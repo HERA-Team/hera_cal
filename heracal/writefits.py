@@ -1,24 +1,22 @@
 import numpy as np
-import subprocess, datetime, os
+import subprocess
+import datetime
 from astropy.io import fits
-import capo.omni as omni
+# from uvdata import CALFITS
+import omni
 import sys
+import os
 
-def writefits(npzfiles, repopath=None, ex_ants=[], name_dict={}):
-    ### This function writes the solution from output npz files from omni_run to a fits file.   ### 
-    ### npzfiles can be a list of npz files with solutions for different polarizations but for  ###.
-    ### the same obs id. repopath is for writing the program of origin and git hash, e.g., if   ###
-    ### the solution comes from capo, then repopath=/path/to/capo/. ex_ants is used to indicate ###
-    ### which antennas are flagged. name_dict is for writing antenna names to fits.             ### 
-     
-    p2pol = {'EE': 'x','NN': 'y','EN': 'cross', 'NE': 'cross'}
+def writefits(outfn, meta, gains, vismdl, xtalk, repopath=None, ex_ants=[], name_dict={}):
+    '''
+    This function writes the solution from output npz files from omni_run to a fits file.
+    npzfiles can be a list of npz files with solutions for different polarizations but for
+    the same obs id. repopath is for writing the program of origin and git hash, e.g., if
+    the solution comes from capo, then repopath=/path/to/capo/. ex_ants is used to indicate
+    which antennas are flagged. name_dict is for writing antenna names to fits.
+    '''
+    p2pol = {'EE': 'x', 'NN': 'y', 'EN': 'cross', 'NE': 'cross'}
 
-    fn0 = npzfiles[0].split('.')
-    if len(npzfiles) > 1: fn0[-2] = 'O'
-    else: fn0[-2] += 'O'
-    fn0[-1] = 'fits'
-    outfn = '.'.join(fn0)
-    print outfn
     if os.path.exists(outfn):
         print '   %s exists, skipping...' % outfn
         return 0
@@ -34,21 +32,19 @@ def writefits(npzfiles, repopath=None, ex_ants=[], name_dict={}):
         ori = ''
 
     datadict = {}
-    ant = []
-    for f,filename in enumerate(npzfiles):
-        data = np.load(filename)
-        for ii, ss in enumerate(data):
-            if ss[0].isdigit():
-                datadict[ss] = data[ss]
-                intss = int(ss[0:-1])
-                if not intss in ant:
-                    ant.append(intss)
-    ant.sort()
-    if name_dict == {}: tot = ant + ex_ants
+    ants = []
+    for pol in gains:
+        for ant in gains[pol]:
+            datadict['%d%s' %(ant,pol)] = gains[pol][ant]
+            if not ant in ants:
+                ants.append(ant)
+
+    ants.sort()
+    if name_dict == {}: tot = ants + ex_ants
     else: tot = name_dict.keys()
     tot.sort()
-    time = data['jds']
-    freq = data['freqs']/1e6
+    time = meta['jds']
+    freq = meta['freqs']/1e6
     pol = ['EE', 'NN', 'EN', 'NE']
     nt = time.shape[0]
     nf = freq.shape[0]
@@ -70,6 +66,7 @@ def writefits(npzfiles, repopath=None, ex_ants=[], name_dict={}):
         datarray.append(dd)
         flgarray.append(fl)
     datarray = np.array(datarray)
+    import IPython; IPython.embed()
     datarray = datarray.swapaxes(0,2).swapaxes(1,2).swapaxes(2,3).reshape(4*nt*nf*na)
     flgarray = np.array(flgarray)
     flgarray = flgarray.swapaxes(0,2).swapaxes(1,2).swapaxes(2,3).reshape(4*nt*nf*na)
@@ -100,8 +97,8 @@ def writefits(npzfiles, repopath=None, ex_ants=[], name_dict={}):
     tbhdu = fits.BinTableHDU.from_columns(cols)
     hdulist = fits.HDUList([prihdu, tbhdu])
     hdulist.writeto(outfn)
-    
-    
+
+
 def read_fits(filename, pols):
     ### This function reads in the solution from fits file, which returns a dictionary of polarization,  ###
     ### each polarization is a dictionary of antenna indexes, which has a value as an numpy array with   ###
