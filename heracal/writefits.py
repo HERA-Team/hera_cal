@@ -2,7 +2,7 @@ import numpy as np
 import subprocess
 import datetime
 from astropy.io import fits
-# from uvdata import CALFITS
+from uvdata import CALFITS
 import omni
 import sys
 import os
@@ -76,27 +76,49 @@ def writefits(outfn, meta, gains, vismdl, xtalk, repopath=None, ex_ants=[], name
     numarray = np.array(tot*4*nt*nf)
     namarray = np.array(nam*4*nt*nf)
 
-    prihdr = fits.Header()
-    prihdr['DATE'] = today
-    prihdr['ORIGIN'] = ori
-    prihdr['HASH'] = githash
-    prihdr['PROTOCOL'] = 'Divide uncalibrated data by these gains to obtain calibrated data.'
-    prihdr['NTIMES'] = nt
-    prihdr['NFREQS'] = nf
-    prihdr['NANTS'] = na
-    prihdr['NPOLS'] = 4
-    prihdu = fits.PrimaryHDU(header=prihdr)
-    colnam = fits.Column(name='ANT NAME', format='A10', array=namarray)
-    colnum = fits.Column(name='ANT INDEX', format='I',array=numarray)
-    colf = fits.Column(name='FREQ (MHZ)', format='E', array=farray)
-    colp = fits.Column(name='POL', format='A4', array=parray)
-    colt = fits.Column(name='TIME (JD)', format='D', array=tarray)
-    coldat = fits.Column(name='GAIN', format='M', array=datarray)
-    colflg = fits.Column(name='FLAG', format='L', array=flgarray)
-    cols = fits.ColDefs([colnam, colnum, colf, colp, colt, coldat, colflg])
-    tbhdu = fits.BinTableHDU.from_columns(cols)
-    hdulist = fits.HDUList([prihdu, tbhdu])
-    hdulist.writeto(outfn)
+    calfits_object = CALFITS()
+    calfits_object.set_gain()
+
+    calfits_object.Nfreqs = nf
+    calfits_object.Npols = len(pol)
+    calfits_object.Ntimes = nt
+    calfits_object.history = ''
+    calfits_object.Nants_data = na  # what value?
+    calfits_object.antenna_names = namarray
+    calfits_object.antenna_numbers = numarray
+    calfits_object.Nants_telescope = na
+    calfits_object.Nspws = 1
+
+    calfits_object.freq_array = farray
+    calfits_object.polarization_array = range(-8, -4)[::-1]
+    calfits_object.time_array = tarray
+    calfits_object.gain_convention = 'divide'
+    calfits_object.flag_array = flgarray
+    calfits_object.quality_array = flgarray  # what is this array supposed to be?
+    calfits_object.cal_type = 'gain'
+    calfits_object.x_orientation = 'E'
+    calfits_object.gain_array = datarray
+
+
+
+
+    # prihdr = fits.Header()
+    # prihdr['DATE'] = today
+    # prihdr['ORIGIN'] = ori
+    # prihdr['HASH'] = githash  do we want to keep git hashes and origin?
+
+    # prihdu = fits.PrimaryHDU(header=prihdr)
+    # colnam = fits.Column(name='ANT NAME', format='A10', array=namarray)
+    # colnum = fits.Column(name='ANT INDEX', format='I',array=numarray)
+    # colf = fits.Column(name='FREQ (MHZ)', format='E', array=farray)
+    # colp = fits.Column(name='POL', format='A4', array=parray)
+    # colt = fits.Column(name='TIME (JD)', format='D', array=tarray)
+    # coldat = fits.Column(name='GAIN', format='M', array=datarray)
+    # colflg = fits.Column(name='FLAG', format='L', array=flgarray)
+    # cols = fits.ColDefs([colnam, colnum, colf, colp, colt, coldat, colflg])
+    # tbhdu = fits.BinTableHDU.from_columns(cols)
+    # hdulist = fits.HDUList([prihdu, tbhdu])
+    # hdulist.writeto(outfn)
 
 
 def read_fits(filename, pols):
