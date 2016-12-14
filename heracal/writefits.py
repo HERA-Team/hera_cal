@@ -31,6 +31,7 @@ def writefits(outfn, meta, gains, vismdl, xtalk, repopath=None, ex_ants=[], name
         githash = ''
         ori = ''
 
+    chisqdict = {}
     datadict = {}
     ants = []
     for pol in gains:
@@ -66,15 +67,28 @@ def writefits(outfn, meta, gains, vismdl, xtalk, repopath=None, ex_ants=[], name
         datarray.append(dd)
         flgarray.append(fl)
     datarray = np.array(datarray)
-    import IPython; IPython.embed()
-    datarray = datarray.swapaxes(0,2).swapaxes(1,2).swapaxes(2,3).reshape(4*nt*nf*na)
+    #import IPython; IPython.embed()
+    datarray = datarray.swapaxes(0,3).swapaxes(0,1)
     flgarray = np.array(flgarray)
-    flgarray = flgarray.swapaxes(0,2).swapaxes(1,2).swapaxes(2,3).reshape(4*nt*nf*na)
-    tarray = np.resize(time,(4*nf*na,nt)).transpose().reshape(4*nf*nt*na)
+    flgarray = flgarray.swapaxes(0,3).swapaxes(0,1)
+    tarray = np.resize(time,(4*nf*na,nt)).transpose()
     parray = np.array((['EE']*(nf*na)+['NN']*(nf*na)+['EN']*(nf*na)+['NE']*(nf*na))*nt)
-    farray = np.array(list(np.resize(freq,(na,nf)).transpose().reshape(na*nf))*4*nt)
+    farray = np.array(list(np.resize(freq,(na,nf)))).transpose()
     numarray = np.array(tot*4*nt*nf)
     namarray = np.array(nam*4*nt*nf)
+
+    chisqarray = []
+    for i in range(4):
+        ch = []
+        for jj in range(na):
+            try:
+                ch.append(meta['chisq'+str(tot[jj])+p2pol[pol[ii]]])
+            except(KeyError): 
+                ch.append(np.ones((nt,nf))) # if key error (b/c) of pol
+        chisqarray.append(ch)
+
+    chisqarray = np.array(chisqarray)
+    chisqarray = chisqarray.swapaxes(0,3).swapaxes(0,1)
 
     calfits_object = CALFITS()
     calfits_object.set_gain()
@@ -98,29 +112,12 @@ def writefits(outfn, meta, gains, vismdl, xtalk, repopath=None, ex_ants=[], name
     calfits_object.cal_type = 'gain'
     calfits_object.x_orientation = 'E'
     calfits_object.gain_array = datarray
+    calfits_object.quality_array = chisqarray
 
 
 
 
-    # prihdr = fits.Header()
-    # prihdr['DATE'] = today
-    # prihdr['ORIGIN'] = ori
-    # prihdr['HASH'] = githash  do we want to keep git hashes and origin?
-
-    # prihdu = fits.PrimaryHDU(header=prihdr)
-    # colnam = fits.Column(name='ANT NAME', format='A10', array=namarray)
-    # colnum = fits.Column(name='ANT INDEX', format='I',array=numarray)
-    # colf = fits.Column(name='FREQ (MHZ)', format='E', array=farray)
-    # colp = fits.Column(name='POL', format='A4', array=parray)
-    # colt = fits.Column(name='TIME (JD)', format='D', array=tarray)
-    # coldat = fits.Column(name='GAIN', format='M', array=datarray)
-    # colflg = fits.Column(name='FLAG', format='L', array=flgarray)
-    # cols = fits.ColDefs([colnam, colnum, colf, colp, colt, coldat, colflg])
-    # tbhdu = fits.BinTableHDU.from_columns(cols)
-    # hdulist = fits.HDUList([prihdu, tbhdu])
-    # hdulist.writeto(outfn)
-
-
+    
 def read_fits(filename, pols):
     ### This function reads in the solution from fits file, which returns a dictionary of polarization,  ###
     ### each polarization is a dictionary of antenna indexes, which has a value as an numpy array with   ###
