@@ -1,7 +1,7 @@
-from uvdata import UVCal
+from uvdata import calfits.CALFITS
 
 
-class HERACal(UVCal):
+class HERACal(CALFITS):
     '''Class that loads in hera omnical data,'''
     def load_omnical(self, meta, gains, ex_ants = []):
         '''given meta and gain dictionary from omni_run.py before to_npz() call,
@@ -61,27 +61,26 @@ class HERACal(UVCal):
         chisqarray.append(ch)
     chisqarray = np.array(chisqarray).swapaxes(0,3).swapaxes(0,1)
     
-    calfits_object = CALFITS()
-    calfits_object.set_gain()
+    self.set_gain()
 
-    calfits_object.Nfreqs = nf
-    calfits_object.Npols = len(pol)
-    calfits_object.Ntimes = nt
-    calfits_object.history = ''
-    calfits_object.Nants_data = na  # what value?
-    calfits_object.antenna_names = namarray
-    calfits_object.antenna_numbers = numarray
-    calfits_object.Nants_telescope = na
-    calfits_object.Nspws = 1
+    self.Nfreqs = nf
+    self.Npols = len(pol)
+    self.Ntimes = nt
+    self.history = ''
+    self.Nants_data = na  # what value?
+    self.antenna_names = namarray
+    self.antenna_numbers = numarray
+    self.Nants_telescope = na
+    self.Nspws = 1
 
-    calfits_object.freq_array = farray
-    calfits_object.polarization_array = parray
-    calfits_object.time_array = tarray
-    calfits_object.gain_convention = 'divide'
-    calfits_object.flag_array = flgarray
-    calfits_object.quality_array = chisqarray  # what is this array supposed to be?
-    calfits_object.cal_type = 'gain'
-    calfits_object.x_orientation = 'E'
-    calfits_object.gain_array = datarray
-    calfits_object.quality_array = chisqarray
+    self.freq_array = farray
+    self.polarization_array = parray
+    self.time_array = tarray
+    self.gain_convention = 'divide'
+    self.flag_array = flgarray
+    self.quality_array = chisqarray  # what is this array supposed to be?
+    self.cal_type = 'gain'
+    self.x_orientation = 'E'
+    self.gain_array = datarray
+    self.quality_array = chisqarray
 
