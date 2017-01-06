@@ -47,6 +47,7 @@ def writefits(outfn, meta, gains, vismdl, xtalk, repopath=None, ex_ants=[], name
     time = meta['jds']
     freq = meta['freqs']/1e6
     pol = ['EE', 'NN', 'EN', 'NE']
+    npol = len(pol)
     nt = time.shape[0]
     nf = freq.shape[0]
     na = len(tot)
@@ -68,14 +69,14 @@ def writefits(outfn, meta, gains, vismdl, xtalk, repopath=None, ex_ants=[], name
         flgarray.append(fl)
     datarray = np.array(datarray)
     #import IPython; IPython.embed()
-    datarray = datarray.swapaxes(0,3).swapaxes(0,1)
+    datarray = datarray.swapaxes(0,3).swapaxes(0,1).reshape(na*nf*npol*nt)
     flgarray = np.array(flgarray)
-    flgarray = flgarray.swapaxes(0,3).swapaxes(0,1)
-    tarray = np.resize(time,(4*nf*na,nt)).transpose()
+    flgarray = flgarray.swapaxes(0,3).swapaxes(0,1).reshape(na*nf*npol*nt)
+    tarray = np.resize(time,(4*nf*na,nt)).transpose().reshape(na*nf*npol*nt)
     parray = np.array((['EE']*(nf*na)+['NN']*(nf*na)+['EN']*(nf*na)+['NE']*(nf*na))*nt)
-    farray = np.array(list(np.resize(freq,(na,nf)))).transpose()
-    numarray = np.array(tot*4*nt*nf)
-    namarray = np.array(nam*4*nt*nf)
+    farray = np.array(list(np.resize(freq,(na,nf)).transpose().reshape(na*nf))*npol*nt)
+    numarray = np.array(tot*npol*nt*nf)
+    namarray = np.array(nam*npol*nt*nf)
 
     chisqarray = []
     for i in range(4):
@@ -104,17 +105,18 @@ def writefits(outfn, meta, gains, vismdl, xtalk, repopath=None, ex_ants=[], name
     calfits_object.Nspws = 1
 
     calfits_object.freq_array = farray
-    calfits_object.polarization_array = range(-8, -4)[::-1]
+    calfits_object.polarization_array = parray
     calfits_object.time_array = tarray
     calfits_object.gain_convention = 'divide'
     calfits_object.flag_array = flgarray
-    calfits_object.quality_array = flgarray  # what is this array supposed to be?
+    calfits_object.quality_array = chisqarray  # what is this array supposed to be?
     calfits_object.cal_type = 'gain'
     calfits_object.x_orientation = 'E'
     calfits_object.gain_array = datarray
     calfits_object.quality_array = chisqarray
 
 
+    calfits_object.write_uvfits(outfn, run_check=False)
 
 
     
