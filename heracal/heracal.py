@@ -19,25 +19,29 @@ class HERACal(CALFITS):
                 if not ant in ants:
                     ants.append(ant)
 
+        # drop antennas that are not solved for. 
         allants = ants + ex_ants
+        ants = np.sort(ants)
         allants = np.sort(allants)
         time = meta['jds']
         freq = meta['freqs']/1e6 # in GHz
-        pols = ['x', 'y']; npol = len(pol)
+        pols = gains.keys(); npol = len(pol)
         ntimes = time.shape[0]
         nfreqs = freq.shape[0]
-        nants = len(allants)
-        antnames = ['ant'+str(ant) for ant in allants]
+        nants = len(ants)
+        antnames = ['ant'+str(ant) for ant in ants]
         datarray = []
         flgarray = []
         for ii in range(npol):
             dd = []
             fl = []
-            for jj in range(nants):
-                try: dd.append(datadict[str(allants[jj])+pols[ii]])
-                except(KeyError): dd.append(np.ones((ntimes,nfreqs)))
-                if allants[jj] in ex_ants: fl.append(np.ones((ntimes,nfreqs),dtype=bool))
-                else: fl.append(np.zeros((ntimes,nfreqs),dtype=bool))
+            for ant in ants:
+                try: 
+                    dd.append(datadict[str(ant)+pols[ii]])
+                    fl.append(np.zeros((ntimes,nfreqs),dtype=bool))
+                #if antenna not in data dict (aka, a bad antenna)
+                except(KeyError): 
+                    print "Can't find antenna {0}".format(ant)
             datarray.append(dd)
             flgarray.append(fl)
 
@@ -48,17 +52,17 @@ class HERACal(CALFITS):
         flgarray = flgarray.swapaxes(0,3).swapaxes(0,1).reshape(nants*nfreqs*npol*ntimes)
         
         tarray = np.resize(time,(npol*nfreqs*nants,ntimes)).transpose().reshape(nants*nfreqs*npol*ntimes)
-        parray = np.concatenate([[pol]*(nfreqs*nants) for pol in pols])
+        parray = np.concatenate([[pol]*(nfreqs*nants*ntimes) for pol in pols])
         farray = np.array(list(np.resize(freq,(nants,nfreqs)).transpose().reshape(nants*nfreqs))*npol*ntimes)
-        numarray = np.array(allants*npol*ntimes*nfreqs)
+        numarray = np.array(list(ants)*npol*ntimes*nfreqs, dtype=np.int16)
         namarray = np.array(antnames*npol*ntimes*nfreqs)
 
         chisqarray = []
         for ii in range(npol):
             ch = []
-            for jj in range(nants):
+            for ant in ants:
                 try:
-                    ch.append(meta['chisq'+str(allants[jj])+pols[ii]])
+                    ch.append(meta['chisq'+str(ant)+pols[ii]])
                 except:
                     ch.append(np.ones((ntimes,nfreqs)))
             chisqarray.append(ch)
@@ -85,6 +89,4 @@ class HERACal(CALFITS):
         self.x_orientation = 'east'
         self.gain_array = datarray
         self.quality_array = chisqarray
-
-        self.set_gain()
 
