@@ -1,23 +1,28 @@
-import numpy as np, omnical, aipy, math
+import numpy as np
+import omnical
+import aipy
+import math
 from red import redundant_bl_cal_simple
 import numpy.linalg as la
 import warnings
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore",category=DeprecationWarning)
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
     import scipy.sparse.linalg as spsla
-    
+
 POL_TYPES = 'xylrab'
-#XXX this can't support restarts or changing # pols between runs
-POLNUM = {} # factor to multiply ant index for internal ordering, 
+# XXX this can't support restarts or changing # pols between runs
+POLNUM = {}  # factor to multiply ant index for internal ordering
 NUMPOL = {}
+
 
 def add_pol(p):
     global NUMPOL
     assert(p in POL_TYPES)
     POLNUM[p] = len(POLNUM)
     NUMPOL = dict(zip(POLNUM.values(), POLNUM.keys()))
-    
+
+
 class Antpol:
     def __init__(self, *args):
         try:
@@ -33,7 +38,7 @@ class Antpol:
     def __str__(self): return ''.join(map(str, self.antpol()))
     def __eq__(self, v): return self.ant() == v
     def __repr__(self): return str(self)
-        
+
 ## XXX filter_reds w/ pol support should probably be in omnical
 def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, crosspols=None, ex_crosspols=None):
     '''Filter redundancies to include/exclude the specified bls, antennas, and unique bl groups and polarizations.
@@ -68,7 +73,7 @@ class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
     def __init__(self, nant):
         omnical.info.FirstCalRedundantInfo.__init__(self)
         self.nant = nant
-        print 'Loading FirstCalRedundantInfo class' 
+        print 'Loading FirstCalRedundantInfo class'
 
 def compute_reds(nant, pols, *args, **kwargs):
     _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
@@ -77,7 +82,7 @@ def compute_reds(nant, pols, *args, **kwargs):
         for pj in pols:
             reds += [[(Antpol(i,pi,nant),Antpol(j,pj,nant)) for i,j in gp] for gp in _reds]
     return reds
- 
+
 def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
     '''Use aa.ant_layout to generate redundances based on ideal placement.
         The remaining arguments are passed to omnical.arrayinfo.filter_reds()'''
@@ -123,7 +128,7 @@ def redcal(data, info, xtalk=None, gains=None, vis=None,removedegen=False, uselo
                 ai,aj = Antpol(i,pol[0],info.nant), Antpol(j,pol[1],info.nant)
                 _vis[(int(ai),int(aj))] = vis[pol][(i,j)]
     else: _vis = vis
-    meta, gains, vis = omnical.calib.redcal(data, info, xtalk=xtalk, gains=_gains, vis=_vis, removedegen=removedegen, uselogcal=uselogcal, maxiter=maxiter, conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit, trust_period=trust_period)    
+    meta, gains, vis = omnical.calib.redcal(data, info, xtalk=xtalk, gains=_gains, vis=_vis, removedegen=removedegen, uselogcal=uselogcal, maxiter=maxiter, conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit, trust_period=trust_period)
     # rewrap to new format
     def mk_ap(a): return Antpol(a, info.nant)
     for i,j in meta['res'].keys():
@@ -155,7 +160,7 @@ def compute_xtalk(res, wgts):
     xtalk = {}
     for pol in res.keys():
         xtalk[pol] = {}
-        for key in res[pol]: 
+        for key in res[pol]:
             r,w = np.where(wgts[pol][key] > 0, res[pol][key], 0), wgts[pol][key].sum(axis=0)
             w = np.where(w == 0, 1, w)
             xtalk[pol][key] = (r.sum(axis=0) / w).astype(res[pol][key].dtype) # avg over time
@@ -168,16 +173,16 @@ def to_npz(filename, meta, gains, vismdl, xtalk):
     metakeys = ['jds','lsts','freqs','history']#,chisq]
     for key in meta:
         if key.startswith('chisq'): d[key] = meta[key] #separate if statements  pending changes to chisqs
-        for k in metakeys: 
+        for k in metakeys:
             if key.startswith(k): d[key] = meta[key]
     for pol in gains:
         for ant in gains[pol]:
-            d['%d%s' % (ant,pol)] = gains[pol][ant] 
+            d['%d%s' % (ant,pol)] = gains[pol][ant]
     for pol in vismdl:
         for bl in vismdl[pol]:
             d['<%d,%d> %s' % (bl[0],bl[1],pol)] = vismdl[pol][bl]
     for pol in xtalk:
-        for bl in xtalk[pol]: 
+        for bl in xtalk[pol]:
             d['(%d,%d) %s' % (bl[0],bl[1],pol)] = xtalk[pol][bl]
     np.savez(filename,**d)
 #PYUV
@@ -205,7 +210,7 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
         for k in npz.files:
             if k[0].isdigit():
                 pol,ant = k[-1:],int(k[:-1])
-                if (pols==None or pol in pols) and (ants==None or ant in ants): 
+                if (pols==None or pol in pols) and (ants==None or ant in ants):
                     if not gains.has_key(pol): gains[pol] = {}
                     gains[pol][ant] = gains[pol].get(ant,[]) + [np.copy(npz[k])]
             try: pol,bl = parse_key(k)
@@ -220,7 +225,7 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
                 try:
                     dat = np.resize(np.copy(npz[k]),vismdl[pol][vismdl[pol].keys()[0]][0].shape) #resize xtalk to be like vismdl (with a time dimension too)
                 except(KeyError):
-                    for tempkey in npz.files: 
+                    for tempkey in npz.files:
                         if tempkey.startswith('<'): break
                     dat = np.resize(np.copy(npz[k]),npz[tempkey].shape) #resize xtalk to be like vismdl (with a time dimension too)
                 if xtalk[pol].get(bl) is None: #no bl key yet
@@ -267,7 +272,7 @@ class FirstCal(object):
         #if wgts != None: self.wgts = wgts
         #else: self.wgts = np.ones_like(self.data)
     def data_to_delays(self, **kwargs):
-        '''data = dictionary of visibilities. 
+        '''data = dictionary of visibilities.
            info = FirstCalRedundantInfo class
            can give it kwargs:
                 supports 'window': window function for fourier transform. default is none
@@ -276,7 +281,7 @@ class FirstCal(object):
                          'clean' : Clean level when deconvolving sampling function out.
            Returns 2 dictionaries:
                 1. baseline pair : delays
-                2. baseline pari : offset 
+                2. baseline pari : offset
         '''
         verbose = kwargs.get('verbose', False)
         blpair2delay = {}
@@ -295,7 +300,7 @@ class FirstCal(object):
             blpair2offset[(bl1,bl2)] = offset
         return blpair2delay, blpair2offset
     def get_N(self,nblpairs):
-        return sps.eye(nblpairs) 
+        return sps.eye(nblpairs)
     def get_M(self, **kwargs):
         blpair2delay,blpair2offset = self.data_to_delays(**kwargs)
         sz = len(blpair2delay[blpair2delay.keys()[0]])
@@ -304,16 +309,16 @@ class FirstCal(object):
         for pair in blpair2delay:
             M[self.info.blpair_index(pair),:] = blpair2delay[pair]
             O[self.info.blpair_index(pair),:] = blpair2offset[pair]
-            
+
         return M,O
     def run(self, **kwargs):
         verbose = kwargs.get('verbose', False)
         offset = kwargs.get('offset', False)
-        #make measurement matrix 
+        #make measurement matrix
         print "Geting M,O matrix"
         self.M,self.O = self.get_M(**kwargs)
         print "Geting N matrix"
-        N = self.get_N(len(self.info.bl_pairs)) 
+        N = self.get_N(len(self.info.bl_pairs))
         #self._N = np.linalg.inv(N)
         self._N = N #since just using identity now
 
@@ -325,7 +330,7 @@ class FirstCal(object):
         print "Inverting A.T*N^{-1}*A matrix"
         invert = self.A.T.dot(self._N.dot(self.A)).todense() #make it dense for pinv
         dontinvert = self.A.T.dot(self._N.dot(self.M)) #converts it all to a dense matrix
-#        definitely want to use pinv here and not solve since invert is probably singular. 
+#        definitely want to use pinv here and not solve since invert is probably singular.
         self.xhat = np.dot(np.linalg.pinv(invert),dontinvert)
         #solve for offset
         if offset:
