@@ -4,6 +4,7 @@ import omnical, aipy, numpy
 from omni import from_npz, aa_to_info, redcal, compute_xtalk, to_npz
 from miriad import read_files
 import pickle, optparse, os, sys
+from heracal import HERACal
 
 o = optparse.OptionParser()
 o.set_usage('omni_run.py [options] *uvcRRE')
@@ -93,9 +94,9 @@ for f,filename in enumerate(args):
         npzb = 3
     else: #zen.jd.pol.npz
         npzb = 4 
-    npzname = opts.omnipath+'.'.join(filename.split('/')[-1].split('.')[0:npzb])+'.npz'
-    if os.path.exists(npzname):
-        print '   %s exists. Skipping...' % npzname
+    fitsname = opts.omnipath+'.'.join(filename.split('/')[-1].split('.')[0:npzb])+'.fits'
+    if os.path.exists(fitsname):
+        print '   %s exists. Skipping...' % fitsname
         continue
 
     timeinfo,d,f = read_files([file_group[key] for key in file_group.keys()], antstr='cross', polstr=opts.pol)
@@ -126,6 +127,7 @@ for f,filename in enumerate(args):
     m2['lsts'] = t_lst
     m2['freqs'] = freqs
     
-    print '   Saving %s'%npzname
-    to_npz(npzname, m2, g2, v2, xtalk)
-    
+    print '   Saving %s'%fitsname 
+    hc = HERACal(m2, g2)
+    hc.write_calfits(fitsname)
+     
