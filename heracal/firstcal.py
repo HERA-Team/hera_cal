@@ -3,6 +3,7 @@ import numpy as np, optparse, sys
 import aipy as a
 from miriad import read_files
 from omni import aa_to_info, FirstCal, save_gains_fc
+from heracal import HERACal
 
 o = optparse.OptionParser()
 a.scripting.add_standard_options(o,cal=True,pol=True)
@@ -55,11 +56,28 @@ dlys = np.fft.fftshift(np.fft.fftfreq(fqs.size, np.diff(fqs)[0]))
 fc = FirstCal(datapack,wgtpack,fqs,info)
 sols = fc.run(finetune=True,verbose=opts.verbose,plot=opts.plot,noclean=True,offset=False,average=False,window='none')
 
+#Converting solutions to a type that heracal can use to write uvfits files.
+meta = {}
+meta['lsts'] = times['lsts']
+meta['jds'] = times['times']
+meta['freqs'] = fqs
+
+delays = {}
+for pol in opts.pol.split(','):
+    delays[pol[0]] = {}
+    for ant in sols.keys():
+        delays[pol[0]][ant] = sols[ant].T
+        #generate chisq per antenna/pol.
+        meta['chisq{0}{1}'.format(ant,pol[0])] = np.ones(shape=(len(times['times']), 1))
+#overall chisq
+meta['chisq'] = np.ones_like(sols[ant].T)
+
 #Save solutions
-if len(args)==1: filename=args[0]
-else: filename='fcgains.%s.npz'%opts.pol #if averaging a bunch together of files together.
+if len(args)==1: filename=args[0]+'.fits'
+else: filename='fcgains.%s.fits'%opts.pol #if averaging a bunch together of files together
 if not opts.outpath is None:
     outname='%s/%s'%(opts.outpath,filename.split('/')[-1])
 else:
     outname='%s'%filename
-save_gains_fc(sols,fqs, opts.pol[0], outname, ubls=ubls, ex_ants=ex_ants)
+hc = HERACal(meta, delays, ex_ants=ex_ants, DELAY=True, appendhist='Testcal')
+hc.write_calfits(outname)

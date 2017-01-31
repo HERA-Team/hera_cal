@@ -4,7 +4,7 @@ import numpy as np
 
 class HERACal(UVCal):
     '''Class that loads in hera omnical data,'''
-    def __init__(self, meta, gains, ex_ants = []):
+    def __init__(self, meta, gains, DELAY=False, ex_ants = [], appendhist=''):
         '''given meta and gain dictionary from omni_run.py before to_npz() call,
            to reshuffle data and populating the UVCal class.'''
         
@@ -41,37 +41,13 @@ class HERACal(UVCal):
             for ant in ants:
                 try: 
                     dd.append(datadict[str(ant)+pol2str[pols[ii]]])
-                    fl.append(np.zeros((ntimes,nfreqs),dtype=bool))
+                    fl.append(np.zeros_like(dd[-1],dtype=bool))
                 #if antenna not in data dict (aka, a bad antenna)
                 except(KeyError): 
                     print "Can't find antenna {0}".format(ant)
             datarray.append(dd)
             flgarray.append(fl)
 
-        '''
-        datarray = np.array(datarray)
-        datarray = datarray.swapaxes(0,3).swapaxes(0,1).reshape(nants*nfreqs*npol*ntimes)
-
-        flgarray = np.array(flgarray)
-        flgarray = flgarray.swapaxes(0,3).swapaxes(0,1).reshape(nants*nfreqs*npol*ntimes)
-        
-        tarray = np.resize(time,(npol*nfreqs*nants,ntimes)).transpose().reshape(nants*nfreqs*npol*ntimes)
-        parray = np.concatenate([[pol]*(nfreqs*nants*ntimes) for pol in pols])
-        farray = np.array(list(np.resize(freq,(nants,nfreqs)).transpose().reshape(nants*nfreqs))*npol*ntimes)
-        numarray = np.array(list(ants)*npol*ntimes*nfreqs, dtype=np.int16)
-        namarray = np.array(antnames*npol*ntimes*nfreqs)
-
-        chisqarray = []
-        for ii in range(npol):
-            ch = []
-            for ant in ants:
-                try:
-                    ch.append(meta['chisq'+str(ant)+pol2str[pols[ii]]])
-                except:
-                    ch.append(np.ones((ntimes,nfreqs)))
-            chisqarray.append(ch)
-        chisqarray = np.array(chisqarray).swapaxes(0,3).swapaxes(0,1).reshape(nants*nfreqs*npol*ntimes)
-        '''
         datarray = np.array(datarray)
         datarray = datarray.swapaxes(0,3).swapaxes(0,1)
 
@@ -91,16 +67,19 @@ class HERACal(UVCal):
                 try:
                     ch.append(meta['chisq'+str(ant)+pol2str[pols[ii]]])
                 except:
-                    ch.append(np.ones((ntimes,nfreqs)))
+                    ch.append(np.ones_like(dd[-1])) # array of ones like the data
             chisqarray.append(ch)
         chisqarray = np.array(chisqarray).swapaxes(0,3).swapaxes(0,1)
 
         
-#       import IPython; IPython.embed()
+        import IPython; IPython.embed()
         self.Nfreqs = nfreqs
         self.Npols = len(pols)
         self.Ntimes = ntimes
-        self.history = 'Test file.'
+        try:
+            self.history = meta['history'] + appendhist
+        except KeyError: 
+            self.history = appendhist
         self.Nants_data = len(ants)  # only ants with data
         self.antenna_names = namarray[:self.Nants_data]
         self.antenna_numbers = numarray[:self.Nants_data]
@@ -111,10 +90,28 @@ class HERACal(UVCal):
         self.polarization_array = parray[:self.Npols]
         self.time_array = tarray[:self.Ntimes]
         self.gain_convention = 'divide'
-        self.flag_array = flgarray
-        self.quality_array = chisqarray  
-        self.cal_type = 'gain'
         self.x_orientation = 'east'
-        self.gain_array = datarray
-        self.quality_array = chisqarray
+        if DELAY:
+            self.set_delay()
+            #dataarray = datarray.reshape(self.Nants_data, self.Ntimes, self.Npols)
+            # collapse on the second axis...should have dimension 1
+            #if datarray.shape[1] == 1: self.delay_array = datarray[:, 0, :, :]
+            #else: raise ValueError('Frequency dimension is not equal to 1. Please check \
+            #                        it is delay data.')
+            #if chisqarray.shape[1] == 1: self.quality_array = chisqarray[:, 0, :, :]
+            #else: raise ValueError('Frequency dimension is not equal to 1. Please check \
+            #                        it is delay data')
+            #if flgarray.shape[1] == 1:  self.flag_array = flgarray[:, 0, :, :]
+            #else: raise ValueError('Frequency dimension is not equal to 1. Please check \
+            #                        it is delay data.')
+            self.delay_array = datarray
+            self.quality_array = chisqarray
+            self.flag_array = flgarray
+
+        else:
+            self.set_gain()
+            self.gain_array = datarray
+            self.quality_array = chisqarray
+            self.flag_array = flgarray
+
 
