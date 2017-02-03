@@ -2,7 +2,7 @@
 '''Takes raw firstcal files and rewrites to give the median gain solution.'''
 
 import numpy as np, glob, optparse, sys
-from omni import save_gains_fc
+from uvdata import UVCal
 
 def load_dmv(files, offsets=False, verbose=False):
     delays = {}
@@ -14,13 +14,16 @@ def load_dmv(files, offsets=False, verbose=False):
     for f in files:
         if verbose:
             print 'Reading %s'%f    
-        npz = np.load(f)
-        for key in npz.files:
-            if key.startswith(ss):
-                if key not in delays.keys(): 
-                    delays[key] = npz[key]
+        cal = UVCal()
+        cal.read_calfits(f)
+        if cal.cal_type == 'delay': 
+            for i, ant in enumerate(cal.antenna_numbers):
+                if ant not in delays.keys():
+                    delays[ant] = cal.delay_array[i,:,:,0]
                     continue 
-                delays[key] = np.hstack((delays[key],npz[key]))
+                delays[ant] = np.hstack((delays[ant], cal.delay_array[i,:,:,0]))
+        else:
+            raise ValueError(("{0} does not contain delays. Check input files and retry".format(f)))
     
     for k in delays.keys():
         delays[k] = np.array(delays[k]).flatten()
@@ -42,15 +45,23 @@ if opts.mean and opts.median:
     raise ValueError('Must choose between mean and median values.')
     sys.exit(1)
 
-fqs = np.load(args[0])['freqs']
+#fqs = np.load(args[0])['freqs']
 _,means,medians,_ = load_dmv(args)
-do = {}
-for ant in medians.keys():
-    ant = ant[1:]
-    do[int(ant)] = [medians['d'+ant]]
+# create load in input cal object. only works on files with delays. Error will be thrown above. 
+cal = UVCal()
+cal.read_calfits(args[0])
+delays = []
+for i in cal.antenna_numbers:
+    delays.append(medians[i])
+delays = np.array(delays).reshape(len(delays),1,1,1)
+cal.delay_array = delays
+cal.flag_array = np.zeros_like(cal.delay_array, dtype=np.bool)
+cal.quality_array = np.ones_like(cal.delay_array)
+# Update number of times in UVCal object
+cal.Ntimes = 1
+cal.time_array = cal.time_array[:1]
+
+# save to fits
 for f in args:
-    fname = '.'.join(f.split('.')[:-2] + ['median'])
-    pol = fname.split('.')[3]
-    save_gains_fc(do,fqs,pol[0],fname)
-
-
+    fname = '.'.join(f.split('.')[:-2] + ['median', 'fits'])
+    cal.write_calfits(fname)
