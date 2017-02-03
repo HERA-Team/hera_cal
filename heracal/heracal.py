@@ -77,7 +77,7 @@ class HERACal(UVCal):
         self.Npols = len(pols)
         self.Ntimes = ntimes
         try:
-            self.history = meta['history'] + appendhist
+            self.history = meta['history'].replace('\n', ' ') + appendhist
         except KeyError: 
             self.history = appendhist
         self.Nants_data = len(ants)  # only ants with data
