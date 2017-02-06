@@ -72,7 +72,6 @@ class HERACal(UVCal):
         chisqarray = np.array(chisqarray).swapaxes(0,3).swapaxes(0,1)
 
         
-        import IPython; IPython.embed()
         self.Nfreqs = nfreqs
         self.Npols = len(pols)
         self.Ntimes = ntimes
