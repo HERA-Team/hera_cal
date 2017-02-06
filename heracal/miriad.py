@@ -1,6 +1,6 @@
 import aipy as a, numpy as np
 
-def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, recast_as_array=True):
+def read_files(filenames, antstr, polstr, chan_str='all', decimate=1, decphs=0, verbose=False, recast_as_array=True):
     '''Read in miriad uv files.
        Parameters
        ---------
@@ -19,8 +19,6 @@ def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, r
        flg       : dict
             corresponding flags to data. Same format. 
     '''
-        
-        
     info = {'lsts':[], 'times':[]}
     ts = {}
     dat, flg = {}, {}
@@ -40,8 +38,9 @@ def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, r
             pol = a.miriad.pol2str[uv['pol']]
             if not dat[bl].has_key(pol):
                 dat[bl][pol],flg[bl][pol] = [],[]
-            dat[bl][pol].append(d)
-            flg[bl][pol].append(f)
+            chans = a.scripting.parse_chans(chan_str, len(d))
+            dat[bl][pol].append(d[chans])
+            flg[bl][pol].append(f[chans])
     info['freqs'] = a.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
     if recast_as_array:
         # This option helps reduce memory footprint, but it shouldn't
