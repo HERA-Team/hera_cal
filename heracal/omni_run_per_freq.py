@@ -2,7 +2,7 @@
 
 import omnical, aipy, numpy
 from omni import from_npz, aa_to_info, redcal, compute_xtalk, to_npz
-from miriad import read_files
+from miriad import read_files_dict
 import pickle, optparse, os, sys
 from heracal import HERACal
 
@@ -99,18 +99,18 @@ for f,filename in enumerate(args):
     #    print '   %s exists. Skipping...' % fitsname
     #    continue
 
-    for channel in range(1024):
-        fitsname = opts.omnipath+'.'.join(filename.split('/')[-1].split('.')[0:npzb]) + '.%d'%channel + '.fits'
+    timeinfo,d,f = read_files_dict([file_group[key] for key in file_group.keys()], antstr='cross', polstr=opts.pol, chanbunch=25)
+    for channelgroup in d.keys():
+        fitsname = opts.omnipath+'.'.join(filename.split('/')[-1].split('.')[0:npzb]) + '.%d'%channelgroup + '.fits'
         if os.path.exists(fitsname):
             print '   %s exists. Skipping...' % fitsname
             continue
 
-        print("Working on channel {0}".format(channel))
-        timeinfo,d,f = read_files([file_group[key] for key in file_group.keys()], antstr='cross', polstr=opts.pol, chan_str='{0}'.format(channel))
+        print("Working on channelgroup {0}".format(channelgroup))
         t_jd = timeinfo['times']
         t_lst = timeinfo['lsts']
-        freqs = timeinfo['freqs'][numpy.array([channel])]
-        SH = d.values()[0].values()[0].shape #shape of file data (ex: (19,203))
+        freqs = timeinfo['freqs'][channelgroup:channelgroup+timeinfo['chanbunch']]
+        SH = d.values()[0].values()[0].values()[0].shape #shape of file data (ex: (19,203))
         data,wgts,xtalk = {}, {}, {}
         m2,g2,v2 = {}, {}, {}
         for p in g0.keys():
@@ -118,12 +118,12 @@ for f,filename in enumerate(args):
                 if g0[p][i].shape != (len(t_jd),len(freqs)):
                     g0[p][i] = numpy.resize(g0[p][i],SH) #resize gains like data
                 else: continue
-        data = d #indexed by bl and then pol (backwards from everything else)
+        data = d[channelgroup] #indexed by bl and then pol (backwards from everything else)
         for p in pols:
             wgts[p] = {} #weights dictionary by pol
-            for bl in f: 
+            for bl in f[channelgroup]: 
                 i,j = bl
-                wgts[p][(j,i)] = wgts[p][(i,j)] = numpy.logical_not(f[bl][p]).astype(numpy.int)
+                wgts[p][(j,i)] = wgts[p][(i,j)] = numpy.logical_not(f[channelgroup][bl][p]).astype(numpy.int)
         print '   Logcal-ing' 
         m1,g1,v1 = redcal(data,info,gains=g0, removedegen=False) #SAK CHANGE REMOVEDEGEN
         print '   Lincal-ing'
