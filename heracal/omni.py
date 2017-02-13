@@ -1,14 +1,12 @@
 import numpy as np
 import omnical
-import aipy
-import math
 from red import redundant_bl_cal_simple
 import numpy.linalg as la
+from uvdata import UVCal
 import warnings
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
-    import scipy.sparse.linalg as spsla
 
 POL_TYPES = 'xylrab'
 # XXX this can't support restarts or changing # pols between runs
@@ -262,6 +260,51 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
         try: meta[k] = np.concatenate(meta[k])
         except(ValueError): pass
     return meta, gains, vismdl, xtalk
+
+def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
+    """
+    Read a calibration fits file (pyuvdata format).
+
+    meta : dictionary of meta information including chisq, times, lst's etc
+    gains : dictionary indexed by polarization and antenna.
+    """
+    if type(filename) is str: filename = [filename]
+    if type(pols) is str: pols = [pols]
+    if type(bls) is tuple and type(bls[0]) is int: bls = [bls]
+    if type(ants) is int: ants = [ants]
+    meta, gains = {}, {}
+    poldict = {-5: 'x', -4: 'y'}
+
+    def parse_key(k):
+        bl,pol = k.split()
+        bl = tuple(map(int,bl[1:-1].split(',')))
+        return pol,bl
+
+    cal = UVCal()
+    for f in filename:
+        cal.read_calfits(f)
+        for k, p in enumerate(cal.polarization_array):
+            pol = poldict[p]
+            if pol not in gains.keys(): gains[pol] = {}
+            for i, ant in enumerate(cal.antenna_numbers):
+                if cal.cal_type == 'gain':
+                    if not ant in gains[pol].keys():
+                        gains[pol][ant] = cal.gain_array[i,:,:,k].T
+                    else:
+                        gains[pol][ant] = np.concatenate([gains[pol][ant],cal.gain_array[i,:,:k].T])
+                    meta['chisq{0}{1}'.format(ant,pol)] = cal.quality_array[i,:,:,k].T
+                else:
+                    if not ant in gains[pol].keys():
+                        gains[pol][ant] = cal.gain_array[i,:,:,k].T
+                    else:
+                        gains[pol][ant] = np.concatenate([gains[pol][ant],cal.gain_array[i,:,:k].T])
+
+    meta['times'] = cal.time_array
+    meta['freqs'] = cal.freq_array
+    meta['history'] = cal.history
+
+    return meta, gains
+
 
 class FirstCal(object):
     def __init__(self, data, wgts, fqs, info):
