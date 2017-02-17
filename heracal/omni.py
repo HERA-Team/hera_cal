@@ -328,6 +328,8 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     meta['times'] = cal.time_array
     meta['freqs'] = cal.freq_array
     meta['history'] = cal.history
+    meta['caltype'] = cal.cal_type
+    meta['gain_conventions'] = cal.gain_convention
 
     return meta, gains, v, x
 
