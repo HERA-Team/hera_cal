@@ -1,13 +1,13 @@
 #! /usr/bin/env python
 
-import aipy, numpy, capo
+import aipy as a, numpy as np, capo
 import optparse, sys
 
 ### Options ###
 o = optparse.OptionParser()
 o.set_usage('omni_apply.py [options] *uvcRRE')
 o.set_description(__doc__)
-aipy.scripting.add_standard_options(o,pol=True)
+a.scripting.add_standard_options(o,pol=True)
 o.add_option('--xtalk',dest='xtalk',default=False,action='store_true',
             help='Toggle: apply xtalk solutions to data. Default=False')
 o.add_option('--omnipath',dest='omnipath',default='%s.npz',type='string',
@@ -50,15 +50,15 @@ for f,filename in enumerate(args):
         def mfunc(uv,p,d,f): #loops over time and baseline
             global times #global list
             _,t,(a1,a2) = p
-            p1,p2 = pol = aipy.miriad.pol2str[uv['pol']]
+            p1,p2 = pol = a.miriad.pol2str[uv['pol']]
             if len(times) == 0 or times[-1] != t: times.append(t) #fill times list
             if opts.xtalk: #subtract xtalk
                 try:
-                    xt = numpy.resize(xtalk[pol][(a1,a2)],d.shape)
+                    xt = np.resize(xtalk[pol][(a1,a2)],d.shape)
                     d -= xt
                 except(KeyError):
                     try:
-                        xt = numpy.resize(xtalk[pol][(a2,a1)].conj(),d.shape) 
+                        xt = np.resize(xtalk[pol][(a2,a1)].conj(),d.shape) 
                         d -= xt
                     except(KeyError): pass
             if opts.firstcal:
@@ -69,12 +69,12 @@ for f,filename in enumerate(args):
             except(KeyError): pass
             try: d /= gains[p2][a2][ti].conj() 
             except(KeyError): pass
-            return p, numpy.where(f,0,d), f
+            return p, np.where(f,0,d), f
     
         if opts.xtalk: print '    Calibrating and subtracting xtalk'
         else: print '    Calibrating'
-        uvi = aipy.miriad.UV(files[filename][p])
-        uvo = aipy.miriad.UV(newfile,status='new')
+        uvi = a.miriad.UV(files[filename][p])
+        uvo = a.miriad.UV(newfile,status='new')
         uvo.init_from_uv(uvi)
         print '    Saving', newfile
         uvo.pipe(uvi, mfunc=mfunc, raw=True, append2hist='OMNICAL: ' + ' '.join(sys.argv) + '\n')
