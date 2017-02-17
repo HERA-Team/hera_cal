@@ -5,6 +5,7 @@ from omni import from_npz, aa_to_info, redcal, compute_xtalk, to_npz
 from miriad import read_files
 import pickle, optparse, os, sys
 from heracal import HERACal
+import pyuvdata 
 
 o = optparse.OptionParser()
 o.set_usage('omni_run.py [options] *uvcRRE')
@@ -21,6 +22,94 @@ o.add_option('--ba',dest='ba',default=None,
 o.add_option('--fc2',dest='fc2',type='string',
             help='Path and name of POL.npz file outputted by firstcal v2.')
 opts,args = o.parse_args(sys.argv[1:])
+
+def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
+
+    pols = v.keys()
+    bls = v[pols[0]].keys()
+                
+    uv = pyuvdata.UVData()
+    if xtalk:
+        uv.Ntimes = 1
+    else:
+        uv.Ntimes = len(m['jds']) 
+    uv.Npols = len(pols)
+    uv.Nbls = len(v[pols[0]].keys()) 
+    uv.Nblts = uv.Nbls * uv.Ntimes
+    uv.Nfreqs = len(m['freqs'])
+    data = {}
+    for p in v.keys():
+        if not p in data.keys(): data[p] = []
+        for bl in v[p].keys():
+            data[p].append(v[p][bl])
+        data[p] = numpy.array(data[p]).reshape(uv.Nblts,uv.Nfreqs)
+
+    uv.data_array = numpy.expand_dims(numpy.array([data[p] for p in pols]).T.swapaxes(0,1), axis=1) # turn into correct shpe
+    uv.vis_units='uncalib'
+    uv.nsample_array = numpy.ones_like(uv.data_array,dtype=numpy.float)
+    uv.flag_array = numpy.zeros_like(uv.data_array,dtype=numpy.bool)
+    uv.Nspws = 1 # this is always 1 for paper and hera(currently)
+    uv.spw_array = numpy.array([uv.Nspws])
+#    uvw_array = aa.
+    blts = numpy.array([bl for bl in bls for i in range(uv.Ntimes)])
+    if xtalk:
+        uv.time_array = numpy.array(list(m['jds'][:1]) * uv.Nbls)
+        uv.lst_array = numpy.array(list(m['lsts'][:1]) * uv.Nbls)
+    else:
+        uv.time_array = numpy.array(list(m['jds']) * uv.Nbls)
+        uv.lst_array = numpy.array(list(m['lsts']) * uv.Nbls)
+
+    #generate uvw
+    uvw = []
+    for t in range(uv.Ntimes):
+        for bl in bls:
+            uvw.append(aa.gen_uvw(*bl, src='z').reshape(3,-1))
+    uv.uvw_array = numpy.array(uvw).reshape(-1,3)
+
+    uv.ant_1_array = blts[:,0]
+    uv.ant_2_array = blts[:,1]
+    uv.baseline_array = uv.antnums_to_baseline(uv.ant_1_array, 
+                                               uv.ant_2_array)
+
+    uv.freq_array = m['freqs'].reshape(1,-1)
+    poldict = {'xx':-5,'yy':-6,'xy':-7,'yx':-8}
+    uv.polarization_array = numpy.array([poldict[p] for p in pols])
+    if xtalk:
+        uv.integration_time = m2['inttime'] * len(m2['jds']) # xtalk integration time is averaged over the whole file
+    else:
+        uv.integration_time = m2['inttime'] 
+    uv.channel_width = numpy.diff(uv.freq_array[0])[0]
+
+    #observation parameters 
+    uv.object_name = 'zenith'
+    uv.telescope_name = 'HERA'
+    uv.instrument = 'HERA'
+    tobj = pyuvdata.uvtel.get_telescope(uv.telescope_name)
+    uv.telescope_location = tobj.telescope_location
+    uv.history = m2['history']# + os. get command line
+    
+    #phasing information
+    uv.phase_type = 'drift'
+    uv.zenith_ra = uv.lst_array
+    uv.zenith_dec = numpy.array([aa.lat]*uv.Nblts)
+    
+    #antenna information 
+    uv.Nants_telescope = 128
+    uv.antenna_numbers = numpy.arange(uv.Nants_telescope, dtype=int)
+    uv.Nants_data = len(numpy.unique(numpy.concatenate([uv.ant_1_array, uv.ant_2_array]).flatten()))
+    uv.antenna_names = numpy.array(['ant{0}'.format(ant) for ant in uv.antenna_numbers])
+    antpos = []
+    for k in aa:
+        antpos.append(k.pos)
+          
+    uv.antenna_positions = numpy.array(antpos)
+
+    if returnuv:
+        return uv
+    else:
+        uv.write_uvfits(filename, force_phase=True, spoof_nonessential=True)
+    
+
 
 #Dictionary of calpar gains and files
 pols = opts.pol.split(',')
@@ -94,12 +183,12 @@ for f,filename in enumerate(args):
         npzb = 3
     else: #zen.jd.pol.npz
         npzb = 4 
-    fitsname = opts.omnipath+'.'.join(filename.split('/')[-1].split('.')[0:npzb])+'.fits'
+    fitsname = opts.omnipath+'.'.join(filename.split('/')[-1].split('.')[0:npzb])+'.fitsA'
     if os.path.exists(fitsname):
         print '   %s exists. Skipping...' % fitsname
         continue
 
-    timeinfo,d,f = read_files([file_group[key] for key in file_group.keys()], antstr='cross', polstr=opts.pol)
+    timeinfo,d,f = read_files([file_group[key] for key in file_group.keys()], antstr='cross', polstr=opts.pol, decimate=20)
     t_jd = timeinfo['times']
     t_lst = timeinfo['lsts']
     freqs = numpy.arange(.1,.2,.1/len(d[d.keys()[0]][pols[0]][0]))
@@ -126,8 +215,12 @@ for f,filename in enumerate(args):
     m2['jds'] = t_jd
     m2['lsts'] = t_lst
     m2['freqs'] = freqs
+    m2['inttime'] = timeinfo['inttime']
     
     print '   Saving %s'%fitsname 
     hc = HERACal(m2, g2)
     hc.write_calfits(fitsname)
-     
+    print('   Saving {0}'.format('.'.join(fitsname.split('.')[:-1]) + '.vis.fits'))
+    write_uvdata_vis('.'.join(fitsname.split('.')[:-1]) + '.vis.fits', aa, m2, v2)
+    print('   Saving {0}'.format('.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits'))
+    write_uvdata_vis('.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits', aa, m2, xtalk, xtalk=True)
