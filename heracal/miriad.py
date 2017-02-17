@@ -38,9 +38,8 @@ def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, r
             pol = a.miriad.pol2str[uv['pol']]
             if not dat[bl].has_key(pol):
                 dat[bl][pol],flg[bl][pol] = [],[]
-            chans = a.scripting.parse_chans(chan_str, len(d))
-            dat[bl][pol].append(d[chans])
-            flg[bl][pol].append(f[chans])
+            dat[bl][pol].append(d)
+            flg[bl][pol].append(f)
     info['freqs'] = a.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
     if recast_as_array:
         # This option helps reduce memory footprint, but it shouldn't
@@ -52,6 +51,7 @@ def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, r
             flg[bl][pol] = np.array(flg[bl][pol])
         info['lsts'] = np.array(info['lsts'])
         info['times'] = np.array(info['times'])
+        info['inttime'] = uv['inttime']
     return info, dat, flg
 
 def read_files_dict(filenames, antstr, polstr, chanbunch='all', decimate=1, decphs=0, verbose=False, recast_as_array=True):
