@@ -2,7 +2,7 @@ import numpy as np
 import omnical
 from red import redundant_bl_cal_simple
 import numpy.linalg as la
-from uvdata import UVCal
+from pyuvdata import UVCal, UVData
 import warnings
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -274,6 +274,9 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     if type(ants) is int: ants = [ants]
     meta, gains = {}, {}
     poldict = {-5: 'x', -4: 'y'}
+    visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
+    xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
+
 
     def parse_key(k):
         bl,pol = k.split()
@@ -298,12 +301,35 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                         gains[pol][ant] = cal.gain_array[i,:,:,k].T
                     else:
                         gains[pol][ant] = np.concatenate([gains[pol][ant],cal.gain_array[i,:,:k].T])
+    
+    vis = UVData()
+    v = {}
+    for f in visfile:
+        vis.read_uvfits(f)
+        for p,pol in enumerate(vis.polarization_array):
+            pol = poldict[pol]*2
+            if not pol in v.keys(): v[pol] = {}
+            for bl,k in zip(*np.unique(vis.baseline_array,return_index=True)):
+                # note we reverse baseline here b/c of conventions
+                v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k+vis.Ntimes, 0, :, p]
+    
+    
+    xtalk = UVData()
+    x = {}
+    for f in xtalkfile:
+        xtalk.read_uvfits(f)
+        for p,pol in enumerate(xtalk.polarization_array):
+            pol = poldict[pol]*2
+            if not pol in x.keys(): x[pol] = {}
+            for bl,k in zip(*np.unique(xtalk.baseline_array,return_index=True)):
+                x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k+xtalk.Ntimes, 0, :, p]
+    
 
     meta['times'] = cal.time_array
     meta['freqs'] = cal.freq_array
     meta['history'] = cal.history
 
-    return meta, gains
+    return meta, gains, v, x
 
 
 class FirstCal(object):
