@@ -1,4 +1,4 @@
-from uvdata.cal import UVCal
+from pyuvdata import UVCal
 import numpy as np
 
 
@@ -72,6 +72,7 @@ class HERACal(UVCal):
             chisqarray.append(ch)
         chisqarray = np.array(chisqarray).swapaxes(0, 3).swapaxes(0, 1)
 
+        self.telescope_name = 'HERA'
         self.Nfreqs = nfreqs
         self.Npols = len(pols)
         self.Ntimes = ntimes
@@ -86,8 +87,10 @@ class HERACal(UVCal):
         self.Nspws = 1
 
         self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
+        self.channel_width = np.diff(self.freq_array)[0][0]
         self.polarization_array = parray[:self.Npols]
         self.time_array = tarray[:self.Ntimes]
+        self.integration_time = np.diff(self.time_array)[0]
         self.gain_convention = 'divide'
         self.x_orientation = 'east'
         if DELAY:
