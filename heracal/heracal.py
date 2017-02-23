@@ -73,6 +73,11 @@ class HERACal(UVCal):
         chisqarray = np.array(chisqarray).swapaxes(0, 3).swapaxes(0, 1)
 
         self.telescope_name = 'HERA'
+        self.observer = 'Zaki Ali (zakiali@berkeley.edu)'
+        try:
+            self.pipeline = meta['pipeline']
+        except KeyError:
+            self.pipeline = 'unknown'
         self.Nfreqs = nfreqs
         self.Npols = len(pols)
         self.Ntimes = ntimes
