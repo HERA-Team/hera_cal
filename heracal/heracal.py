@@ -1,10 +1,10 @@
 from pyuvdata import UVCal
 import numpy as np
 
-
+JD2SEC = 1.*24.*60.*60.
 class HERACal(UVCal):
     '''Class that loads in hera omnical data,'''
-    def __init__(self, meta, gains, DELAY=False, ex_ants=[], appendhist=''):
+    def __init__(self, meta, gains, flags=None, DELAY=False, ex_ants=[], appendhist=''):
         '''given meta and gain dictionary from omni_run.py before to_npz() call,
            to reshuffle data and populating the UVCal class.'''
 
@@ -15,10 +15,13 @@ class HERACal(UVCal):
 
         chisqdict = {}
         datadict = {}
+        flagdict = {}
         ants = []
         for pol in gains:
             for ant in np.sort(gains[pol].keys()):
                 datadict['%d%s' % (ant, pol)] = gains[pol][ant]
+                if flags:
+                    flagdict['%d%s' % (ant, pol)] = flags[pol][ant]
                 if ant not in ants:
                     ants.append(ant)
 
@@ -29,20 +32,23 @@ class HERACal(UVCal):
         time = meta['jds']
         freq = meta['freqs']  # in GHz
         pols = [str2pol[p] for p in gains.keys()]
-        npol = len(pols)
         ntimes = time.shape[0]
         nfreqs = freq.shape[0]
         nants = len(ants)
         antnames = ['ant'+str(ant) for ant in ants]
         datarray = []
         flgarray = []
+        import IPython; IPython.embed()
         for ii in range(npol):
             dd = []
             fl = []
             for ant in ants:
                 try:
                     dd.append(datadict[str(ant)+pol2str[pols[ii]]])
-                    fl.append(np.zeros_like(dd[-1], dtype=bool))
+                    if flags:
+                        fl.append(flagdict[str(ant)+pol2str[pols[ii]]])
+                    else:
+                        fl.append(np.zeros_like(dd[-1], dtype=bool))
                 # if antenna not in data dict (aka, a bad antenna)
                 except(KeyError):
                     print "Can't find antenna {0}".format(ant)
@@ -79,7 +85,7 @@ class HERACal(UVCal):
         except KeyError:
             self.pipeline = 'unknown'
         self.Nfreqs = nfreqs
-        self.Npols = len(pols)
+        self.Njones = len(pols)
         self.Ntimes = ntimes
         try:
             self.history = meta['history'].replace('\n', ' ') + appendhist
@@ -93,19 +99,19 @@ class HERACal(UVCal):
 
         self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
-        self.polarization_array = parray[:self.Npols]
+        self.jones_array = parray[:self.Npols]
         self.time_array = tarray[:self.Ntimes]
-        self.integration_time = np.diff(self.time_array)[0]
+        self.integration_time = meta['inttime']
         self.gain_convention = 'divide'
         self.x_orientation = 'east'
         if DELAY:
             self.set_delay()
             self.delay_array = datarray
             self.quality_array = chisqarray
-            self.flag_array = flgarray
+            self.flag_array = flgarray.astype(np.bool)
 
         else:
             self.set_gain()
             self.gain_array = datarray
             self.quality_array = chisqarray
-            self.flag_array = flgarray
+            self.flag_array = flgarray.astype(np.bool)
