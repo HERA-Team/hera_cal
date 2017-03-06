@@ -61,12 +61,17 @@ meta = {}
 meta['lsts'] = times['lsts']
 meta['jds'] = times['times']
 meta['freqs'] = fqs
+meta['inttime'] = times['inttime']
+meta['chwidth'] = times['chwidth']
 
 delays = {}
+antflags = {}
 for pol in opts.pol.split(','):
     delays[pol[0]] = {}
+    antflags[pol[0]] = {}
     for ant in sols.keys():
         delays[pol[0]][ant] = sols[ant].T
+        antflags[pol[0]][ant] = np.zeros(shape=(len(meta['lsts']), len(meta['freqs'])))
         #generate chisq per antenna/pol.
         meta['chisq{0}{1}'.format(ant,pol[0])] = np.ones(shape=(len(times['times']), 1))
 #overall chisq
@@ -79,5 +84,7 @@ if not opts.outpath is None:
     outname='%s/%s'%(opts.outpath,filename.split('/')[-1])
 else:
     outname='%s'%filename
-hc = HERACal(meta, delays, ex_ants=ex_ants, DELAY=True, appendhist='Testcal')
+
+hc = HERACal(meta, delays, flags=antflags, ex_ants=ex_ants, DELAY=True, appendhist='Testcal')
+print('     Saving {0}'.format(outname))
 hc.write_calfits(outname)
