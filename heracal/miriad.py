@@ -51,7 +51,9 @@ def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, r
             flg[bl][pol] = np.array(flg[bl][pol])
         info['lsts'] = np.array(info['lsts'])
         info['times'] = np.array(info['times'])
-        info['inttime'] = uv['inttime']
+    info['inttime'] = uv['inttime']
+    info['chwidth'] = uv['sdf'] * 1e9 # put this in GHz
+
     return info, dat, flg
 
 def read_files_dict(filenames, antstr, polstr, chanbunch='all', decimate=1, decphs=0, verbose=False, recast_as_array=True):
