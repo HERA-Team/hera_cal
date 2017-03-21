@@ -32,21 +32,22 @@ class HERACal(UVCal):
         time = meta['jds']
         freq = meta['freqs']  # in GHz
         pols = [str2pol[p] for p in gains.keys()]
+        npol = len(pols)
         ntimes = time.shape[0]
         nfreqs = freq.shape[0]
         nants = len(ants)
-        antnames = ['ant'+str(ant) for ant in ants]
+        antnames = ['ant' + str(ant) for ant in ants]
         datarray = []
         flgarray = []
-        import IPython; IPython.embed()
+        # import IPython; IPython.embed()
         for ii in range(npol):
             dd = []
             fl = []
             for ant in ants:
                 try:
-                    dd.append(datadict[str(ant)+pol2str[pols[ii]]])
+                    dd.append(datadict[str(ant) + pol2str[pols[ii]]])
                     if flags:
-                        fl.append(flagdict[str(ant)+pol2str[pols[ii]]])
+                        fl.append(flagdict[str(ant) + pol2str[pols[ii]]])
                     else:
                         fl.append(np.zeros_like(dd[-1], dtype=bool))
                 # if antenna not in data dict (aka, a bad antenna)
@@ -99,11 +100,13 @@ class HERACal(UVCal):
 
         self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
-        self.jones_array = parray[:self.Npols]
+        self.jones_array = parray[:self.Njones]
         self.time_array = tarray[:self.Ntimes]
         self.integration_time = meta['inttime']
         self.gain_convention = 'divide'
         self.x_orientation = 'east'
+        self.time_range = [self.time_array[0], self.time_array[-1]]
+        self.freq_range = [self.freq_array[0], self.freq_array[-1]]
         if DELAY:
             self.set_delay()
             self.delay_array = datarray
