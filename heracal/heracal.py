@@ -106,7 +106,7 @@ class HERACal(UVCal):
         self.gain_convention = 'divide'
         self.x_orientation = 'east'
         self.time_range = [self.time_array[0], self.time_array[-1]]
-        self.freq_range = [self.freq_array[0], self.freq_array[-1]]
+        self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
         if DELAY:
             self.set_delay()
             self.delay_array = datarray
