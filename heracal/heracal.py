@@ -2,6 +2,8 @@ from pyuvdata import UVCal
 import numpy as np
 
 JD2SEC = 1.*24.*60.*60.
+
+
 class HERACal(UVCal):
     '''Class that loads in hera omnical data,'''
     def __init__(self, meta, gains, flags=None, DELAY=False, ex_ants=[], appendhist=''):
