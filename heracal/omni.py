@@ -133,28 +133,28 @@ def redcal(data, info, xtalk=None, gains=None, vis=None, removedegen=False, usel
                                             conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit, trust_period=trust_period)
     # rewrap to new format
     def mk_ap(a): return Antpol(a, info.nant)
-    for i,j in meta['res'].keys():
-        api,apj = mk_ap(i),mk_ap(j)
+    for i, j in meta['res'].keys():
+        api, apj = mk_ap(i), mk_ap(j)
         pol = api.pol() + apj.pol()
         bl = (api.ant(), apj.ant())
         if not meta['res'].has_key(pol): meta['res'][pol] = {}
-        meta['res'][pol][bl] = meta['res'].pop((i,j))
-    #XXX make chisq a nested dict, with individual antpol keys?
+        meta['res'][pol][bl] = meta['res'].pop((i, j))
+    # XXX make chisq a nested dict, with individual antpol keys?
     for k in [k for k in meta.keys() if k.startswith('chisq')]:
         try:
             ant = int(k.split('chisq')[1])
-            meta['chisq'+str(mk_ap(ant))] = meta.pop(k)
+            meta['chisq' + str(mk_ap(ant))] = meta.pop(k)
         except(ValueError): pass
     for i in gains.keys():
         ap = mk_ap(i)
         if not gains.has_key(ap.pol()): gains[ap.pol()] = {}
         gains[ap.pol()][ap.ant()] = gains.pop(i).conj()
-    for i,j in vis.keys():
-        api,apj = mk_ap(i),mk_ap(j)
+    for i, j in vis.keys():
+        api, apj = mk_ap(i), mk_ap(j)
         pol = api.pol() + apj.pol()
         bl = (api.ant(), apj.ant())
         if not vis.has_key(pol): vis[pol] = {}
-        vis[pol][bl] = vis.pop((i,j))
+        vis[pol][bl] = vis.pop((i, j))
     return meta, gains, vis
 
 
@@ -247,7 +247,9 @@ def compute_xtalk(res, wgts):
             w = np.where(w == 0, 1, w)
             xtalk[pol][key] = (r.sum(axis=0) / w).astype(res[pol][key].dtype) # avg over time
     return xtalk
-#PYUV
+
+
+# PYUV
 def to_npz(filename, meta, gains, vismdl, xtalk):
     '''Write results from omnical.calib.redcal (meta,gains,vismdl,xtalk) to npz file.
     Each of these is assumed to be a dict keyed by pol, and then by bl/ant/keyword'''
@@ -267,7 +269,9 @@ def to_npz(filename, meta, gains, vismdl, xtalk):
         for bl in xtalk[pol]:
             d['(%d,%d) %s' % (bl[0],bl[1],pol)] = xtalk[pol][bl]
     np.savez(filename,**d)
-#PYUV
+
+
+# PYUV
 def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
     '''Reconstitute results from to_npz, returns meta, gains, vismdl, xtalk, each
     keyed first by polarization, and then by bl/ant/keyword.
@@ -345,6 +349,7 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
         except(ValueError): pass
     return meta, gains, vismdl, xtalk
 
+
 def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     """
     Read a calibration fits file (pyuvdata format).
@@ -361,12 +366,6 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
     xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
 
-
-    def parse_key(k):
-        bl,pol = k.split()
-        bl = tuple(map(int,bl[1:-1].split(',')))
-        return pol,bl
-
     cal = UVCal()
     for f in filename:
         cal.read_calfits(f)
@@ -375,39 +374,37 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
             if pol not in gains.keys(): gains[pol] = {}
             for i, ant in enumerate(cal.antenna_numbers):
                 if cal.cal_type == 'gain':
-                    if not ant in gains[pol].keys():
-                        gains[pol][ant] = cal.gain_array[i,:,:,k].T
+                    if ant not in gains[pol].keys():
+                        gains[pol][ant] = cal.gain_array[i, :, :, k].T
                     else:
-                        gains[pol][ant] = np.concatenate([gains[pol][ant],cal.gain_array[i,:,:k].T])
-                    meta['chisq{0}{1}'.format(ant,pol)] = cal.quality_array[i,:,:,k].T
+                        gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, : k].T])
+                    meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, :, :, k].T
                 else:
-                    if not ant in gains[pol].keys():
-                        gains[pol][ant] = cal.gain_array[i,:,:,k].T
+                    if ant not in gains[pol].keys():
+                        gains[pol][ant] = cal.gain_array[i, :, :, k].T
                     else:
-                        gains[pol][ant] = np.concatenate([gains[pol][ant],cal.gain_array[i,:,:k].T])
+                        gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, :k].T])
 
     vis = UVData()
     v = {}
     for f in visfile:
         vis.read_uvfits(f)
-        for p,pol in enumerate(vis.polarization_array):
-            pol = poldict[pol]*2
-            if not pol in v.keys(): v[pol] = {}
-            for bl,k in zip(*np.unique(vis.baseline_array,return_index=True)):
+        for p, pol in enumerate(vis.polarization_array):
+            pol = poldict[pol] * 2
+            if pol not in v.keys(): v[pol] = {}
+            for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
                 # note we reverse baseline here b/c of conventions
-                v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k+vis.Ntimes, 0, :, p]
-
+                v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
 
     xtalk = UVData()
     x = {}
     for f in xtalkfile:
         xtalk.read_uvfits(f)
-        for p,pol in enumerate(xtalk.polarization_array):
-            pol = poldict[pol]*2
-            if not pol in x.keys(): x[pol] = {}
-            for bl,k in zip(*np.unique(xtalk.baseline_array,return_index=True)):
-                x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k+xtalk.Ntimes, 0, :, p]
-
+        for p, pol in enumerate(xtalk.polarization_array):
+            pol = poldict[pol] * 2
+            if pol not in x.keys(): x[pol] = {}
+            for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
+                x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p]
 
     meta['times'] = cal.time_array
     meta['freqs'] = cal.freq_array
@@ -424,8 +421,7 @@ class FirstCal(object):
         self.fqs = fqs
         self.info = info
         self.wgts = wgts
-        #if wgts != None: self.wgts = wgts
-        #else: self.wgts = np.ones_like(self.data)
+
     def data_to_delays(self, **kwargs):
         '''data = dictionary of visibilities.
            info = FirstCalRedundantInfo class
@@ -443,69 +439,74 @@ class FirstCal(object):
         blpair2offset = {}
         dd = self.info.order_data(self.data)
         ww = self.info.order_data(self.wgts)
-        for (bl1,bl2) in self.info.bl_pairs:
+        for (bl1, bl2) in self.info.bl_pairs:
             if verbose:
                 print (bl1, bl2)
-            d1 = dd[:,:,self.info.bl_index(bl1)]
-            w1 = ww[:,:,self.info.bl_index(bl1)]
-            d2 = dd[:,:,self.info.bl_index(bl2)]
-            w2 = ww[:,:,self.info.bl_index(bl2)]
-            delay,offset = redundant_bl_cal_simple(d1,w1,d2,w2,self.fqs,**kwargs)
-            blpair2delay[(bl1,bl2)] = delay
-            blpair2offset[(bl1,bl2)] = offset
+            d1 = dd[:, :, self.info.bl_index(bl1)]
+            w1 = ww[:, :, self.info.bl_index(bl1)]
+            d2 = dd[:, :, self.info.bl_index(bl2)]
+            w2 = ww[:, :, self.info.bl_index(bl2)]
+            delay, offset = redundant_bl_cal_simple(d1, w1, d2, w2, self.fqs, **kwargs)
+            blpair2delay[(bl1, bl2)] = delay
+            blpair2offset[(bl1, bl2)] = offset
         return blpair2delay, blpair2offset
-    def get_N(self,nblpairs):
-        return sps.eye(nblpairs)
-    def get_M(self, **kwargs):
-        blpair2delay,blpair2offset = self.data_to_delays(**kwargs)
-        sz = len(blpair2delay[blpair2delay.keys()[0]])
-        M = np.zeros((len(self.info.bl_pairs),sz))
-        O = np.zeros((len(self.info.bl_pairs),sz))
-        for pair in blpair2delay:
-            M[self.info.blpair_index(pair),:] = blpair2delay[pair]
-            O[self.info.blpair_index(pair),:] = blpair2offset[pair]
 
-        return M,O
+    def get_N(self, nblpairs):
+        return sps.eye(nblpairs)
+
+    def get_M(self, **kwargs):
+        blpair2delay, blpair2offset = self.data_to_delays(**kwargs)
+        sz = len(blpair2delay[blpair2delay.keys()[0]])
+        M = np.zeros((len(self.info.bl_pairs), sz))
+        O = np.zeros((len(self.info.bl_pairs), sz))
+        for pair in blpair2delay:
+            M[self.info.blpair_index(pair), :] = blpair2delay[pair]
+            O[self.info.blpair_index(pair), :] = blpair2offset[pair]
+        return M, O
+
     def run(self, **kwargs):
         verbose = kwargs.get('verbose', False)
         offset = kwargs.get('offset', False)
-        #make measurement matrix
+        # make measurement matrix
         print "Geting M,O matrix"
-        self.M,self.O = self.get_M(**kwargs)
+        self.M, self.O = self.get_M(**kwargs)
         print "Geting N matrix"
         N = self.get_N(len(self.info.bl_pairs))
-        #self._N = np.linalg.inv(N)
-        self._N = N #since just using identity now
+        # XXX This needs to be addressed. If actually do invers, slows code way down.
+        # self._N = np.linalg.inv(N)
+        self._N = N  # since just using identity now
 
-        #get coefficients matrix,A
+        # get coefficients matrix,A
         self.A = sps.csr_matrix(self.info.A)
         print 'Shape of coefficient matrix: ', self.A.shape
 
 #        solve for delays
         print "Inverting A.T*N^{-1}*A matrix"
-        invert = self.A.T.dot(self._N.dot(self.A)).todense() #make it dense for pinv
-        dontinvert = self.A.T.dot(self._N.dot(self.M)) #converts it all to a dense matrix
+        invert = self.A.T.dot(self._N.dot(self.A)).todense()  # make it dense for pinv
+        dontinvert = self.A.T.dot(self._N.dot(self.M))  # converts it all to a dense matrix
 #        definitely want to use pinv here and not solve since invert is probably singular.
-        self.xhat = np.dot(np.linalg.pinv(invert),dontinvert)
-        #solve for offset
+        self.xhat = np.dot(np.linalg.pinv(invert), dontinvert)
+        # solve for offset
         if offset:
             print "Inverting A.T*N^{-1}*A matrix"
             invert = self.A.T.dot(self._N.dot(self.A)).todense()
-            dontinvert =self.A.T.dot(self._N.dot(self.O))
-            self.ohat = np.dot(np.linalg.pinv(invert),dontinvert)
-            #turn solutions into dictionary
-            return dict(zip(self.info.subsetant,zip(self.xhat,self.ohat)))
+            dontinvert = self.A.T.dot(self._N.dot(self.O))
+            self.ohat = np.dot(np.linalg.pinv(invert), dontinvert)
+            # turn solutions into dictionary
+            return dict(zip(self.info.subsetant, zip(self.xhat, self.ohat)))
         else:
-            #turn solutions into dictionary
-            return dict(zip(self.info.subsetant,self.xhat))
+            # turn solutions into dictionary
+            return dict(zip(self.info.subsetant, self.xhat))
+
     def get_solved_delay(self):
         solved_delays = []
         for pair in self.info.bl_pairs:
             ant_indexes = self.info.blpair2antind(pair)
             dlys = self.xhat[ant_indexes]
-            solved_delays.append(dlys[0]-dlys[1]-dlys[2]+dlys[3])
+            solved_delays.append(dlys[0] - dlys[1] - dlys[2] + dlys[3])
         self.solved_delays = np.array(solved_delays)
-#PYUV
+
+# PYUV
 def get_phase(fqs,tau, offset=False):
     fqs = fqs.reshape(-1,1) #need the extra axis
     if offset:
@@ -514,7 +515,8 @@ def get_phase(fqs,tau, offset=False):
         return np.exp(-1j*(2*np.pi*fqs*delay) - offset)
     else:
         return np.exp(-2j*np.pi*fqs*tau)
-#PYUV
+
+# PYUV
 def save_gains_fc(s,fqs,pol,filename,ubls=None,ex_ants=None,verbose=False):
     """
     s: solutions
