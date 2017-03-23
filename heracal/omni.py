@@ -1,6 +1,7 @@
 import numpy as np
 import omnical
 from red import redundant_bl_cal_simple
+from copy import deepcopy
 import numpy.linalg as la
 from pyuvdata import UVCal, UVData
 import warnings
@@ -100,33 +101,36 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
             i = Antpol(ant, pol, len(aa))
             antpos[i,0], antpos[i,1], antpos[i,2] = x,y,z
     reds = compute_reds(nant, pols, antpos[:nant], tol=.1)
-    ex_ants = [Antpol(i,nant).ant() for i in range(antpos.shape[0]) if antpos[i,0] == -1]
-    kwargs['ex_ants'] = kwargs.get('ex_ants',[]) + ex_ants
+    ex_ants = [Antpol(i, nant).ant() for i in range(antpos.shape[0]) if antpos[i, 0] == -1]
+    kwargs['ex_ants'] = kwargs.get('ex_ants', []) + ex_ants
     reds = filter_reds(reds, **kwargs)
     if fcal:
         info = FirstCalRedundantInfo(nant)
     else:
         info = RedundantInfo(nant)
-    info.init_from_reds(reds,antpos)
+    info.init_from_reds(reds, antpos)
     return info
 
-def redcal(data, info, xtalk=None, gains=None, vis=None,removedegen=False, uselogcal=True, maxiter=50, conv=1e-3, stepsize=.3, computeUBLFit=True, trust_period=1):
-    #add layer to support new gains format
+
+def redcal(data, info, xtalk=None, gains=None, vis=None, removedegen=False, uselincal=False,
+           uselogcal=False, maxiter=50, conv=1e-3, stepsize=.3, computeUBLFit=True, trust_period=1):
     if gains:
         _gains = {}
         for pol in gains:
             for i in gains[pol]:
-                ai = Antpol(i,pol,info.nant)
+                ai = Antpol(i, pol, info.nant)
                 _gains[int(ai)] = gains[pol][i].conj()
     else: _gains = gains
     if vis:
         _vis = {}
         for pol in vis:
-            for i,j in vis[pol]:
-                ai,aj = Antpol(i,pol[0],info.nant), Antpol(j,pol[1],info.nant)
-                _vis[(int(ai),int(aj))] = vis[pol][(i,j)]
+            for i, j in vis[pol]:
+                ai, aj = Antpol(i, pol[0], info.nant), Antpol(j, pol[1], info.nant)
+                _vis[(int(ai), int(aj))] = vis[pol][(i, j)]
     else: _vis = vis
-    meta, gains, vis = omnical.calib.redcal(data, info, xtalk=xtalk, gains=_gains, vis=_vis, removedegen=removedegen, uselogcal=uselogcal, maxiter=maxiter, conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit, trust_period=trust_period)
+    meta, gains, vis = omnical.calib.redcal(data, info, xtalk=xtalk, gains=_gains, vis=_vis,
+                                            removedegen=removedegen, uselogcal=uselogcal, uselincal=uselincal, maxiter=maxiter,
+                                            conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit, trust_period=trust_period)
     # rewrap to new format
     def mk_ap(a): return Antpol(a, info.nant)
     for i,j in meta['res'].keys():
@@ -152,6 +156,86 @@ def redcal(data, info, xtalk=None, gains=None, vis=None,removedegen=False, uselo
         if not vis.has_key(pol): vis[pol] = {}
         vis[pol][bl] = vis.pop((i,j))
     return meta, gains, vis
+
+
+def create_unitgains(data):
+    '''Create unity gains for all antpols and antennas that appear in data'''
+    unitgains = {}
+    ants = list(set([ant for bl in data.keys() for ant in bl]))
+    antpols = list(set(''.join([vispol for vis in data.values() for vispol in vis.keys()])))
+    for ap in antpols:
+        unitgains[ap] = {ai: np.ones_like(data.values()[0].values()[0], dtype=np.complex64) for ai in ants}
+    return unitgains
+
+
+def logcal(data, info, gainstart=None, xtalk=None, maxiter=50, conv=1e-3, stepsize=.3,
+           computeUBLFit=True, trust_period=1):
+    '''Run omnical's Logcal XXX'''
+    datafc = deepcopy(data)
+
+    unitgains = create_unitgains(data)
+    if gainstart is None: gainstart = deepcopy(unitgains)
+
+    for ai, aj in datafc.keys():
+        if ai in info.subsetant and aj in info.subsetant:
+            for pol in datafc[ai, aj]:
+                datafc[ai, aj][pol] /= (gainstart[pol[0]][ai] * np.conj(gainstart[pol[1]][aj]))
+
+    m, g, v = redcal(datafc, info, gains=unitgains, uselogcal=True, xtalk=xtalk,
+                     conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
+                     trust_period=trust_period, maxiter=maxiter)
+
+    for ap in g.keys():
+        for ai in g[ap].keys():
+            g[ap][ai] *= gainstart[ap][ai]
+
+    return m, g, v
+
+
+def lincal(data, info, gainstart, visstart, xtalk=None, maxiter=50, conv=1e-3,
+           stepsize=.3, computeUBLFit=True, trust_period=1):
+    '''Run omnical's lincal XXX'''
+    datafc = deepcopy(data)
+    for ai, aj in datafc.keys():
+        if ai in info.subsetant and aj in info.subsetant:
+            for pol in datafc[ai, aj]:
+                datafc[ai, aj][pol] /= (gainstart[pol[0]][ai] * np.conj(gainstart[pol[1]][aj]))
+
+    unitgains = create_unitgains(data)
+    m, g, v = redcal(datafc, info, gains=unitgains, vis=visstart, uselincal=True, xtalk=xtalk,
+                     conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
+                     trust_period=trust_period, maxiter=maxiter)
+
+    for ap in g.keys():
+        for ai in g[ap].keys():
+            g[ap][ai] *= gainstart[ap][ai]
+
+    return m, g, v
+
+
+def removedegen(info, gains, vis, gainstart):
+    '''Run omnical's removedegen'''
+    # divide out by gainstart (e.g. firstcal gains).
+    omnigains = deepcopy(gains)
+    for ap in gains.keys():
+        for ai in gains[ap].keys():
+            omnigains[ap][ai] /= gainstart[ap][ai]
+
+    # need to create a fake dataset to input into omnical.
+    fakedata = {}
+    fake_size_like = vis.values()[0].values()[0]
+    for ai, aj in info.bl_order():
+        fakedata[ai.ant(), aj.ant()] = {ai.pol() + aj.pol(): np.ones_like(fake_size_like)}
+
+    m, g, v = redcal(fakedata, info, gains=omnigains, vis=vis, removedegen=True)
+
+    # multipy back in gainstart.
+    for ap in g.keys():
+        for ai in g[ap].keys():
+            g[ap][ai] *= gainstart[ap][ai]
+
+    return m, g, v
+
 
 def compute_xtalk(res, wgts):
     '''Estimate xtalk as time-average of omnical residuals.'''
@@ -301,7 +385,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                         gains[pol][ant] = cal.gain_array[i,:,:,k].T
                     else:
                         gains[pol][ant] = np.concatenate([gains[pol][ant],cal.gain_array[i,:,:k].T])
-    
+
     vis = UVData()
     v = {}
     for f in visfile:
@@ -312,8 +396,8 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
             for bl,k in zip(*np.unique(vis.baseline_array,return_index=True)):
                 # note we reverse baseline here b/c of conventions
                 v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k+vis.Ntimes, 0, :, p]
-    
-    
+
+
     xtalk = UVData()
     x = {}
     for f in xtalkfile:
@@ -323,7 +407,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
             if not pol in x.keys(): x[pol] = {}
             for bl,k in zip(*np.unique(xtalk.baseline_array,return_index=True)):
                 x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k+xtalk.Ntimes, 0, :, p]
-    
+
 
     meta['times'] = cal.time_array
     meta['freqs'] = cal.freq_array
