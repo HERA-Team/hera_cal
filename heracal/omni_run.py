@@ -3,7 +3,7 @@
 import omnical
 import aipy
 import numpy as np
-from omni import from_fits, aa_to_info, redcal, compute_xtalk
+from omni import from_fits, aa_to_info, logcal, lincal, removedegen, compute_xtalk
 from miriad import read_files
 import pickle
 import optparse
@@ -105,7 +105,7 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     # phasing information
     uv.phase_type = 'drift'
     uv.zenith_ra = uv.lst_array
-    uv.zenith_dec = np.array([aa.lat]*uv.Nblts)
+    uv.zenith_dec = np.array([aa.lat] * uv.Nblts)
 
     # antenna information
     uv.Nants_telescope = 128
@@ -167,13 +167,13 @@ for f, filename in enumerate(args):
     file_group = files[filename]  # dictionary with pol indexed files
     print 'Reading:'
     for key in file_group.keys():
-        print '   '+file_group[key]
+        print '   ' + file_group[key]
 
     if len(pols) > 1:  # zen.jd.npz
         npzb = 3
     else:  # zen.jd.pol.npz
         npzb = 4
-    fitsname = opts.omnipath+'.'.join(filename.split('/')[-1].split('.')[0:npzb])+'.fitsA'
+    fitsname = opts.omnipath + '.'.join(filename.split('/')[-1].split('.')[0:npzb]) + '.fitsA'
     if os.path.exists(fitsname):
         print '   %s exists. Skipping...' % fitsname
         continue
@@ -182,7 +182,7 @@ for f, filename in enumerate(args):
                                 antstr='cross', polstr=opts.pol, decimate=20)
     t_jd = timeinfo['times']
     t_lst = timeinfo['lsts']
-    freqs = np.arange(.1, .2, .1/len(d[d.keys()[0]][pols[0]][0]))
+    freqs = np.arange(.1, .2, .1 / len(d[d.keys()[0]][pols[0]][0]))
     SH = d.values()[0].values()[0].shape  # shape of file data (ex: (19,203))
     data, wgts, xtalk = {}, {}, {}
     m2, g2, v2 = {}, {}, {}
@@ -198,11 +198,14 @@ for f, filename in enumerate(args):
             i, j = bl
             wgts[p][(j, i)] = wgts[p][(i, j)] = np.logical_not(f[bl][p]).astype(np.int)
     print '   Logcal-ing'
-    m1, g1, v1 = redcal(data, info, gains=g0, removedegen=opts.removedegen)
+    m1, g1, v1 = logcal(data, info, gainstart=g0)
     print '   Lincal-ing'
-    m2, g2, v2 = redcal(data, info, gains=g1, vis=v1, uselogcal=False, removedegen=opts.removedegen)
+    m2, g2, v2 = lincal(data, info, gainstart=g1, visstart=v1)
+    print '   Removing Degeneracies'
+    _, g3, v3 = removedegen(info, g2, v2, g0)
+
     xtalk = compute_xtalk(m2['res'], wgts)  # xtalk is time-average of residual
-    m2['history'] = 'OMNI_RUN: '+''.join(sys.argv) + '\n'
+    m2['history'] = 'OMNI_RUN: ' + ''.join(sys.argv) + '\n'
     m2['jds'] = t_jd
     m2['lsts'] = t_lst
     m2['freqs'] = freqs
