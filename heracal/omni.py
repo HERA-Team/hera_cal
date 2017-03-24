@@ -206,10 +206,16 @@ def lincal(data, info, gainstart, visstart, xtalk=None, maxiter=50, conv=1e-3,
                      conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
                      trust_period=trust_period, maxiter=maxiter)
 
+    _iter = np.copy(m['iter'])
     for ap in g.keys():
         for ai in g[ap].keys():
             g[ap][ai] *= gainstart[ap][ai]
 
+    m, _, _ = redcal(data, info, gains=g, vis=v, uselincal=True, xtalk=xtalk,
+                     conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
+                     trust_period=trust_period, maxiter=0)
+
+    m['iter'] = _iter
     return m, g, v
 
 
