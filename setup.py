@@ -7,10 +7,10 @@ __version__ = '0.0.0'
 
 setup_args = {
     'name': 'heracals',
-    'author': 'HERA Team'
+    'author': 'HERA Team',
     'url': 'https://github.com/HERA-Team/heracals',
     'license': 'BSD',
-    'description': 'collection of calibration routines to run on the HERA instrument.'.
+    'description': 'collection of calibration routines to run on the HERA instrument.',
     'package_dir': {'heracals': 'heracal'},
     'packages': ['heracal'],
     'scripts': glob.glob('scripts/*'),
