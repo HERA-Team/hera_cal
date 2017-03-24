@@ -13,7 +13,7 @@ setup_args = {
     'description': 'collection of calibration routines to run on the HERA instrument.',
     'package_dir': {'heracals': 'heracal'},
     'packages': ['heracal'],
-    'scripts': glob.glob('scripts/*'),
+#    'scripts': glob.glob('scripts/*'),
     'version': __version__,
     # 'package_data':
     'install_requires': ['numpy>=1.10', 'scipy', 'pyuvdata', 'astropy>1.2', 'aipy'],
