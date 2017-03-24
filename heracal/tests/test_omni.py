@@ -4,7 +4,7 @@ import nose.tools as nt
 import os
 import numpy as np
 import aipy as a
-import omni
+from heracal import omni
 
 
 class AntennaArray(a.fit.AntennaArray):
