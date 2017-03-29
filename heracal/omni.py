@@ -25,8 +25,8 @@ def add_pol(p):
 class Antpol:
     def __init__(self, *args):
         try:
-            ant,pol,nant = args
-            if not POLNUM.has_key(pol): add_pol(pol)
+            ant, pol, nant = args
+            if pol not in POLNUM: add_pol(pol)
             self.val, self.nant = POLNUM[pol] * nant + ant, nant
         except(ValueError): self.val, self.nant = args
     def antpol(self): return self.val % self.nant, NUMPOL[self.val / self.nant]
@@ -38,7 +38,8 @@ class Antpol:
     def __eq__(self, v): return self.ant() == v
     def __repr__(self): return str(self)
 
-## XXX filter_reds w/ pol support should probably be in omnical
+
+# XXX filter_reds w/ pol support should probably be in omnical
 def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, crosspols=None, ex_crosspols=None):
     '''Filter redundancies to include/exclude the specified bls, antennas, and unique bl groups and polarizations.
     Assumes reds indices are Antpol objects.'''
@@ -47,26 +48,30 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     if ex_crosspols: reds = [r for r in reds if not pol(r[0]) in ex_crosspols]
     return omnical.arrayinfo.filter_reds(reds, bls=bls, ex_bls=ex_bls, ants=ants, ex_ants=ex_ants, ubls=ubls, ex_ubls=ex_ubls)
 
+
 class RedundantInfo(omnical.info.RedundantInfo):
     def __init__(self, nant, filename=None):
         omnical.info.RedundantInfo.__init__(self, filename=filename)
         self.nant = nant
+
     def bl_order(self):
         '''Return (i,j) baseline tuples in the order that they should appear in data.  Antenna indicies
         are in real-world order (as opposed to the internal ordering used in subsetant).'''
-        return [(Antpol(self.subsetant[i],self.nant),Antpol(self.subsetant[j],self.nant)) for (i,j) in self.bl2d]
+        return [(Antpol(self.subsetant[i], self.nant), Antpol(self.subsetant[j], self.nant)) for (i, j) in self.bl2d]
+
     def order_data(self, dd):
         '''Create a data array ordered for use in _omnical.redcal.  'dd' is
         a dict whose keys are (i,j) antenna tuples; antennas i,j should be ordered to reflect
         the conjugation convention of the provided data.  'dd' values are 2D arrays
         of (time,freq) data.'''
         d = []
-        for i,j in self.bl_order():
-            bl = (i.ant(),j.ant())
+        for i, j in self.bl_order():
+            bl = (i.ant(), j.ant())
             pol = i.pol() + j.pol()
             try: d.append(dd[bl][pol])
             except(KeyError): d.append(dd[bl[::-1]][pol[::-1]].conj())
-        return np.array(d).transpose((1,2,0))
+        return np.array(d).transpose((1, 2, 0))
+
 
 class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
     def __init__(self, nant):
@@ -74,13 +79,15 @@ class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
         self.nant = nant
         print 'Loading FirstCalRedundantInfo class'
 
+
 def compute_reds(nant, pols, *args, **kwargs):
     _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
     reds = []
     for pi in pols:
         for pj in pols:
-            reds += [[(Antpol(i,pi,nant),Antpol(j,pj,nant)) for i,j in gp] for gp in _reds]
+            reds += [[(Antpol(i, pi, nant), Antpol(j, pj, nant)) for i, j in gp] for gp in _reds]
     return reds
+
 
 def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
     '''Use aa.ant_layout to generate redundances based on ideal placement.
@@ -88,18 +95,18 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
     nant = len(aa)
     try:
         antpos_ideal = aa.antpos_ideal
-        xs,ys,zs = antpos_ideal.T
+        xs, ys, zs = antpos_ideal.T
         layout = np.arange(len(xs))
-        #antpos = np.concatenat([antpos_ideal for i in len(pols)])
+        # antpos = np.concatenat([antpos_ideal for i in len(pols)])
     except(AttributeError):
         layout = aa.ant_layout
-        xs,ys = np.indices(layout.shape)
-    antpos = -np.ones((nant*len(pols),3)) #remake antpos with pol information. -1 to flag
-    for ant,x,y in zip(layout.flatten(), xs.flatten(), ys.flatten()):
+        xs, ys = np.indices(layout.shape)
+    antpos = -np.ones((nant * len(pols), 3))  # remake antpos with pol information. -1 to flag
+    for ant, x, y in zip(layout.flatten(), xs.flatten(), ys.flatten()):
         for z, pol in enumerate(pols):
             z = 2**z
             i = Antpol(ant, pol, len(aa))
-            antpos[i,0], antpos[i,1], antpos[i,2] = x,y,z
+            antpos[i, 0], antpos[i, 1], antpos[i, 2] = x, y, z
     reds = compute_reds(nant, pols, antpos[:nant], tol=.1)
     ex_ants = [Antpol(i, nant).ant() for i in range(antpos.shape[0]) if antpos[i, 0] == -1]
     kwargs['ex_ants'] = kwargs.get('ex_ants', []) + ex_ants
@@ -112,26 +119,30 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
     return info
 
 
-def redcal(data, info, xtalk=None, gains=None, vis=None, removedegen=False, uselincal=False,
-           uselogcal=False, maxiter=50, conv=1e-3, stepsize=.3, computeUBLFit=True, trust_period=1):
-    if gains:
+def wrap_gains_to_antpol(info, gains=None):
+     if gains:
         _gains = {}
         for pol in gains:
             for i in gains[pol]:
                 ai = Antpol(i, pol, info.nant)
-                _gains[int(ai)] = gains[pol][i].conj()
+                _gains[int(ai)] = gains[pol][i].conj()  # this conj was in the previous redcal function. Is it necessary?
     else: _gains = gains
-    if vis:
+    return _gains
+
+
+def wrap_vis_to_antpol(info, vis=None):
+     if vis:
         _vis = {}
         for pol in vis:
             for i, j in vis[pol]:
                 ai, aj = Antpol(i, pol[0], info.nant), Antpol(j, pol[1], info.nant)
                 _vis[(int(ai), int(aj))] = vis[pol][(i, j)]
     else: _vis = vis
-    meta, gains, vis = omnical.calib.redcal(data, info, xtalk=xtalk, gains=_gains, vis=_vis,
-                                            removedegen=removedegen, uselogcal=uselogcal, uselincal=uselincal, maxiter=maxiter,
-                                            conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit, trust_period=trust_period)
-    # rewrap to new format
+    return _vis
+
+
+def wrap_omnical_output(meta, gains, vis):
+    '''Rewraps omnical output to standard format.'''
     def mk_ap(a): return Antpol(a, info.nant)
     for i, j in meta['res'].keys():
         api, apj = mk_ap(i), mk_ap(j)
@@ -158,88 +169,41 @@ def redcal(data, info, xtalk=None, gains=None, vis=None, removedegen=False, usel
     return meta, gains, vis
 
 
-def create_unitgains(data):
-    '''Create unity gains for all antpols and antennas that appear in data'''
-    unitgains = {}
-    ants = list(set([ant for bl in data.keys() for ant in bl]))
-    antpols = list(set(''.join([vispol for vis in data.values() for vispol in vis.keys()])))
-    for ap in antpols:
-        unitgains[ap] = {ai: np.ones_like(data.values()[0].values()[0], dtype=np.complex64) for ai in ants}
-    return unitgains
-
-
 def logcal(data, info, gainstart=None, xtalk=None, maxiter=50, conv=1e-3, stepsize=.3,
            computeUBLFit=True, trust_period=1):
-    '''Run omnical's Logcal XXX'''
-    datafc = deepcopy(data)
+    '''High level wrapper for running omnical's logcal function.'''
+    gainstart = wrap_gains_to_antpol(info, gains=gainstart)
 
-    unitgains = create_unitgains(data)
-    if gainstart is None: gainstart = deepcopy(unitgains)
-
-    for ai, aj in datafc.keys():
-        if ai in info.subsetant and aj in info.subsetant:
-            for pol in datafc[ai, aj]:
-                datafc[ai, aj][pol] /= (gainstart[pol[0]][ai] * np.conj(gainstart[pol[1]][aj]))
-
-    m, g, v = redcal(datafc, info, gains=unitgains, uselogcal=True, xtalk=xtalk,
-                     conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
-                     trust_period=trust_period, maxiter=maxiter)
-
-    for ap in g.keys():
-        for ai in g[ap].keys():
-            g[ap][ai] *= gainstart[ap][ai]
-
+    m, g, v = omnical.calib.logcal(data, info, xtalk=xtalk, gainstart=gainstart,
+                                   maxiter=maxiter, conv=conv, stepsize=stepsize,
+                                   computeUBLFit=computeUBLFit, trust_period=trust_period)
+    m, g, v = wrap_omnical_output(m, g, v)
     return m, g, v
 
 
 def lincal(data, info, gainstart, visstart, xtalk=None, maxiter=50, conv=1e-3,
            stepsize=.3, computeUBLFit=True, trust_period=1):
-    '''Run omnical's lincal XXX'''
-    datafc = deepcopy(data)
-    for ai, aj in datafc.keys():
-        if ai in info.subsetant and aj in info.subsetant:
-            for pol in datafc[ai, aj]:
-                datafc[ai, aj][pol] /= (gainstart[pol[0]][ai] * np.conj(gainstart[pol[1]][aj]))
+    '''High level wrapper for running omnical's lincal function.'''
+    gainstart= wrap_gains_to_antpol(info, gains=gainstart)
+    visstart= wrap_vis_to_antpol(info, vis=visstart)
 
-    unitgains = create_unitgains(data)
-    m, g, v = redcal(datafc, info, gains=unitgains, vis=visstart, uselincal=True, xtalk=xtalk,
-                     conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
-                     trust_period=trust_period, maxiter=maxiter)
+    m, g, v = omnical.calib.lincal(data, info, gainstart, visstart, xtalk=xtalk,
+                                   conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
+                                   trust_period=trust_period, maxiter=maxiter)
 
-    _iter = np.copy(m['iter'])
-    for ap in g.keys():
-        for ai in g[ap].keys():
-            g[ap][ai] *= gainstart[ap][ai]
-
-    m, _, _ = redcal(data, info, gains=g, vis=v, uselincal=True, xtalk=xtalk,
-                     conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
-                     trust_period=trust_period, maxiter=0)
-
-    m['iter'] = _iter
+    m, g, v = wrap_omnical_output(m, g, v)
     return m, g, v
 
 
 def removedegen(info, gains, vis, gainstart):
-    '''Run omnical's removedegen'''
-    # divide out by gainstart (e.g. firstcal gains).
-    omnigains = deepcopy(gains)
-    for ap in gains.keys():
-        for ai in gains[ap].keys():
-            omnigains[ap][ai] /= gainstart[ap][ai]
+    '''High level wrapper for running omnical's removedegen function.'''
+    gains = wrap_gains_to_antpol(gains=gains)
+    gainstart = wrap_gains_to_antpol(gains=gainstart)
+    vis = wrap_vis_to_antpol(vis=vis)
 
-    # need to create a fake dataset to input into omnical.
-    fakedata = {}
-    fake_size_like = vis.values()[0].values()[0]
-    for ai, aj in info.bl_order():
-        fakedata[ai.ant(), aj.ant()] = {ai.pol() + aj.pol(): np.ones_like(fake_size_like)}
+    m, g, v = omnical.calib.lincal(info, gains, vis, gainstart)
 
-    m, g, v = redcal(fakedata, info, gains=omnigains, vis=vis, removedegen=True)
-
-    # multipy back in gainstart.
-    for ap in g.keys():
-        for ai in g[ap].keys():
-            g[ap][ai] *= gainstart[ap][ai]
-
+    m, g, v = wrap_omnical_output(m, g, v)
     return m, g, v
 
 
@@ -249,35 +213,33 @@ def compute_xtalk(res, wgts):
     for pol in res.keys():
         xtalk[pol] = {}
         for key in res[pol]:
-            r,w = np.where(wgts[pol][key] > 0, res[pol][key], 0), wgts[pol][key].sum(axis=0)
+            r, w = np.where(wgts[pol][key] > 0, res[pol][key], 0), wgts[pol][key].sum(axis=0)
             w = np.where(w == 0, 1, w)
-            xtalk[pol][key] = (r.sum(axis=0) / w).astype(res[pol][key].dtype) # avg over time
+            xtalk[pol][key] = (r.sum(axis=0) / w).astype(res[pol][key].dtype)  # avg over time
     return xtalk
 
 
-# PYUV
 def to_npz(filename, meta, gains, vismdl, xtalk):
     '''Write results from omnical.calib.redcal (meta,gains,vismdl,xtalk) to npz file.
     Each of these is assumed to be a dict keyed by pol, and then by bl/ant/keyword'''
     d = {}
-    metakeys = ['jds','lsts','freqs','history']#,chisq]
+    metakeys = ['jds', 'lsts', 'freqs', 'history']  # ,chisq]
     for key in meta:
-        if key.startswith('chisq'): d[key] = meta[key] #separate if statements  pending changes to chisqs
+        if key.startswith('chisq'): d[key] = meta[key]  # separate if statements  pending changes to chisqs
         for k in metakeys:
             if key.startswith(k): d[key] = meta[key]
     for pol in gains:
         for ant in gains[pol]:
-            d['%d%s' % (ant,pol)] = gains[pol][ant]
+            d['%d%s' % (ant, pol)] = gains[pol][ant]
     for pol in vismdl:
         for bl in vismdl[pol]:
-            d['<%d,%d> %s' % (bl[0],bl[1],pol)] = vismdl[pol][bl]
+            d['<%d,%d> %s' % (bl[0], bl[1], pol)] = vismdl[pol][bl]
     for pol in xtalk:
         for bl in xtalk[pol]:
-            d['(%d,%d) %s' % (bl[0],bl[1],pol)] = xtalk[pol][bl]
-    np.savez(filename,**d)
+            d['(%d,%d) %s' % (bl[0], bl[1], pol)] = xtalk[pol][bl]
+    np.savez(filename, **d)
 
 
-# PYUV
 def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
     '''Reconstitute results from to_npz, returns meta, gains, vismdl, xtalk, each
     keyed first by polarization, and then by bl/ant/keyword.
