@@ -64,7 +64,6 @@ class TestBasics(object):
         # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
 
 
-
 class Test_Antpol(object):
     def setUp(self):
         self.pols = ['x', 'y']
@@ -153,3 +152,38 @@ class Test_Redcal_with_Degen(object):
         gains = np.array([g[pol][i] for pol in g.keys() for i in g[pol].keys()])
         nt.assert_equal(np.testing.assert_almost_equal(np.mean(np.abs(gains), axis=0), np.ones_like(gains), decimal=8))
         nt.assert_equal(np.testing.assert_almost_equal(np.mean(np.angle(gains), axis=0), np.zeros_like(np.real(gains[0])), decimal=8), None)
+
+
+class Test_FirstCal(object):
+    def setUp(self):
+        # set up the basics
+        self.freqs = np.linspace(.1, .2, 16)
+        self.times = np.arange(4)
+        self.aa = get_aa(self.freqs, nants=20)
+        self.info = omni.aa_to_info(self.aa, fcal=True)
+        self.pol = 'x'
+        self.reds = self.info.get_reds()
+        self.true_vis = {self.pol * 2: {}}
+        # Make true visibilities. These are random complex arrays. Note format is [pol][unique_baseline_representative]
+        for i, rg in enumerate(self.reds):
+            rd = np.array(np.random.randn(self.times.size, self.freqs.size) + 1j * np.random.randn(self.times.size, self.freqs.size), dtype=np.complex64)
+            self.true_vis[self.pol * 2][rg[0]] = rd
+        self.true_gains = {self.pol: {}}
+        # Make the true gains. Set to unity. Format is [pol][antenna].
+        for i in self.info.subsetant:
+            self.true_gains[self.pol][i] = np.ones((self.times.size, self.freqs.size), dtype=np.complex64)  # make it more complicated
+        # Make noisey gains = true_gains + some phase wraps.
+        self.noisey_gains = {self.pol: {i: self.true_gains[self.pol][i] + np.exp(2j*np.pi*(np.random.randint(10,30)+10)*self.freqs) for i in self.true_gains[self.pol].keys()}}
+        self.data = {}
+        self.bl2red = {}
+        for rg in self.reds:
+            for r in rg:
+                self.bl2red[r] = rg[0]
+        for redgp in self.reds:
+            for ai, aj in redgp:
+                self.data[ai, aj] = {self.pol * 2: self.true_vis[self.pol * 2][self.bl2red[ai, aj]] * self.noisey_gains[self.pol][ai] * np.conj(self.noisey_gains[self.pol][aj])}
+
+        self.wgts = {}
+        for redgp in self.reds:
+            for ai, aj in redgp:
+                self.wgts[ai, aj] = {self.pol * 2: np.ones_like(self.data[ai, aj][self.pol*2], dtype=float)}
