@@ -120,25 +120,36 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
 
 
 def wrap_gains_to_antpol(info, gains=None):
-     if gains:
+    if gains:
         _gains = {}
         for pol in gains:
             for i in gains[pol]:
                 ai = Antpol(i, pol, info.nant)
                 _gains[int(ai)] = gains[pol][i].conj()  # this conj was in the previous redcal function. Is it necessary?
-    else: _gains = gains
+    else:
+        _gains = gains
     return _gains
 
 
 def wrap_vis_to_antpol(info, vis=None):
-     if vis:
+    if vis:
         _vis = {}
         for pol in vis:
             for i, j in vis[pol]:
                 ai, aj = Antpol(i, pol[0], info.nant), Antpol(j, pol[1], info.nant)
                 _vis[(int(ai), int(aj))] = vis[pol][(i, j)]
-    else: _vis = vis
+    else:
+        _vis = vis
     return _vis
+
+
+def wrap_data_to_antpol(info, data):
+    _data = {}
+    for i, j in data:
+        for pol in data[i, j]:
+            ai, aj = Antpol(i, pol[0], info.nant), Antpol(j, pol[1], info.nant)
+            _data[(int(ai), int(aj))] = data[(i, j)][pol]
+    return _data
 
 
 def wrap_omnical_output(meta, gains, vis):
@@ -173,6 +184,7 @@ def logcal(data, info, gainstart=None, xtalk=None, maxiter=50, conv=1e-3, stepsi
            computeUBLFit=True, trust_period=1):
     '''High level wrapper for running omnical's logcal function.'''
     gainstart = wrap_gains_to_antpol(info, gains=gainstart)
+    data = wrap_data_to_antpol(info, data)
 
     m, g, v = omnical.calib.logcal(data, info, xtalk=xtalk, gainstart=gainstart,
                                    maxiter=maxiter, conv=conv, stepsize=stepsize,
@@ -184,8 +196,9 @@ def logcal(data, info, gainstart=None, xtalk=None, maxiter=50, conv=1e-3, stepsi
 def lincal(data, info, gainstart, visstart, xtalk=None, maxiter=50, conv=1e-3,
            stepsize=.3, computeUBLFit=True, trust_period=1):
     '''High level wrapper for running omnical's lincal function.'''
-    gainstart= wrap_gains_to_antpol(info, gains=gainstart)
-    visstart= wrap_vis_to_antpol(info, vis=visstart)
+    gainstart = wrap_gains_to_antpol(info, gains=gainstart)
+    visstart = wrap_vis_to_antpol(info, vis=visstart)
+    data = wrap_data_to_antpol(info, data)
 
     m, g, v = omnical.calib.lincal(data, info, gainstart, visstart, xtalk=xtalk,
                                    conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
