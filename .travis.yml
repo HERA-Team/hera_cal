@@ -26,4 +26,4 @@ install:
   - pip install git+https://github.com/HERA-Team/pyuvdata.git@cal
   - python setup.py install
 
-script: nosetests heracals
+script: nosetests heracal
