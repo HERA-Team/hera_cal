@@ -6,12 +6,12 @@ from os import listdir
 __version__ = '0.0.0'
 
 setup_args = {
-    'name': 'heracals',
+    'name': 'heracal',
     'author': 'HERA Team',
-    'url': 'https://github.com/HERA-Team/heracals',
+    'url': 'https://github.com/HERA-Team/heracal',
     'license': 'BSD',
     'description': 'collection of calibration routines to run on the HERA instrument.',
-    'package_dir': {'heracals': 'heracal'},
+    'package_dir': {'heracal': 'heracal'},
     'packages': ['heracal'],
 #    'scripts': glob.glob('scripts/*'),
     'version': __version__,
