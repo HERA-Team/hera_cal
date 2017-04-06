@@ -4,7 +4,8 @@ import nose.tools as nt
 import os
 import numpy as np
 import aipy as a
-from heracal import omni
+import heracal.omni as omni
+#from heracal import omni
 
 
 class AntennaArray(a.fit.AntennaArray):
@@ -25,12 +26,14 @@ def get_aa(freqs, nants=4):
         return aa
 
 
-class TestBasics(object):
+class TestMethods(object):
     def setUp(self):
         """Set up for basic tests of antenna array to info object."""
         self.freqs = np.linspace(.1, .2, 16)
+        self.pols = ['x', 'y']
         self.aa = get_aa(self.freqs)
-        self.info = omni.aa_to_info(self.aa, pols=['x', 'y'])
+        self.info = omni.aa_to_info(self.aa, pols=self.pols)
+        self.gains = {pol: {ant: np.ones((1, self.freqs.size)) for ant in range(self.info.nant)} for pol in self.pols}
 
     def test_aa_to_info(self):
         info = omni.aa_to_info(self.aa)
@@ -63,6 +66,32 @@ class TestBasics(object):
         # exclude crosspols
         # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
 
+    def test_compute_reds(self):
+        reds = omni.compute_reds(4, self.pols, self.info.antloc[:self.info.nant])
+        for i in reds:
+            for k in i:
+                for l in k:
+                    nt.assert_true(isinstance(l, omni.Antpol))
+
+    def test_wrap_gains_to_antpol(self):
+        _gains = omni.wrap_gains_to_antpol(self.info, self.gains)
+        nt.assert_equal(len(_gains), self.info.nant * len(self.pols))
+
+#    def test_wrap_vis_to_antpol(self):
+#
+#    def test_omnical_output(self):
+#
+#    def test_logcal(self):
+#
+#    def test_lincal(self):
+#
+#    def test_remove_degen(self):
+#
+#    def test_compute_xtalk(self):
+#
+#    def test_from_fits(self):
+#
+#    def test_get_phase(self):
 
 class Test_Antpol(object):
     def setUp(self):
@@ -95,63 +124,14 @@ class Test_Redcal_Basics(object):
             self.data[ai.ant(), aj.ant()] = {self.pol[0] * 2: np.ones((self.times.size, self.freqs.size), dtype=np.complex64)}
         self.unitgains = {self.pol[0]: {ant: np.ones((self.times.size, self.freqs.size), dtype=np.complex64) for ant in self.info.subsetant}}
 
-    def test_unitgains(self):
-        nt.assert_equal(np.testing.assert_equal(omni.create_unitgains(self.data), {self.pol[0]: {ant: np.ones((self.times.size, self.freqs.size), dtype=np.complex64) for ant in self.info.subsetant}}), None)
-
     def test_logcal(self):
         m, g, v = omni.logcal(self.data, self.info, gainstart=self.unitgains)
         nt.assert_equal(np.testing.assert_equal(g, self.unitgains), None)
 
     def test_lincal(self):
         m1, g1, v1 = omni.logcal(self.data, self.info, gainstart=self.unitgains)
-        m, g, v = omni.lincal(self.data, self.info, gainstart=g1, visstart=v1)
+        m, g, v = omni.lincal(self.data, self.info, g1, v1)
         nt.assert_equal(np.testing.assert_equal(g, self.unitgains), None)
-
-
-class Test_Redcal_with_Degen(object):
-    def setUp(self):
-        self.freqs = np.linspace(.1, .2, 16)
-        self.times = np.arange(4)
-        self.aa = get_aa(self.freqs, nants=20)
-        self.info = omni.aa_to_info(self.aa)
-        self.pol = 'x'
-        self.reds = self.info.get_reds()
-        self.true_vis = {self.pol * 2: {}}
-        for i, rg in enumerate(self.reds):
-            rd = np.array(np.random.randn(self.times.size, self.freqs.size) + 1j * np.random.randn(self.times.size, self.freqs.size), dtype=np.complex64)
-            self.true_vis[self.pol * 2][rg[0]] = rd
-        self.true_gains = {self.pol: {}}
-        for i in self.info.subsetant:
-            self.true_gains[self.pol][i] = np.ones((self.times.size, self.freqs.size), dtype=np.complex64)  # make it more complicated
-        self.data = {}
-        self.bl2red = {}
-        for rg in self.reds:
-            for r in rg:
-                self.bl2red[r] = rg[0]
-        for redgp in self.reds:
-            for ai, aj in redgp:
-                self.data[ai, aj] = {self.pol * 2: self.true_vis[self.pol * 2][self.bl2red[ai, aj]] * self.true_gains[self.pol][ai] * np.conj(self.true_gains[self.pol][aj])}
-
-    def test_redcal(self):
-        m1, g1, v1 = omni.logcal(self.data, self.info)
-        m, g, v = omni.lincal(self.data, self.info, gainstart=g1, visstart=v1)
-        _, g, v = omni.removedegen(self.info, g, v, omni.create_unitgains(self.data))
-        nt.assert_equal(np.testing.assert_almost_equal(m['chisq'], np.zeros_like(m['chisq']), decimal=8), None)
-
-        # make sure model visibilities equals true visibilities
-        for pol in v.keys():
-            for bl in v[pol].keys():
-                nt.assert_equal(np.testing.assert_almost_equal(v[pol][bl], self.true_vis[pol][bl], decimal=8), None)
-
-        # make sure gains equal true gains
-        for pol in g.keys():
-            for ai in g[pol].keys():
-                nt.assert_equal(np.testing.assert_almost_equal(g[pol][ai], self.true_gains[pol][ai], decimal=8), None)
-
-        # test to make sure degeneracies keep average amplitudes and phases constant.
-        gains = np.array([g[pol][i] for pol in g.keys() for i in g[pol].keys()])
-        nt.assert_equal(np.testing.assert_almost_equal(np.mean(np.abs(gains), axis=0), np.ones_like(gains), decimal=8))
-        nt.assert_equal(np.testing.assert_almost_equal(np.mean(np.angle(gains), axis=0), np.zeros_like(np.real(gains[0])), decimal=8), None)
 
 
 class Test_FirstCal(object):
@@ -159,7 +139,7 @@ class Test_FirstCal(object):
         # set up the basics
         self.freqs = np.linspace(.1, .2, 16)
         self.times = np.arange(4)
-        self.aa = get_aa(self.freqs, nants=20)
+        self.aa = get_aa(self.freqs, nants=8)
         self.info = omni.aa_to_info(self.aa, fcal=True)
         self.pol = 'x'
         self.reds = self.info.get_reds()
@@ -173,7 +153,7 @@ class Test_FirstCal(object):
         for i in self.info.subsetant:
             self.true_gains[self.pol][i] = np.ones((self.times.size, self.freqs.size), dtype=np.complex64)  # make it more complicated
         # Make noisey gains = true_gains + some phase wraps.
-        self.noisey_gains = {self.pol: {i: self.true_gains[self.pol][i] + np.exp(2j*np.pi*(np.random.randint(10,30)+10)*self.freqs) for i in self.true_gains[self.pol].keys()}}
+        self.noisey_gains = {self.pol: {i: self.true_gains[self.pol][i] + np.exp(2j*np.pi*(np.random.randint(10,30))*self.freqs) for i in self.true_gains[self.pol].keys()}}
         self.data = {}
         self.bl2red = {}
         for rg in self.reds:
