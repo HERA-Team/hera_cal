@@ -20,7 +20,7 @@ install:
   - conda info -a
 
   # create environment and install dependencies
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy astropy nose pip matplotlib
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy=1.11.2 scipy astropy nose pip matplotlib
   - source activate test-environment
   - conda install -c pkgw aipy
   - pip install git+https://github.com/HERA-Team/pyuvdata.git@cal
