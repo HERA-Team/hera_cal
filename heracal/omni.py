@@ -49,7 +49,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     return omnical.arrayinfo.filter_reds(reds, bls=bls, ex_bls=ex_bls, ants=ants, ex_ants=ex_ants, ubls=ubls, ex_ubls=ex_ubls)
 
 
-class RedundantInfo(omnical.info.RedundantInfo):
+class RedundantInfo(omnical.calib.RedundantInfo):
     def __init__(self, nant, filename=None):
         omnical.info.RedundantInfo.__init__(self, filename=filename)
         self.nant = nant
@@ -72,6 +72,62 @@ class RedundantInfo(omnical.info.RedundantInfo):
             except(KeyError): d.append(dd[bl[::-1]][pol[::-1]].conj())
         return np.array(d).transpose((1, 2, 0))
 
+    def pack_calpar(self, calpar, gains=None, vis=None):
+        '''Take the pol/antenna/bl formatted gains and visibilities and 
+           wrap them to antpol format. Call RedundantInfo pack_calpar to
+           generate calpar for omnical format.'''
+        if gains:
+            _gains = {}
+            for pol in gains:
+                for i in gains[pol]:
+                    ai = Antpol(i, pol, self.nant)
+                    _gains[int(ai)] = gains[pol][i].conj() # is this conj necessary?
+        else:
+            _gains = gains
+
+        if vis:
+            _vis = {}
+            for pol in vis:
+                for i, j in vis[pol]:
+                    ai, aj = Antpol(i, pol[0], self.nant), Antpol(j, pol[1], self.nant)
+                    _vis[(int(ai), int(aj))] = vis[pol][(i, j)]
+        else:
+            _vis = vis
+
+        calpar = omnical.calib.RedundantInfo.pack_calpar(self, calpar, gains=_gains, vis=_vis)
+
+        return calpar
+    
+    def unpack_calpar(self, calpar):
+        '''Unpack the solved for calibration parameters and repack
+           those to antpol format'''
+        meta, gains, vis = omnical.calib.RedundantInfo.unpack_calpar(self, calpar)
+
+        def mk_ap(a): return Antpol(a, self.nant)
+        for i, j in meta['res'].keys():
+            api, apj = mk_ap(i), mk_ap(j)
+            pol = api.pol() + apj.pol()
+            bl = (api.ant(), apj.ant())
+            if not meta['res'].has_key(pol): meta['res'][pol] = {}
+            meta['res'][pol][bl] = meta['res'].pop((i, j))
+        # XXX make chisq a nested dict, with individual antpol keys?
+        for k in [k for k in meta.keys() if k.startswith('chisq')]:
+            try:
+                ant = int(k.split('chisq')[1])
+                meta['chisq' + str(mk_ap(ant))] = meta.pop(k)
+            except(ValueError): pass
+        for i in gains.keys():
+            ap = mk_ap(i)
+            if not gains.has_key(ap.pol()): gains[ap.pol()] = {}
+            gains[ap.pol()][ap.ant()] = gains.pop(i).conj()
+        for i, j in vis.keys():
+            api, apj = mk_ap(i), mk_ap(j)
+            pol = api.pol() + apj.pol()
+            bl = (api.ant(), apj.ant())
+            if not vis.has_key(pol): vis[pol] = {}
+            vis[pol][bl] = vis.pop((i, j))
+        return meta, gains, vis
+       
 
 class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
     def __init__(self, nant):
@@ -119,66 +175,8 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
     return info
 
 
-def wrap_gains_to_antpol(info, gains=None):
-    if gains:
-        _gains = {}
-        for pol in gains:
-            for i in gains[pol]:
-                ai = Antpol(i, pol, info.nant)
-                _gains[int(ai)] = gains[pol][i].conj()  # this conj was in the previous redcal function. Is it necessary?
-    else:
-        _gains = gains
-    return _gains
-
-
-def wrap_vis_to_antpol(info, vis=None):
-    if vis:
-        _vis = {}
-        for pol in vis:
-            for i, j in vis[pol]:
-                ai, aj = Antpol(i, pol[0], info.nant), Antpol(j, pol[1], info.nant)
-                _vis[(int(ai), int(aj))] = vis[pol][(i, j)]
-    else:
-        _vis = vis
-    return _vis
-
-
-def wrap_data_to_antpol(info, data):
-    _data = {}
-    for i, j in data:
-        for pol in data[i, j]:
-            ai, aj = Antpol(i, pol[0], info.nant), Antpol(j, pol[1], info.nant)
-            _data[(int(ai), int(aj))] = data[(i, j)][pol]
-    return _data
-
-
-def wrap_omnical_output(meta, gains, vis):
-    '''Rewraps omnical output to standard format.'''
-    def mk_ap(a): return Antpol(a, info.nant)
-    for i, j in meta['res'].keys():
-        api, apj = mk_ap(i), mk_ap(j)
-        pol = api.pol() + apj.pol()
-        bl = (api.ant(), apj.ant())
-        if not meta['res'].has_key(pol): meta['res'][pol] = {}
-        meta['res'][pol][bl] = meta['res'].pop((i, j))
-    # XXX make chisq a nested dict, with individual antpol keys?
-    for k in [k for k in meta.keys() if k.startswith('chisq')]:
-        try:
-            ant = int(k.split('chisq')[1])
-            meta['chisq' + str(mk_ap(ant))] = meta.pop(k)
-        except(ValueError): pass
-    for i in gains.keys():
-        ap = mk_ap(i)
-        if not gains.has_key(ap.pol()): gains[ap.pol()] = {}
-        gains[ap.pol()][ap.ant()] = gains.pop(i).conj()
-    for i, j in vis.keys():
-        api, apj = mk_ap(i), mk_ap(j)
-        pol = api.pol() + apj.pol()
-        bl = (api.ant(), apj.ant())
-        if not vis.has_key(pol): vis[pol] = {}
-        vis[pol][bl] = vis.pop((i, j))
-    return meta, gains, vis
-
+def omnical():
+    '''Write omnical function here that just runs the full omnical'''
 
 def logcal(data, info, gainstart=None, xtalk=None, maxiter=50, conv=1e-3, stepsize=.3,
            computeUBLFit=True, trust_period=1):
@@ -198,7 +196,7 @@ def lincal(data, info, gainstart, visstart, xtalk=None, maxiter=50, conv=1e-3,
     '''High level wrapper for running omnical's lincal function.'''
     gainstart = wrap_gains_to_antpol(info, gains=gainstart)
     visstart = wrap_vis_to_antpol(info, vis=visstart)
-    data = wrap_data_to_antpol(info, data)
+    #data = wrap_data_to_antpol(info, data)
 
     m, g, v = omnical.calib.lincal(data, info, gainstart, visstart, xtalk=xtalk,
                                    conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
