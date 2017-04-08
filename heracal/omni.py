@@ -175,48 +175,21 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
     return info
 
 
-def omnical():
-    '''Write omnical function here that just runs the full omnical'''
+def omnical(data, info, gains=gains, dontprojectthesegains=None, xtalk=None, maxiter=50,
+            conv=1e-3, stepsize=.3, computeUBLFit=True, trust_period=1):
+    '''Run a full run through of omnical: Logcal, lincal, and removing degeneracies.'''
+    
 
-def logcal(data, info, gainstart=None, xtalk=None, maxiter=50, conv=1e-3, stepsize=.3,
-           computeUBLFit=True, trust_period=1):
-    '''High level wrapper for running omnical's logcal function.'''
-    gainstart = wrap_gains_to_antpol(info, gains=gainstart)
-    data = wrap_data_to_antpol(info, data)
+    m1, g1, v1 = omnical.calib.logcal(data, info, xtalk=xtalk, gains=gains,
+                                      maxiter=maxiter, conv=conv, stepsize=stepsize,
+                                      computeUBLFit=computeUBLFit, trust_period=trust_period)
 
-    m, g, v = omnical.calib.logcal(data, info, xtalk=xtalk, gainstart=gainstart,
-                                   maxiter=maxiter, conv=conv, stepsize=stepsize,
-                                   computeUBLFit=computeUBLFit, trust_period=trust_period)
-    m, g, v = wrap_omnical_output(m, g, v)
-    return m, g, v
+    m2, g2, v2 = omnical.calib.lincal(data, info, gains=g1, vis=v1, xtalk=xtalk,
+                                      conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
+                                      trust_period=trust_period, maxiter=maxiter)
 
-
-def lincal(data, info, gainstart, visstart, xtalk=None, maxiter=50, conv=1e-3,
-           stepsize=.3, computeUBLFit=True, trust_period=1):
-    '''High level wrapper for running omnical's lincal function.'''
-    gainstart = wrap_gains_to_antpol(info, gains=gainstart)
-    visstart = wrap_vis_to_antpol(info, vis=visstart)
-    #data = wrap_data_to_antpol(info, data)
-
-    m, g, v = omnical.calib.lincal(data, info, gainstart, visstart, xtalk=xtalk,
-                                   conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
-                                   trust_period=trust_period, maxiter=maxiter)
-
-    m, g, v = wrap_omnical_output(m, g, v)
-    return m, g, v
-
-
-def removedegen(info, gains, vis, gainstart):
-    '''High level wrapper for running omnical's removedegen function.'''
-    gains = wrap_gains_to_antpol(gains=gains)
-    gainstart = wrap_gains_to_antpol(gains=gainstart)
-    vis = wrap_vis_to_antpol(vis=vis)
-
-    m, g, v = omnical.calib.lincal(info, gains, vis, gainstart)
-
-    m, g, v = wrap_omnical_output(m, g, v)
-    return m, g, v
-
+    _, g3, v3 = omnical.calib.removedegen(info, g2, v2, dontprojectthesegains)
+    
 
 def compute_xtalk(res, wgts):
     '''Estimate xtalk as time-average of omnical residuals.'''
