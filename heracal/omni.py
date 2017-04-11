@@ -72,16 +72,20 @@ class RedundantInfo(omnical.calib.RedundantInfo):
             except(KeyError): d.append(dd[bl[::-1]][pol[::-1]].conj())
         return np.array(d).transpose((1, 2, 0))
 
-    def pack_calpar(self, calpar, gains=None, vis=None):
+    def pack_calpar(self, calpar, gains=None, vis=None, **kwargs):
         '''Take the pol/antenna/bl formatted gains and visibilities and 
            wrap them to antpol format. Call RedundantInfo pack_calpar to
            generate calpar for omnical format.'''
+        nondegenerategains = kwargs.pop('nondegenerategains', None)
         if gains:
             _gains = {}
             for pol in gains:
                 for i in gains[pol]:
                     ai = Antpol(i, pol, self.nant)
-                    _gains[int(ai)] = gains[pol][i].conj() # is this conj necessary?
+                    if nondegenerategains is not None:
+                        _gains[int(ai)] = gains[pol][i].conj()/nondegenerategains[pol][i].conj() # is this conj necessary?
+                    else:
+                        _gains[int(ai)] = gains[pol][i].conj() # is this conj necessary?
         else:
             _gains = gains
 
@@ -98,11 +102,12 @@ class RedundantInfo(omnical.calib.RedundantInfo):
 
         return calpar
     
-    def unpack_calpar(self, calpar):
+    def unpack_calpar(self, calpar, **kwargs):
         '''Unpack the solved for calibration parameters and repack
            those to antpol format'''
-        meta, gains, vis = omnical.calib.RedundantInfo.unpack_calpar(self, calpar)
-
+        nondegenerategains = kwargs.pop('nondegenerategains', None)
+        meta, gains, vis = omnical.calib.RedundantInfo.unpack_calpar(self, calpar, **kwargs)
+        
         def mk_ap(a): return Antpol(a, self.nant)
         for i, j in meta['res'].keys():
             api, apj = mk_ap(i), mk_ap(j)
@@ -120,6 +125,8 @@ class RedundantInfo(omnical.calib.RedundantInfo):
             ap = mk_ap(i)
             if not gains.has_key(ap.pol()): gains[ap.pol()] = {}
             gains[ap.pol()][ap.ant()] = gains.pop(i).conj()
+            if nondegenerategains:
+                gains[ap.pol()][ap.ant()]*= nondegenerategains[ap.pol()][ap.ant()]
         for i, j in vis.keys():
             api, apj = mk_ap(i), mk_ap(j)
             pol = api.pol() + apj.pol()
@@ -175,7 +182,7 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
     return info
 
 
-def omnical(data, info, gains=gains, dontprojectthesegains=None, xtalk=None, maxiter=50,
+def run_omnical(data, info, gains=None, dontprojectthesegains=None, xtalk=None, maxiter=50,
             conv=1e-3, stepsize=.3, computeUBLFit=True, trust_period=1):
     '''Run a full run through of omnical: Logcal, lincal, and removing degeneracies.'''
     
@@ -188,7 +195,9 @@ def omnical(data, info, gains=gains, dontprojectthesegains=None, xtalk=None, max
                                       conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
                                       trust_period=trust_period, maxiter=maxiter)
 
-    _, g3, v3 = omnical.calib.removedegen(info, g2, v2, dontprojectthesegains)
+    _, g3, v3 = omnical.calib.removedegen(data, info, g2, v2, dontprojectthesegains)
+
+    return m2, g3, v3
     
 
 def compute_xtalk(res, wgts):
