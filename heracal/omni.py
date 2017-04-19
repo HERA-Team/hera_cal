@@ -73,7 +73,7 @@ class RedundantInfo(omnical.calib.RedundantInfo):
         return np.array(d).transpose((1, 2, 0))
 
     def pack_calpar(self, calpar, gains=None, vis=None, **kwargs):
-        '''Take the pol/antenna/bl formatted gains and visibilities and 
+        '''Take the pol/antenna/bl formatted gains and visibilities and
            wrap them to antpol format. Call RedundantInfo pack_calpar to
            generate calpar for omnical format.'''
         nondegenerategains = kwargs.pop('nondegenerategains', None)
@@ -83,9 +83,9 @@ class RedundantInfo(omnical.calib.RedundantInfo):
                 for i in gains[pol]:
                     ai = Antpol(i, pol, self.nant)
                     if nondegenerategains is not None:
-                        _gains[int(ai)] = gains[pol][i].conj()/nondegenerategains[pol][i].conj() # is this conj necessary?
+                        _gains[int(ai)] = gains[pol][i].conj()/nondegenerategains[pol][i].conj()  # This conj is necessary to conform to omnical conj conv.
                     else:
-                        _gains[int(ai)] = gains[pol][i].conj() # is this conj necessary?
+                        _gains[int(ai)] = gains[pol][i].conj()  # This conj is necessary to conform to omnical conj conv.
         else:
             _gains = gains
 
@@ -101,13 +101,13 @@ class RedundantInfo(omnical.calib.RedundantInfo):
         calpar = omnical.calib.RedundantInfo.pack_calpar(self, calpar, gains=_gains, vis=_vis)
 
         return calpar
-    
+
     def unpack_calpar(self, calpar, **kwargs):
         '''Unpack the solved for calibration parameters and repack
            those to antpol format'''
         nondegenerategains = kwargs.pop('nondegenerategains', None)
         meta, gains, vis = omnical.calib.RedundantInfo.unpack_calpar(self, calpar, **kwargs)
-        
+
         def mk_ap(a): return Antpol(a, self.nant)
         for i, j in meta['res'].keys():
             api, apj = mk_ap(i), mk_ap(j)
@@ -134,7 +134,7 @@ class RedundantInfo(omnical.calib.RedundantInfo):
             if not vis.has_key(pol): vis[pol] = {}
             vis[pol][bl] = vis.pop((i, j))
         return meta, gains, vis
-       
+
 
 class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
     def __init__(self, nant):
@@ -182,12 +182,12 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
     return info
 
 
-def run_omnical(data, info, gains=None, dontprojectthesegains=None, xtalk=None, maxiter=50,
+def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
             conv=1e-3, stepsize=.3, computeUBLFit=True, trust_period=1):
     '''Run a full run through of omnical: Logcal, lincal, and removing degeneracies.'''
-    
 
-    m1, g1, v1 = omnical.calib.logcal(data, info, xtalk=xtalk, gains=gains,
+
+    m1, g1, v1 = omnical.calib.logcal(data, info, xtalk=xtalk, gains=gains0,
                                       maxiter=maxiter, conv=conv, stepsize=stepsize,
                                       computeUBLFit=computeUBLFit, trust_period=trust_period)
 
@@ -195,10 +195,10 @@ def run_omnical(data, info, gains=None, dontprojectthesegains=None, xtalk=None, 
                                       conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
                                       trust_period=trust_period, maxiter=maxiter)
 
-    _, g3, v3 = omnical.calib.removedegen(data, info, g2, v2, dontprojectthesegains)
+    _, g3, v3 = omnical.calib.removedegen(data, info, g2, v2, nondegenerategains=gains0)
 
     return m2, g3, v3
-    
+
 
 def compute_xtalk(res, wgts):
     '''Estimate xtalk as time-average of omnical residuals.'''
