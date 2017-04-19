@@ -142,6 +142,13 @@ class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
         self.nant = nant
         print 'Loading FirstCalRedundantInfo class'
 
+    def order_data(self, dd):
+        '''Create a data array ordered for use in _omnical.redcal.  'dd' is
+        a dict whose keys are (i,j) antenna tuples; antennas i,j should be ordered to reflect
+        the conjugation convention of the provided data.  'dd' values are 2D arrays
+        of (time,freq) data.''' # XXX does time/freq ordering matter.  should data be 2D instead?
+        return np.array([dd[bl] if dd.has_key(bl) else dd[bl[::-1]].conj()
+            for bl in self.bl_order()]).transpose((1,2,0))
 
 def compute_reds(nant, pols, *args, **kwargs):
     _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
@@ -183,16 +190,16 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
 
 
 def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
-            conv=1e-3, stepsize=.3, computeUBLFit=True, trust_period=1):
+            conv=1e-3, stepsize=.3, trust_period=1):
     '''Run a full run through of omnical: Logcal, lincal, and removing degeneracies.'''
 
 
     m1, g1, v1 = omnical.calib.logcal(data, info, xtalk=xtalk, gains=gains0,
                                       maxiter=maxiter, conv=conv, stepsize=stepsize,
-                                      computeUBLFit=computeUBLFit, trust_period=trust_period)
+                                      trust_period=trust_period)
 
     m2, g2, v2 = omnical.calib.lincal(data, info, gains=g1, vis=v1, xtalk=xtalk,
-                                      conv=conv, stepsize=stepsize, computeUBLFit=computeUBLFit,
+                                      conv=conv, stepsize=stepsize,
                                       trust_period=trust_period, maxiter=maxiter)
 
     _, g3, v3 = omnical.calib.removedegen(data, info, g2, v2, nondegenerategains=gains0)
@@ -311,69 +318,199 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
     return meta, gains, vismdl, xtalk
 
 
-def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
-    """
-    Read a calibration fits file (pyuvdata format).
 
-    meta : dictionary of meta information including chisq, times, lst's etc
-    gains : dictionary indexed by polarization and antenna.
-    """
-    if type(filename) is str: filename = [filename]
-    if type(pols) is str: pols = [pols]
-    if type(bls) is tuple and type(bls[0]) is int: bls = [bls]
-    if type(ants) is int: ants = [ants]
-    meta, gains = {}, {}
-    poldict = {-5: 'x', -4: 'y'}
-    visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
-    xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
 
-    cal = UVCal()
-    for f in filename:
-        cal.read_calfits(f)
-        for k, p in enumerate(cal.polarization_array):
-            pol = poldict[p]
-            if pol not in gains.keys(): gains[pol] = {}
-            for i, ant in enumerate(cal.antenna_numbers):
-                if cal.cal_type == 'gain':
-                    if ant not in gains[pol].keys():
-                        gains[pol][ant] = cal.gain_array[i, :, :, k].T
+class HERACal(UVCal):
+    '''
+       Class that loads in hera omnical data into a pyuvdata calfits object.
+       This can then be saved to a file, plotted, etc.
+    '''
+    def __init__(self, meta, gains, flags=None, DELAY=False, ex_ants=[], appendhist=''):
+        '''Given meta and gain dictionary after running omnical (run_omnical), 
+           populate a UVCal class upon creation.'''
+
+        super(HERACal, self).__init__()
+
+        str2pol = {'x': -5, 'y': -4}
+        pol2str = {-5: 'x', -4: 'y'}
+
+        chisqdict = {}
+        datadict = {}
+        flagdict = {}
+        ants = []
+        for pol in gains:
+            for ant in np.sort(gains[pol].keys()):
+                datadict['%d%s' % (ant, pol)] = gains[pol][ant]
+                if flags:
+                    flagdict['%d%s' % (ant, pol)] = flags[pol][ant]
+                if ant not in ants:
+                    ants.append(ant)
+
+        # drop antennas that are not solved for.
+        allants = ants + ex_ants
+        ants = np.sort(ants)
+        allants = np.sort(allants)
+        time = meta['jds']
+        freq = meta['freqs'] * 1e9
+        pols = [str2pol[p] for p in gains.keys()]
+        npol = len(pols)
+        ntimes = time.shape[0]
+        nfreqs = freq.shape[0]
+        nants = len(ants)
+        antnames = ['ant' + str(ant) for ant in ants]
+        datarray = []
+        flgarray = []
+        # import IPython; IPython.embed()
+        for ii in range(npol):
+            dd = []
+            fl = []
+            for ant in ants:
+                try:
+                    dd.append(datadict[str(ant) + pol2str[pols[ii]]])
+                    if flags:
+                        fl.append(flagdict[str(ant) + pol2str[pols[ii]]])
                     else:
-                        gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, : k].T])
-                    meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, :, :, k].T
-                else:
-                    if ant not in gains[pol].keys():
-                        gains[pol][ant] = cal.gain_array[i, :, :, k].T
+                        fl.append(np.zeros_like(dd[-1], dtype=bool))
+                # if antenna not in data dict (aka, a bad antenna)
+                except(KeyError):
+                    print "Can't find antenna {0}".format(ant)
+            datarray.append(dd)
+            flgarray.append(fl)
+
+        datarray = np.array(datarray)
+        datarray = datarray.swapaxes(0, 3).swapaxes(0, 1)
+
+        flgarray = np.array(flgarray)
+        flgarray = flgarray.swapaxes(0, 3).swapaxes(0, 1)
+
+        tarray = time
+        parray = np.array(pols)
+        farray = np.array(freq)
+        numarray = np.array(list(ants))
+        namarray = np.array(antnames)
+
+        chisqarray = []
+        for ii in range(npol):
+            ch = []
+            for ant in ants:
+                try:
+                    ch.append(meta['chisq'+str(ant)+pol2str[pols[ii]]])
+                except:
+                    ch.append(np.ones_like(dd[-1]))  # array of ones
+            chisqarray.append(ch)
+        chisqarray = np.array(chisqarray).swapaxes(0, 3).swapaxes(0, 1)
+
+        self.telescope_name = 'HERA'
+        self.observer = 'Zaki Ali (zakiali@berkeley.edu)'
+        try:
+            self.pipeline = meta['pipeline']
+        except KeyError:
+            self.pipeline = 'unknown'
+        self.Nfreqs = nfreqs
+        self.Njones = len(pols)
+        self.Ntimes = ntimes
+        try:
+            self.history = meta['history'].replace('\n', ' ') + appendhist
+        except KeyError:
+            self.history = appendhist
+        self.Nants_data = len(ants)  # only ants with data
+        self.antenna_names = namarray[:self.Nants_data]
+        self.antenna_numbers = numarray[:self.Nants_data]
+        self.Nants_telescope = nants  # total number of antennas
+        self.Nspws = 1
+
+        self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
+        self.channel_width = np.diff(self.freq_array)[0][0]
+        self.jones_array = parray[:self.Njones]
+        self.time_array = tarray[:self.Ntimes]
+        self.integration_time = meta['inttime']
+        self.gain_convention = 'divide'
+        self.x_orientation = 'east'
+        self.time_range = [self.time_array[0], self.time_array[-1]]
+        self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
+        if DELAY:
+            self.set_delay()
+            self.delay_array = datarray
+            self.quality_array = chisqarray
+            self.flag_array = flgarray.astype(np.bool)
+
+        else:
+            self.set_gain()
+            self.gain_array = datarray
+            self.quality_array = chisqarray
+            self.flag_array = flgarray.astype(np.bool)
+
+    def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
+        """
+        Read a calibration fits file (pyuvdata format). This also finds the model
+        visibilities and the xtalkfile. 
+
+        filename: Name of calfits file storing omnical solutions. 
+                  There should also be corresponding files for the visibilities 
+                  and crosstalk. These filenames should have be *vis{xtalk}.fits.
+        pols: Specify polarization to read.
+        bls: Specify bls to read. 
+        ants: Specify ants to read.
+        verbose: Be verbose.
+    
+        Returns meta, gains, vis, xtalk in old format (see from_npz)
+        """
+        if type(filename) is str: filename = [filename]
+        if type(pols) is str: pols = [pols]
+        if type(bls) is tuple and type(bls[0]) is int: bls = [bls]
+        if type(ants) is int: ants = [ants]
+        meta, gains = {}, {}
+        poldict = {-5: 'x', -4: 'y'}
+        visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
+        xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
+
+        cal = UVCal()
+        for f in filename:
+            cal.read_calfits(f)
+            for k, p in enumerate(cal.polarization_array):
+                pol = poldict[p]
+                if pol not in gains.keys(): gains[pol] = {}
+                for i, ant in enumerate(cal.antenna_numbers):
+                    if cal.cal_type == 'gain':
+                        if ant not in gains[pol].keys():
+                            gains[pol][ant] = cal.gain_array[i, :, :, k].T
+                        else:
+                            gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, : k].T])
+                        meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, :, :, k].T
                     else:
-                        gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, :k].T])
+                        if ant not in gains[pol].keys():
+                            gains[pol][ant] = cal.gain_array[i, :, :, k].T
+                        else:
+                            gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, :k].T])
 
-    vis = UVData()
-    v = {}
-    for f in visfile:
-        vis.read_uvfits(f)
-        for p, pol in enumerate(vis.polarization_array):
-            pol = poldict[pol] * 2
-            if pol not in v.keys(): v[pol] = {}
-            for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
-                # note we reverse baseline here b/c of conventions
-                v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
+        vis = UVData()
+        v = {}
+        for f in visfile:
+            vis.read_uvfits(f)
+            for p, pol in enumerate(vis.polarization_array):
+                pol = poldict[pol] * 2
+                if pol not in v.keys(): v[pol] = {}
+                for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
+                    # note we reverse baseline here b/c of conventions
+                    v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
 
-    xtalk = UVData()
-    x = {}
-    for f in xtalkfile:
-        xtalk.read_uvfits(f)
-        for p, pol in enumerate(xtalk.polarization_array):
-            pol = poldict[pol] * 2
-            if pol not in x.keys(): x[pol] = {}
-            for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
-                x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p]
+        xtalk = UVData()
+        x = {}
+        for f in xtalkfile:
+            xtalk.read_uvfits(f)
+            for p, pol in enumerate(xtalk.polarization_array):
+                pol = poldict[pol] * 2
+                if pol not in x.keys(): x[pol] = {}
+                for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
+                    x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p]
 
-    meta['times'] = cal.time_array
-    meta['freqs'] = cal.freq_array
-    meta['history'] = cal.history
-    meta['caltype'] = cal.cal_type
-    meta['gain_conventions'] = cal.gain_convention
+        meta['times'] = cal.time_array
+        meta['freqs'] = cal.freq_array
+        meta['history'] = cal.history
+        meta['caltype'] = cal.cal_type
+        meta['gain_conventions'] = cal.gain_convention
 
-    return meta, gains, v, x
+        return meta, gains, v, x
 
 
 class FirstCal(object):
