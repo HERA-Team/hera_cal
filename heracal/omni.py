@@ -325,7 +325,7 @@ class HERACal(UVCal):
        Class that loads in hera omnical data into a pyuvdata calfits object.
        This can then be saved to a file, plotted, etc.
     '''
-    def __init__(self, meta, gains, flags=None, DELAY=False, ex_ants=[], appendhist=''):
+    def __init__(self, meta, gains, flags=None, DELAY=False, ex_ants=[], appendhist='', optional={}):
         '''Given meta and gain dictionary after running omnical (run_omnical), 
            populate a UVCal class upon creation.'''
 
@@ -400,12 +400,10 @@ class HERACal(UVCal):
             chisqarray.append(ch)
         chisqarray = np.array(chisqarray).swapaxes(0, 3).swapaxes(0, 1)
 
+        # set the optional attributes to UVCal class.
+        for key in opional:
+            setattr(self, key, optional[key])
         self.telescope_name = 'HERA'
-        self.observer = 'Zaki Ali (zakiali@berkeley.edu)'
-        try:
-            self.pipeline = meta['pipeline']
-        except KeyError:
-            self.pipeline = 'unknown'
         self.Nfreqs = nfreqs
         self.Njones = len(pols)
         self.Ntimes = ntimes
