@@ -438,77 +438,78 @@ class HERACal(UVCal):
             self.quality_array = chisqarray
             self.flag_array = flgarray.astype(np.bool)
 
-    def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
-        """
-        Read a calibration fits file (pyuvdata format). This also finds the model
-        visibilities and the xtalkfile. 
 
-        filename: Name of calfits file storing omnical solutions. 
-                  There should also be corresponding files for the visibilities 
-                  and crosstalk. These filenames should have be *vis{xtalk}.fits.
-        pols: Specify polarization to read.
-        bls: Specify bls to read. 
-        ants: Specify ants to read.
-        verbose: Be verbose.
-    
-        Returns meta, gains, vis, xtalk in old format (see from_npz)
-        """
-        if type(filename) is str: filename = [filename]
-        if type(pols) is str: pols = [pols]
-        if type(bls) is tuple and type(bls[0]) is int: bls = [bls]
-        if type(ants) is int: ants = [ants]
-        meta, gains = {}, {}
-        poldict = {-5: 'x', -4: 'y'}
-        visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
-        xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
+def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
+    """
+    Read a calibration fits file (pyuvdata format). This also finds the model
+    visibilities and the xtalkfile. 
 
-        cal = UVCal()
-        for f in filename:
-            cal.read_calfits(f)
-            for k, p in enumerate(cal.polarization_array):
-                pol = poldict[p]
-                if pol not in gains.keys(): gains[pol] = {}
-                for i, ant in enumerate(cal.antenna_numbers):
-                    if cal.cal_type == 'gain':
-                        if ant not in gains[pol].keys():
-                            gains[pol][ant] = cal.gain_array[i, :, :, k].T
-                        else:
-                            gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, : k].T])
-                        meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, :, :, k].T
+    filename: Name of calfits file storing omnical solutions. 
+              There should also be corresponding files for the visibilities 
+              and crosstalk. These filenames should have be *vis{xtalk}.fits.
+    pols: Specify polarization to read.
+    bls: Specify bls to read. 
+    ants: Specify ants to read.
+    verbose: Be verbose.
+
+    Returns meta, gains, vis, xtalk in old format (see from_npz)
+    """
+    if type(filename) is str: filename = [filename]
+    if type(pols) is str: pols = [pols]
+    if type(bls) is tuple and type(bls[0]) is int: bls = [bls]
+    if type(ants) is int: ants = [ants]
+    meta, gains = {}, {}
+    poldict = {-5: 'x', -4: 'y'}
+    visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
+    xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
+
+    cal = UVCal()
+    for f in filename:
+        cal.read_calfits(f)
+        for k, p in enumerate(cal.polarization_array):
+            pol = poldict[p]
+            if pol not in gains.keys(): gains[pol] = {}
+            for i, ant in enumerate(cal.antenna_numbers):
+                if cal.cal_type == 'gain':
+                    if ant not in gains[pol].keys():
+                        gains[pol][ant] = cal.gain_array[i, :, :, k].T
                     else:
-                        if ant not in gains[pol].keys():
-                            gains[pol][ant] = cal.gain_array[i, :, :, k].T
-                        else:
-                            gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, :k].T])
+                        gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, : k].T])
+                    meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, :, :, k].T
+                else:
+                    if ant not in gains[pol].keys():
+                        gains[pol][ant] = cal.gain_array[i, :, :, k].T
+                    else:
+                        gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, :k].T])
 
-        vis = UVData()
-        v = {}
-        for f in visfile:
-            vis.read_uvfits(f)
-            for p, pol in enumerate(vis.polarization_array):
-                pol = poldict[pol] * 2
-                if pol not in v.keys(): v[pol] = {}
-                for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
-                    # note we reverse baseline here b/c of conventions
-                    v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
+    vis = UVData()
+    v = {}
+    for f in visfile:
+        vis.read_uvfits(f)
+        for p, pol in enumerate(vis.polarization_array):
+            pol = poldict[pol] * 2
+            if pol not in v.keys(): v[pol] = {}
+            for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
+                # note we reverse baseline here b/c of conventions
+                v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
 
-        xtalk = UVData()
-        x = {}
-        for f in xtalkfile:
-            xtalk.read_uvfits(f)
-            for p, pol in enumerate(xtalk.polarization_array):
-                pol = poldict[pol] * 2
-                if pol not in x.keys(): x[pol] = {}
-                for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
-                    x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p]
+    xtalk = UVData()
+    x = {}
+    for f in xtalkfile:
+        xtalk.read_uvfits(f)
+        for p, pol in enumerate(xtalk.polarization_array):
+            pol = poldict[pol] * 2
+            if pol not in x.keys(): x[pol] = {}
+            for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
+                x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p]
 
-        meta['times'] = cal.time_array
-        meta['freqs'] = cal.freq_array
-        meta['history'] = cal.history
-        meta['caltype'] = cal.cal_type
-        meta['gain_conventions'] = cal.gain_convention
+    meta['times'] = cal.time_array
+    meta['freqs'] = cal.freq_array
+    meta['history'] = cal.history
+    meta['caltype'] = cal.cal_type
+    meta['gain_conventions'] = cal.gain_convention
 
-        return meta, gains, v, x
+    return meta, gains, v, x
 
 
 class FirstCal(object):
