@@ -3,28 +3,27 @@
 import omnical
 import aipy
 import numpy as np
-from omni import from_fits, aa_to_info, logcal, lincal, removedegen, compute_xtalk
-from miriad import read_files
+from heracal.omni import from_fits, aa_to_info, run_omnical, compute_xtalk, HERACal
+from heracal.miriad import read_files
 import pickle
 import optparse
 import os
 import sys
-from heracal import HERACal
 import pyuvdata
+import glob
 
 o = optparse.OptionParser()
 o.set_usage('omni_run.py [options] *uvcRRE')
 o.set_description(__doc__)
 aipy.scripting.add_standard_options(o, cal=True, pol=True)
 o.add_option('--omnipath', dest='omnipath', default='', type='string',
-             help='Path to save .npz files. Include final / in path.')
-o.add_option('--ba', dest='ba', default=None,
+             help='Path to save omnical solutions. Include final / in path.')
+o.add_option('--ex_ants', dest='ex_ants', default=None,
              help='Antennas to exclude, separated by commas.')
 o.add_option('--firstcal', dest='firstcal', type='string',
-             help='Path and name of POL.fits firstcal file.')
-o.add_option('--removedegen', action='store_true', default=False,
-             help='Switch to turn on removedegen functionality in omnical.')
+             help='Path and name of firstcal file. Can pass in wildcards.')
 opts, args = o.parse_args(sys.argv[1:])
+args = np.sort(args)
 
 
 def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
@@ -84,7 +83,7 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     uv.baseline_array = uv.antnums_to_baseline(uv.ant_1_array,
                                                uv.ant_2_array)
 
-    uv.freq_array = m['freqs'].reshape(1, -1)
+    uv.freq_array = m['freqs'].reshape(1, -1) * 1e9  # Turn into MHz.
     poldict = {'xx': -5, 'yy': -6, 'xy': -7, 'yx': -8}
     uv.polarization_array = np.array([poldict[p] for p in pols])
     if xtalk:
@@ -128,33 +127,27 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
 # Dictionary of calpar gains and files
 pols = opts.pol.split(',')
 files = {}
-g0 = {}  # firstcal gains
-for pp, p in enumerate(pols):
-    # dictionary of calpars per pol
-    g0[p[0]] = {}  # indexing by one pol letter instead of two
-    if opts.firstcal is not None:  # if firstcal file is given
-        if p in opts.firstcal:
-            print 'Reading', opts.firstcal
-            _, _g0, _, _ = from_fits(opts.firstcal)
-            for i in _g0[p[0]].keys():
-                print i
-                g0[p[0]][i] = _g0[p[0]][i][:, :] / np.abs(_g0[p[0]][i][:, :])
-        else:
-            raise IOError("Please provide a first cal file")
-for filename in args:
+firstcal_files = np.sort(glob.glob(opts.firstcal))
+for f, filename in enumerate(args):
     files[filename] = {}
+    if len(firstcal_files) == len(args):
+        files[filename]['firstcal'] = str(firstcal_files[f])  # one firstcal file per input file.
+    elif len(args) > len(firstcal_files):
+        files[filename]['firstcal'] = str(firstcal_files[0])  # only use first firstcal file for all input files.
+    else:
+        raise('Please provide a firstcal file. Exiting...')
     for p in pols:
         fn = filename.split('.')
         fn[3] = p
         files[filename][p] = '.'.join(fn)
-
+    
 # Create info
 # generate reds from calfile
 aa = aipy.cal.get_aa(opts.cal, np.array([.15]))
 print 'Getting reds from calfile'
-if opts.ba:  # assumes exclusion of the same antennas for every pol
+if opts.ex_ants:  # assumes exclusion of the same antennas for every pol
     ex_ants = []
-    for a in opts.ba.split(','):
+    for a in opts.ex_ants.split(','):
         ex_ants.append(int(a))
     print '   Excluding antennas:', sorted(ex_ants)
 else:
@@ -169,23 +162,20 @@ for f, filename in enumerate(args):
     for key in file_group.keys():
         print '   ' + file_group[key]
 
-    if len(pols) > 1:  # zen.jd.npz
-        npzb = 3
-    else:  # zen.jd.pol.npz
-        npzb = 4
-    fitsname = opts.omnipath + '.'.join(filename.split('/')[-1].split('.')[0:npzb]) + '.fitsA'
+    fitsname = opts.omnipath + filename + '.fits'  # Full filename + .fits to keep notion of history.
     if os.path.exists(fitsname):
         print '   %s exists. Skipping...' % fitsname
         continue
+    
+    _, g0, _, _ = from_fits(file_group['firstcal'])  # read in firstcal data
 
-    timeinfo, d, f = read_files([file_group[key] for key in file_group.keys()],
+    timeinfo, d, f = read_files([file_group[key] for key in file_group.keys() if key != 'firstcal'],
                                 antstr='cross', polstr=opts.pol, decimate=20)
     t_jd = timeinfo['times']
     t_lst = timeinfo['lsts']
     freqs = np.arange(.1, .2, .1 / len(d[d.keys()[0]][pols[0]][0]))
     SH = d.values()[0].values()[0].shape  # shape of file data (ex: (19,203))
     data, wgts, xtalk = {}, {}, {}
-    m2, g2, v2 = {}, {}, {}
     for p in g0.keys():
         for i in g0[p]:
             if g0[p][i].shape != (len(t_jd), len(freqs)):
@@ -197,12 +187,8 @@ for f, filename in enumerate(args):
         for bl in f:
             i, j = bl
             wgts[p][(j, i)] = wgts[p][(i, j)] = np.logical_not(f[bl][p]).astype(np.int)
-    print '   Logcal-ing'
-    m1, g1, v1 = logcal(data, info, gainstart=g0)
-    print '   Lincal-ing'
-    m2, g2, v2 = lincal(data, info, gainstart=g1, visstart=v1)
-    print '   Removing Degeneracies'
-    _, g3, v3 = removedegen(info, g2, v2, g0)
+    print '   Running Omnical'
+    m2, g3, v3 = run_omnical(data, info, gains0=g0)
 
     xtalk = compute_xtalk(m2['res'], wgts)  # xtalk is time-average of residual
     m2['history'] = 'OMNI_RUN: ' + ''.join(sys.argv) + '\n'
@@ -210,9 +196,10 @@ for f, filename in enumerate(args):
     m2['lsts'] = t_lst
     m2['freqs'] = freqs
     m2['inttime'] = timeinfo['inttime']
+    optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
 
     print '   Saving %s' % fitsname
-    hc = HERACal(m2, g2)
+    hc = HERACal(m2, g3, optional=optional)
     hc.write_calfits(fitsname)
-    write_uvdata_vis('.'.join(fitsname.split('.')[:-1]) + '.vis.fitsA', aa, m2, v2, returnuv=False)
-    write_uvdata_vis('.'.join(fitsname.split('.')[:-1]) + '.xtalk.fitsA', aa, m2, xtalk, xtalk=True, returnuv=False)
+    write_uvdata_vis('.'.join(fitsname.split('.')[:-1]) + '.vis.fits', aa, m2, v3, returnuv=False)
+    write_uvdata_vis('.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits', aa, m2, xtalk, xtalk=True, returnuv=False)
