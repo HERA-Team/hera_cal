@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
-import aipy as a, numpy as np, capo, pyuvdata
-import optparse, sys
+import aipy as a, numpy as np 
+import optparse, sys, pyuvdata, heracal, glob
 
 ### Options ###
 o = optparse.OptionParser()
@@ -15,14 +15,13 @@ o.add_option('--omnipath',dest='omnipath',default='%s.npz',type='string',
 o.add_option('--firstcal', action='store_true', 
             help='Applying firstcal solutions.')
 opts,args = o.parse_args(sys.argv[1:])
+args = np.sort(args)
 
 
 filedict = {}
-for f in args:
-    if opts.firstcal:
-        filedict[f] = '.'.join(f.split('.')[:-1]) + '.fits'
-    else:
-        filedict[f] = '.'.join(f.split('.')[:4]) + '.fits'
+solution_files = np.sort(glob.glob(opts.omnipath))
+for i, f in enumerate(args):
+        filedict[f] = str(solution_files[i])
     
 for f in args:
     mir = pyuvdata.UVData()
