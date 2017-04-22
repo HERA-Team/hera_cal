@@ -22,47 +22,54 @@ filedict = {}
 solution_files = np.sort(glob.glob(opts.omnipath))
 for i, f in enumerate(args):
         filedict[f] = str(solution_files[i])
-    
+print args, filedict    
 for f in args:
     mir = pyuvdata.UVData()
+    print "  Reading {0}".format(f)
     mir.read_miriad(f)
     cal = pyuvdata.UVCal()
+    print "  Reading calibration : {0}".format(filedict[f])
     cal.read_calfits(filedict[f])
 
+    print "  Calibrating..."
     antenna_index = dict(zip(*(cal.antenna_numbers,range(cal.Nants_data))))
     for p,pol in enumerate(mir.polarization_array):
         for bl,k in zip(*np.unique(mir.baseline_array, return_index=True)):
             blmask = np.where(mir.baseline_array == bl)[0]
-            bl = mir.baseline_to_antnums(bl)
+            ai, aj = mir.baseline_to_antnums(bl)
+            if not ai in cal.antenna_numbers or not aj in cal.antenna_numbers:
+                continue
             for nsp, nspws in enumerate(mir.spw_array):
                 if cal.cal_type == 'gain' and cal.gain_convention == 'multiply':
                     mir.data_array[blmask, nsp, :, p] = \
                                 mir.data_array[blmask, nsp, :, p] * \
-                                cal.gain_array[antenna_index[bl[0]], :, :, p].T * \
-                                np.conj(cal.gain_array[antenna_index[bl[1]], :, :, p].T)
+                                cal.gain_array[antenna_index[ai], :, :, p].T * \
+                                np.conj(cal.gain_array[antenna_index[aj], :, :, p].T)
                                                                
                 if cal.cal_type == 'gain' and cal.gain_convention == 'divide':
                     mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] / \
-                                cal.gain_array[antenna_index[bl[0]], :, :, p].T / \
-                                np.conj(cal.gain_array[antenna_index[bl[1]], :, :, p].T)
+                                cal.gain_array[antenna_index[ai], :, :, p].T / \
+                                np.conj(cal.gain_array[antenna_index[aj], :, :, p].T)
     
                 if cal.cal_type == 'delay' and cal.gain_convention == 'multiply':
                     mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] * \
-                                np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[bl[0]], 0, :, p].reshape(-1,1),cal.freq_array)) * \
-                                np.conj(np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[bl[0]], 0, :, p].reshape(-1,1),cal.freq_array)))
+                                np.exp(2j*np.pi*np.dot(cal.delay_array[antenna_index[ai], 0, :, p].reshape(-1,1),cal.freq_array/1e9)) * \
+                                np.conj(np.exp(2j*np.pi*np.dot(cal.delay_array[antenna_index[aj], 0, :, p].reshape(-1,1),cal.freq_array/1e9)))
 
                 if cal.cal_type == 'delay' and cal.gain_convention == 'divide':
                     mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] / \
-                                np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[bl[0]], 0, :, p].reshape(-1,1),cal.freq_array)) / \
-                                np.conj(np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[bl[0]], 0, :, p].reshape(-1,1),cal.freq_array)))
+                                np.exp(2j*np.pi*np.dot(cal.delay_array[antenna_index[ai], 0, :, p].reshape(-1,1),cal.freq_array/1e9)) / \
+                                np.conj(np.exp(2j*np.pi*np.dot(cal.delay_array[antenna_index[aj], 0, :, p].reshape(-1,1),cal.freq_array/1e9)))
 
 
 
     if opts.firstcal:
+        print " Writing {0}".format(f+'F')
         mir.write_miriad(f +'F') 
     else:
+        print " Writing {0}".format(f+'O')
         mir.write_miriad(f +'O') 
 
