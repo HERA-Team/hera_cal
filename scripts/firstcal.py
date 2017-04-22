@@ -48,48 +48,51 @@ print 'Number of redundant baselines:',len(reds)
 #Read in data here.
 ant_string =','.join(map(str,info.subsetant))
 bl_string = ','.join(['_'.join(map(str,k)) for k in reds])
-times, data, flags = read_files(args, bl_string, opts.pol, verbose=True)
-datapack,wgtpack = {},{}
-for (i,j) in data.keys():
-    datapack[(i,j)] = data[(i,j)][opts.pol]
-    wgtpack[(i,j)] = np.logical_not(flags[(i,j)][opts.pol])
-dlys = np.fft.fftshift(np.fft.fftfreq(fqs.size, np.diff(fqs)[0]))
 
-#gets phase solutions per frequency.
-fc = omni.FirstCal(datapack,wgtpack,fqs,info)
-sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,plot=opts.plot,noclean= not opts.clean,offset=opts.offset,average=opts.average,window='none')
+for filename in args:
+    times, data, flags = read_files([filename], bl_string, opts.pol, verbose=True)
+    datapack,wgtpack = {},{}
+    for (i,j) in data.keys():
+        datapack[(i,j)] = data[(i,j)][opts.pol]
+        wgtpack[(i,j)] = np.logical_not(flags[(i,j)][opts.pol])
+    dlys = np.fft.fftshift(np.fft.fftfreq(fqs.size, np.diff(fqs)[0]))
 
-#Converting solutions to a type that heracal can use to write uvfits files.
-meta = {}
-meta['lsts'] = times['lsts']
-meta['jds'] = times['times']
-meta['freqs'] = fqs
-meta['inttime'] = times['inttime']
-meta['chwidth'] = times['chwidth']
+    #gets phase solutions per frequency.
+    fc = omni.FirstCal(datapack,wgtpack,fqs,info)
+    sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,plot=opts.plot,noclean= not opts.clean,offset=opts.offset,average=opts.average,window='none')
 
-delays = {}
-antflags = {}
-for pol in opts.pol.split(','):
-    delays[pol[0]] = {}
-    antflags[pol[0]] = {}
-    for ant in sols.keys():
-        delays[pol[0]][ant] = sols[ant].T
-        antflags[pol[0]][ant] = np.zeros(shape=(len(meta['lsts']), len(meta['freqs'])))
-        #generate chisq per antenna/pol.
-        meta['chisq{0}{1}'.format(ant,pol[0])] = np.ones(shape=(len(times['times']), 1))
-#overall chisq. This is a required parameter for uvcal.
-meta['chisq'] = np.ones_like(sols[ant].T)
+    #Converting solutions to a type that heracal can use to write uvfits files.
+    meta = {}
+    meta['lsts'] = times['lsts']
+    meta['jds'] = times['times']
+    meta['freqs'] = fqs
+    meta['inttime'] = times['inttime']
+    meta['chwidth'] = times['chwidth']
 
-#Save solutions
-print args
-if len(args)==1: filename=args[0]+'.firstcal.fits'
-else: filename='fcgains.%s.fits'%opts.pol #if averaging a bunch together of files together
-if not opts.outpath is None:
-    outname='%s/%s'%(opts.outpath,filename.split('/')[-1])
-else:
-    outname='%s'%filename
+    delays = {}
+    antflags = {}
+    for pol in opts.pol.split(','):
+        delays[pol[0]] = {}
+        antflags[pol[0]] = {}
+        for ant in sols.keys():
+            delays[pol[0]][ant] = sols[ant].T
+            antflags[pol[0]][ant] = np.zeros(shape=(len(meta['lsts']), len(meta['freqs'])))
+            #generate chisq per antenna/pol.
+            meta['chisq{0}{1}'.format(ant,pol[0])] = np.ones(shape=(len(times['times']), 1))
+    #overall chisq. This is a required parameter for uvcal.
+    meta['chisq'] = np.ones_like(sols[ant].T)
 
-optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
-hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants, DELAY=True, appendhist=' '.join(sys.argv), optional=optional)
-print('     Saving {0}'.format(outname))
-hc.write_calfits(outname)
+    #Save solutions
+    filename=args[0]+'.firstcal.fits'
+    if not opts.outpath is None:
+        outname='%s/%s'%(opts.outpath,filename.split('/')[-1])
+    else:
+        outname='%s'%filename
+
+    optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)',
+                'git_origin_cal': 'None',
+                'git_hash_cal': 'None'}
+                
+    hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants, DELAY=True, appendhist=' '.join(sys.argv), optional=optional)
+    print('     Saving {0}'.format(outname))
+    hc.write_calfits(outname)
