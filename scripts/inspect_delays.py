@@ -26,5 +26,5 @@ for f in args:
         delays[ant].append(cal.delay_array[i,0,:,0])
     
 for ant in cal.antenna_numbers:
-    p.plot(np.array(delays[ant]).flatten(), 'o')
+    p.plot(np.concatenate(delays[ant]).flatten(), 'o')
 p.show()
