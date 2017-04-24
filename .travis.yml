@@ -23,8 +23,11 @@ install:
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy=1.11.2 scipy astropy nose pip matplotlib
   - source activate test-environment
   - conda install -c pkgw aipy
-  - pip install git+https://github.com/HERA-Team/pyuvdata.git@cal
+  - pip install git+https://github.com/HERA-Team/pyuvdata.git
   - pip install git+https://github.com/zakiali/omnical.git
   - python setup.py install
 
-script: nosetests heracal
+script: nosetests heracal --with-coverage --cover-package=heracal
+
+aftersuccess:
+  - coveralls
