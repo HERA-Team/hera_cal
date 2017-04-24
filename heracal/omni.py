@@ -196,27 +196,6 @@ def compute_xtalk(res, wgts):
     return xtalk
 
 
-def to_npz(filename, meta, gains, vismdl, xtalk):
-    '''Write results from omnical.calib.redcal (meta,gains,vismdl,xtalk) to npz file.
-    Each of these is assumed to be a dict keyed by pol, and then by bl/ant/keyword'''
-    d = {}
-    metakeys = ['jds', 'lsts', 'freqs', 'history']  # ,chisq]
-    for key in meta:
-        if key.startswith('chisq'): d[key] = meta[key]  # separate if statements  pending changes to chisqs
-        for k in metakeys:
-            if key.startswith(k): d[key] = meta[key]
-    for pol in gains:
-        for ant in gains[pol]:
-            d['%d%s' % (ant, pol)] = gains[pol][ant]
-    for pol in vismdl:
-        for bl in vismdl[pol]:
-            d['<%d,%d> %s' % (bl[0], bl[1], pol)] = vismdl[pol][bl]
-    for pol in xtalk:
-        for bl in xtalk[pol]:
-            d['(%d,%d) %s' % (bl[0], bl[1], pol)] = xtalk[pol][bl]
-    np.savez(filename, **d)
-
-
 def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
     '''Reconstitute results from to_npz, returns meta, gains, vismdl, xtalk, each
     keyed first by polarization, and then by bl/ant/keyword.
