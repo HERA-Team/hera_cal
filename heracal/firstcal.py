@@ -143,3 +143,161 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, cleantol=1e-4, window='none', finet
     info = {'dtau':dts, 'off':offs, 'mx':mxs}
     if verbose: print info, taus, taus+dts, offs
     return taus+dts,offs
+
+
+class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
+    def __init__(self, nant):
+        omnical.info.FirstCalRedundantInfo.__init__(self)
+        self.nant = nant
+        print 'Loading FirstCalRedundantInfo class'
+
+    def order_data(self, dd):
+        '''Create a data array ordered for use in _omnical.redcal.  'dd' is
+        a dict whose keys are (i,j) antenna tuples; antennas i,j should be ordered to reflect
+        the conjugation convention of the provided data.  'dd' values are 2D arrays
+        of (time,freq) data.''' # XXX does time/freq ordering matter.  should data be 2D instead?
+        return np.array([dd[bl] if dd.has_key(bl) else dd[bl[::-1]].conj()
+            for bl in self.bl_order()]).transpose((1,2,0))
+
+def compute_reds(nant, pols, *args, **kwargs):
+    _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
+    reds = []
+    for pi in pols:
+        for pj in pols:
+            reds += [[(Antpol(i, pi, nant), Antpol(j, pj, nant)) for i, j in gp] for gp in _reds]
+    return reds
+
+
+class FirstCal(object):
+    def __init__(self, data, wgts, fqs, info):
+        self.data = data
+        self.fqs = fqs
+        self.info = info
+        self.wgts = wgts
+
+    def data_to_delays(self, **kwargs):
+        '''data = dictionary of visibilities.
+           info = FirstCalRedundantInfo class
+           can give it kwargs:
+                supports 'window': window function for fourier transform. default is none
+                         'tune'  : to fit and remove a linear slope to phase.
+                         'plot'  : Low level plotting in the red.redundant_bl_cal_simple script.
+                         'clean' : Clean level when deconvolving sampling function out.
+           Returns 2 dictionaries:
+                1. baseline pair : delays
+                2. baseline pari : offset
+        '''
+        verbose = kwargs.get('verbose', False)
+        blpair2delay = {}
+        blpair2offset = {}
+        dd = self.info.order_data(self.data)
+        ww = self.info.order_data(self.wgts)
+        for (bl1, bl2) in self.info.bl_pairs:
+            if verbose:
+                print (bl1, bl2)
+            d1 = dd[:, :, self.info.bl_index(bl1)]
+            w1 = ww[:, :, self.info.bl_index(bl1)]
+            d2 = dd[:, :, self.info.bl_index(bl2)]
+            w2 = ww[:, :, self.info.bl_index(bl2)]
+            delay, offset = redundant_bl_cal_simple(d1, w1, d2, w2, self.fqs, **kwargs)
+            blpair2delay[(bl1, bl2)] = delay
+            blpair2offset[(bl1, bl2)] = offset
+        return blpair2delay, blpair2offset
+
+    def get_N(self, nblpairs):
+        return sps.eye(nblpairs)
+
+    def get_M(self, **kwargs):
+        blpair2delay, blpair2offset = self.data_to_delays(**kwargs)
+        sz = len(blpair2delay[blpair2delay.keys()[0]])
+        M = np.zeros((len(self.info.bl_pairs), sz))
+        O = np.zeros((len(self.info.bl_pairs), sz))
+        for pair in blpair2delay:
+            M[self.info.blpair_index(pair), :] = blpair2delay[pair]
+            O[self.info.blpair_index(pair), :] = blpair2offset[pair]
+        return M, O
+
+    def run(self, **kwargs):
+        verbose = kwargs.get('verbose', False)
+        offset = kwargs.get('offset', False)
+        # make measurement matrix
+        print "Geting M,O matrix"
+        self.M, self.O = self.get_M(**kwargs)
+        print "Geting N matrix"
+        N = self.get_N(len(self.info.bl_pairs))
+        # XXX This needs to be addressed. If actually do invers, slows code way down.
+        # self._N = np.linalg.inv(N)
+        self._N = N  # since just using identity now
+
+        # get coefficients matrix,A
+        self.A = sps.csr_matrix(self.info.A)
+        print 'Shape of coefficient matrix: ', self.A.shape
+
+#        solve for delays
+        print "Inverting A.T*N^{-1}*A matrix"
+        invert = self.A.T.dot(self._N.dot(self.A)).todense()  # make it dense for pinv
+        dontinvert = self.A.T.dot(self._N.dot(self.M))  # converts it all to a dense matrix
+#        definitely want to use pinv here and not solve since invert is probably singular.
+        self.xhat = np.dot(np.linalg.pinv(invert), dontinvert)
+        # solve for offset
+        if offset:
+            print "Inverting A.T*N^{-1}*A matrix"
+            invert = self.A.T.dot(self._N.dot(self.A)).todense()
+            dontinvert = self.A.T.dot(self._N.dot(self.O))
+            self.ohat = np.dot(np.linalg.pinv(invert), dontinvert)
+            # turn solutions into dictionary
+            return dict(zip(self.info.subsetant, zip(self.xhat, self.ohat)))
+        else:
+            # turn solutions into dictionary
+            return dict(zip(self.info.subsetant, self.xhat))
+
+    def get_solved_delay(self):
+        solved_delays = []
+        for pair in self.info.bl_pairs:
+            ant_indexes = self.info.blpair2antind(pair)
+            dlys = self.xhat[ant_indexes]
+            solved_delays.append(dlys[0] - dlys[1] - dlys[2] + dlys[3])
+        self.solved_delays = np.array(solved_delays)
+
+# PYUV
+def get_phase(fqs,tau, offset=False):
+    fqs = fqs.reshape(-1,1) #need the extra axis
+    if offset:
+        delay = tau[0]
+        offset = tau[1]
+        return np.exp(-1j*(2*np.pi*fqs*delay) - offset)
+    else:
+        return np.exp(-2j*np.pi*fqs*tau)
+
+# PYUV
+def save_gains_fc(s,fqs,pol,filename,ubls=None,ex_ants=None,verbose=False):
+    """
+    s: solutions
+    fqs: frequencies
+    pol: polarization of single antenna i.e. 'x', or 'y'.
+    filename: if a specific file was used (instead of many), change output name
+    ubls: unique baselines used to solve for s'
+    ex_ants: antennae excluded to solve for s'
+    """
+#    if isinstance(filename, list): filename=filename[0] #XXX this is evil. why?
+    NBINS = len(fqs)
+    s2 = {}
+    for k,i in s.iteritems():
+        #len > 1 means that one is using the "tune" parameter in omni.firstcal
+        if len(i)>1:
+            s2[str(k)+pol] = get_phase(fqs,i,offset=True).T
+            s2['d'+str(k)] = i[0]
+            s2['o'+str(k)] = i[1]
+            if verbose: print 'dly=%f , off=%f'%i
+        else:
+            s2[str(k)+pol] = get_phase(fqs,i).T #reshape plays well with omni apply
+            s2['d'+str(k)] = i
+            if verbose: print 'dly=%f'%i
+    if not ubls is None: s2['ubls']=ubls
+    if not ex_ants is None: s2['ex_ants']=ex_ants
+    s2['freqs']=fqs#in GHz
+    outname='%s.fc.npz'%filename
+    import sys
+    s2['cmd'] = ' '.join(sys.argv)
+    print 'Saving fcgains to %s'%outname
+    np.savez(outname,**s2)
