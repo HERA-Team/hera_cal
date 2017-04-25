@@ -143,8 +143,34 @@ def compute_reds(nant, pols, *args, **kwargs):
             reds += [[(Antpol(i, pi, nant), Antpol(j, pj, nant)) for i, j in gp] for gp in _reds]
     return reds
 
+def minVreds(reds):
+    """
+    Manipulate redundancy array to combine crosspols
+    into a single redundancy array - imposing that
+    Stokes V = 0.
 
-def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
+    This works in the simple way that it does because
+    of the way the reds arrays are constructed in
+    aa_to_info when 4 polarizations are present: it
+    reprsents them as 4 co-located arrays in (NS,EW) and
+    displaced in z, with the cross-combinations (e.g. 
+    polarization xy and yx) _always_ in the middle.
+    """
+    _reds = []
+    L = len(reds)
+    try:
+        assert(L%4)==0
+    except AssertionError:
+        raise Exception('Wrong number of polarizations supplied')
+    _reds += reds[:L/4]
+    xpols = reds[L/4:3*L/4]
+    _xpols = []
+    for i in range(L/4): _xpols.append(xpols[i] + xpols[i+L/4])
+    _reds+=_xpols
+    _reds+=reds[3*L/4:]
+    return _reds
+
+def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     '''Use aa.ant_layout to generate redundances based on ideal placement.
         The remaining arguments are passed to omnical.arrayinfo.filter_reds()'''
     nant = len(aa)
@@ -152,20 +178,20 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
         antpos_ideal = aa.antpos_ideal
         xs, ys, zs = antpos_ideal.T
         layout = np.arange(len(xs))
-        # antpos = np.concatenat([antpos_ideal for i in len(pols)])
     except(AttributeError):
         layout = aa.ant_layout
         xs, ys = np.indices(layout.shape)
     antpos = -np.ones((nant * len(pols), 3))  # remake antpos with pol information. -1 to flag
     for ant, x, y in zip(layout.flatten(), xs.flatten(), ys.flatten()):
         for z, pol in enumerate(pols):
-            z = 2**z
+            z = 2**z # exponential ensures diff xpols aren't redundant w/ each other
             i = Antpol(ant, pol, len(aa))
             antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
     reds = compute_reds(nant, pols, antpos[:nant], tol=.1)
     ex_ants = [Antpol(i, nant).ant() for i in range(antpos.shape[0]) if antpos[i, 0] == -1]
     kwargs['ex_ants'] = kwargs.get('ex_ants', []) + ex_ants
     reds = filter_reds(reds, **kwargs)
+    if minV: reds = minVreds(reds)
     if fcal:
         info = FirstCalRedundantInfo(nant)
     else:
