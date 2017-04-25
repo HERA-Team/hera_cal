@@ -30,5 +30,5 @@ install:
 
 script: nosetests heracal --with-coverage --cover-package=heracal
 
-aftersuccess:
+after_success:
   - coveralls
