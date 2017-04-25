@@ -1,6 +1,5 @@
 import numpy as np
 import omnical
-from red import redundant_bl_cal_simple
 from copy import deepcopy
 import numpy.linalg as la
 from pyuvdata import UVCal, UVData
@@ -134,6 +133,15 @@ class RedundantInfo(omnical.calib.RedundantInfo):
             if not vis.has_key(pol): vis[pol] = {}
             vis[pol][bl] = vis.pop((i, j))
         return meta, gains, vis
+
+
+def compute_reds(nant, pols, *args, **kwargs):
+    _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
+    reds = []
+    for pi in pols:
+        for pj in pols:
+            reds += [[(Antpol(i, pi, nant), Antpol(j, pj, nant)) for i, j in gp] for gp in _reds]
+    return reds
 
 
 def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
