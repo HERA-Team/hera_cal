@@ -23,6 +23,7 @@ install:
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy=1.11.2 scipy astropy nose pip matplotlib coverage
   - source activate test-environment
   - conda install -c pkgw aipy
+  - pip install coveralls
   - pip install git+https://github.com/HERA-Team/pyuvdata.git
   - pip install git+https://github.com/zakiali/omnical.git
   - python setup.py install
