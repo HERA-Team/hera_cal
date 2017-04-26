@@ -2,6 +2,7 @@
 import numpy as np, optparse, sys
 import aipy as a
 from heracal import omni
+from heracal import firstcal
 from heracal.miriad import read_files
 
 o = optparse.OptionParser()
@@ -58,7 +59,7 @@ for filename in args:
     dlys = np.fft.fftshift(np.fft.fftfreq(fqs.size, np.diff(fqs)[0]))
 
     #gets phase solutions per frequency.
-    fc = omni.FirstCal(datapack,wgtpack,fqs,info)
+    fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
     sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,plot=opts.plot,noclean= not opts.clean,offset=opts.offset,average=opts.average,window='none')
 
     #Converting solutions to a type that heracal can use to write uvfits files.

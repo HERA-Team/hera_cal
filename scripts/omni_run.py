@@ -170,7 +170,7 @@ for f, filename in enumerate(args):
     _, g0, _, _ = from_fits(file_group['firstcal'])  # read in firstcal data
 
     timeinfo, d, f = read_files([file_group[key] for key in file_group.keys() if key != 'firstcal'],
-                                antstr='cross', polstr=opts.pol, decimate=20)
+                                antstr='cross', polstr=opts.pol)
     t_jd = timeinfo['times']
     t_lst = timeinfo['lsts']
     freqs = np.arange(.1, .2, .1 / len(d[d.keys()[0]][pols[0]][0]))
