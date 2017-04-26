@@ -3,6 +3,7 @@ import omnical
 from copy import deepcopy
 import numpy.linalg as la
 from pyuvdata import UVCal, UVData
+from heracal.firstcal import FirstCalRedundantInfo
 import warnings, os
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -282,6 +283,15 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
     return meta, gains, vismdl, xtalk
 
 
+def get_phase(freqs, tau):
+    '''
+       Turn a delay into a phase.
+       freqs: array of frequencies in GHz.
+       tau: delay in nanoseconds.
+    '''
+    freqs = freqs.reshape(-1,1)
+    return np.exp(-2j*np.pi*freqs*tau)
+
 def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     """
     Read a calibration fits file (pyuvdata format). This also finds the model
@@ -321,7 +331,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                     meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, :, :, k].T
                 elif cal.cal_type == 'delay':
                     if ant not in gains[pol].keys():
-                        gains[pol][ant] = get_phase(cal.freq_array/1e9, cal.delay_array[i, :, :, k]).T
+                        gains[pol][ant] = get_phase(cal.freq_array/1e9, cal.delay_array[i, :, k]).T
                     else:
                         gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(cal.freq_array/1e9, cal.gain_array[i, :, :k]).T])
                 else:
@@ -453,6 +463,7 @@ class HERACal(UVCal):
         self.Nants_data = len(ants)  # only ants with data
         self.antenna_names = namarray[:self.Nants_data]
         self.antenna_numbers = numarray[:self.Nants_data]
+        self.ant_array = numarray[:self.Nants_data]
         self.Nants_telescope = nants  # total number of antennas
         self.Nspws = 1
 
@@ -467,8 +478,8 @@ class HERACal(UVCal):
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
         if DELAY:
             self.set_delay()
-            self.delay_array = datarray
-            self.quality_array = chisqarray
+            self.delay_array = datarray.squeeze(axis=1)
+            self.quality_array = chisqarray.squeeze(axis=1)
             self.flag_array = flgarray.astype(np.bool)
 
         else:
