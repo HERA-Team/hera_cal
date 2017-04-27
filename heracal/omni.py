@@ -478,7 +478,7 @@ class HERACal(UVCal):
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
         if DELAY:
             self.set_delay()
-            self.delay_array = datarray.squeeze(axis=1)
+            self.delay_array = datarray.squeeze(axis=1)  # units of seconds
             self.quality_array = chisqarray.squeeze(axis=1)
             self.flag_array = flgarray.astype(np.bool)
 

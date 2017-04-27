@@ -84,7 +84,7 @@ for filename in args:
         delays[pol[0]] = {}
         antflags[pol[0]] = {}
         for ant in sols.keys():
-            delays[pol[0]][ant] = sols[ant].T
+            delays[pol[0]][ant] = sols[ant].T / 1e9  # get into units of seconds
             antflags[pol[0]][ant] = np.zeros(shape=(len(meta['lsts']), len(meta['freqs'])))
             #generate chisq per antenna/pol.
             meta['chisq{0}{1}'.format(ant,pol[0])] = np.ones(shape=(uv_in.Ntimes, 1))

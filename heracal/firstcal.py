@@ -212,6 +212,9 @@ class FirstCal(object):
         return M, O
 
     def run(self, **kwargs):
+        '''Runs firstcal after the class initialized.
+           returns:
+                 dict: antenna delay pair with delay in nanoseconds.'''
         verbose = kwargs.get('verbose', False)
         offset = kwargs.get('offset', False)
         # make measurement matrix
