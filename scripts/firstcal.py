@@ -65,7 +65,6 @@ for filename in args:
             wgtpack[(i,j)] = np.logical_not( flags[:, nbl, 0, :, ip] )
     
 
-    import IPython; IPython.embed()
     #gets phase solutions per frequency.
     fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
     sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,plot=opts.plot,noclean= not opts.clean,offset=opts.offset,average=opts.average,window='none')
