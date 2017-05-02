@@ -400,7 +400,7 @@ class HERACal(UVCal):
         ants = np.sort(ants)
         allants = np.sort(allants)
         time = meta['jds']
-        freq = meta['freqs'] * 1e9
+        freq = meta['freqs']  # this is in Hz
         pols = [str2pol[p] for p in gains.keys()]
         npol = len(pols)
         ntimes = time.shape[0]
