@@ -465,7 +465,7 @@ class HERACal(UVCal):
         self.antenna_numbers = numarray[:self.Nants_data]
         self.ant_array = numarray[:self.Nants_data]
         self.Nants_telescope = nants  # total number of antennas
-        self.Nspws = 1
+        self.Nspws = 1  # This is by default 1. No support for > 1 in pyuvdata.
 
         self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
@@ -478,12 +478,13 @@ class HERACal(UVCal):
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
         if DELAY:
             self.set_delay()
-            self.delay_array = datarray.squeeze(axis=1)  # units of seconds
-            self.quality_array = chisqarray.squeeze(axis=1)
-            self.flag_array = flgarray.astype(np.bool)
-
+            self.delay_array = datarray  # units of seconds
+            self.quality_array = chisqarray  
+            self.flag_array = flgarray.astype(np.bool)[:, np.newaxis,  :, :, :]
         else:
             self.set_gain()
-            self.gain_array = datarray
-            self.quality_array = chisqarray
-            self.flag_array = flgarray.astype(np.bool)
+            # adding new axis for the spectral window axis. This is default to 1.
+            # This needs to change when support for Nspws>1 in pyuvdata.
+            self.gain_array = datarray[:, np.newaxis, :, :, :]
+            self.quality_array = chisqarray[:, np.newaxis, :, :, :]
+            self.flag_array = flgarray.astype(np.bool)[:, np.newaxis, :, :, :]
