@@ -10,7 +10,7 @@ o.set_description(__doc__)
 a.scripting.add_standard_options(o,pol=True)
 o.add_option('--xtalk',dest='xtalk',default=False,action='store_true',
             help='Toggle: apply xtalk solutions to data. Default=False')
-o.add_option('--omnipath',dest='omnipath',default='%s.npz',type='string',
+o.add_option('--omnipath',dest='omnipath',default='%s.fits',type='string',
             help='Format string (e.g. "path/%s.npz", where you actually type the "%s") which converts the input file name to the omnical npz path/file.')
 o.add_option('--firstcal', action='store_true', 
             help='Applying firstcal solutions.')
@@ -43,26 +43,26 @@ for f in args:
                 if cal.cal_type == 'gain' and cal.gain_convention == 'multiply':
                     mir.data_array[blmask, nsp, :, p] = \
                                 mir.data_array[blmask, nsp, :, p] * \
-                                cal.gain_array[antenna_index[ai], :, :, p].T * \
-                                np.conj(cal.gain_array[antenna_index[aj], :, :, p].T)
+                                cal.gain_array[antenna_index[ai], nsp, :, :, p].T * \
+                                np.conj(cal.gain_array[antenna_index[aj], nsp, :, :, p].T)
                                                                
                 if cal.cal_type == 'gain' and cal.gain_convention == 'divide':
                     mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] / \
-                                cal.gain_array[antenna_index[ai], :, :, p].T / \
-                                np.conj(cal.gain_array[antenna_index[aj], :, :, p].T)
+                                cal.gain_array[antenna_index[ai], nsp, :, :, p].T / \
+                                np.conj(cal.gain_array[antenna_index[aj], nsp, :, :, p].T)
     
                 if cal.cal_type == 'delay' and cal.gain_convention == 'multiply':
                     mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] * \
-                                np.exp(2j*np.pi*np.dot(cal.delay_array[antenna_index[ai], 0, :, p].reshape(-1,1),cal.freq_array/1e9)) * \
-                                np.conj(np.exp(2j*np.pi*np.dot(cal.delay_array[antenna_index[aj], 0, :, p].reshape(-1,1),cal.freq_array/1e9)))
+                                np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[ai], nsp, :, p].reshape(-1,1),cal.freq_array)) * \
+                                np.conj(np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[aj], nsp, :, p].reshape(-1,1),cal.freq_array)))
 
                 if cal.cal_type == 'delay' and cal.gain_convention == 'divide':
                     mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] / \
-                                np.exp(2j*np.pi*np.dot(cal.delay_array[antenna_index[ai], 0, :, p].reshape(-1,1),cal.freq_array/1e9)) / \
-                                np.conj(np.exp(2j*np.pi*np.dot(cal.delay_array[antenna_index[aj], 0, :, p].reshape(-1,1),cal.freq_array/1e9)))
+                                np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[ai], nsp, :, p].reshape(-1,1),cal.freq_array)) / \
+                                np.conj(np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[aj], nsp, :, p].reshape(-1,1),cal.freq_array)))
 
 
 

@@ -31,7 +31,7 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     Given meta information and visibilities, write out a uvfits file.
     filename: filename to write uvfits object.(str)
     aa      : aipy antenna array object (object)
-    m       : dictionary of information (capo.read_files format) (dict)
+    m       : dictionary of information (dict)
     v       : dictionary of visibilities with keys antenna pair and pol (dict)
     xtalk   : visibilities given are xtalk visibilities. (bool)
     returnuv: return uvdata object. If returned, file is not written. (bool)
@@ -127,15 +127,16 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
 # Dictionary of calpar gains and files
 pols = opts.pol.split(',')
 files = {}
-firstcal_files = np.sort(glob.glob(opts.firstcal))
+if not opts.firstcal:
+    raise ValueError('Please provide a firstcal file. Exiting...')
+else:
+    firstcal_files = np.sort(glob.glob(opts.firstcal))
 for f, filename in enumerate(args):
     files[filename] = {}
     if len(firstcal_files) == len(args):
         files[filename]['firstcal'] = str(firstcal_files[f])  # one firstcal file per input file.
     elif len(args) > len(firstcal_files):
         files[filename]['firstcal'] = str(firstcal_files[0])  # only use first firstcal file for all input files.
-    else:
-        raise('Please provide a firstcal file. Exiting...')
     for p in pols:
         fn = filename.split('.')
         fn[3] = p
@@ -154,8 +155,9 @@ else:
     ex_ants = []
 info = aa_to_info(aa, pols=list(set(''.join(pols))), ex_ants=ex_ants, crosspols=pols)
 reds = info.get_reds()
+bls = [bl for red in reds for bl in red]
 
-### Omnical-ing! Loop Through Compressed Files ###
+### Omnical-ing! Loop Through Files ###
 for f, filename in enumerate(args):
     file_group = files[filename]  # dictionary with pol indexed files
     print 'Reading:'
@@ -169,24 +171,42 @@ for f, filename in enumerate(args):
     
     _, g0, _, _ = from_fits(file_group['firstcal'])  # read in firstcal data
 
-    timeinfo, d, f = read_files([file_group[key] for key in file_group.keys() if key != 'firstcal'],
-                                antstr='cross', polstr=opts.pol)
-    t_jd = timeinfo['times']
-    t_lst = timeinfo['lsts']
-    freqs = np.arange(.1, .2, .1 / len(d[d.keys()[0]][pols[0]][0]))
-    SH = d.values()[0].values()[0].shape  # shape of file data (ex: (19,203))
+    # timeinfo, d, f = read_files([file_group[key] for key in file_group.keys() if key != 'firstcal'],
+    #                            antstr='cross', polstr=opts.pol)
+    file_pol = filename.split('/')[-1].split('.')[3]
+    uvd = pyuvdata.UVData()
+    uvd.read_miriad(file_group[file_pol])
+    t_jd = uvd.time_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
+    t_lst = uvd.lst_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
+    freqs = uvd.freq_array[0]
+    SH = (uvd.Ntimes, uvd.Nfreqs)  # shape of file data (ex: (19,203))
     data, wgts, xtalk = {}, {}, {}
+    d, f = {}, {}
     for p in g0.keys():
         for i in g0[p]:
             if g0[p][i].shape != (len(t_jd), len(freqs)):
                 g0[p][i] = np.resize(g0[p][i], SH)  # resize gains like data
             else: continue
+
+    for ip, pol in enumerate(uvd.polarization_array):
+        pol = aipy.miriad.pol2str[pol]
+        if pol != opts.pol: 
+            continue
+        for nbl, (i,j) in enumerate(map(uvd.baseline_to_antnums, uvd.baseline_array[:uvd.Nbls])):
+            if not (i, j) in bls and not (j, i) in bls:
+                continue
+            d[(i,j)] = {pol: uvd.data_array.reshape(uvd.Ntimes, uvd.Nbls, uvd.Nspws, uvd.Nfreqs, uvd.Npols)[:, nbl, 0, :, ip]}
+            f[(i,j)] = {pol: np.logical_not(uvd.flag_array.reshape(uvd.Ntimes, uvd.Nbls, uvd.Nspws, uvd.Nfreqs, uvd.Npols)[:, nbl, 0, :, ip])}
+    
+
     data = d  # indexed by bl and then pol (backwards from everything else)
     for p in pols:
         wgts[p] = {}  # weights dictionary by pol
-        for bl in f:
-            i, j = bl
-            wgts[p][(j, i)] = wgts[p][(i, j)] = np.logical_not(f[bl][p]).astype(np.int)
+        for i,j in f:
+            if (i,j) in bls:
+                wgts[p][(i, j)] = np.logical_not(f[i,j][p]).astype(np.int)
+            else:  # conjugate
+                wgts[p][(j, i)] = np.logical_not(f[i,j][p]).astype(np.int)
     print '   Running Omnical'
     m2, g3, v3 = run_omnical(data, info, gains0=g0)
 
@@ -195,7 +215,7 @@ for f, filename in enumerate(args):
     m2['jds'] = t_jd
     m2['lsts'] = t_lst
     m2['freqs'] = freqs
-    m2['inttime'] = timeinfo['inttime']
+    m2['inttime'] = uvd.integration_time
     optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
 
     print '   Saving %s' % fitsname
