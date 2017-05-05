@@ -1,16 +1,12 @@
 #! /usr/bin/env python
 
-import omnical
 import aipy
 import numpy as np
 from heracal.omni import from_fits, aa_to_info, run_omnical, compute_xtalk, HERACal
 from heracal.miriad import read_files
-import pickle
-import optparse
-import os
-import sys
 import pyuvdata
-import glob
+import optparse
+import os, sys, glob
 
 o = optparse.OptionParser()
 o.set_usage('omni_run.py [options] *uvcRRE')
@@ -180,7 +176,6 @@ for f, filename in enumerate(args):
     t_lst = uvd.lst_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
     freqs = uvd.freq_array[0]
     SH = (uvd.Ntimes, uvd.Nfreqs)  # shape of file data (ex: (19,203))
-    data, wgts, xtalk = {}, {}, {}
     d, f = {}, {}
     for p in g0.keys():
         for i in g0[p]:
@@ -198,8 +193,11 @@ for f, filename in enumerate(args):
             d[(i,j)] = {pol: uvd.data_array.reshape(uvd.Ntimes, uvd.Nbls, uvd.Nspws, uvd.Nfreqs, uvd.Npols)[:, nbl, 0, :, ip]}
             f[(i,j)] = {pol: np.logical_not(uvd.flag_array.reshape(uvd.Ntimes, uvd.Nbls, uvd.Nspws, uvd.Nfreqs, uvd.Npols)[:, nbl, 0, :, ip])}
     
+    print '   Running Omnical'
+    m2, g3, v3 = run_omnical(d, info, gains0=g0)
 
-    data = d  # indexed by bl and then pol (backwards from everything else)
+    # need wgts for xtalk
+    wgts, xtalk = {}, {}
     for p in pols:
         wgts[p] = {}  # weights dictionary by pol
         for i,j in f:
@@ -207,8 +205,6 @@ for f, filename in enumerate(args):
                 wgts[p][(i, j)] = np.logical_not(f[i,j][p]).astype(np.int)
             else:  # conjugate
                 wgts[p][(j, i)] = np.logical_not(f[i,j][p]).astype(np.int)
-    print '   Running Omnical'
-    m2, g3, v3 = run_omnical(data, info, gains0=g0)
 
     xtalk = compute_xtalk(m2['res'], wgts)  # xtalk is time-average of residual
     m2['history'] = 'OMNI_RUN: ' + ''.join(sys.argv) + '\n'
