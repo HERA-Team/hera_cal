@@ -94,6 +94,46 @@ class Test_Antpol(object):
             nt.assert_true(ant == 0)
             nt.assert_equal({ant: None}.keys()[0], ant)
 
+class Test_RedundantInfo(object):
+    def setUp(self):
+        self.aa = get_aa(np.linspace(.1,.2,16))
+        self.pol = ['x']
+        self.info = omni.aa_to_info(self.aa, pols=self.pol)
+        self.reds = self.info.get_reds()
+        self.nondegenerategains = {}
+        self.gains = {}
+        self.vis = {}
+        for gn in self.info.subsetant:
+            self.gains[gn] = np.random.randn(16) + 1j*np.random.randn(16)
+            self.nondegenerategains[gn] = np.random.randn(16) + 1j*np.random.randn(16)
+        self.vis = { red[0]: np.random.randn(16)+1j*np.random.randn(16) for red in self.reds}
+
+    def test_bl_order(self):
+        self.bl_order = [(omni.Antpol(self.info.subsetant[i], self.info.nant), omni.Antpol(self.info.subsetant[j], self.info.nant)) for i, j in self.info.bl2d]
+        nt.assert_equal(self.bl_order, self.info.bl_order())
+
+    def test_order_data(self):
+        self.data = {}
+        for red in self.reds:
+            for i,j in red:
+                self.data[i,j] = {self.pol[0]*2: np.random.randn(1,16)+1j*np.random.randn(1,16)}
+        d = []
+        for i, j in self.info.bl_order():
+            bl = (i.ant(), j.ant())
+            pol = i.pol() + j.pol()
+            try: d.append(self.data[bl][pol])
+            except(KeyError): d.append(self.data[bl][::-1][pol[::-1]].conj())
+        nt.assert_equal(np.testing.assert_equal(np.array(d).transpose((1,2,0)), self.info.order_data(self.data)), None)
+        
+#    def test_pack_calpar(self):
+#        calpar = np.zeros(1,16,self.info.calpar_size(4,self.len(info.ubl)))
+#        calpar = self.info.pack_calpar(calpar, gains=self.gains, vis=self.vis, nondegenerategains=self.nondegenerategains)
+#        
+#        calpar = np.zeros(1,16,self.info.calpar_size(4,self.len(info.ubl)))
+        
+        
+         
+
 
 class Test_Redcal_Basics(object):
     def setUp(self):
