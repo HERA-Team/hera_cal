@@ -319,23 +319,32 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     cal = UVCal()
     for f in filename:
         cal.read_calfits(f)
-        for k, p in enumerate(cal.jones_array):
-            pol = poldict[p]
-            if pol not in gains.keys(): gains[pol] = {}
-            for i, ant in enumerate(cal.antenna_numbers):
-                if cal.cal_type == 'gain':
-                    if ant not in gains[pol].keys():
-                        gains[pol][ant] = cal.gain_array[i, :, :, k].T
+        for nspw in xrange(cal.Nspws):
+            for k, p in enumerate(cal.jones_array):
+                pol = poldict[p]
+                if pol not in gains.keys(): gains[pol] = {}
+                for i, ant in enumerate(cal.antenna_numbers):
+                    if cal.cal_type == 'gain':
+                        if ant not in gains[pol].keys():
+                            gains[pol][ant] = cal.gain_array[i, nspw, :, :, k].T
+                        else:
+                            gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, nspw, :, :, k].T])
+                        if not 'chisq{0}{1}' in meta.keys():
+                            meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, :, k].T
+                        else:
+                            meta['chisq{0}{1}'] = np.concantenate([meta['chisq{0}{1}'], cal.quality_array[i, nspw, :, :, k].T])
+                    elif cal.cal_type == 'delay':
+                        if ant not in gains[pol].keys():
+                            gains[pol][ant] = get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T
+                        else:
+                            gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T])
+                        if not 'chisq{0}{1}' in meta.keys():
+                            meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, k].T
+                        else:
+                            meta['chisq{0}{1}'] = np.concantenate([meta['chisq{0}{1}'], cal.quality_array[i, nspw, :, k].T])
                     else:
-                        gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, : k].T])
-                    meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, :, :, k].T
-                elif cal.cal_type == 'delay':
-                    if ant not in gains[pol].keys():
-                        gains[pol][ant] = get_phase(cal.freq_array/1e9, cal.delay_array[i, :, k]).T
-                    else:
-                        gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(cal.freq_array/1e9, cal.gain_array[i, :, :k]).T])
-                else:
-                    print 'Not a recognized file type'
+                        print 'Not a recognized file type'
+                    
      
     vis = UVData()
     v = {}
