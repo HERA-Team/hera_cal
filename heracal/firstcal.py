@@ -147,11 +147,16 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, cleantol=1e-4, window='none', finet
     return taus+dts,offs
 
 
-class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
+class FirstCalRedundantInfo(omnical.info.RedundantInfo):
+    '''
+        The extra meta data added to the RedundantInfo object from omnical are:
+        self.nant : number of antennas
+        self.A:  coefficient matrix for firstcal delay calibration. (Nmeasurements, Nants).
+                 Measurements are ratios of redundant baselines.
+    '''
     def __init__(self, nant):
-        omnical.info.FirstCalRedundantInfo.__init__(self)
+        omnical.info.RedundantInfo.__init__(self)
         self.nant = nant
-        print 'Loading FirstCalRedundantInfo class'
 
     def order_data(self, dd):
         '''Create a data array ordered for use in _omnical.redcal.  'dd' is
@@ -160,6 +165,58 @@ class FirstCalRedundantInfo(omnical.info.FirstCalRedundantInfo):
         of (time,freq) data.''' # XXX does time/freq ordering matter.  should data be 2D instead?
         return np.array([dd[bl] if dd.has_key(bl) else dd[bl[::-1]].conj()
             for bl in self.bl_order()]).transpose((1,2,0))
+
+    def bl_index(self,bl):
+        '''Gets the baseline index from bl_order for a given baseline, bl'''
+        try: return self._bl2ind[bl]
+        except(AttributeError):
+            self._bl2ind = {}
+            for x,b in enumerate(self.bl_order()): self._bl2ind[b] = x
+            return self._bl2ind[bl]
+
+    def blpair_index(self,blpair):
+        try: return self._blpair2ind[blpair]
+        except:
+            self._blpair2ind = {}
+            for x,bp in enumerate(self.bl_pairs): self._blpair2ind[bp] = x
+            return self._blpair2ind[blpair]
+
+    def blpair2antind(self,blpair):
+        try: return self._blpair2antind[blpair]
+        except:
+            self._blpair2antind = {}
+            for bp in self.bl_pairs: self._blpair2antind[bp] = map(self.ant_index,np.array(bp).flatten())
+            return self._blpair2antind[blpair]
+
+    def init_from_reds(self, reds, antpos):
+        '''Initialize RedundantInfo from a list where each entry is a group of redundant baselines.
+        Each baseline is a (i,j) tuple, where i,j are antenna indices.  To ensure baselines are
+        oriented to be redundant, it may be necessary to have i > j.  If this is the case, then
+        when calibrating visibilities listed as j,i data will have to be conjugated. After initializing,
+        the coefficient matrix for deducing delay solutions per antennas (for firstcal) is created by
+        modeling it as per antenna delays.'''
+        self.reds = [[(int(i),int(j)) for i,j in gp] for gp in reds]
+        self.init_same(self.reds)
+        #new stuff for first cal
+        self.bl_pairs = [(bl1,bl2) for ublgp in reds for i,bl1 in enumerate(ublgp) for bl2 in ublgp[i+1:]]
+        A = np.zeros((len(self.bl_pairs),len(self.subsetant)))
+        for n, bp in enumerate(self.bl_pairs):
+            i,j,k,l = self.blpair2antind(bp)
+            A[n,i] += 1
+            A[n,j] += -1
+            A[n,k] += -1
+            A[n,l] += 1
+        self.A = A
+        # XXX nothing up to this point requires antloc; in principle, degenM can be deduced
+        # from reds alone, removing need for antpos.  So that'd be nice, someday
+        self.antloc = antpos.take(self.subsetant, axis=0).astype(np.float32)
+        self.ubl = np.array([np.mean([antpos[j]-antpos[i] for i,j in ublgp],axis=0) for ublgp in reds], dtype=np.float32)
+
+    def get_reds(self):
+        '''After initialization, return redundancies.'''
+        try: return self.reds
+        except(AttributeError):
+            print 'Initialize info class!'
 
 
 class FirstCal(object):
