@@ -109,12 +109,13 @@ class RedundantInfo(omnical.calib.RedundantInfo):
         meta, gains, vis = omnical.calib.RedundantInfo.unpack_calpar(self, calpar, **kwargs)
 
         def mk_ap(a): return Antpol(a, self.nant)
-        for i, j in meta['res'].keys():
-            api, apj = mk_ap(i), mk_ap(j)
-            pol = api.pol() + apj.pol()
-            bl = (api.ant(), apj.ant())
-            if not meta['res'].has_key(pol): meta['res'][pol] = {}
-            meta['res'][pol][bl] = meta['res'].pop((i, j))
+        if 'res' in meta:
+            for i, j in meta['res'].keys():
+                api, apj = mk_ap(i), mk_ap(j)
+                pol = api.pol() + apj.pol()
+                bl = (api.ant(), apj.ant())
+                if not meta['res'].has_key(pol): meta['res'][pol] = {}
+                meta['res'][pol][bl] = meta['res'].pop((i, j))
         # XXX make chisq a nested dict, with individual antpol keys?
         for k in [k for k in meta.keys() if k.startswith('chisq')]:
             try:

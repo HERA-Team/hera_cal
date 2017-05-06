@@ -4,6 +4,7 @@ import nose.tools as nt
 import os
 import numpy as np
 import aipy as a
+from omnical.calib import RedundantInfo
 import heracal.omni as omni
 import heracal.miriad as miriad
 from copy import deepcopy
@@ -103,10 +104,9 @@ class Test_RedundantInfo(object):
         self.nondegenerategains = {}
         self.gains = {}
         self.vis = {}
-        for gn in self.info.subsetant:
-            self.gains[gn] = np.random.randn(16) + 1j*np.random.randn(16)
-            self.nondegenerategains[gn] = np.random.randn(16) + 1j*np.random.randn(16)
-        self.vis = { red[0]: np.random.randn(16)+1j*np.random.randn(16) for red in self.reds}
+        self.gains[self.pol[0]] = { gn: np.random.randn(1,16) + 1j*np.random.randn(1,16) for gn in self.info.subsetant }
+        self.nondegenerategains[self.pol[0]] = { gn:  np.random.randn(1,16) + 1j*np.random.randn(1,16) for gn in self.info.subsetant}
+        self.vis[self.pol[0]*2] = { red[0]: np.random.randn(1,16)+1j*np.random.randn(1,16) for red in self.reds}
 
     def test_bl_order(self):
         self.bl_order = [(omni.Antpol(self.info.subsetant[i], self.info.nant), omni.Antpol(self.info.subsetant[j], self.info.nant)) for i, j in self.info.bl2d]
@@ -125,15 +125,63 @@ class Test_RedundantInfo(object):
             except(KeyError): d.append(self.data[bl][::-1][pol[::-1]].conj())
         nt.assert_equal(np.testing.assert_equal(np.array(d).transpose((1,2,0)), self.info.order_data(self.data)), None)
         
-#    def test_pack_calpar(self):
-#        calpar = np.zeros(1,16,self.info.calpar_size(4,self.len(info.ubl)))
-#        calpar = self.info.pack_calpar(calpar, gains=self.gains, vis=self.vis, nondegenerategains=self.nondegenerategains)
-#        
-#        calpar = np.zeros(1,16,self.info.calpar_size(4,self.len(info.ubl)))
+    def test_pack_calpar(self):
+        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
+        calpar2 = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
         
+        omni_info = RedundantInfo()
+        reds = omni.compute_reds(4, self.pol, self.info.antloc[:self.info.nant])
+        omni_info.init_from_reds(reds, self.info.antloc)
+        _gains = {}
+        for pol in self.gains:
+            for ant in self.gains[pol]:
+                _gains[ant] = self.gains[pol][ant].conj()
+                
+        _vis = {}
+        for pol in self.vis:
+            for i,j in self.vis[pol]:
+                _vis[i,j] = self.vis[pol][i,j]
+        calpar = omni_info.pack_calpar(calpar, gains=_gains, vis=_vis)
+        nt.assert_equal(np.testing.assert_equal(self.info.pack_calpar(calpar2, self.gains, self.vis), calpar), None)
+
+        # again with nondegenerate gains
+        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
+        calpar2 = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
         
+        omni_info = RedundantInfo()
+        reds = omni.compute_reds(4, self.pol, self.info.antloc[:self.info.nant])
+        omni_info.init_from_reds(reds, self.info.antloc)
+        _gains = {}
+        for pol in self.gains:
+            for ant in self.gains[pol]:
+                _gains[ant] = self.gains[pol][ant].conj()/self.nondegenerategains[pol][ant].conj()
+                
+        _vis = {}
+        for pol in self.vis:
+            for i,j in self.vis[pol]:
+                _vis[i,j] = self.vis[pol][i,j]
+        calpar = omni_info.pack_calpar(calpar, gains=_gains, vis=_vis)
+        nt.assert_equal(np.testing.assert_equal(self.info.pack_calpar(calpar2, self.gains, self.vis,nondegenerategains=self.nondegenerategains), calpar), None)
+
+    def test_unpack_calpar(self):
+        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
+        calpar = self.info.pack_calpar(calpar, self.gains, self.vis)
+        
+        m,g,v = self.info.unpack_calpar(calpar)
+        for pol in g.keys():
+            for ant in g[pol].keys():
+                nt.assert_equal(np.testing.assert_almost_equal(g[pol][ant], self.gains[pol][ant]), None)
+        nt.assert_equal(np.testing.assert_equal(v, self.vis), None)
          
 
+        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
+        calpar = self.info.pack_calpar(calpar, self.gains, self.vis, nondegenerategains=self.nondegenerategains)
+        
+        m,g,v = self.info.unpack_calpar(calpar, nondegenerategains=self.nondegenerategains)
+        for pol in g.keys():
+            for ant in g[pol].keys():
+                nt.assert_equal(np.testing.assert_almost_equal(g[pol][ant], self.gains[pol][ant]), None)
+        nt.assert_equal(np.testing.assert_equal(v, self.vis), None)
 
 class Test_Redcal_Basics(object):
     def setUp(self):
