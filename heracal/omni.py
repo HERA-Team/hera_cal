@@ -287,8 +287,8 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
 def get_phase(freqs, tau):
     '''
        Turn a delay into a phase.
-       freqs: array of frequencies in GHz.
-       tau: delay in nanoseconds.
+       freqs: array of frequencies in Hz
+       tau: delay in seconds.
     '''
     freqs = freqs.reshape(-1,1)
     return np.exp(-2j*np.pi*freqs*tau)
@@ -314,8 +314,8 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     if type(ants) is int: ants = [ants]
     meta, gains = {}, {}
     poldict = {-5: 'x', -4: 'y'}
-    visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
-    xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
+    
+    firstcal = filename[0].split('.')[-2] == 'firstcal'
 
     cal = UVCal()
     for f in filename:
@@ -346,32 +346,37 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                     else:
                         print 'Not a recognized file type'
                     
-     
-    vis = UVData()
-    v = {}
-    for f in visfile:
-        if os.path.exists(f):
-            vis.read_uvfits(f)
-            for p, pol in enumerate(vis.polarization_array):
-                pol = poldict[pol] * 2
-                if pol not in v.keys(): v[pol] = {}
-                for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
-                    # note we reverse baseline here b/c of conventions
-                    v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
 
-    xtalk = UVData()
+    v = {}
     x = {}
-    for f in xtalkfile:
-        if os.path.exists(f):
-            xtalk.read_uvfits(f)
-            for p, pol in enumerate(xtalk.polarization_array):
-                pol = poldict[pol] * 2
-                if pol not in x.keys(): x[pol] = {}
-                for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
-                    x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p]
+    if not firstcal:
+        visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
+        xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
+         
+        vis = UVData()
+        for f in visfile:
+            if os.path.exists(f):
+                vis.read_uvfits(f)
+                for p, pol in enumerate(vis.polarization_array):
+                    pol = poldict[pol] * 2
+                    if pol not in v.keys(): v[pol] = {}
+                    for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
+                        # note we reverse baseline here b/c of conventions
+                        v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
+
+        DATA_SHAPE = v[pol][vis.baseline_to_antnums(bl)[::-1]].shape
+        xtalk = UVData()
+        for f in xtalkfile:
+            if os.path.exists(f):
+                xtalk.read_uvfits(f)
+                for p, pol in enumerate(xtalk.polarization_array):
+                    pol = poldict[pol] * 2
+                    if pol not in x.keys(): x[pol] = {}
+                    for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
+                        x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
 
     meta['times'] = cal.time_array
-    meta['freqs'] = cal.freq_array
+    meta['freqs'] = cal.freq_array.flatten()
     meta['history'] = cal.history
     meta['caltype'] = cal.cal_type
     meta['gain_conventions'] = cal.gain_convention
