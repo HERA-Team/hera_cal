@@ -330,19 +330,19 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                             gains[pol][ant] = cal.gain_array[i, nspw, :, :, k].T
                         else:
                             gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, nspw, :, :, k].T])
-                        if not 'chisq{0}{1}' in meta.keys():
+                        if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
                             meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, :, k].T
                         else:
-                            meta['chisq{0}{1}'] = np.concantenate([meta['chisq{0}{1}'], cal.quality_array[i, nspw, :, :, k].T])
+                            meta['chisq{0}{1}'.format(ant, pol)] = np.concantenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, :, k].T])
                     elif cal.cal_type == 'delay':
                         if ant not in gains[pol].keys():
                             gains[pol][ant] = get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T
                         else:
                             gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T])
-                        if not 'chisq{0}{1}' in meta.keys():
+                        if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
                             meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, k].T
                         else:
-                            meta['chisq{0}{1}'] = np.concantenate([meta['chisq{0}{1}'], cal.quality_array[i, nspw, :, k].T])
+                            meta['chisq{0}{1}'.format(ant, pol)] = np.concantenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, k].T])
                     else:
                         print 'Not a recognized file type'
                     
@@ -414,7 +414,7 @@ class HERACal(UVCal):
         allants = ants + ex_ants
         ants = np.sort(ants)
         allants = np.sort(allants)
-        time = meta['jds']
+        time = meta['times']
         freq = meta['freqs']  # this is in Hz
         pols = [str2pol[p] for p in gains.keys()]
         npol = len(pols)
@@ -476,8 +476,8 @@ class HERACal(UVCal):
         except KeyError:
             self.history = appendhist
         self.Nants_data = len(ants)  # only ants with data
-        self.antenna_names = namarray[:self.Nants_data]
-        self.antenna_numbers = numarray[:self.Nants_data]
+        self.antenna_names = list(namarray[:self.Nants_data])
+        self.antenna_numbers = list(numarray[:self.Nants_data])
         self.ant_array = numarray[:self.Nants_data]
         self.Nants_telescope = nants  # total number of antennas
         self.Nspws = 1  # This is by default 1. No support for > 1 in pyuvdata.

@@ -8,6 +8,7 @@ from omnical.calib import RedundantInfo
 import heracal.omni as omni
 import heracal.miriad as miriad
 from heracal.data import DATA_PATH
+from pyuvdata import UVCal
 from copy import deepcopy
 #from heracal import omni
 
@@ -109,7 +110,6 @@ class TestMethods(object):
         freqs = np.linspace(.1,.2,1024).reshape(-1,1)  # GHz
         tau = 10  # ns 
         nt.assert_true(np.all(omni.get_phase(freqs, tau) == np.exp(-2j*np.pi*freqs*tau)))
-
     def test_from_fits_gain(self):
         Ntimes = 56 
         Nchans = 1024  # hardcoded for this file
@@ -296,4 +296,19 @@ class Test_Redcal_Basics(object):
             zeros[self.pol[0] * 2][ai.ant(), aj.ant()] = np.mean(np.zeros_like(m['res'][self.pol[0]*2][ai.ant(), aj.ant()]), axis=0) # need to average over the times
         nt.assert_equal(np.testing.assert_equal(omni.compute_xtalk(m['res'], wgts), zeros), None)
 
+
+class Test_HERACal(UVCal):
+    def test_gainHC(self):
+        meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
+        meta['inttime'] = np.diff(meta['times'])[0]*60*60*24
+        optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
+        hc = omni.HERACal(meta, gains, optional=optional)
+        uv = UVCal()
+        uv.read_calfits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
+        for param in hc:
+            if param == '_history': continue
+            elif param == '_time_range':  # why do we need this?
+                nt.assert_equal(np.testing.assert_almost_equal(getattr(hc, param).value, getattr(uv, param).value, 5), None)
+            else:
+                nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
 

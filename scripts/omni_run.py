@@ -208,7 +208,7 @@ for f, filename in enumerate(args):
 
     xtalk = compute_xtalk(m2['res'], wgts)  # xtalk is time-average of residual
     m2['history'] = 'OMNI_RUN: ' + ''.join(sys.argv) + '\n'
-    m2['jds'] = t_jd
+    m2['times'] = t_jd
     m2['lsts'] = t_lst
     m2['freqs'] = freqs
     m2['inttime'] = uvd.integration_time
