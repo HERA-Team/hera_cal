@@ -29,10 +29,7 @@ def fit_line(phs, fqs, valid, offset=False):
         import IPython 
         IPython.embed()
 
-def mpr_clean(args):
-    return a.deconv.clean(*args,tol=1e-4)[0]
-
-def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, cleantol=1e-4, window='none', finetune=True, verbose=False, plot=False, noclean=True, average=False, offset=False):
+def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, window='none', finetune=True, verbose=False, average=False, offset=False):
     '''Gets the phase differnce between two baselines by using the fourier transform and a linear fit to that residual slop. 
         Parameters
         ----------
@@ -50,10 +47,6 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, cleantol=1e-4, window='none', finet
             Be verobse. Default is False.
         plot: boolean
             Turn on low level plotting of phase ratios. Default is False.
-        cleantol: float
-            Clean tolerance level. Default is 1e-4.
-        noclean: boolean
-            Don't apply clean deconvolution to remove the sampling function (weights).
         average: boolean
             Average the data in time before applying analysis. collapses NXM -> 1XM.
         offset: boolean
@@ -87,14 +80,7 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, cleantol=1e-4, window='none', finet
     # FFT and deconvolve the weights to get the phs
     _phs = np.fft.fft(window*d12_sum,axis=-1)
     _wgt = np.fft.fft(window*d12_wgt,axis=-1)
-    _phss = np.zeros_like(_phs)
-    if not noclean and average:
-        _phss = a.deconv.clean(_phs, _wgt, tol=cleantol)[0]
-    elif not noclean:
-        pool=mpr.Pool(processes=4)
-        _phss = pool.map(mpr_clean, zip(_phs,_wgt))
-    else:
-        _phss = _phs
+    _phss = _phs
     _phss = np.abs(_phss)
     #get bin of phase
     mxs = np.argmax(_phss, axis=-1)
@@ -113,32 +99,31 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, cleantol=1e-4, window='none', finet
             dly = np.angle(d*np.exp(-2j*np.pi*tau*fqs))
             dt,off = fit_line(dly,fqs,valid,offset=offset)
             dts.append(dt), offs.append(off)
-            if plot:
-                p.subplot(411)
-                p.plot(fqs,np.angle(d12_sum[ii]), linewidth=2)
-                p.plot(fqs,d12_sum[ii], linewidth=2)
-                p.plot(fqs, np.exp((2j*np.pi*fqs*(tau+dt))+off))
-                p.hlines(np.pi, .1,.2,linestyles='--',colors='k')
-                p.hlines(-np.pi, .1,.2,linestyles='--',colors='k')
-                p.subplot(412)
-                p.plot(fqs,np.unwrap(dly)+2*np.pi*tau*fqs, linewidth=2)
-                p.plot(fqs,dly+2*np.pi*tau*fqs, linewidth=2,ls='--')
-                p.plot(fqs,2*np.pi*tau*fqs, linewidth=2,ls='-.')
-                p.plot(fqs,2*np.pi*(tau+dt)*fqs + off, linewidth=2,ls=':')
-                p.subplot(413)
-                p.plot(dlys, np.abs(_phs[ii]),'-.')
-                p.xlim(-400,400)
-                p.subplot(414)
-                p.plot(fqs,dly, linewidth=2)
-                p.plot(fqs,off+dt*fqs*2*np.pi, '--')
-                p.hlines(np.pi, .1,.2,linestyles='--',colors='k')
-                p.hlines(-np.pi, .1,.2,linestyles='--',colors='k')
-                print 'tau=', tau
-                print 'tau + dt=', tau+dt
-                p.xlabel('Frequency (GHz)', fontsize='large')
-                p.ylabel('Phase (radians)', fontsize='large')
-        p.show()
-
+#            if plot:
+#                p.subplot(411)
+#                p.plot(fqs,np.angle(d12_sum[ii]), linewidth=2)
+#                p.plot(fqs,d12_sum[ii], linewidth=2)
+#                p.plot(fqs, np.exp((2j*np.pi*fqs*(tau+dt))+off))
+#                p.hlines(np.pi, .1,.2,linestyles='--',colors='k')
+#                p.hlines(-np.pi, .1,.2,linestyles='--',colors='k')
+#                p.subplot(412)
+#                p.plot(fqs,np.unwrap(dly)+2*np.pi*tau*fqs, linewidth=2)
+#                p.plot(fqs,dly+2*np.pi*tau*fqs, linewidth=2,ls='--')
+#                p.plot(fqs,2*np.pi*tau*fqs, linewidth=2,ls='-.')
+#                p.plot(fqs,2*np.pi*(tau+dt)*fqs + off, linewidth=2,ls=':')
+#                p.subplot(413)
+#                p.plot(dlys, np.abs(_phs[ii]),'-.')
+#                p.xlim(-400,400)
+#                p.subplot(414)
+#                p.plot(fqs,dly, linewidth=2)
+#                p.plot(fqs,off+dt*fqs*2*np.pi, '--')
+#                p.hlines(np.pi, .1,.2,linestyles='--',colors='k')
+#                p.hlines(-np.pi, .1,.2,linestyles='--',colors='k')
+#                print 'tau=', tau
+#                print 'tau + dt=', tau+dt
+#                p.xlabel('Frequency (GHz)', fontsize='large')
+#                p.ylabel('Phase (radians)', fontsize='large')
+#        p.show()
         dts = np.array(dts)
         offs = np.array(offs)
 
