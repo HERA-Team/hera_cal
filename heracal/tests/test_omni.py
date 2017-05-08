@@ -7,6 +7,7 @@ import aipy as a
 from omnical.calib import RedundantInfo
 import heracal.omni as omni
 import heracal.miriad as miriad
+from heracal.data import DATA_PATH
 from copy import deepcopy
 #from heracal import omni
 
@@ -76,6 +77,90 @@ class TestMethods(object):
                 for l in k:
                     nt.assert_true(isinstance(l, omni.Antpol))
 
+    def test_from_npz(self):
+        Ntimes = 56 
+        Nchans = 1024  # hardcoded for this file
+        meta, gains, vis, xtalk = omni.from_npz(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.npz'))
+        for m in meta.keys():
+            if m.startswith('chisq'):
+                nt.assert_equal(meta[m].shape, (Ntimes,Nchans))
+        nt.assert_equal(len(meta['freqs']), Nchans)
+        nt.assert_equal(len(meta['jds']), Ntimes)
+        nt.assert_equal(len(meta['lsts']), Ntimes)
+
+        nt.assert_equal(gains.keys(), ['x'])
+        for ant in gains['x'].keys():
+            nt.assert_equal(gains['x'][ant].dtype, np.complex64)
+            nt.assert_equal(gains['x'][ant].shape, (Ntimes,Nchans))
+        
+        nt.assert_equal(vis.keys(), ['xx'])
+        for bl in vis['xx'].keys():
+            nt.assert_equal(vis['xx'][bl].dtype, np.complex64)
+            nt.assert_equal(vis['xx'][bl].shape, (Ntimes, Nchans))
+
+        nt.assert_equal(xtalk.keys(), ['xx'])
+        for bl in xtalk['xx'].keys():
+            nt.assert_equal(xtalk['xx'][bl].dtype, np.complex64)
+            nt.assert_equal(xtalk['xx'][bl].shape, (Ntimes, Nchans))
+            for time in range(Ntimes):
+                nt.assert_true(np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
+
+    def test_get_phase(self):
+        freqs = np.linspace(.1,.2,1024).reshape(-1,1)  # GHz
+        tau = 10  # ns 
+        nt.assert_true(np.all(omni.get_phase(freqs, tau) == np.exp(-2j*np.pi*freqs*tau)))
+
+    def test_from_fits_gain(self):
+        Ntimes = 56 
+        Nchans = 1024  # hardcoded for this file
+        meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
+        for m in meta.keys():
+            if m.startswith('chisq'):
+                nt.assert_equal(meta[m].shape, (Ntimes,Nchans))
+        nt.assert_equal(len(meta['freqs']), Nchans)
+        nt.assert_equal(len(meta['times']), Ntimes)
+        nt.assert_equal(type(meta['history']), str)
+        nt.assert_equal(meta['gain_conventions'], 'divide')
+
+        nt.assert_equal(gains.keys(), ['x'])
+        for ant in gains['x'].keys():
+            nt.assert_equal(gains['x'][ant].dtype, np.complex64)
+            nt.assert_equal(gains['x'][ant].shape, (Ntimes,Nchans))
+        
+        nt.assert_equal(vis.keys(), ['xx'])
+        for bl in vis['xx'].keys():
+            nt.assert_equal(vis['xx'][bl].dtype, np.complex64)
+            nt.assert_equal(vis['xx'][bl].shape, (Ntimes, Nchans))
+
+        nt.assert_equal(xtalk.keys(), ['xx'])
+        for bl in xtalk['xx'].keys():
+            nt.assert_equal(xtalk['xx'][bl].dtype, np.complex64)
+            nt.assert_equal(xtalk['xx'][bl].shape, (Ntimes, Nchans))
+            for time in range(Ntimes):
+                nt.assert_true(np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
+
+    def test_from_fits_delay(self):
+        Ntimes = 56 
+        Nchans = 1024  # hardcoded for this file
+        Ndelay = 1  # number of delays per integration
+        meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.firstcal.fits'))
+        for m in meta.keys():
+            if m.startswith('chisq'):
+                nt.assert_equal(meta[m].shape, (Ntimes,))
+        nt.assert_equal(len(meta['freqs']), Nchans)
+        nt.assert_equal(len(meta['times']), Ntimes)
+        nt.assert_equal(type(meta['history']), str)
+        nt.assert_equal(meta['gain_conventions'], 'divide')
+
+        nt.assert_equal(gains.keys(), ['x'])
+        for ant in gains['x'].keys():
+            nt.assert_equal(gains['x'][ant].dtype, np.complex128)
+            nt.assert_equal(gains['x'][ant].shape, (Ntimes,Nchans))
+        
+        nt.assert_equal(vis, {})
+
+        nt.assert_equal(xtalk, {})
+
 
 class Test_Antpol(object):
     def setUp(self):
@@ -94,6 +179,7 @@ class Test_Antpol(object):
             nt.assert_equal(str(ant), '{0}{1}'.format(ant.ant(), ant.pol()))
             nt.assert_true(ant == 0)
             nt.assert_equal({ant: None}.keys()[0], ant)
+
 
 class Test_RedundantInfo(object):
     def setUp(self):
@@ -183,6 +269,7 @@ class Test_RedundantInfo(object):
                 nt.assert_equal(np.testing.assert_almost_equal(g[pol][ant], self.gains[pol][ant]), None)
         nt.assert_equal(np.testing.assert_equal(v, self.vis), None)
 
+
 class Test_Redcal_Basics(object):
     def setUp(self):
         self.freqs = np.array([.1, .125, .150, .175, .2])
@@ -208,3 +295,5 @@ class Test_Redcal_Basics(object):
             wgts[self.pol[0] * 2][ai.ant(), aj.ant()] = np.ones_like(m['res'][self.pol[0]*2][ai.ant(), aj.ant()], dtype=np.bool)
             zeros[self.pol[0] * 2][ai.ant(), aj.ant()] = np.mean(np.zeros_like(m['res'][self.pol[0]*2][ai.ant(), aj.ant()]), axis=0) # need to average over the times
         nt.assert_equal(np.testing.assert_equal(omni.compute_xtalk(m['res'], wgts), zeros), None)
+
+
