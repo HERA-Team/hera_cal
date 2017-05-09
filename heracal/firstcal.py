@@ -14,22 +14,11 @@ def fit_line(phs, fqs, valid, offset=False):
     fqs = fqs.compress(valid)
     dly = phs.compress(valid)
     B = np.zeros((fqs.size,1)); B[:,0] = dly
-    if offset:
-        A = np.zeros((fqs.size,2)); A[:,0] = fqs*2*np.pi; A[:,1] = 1
-    else:
-        A = np.zeros((fqs.size,1)); A[:,0] = fqs*2*np.pi#; A[:,1] = 1
-    try:
-        if offset:
-            dt,off = np.linalg.lstsq(A,B)[0].flatten()
-        else:
-            dt = np.linalg.lstsq(A,B)[0][0][0]
-            off = 0.0
-        return dt,off
-    except ValueError:
-        import IPython 
-        IPython.embed()
+    A = np.zeros((fqs.size,1)); A[:,0] = fqs*2*np.pi#; A[:,1] = 1
+    dt = np.linalg.lstsq(A,B)[0][0][0]
+    return dt
 
-def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, window='none', finetune=True, verbose=False, average=False, offset=False):
+def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, window='none', finetune=True, verbose=False, average=False):
     '''Gets the phase differnce between two baselines by using the fourier transform and a linear fit to that residual slop. 
         Parameters
         ----------
@@ -49,15 +38,11 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, window='none', finetune=True, verbo
             Turn on low level plotting of phase ratios. Default is False.
         average: boolean
             Average the data in time before applying analysis. collapses NXM -> 1XM.
-        offset: boolean
-            Solve for a offset component in addition to a delay component.
 
         Returns
         -------
         delays : ndarrays
             Array of delays (if average == False), or single delay.    
-        offsets: ndarrays
-            Array of offsets (if average == False), or single delay.
     
 '''
     d12 = d2 * np.conj(d1)
@@ -89,7 +74,7 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, window='none', finetune=True, verbo
     dtau = mxs / (fqs[-1] - fqs[0])
     mxs = np.dot(mxs.reshape(len(mxs),1),np.ones((1,3),dtype=int)) + np.array([-1,0,1])
     taus = np.sum(_phss[np.arange(mxs.shape[0],dtype=int).reshape(-1,1),mxs] * dlys[mxs],axis=-1) / np.sum(_phss[np.arange(mxs.shape[0]).reshape(-1,1),mxs],axis=-1)
-    dts,offs = [],[]
+    dts = []
     if finetune:
     #loop over the linear fits
         t1 = time.time()
@@ -97,8 +82,8 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, window='none', finetune=True, verbo
             valid = np.where(d != 0, 1, 0) # Throw out zeros, which NaN in the log below
             valid = np.logical_and(valid, np.logical_and(fqs>.11,fqs<.19))
             dly = np.angle(d*np.exp(-2j*np.pi*tau*fqs))
-            dt,off = fit_line(dly,fqs,valid,offset=offset)
-            dts.append(dt), offs.append(off)
+            dt = fit_line(dly,fqs,valid)
+            dts.append(dt)
 #            if plot:
 #                p.subplot(411)
 #                p.plot(fqs,np.angle(d12_sum[ii]), linewidth=2)
@@ -125,11 +110,10 @@ def redundant_bl_cal_simple(d1,w1,d2,w2,fqs, window='none', finetune=True, verbo
 #                p.ylabel('Phase (radians)', fontsize='large')
 #        p.show()
         dts = np.array(dts)
-        offs = np.array(offs)
 
-    info = {'dtau':dts, 'off':offs, 'mx':mxs}
-    if verbose: print info, taus, taus+dts, offs
-    return taus+dts,offs
+    info = {'dtau':dts, 'mx':mxs}
+    if verbose: print info, taus, taus+dts
+    return taus+dts
 
 
 class FirstCalRedundantInfo(omnical.info.RedundantInfo):
@@ -235,33 +219,29 @@ class FirstCal(object):
             w1 = ww[:, :, self.info.bl_index(bl1)]
             d2 = dd[:, :, self.info.bl_index(bl2)]
             w2 = ww[:, :, self.info.bl_index(bl2)]
-            delay, offset = redundant_bl_cal_simple(d1, w1, d2, w2, self.fqs, **kwargs)
+            delay = redundant_bl_cal_simple(d1, w1, d2, w2, self.fqs, **kwargs)
             blpair2delay[(bl1, bl2)] = delay
-            blpair2offset[(bl1, bl2)] = offset
-        return blpair2delay, blpair2offset
+        return blpair2delay
 
     def get_N(self, nblpairs):
         return sps.eye(nblpairs)
 
     def get_M(self, **kwargs):
-        blpair2delay, blpair2offset = self.data_to_delays(**kwargs)
+        blpair2delay = self.data_to_delays(**kwargs)
         sz = len(blpair2delay[blpair2delay.keys()[0]])
         M = np.zeros((len(self.info.bl_pairs), sz))
-        O = np.zeros((len(self.info.bl_pairs), sz))
         for pair in blpair2delay:
             M[self.info.blpair_index(pair), :] = blpair2delay[pair]
-            O[self.info.blpair_index(pair), :] = blpair2offset[pair]
-        return M, O
+        return M
 
     def run(self, **kwargs):
         '''Runs firstcal after the class initialized.
            returns:
                  dict: antenna delay pair with delay in nanoseconds.'''
         verbose = kwargs.get('verbose', False)
-        offset = kwargs.get('offset', False)
         # make measurement matrix
         print "Geting M,O matrix"
-        self.M, self.O = self.get_M(**kwargs)
+        self.M = self.get_M(**kwargs)
         print "Geting N matrix"
         N = self.get_N(len(self.info.bl_pairs))
         # XXX This needs to be addressed. If actually do invers, slows code way down.
@@ -278,22 +258,5 @@ class FirstCal(object):
         dontinvert = self.A.T.dot(self._N.dot(self.M))  # converts it all to a dense matrix
 #        definitely want to use pinv here and not solve since invert is probably singular.
         self.xhat = np.dot(np.linalg.pinv(invert), dontinvert)
-        # solve for offset
-        if offset:
-            print "Inverting A.T*N^{-1}*A matrix"
-            invert = self.A.T.dot(self._N.dot(self.A)).todense()
-            dontinvert = self.A.T.dot(self._N.dot(self.O))
-            self.ohat = np.dot(np.linalg.pinv(invert), dontinvert)
-            # turn solutions into dictionary
-            return dict(zip(self.info.subsetant, zip(self.xhat, self.ohat)))
-        else:
-            # turn solutions into dictionary
-            return dict(zip(self.info.subsetant, self.xhat))
-
-    def get_solved_delay(self):
-        solved_delays = []
-        for pair in self.info.bl_pairs:
-            ant_indexes = self.info.blpair2antind(pair)
-            dlys = self.xhat[ant_indexes]
-            solved_delays.append(dlys[0] - dlys[1] - dlys[2] + dlys[3])
-        self.solved_delays = np.array(solved_delays)
+        # turn solutions into dictionary
+        return dict(zip(self.info.subsetant, self.xhat))
