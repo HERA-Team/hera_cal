@@ -111,7 +111,7 @@ class TestMethods(object):
         tau = 10  # ns 
         nt.assert_true(np.all(omni.get_phase(freqs, tau) == np.exp(-2j*np.pi*freqs*tau)))
     def test_from_fits_gain(self):
-        Ntimes = 56 
+        Ntimes = 3 
         Nchans = 1024  # hardcoded for this file
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
         for m in meta.keys():
@@ -140,7 +140,7 @@ class TestMethods(object):
                 nt.assert_true(np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
 
     def test_from_fits_delay(self):
-        Ntimes = 56 
+        Ntimes = 3 
         Nchans = 1024  # hardcoded for this file
         Ndelay = 1  # number of delays per integration
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.firstcal.fits'))
