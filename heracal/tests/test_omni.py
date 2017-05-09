@@ -79,9 +79,9 @@ class TestMethods(object):
                     nt.assert_true(isinstance(l, omni.Antpol))
 
     def test_from_npz(self):
-        Ntimes = 56 
+        Ntimes = 3 
         Nchans = 1024  # hardcoded for this file
-        meta, gains, vis, xtalk = omni.from_npz(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.npz'))
+        meta, gains, vis, xtalk = omni.from_npz(os.path.join(DATA_PATH, 'zen.2457698.50098.xx.pulledtime.npz'))
         for m in meta.keys():
             if m.startswith('chisq'):
                 nt.assert_equal(meta[m].shape, (Ntimes,Nchans))

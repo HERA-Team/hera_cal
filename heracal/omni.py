@@ -450,8 +450,8 @@ class HERACal(UVCal):
         tarray = time
         parray = np.array(pols)
         farray = np.array(freq)
-        numarray = np.array(list(ants))
-        namarray = np.array(antnames)
+        numarray = list(map(int, ants))
+        namarray = antnames
 
         chisqarray = []
         for ii in range(npol):
@@ -476,8 +476,8 @@ class HERACal(UVCal):
         except KeyError:
             self.history = appendhist
         self.Nants_data = len(ants)  # only ants with data
-        self.antenna_names = list(namarray[:self.Nants_data])
-        self.antenna_numbers = list(numarray[:self.Nants_data])
+        self.antenna_names = namarray[:self.Nants_data]
+        self.antenna_numbers = numarray[:self.Nants_data]
         self.ant_array = numarray[:self.Nants_data]
         self.Nants_telescope = nants  # total number of antennas
         self.Nspws = 1  # This is by default 1. No support for > 1 in pyuvdata.
