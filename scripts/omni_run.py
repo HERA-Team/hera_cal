@@ -40,7 +40,7 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     if xtalk:
         uv.Ntimes = 1
     else:
-        uv.Ntimes = len(m['jds'])
+        uv.Ntimes = len(m['times'])
     uv.Npols = len(pols)
     uv.Nbls = len(v[pols[0]].keys())
     uv.Nblts = uv.Nbls * uv.Ntimes
@@ -61,10 +61,10 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     uv.spw_array = np.array([uv.Nspws])
     blts = np.array([bl for bl in bls for i in range(uv.Ntimes)])
     if xtalk:
-        uv.time_array = np.array(list(m['jds'][:1]) * uv.Nbls)
+        uv.time_array = np.array(list(m['times'][:1]) * uv.Nbls)
         uv.lst_array = np.array(list(m['lsts'][:1]) * uv.Nbls)
     else:
-        uv.time_array = np.array(list(m['jds']) * uv.Nbls)
+        uv.time_array = np.array(list(m['times']) * uv.Nbls)
         uv.lst_array = np.array(list(m['lsts']) * uv.Nbls)
 
     # generate uvw
@@ -84,7 +84,7 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     uv.polarization_array = np.array([poldict[p] for p in pols])
     if xtalk:
         # xtalk integration time is averaged over the whole file
-        uv.integration_time = m2['inttime'] * len(m2['jds'])
+        uv.integration_time = m2['inttime'] * len(m2['times'])
     else:
         uv.integration_time = m2['inttime']
     uv.channel_width = np.diff(uv.freq_array[0])[0]

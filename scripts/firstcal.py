@@ -10,10 +10,8 @@ a.scripting.add_standard_options(o,cal=True,pol=True)
 o.add_option('--ubls', default='', help='Unique baselines to use, separated by commas (ex: 1_4,64_49).')
 o.add_option('--ex_ants', default='', help='Antennas to exclude, separated by commas (ex: 1,4,64,49).')
 o.add_option('--outpath', default=None,help='Output path of solution npz files. Default will be the same directory as the data files.')
-o.add_option('--plot', action='store_true', default=False, help='Turn on plotting in firstcal class.')
 o.add_option('--verbose', action='store_true', default=False, help='Turn on verbose.')
 o.add_option('--finetune', action='store_false', default=True, help='Fine tune the delay fit.')
-o.add_option('--clean', action='store_true', default=False, help='Run clean on delay transform.')
 o.add_option('--offset', action='store_true', default=False, help='Solve for offset along with delay.')
 o.add_option('--average', action='store_true', default=False, help='Average all data before finding delays.')
 opts,args = o.parse_args(sys.argv[1:])
@@ -67,12 +65,12 @@ for filename in args:
 
     #gets phase solutions per frequency.
     fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
-    sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,plot=opts.plot,noclean= not opts.clean,offset=opts.offset,average=opts.average,window='none')
+    sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,offset=opts.offset,average=opts.average,window='none')
 
     #Converting solutions to a type that heracal can use to write uvfits files.
     meta = {}
     meta['lsts'] = uv_in.lst_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
-    meta['jds'] = uv_in.time_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
+    meta['times'] = uv_in.time_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
     meta['freqs'] = uv_in.freq_array[0]  # in Hz
     meta['inttime'] = uv_in.integration_time  # in sec
     meta['chwidth'] = uv_in.channel_width  # in Hz
