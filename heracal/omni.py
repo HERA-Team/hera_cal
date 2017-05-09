@@ -478,7 +478,7 @@ class HERACal(UVCal):
         self.Nants_data = len(ants)  # only ants with data
         self.antenna_names = namarray[:self.Nants_data]
         self.antenna_numbers = numarray[:self.Nants_data]
-        self.ant_array = numarray[:self.Nants_data]
+        self.ant_array = np.array(numarray[:self.Nants_data])
         self.Nants_telescope = nants  # total number of antennas
         self.Nspws = 1  # This is by default 1. No support for > 1 in pyuvdata.
 
