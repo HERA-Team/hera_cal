@@ -50,6 +50,12 @@ class Test_FirstCal(object):
         for (i,k), (l,m) in w.keys():
             nt.assert_almost_equal(w[(i,k), (l,m)][0], self.delays[i]-self.delays[k]-self.delays[l]+self.delays[m], places=7)
 
+    def test_data_to_delays_average(self):
+        fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
+        w = fcal.data_to_delays(average=True)
+        for (i,k), (l,m) in w.keys():
+            nt.assert_almost_equal(w[(i,k), (l,m)][0], self.delays[i]-self.delays[k]-self.delays[l]+self.delays[m], places=7)
+
     def test_get_N(self):
         fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
         nt.assert_equal(fcal.get_N(len(fcal.info.bl_pairs)).shape, (len(fcal.info.bl_pairs), len(fcal.info.bl_pairs)))  # the only requirement on N is it's shape.
@@ -71,4 +77,13 @@ class Test_FirstCal(object):
         solved_delays = np.array(solved_delays).flatten()
         nt.assert_equal(np.testing.assert_almost_equal(fcal.M.flatten(), solved_delays, decimal=7), None)
         
-
+    def test_run_average(self):
+        fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
+        sols = fcal.run(average=True)
+        solved_delays = []
+        for pair in fcal.info.bl_pairs:
+            ant_indexes = fcal.info.blpair2antind(pair)
+            dlys = fcal.xhat[ant_indexes]
+            solved_delays.append(dlys[0] - dlys[1] - dlys[2] + dlys[3])
+        solved_delays = np.array(solved_delays).flatten()
+        nt.assert_equal(np.testing.assert_almost_equal(fcal.M.flatten(), solved_delays, decimal=7), None)
