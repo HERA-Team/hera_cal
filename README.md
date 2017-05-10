@@ -5,6 +5,22 @@
 
 The heracal package inlcudes modules and scripts that are required to run redundant calibration on HERA as part of the real time system.
 
+# Package Details
+
+## Modules
+
+* heracal.firstcal: module includes the FirstCalRedundantInfo class, FirstCal class that solves for delays, and other helper functions.
+* heracal.omni: includes functions and classes for interfacing with and running omnical.
+* heracal.metrics: includes functions for determining metrics of the array, e.g. determining bad antennas.
+* heracal.xrfi: suite of rfi excision algorithms.
+
+## Scripts
+
+* omni\_run.py: runs omnical on a per file basis.
+* run\_firstcal.py: runs firstcal on a per file basis.
+* omni\_apply.py: apply calibration solutions to miriad files.
+
+
 # Installation
 ## Dependencies
 First install dependencies. 
