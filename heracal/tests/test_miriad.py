@@ -15,9 +15,7 @@ class TestMethods(object):
             nt.assert_true(k in info_keys)
         for k in data.keys():
             nt.assert_equal(data[k].keys(), ['xx'])
-            nt.assert_equal(data[k]['xx'].shape, (3, 256))
+            nt.assert_equal(data[k]['xx'].shape, (Ntimes, Nchans))
         for k in flags.keys():
             nt.assert_equal(flags[k].keys(), ['xx'])
-            nt.assert_equal(flags[k]['xx'].shape, (3, 256))
-        
-               
+            nt.assert_equal(flags[k]['xx'].shape, (Ntimes, Nchans))
