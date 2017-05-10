@@ -333,7 +333,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                         if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
                             meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, :, k].T
                         else:
-                            meta['chisq{0}{1}'.format(ant, pol)] = np.concantenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, :, k].T])
+                            meta['chisq{0}{1}'.format(ant, pol)] = np.concatenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, :, k].T])
                     elif cal.cal_type == 'delay':
                         if ant not in gains[pol].keys():
                             gains[pol][ant] = get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T
@@ -342,45 +342,53 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                         if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
                             meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, k].T
                         else:
-                            meta['chisq{0}{1}'.format(ant, pol)] = np.concantenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, k].T])
+                            meta['chisq{0}{1}'.format(ant, pol)] = np.concatenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, k].T])
                     else:
                         print 'Not a recognized file type'
-                    
+        if not 'times' in meta.keys():
+            meta['times'] = cal.time_array
+        else:
+            meta['times'] = np.concatenate([meta['times'], cal.time_array])
+
+        meta['history'] = cal.history
+        meta['caltype'] = cal.cal_type
+        meta['gain_conventions'] = cal.gain_convention
+        meta['freqs'] = cal.freq_array.flatten()
+
+
 
     v = {}
     x = {}
     if not firstcal:
         visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
         xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
-         
+
         vis = UVData()
-        for f in visfile:
-            if os.path.exists(f):
-                vis.read_uvfits(f)
+        xtalk = UVData()
+        for f1, f2 in zip(visfile, xtalkfile):
+            if os.path.exists(f1) and os.path.exists(f2):
+                vis.read_uvfits(f1)
+                xtalk.read_uvfits(f2)
                 for p, pol in enumerate(vis.polarization_array):
                     pol = poldict[pol] * 2
                     if pol not in v.keys(): v[pol] = {}
                     for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
                         # note we reverse baseline here b/c of conventions
-                        v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
+                        if not vis.baseline_to_antnums(bl)[::-1] in v[pol].keys():
+                            v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
+                        else:
+                            v[pol][vis.baseline_to_antnums(bl)[::-1]] = np.concatenate([v[pol][vis.baseline_to_antnums(bl)[::-1]], vis.data_array[k:k + vis.Ntimes, 0, :, p]])
 
-        DATA_SHAPE = v[pol][vis.baseline_to_antnums(bl)[::-1]].shape
-        xtalk = UVData()
-        for f in xtalkfile:
-            if os.path.exists(f):
-                xtalk.read_uvfits(f)
+                DATA_SHAPE = (vis.Ntimes, vis.Nfreqs)
                 for p, pol in enumerate(xtalk.polarization_array):
                     pol = poldict[pol] * 2
                     if pol not in x.keys(): x[pol] = {}
                     for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
-                        x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
-
-    meta['times'] = cal.time_array
-    meta['freqs'] = cal.freq_array.flatten()
-    meta['history'] = cal.history
-    meta['caltype'] = cal.cal_type
-    meta['gain_conventions'] = cal.gain_convention
-
+                        if not xtalk.baseline_to_antnums(bl)[::-1] in x[pol].keys():
+                            x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
+                        else:
+                            x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.concatenate([x[pol][xtalk.baseline_to_antnums(bl)[::-1]], np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)])
+                            
     return meta, gains, v, x
 
 
