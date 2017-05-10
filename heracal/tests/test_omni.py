@@ -47,6 +47,12 @@ class TestMethods(object):
         for rb in info.get_reds():
             nt.assert_true(rb in reds)
 
+        info = omni.aa_to_info(self.aa, fcal=True)
+        reds = [[(0, 1), (1, 2), (2, 3)], [(0, 2), (1, 3)]]
+        nt.assert_true(np.all(info.subsetant == np.array([0, 1, 2, 3])))
+        for rb in info.get_reds():
+            nt.assert_true(rb in reds)
+
     def test_filter_reds(self):
         # exclude ants
         reds = omni.filter_reds(self.info.get_reds(), ex_ants=[0, 4])
@@ -111,9 +117,10 @@ class TestMethods(object):
         tau = 10  # ns 
         nt.assert_true(np.all(omni.get_phase(freqs, tau) == np.exp(-2j*np.pi*freqs*tau)))
     def test_from_fits_gain(self):
-        Ntimes = 3 
+        Ntimes = 3 * 2  # need 2 here because reading two files
         Nchans = 1024  # hardcoded for this file
-        meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
+        # read in the same file twice to make sure file concatenation works
+        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits')]*2)
         for m in meta.keys():
             if m.startswith('chisq'):
                 nt.assert_equal(meta[m].shape, (Ntimes,Nchans))
@@ -140,10 +147,11 @@ class TestMethods(object):
                 nt.assert_true(np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
 
     def test_from_fits_delay(self):
-        Ntimes = 3 
+        Ntimes = 3 * 2  # need 2 here because reading two files
         Nchans = 1024  # hardcoded for this file
         Ndelay = 1  # number of delays per integration
-        meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.firstcal.fits'))
+        # read in the same file twice to make sure file concatenation works
+        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.firstcal.fits')]*2)
         for m in meta.keys():
             if m.startswith('chisq'):
                 nt.assert_equal(meta[m].shape, (Ntimes,))
@@ -202,13 +210,18 @@ class Test_RedundantInfo(object):
         self.data = {}
         for red in self.reds:
             for i,j in red:
-                self.data[i,j] = {self.pol[0]*2: np.random.randn(1,16)+1j*np.random.randn(1,16)}
+                # Randomly swap baseline orientation
+                if np.random.randint(2):
+                    self.data[i,j] = {self.pol[0]*2: np.random.randn(1,16)+1j*np.random.randn(1,16)}
+                else:
+                    self.data[j,i] = {self.pol[0]*2: np.random.randn(1,16)+1j*np.random.randn(1,16)}
+
         d = []
         for i, j in self.info.bl_order():
             bl = (i.ant(), j.ant())
             pol = i.pol() + j.pol()
             try: d.append(self.data[bl][pol])
-            except(KeyError): d.append(self.data[bl][::-1][pol[::-1]].conj())
+            except(KeyError): d.append(self.data[bl[::-1]][pol[::-1]].conj())
         nt.assert_equal(np.testing.assert_equal(np.array(d).transpose((1,2,0)), self.info.order_data(self.data)), None)
         
     def test_pack_calpar(self):
@@ -248,6 +261,11 @@ class Test_RedundantInfo(object):
                 _vis[i,j] = self.vis[pol][i,j]
         calpar = omni_info.pack_calpar(calpar, gains=_gains, vis=_vis)
         nt.assert_equal(np.testing.assert_equal(self.info.pack_calpar(calpar2, self.gains, self.vis,nondegenerategains=self.nondegenerategains), calpar), None)
+
+        # test not giving gains and vis to calpar
+        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
+        calpar_out = omni_info.pack_calpar(calpar)
+        nt.assert_equal(np.testing.assert_equal(calpar, calpar_out), None)
 
     def test_unpack_calpar(self):
         calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
