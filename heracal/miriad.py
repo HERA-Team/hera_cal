@@ -13,7 +13,7 @@ def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, r
        Returns 
        -------
        info      : dict. 
-            the lsts and jd's of the data
+            lsts, jds (times), freqs (Hz), chwidth (Hz), inttime (seconds)
        dat       : dict
             the data in dictionary format. dat[bl(in tuple format)][pol(in string)]  
        flg       : dict
@@ -40,7 +40,7 @@ def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, r
                 dat[bl][pol],flg[bl][pol] = [],[]
             dat[bl][pol].append(d)
             flg[bl][pol].append(f)
-    info['freqs'] = a.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
+    info['freqs'] = a.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan']) * 1e9  # turn into Hz
     if recast_as_array:
         # This option helps reduce memory footprint, but it shouldn't
         # be necessary: the replace below should free RAM as quickly
@@ -52,7 +52,7 @@ def read_files(filenames, antstr, polstr, decimate=1, decphs=0, verbose=False, r
         info['lsts'] = np.array(info['lsts'])
         info['times'] = np.array(info['times'])
     info['inttime'] = uv['inttime']
-    info['chwidth'] = uv['sdf'] * 1e9 # put this in GHz
+    info['chwidth'] = uv['sdf'] * 1e9 # put this in Hz
 
     return info, dat, flg
 
