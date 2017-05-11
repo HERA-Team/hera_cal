@@ -123,21 +123,50 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
 # Dictionary of calpar gains and files
 pols = opts.pol.split(',')
 files = {}
+firstcal_files = {}
 if not opts.firstcal:
     raise ValueError('Please provide a firstcal file. Exiting...')
 else:
-    firstcal_files = np.sort(glob.glob(opts.firstcal))
+    for p in pols:
+        if not len(list(set(p))) > 1:
+            firstcal_files[p] = np.sort([s for s in glob.glob(opts.firstcal) if p in s])
+
 for f, filename in enumerate(args):
     files[filename] = {}
-    if len(firstcal_files) == len(args):
-        files[filename]['firstcal'] = str(firstcal_files[f])  # one firstcal file per input file.
-    elif len(args) > len(firstcal_files):
-        files[filename]['firstcal'] = str(firstcal_files[0])  # only use first firstcal file for all input files.
+    if len(firstcal_files) == len(args) or len(firstcal_files) == 2*len(args):  # each data file has its own firstcal file.
+        for pp in pols:
+            #if not pp in files[filename]: files[filename][pp] = {}
+            if len(list(set(p))) == 1:
+                # files[filename][pp]['firstcal'] = str(firstcal_files[pp][f])
+                files[filename]['firstcal'] = str(firstcal_files[pp][f])
+            elif len(list(set(p))) == 2:
+                try:
+                    # files[filename][pp]['firstcal'] = [str(firstcal_files[pp[0]*2][f]), str(firstcal_files[pp[1]*2][f])]
+                    files[filename]['firstcal'] = [str(firstcal_files[pp[0]*2][f]), str(firstcal_files[pp[1]*2][f])]
+                except(IndexError):
+                    raise Exception("Provide firstcal files for both linear pols if cross pols require calibration.")
+            else:
+                raise IOError("Provide valid polarization.")
+    else:  # use firstcal file for all input files
+        for pp in pols:
+            if not pp in files[filename]: files[filename][pp] = {}
+            if len(list(set(p))) == 1:
+                # files[filename][pp]['firstcal'] = str(firstcal_files[pp][0])
+                files[filename]['firstcal'] = str(firstcal_files[pp][0])
+            elif len(list(set(p))) == 2:
+                try:
+                    # files[filename][pp]['firstcal'] = [str(firstcal_files[pp[0]*2][0]), str(firstcal_files[pp[1]*2][0])]
+                    files[filename]['firstcal'] = [str(firstcal_files[pp[0]*2][0]), str(firstcal_files[pp[1]*2][0])]
+                except(IndexError):
+                    raise Exception("Provide firstcal files for both linear pols if cross pols require calibration.")
+            else:
+                raise IOError("Provide valid polarization.")
+
     for p in pols:
         fn = filename.split('.')
         fn[3] = p
         files[filename][p] = '.'.join(fn)
-    
+
 # Create info
 # generate reds from calfile
 aa = aipy.cal.get_aa(opts.cal, np.array([.15]))
@@ -164,7 +193,7 @@ for f, filename in enumerate(args):
     if os.path.exists(fitsname):
         print '   %s exists. Skipping...' % fitsname
         continue
-    
+
     _, g0, _, _ = from_fits(file_group['firstcal'])  # read in firstcal data
 
     # timeinfo, d, f = read_files([file_group[key] for key in file_group.keys() if key != 'firstcal'],
@@ -172,6 +201,7 @@ for f, filename in enumerate(args):
     file_pol = filename.split('/')[-1].split('.')[3]
     uvd = pyuvdata.UVData()
     uvd.read_miriad(file_group[file_pol])
+    uvd.select(times=np.unique(uvd.time_array)[:3])
     t_jd = uvd.time_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
     t_lst = uvd.lst_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
     freqs = uvd.freq_array[0]
@@ -185,14 +215,14 @@ for f, filename in enumerate(args):
 
     for ip, pol in enumerate(uvd.polarization_array):
         pol = aipy.miriad.pol2str[pol]
-        if pol != opts.pol: 
+        if pol != opts.pol:
             continue
         for nbl, (i,j) in enumerate(map(uvd.baseline_to_antnums, uvd.baseline_array[:uvd.Nbls])):
             if not (i, j) in bls and not (j, i) in bls:
                 continue
             d[(i,j)] = {pol: uvd.data_array.reshape(uvd.Ntimes, uvd.Nbls, uvd.Nspws, uvd.Nfreqs, uvd.Npols)[:, nbl, 0, :, ip]}
             f[(i,j)] = {pol: np.logical_not(uvd.flag_array.reshape(uvd.Ntimes, uvd.Nbls, uvd.Nspws, uvd.Nfreqs, uvd.Npols)[:, nbl, 0, :, ip])}
-    
+
     print '   Running Omnical'
     m2, g3, v3 = run_omnical(d, info, gains0=g0)
 
