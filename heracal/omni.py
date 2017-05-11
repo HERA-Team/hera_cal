@@ -3,6 +3,7 @@ import omnical
 from copy import deepcopy
 import numpy.linalg as la
 from pyuvdata import UVCal, UVData
+from heracal.firstcal import FirstCalRedundantInfo
 import warnings, os
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -108,12 +109,13 @@ class RedundantInfo(omnical.calib.RedundantInfo):
         meta, gains, vis = omnical.calib.RedundantInfo.unpack_calpar(self, calpar, **kwargs)
 
         def mk_ap(a): return Antpol(a, self.nant)
-        for i, j in meta['res'].keys():
-            api, apj = mk_ap(i), mk_ap(j)
-            pol = api.pol() + apj.pol()
-            bl = (api.ant(), apj.ant())
-            if not meta['res'].has_key(pol): meta['res'][pol] = {}
-            meta['res'][pol][bl] = meta['res'].pop((i, j))
+        if 'res' in meta:
+            for i, j in meta['res'].keys():
+                api, apj = mk_ap(i), mk_ap(j)
+                pol = api.pol() + apj.pol()
+                bl = (api.ant(), apj.ant())
+                if not meta['res'].has_key(pol): meta['res'][pol] = {}
+                meta['res'][pol][bl] = meta['res'].pop((i, j))
         # XXX make chisq a nested dict, with individual antpol keys?
         for k in [k for k in meta.keys() if k.startswith('chisq')]:
             try:
@@ -308,6 +310,15 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
     return meta, gains, vismdl, xtalk
 
 
+def get_phase(freqs, tau):
+    '''
+       Turn a delay into a phase.
+       freqs: array of frequencies in Hz
+       tau: delay in seconds.
+    '''
+    freqs = freqs.reshape(-1,1)
+    return np.exp(-2j*np.pi*freqs*tau)
+
 def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     """
     Read a calibration fits file (pyuvdata format). This also finds the model
@@ -329,59 +340,81 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     if type(ants) is int: ants = [ants]
     meta, gains = {}, {}
     poldict = {-5: 'x', -4: 'y'}
-    visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
-    xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
+    
+    firstcal = filename[0].split('.')[-2] == 'firstcal'
 
     cal = UVCal()
     for f in filename:
         cal.read_calfits(f)
-        for k, p in enumerate(cal.jones_array):
-            pol = poldict[p]
-            if pol not in gains.keys(): gains[pol] = {}
-            for i, ant in enumerate(cal.antenna_numbers):
-                if cal.cal_type == 'gain':
-                    if ant not in gains[pol].keys():
-                        gains[pol][ant] = cal.gain_array[i, :, :, k].T
+        for nspw in xrange(cal.Nspws):
+            for k, p in enumerate(cal.jones_array):
+                pol = poldict[p]
+                if pol not in gains.keys(): gains[pol] = {}
+                for i, ant in enumerate(cal.antenna_numbers):
+                    if cal.cal_type == 'gain':
+                        if ant not in gains[pol].keys():
+                            gains[pol][ant] = cal.gain_array[i, nspw, :, :, k].T
+                        else:
+                            gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, nspw, :, :, k].T])
+                        if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
+                            meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, :, k].T
+                        else:
+                            meta['chisq{0}{1}'.format(ant, pol)] = np.concatenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, :, k].T])
+                    elif cal.cal_type == 'delay':
+                        if ant not in gains[pol].keys():
+                            gains[pol][ant] = get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T
+                        else:
+                            gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T])
+                        if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
+                            meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, k].T
+                        else:
+                            meta['chisq{0}{1}'.format(ant, pol)] = np.concatenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, k].T])
                     else:
-                        gains[pol][ant] = np.concatenate([gains[pol][ant], cal.gain_array[i, :, : k].T])
-                    meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, :, :, k].T
-                elif cal.cal_type == 'delay':
-                    if ant not in gains[pol].keys():
-                        gains[pol][ant] = get_phase(cal.freq_array/1e9, cal.delay_array[i, :, :, k]).T
-                    else:
-                        gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(cal.freq_array/1e9, cal.gain_array[i, :, :k]).T])
-                else:
-                    print 'Not a recognized file type'
-     
-    vis = UVData()
+                        print 'Not a recognized file type'
+        if not 'times' in meta.keys():
+            meta['times'] = cal.time_array
+        else:
+            meta['times'] = np.concatenate([meta['times'], cal.time_array])
+
+        meta['history'] = cal.history
+        meta['caltype'] = cal.cal_type
+        meta['gain_conventions'] = cal.gain_convention
+        meta['freqs'] = cal.freq_array.flatten()
+
+
+
     v = {}
-    for f in visfile:
-        if os.path.exists(f):
-            vis.read_uvfits(f)
-            for p, pol in enumerate(vis.polarization_array):
-                pol = poldict[pol] * 2
-                if pol not in v.keys(): v[pol] = {}
-                for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
-                    # note we reverse baseline here b/c of conventions
-                    v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
-
-    xtalk = UVData()
     x = {}
-    for f in xtalkfile:
-        if os.path.exists(f):
-            xtalk.read_uvfits(f)
-            for p, pol in enumerate(xtalk.polarization_array):
-                pol = poldict[pol] * 2
-                if pol not in x.keys(): x[pol] = {}
-                for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
-                    x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p]
+    if not firstcal:
+        visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
+        xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
 
-    meta['times'] = cal.time_array
-    meta['freqs'] = cal.freq_array
-    meta['history'] = cal.history
-    meta['caltype'] = cal.cal_type
-    meta['gain_conventions'] = cal.gain_convention
+        vis = UVData()
+        xtalk = UVData()
+        for f1, f2 in zip(visfile, xtalkfile):
+            if os.path.exists(f1) and os.path.exists(f2):
+                vis.read_uvfits(f1)
+                xtalk.read_uvfits(f2)
+                for p, pol in enumerate(vis.polarization_array):
+                    pol = poldict[pol] * 2
+                    if pol not in v.keys(): v[pol] = {}
+                    for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
+                        # note we reverse baseline here b/c of conventions
+                        if not vis.baseline_to_antnums(bl)[::-1] in v[pol].keys():
+                            v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
+                        else:
+                            v[pol][vis.baseline_to_antnums(bl)[::-1]] = np.concatenate([v[pol][vis.baseline_to_antnums(bl)[::-1]], vis.data_array[k:k + vis.Ntimes, 0, :, p]])
 
+                DATA_SHAPE = (vis.Ntimes, vis.Nfreqs)
+                for p, pol in enumerate(xtalk.polarization_array):
+                    pol = poldict[pol] * 2
+                    if pol not in x.keys(): x[pol] = {}
+                    for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
+                        if not xtalk.baseline_to_antnums(bl)[::-1] in x[pol].keys():
+                            x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
+                        else:
+                            x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.concatenate([x[pol][xtalk.baseline_to_antnums(bl)[::-1]], np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)])
+                            
     return meta, gains, v, x
 
 
@@ -415,8 +448,8 @@ class HERACal(UVCal):
         allants = ants + ex_ants
         ants = np.sort(ants)
         allants = np.sort(allants)
-        time = meta['jds']
-        freq = meta['freqs'] * 1e9
+        time = meta['times']
+        freq = meta['freqs']  # this is in Hz
         pols = [str2pol[p] for p in gains.keys()]
         npol = len(pols)
         ntimes = time.shape[0]
@@ -451,8 +484,8 @@ class HERACal(UVCal):
         tarray = time
         parray = np.array(pols)
         farray = np.array(freq)
-        numarray = np.array(list(ants))
-        namarray = np.array(antnames)
+        numarray = list(map(int, ants))
+        namarray = antnames
 
         chisqarray = []
         for ii in range(npol):
@@ -479,8 +512,9 @@ class HERACal(UVCal):
         self.Nants_data = len(ants)  # only ants with data
         self.antenna_names = namarray[:self.Nants_data]
         self.antenna_numbers = numarray[:self.Nants_data]
+        self.ant_array = np.array(numarray[:self.Nants_data])
         self.Nants_telescope = nants  # total number of antennas
-        self.Nspws = 1
+        self.Nspws = 1  # This is by default 1. No support for > 1 in pyuvdata.
 
         self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
@@ -493,12 +527,13 @@ class HERACal(UVCal):
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
         if DELAY:
             self.set_delay()
-            self.delay_array = datarray
-            self.quality_array = chisqarray
-            self.flag_array = flgarray.astype(np.bool)
-
+            self.delay_array = datarray  # units of seconds
+            self.quality_array = chisqarray  
+            self.flag_array = flgarray.astype(np.bool)[:, np.newaxis,  :, :, :]
         else:
             self.set_gain()
-            self.gain_array = datarray
-            self.quality_array = chisqarray
-            self.flag_array = flgarray.astype(np.bool)
+            # adding new axis for the spectral window axis. This is default to 1.
+            # This needs to change when support for Nspws>1 in pyuvdata.
+            self.gain_array = datarray[:, np.newaxis, :, :, :]
+            self.quality_array = chisqarray[:, np.newaxis, :, :, :]
+            self.flag_array = flgarray.astype(np.bool)[:, np.newaxis, :, :, :]

@@ -2,17 +2,16 @@
 import numpy as np, optparse, sys
 import aipy as a
 from heracal import omni
-from heracal.miriad import read_files
+from heracal import firstcal
+from pyuvdata import UVData
 
 o = optparse.OptionParser()
 a.scripting.add_standard_options(o,cal=True,pol=True)
 o.add_option('--ubls', default='', help='Unique baselines to use, separated by commas (ex: 1_4,64_49).')
 o.add_option('--ex_ants', default='', help='Antennas to exclude, separated by commas (ex: 1,4,64,49).')
 o.add_option('--outpath', default=None,help='Output path of solution npz files. Default will be the same directory as the data files.')
-o.add_option('--plot', action='store_true', default=False, help='Turn on plotting in firstcal class.')
 o.add_option('--verbose', action='store_true', default=False, help='Turn on verbose.')
 o.add_option('--finetune', action='store_false', default=True, help='Fine tune the delay fit.')
-o.add_option('--clean', action='store_true', default=False, help='Run clean on delay transform.')
 o.add_option('--offset', action='store_true', default=False, help='Solve for offset along with delay.')
 o.add_option('--average', action='store_true', default=False, help='Average all data before finding delays.')
 opts,args = o.parse_args(sys.argv[1:])
@@ -31,8 +30,8 @@ del(uv)
 aa = a.cal.get_aa(opts.cal, fqs)
 ex_ants = []
 ubls = []
-for a in opts.ex_ants.split(','):
-    try: ex_ants.append(int(a))
+for ant in opts.ex_ants.split(','):
+    try: ex_ants.append(int(ant))
     except: pass
 for bl in opts.ubls.split(','):
     try:
@@ -42,32 +41,39 @@ for bl in opts.ubls.split(','):
 print 'Excluding Antennas:',ex_ants
 if len(ubls) != None: print 'Using Unique Baselines:',ubls
 info = omni.aa_to_info(aa, fcal=True, ubls=ubls, ex_ants=ex_ants)
-reds = flatten_reds(info.get_reds())
-
-print 'Number of redundant baselines:',len(reds)
+bls = flatten_reds(info.get_reds())
+print 'Number of redundant baselines:',len(bls)
 #Read in data here.
-ant_string =','.join(map(str,info.subsetant))
-bl_string = ','.join(['_'.join(map(str,k)) for k in reds])
 
 for filename in args:
-    times, data, flags = read_files([filename], bl_string, opts.pol, verbose=True)
+    uv_in = UVData()
+    uv_in.read_miriad(filename)
+    data = uv_in.data_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
+    flags = uv_in.flag_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
+     
     datapack,wgtpack = {},{}
-    for (i,j) in data.keys():
-        datapack[(i,j)] = data[(i,j)][opts.pol]
-        wgtpack[(i,j)] = np.logical_not(flags[(i,j)][opts.pol])
-    dlys = np.fft.fftshift(np.fft.fftfreq(fqs.size, np.diff(fqs)[0]))
+    for ip, pol in enumerate(uv_in.polarization_array):
+        pol = a.miriad.pol2str[pol]
+        if pol != opts.pol: 
+            continue
+        for nbl, (i,j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
+            if not (i, j) in bls and not (j, i) in bls:
+                continue
+            datapack[(i,j)] = data[:, nbl, 0, :, ip]
+            wgtpack[(i,j)] = np.logical_not( flags[:, nbl, 0, :, ip] )
+    
 
     #gets phase solutions per frequency.
-    fc = omni.FirstCal(datapack,wgtpack,fqs,info)
-    sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,plot=opts.plot,noclean= not opts.clean,offset=opts.offset,average=opts.average,window='none')
+    fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
+    sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,offset=opts.offset,average=opts.average,window='none')
 
     #Converting solutions to a type that heracal can use to write uvfits files.
     meta = {}
-    meta['lsts'] = times['lsts']
-    meta['jds'] = times['times']
-    meta['freqs'] = fqs
-    meta['inttime'] = times['inttime']
-    meta['chwidth'] = times['chwidth']
+    meta['lsts'] = uv_in.lst_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
+    meta['times'] = uv_in.time_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
+    meta['freqs'] = uv_in.freq_array[0]  # in Hz
+    meta['inttime'] = uv_in.integration_time  # in sec
+    meta['chwidth'] = uv_in.channel_width  # in Hz
 
     delays = {}
     antflags = {}
@@ -75,10 +81,10 @@ for filename in args:
         delays[pol[0]] = {}
         antflags[pol[0]] = {}
         for ant in sols.keys():
-            delays[pol[0]][ant] = sols[ant].T
+            delays[pol[0]][ant] = sols[ant].T / 1e9  # get into units of seconds
             antflags[pol[0]][ant] = np.zeros(shape=(len(meta['lsts']), len(meta['freqs'])))
             #generate chisq per antenna/pol.
-            meta['chisq{0}{1}'.format(ant,pol[0])] = np.ones(shape=(len(times['times']), 1))
+            meta['chisq{0}{1}'.format(ant,pol[0])] = np.ones(shape=(uv_in.Ntimes, 1))
     #overall chisq. This is a required parameter for uvcal.
     meta['chisq'] = np.ones_like(sols[ant].T)
 
