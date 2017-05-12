@@ -87,3 +87,44 @@ class Test_FirstCal(object):
             solved_delays.append(dlys[0] - dlys[1] - dlys[2] + dlys[3])
         solved_delays = np.array(solved_delays).flatten()
         nt.assert_equal(np.testing.assert_almost_equal(fcal.M.flatten(), solved_delays, decimal=7), None)
+
+class TestFCRedInfo(object):
+    def test_init_from_reds(self):
+        antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])
+        reds = [[(0,1),(1,2),(2,3)],[(0,2),(1,3)]]
+        blpairs = [((0,1),(1,2)),((0,1),(2,3)),((1,2),(2,3)),((0,2),(1,3))]
+        A = np.array([[1, -2, 1, 0], [1,-1,-1,1], [0,1,-2,1], [1,-1,-1,1]])
+        i = firstcal.FirstCalRedundantInfo(4)
+        i.init_from_reds(reds,antpos)
+        nt.assert_true(np.all(i.subsetant == np.arange(4, dtype=np.int32)))
+        nt.assert_equal(i.reds,reds)
+        nt.assert_equal(i.bl_pairs,blpairs)
+        nt.assert_true(i.blperant[0] == 2)
+        nt.assert_true(i.blperant[1] == 3)
+        nt.assert_true(i.blperant[2] == 3)
+        nt.assert_true(i.blperant[3] == 2)
+        nt.assert_true(np.all(i.A == A))
+    def test_bl_index(self):
+        reds = [[(0,1),(1,2),(2,3)],[(0,2),(1,3)]]
+        antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])
+        i = firstcal.FirstCalRedundantInfo(4)
+        i.init_from_reds(reds,antpos)
+        bls_order = [bl for ublgp in reds for bl in ublgp]
+        for k,b in enumerate(bls_order):
+            nt.assert_equal(i.bl_index(b),k)
+    def test_blpair_index(self):
+        antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])
+        reds = [[(0,1),(1,2),(2,3)],[(0,2),(1,3)]]
+        blpairs = [((0,1),(1,2)),((0,1),(2,3)),((1,2),(2,3)),((0,2),(1,3))]
+        i = firstcal.FirstCalRedundantInfo(4)
+        i.init_from_reds(reds,antpos)
+        for k,bp in enumerate(blpairs):
+            nt.assert_equal(i.blpair_index(bp), k)
+    def test_blpair2antindex(self):
+        antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])
+        reds = [[(0,1),(1,2),(2,3)],[(0,2),(1,3)]]
+        blpairs = [((0,1),(1,2)),((0,1),(2,3)),((1,2),(2,3)),((0,2),(1,3))]
+        i = firstcal.FirstCalRedundantInfo(4)
+        i.init_from_reds(reds,antpos)
+        for bp in blpairs:
+            nt.assert_true(np.all(i.blpair2antind(bp) == map(i.ant_index,np.array(bp).flatten())))
