@@ -16,6 +16,10 @@ NUMPOL = {}
 
 
 def add_pol(p):
+    '''
+        Add's pols to the global POLNUM and NUMPOL dictionaries.
+        Used for creating Antpol objects.
+    '''
     global NUMPOL
     assert(p in POL_TYPES)
     POLNUM[p] = len(POLNUM)
@@ -23,7 +27,15 @@ def add_pol(p):
 
 
 class Antpol:
+    '''Defines an Antpol object that encodes an antenna number and polarization value.'''
     def __init__(self, *args):
+        '''
+            Creates an Antpol object.
+                Args:
+                    ant: antenna number, integer.
+                    pol: polarization string. e.g. 'x', or 'y'
+                    nant: total number of antennas.
+        '''
         try:
             ant, pol, nant = args
             if pol not in POLNUM: add_pol(pol)
@@ -41,8 +53,23 @@ class Antpol:
 
 # XXX filter_reds w/ pol support should probably be in omnical
 def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, crosspols=None, ex_crosspols=None):
-    '''Filter redundancies to include/exclude the specified bls, antennas, and unique bl groups and polarizations.
-    Assumes reds indices are Antpol objects.'''
+    '''
+        Filter redundancies to include/exclude the specified bls, antennas, unique bl groups and polarizations.
+        Assumes reds indices are Antpol objects.
+        Args:
+            reds: list of lists of redundant baselines as antenna pair tuples. e.g. [[(1,2),(2,3)], [(1,3)]]
+        Kwargs:
+            bls: list of baselines as antenna pair tuples to include in reds.
+            ex_bls: list of baselines as antenna pair tuples to exclude in reds.
+            ants: list of antenna numbers (as int's) to include in reds.
+            ex_ants: list of antenna numbers (as int's) to exclude in reds.
+            ubls: list of baselines representing their redundant group to include in reds.
+            ex_ubls: list of baselines representing their redundant group to exclude in reds.
+            crosspols: cross polarizations to include in reds. e.g. 'xy' or 'yx'.
+            ex_crosspols: cross polarizations to exclude in reds. e.g. 'xy' or 'yx'.
+        Return:
+            reds: list of lists of redundant baselines as antenna pair tuples.
+    '''
     def pol(bl): return bl[0].pol() + bl[1].pol()
     if crosspols: reds = [r for r in reds if pol(r[0]) in crosspols]
     if ex_crosspols: reds = [r for r in reds if not pol(r[0]) in ex_crosspols]
@@ -50,20 +77,33 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
 
 
 class RedundantInfo(omnical.calib.RedundantInfo):
+    '''RedundantInfo object to interface with omnical. Includes support for Antpol objects.'''
     def __init__(self, nant, filename=None):
+        '''
+            Args:
+                nant: number of antennas.
+                filename: filename (str) for legacy info objects.'''
         omnical.info.RedundantInfo.__init__(self, filename=filename)
         self.nant = nant
 
     def bl_order(self):
-        '''Return (i,j) baseline tuples in the order that they should appear in data.  Antenna indicies
-        are in real-world order (as opposed to the internal ordering used in subsetant).'''
+        '''
+            Return:
+                (i,j) baseline tuples in the order that they should appear in data.
+                Antenna indicies are in real-world order
+                (as opposed to the internal ordering used in subsetant).
+        '''
         return [(Antpol(self.subsetant[i], self.nant), Antpol(self.subsetant[j], self.nant)) for (i, j) in self.bl2d]
 
     def order_data(self, dd):
-        '''Create a data array ordered for use in _omnical.redcal.  'dd' is
-        a dict whose keys are (i,j) antenna tuples; antennas i,j should be ordered to reflect
-        the conjugation convention of the provided data.  'dd' values are 2D arrays
-        of (time,freq) data.'''
+        '''
+            Create a data array ordered for use in _omnical.redcal.
+            Args:
+                dd: dictionary whose keys are (i,j) antenna tuples; antennas i,j should be ordered to reflect
+                    the conjugation convention of the provided data.  'dd' values are 2D arrays of (time,freq) data.
+            Return:
+                array: array whose ordering reflects the internal ordering of omnical. Used to pass into pack_calpar
+        '''
         d = []
         for i, j in self.bl_order():
             bl = (i.ant(), j.ant())
@@ -73,9 +113,21 @@ class RedundantInfo(omnical.calib.RedundantInfo):
         return np.array(d).transpose((1, 2, 0))
 
     def pack_calpar(self, calpar, gains=None, vis=None, **kwargs):
-        '''Take the pol/antenna/bl formatted gains and visibilities and
-           wrap them to antpol format. Call RedundantInfo pack_calpar to
-           generate calpar for omnical format.'''
+        '''
+            Note that this function includes polarization support by wrapping
+            into calpar format.
+            Args:
+                calpar: array whose size is given by self.calpar_size. Usually initialized to zeros.
+            Kwargs:
+                gains: dictionary of starting gains for omnical run. dict[pol][antenna]
+                vis: dictionary of starting visibilities (for a redundant group) for omnical run. dict[pols][bl],
+            Extra Kwargs:
+                nondegenerategains: gains that don't have a degeneracy component to them (e.g. firstcal gains).
+                                    The gains get divided out before handing off calpar to omnical.
+
+            Returns:
+                calpar: The populated calpar array.
+        '''
         nondegenerategains = kwargs.pop('nondegenerategains', None)
         if gains:
             _gains = {}
@@ -103,8 +155,19 @@ class RedundantInfo(omnical.calib.RedundantInfo):
         return calpar
 
     def unpack_calpar(self, calpar, **kwargs):
-        '''Unpack the solved for calibration parameters and repack
-           those to antpol format'''
+        '''
+            Unpack the solved for calibration parameters and repack to antpol format
+            Args:
+                calpar: calpar array output from omnical.
+            Kwargs:
+                nondegenerategains: the nondegenerategains that were divided out in pack_calpar.
+                                    These are multiplied back into calpar here. gain dictionary format.
+
+            Return:
+                meta: dictionary of meta information from omnical. e.g. chisq, iters, etc
+                gains: dictionary of gains solved for by omnical. gains[pol][ant]
+                vis: dictionary of model visibilities solved for by omnical. vis[pols][blpair]
+        '''
         nondegenerategains = kwargs.pop('nondegenerategains', None)
         meta, gains, vis = omnical.calib.RedundantInfo.unpack_calpar(self, calpar, **kwargs)
 
@@ -138,6 +201,17 @@ class RedundantInfo(omnical.calib.RedundantInfo):
 
 
 def compute_reds(nant, pols, *args, **kwargs):
+    '''
+        Compute the redundancies given antenna_positions and wrap into Antpol format.
+        Args:
+            nant: number of antennas
+            pols: number of polarizations
+            *args: args to be passed to omnical.arrayinfo.compute_reds, spcifically
+                   antpos: array of antenna positions in order of subsetant.
+
+        Return:
+            reds: list of list of baselines as antenna tuples
+       '''
     _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
     reds = []
     for pi in pols:
@@ -147,8 +221,20 @@ def compute_reds(nant, pols, *args, **kwargs):
 
 
 def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
-    '''Use aa.ant_layout to generate redundances based on ideal placement.
-        The remaining arguments are passed to omnical.arrayinfo.filter_reds()'''
+    '''
+        Generate set of redundancies given an antenna array with idealized antenna positions.
+        Args:
+            aa: aipy antenna array object. Must have antpos_ideal or ant_layout attributes.
+
+            The remaining arguments are passed to omnical.arrayinfo.filter_reds()
+        Kwargs:
+            pols: list of antenna polarizations to include. default is ['x'].
+            fcal: toggle for using FirstCalRedundantInfo.
+
+        Return:
+            info: omnical info object. e.g. RedundantInfo or FirstCalRedundantInfo
+
+    '''
     nant = len(aa)
     try:
         antpos_ideal = aa.antpos_ideal
@@ -178,9 +264,22 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
 
 def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
             conv=1e-3, stepsize=.3, trust_period=1):
-    '''Run a full run through of omnical: Logcal, lincal, and removing degeneracies.'''
-
-
+    '''
+        Run a full run through of omnical: Logcal, lincal, and removing degeneracies.
+        Args:
+            data: dictionary of data with pol and blpair keys
+            info: RedundantInfo object that can parse data
+        Kwargs:
+            gains0: dictionary (with pol, ant keys) used as the starting point for omnical.
+            xtalk: input xtalk dictionary (similar to data). Used to remove an additive offset
+                   before running omnical. This is usually left as None.
+            maxiter: Maximum number of iterations to run in lincal.
+            conv: convergence criterion for lincal.
+            stepsize: size of steps to take in lincal.
+            trust_period: This is the number of iterations to trust in lincal. If > 1, uses the
+                         previous solution as starting point of lincal's next iteration. This
+                         should always be 1!
+    '''
     m1, g1, v1 = omnical.calib.logcal(data, info, xtalk=xtalk, gains=gains0,
                                       maxiter=maxiter, conv=conv, stepsize=stepsize,
                                       trust_period=trust_period)
@@ -195,7 +294,12 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
 
 
 def compute_xtalk(res, wgts):
-    '''Estimate xtalk as time-average of omnical residuals.'''
+    '''
+        Estimate xtalk as time-average of omnical residuals.
+        Args:
+            res: omnical residuals.
+            wgts: dictionary of weights to use in xtalk generation.
+    '''
     xtalk = {}
     for pol in res.keys():
         xtalk[pol] = {}
@@ -207,12 +311,14 @@ def compute_xtalk(res, wgts):
 
 
 def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
-    '''Reconstitute results from to_npz, returns meta, gains, vismdl, xtalk, each
-    keyed first by polarization, and then by bl/ant/keyword.
-    Optional variables:
-    pols: list of polarizations. default: None, return all
-    bls: list of baselines. default: None, return all
-    ants: list of antennas for gain. default: None, return all
+    '''
+        ##Deprecated and only used for legacy purposes##
+        Reconstitute results from to_npz, returns meta, gains, vismdl, xtalk, each
+        keyed first by polarization, and then by bl/ant/keyword.
+        Optional variables:
+        pols: list of polarizations. default: None, return all
+        bls: list of baselines. default: None, return all
+        ants: list of antennas for gain. default: None, return all
     '''
     if type(filename) is str: filename = [filename]
     if type(pols) is str: pols = [pols]
@@ -286,9 +392,12 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
 
 def get_phase(freqs, tau):
     '''
-       Turn a delay into a phase.
-       freqs: array of frequencies in Hz
-       tau: delay in seconds.
+        Turn a delay into a phase.
+        Args:
+           freqs: array of frequencies in Hz (or GHz)
+           tau: delay in seconds (or ns)
+        Returns:
+            array: of complex phases the size of freqs
     '''
     freqs = freqs.reshape(-1,1)
     return np.exp(-2j*np.pi*freqs*tau)
@@ -298,13 +407,15 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     Read a calibration fits file (pyuvdata format). This also finds the model
     visibilities and the xtalkfile. 
 
-    filename: Name of calfits file storing omnical solutions. 
-              There should also be corresponding files for the visibilities 
-              and crosstalk. These filenames should have be *vis{xtalk}.fits.
-    pols: Specify polarization to read.
-    bls: Specify bls to read. 
-    ants: Specify ants to read.
-    verbose: Be verbose.
+    Args:
+        filename: Name of calfits file storing omnical solutions.
+                  There should also be corresponding files for the visibilities
+                  and crosstalk. These filenames should have be *vis{xtalk}.fits.
+    Kwargs:
+        pols: Specify polarizations (xx,yy,xy,yx, etc...) to read.
+        bls: Specify bls to read. list of bls
+        ants: Specify ants to read. list of antenna numbers
+        verbose: Be verbose.
 
     Returns meta, gains, vis, xtalk in old format (see from_npz)
     """
@@ -313,18 +424,26 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     if type(bls) is tuple and type(bls[0]) is int: bls = [bls]
     if type(ants) is int: ants = [ants]
     meta, gains = {}, {}
-    poldict = {-5: 'x', -4: 'y'}
+    poldict = {-5: 'xx', -6: 'yy', -7:'xy', -8:'yx'}
+    if pols not None: jones_params = set(x for pol in pols for x in pol)
     
     firstcal = filename[0].split('.')[-2] == 'firstcal'
 
     cal = UVCal()
+    # filename loop
     for f in filename:
         cal.read_calfits(f)
+        if ants is not None:
+            cal.select(antenna_nums=ants, jones=jones_params)
+        # number of spectral windows loop
         for nspw in xrange(cal.Nspws):
+            # polarization loop
             for k, p in enumerate(cal.jones_array):
                 pol = poldict[p]
                 if pol not in gains.keys(): gains[pol] = {}
+                # antenna loop
                 for i, ant in enumerate(cal.antenna_numbers):
+                    # if the cal_type is gain, create or concatenate gain_array
                     if cal.cal_type == 'gain':
                         if ant not in gains[pol].keys():
                             gains[pol][ant] = cal.gain_array[i, nspw, :, :, k].T
@@ -334,6 +453,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                             meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, :, k].T
                         else:
                             meta['chisq{0}{1}'.format(ant, pol)] = np.concatenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, :, k].T])
+                    # if the cal_type is delay, create or concatenate delay_array
                     elif cal.cal_type == 'delay':
                         if ant not in gains[pol].keys():
                             gains[pol][ant] = get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T
@@ -350,15 +470,30 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
         else:
             meta['times'] = np.concatenate([meta['times'], cal.time_array])
 
-        meta['history'] = cal.history
-        meta['caltype'] = cal.cal_type
-        meta['gain_conventions'] = cal.gain_convention
-        meta['freqs'] = cal.freq_array.flatten()
+        meta['history'] = cal.history  # only taking history of the last file
+        # checks to see if all files have the same cal_types
+        if meta.has_key('caltype'):
+            if cal.cal_type == meta['caltype']: pass
+            else: raise ValueError("All caltypes are not the same across files")
+        else: meta['caltype'] = cal.cal_type
+
+        # checks to see if all files have the same gain conventions
+        if meta.has_key('gain_conventions'):
+            if cal.gain_convention == meta['gain_convention']: pass
+            else: raise ValueError("All gain conventions for calibration solutions is not the same across files.")
+        else: meta['gain_conventions'] = cal.gain_convention
+
+        # checks to see if all files have the same frequencies
+        if meta.has_key('freqs'):
+            if cal.freq_array.flatten() == meta['freqs']: pass
+            else: raise ValueError("All files don't have the same frequencies")
+        else: meta['freqs'] = cal.freq_array.flatten()
 
 
 
     v = {}
     x = {}
+    # if these are omnical solutions, there vis.fits and xtalk.fits were created.
     if not firstcal:
         visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
         xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
@@ -369,6 +504,12 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
             if os.path.exists(f1) and os.path.exists(f2):
                 vis.read_uvfits(f1)
                 xtalk.read_uvfits(f2)
+                if ants not None:
+                    vis.select(antenna_nums=ants)
+                    xtalk.select(antenna_nums=ants)
+                if bls not None:
+                    vis.select(ant_pair_nums=bls)
+                    xtalk.select(ant_pair_nums=bls)
                 for p, pol in enumerate(vis.polarization_array):
                     pol = poldict[pol] * 2
                     if pol not in v.keys(): v[pol] = {}
@@ -398,11 +539,22 @@ class HERACal(UVCal):
        This can then be saved to a file, plotted, etc.
     '''
     def __init__(self, meta, gains, flags=None, DELAY=False, ex_ants=[], appendhist='', optional={}):
-        '''Given meta and gain dictionary after running omnical (run_omnical), 
-           populate a UVCal class upon creation.'''
+        '''
+            Initialize a UVCal object.
+            Args:
+                meta: meta information dictionary. As returned by from_fits or from_npz.
+                gains: dictionary of complex gain solutions or delays.
+            Kwargs:
+                flags: Optional input flags for gains.
+                DELAY: toggle if calibration solutions in gains are delays.
+                ex_ants: antennas that are excluded from gains.
+                appendhist: string to append to history
+                optional: dictionary of optional parameters to be passed to UVCal object.
+        '''
 
         super(HERACal, self).__init__()
 
+        # helpful dictionaries for antenna polarization of gains
         str2pol = {'x': -5, 'y': -4}
         pol2str = {-5: 'x', -4: 'y'}
 
@@ -410,6 +562,7 @@ class HERACal(UVCal):
         datadict = {}
         flagdict = {}
         ants = []
+        # generate data (gain) and flag dictionaries.
         for pol in gains:
             for ant in np.sort(gains[pol].keys()):
                 datadict['%d%s' % (ant, pol)] = gains[pol][ant]
@@ -419,20 +572,22 @@ class HERACal(UVCal):
                     ants.append(ant)
 
         # drop antennas that are not solved for.
-        allants = ants + ex_ants
+        allants = ants + ex_ants  # total number of antennas
         ants = np.sort(ants)
         allants = np.sort(allants)
+        antnames = ['ant' + str(ant) for ant in ants]
         time = meta['times']
-        freq = meta['freqs']  # this is in Hz
-        pols = [str2pol[p] for p in gains.keys()]
+        freq = meta['freqs']  # this is in Hz (should be anyways)
+        pols = [str2pol[p] for p in gains.keys()]  # all of the polarizations
+
+        # get sizes of things
         npol = len(pols)
         ntimes = time.shape[0]
         nfreqs = freq.shape[0]
         nants = len(ants)
-        antnames = ['ant' + str(ant) for ant in ants]
+
         datarray = []
         flgarray = []
-        # import IPython; IPython.embed()
         for ii in range(npol):
             dd = []
             fl = []
