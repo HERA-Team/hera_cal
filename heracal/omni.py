@@ -425,7 +425,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     if type(ants) is int: ants = [ants]
     meta, gains = {}, {}
     poldict = {-5: 'xx', -6: 'yy', -7:'xy', -8:'yx'}
-    if pols not None: jones_params = set(x for pol in pols for x in pol)
+    if not pols is None: jones_params = set(x for pol in pols for x in pol)
     
     firstcal = filename[0].split('.')[-2] == 'firstcal'
 
@@ -439,7 +439,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
         for nspw in xrange(cal.Nspws):
             # polarization loop
             for k, p in enumerate(cal.jones_array):
-                pol = poldict[p]
+                pol = poldict[p][0]
                 if pol not in gains.keys(): gains[pol] = {}
                 # antenna loop
                 for i, ant in enumerate(cal.antenna_numbers):
@@ -479,13 +479,13 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
 
         # checks to see if all files have the same gain conventions
         if meta.has_key('gain_conventions'):
-            if cal.gain_convention == meta['gain_convention']: pass
+            if cal.gain_convention == meta['gain_conventions']: pass
             else: raise ValueError("All gain conventions for calibration solutions is not the same across files.")
         else: meta['gain_conventions'] = cal.gain_convention
 
         # checks to see if all files have the same frequencies
         if meta.has_key('freqs'):
-            if cal.freq_array.flatten() == meta['freqs']: pass
+            if np.all(cal.freq_array.flatten() == meta['freqs']): pass
             else: raise ValueError("All files don't have the same frequencies")
         else: meta['freqs'] = cal.freq_array.flatten()
 
@@ -504,14 +504,14 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
             if os.path.exists(f1) and os.path.exists(f2):
                 vis.read_uvfits(f1)
                 xtalk.read_uvfits(f2)
-                if ants not None:
+                if not ants is None:
                     vis.select(antenna_nums=ants)
                     xtalk.select(antenna_nums=ants)
-                if bls not None:
+                if not bls is None:
                     vis.select(ant_pair_nums=bls)
                     xtalk.select(ant_pair_nums=bls)
                 for p, pol in enumerate(vis.polarization_array):
-                    pol = poldict[pol] * 2
+                    pol = poldict[pol]
                     if pol not in v.keys(): v[pol] = {}
                     for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
                         # note we reverse baseline here b/c of conventions
@@ -522,7 +522,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
 
                 DATA_SHAPE = (vis.Ntimes, vis.Nfreqs)
                 for p, pol in enumerate(xtalk.polarization_array):
-                    pol = poldict[pol] * 2
+                    pol = poldict[pol]
                     if pol not in x.keys(): x[pol] = {}
                     for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
                         if not xtalk.baseline_to_antnums(bl)[::-1] in x[pol].keys():
