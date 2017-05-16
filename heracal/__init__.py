@@ -1,1 +1,1 @@
-import omni, firstcal, miriad, xrfi, metrics
+import omni, firstcal, xrfi, metrics
