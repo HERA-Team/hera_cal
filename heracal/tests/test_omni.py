@@ -320,7 +320,7 @@ class Test_HERACal(UVCal):
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
         meta['inttime'] = np.diff(meta['times'])[0]*60*60*24
         optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
-        hc = omni.HERACal(meta, gains, optional=optional)
+        hc = omni.HERACal(meta, gains, ex_ants=[81], optional=optional)  # the fits file was run with ex_ants=[81] and we need to include it here for the test.
         uv = UVCal()
         uv.read_calfits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
         for param in hc:
