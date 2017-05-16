@@ -6,7 +6,6 @@ import numpy as np
 import aipy as a
 from omnical.calib import RedundantInfo
 import heracal.omni as omni
-import heracal.miriad as miriad
 from heracal.data import DATA_PATH
 from pyuvdata import UVCal
 from copy import deepcopy
