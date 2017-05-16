@@ -12,7 +12,6 @@ o.add_option('--ex_ants', default='', help='Antennas to exclude, separated by co
 o.add_option('--outpath', default=None,help='Output path of solution npz files. Default will be the same directory as the data files.')
 o.add_option('--verbose', action='store_true', default=False, help='Turn on verbose.')
 o.add_option('--finetune', action='store_false', default=True, help='Fine tune the delay fit.')
-o.add_option('--offset', action='store_true', default=False, help='Solve for offset along with delay.')
 o.add_option('--average', action='store_true', default=False, help='Average all data before finding delays.')
 opts,args = o.parse_args(sys.argv[1:])
 
@@ -65,7 +64,7 @@ for filename in args:
 
     #gets phase solutions per frequency.
     fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
-    sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,offset=opts.offset,average=opts.average,window='none')
+    sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,average=opts.average,window='none')
 
     #Converting solutions to a type that heracal can use to write uvfits files.
     meta = {}
