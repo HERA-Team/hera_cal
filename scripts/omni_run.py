@@ -172,6 +172,7 @@ for f, filename in enumerate(args):
     file_pol = filename.split('/')[-1].split('.')[3]
     uvd = pyuvdata.UVData()
     uvd.read_miriad(file_group[file_pol])
+    uvd.select(times=np.unique(uvd.time_array)[:3])
     t_jd = uvd.time_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
     t_lst = uvd.lst_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
     freqs = uvd.freq_array[0]
@@ -215,7 +216,7 @@ for f, filename in enumerate(args):
     optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
 
     print '   Saving %s' % fitsname
-    hc = HERACal(m2, g3, optional=optional)
+    hc = HERACal(m2, g3, ex_ants = ex_ants,  optional=optional)
     hc.write_calfits(fitsname)
     write_uvdata_vis('.'.join(fitsname.split('.')[:-1]) + '.vis.fits', aa, m2, v3, returnuv=False)
     write_uvdata_vis('.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits', aa, m2, xtalk, xtalk=True, returnuv=False)
