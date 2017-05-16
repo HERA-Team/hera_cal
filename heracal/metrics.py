@@ -1,6 +1,9 @@
 import numpy as np
 
 class DataContainer:
+    """
+        Dictionary object that is agnostic to indexing with bl or pol first.
+    """
     def __init__(self, data):
         self._data = {}
         if type(data.keys()[0]) is str: # Nested POL:{bls}
@@ -45,8 +48,16 @@ class DataContainer:
         
 
 def _count_flags(m, labels):
-    '''Count flags in an "inside-out" way that doesn't penalize well-performing
-    indices (e.g. bls or ants) pairings with poor-performing ones.'''
+    '''
+        Count flags in an "inside-out" way that doesn't penalize well-performing
+        indices (e.g. bls or ants) pairings with poor-performing ones.
+        
+        Args:
+            m : boolean array of masks
+            labels: labels for the masks (bls, ants, etc...)
+        Return:
+            cnts: dictionary of flag counts
+    '''
     order = np.argsort(np.sum(m, axis=1))[::-1]
     m = m[order][:,order]
     labels = [labels[i] for i in order]
@@ -55,7 +66,17 @@ def _count_flags(m, labels):
     return cnts
 
 def check_ants(reds, data, flag_thresh=.2, skip_ants=[]):
-    '''Correlate bls within redundant groups to find counts of poorly correlated (broken) data per antennas.'''
+    '''
+        Correlate bls within redundant groups to find counts of poorly correlated (broken) data per antennas.
+        Args:
+            reds: list of list of redundant baselines in antenna pair tuple format.
+            data: data dictionary with pol and blpair keys (in any order)
+            flag_thresh: float, threshold to flag bad antennas.
+            skip_ants: list of antennas to not include in calculation. i.e. predetermined bad antennas.
+        Return:
+            dictionary of counts with antennas as indices and number of bad data involved with antenna as values.
+             
+    '''
     def exclude_ants(bls, skip_ants): 
         return [bl for bl in bls if bl[0] not in skip_ants and bl[1] not in skip_ants]
     dc = DataContainer(data)
@@ -90,6 +111,7 @@ def check_ants(reds, data, flag_thresh=.2, skip_ants=[]):
     return cnts
 
 def check_noise_variance(data, wgts, bandwidth, inttime):
+    """XXX"""
     dc = DataContainer(data)
     wc = DataContainer(wgts)
     Cij = {}
