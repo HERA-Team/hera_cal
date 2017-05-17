@@ -20,15 +20,15 @@ class AntennaArray(a.fit.AntennaArray):
 
 
 def get_aa(freqs, nants=4):
-        lat = "45:00"
-        lon = "90:00"
-        beam = a.fit.Beam(freqs)
-        ants = []
-        for i in range(nants):
-            ants.append(a.fit.Antenna(0, 50 * i, 0, beam))
-        antpos_ideal = np.array([ant.pos for ant in ants])
-        aa = AntennaArray((lat, lon), ants, antpos_ideal=antpos_ideal)
-        return aa
+    lat = "45:00"
+    lon = "90:00"
+    beam = a.fit.Beam(freqs)
+    ants = []
+    for i in range(nants):
+        ants.append(a.fit.Antenna(0, 50 * i, 0, beam))
+    antpos_ideal = np.array([ant.pos for ant in ants])
+    aa = AntennaArray((lat, lon), ants, antpos_ideal=antpos_ideal)
+    return aa
 
 
 class TestMethods(object):

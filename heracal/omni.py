@@ -205,7 +205,7 @@ def compute_reds(nant, pols, *args, **kwargs):
         Compute the redundancies given antenna_positions and wrap into Antpol format.
         Args:
             nant: number of antennas
-            pols: number of polarizations
+            pols: polarization labels, e.g. pols=['x']
             *args: args to be passed to omnical.arrayinfo.compute_reds, spcifically
                    antpos: array of antenna positions in order of subsetant.
 
@@ -233,7 +233,7 @@ def reds_for_minimal_V(reds):
     polarization xy and yx) _always_ in the middle.
     
     Args:
-        reds: the array of redundant baseline sets.
+        reds: list of list of redundant baselines as antenna tuples
         
     Return:
         _reds: the adjusted array of redundant baseline sets.
@@ -241,7 +241,7 @@ def reds_for_minimal_V(reds):
     _reds = []
     n = len(reds)
     if n%4 != 0:
-        raise ValueError('Wrong number of polarizations supplied')
+        raise ValueError('Expected ')
     _reds += reds[:n/4]
     xpols = reds[n/4:3*n/4]
     _xpols = []
