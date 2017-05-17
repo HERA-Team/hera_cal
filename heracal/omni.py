@@ -241,7 +241,7 @@ def reds_for_minimal_V(reds):
     _reds = []
     n = len(reds)
     if n%4 != 0:
-        raise ValueError('Expected ')
+        raise ValueError('Expected number of redundant baseline types to be a multiple of 4')
     _reds += reds[:n/4]
     xpols = reds[n/4:3*n/4]
     _xpols = []
