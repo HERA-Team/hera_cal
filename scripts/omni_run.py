@@ -29,11 +29,11 @@ if len(args)==0: raise AssertionError('Please provide visibility files.')
 if opts.minV and len(list(set(''.join(pols))))==1: raise AssertionError('Stokes V minimization requires crosspols in the "-p" option.')
 
 def getPol(fname): return fname.split('.')[3] #XXX assumes file naming format
-def linPol(polstr): return len(list(set(polstr)))==1
+def isLinPol(polstr): return len(list(set(polstr)))==1
 
 linear_pol_keys = []
 for pp in pols:
-    if linPol(pp):
+    if isLinPol(pp):
         linear_pol_keys.append(pp)
 
 # Create info
@@ -52,17 +52,18 @@ bls = [bl for red in reds for bl in red]
 ### Collect all firstcal files ###
 firstcal_files = {}
 if not opts.firstcal:
-    raise ValueError('Please provide a firstcal file. Exiting...') #XXX this requires a firstcal file for any implementation
-else:
-    Nf=0
-    for pp in pols:
-        if linPol(pp):
-            # we cannot use cross-pols to firstcal
-            if '*' in opts.firstcal or '?' in opts.firstcal: flist = glob.glob(opts.firstcal)    
-            elif ',' in opts.firstcal:flist = opts.firstcal.split(',')             
-            else: flist = [str(opts.firstcal)]
-            firstcal_files[pp] = np.sort([s for s in flist if pp in s])
-            Nf += len(firstcal_files[pp])
+    raise ValueError('Please provide a firstcal file. Exiting...') 
+#XXX this requires a firstcal file for any implementation
+
+Nf=0
+for pp in pols:
+    if isLinPol(pp):
+        # we cannot use cross-pols to firstcal
+        if '*' in opts.firstcal or '?' in opts.firstcal: flist = glob.glob(opts.firstcal)    
+        elif ',' in opts.firstcal:flist = opts.firstcal.split(',')             
+        else: flist = [str(opts.firstcal)]
+        firstcal_files[pp] = sorted([s for s in flist if pp in s])
+        Nf += len(firstcal_files[pp])
 
 ### Match firstcal files according to mode of calibration ###
 filesByPol = {}
@@ -70,11 +71,15 @@ for pp in pols: filesByPol[pp] = []
 file2firstcal = {}
 
 for f, filename in enumerate(args):
-    if Nf == len(args)*len(pols): fi = f # atomic firstcal application
-    else: fi = 0 # one firstcal file serves all visibility files
+    if Nf == len(args)*len(pols):
+        fi = f # atomic firstcal application
+    else:
+        fi = 0 # one firstcal file serves all visibility files
     pp = getPol(filename)
-    if linPol(pp): file2firstcal[filename] = [firstcal_files[pp][fi]]
-    else: file2firstcal[filename] = [firstcal_files[lpk][fi] for lpk in linear_pol_keys]
+    if isLinPol(pp):
+        file2firstcal[filename] = [firstcal_files[pp][fi]]
+    else:
+        file2firstcal[filename] = [firstcal_files[lpk][fi] for lpk in linear_pol_keys]
     filesByPol[pp].append(filename)
 
 # XXX can these be combined into one loop?
@@ -82,7 +87,8 @@ for f, filename in enumerate(args):
 ### Execute Omnical stages ###
 for filenumber in range(len(args)/len(pols)):
     file_group = {} #there is one file_group per djd
-    for pp in pols: file_group[pp] = filesByPol[pp][filenumber]
+    for pp in pols:
+        file_group[pp] = filesByPol[pp][filenumber]
     if len(pols) == 1:
         bname = os.path.basename(file_group[pols[0]])
     else:
@@ -110,7 +116,7 @@ for filenumber in range(len(args)/len(pols)):
     
     #uvd = pyuvdata.UVData()
     #uvd.read_miriad([file_group[pp] for pp in pols])
-    #XXX THIS WILL BECOME MUCH SIMPLER WHEN PYUVDATA CAN READ MULTIPLE MIRIAD FILES AT ONCE
+    #XXX This will become much simpler when pyuvdata can read multiple MIRIAD files at once.
     
     ## collect metadata -- should be the same for each file
     f0 = file_group[pols[0]]
@@ -174,7 +180,7 @@ for filenumber in range(len(args)/len(pols)):
     m2['lsts'] = t_lst
     m2['freqs'] = freqs
     m2['inttime'] = t_int
-    optional = {'observer': 'obs (example@institution.edu)'}
+    optional = {'observer': 'heracal'}
 
     print '   Saving %s' % fitsname
     hc = HERACal(m2, g3, ex_ants = ex_ants,  optional=optional)

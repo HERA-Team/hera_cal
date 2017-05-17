@@ -84,9 +84,9 @@ class TestMethods(object):
                 for l in k:
                     nt.assert_true(isinstance(l, omni.Antpol))
 
-    def test_minVreds(self):
+    def test_reds_for_minimal_V(self):
         reds = omni.compute_reds(4, self.pols, self.info.antloc[:self.info.nant])
-        mVreds = omni.minVreds(reds)
+        mVreds = omni.reds_for_minimal_V(reds)
         # test that the new reds array is shorter by 1/4, as expected
         nt.assert_equal(len(mVreds),len(reds) - len(reds)/4)
         # test that we haven't invented or lost baselines
@@ -100,24 +100,21 @@ class TestMethods(object):
             for ap in arr:
                 p = ap[0].pol()+ap[1].pol()
                 nt.assert_equal(len(set(p)),len(set(p0)))
-        # test that every xy has it's corresponding yx in the array
+        # test that every xy has its corresponding yx in the array
         for arr in mVreds:
             p0 = arr[0][0].pol()+arr[0][1].pol()
             if len(set(p0))==1: continue #not interested in linpols
             for ap in arr:
                 ai,aj = ap
                 bi,bj = omni.Antpol(ai.ant(),aj.pol(),self.info.nant),omni.Antpol(aj.ant(),ai.pol(),self.info.nant) 
-                if (bi,bj) in arr:
-                    continue
-                elif (bj,bi) in arr:
-                    continue
-                else:
-                    raise Exception('Something has gone wrong in polarized redundancy calculation (missing crosspols)')
+                if not (bi,bj) in arr and not (bj,bi) in arr:
+                    raise ValueError('Something has gone wrong in polarized redundancy calculation (missing crosspols)')
         # test AssertionError
         _reds = reds[:-1]
         try:
-            omni.minVreds(_reds)
-        except:
+            omni.reds_for_minimal_V(_reds)
+            assert False, 'should not have gotten here'
+        except Exception:
             pass   
     
     def test_from_npz(self):

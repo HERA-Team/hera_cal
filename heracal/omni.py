@@ -219,7 +219,7 @@ def compute_reds(nant, pols, *args, **kwargs):
             reds += [[(Antpol(i, pi, nant), Antpol(j, pj, nant)) for i, j in gp] for gp in _reds]
     return reds
 
-def minVreds(reds):
+def reds_for_minimal_V(reds):
     '''
     Manipulate redundancy array to combine crosspols
     into a single redundancy array - imposing that
@@ -239,17 +239,16 @@ def minVreds(reds):
         _reds: the adjusted array of redundant baseline sets.
     '''
     _reds = []
-    L = len(reds)
-    try:
-        assert(L%4)==0
-    except AssertionError:
-        raise Exception('Wrong number of polarizations supplied')
-    _reds += reds[:L/4]
-    xpols = reds[L/4:3*L/4]
+    n = len(reds)
+    if n%4 != 0:
+        raise ValueError('Wrong number of polarizations supplied')
+    _reds += reds[:n/4]
+    xpols = reds[n/4:3*n/4]
     _xpols = []
-    for i in range(L/4): _xpols.append(xpols[i] + xpols[i+L/4])
+    for i in range(n/4):
+        _xpols.append(xpols[i] + xpols[i+n/4])
     _reds+=_xpols
-    _reds+=reds[3*L/4:]
+    _reds+=reds[3*n/4:]
     return _reds
 
 def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
@@ -286,7 +285,8 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     ex_ants = [Antpol(i, nant).ant() for i in range(antpos.shape[0]) if antpos[i, 0] == -1]
     kwargs['ex_ants'] = kwargs.get('ex_ants', []) + ex_ants
     reds = filter_reds(reds, **kwargs)
-    if minV: reds = minVreds(reds)
+    if minV:
+        reds = reds_for_minimal_V(reds)
     if fcal:
         info = FirstCalRedundantInfo(nant)
     else:
