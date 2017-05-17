@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-import aipy as a, numpy as np 
+import aipy as a, numpy as np, re, os
 import optparse, sys, pyuvdata, heracal, glob
 
 ### Options ###
@@ -11,18 +11,30 @@ a.scripting.add_standard_options(o,pol=True)
 o.add_option('--xtalk',dest='xtalk',default=False,action='store_true',
             help='Toggle: apply xtalk solutions to data. Default=False')
 o.add_option('--omnipath',dest='omnipath',default='%s.fits',type='string',
-            help='Format string (e.g. "path/%s.npz", where you actually type the "%s") which converts the input file name to the omnical npz path/file.')
+            help='Format string (e.g. "path/%s.fits", where you actually type the "%s") which converts the input file name to the omnical npz path/file.')
 o.add_option('--firstcal', action='store_true', 
             help='Applying firstcal solutions.')
 opts,args = o.parse_args(sys.argv[1:])
 args = np.sort(args)
+pols = opts.pol.split(',')
 
+def file2pol(filename): return filename.split('.')[3] #XXX assumes file naming format
 
 filedict = {}
-solution_files = np.sort(glob.glob(opts.omnipath))
+solution_files = sorted(glob.glob(opts.omnipath))
+
 for i, f in enumerate(args):
-        filedict[f] = str(solution_files[i])
-print args, filedict    
+    pp = file2pol(f)
+    if len(pols)==1:
+        fexpected = '%s/%s.fits'%(os.path.dirname(opts.omnipath),os.path.basename(f))
+    else: 
+        fexpected = '%s/%s.fits'%(os.path.dirname(opts.omnipath), os.path.basename(f).replace('.%s'%pp,''))
+    try:
+        ind = solution_files.index(fexpected)
+        filedict[f] = str(solution_files[ind])
+    except ValueError:
+       raise Exception('Solution file %s.fits expected; not found.'%f)
+
 for f in args:
     mir = pyuvdata.UVData()
     print "  Reading {0}".format(f)
