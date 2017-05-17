@@ -2,7 +2,7 @@ import numpy as np
 import omnical
 from copy import deepcopy
 import numpy.linalg as la
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, uvtel
 from heracal.firstcal import FirstCalRedundantInfo
 import warnings, os
 with warnings.catch_warnings():
@@ -565,6 +565,102 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                             
     return meta, gains, v, x
 
+def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
+    '''
+    Given meta information and visibilities, write out a uvfits file.
+    filename: filename to write uvfits object.(str)
+    aa      : aipy antenna array object (object)
+    m       : dictionary of information (dict)
+    v       : dictionary of visibilities with keys antenna pair and pol (dict)
+    xtalk   : visibilities given are xtalk visibilities. (bool)
+    returnuv: return uvdata object. If returned, file is not written. (bool)
+    '''
+
+    pols = v.keys()
+    bls = v[pols[0]].keys()
+
+    uv = UVData()
+    if xtalk:
+        uv.Ntimes = 1
+    else:
+        uv.Ntimes = len(m['times'])
+    uv.Npols = len(pols)
+    uv.Nbls = len(v[pols[0]].keys())
+    uv.Nblts = uv.Nbls * uv.Ntimes
+    uv.Nfreqs = len(m['freqs'])
+    data = {}
+    for p in v.keys():
+        if p not in data.keys():
+            data[p] = []
+        for bl in v[p].keys():
+            data[p].append(v[p][bl])
+        data[p] = np.array(data[p]).reshape(uv.Nblts, uv.Nfreqs)
+
+    uv.data_array = np.expand_dims(np.array([data[p] for p in pols]).T.swapaxes(0, 1), axis=1)
+    uv.vis_units = 'uncalib'
+    uv.nsample_array = np.ones_like(uv.data_array, dtype=np.float)
+    uv.flag_array = np.zeros_like(uv.data_array, dtype=np.bool)
+    uv.Nspws = 1  # this is always 1 for paper and hera(currently)
+    uv.spw_array = np.array([uv.Nspws])
+    blts = np.array([bl for bl in bls for i in range(uv.Ntimes)])
+    if xtalk:
+        uv.time_array = np.array(list(m['times'][:1]) * uv.Nbls)
+        uv.lst_array = np.array(list(m['lsts'][:1]) * uv.Nbls)
+    else:
+        uv.time_array = np.array(list(m['times']) * uv.Nbls)
+        uv.lst_array = np.array(list(m['lsts']) * uv.Nbls)
+
+    # generate uvw
+    uvw = []
+    for t in range(uv.Ntimes):
+        for bl in bls:
+            uvw.append(aa.gen_uvw(*bl, src='z').reshape(3, -1))
+    uv.uvw_array = np.array(uvw).reshape(-1, 3)
+
+    uv.ant_1_array = blts[:, 0]
+    uv.ant_2_array = blts[:, 1]
+    uv.baseline_array = uv.antnums_to_baseline(uv.ant_1_array,
+                                               uv.ant_2_array)
+
+    uv.freq_array = m['freqs'].reshape(1, -1) * 1e9  # Turn into MHz.
+    poldict = {'xx': -5, 'yy': -6, 'xy': -7, 'yx': -8}
+    uv.polarization_array = np.array([poldict[p] for p in pols])
+    if xtalk:
+        # xtalk integration time is averaged over the whole file
+        uv.integration_time = m['inttime'] * len(m['times'])
+    else:
+        uv.integration_time = m['inttime']
+    uv.channel_width = np.diff(uv.freq_array[0])[0]
+
+    # observation parameters
+    uv.object_name = 'zenith'
+    uv.telescope_name = 'HERA'
+    uv.instrument = 'HERA'
+    tobj = uvtel.get_telescope(uv.telescope_name)
+    uv.telescope_location = tobj.telescope_location
+    uv.history = m['history']
+
+    # phasing information
+    uv.phase_type = 'drift'
+    uv.zenith_ra = uv.lst_array
+    uv.zenith_dec = np.array([aa.lat] * uv.Nblts)
+
+    # antenna information
+    uv.Nants_telescope = 128
+    uv.antenna_numbers = np.arange(uv.Nants_telescope, dtype=int)
+    uv.Nants_data = len(np.unique(np.concatenate([uv.ant_1_array, uv.ant_2_array]).flatten()))
+    uv.antenna_names = np.array(['ant{0}'.format(ant) for ant in uv.antenna_numbers])
+    antpos = []
+    for k in aa:
+        antpos.append(k.pos)
+
+    uv.antenna_positions = np.array(antpos)
+
+    if returnuv:
+        return uv
+    else:
+        print('   Saving {0}'.format(filename))
+        uv.write_uvfits(filename, force_phase=True, spoof_nonessential=True)
 
 class HERACal(UVCal):
     '''
