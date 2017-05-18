@@ -592,8 +592,7 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     antnums = np.array(v[pols[0]].keys()).T
 
     uv = UVData()
-    # purposefully indexed with 1, 0 becuase of bug in pyuvdata. Make sure it is fixed when it gets fixed in pyuvdata
-    bls = sorted(map(uv.antnums_to_baseline, antnums[1], antnums[0])) # XXX sort the baselines
+    bls = sorted(map(uv.antnums_to_baseline, antnums[0], antnums[1])) # XXX sort the baselines
     if xtalk:
         uv.Ntimes = 1
     else:
