@@ -557,20 +557,20 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                     if pol not in v.keys(): v[pol] = {}
                     for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
                         # note we reverse baseline here b/c of conventions
-                        if not vis.baseline_to_antnums(bl)[::-1] in v[pol].keys():
-                            v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
+                        if not vis.baseline_to_antnums(bl) in v[pol].keys():
+                            v[pol][vis.baseline_to_antnums(bl)] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
                         else:
-                            v[pol][vis.baseline_to_antnums(bl)[::-1]] = np.concatenate([v[pol][vis.baseline_to_antnums(bl)[::-1]], vis.data_array[k:k + vis.Ntimes, 0, :, p]])
+                            v[pol][vis.baseline_to_antnums(bl)] = np.concatenate([v[pol][vis.baseline_to_antnums(bl)], vis.data_array[k:k + vis.Ntimes, 0, :, p]])
 
                 DATA_SHAPE = (vis.Ntimes, vis.Nfreqs)
                 for p, pol in enumerate(xtalk.polarization_array):
                     pol = poldict[pol]
                     if pol not in x.keys(): x[pol] = {}
                     for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
-                        if not xtalk.baseline_to_antnums(bl)[::-1] in x[pol].keys():
-                            x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
+                        if not xtalk.baseline_to_antnums(bl) in x[pol].keys():
+                            x[pol][xtalk.baseline_to_antnums(bl)] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
                         else:
-                            x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.concatenate([x[pol][xtalk.baseline_to_antnums(bl)[::-1]], np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)])
+                            x[pol][xtalk.baseline_to_antnums(bl)] = np.concatenate([x[pol][xtalk.baseline_to_antnums(bl)], np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)])
         # use vis to get lst array
         if not 'lsts' in meta.keys():
             meta['lsts'] = vis.lst_array[:vis.Ntimes]
@@ -602,7 +602,7 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     uv.Nblts = uv.Nbls * uv.Ntimes
     uv.Nfreqs = len(m['freqs'])
     data = {}
-    for p in v.keys():
+    for p in pols:
         if p not in data.keys():
             data[p] = []
         for bl in bls:  # crucial to loop over bls here and not v[p].keys()
