@@ -237,7 +237,49 @@ class TestMethods(object):
         nt.assert_equal(uv_vis_in, uv_vis_out)
         nt.assert_equal(uv_xtalk_in, uv_xtalk_in)
     
-
+    def test_concatenate_UVCal_on_pol(self):
+        calname0 = os.path.join(DATA_PATH,'zen.2457705.41052.xx.HH.uvc.firstcal.fits')
+        calname1 = os.path.join(DATA_PATH,'zen.2457705.41052.yy.HH.uvc.firstcal.fits')
+        calnameList = [calname0,calname1]
+        cal0 = UVCal()
+        cal0.read_calfits(calname0)
+        cal1 = UVCal()
+        cal1.read_calfits(calname1)
+        
+        # Concatenate and test concatenation
+        newcal = omni.concatenate_UVCal_on_pol(calnameList)
+        testpath0 = os.path.join(DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.firstcal.test0.fits')
+        if os.path.exists(testpath0): os.system('rm %s'%testpath0)
+        newcal.write_calfits(testpath0)
+        
+        nt.assert_equal(newcal.Njones,2)
+        nt.assert_equal(sorted(newcal.jones_array), [-6,-5])
+        nt.assert_equal(newcal.flag_array.shape[-1], 2)
+        nt.assert_equal(newcal.delay_array.shape[-1], 2)
+        nt.assert_equal(newcal.quality_array.shape[-1], 2)
+        
+        cal1.gain_convention = 'multiply'
+        testpath1 = os.path.join(DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.firstcal.test1.fits')
+        if os.path.exists(testpath1): os.system('rm %s'%testpath1)
+        cal1.write_calfits(testpath1)
+        
+        try:
+            failcal = omni.concatenate_UVCal_on_pol([calname0,calname0])
+            assert False, 'should not have gotten here'
+        except ValueError:
+            pass
+        try:
+            failcal = omni.concatenate_UVCal_on_pol([calname0,testpath0])
+            assert False, 'should not have gotten here'
+        except ValueError:
+            pass
+        try:
+            failcal = omni.concatenate_UVCal_on_pol([calname0,testpath1])
+            assert False, 'should not have gotten here'
+        except ValueError:
+            pass
+        
+        
 class Test_Antpol(object):
     def setUp(self):
         self.pols = ['x', 'y']

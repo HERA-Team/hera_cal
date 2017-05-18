@@ -74,7 +74,7 @@ for f in args:
     cal.read_calfits(filedict[f])
     
     print "  Calibrating..."
-    antenna_index = dict(zip(*(cal.antenna_numbers,range(cal.Nants_data))))
+    antenna_index = dict(zip(*(cal.ant_array,range(cal.Nants_data))))
     for p,pol in enumerate(mir.polarization_array):
         p1,p2 = [list(cal.jones_array).index(pk) for pk in jonesLookup[pol]] #XXX could replace with numpy function instead of casting to list
         for bl,k in zip(*np.unique(mir.baseline_array, return_index=True)):
