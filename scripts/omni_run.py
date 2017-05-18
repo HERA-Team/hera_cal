@@ -2,7 +2,7 @@
 
 import aipy
 import numpy as np
-from heracal.omni import from_fits, aa_to_info, run_omnical, compute_xtalk, HERACal, write_uvdata_vis
+from heracal.omni import from_fits, aa_to_info, run_omnical, compute_xtalk, HERACal, make_uvdata_vis
 from heracal.miriad import read_files
 import pyuvdata
 import optparse
@@ -12,7 +12,7 @@ o = optparse.OptionParser()
 o.set_usage("omni_run.py [options] *.uvcRRE")
 o.set_description(__doc__)
 aipy.scripting.add_standard_options(o, cal=True, pol=True)
-o.add_option('--omnipath', dest='omnipath', default='', type='string',
+o.add_option('--omnipath', dest='omnipath', default='.', type='string',
              help='Path to save omnical solutions.')
 o.add_option('--ex_ants', dest='ex_ants', default=None,
              help='Antennas to exclude, separated by commas.')
@@ -186,6 +186,8 @@ for filenumber in range(len(args)/len(pols)):
     hc = HERACal(m2, g3, ex_ants = ex_ants,  optional=optional)
     hc.write_calfits(fitsname)
     fsj = '.'.join(fitsname.split('.')[:-1])
-    write_uvdata_vis('%s.vis.fits'%fsj, aa, m2, v3, returnuv=False)
-    write_uvdata_vis('%s.xtalk.fits'%fsj, aa, m2, xtalk, xtalk=True, returnuv=False)
+    uv_vis = make_uvdata_vis(aa, m2, v3)
+    uv_vis.write_uvfits('%s.vis.fits'%fsj, force_phase=True, spoof_nonessential=True)
+    uv_xtalk = make_uvdata_vis(aa, m2, xtalk, xtalk=True)
+    uv_xtalk.write_uvfits('%s.xtalk.fits'%fsj, force_phase=True, spoof_nonessential=True)
 

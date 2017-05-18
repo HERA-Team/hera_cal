@@ -516,6 +516,13 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
             else: raise ValueError("All gain conventions for calibration solutions is not the same across files.")
         else: meta['gain_conventions'] = cal.gain_convention
 
+        # checks to see if all files have the same gain conventions
+        if meta.has_key('inttime'):
+            if cal.integration_time == meta['inttime']: pass
+            else: raise ValueError("All integration times for calibration solutions is not the same across files.")
+        else: meta['inttime'] = cal.integration_time
+
+
         # checks to see if all files have the same frequencies
         if meta.has_key('freqs'):
             if np.all(cal.freq_array.flatten() == meta['freqs']): pass
@@ -536,7 +543,9 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
         for f1, f2 in zip(visfile, xtalkfile):
             if os.path.exists(f1) and os.path.exists(f2):
                 vis.read_uvfits(f1)
+                vis.unphase_to_drift()  # need to do this since all uvfits files are phased! PAPER/HERA miriad files are drift.
                 xtalk.read_uvfits(f2)
+                xtalk.unphase_to_drift()  # need to do this since all uvfits files are phased! PAPER/HERA miriad files are drift.
                 if not ants is None:
                     vis.select(antenna_nums=ants)
                     xtalk.select(antenna_nums=ants)
@@ -562,24 +571,29 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                             x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
                         else:
                             x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.concatenate([x[pol][xtalk.baseline_to_antnums(bl)[::-1]], np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)])
+        # use vis to get lst array
+        if not 'lsts' in meta.keys():
+            meta['lsts'] = vis.lst_array[:vis.Ntimes]
+        else:
+            meta['lsts'] = np.concatenate([meta['lsts'], vis.lst_array[:vis.Ntimes]])
                             
     return meta, gains, v, x
 
-def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
+def make_uvdata_vis(aa, m, v, xtalk=False):
     '''
-    Given meta information and visibilities, write out a uvfits file.
-    filename: filename to write uvfits object.(str)
+    Given meta information and visibilities (from omnical), write out a uvfits file.
     aa      : aipy antenna array object (object)
     m       : dictionary of information (dict)
     v       : dictionary of visibilities with keys antenna pair and pol (dict)
     xtalk   : visibilities given are xtalk visibilities. (bool)
-    returnuv: return uvdata object. If returned, file is not written. (bool)
     '''
 
     pols = v.keys()
-    bls = v[pols[0]].keys()
+    antnums = np.array(v[pols[0]].keys()).T
 
     uv = UVData()
+    # purposefully indexed with 1, 0 becuase of bug in pyuvdata. Make sure it is fixed when it gets fixed in pyuvdata
+    bls = sorted(map(uv.antnums_to_baseline, antnums[1], antnums[0])) # XXX sort the baselines
     if xtalk:
         uv.Ntimes = 1
     else:
@@ -592,8 +606,8 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     for p in v.keys():
         if p not in data.keys():
             data[p] = []
-        for bl in v[p].keys():
-            data[p].append(v[p][bl])
+        for bl in bls:  # crucial to loop over bls here and not v[p].keys()
+            data[p].append(v[p][uv.baseline_to_antnums(bl)])
         data[p] = np.array(data[p]).reshape(uv.Nblts, uv.Nfreqs)
 
     uv.data_array = np.expand_dims(np.array([data[p] for p in pols]).T.swapaxes(0, 1), axis=1)
@@ -614,15 +628,15 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     uvw = []
     for t in range(uv.Ntimes):
         for bl in bls:
-            uvw.append(aa.gen_uvw(*bl, src='z').reshape(3, -1))
+            uvw.append(aa.gen_uvw(*uv.baseline_to_antnums(bl), src='z').reshape(3, -1))
     uv.uvw_array = np.array(uvw).reshape(-1, 3)
 
-    uv.ant_1_array = blts[:, 0]
-    uv.ant_2_array = blts[:, 1]
+    uv.ant_1_array = uv.baseline_to_antnums(blts)[0]
+    uv.ant_2_array = uv.baseline_to_antnums(blts)[1]
     uv.baseline_array = uv.antnums_to_baseline(uv.ant_1_array,
                                                uv.ant_2_array)
 
-    uv.freq_array = m['freqs'].reshape(1, -1) * 1e9  # Turn into MHz.
+    uv.freq_array = m['freqs'].reshape(1, -1)
     poldict = {'xx': -5, 'yy': -6, 'xy': -7, 'yx': -8}
     uv.polarization_array = np.array([poldict[p] for p in pols])
     if xtalk:
@@ -630,7 +644,7 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
         uv.integration_time = m['inttime'] * len(m['times'])
     else:
         uv.integration_time = m['inttime']
-    uv.channel_width = np.diff(uv.freq_array[0])[0]
+    uv.channel_width = np.float(np.diff(uv.freq_array[0])[0])
 
     # observation parameters
     uv.object_name = 'zenith'
@@ -646,21 +660,17 @@ def write_uvdata_vis(filename, aa, m, v, xtalk=False, returnuv=True):
     uv.zenith_dec = np.array([aa.lat] * uv.Nblts)
 
     # antenna information
-    uv.Nants_telescope = 128
+    uv.Nants_telescope = len(aa)
     uv.antenna_numbers = np.arange(uv.Nants_telescope, dtype=int)
     uv.Nants_data = len(np.unique(np.concatenate([uv.ant_1_array, uv.ant_2_array]).flatten()))
-    uv.antenna_names = np.array(['ant{0}'.format(ant) for ant in uv.antenna_numbers])
+    uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
     antpos = []
     for k in aa:
         antpos.append(k.pos)
 
     uv.antenna_positions = np.array(antpos)
 
-    if returnuv:
-        return uv
-    else:
-        print('   Saving {0}'.format(filename))
-        uv.write_uvfits(filename, force_phase=True, spoof_nonessential=True)
+    return uv
 
 class HERACal(UVCal):
     '''
