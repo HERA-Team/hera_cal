@@ -1,7 +1,7 @@
 '''Tests for omni.py'''
 
 import nose.tools as nt
-import os
+import os, sys
 import numpy as np
 import aipy as a
 from omnical.calib import RedundantInfo
@@ -204,7 +204,10 @@ class TestMethods(object):
         nt.assert_equal(xtalk, {})
 
     def test_make_uvdata_vis(self):
-        aa = a.cal.get_aa('hsa7458_v000', np.array([.15])) # This aa is specific for the fits file below.
+        sys.path.append(DATA_PATH)  # append data_path to path so we can find calfile.
+        aa = a.cal.get_aa('heratest_calfile', np.array([.15])) # This aa is specific for the fits file below.
+        sys.path[:-1]  # remove last entry from path (DATA_PATH)
+
         # read in meta, gains, vis, xtalk from file.
         meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits')])
         _xtalk = {}
