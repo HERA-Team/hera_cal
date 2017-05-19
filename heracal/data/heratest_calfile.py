@@ -4,43 +4,30 @@ class AntennaArray(a.pol.AntennaArray):
     def __init__(self, *args, **kwargs):
         a.pol.AntennaArray.__init__(self, *args, **kwargs)
         self.antpos_ideal = kwargs.pop('antpos_ideal')
-    def update_gains(self):
-        gains = self.gain * self.amp_coeffs
-        for i,gain in zip(self.ant_layout.flatten(), gains.flatten()):
-            self[i].set_params({'amp_x':gain})
-            self[i].set_params({'amp_y':gain})
-    def update_delays(self):
-        ns,ew = n.indices(self.ant_layout.shape)
-        dlys = ns*self.tau_ns + ew*self.tau_ew + self.dly_coeffs
-        for i,tau in zip(self.ant_layout.flatten(), dlys.flatten()):
-            self[i].set_params({'dly_x':tau})
-            self[i].set_params({'dly_y':tau + self.dly_xx_to_yy.flatten()[i]})
     def update(self):
-#        self.update_gains()
-#        self.update_delays()
         a.pol.AntennaArray.update(self)
-    def get_params(self, ant_prms={'*':'*'}):
-        try: prms = a.pol.AntennaArray.get_params(self, ant_prms)
-        except(IndexError): return {}
-        for k in ant_prms:
-            if k == 'aa':
-                if not prms.has_key('aa'): prms['aa'] = {}
-                for val in ant_prms[k]:
-                    if   val == 'tau_ns': prms['aa']['tau_ns'] = self.tau_ns
-                    elif val == 'tau_ew': prms['aa']['tau_ew'] = self.tau_ew
-                    elif val == 'gain': prms['aa']['gain'] = self.gain
-            else:
-                try: top_pos = n.dot(self._eq2zen, self[int(k)].pos)
-                # XXX should multiply this by len_ns to match set_params.
-                except(ValueError): continue
-                if ant_prms[k] == '*':
-                    prms[k].update({'top_x':top_pos[0], 'top_y':top_pos[1], 'top_z':top_pos[2]})
-                else:
-                    for val in ant_prms[k]:
-                        if   val == 'top_x': prms[k]['top_x'] = top_pos[0]
-                        elif val == 'top_y': prms[k]['top_y'] = top_pos[1]
-                        elif val == 'top_z': prms[k]['top_z'] = top_pos[2]
-        return prms
+#    def get_params(self, ant_prms={'*':'*'}):
+#        try: prms = a.pol.AntennaArray.get_params(self, ant_prms)
+#        except(IndexError): return {}
+#        for k in ant_prms:
+#            if k == 'aa':
+#                if not prms.has_key('aa'): prms['aa'] = {}
+#                for val in ant_prms[k]:
+#                    if   val == 'tau_ns': prms['aa']['tau_ns'] = self.tau_ns
+#                    elif val == 'tau_ew': prms['aa']['tau_ew'] = self.tau_ew
+#                    elif val == 'gain': prms['aa']['gain'] = self.gain
+#            else:
+#                try: top_pos = n.dot(self._eq2zen, self[int(k)].pos)
+#                # XXX should multiply this by len_ns to match set_params.
+#                except(ValueError): continue
+#                if ant_prms[k] == '*':
+#                    prms[k].update({'top_x':top_pos[0], 'top_y':top_pos[1], 'top_z':top_pos[2]})
+#                else:
+#                    for val in ant_prms[k]:
+#                        if   val == 'top_x': prms[k]['top_x'] = top_pos[0]
+#                        elif val == 'top_y': prms[k]['top_y'] = top_pos[1]
+#                        elif val == 'top_z': prms[k]['top_z'] = top_pos[2]
+#        return prms
     def set_params(self, prms):
         changed = a.pol.AntennaArray.set_params(self, prms)
         for i, ant in enumerate(self):
