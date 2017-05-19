@@ -1,13 +1,13 @@
 '''Tests for omni.py'''
 
 import nose.tools as nt
-import os
+import os, sys
 import numpy as np
 import aipy as a
 from omnical.calib import RedundantInfo
 import heracal.omni as omni
 from heracal.data import DATA_PATH
-from pyuvdata import UVCal
+from pyuvdata import UVCal, UVData
 from copy import deepcopy
 #from heracal import omni
 
@@ -19,15 +19,15 @@ class AntennaArray(a.fit.AntennaArray):
 
 
 def get_aa(freqs, nants=4):
-        lat = "45:00"
-        lon = "90:00"
-        beam = a.fit.Beam(freqs)
-        ants = []
-        for i in range(nants):
-            ants.append(a.fit.Antenna(0, 50 * i, 0, beam))
-        antpos_ideal = np.array([ant.pos for ant in ants])
-        aa = AntennaArray((lat, lon), ants, antpos_ideal=antpos_ideal)
-        return aa
+    lat = "45:00"
+    lon = "90:00"
+    beam = a.fit.Beam(freqs)
+    ants = []
+    for i in range(nants):
+        ants.append(a.fit.Antenna(0, 50 * i, 0, beam))
+    antpos_ideal = np.array([ant.pos for ant in ants])
+    aa = AntennaArray((lat, lon), ants, antpos_ideal=antpos_ideal)
+    return aa
 
 
 class TestMethods(object):
@@ -83,6 +83,39 @@ class TestMethods(object):
                 for l in k:
                     nt.assert_true(isinstance(l, omni.Antpol))
 
+    def test_reds_for_minimal_V(self):
+        reds = omni.compute_reds(4, self.pols, self.info.antloc[:self.info.nant])
+        mVreds = omni.reds_for_minimal_V(reds)
+        # test that the new reds array is shorter by 1/4, as expected
+        nt.assert_equal(len(mVreds),len(reds) - len(reds)/4)
+        # test that we haven't invented or lost baselines
+        cr,cmv = 0,0
+        for arr in reds: cr+=len(arr)
+        for arr in mVreds: cmv+=len(arr)
+        nt.assert_equal(cr,cmv)
+        # test that no crosspols are in linpol red arrays and vice versa
+        for arr in mVreds:
+            p0 = arr[0][0].pol()+arr[0][1].pol()
+            for ap in arr:
+                p = ap[0].pol()+ap[1].pol()
+                nt.assert_equal(len(set(p)),len(set(p0)))
+        # test that every xy has its corresponding yx in the array
+        for arr in mVreds:
+            p0 = arr[0][0].pol()+arr[0][1].pol()
+            if len(set(p0))==1: continue #not interested in linpols
+            for ap in arr:
+                ai,aj = ap
+                bi,bj = omni.Antpol(ai.ant(),aj.pol(),self.info.nant),omni.Antpol(aj.ant(),ai.pol(),self.info.nant) 
+                if not (bi,bj) in arr and not (bj,bi) in arr:
+                    raise ValueError('Something has gone wrong in polarized redundancy calculation (missing crosspols)')
+        # test AssertionError
+        _reds = reds[:-1]
+        try:
+            omni.reds_for_minimal_V(_reds)
+            assert False, 'should not have gotten here'
+        except Exception:
+            pass   
+    
     def test_from_npz(self):
         Ntimes = 3 
         Nchans = 1024  # hardcoded for this file
@@ -115,6 +148,7 @@ class TestMethods(object):
         freqs = np.linspace(.1,.2,1024).reshape(-1,1)  # GHz
         tau = 10  # ns 
         nt.assert_true(np.all(omni.get_phase(freqs, tau) == np.exp(-2j*np.pi*freqs*tau)))
+
     def test_from_fits_gain(self):
         Ntimes = 3 * 2  # need 2 here because reading two files
         Nchans = 1024  # hardcoded for this file
@@ -168,7 +202,86 @@ class TestMethods(object):
 
         nt.assert_equal(xtalk, {})
 
+    def test_make_uvdata_vis(self):
+        sys.path.append(DATA_PATH)  # append data_path to path so we can find calfile.
+        aa = a.cal.get_aa('heratest_calfile', np.array([.15])) # This aa is specific for the fits file below.
+        sys.path[:-1]  # remove last entry from path (DATA_PATH)
 
+        # read in meta, gains, vis, xtalk from file.
+        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits')])
+        _xtalk = {}
+        # overide xtalk to have single visibility. from fits expands to size of vis data.
+        for pol in xtalk.keys():
+            _xtalk[pol] = {key : xtalk[pol][key][0,:] for key in xtalk[pol].keys() }
+        # write to new file for both vis and xtalk
+        uv = omni.make_uvdata_vis(aa, meta, vis)
+        uv.write_uvfits(os.path.join(DATA_PATH,'write_vis_test.fits'), force_phase=True, spoof_nonessential=True)
+        uv = omni.make_uvdata_vis(aa, meta, _xtalk, xtalk=True)
+        uv.write_uvfits(os.path.join(DATA_PATH,'write_xtalk_test.fits'), force_phase=True, spoof_nonessential=True)
+        
+        # read in old and newly written files and check equality.
+        uv_vis_in = UVData()
+        uv_vis_in.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.vis.fits'))
+        uv_vis_in.unphase_to_drift()
+
+        uv_xtalk_in = UVData()
+        uv_xtalk_in.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.xtalk.fits'))
+        uv_xtalk_in.unphase_to_drift()
+
+        uv_vis_out= UVData()
+        uv_vis_out.read_uvfits(os.path.join(DATA_PATH,'write_vis_test.fits'))
+        uv_vis_out.unphase_to_drift()
+
+        uv_xtalk_out = UVData()
+        uv_xtalk_out.read_uvfits(os.path.join(DATA_PATH,'write_xtalk_test.fits'))
+        uv_xtalk_out.unphase_to_drift()
+
+        nt.assert_equal(uv_vis_in, uv_vis_out)
+        nt.assert_equal(uv_xtalk_in, uv_xtalk_in)
+    
+    def test_concatenate_UVCal_on_pol(self):
+        calname0 = os.path.join(DATA_PATH,'zen.2457705.41052.xx.HH.uvc.firstcal.fits')
+        calname1 = os.path.join(DATA_PATH,'zen.2457705.41052.yy.HH.uvc.firstcal.fits')
+        calnameList = [calname0,calname1]
+        cal0 = UVCal()
+        cal0.read_calfits(calname0)
+        cal1 = UVCal()
+        cal1.read_calfits(calname1)
+        
+        # Concatenate and test concatenation
+        newcal = omni.concatenate_UVCal_on_pol(calnameList)
+        testpath0 = os.path.join(DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.firstcal.test0.fits')
+        if os.path.exists(testpath0): os.system('rm %s'%testpath0)
+        newcal.write_calfits(testpath0)
+        
+        nt.assert_equal(newcal.Njones,2)
+        nt.assert_equal(sorted(newcal.jones_array), [-6,-5])
+        nt.assert_equal(newcal.flag_array.shape[-1], 2)
+        nt.assert_equal(newcal.delay_array.shape[-1], 2)
+        nt.assert_equal(newcal.quality_array.shape[-1], 2)
+        
+        cal1.gain_convention = 'multiply'
+        testpath1 = os.path.join(DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.firstcal.test1.fits')
+        if os.path.exists(testpath1): os.system('rm %s'%testpath1)
+        cal1.write_calfits(testpath1)
+        
+        try:
+            failcal = omni.concatenate_UVCal_on_pol([calname0,calname0])
+            assert False, 'should not have gotten here'
+        except ValueError:
+            pass
+        try:
+            failcal = omni.concatenate_UVCal_on_pol([calname0,testpath0])
+            assert False, 'should not have gotten here'
+        except ValueError:
+            pass
+        try:
+            failcal = omni.concatenate_UVCal_on_pol([calname0,testpath1])
+            assert False, 'should not have gotten here'
+        except ValueError:
+            pass
+        
+        
 class Test_Antpol(object):
     def setUp(self):
         self.pols = ['x', 'y']
@@ -318,8 +431,8 @@ class Test_HERACal(UVCal):
     def test_gainHC(self):
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
         meta['inttime'] = np.diff(meta['times'])[0]*60*60*24
-        optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
-        hc = omni.HERACal(meta, gains, ex_ants=[81], optional=optional)  # the fits file was run with ex_ants=[81] and we need to include it here for the test.
+        optional = {'observer': 'heracal'}
+        hc = omni.HERACal(meta, gains, optional=optional)  # the fits file was run with ex_ants=[81] and we need to include it here for the test.
         uv = UVCal()
         uv.read_calfits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
         for param in hc:

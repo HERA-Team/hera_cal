@@ -2,14 +2,14 @@ import numpy as np
 import omnical
 from copy import deepcopy
 import numpy.linalg as la
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, uvtel
 from heracal.firstcal import FirstCalRedundantInfo
 import warnings, os
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
 
-POL_TYPES = 'xylrab'
+POL_TYPES = 'xylrabne'
 # XXX this can't support restarts or changing # pols between runs
 POLNUM = {}  # factor to multiply ant index for internal ordering
 NUMPOL = {}
@@ -205,7 +205,7 @@ def compute_reds(nant, pols, *args, **kwargs):
         Compute the redundancies given antenna_positions and wrap into Antpol format.
         Args:
             nant: number of antennas
-            pols: number of polarizations
+            pols: polarization labels, e.g. pols=['x']
             *args: args to be passed to omnical.arrayinfo.compute_reds, spcifically
                    antpos: array of antenna positions in order of subsetant.
 
@@ -219,8 +219,39 @@ def compute_reds(nant, pols, *args, **kwargs):
             reds += [[(Antpol(i, pi, nant), Antpol(j, pj, nant)) for i, j in gp] for gp in _reds]
     return reds
 
+def reds_for_minimal_V(reds):
+    '''
+    Manipulate redundancy array to combine crosspols
+    into a single redundancy array - imposing that
+    Stokes V = 0.
 
-def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
+    This works in the simple way that it does because
+    of the way the reds arrays are constructed in
+    aa_to_info when 4 polarizations are present: it
+    reprsents them as 4 co-located arrays in (NS,EW) and
+    displaced in z, with the cross-combinations (e.g. 
+    polarization xy and yx) _always_ in the middle.
+    
+    Args:
+        reds: list of list of redundant baselines as antenna tuples
+        
+    Return:
+        _reds: the adjusted array of redundant baseline sets.
+    '''
+    _reds = []
+    n = len(reds)
+    if n%4 != 0:
+        raise ValueError('Expected number of redundant baseline types to be a multiple of 4')
+    _reds += reds[:n/4]
+    xpols = reds[n/4:3*n/4]
+    _xpols = []
+    for i in range(n/4):
+        _xpols.append(xpols[i] + xpols[i+n/4])
+    _reds+=_xpols
+    _reds+=reds[3*n/4:]
+    return _reds
+
+def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     '''
         Generate set of redundancies given an antenna array with idealized antenna positions.
         Args:
@@ -230,6 +261,7 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
         Kwargs:
             pols: list of antenna polarizations to include. default is ['x'].
             fcal: toggle for using FirstCalRedundantInfo.
+            minV: toggle pseudo-Stokes V minimization.
 
         Return:
             info: omnical info object. e.g. RedundantInfo or FirstCalRedundantInfo
@@ -240,20 +272,21 @@ def aa_to_info(aa, pols=['x'], fcal=False, **kwargs):
         antpos_ideal = aa.antpos_ideal
         xs, ys, zs = antpos_ideal.T
         layout = np.arange(len(xs))
-        # antpos = np.concatenat([antpos_ideal for i in len(pols)])
     except(AttributeError):
         layout = aa.ant_layout
         xs, ys = np.indices(layout.shape)
     antpos = -np.ones((nant * len(pols), 3))  # remake antpos with pol information. -1 to flag
     for ant, x, y in zip(layout.flatten(), xs.flatten(), ys.flatten()):
         for z, pol in enumerate(pols):
-            z = 2**z
+            z = 2**z # exponential ensures diff xpols aren't redundant w/ each other
             i = Antpol(ant, pol, len(aa))
             antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
     reds = compute_reds(nant, pols, antpos[:nant], tol=.1)
     ex_ants = [Antpol(i, nant).ant() for i in range(antpos.shape[0]) if antpos[i, 0] == -1]
     kwargs['ex_ants'] = kwargs.get('ex_ants', []) + ex_ants
     reds = filter_reds(reds, **kwargs)
+    if minV:
+        reds = reds_for_minimal_V(reds)
     if fcal:
         info = FirstCalRedundantInfo(nant)
     else:
@@ -483,6 +516,13 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
             else: raise ValueError("All gain conventions for calibration solutions is not the same across files.")
         else: meta['gain_conventions'] = cal.gain_convention
 
+        # checks to see if all files have the same gain conventions
+        if meta.has_key('inttime'):
+            if cal.integration_time == meta['inttime']: pass
+            else: raise ValueError("All integration times for calibration solutions is not the same across files.")
+        else: meta['inttime'] = cal.integration_time
+
+
         # checks to see if all files have the same frequencies
         if meta.has_key('freqs'):
             if np.all(cal.freq_array.flatten() == meta['freqs']): pass
@@ -503,7 +543,9 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
         for f1, f2 in zip(visfile, xtalkfile):
             if os.path.exists(f1) and os.path.exists(f2):
                 vis.read_uvfits(f1)
+                vis.unphase_to_drift()  # need to do this since all uvfits files are phased! PAPER/HERA miriad files are drift.
                 xtalk.read_uvfits(f2)
+                xtalk.unphase_to_drift()  # need to do this since all uvfits files are phased! PAPER/HERA miriad files are drift.
                 if not ants is None:
                     vis.select(antenna_nums=ants)
                     xtalk.select(antenna_nums=ants)
@@ -515,22 +557,170 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                     if pol not in v.keys(): v[pol] = {}
                     for bl, k in zip(*np.unique(vis.baseline_array, return_index=True)):
                         # note we reverse baseline here b/c of conventions
-                        if not vis.baseline_to_antnums(bl)[::-1] in v[pol].keys():
-                            v[pol][vis.baseline_to_antnums(bl)[::-1]] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
+                        if not vis.baseline_to_antnums(bl) in v[pol].keys():
+                            v[pol][vis.baseline_to_antnums(bl)] = vis.data_array[k:k + vis.Ntimes, 0, :, p]
                         else:
-                            v[pol][vis.baseline_to_antnums(bl)[::-1]] = np.concatenate([v[pol][vis.baseline_to_antnums(bl)[::-1]], vis.data_array[k:k + vis.Ntimes, 0, :, p]])
+                            v[pol][vis.baseline_to_antnums(bl)] = np.concatenate([v[pol][vis.baseline_to_antnums(bl)], vis.data_array[k:k + vis.Ntimes, 0, :, p]])
 
                 DATA_SHAPE = (vis.Ntimes, vis.Nfreqs)
                 for p, pol in enumerate(xtalk.polarization_array):
                     pol = poldict[pol]
                     if pol not in x.keys(): x[pol] = {}
                     for bl, k in zip(*np.unique(xtalk.baseline_array, return_index=True)):
-                        if not xtalk.baseline_to_antnums(bl)[::-1] in x[pol].keys():
-                            x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
+                        if not xtalk.baseline_to_antnums(bl) in x[pol].keys():
+                            x[pol][xtalk.baseline_to_antnums(bl)] = np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)
                         else:
-                            x[pol][xtalk.baseline_to_antnums(bl)[::-1]] = np.concatenate([x[pol][xtalk.baseline_to_antnums(bl)[::-1]], np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)])
+                            x[pol][xtalk.baseline_to_antnums(bl)] = np.concatenate([x[pol][xtalk.baseline_to_antnums(bl)], np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)])
+        # use vis to get lst array
+        if not 'lsts' in meta.keys():
+            meta['lsts'] = vis.lst_array[:vis.Ntimes]
+        else:
+            meta['lsts'] = np.concatenate([meta['lsts'], vis.lst_array[:vis.Ntimes]])
                             
     return meta, gains, v, x
+
+def make_uvdata_vis(aa, m, v, xtalk=False):
+    '''
+    Given meta information and visibilities (from omnical), write out a uvfits file.
+    aa      : aipy antenna array object (object)
+    m       : dictionary of information (dict)
+    v       : dictionary of visibilities with keys antenna pair and pol (dict)
+    xtalk   : visibilities given are xtalk visibilities. (bool)
+    '''
+
+    pols = v.keys()
+    antnums = np.array(v[pols[0]].keys()).T
+
+    uv = UVData()
+    bls = sorted(map(uv.antnums_to_baseline, antnums[0], antnums[1])) # XXX sort the baselines
+    if xtalk:
+        uv.Ntimes = 1
+    else:
+        uv.Ntimes = len(m['times'])
+    uv.Npols = len(pols)
+    uv.Nbls = len(v[pols[0]].keys())
+    uv.Nblts = uv.Nbls * uv.Ntimes
+    uv.Nfreqs = len(m['freqs'])
+    data = {}
+    for p in pols:
+        if p not in data.keys():
+            data[p] = []
+        for bl in bls:  # crucial to loop over bls here and not v[p].keys()
+            data[p].append(v[p][uv.baseline_to_antnums(bl)])
+        data[p] = np.array(data[p]).reshape(uv.Nblts, uv.Nfreqs)
+
+    uv.data_array = np.expand_dims(np.array([data[p] for p in pols]).T.swapaxes(0, 1), axis=1)
+    uv.vis_units = 'uncalib'
+    uv.nsample_array = np.ones_like(uv.data_array, dtype=np.float)
+    uv.flag_array = np.zeros_like(uv.data_array, dtype=np.bool)
+    uv.Nspws = 1  # this is always 1 for paper and hera(currently)
+    uv.spw_array = np.array([uv.Nspws])
+    blts = np.array([bl for bl in bls for i in range(uv.Ntimes)])
+    if xtalk:
+        uv.time_array = np.array(list(m['times'][:1]) * uv.Nbls)
+        uv.lst_array = np.array(list(m['lsts'][:1]) * uv.Nbls)
+    else:
+        uv.time_array = np.array(list(m['times']) * uv.Nbls)
+        uv.lst_array = np.array(list(m['lsts']) * uv.Nbls)
+
+    # generate uvw
+    uvw = []
+    for t in range(uv.Ntimes):
+        for bl in bls:
+            uvw.append(aa.gen_uvw(*uv.baseline_to_antnums(bl), src='z').reshape(3, -1))
+    uv.uvw_array = np.array(uvw).reshape(-1, 3)
+
+    uv.ant_1_array = uv.baseline_to_antnums(blts)[0]
+    uv.ant_2_array = uv.baseline_to_antnums(blts)[1]
+    uv.baseline_array = uv.antnums_to_baseline(uv.ant_1_array,
+                                               uv.ant_2_array)
+
+    uv.freq_array = m['freqs'].reshape(1, -1)
+    poldict = {'xx': -5, 'yy': -6, 'xy': -7, 'yx': -8}
+    uv.polarization_array = np.array([poldict[p] for p in pols])
+    if xtalk:
+        # xtalk integration time is averaged over the whole file
+        uv.integration_time = m['inttime'] * len(m['times'])
+    else:
+        uv.integration_time = m['inttime']
+    uv.channel_width = np.float(np.diff(uv.freq_array[0])[0])
+
+    # observation parameters
+    uv.object_name = 'zenith'
+    uv.telescope_name = 'HERA'
+    uv.instrument = 'HERA'
+    tobj = uvtel.get_telescope(uv.telescope_name)
+    uv.telescope_location = tobj.telescope_location
+    uv.history = m['history']
+
+    # phasing information
+    uv.phase_type = 'drift'
+    uv.zenith_ra = uv.lst_array
+    uv.zenith_dec = np.array([aa.lat] * uv.Nblts)
+
+    # antenna information
+    uv.Nants_telescope = len(aa)
+    uv.antenna_numbers = np.arange(uv.Nants_telescope, dtype=int)
+    uv.Nants_data = len(np.unique(np.concatenate([uv.ant_1_array, uv.ant_2_array]).flatten()))
+    uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
+    antpos = []
+    for k in aa:
+        antpos.append(k.pos)
+
+    uv.antenna_positions = np.array(antpos)
+
+    return uv
+
+# XXX Eventually this may belong in pyuvdata
+def concatenate_UVCal_on_pol(calfitsList):
+    '''
+    Joins UVCal files of different polarizations along 
+    the polarization axis of the delay_array, flag_array,
+    gain_array, and quality_array.
+    
+    Args:
+        calfitsList: list of calfits filenames
+            type: list of strings
+    
+    Returns:
+        a single cal file, with relevant arrays
+        concatenated along the polarization axis
+            type: pyuvdata.UVCal()
+    '''
+    # XXX these could be more flexible if we wanted to have it as optional
+    constProperties = ['antenna_names', 'antenna_numbers', 'cal_type', 'channel_width',  'freq_range', 'gain_convention', 'integration_time', 'Nants_data', 'Nants_telescope', 'Nfreqs', 'Njones', 'Nspws', 'Ntimes',  'time_range', 'x_orientation']
+    constPropertiesArrays = ['ant_array', 'freq_array', 'time_array']
+    
+    # check that constProperties match between files
+    calname0 = calfitsList[0]
+    cal0 = UVCal()
+    cal0.read_calfits(calname0)
+    
+    if not cal0.Njones == 1:
+            raise ValueError('Njones!=1; cannot concantenate > 1 polarization at a time')
+    for calname1 in calfitsList[1:]:
+        cal1 = UVCal()
+        cal1.read_calfits(calname1)
+        for prp in constProperties:
+            if not getattr(cal0,prp)==getattr(cal1,prp):
+                raise ValueError('%s of %s does not match %s'%(prp, calname0, calname1))
+        for prp in constPropertiesArrays:
+            if not (getattr(cal0,prp)==getattr(cal1,prp)).all():
+                raise ValueError('%s of %s does not match %s'%(prp, calname0, calname1))
+        if not cal1.Njones == 1:
+            raise ValueError('Njones!=1; cannot concantenate > 1 polarization at a time')
+        if cal1.jones_array[0] in cal0.jones_array:
+            raise ValueError('Cannot concatenate calfits files of identical polarization')
+        
+        cal0.Njones += 1
+        cal0.jones_array = np.concatenate((cal0.jones_array,cal1.jones_array))
+        if not cal0.delay_array is None:
+            cal0.delay_array = np.concatenate((cal0.delay_array, cal1.delay_array),axis=3)
+        if not cal0.gain_array is None:
+            cal0.gain_array = np.concatenate((cal0.gain_array, cal1.gain_array), axis=4)
+        cal0.flag_array = np.concatenate((cal0.flag_array, cal1.flag_array), axis=4)
+        cal0.quality_array = np.concatenate((cal0.quality_array, cal1.quality_array), axis=3)
+    return cal0
 
 
 class HERACal(UVCal):
