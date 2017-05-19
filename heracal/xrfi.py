@@ -3,6 +3,7 @@ import numpy as np
 from scipy.signal import medfilt
 
 def medmin(d):
+    """ return the med-min of array"""
     #return np.median(np.min(chisq,axis=0))
     mn = np.min(d,axis=0)
     return 2*np.median(mn) - np.min(mn)
@@ -68,6 +69,7 @@ def watershed_flag(d, f=None, sig_init=6, sig_adj=2):
     return f1.mask
     
 def toss_times_freqs(mask, sig_t=6, sig_f=6):
+    """XXX what does this function do? Needs test."""
     f1ch = np.average(f1.mask, axis=0); f1ch.shape = (1,-1)
     #The cut off value is a made up number here...sig = 'sig' if none flagged.
     f1.mask = np.logical_or(f1.mask, np.where(f1 > sig_init*(1-f1ch), 1, 0))
@@ -83,18 +85,34 @@ def toss_times_freqs(mask, sig_t=6, sig_f=6):
     return mask
 
 def xrfi_simple(d, f=None, nsig_df=6, nsig_dt=6, nsig_all=0):
+    '''
+        Simple RFI flagging technique that uses derivatives in time 
+        and frequency to determine RFI.
+        
+        Args:
+            d: data array, shape=(Ntimes, Nfreqs).
+        Kwargs:
+            f: input flags, defaults to zeros
+            nsig_df: float, number of sigma above median to flag in frequency direction
+            nsig_dt: float, number of sigma above median to flag in time direction
+            nsig_all: float, overall flag above some sigma. Skip of 0
+
+        Return:
+            f: array of boolean flags
+             
+    '''
     if f is None: f = np.zeros(d.shape, dtype=np.bool)
     if nsig_df > 0:
         d_df = d[:,1:-1] - .5 * (d[:,:-2] + d[:,2:])
         d_df2 = np.abs(d_df)**2
-        sig2 = np.median(d_df2, axis=1) # XXX 1 or 0 here?
+        sig2 = np.median(d_df2, axis=1)
         sig2.shape = (-1,1)
         f[:,0] = 1; f[:,-1] = 1
         f[:,1:-1] = np.where(d_df2 / sig2 > nsig_df**2, 1, f[:,1:-1])
     if nsig_dt > 0:
         d_dt = d[1:-1,:] - .5 * (d[:-2,:] + d[2:,:])
         d_dt2 = np.abs(d_dt)**2
-        sig2 = np.median(d_dt2, axis=0) # XXX 0 or 1 here?
+        sig2 = np.median(d_dt2, axis=0)
         sig2.shape = (1,-1)
         f[0,:] = 1; f[-1,:] = 1
         f[1:-1,:] = np.where(d_dt2 / sig2 > nsig_dt**2, 1, f[1:-1,:])
@@ -127,6 +145,16 @@ def detrend_deriv(d, dt=True, df=True):
     return d_dt / sig
 
 def detrend_medminfilt(d, K=8):
+    """
+        Detrend array using medminfilt statistic. See medminfilt.
+        Args:
+            d: data array
+        Kwargs: 
+            K: box size to apply medminfilt over
+
+        return:
+            f: boolean array of flags
+    """
     d_sm = medminfilt(np.abs(d), 2*K+1)
     d_rs = d - d_sm
     d_sq = np.abs(d_rs)**2
@@ -135,6 +163,17 @@ def detrend_medminfilt(d, K=8):
     return f
 
 def detrend_medfilt(d, K=8):
+    """
+        Detrend array using a median filter.
+        Args:
+            d: data array
+        Kwargs: 
+            K: box size to apply medminfilt over
+
+        return:
+            f: boolean array of flags
+
+    """
     d = np.concatenate([d[K-1::-1],d,d[:-K-1:-1]], axis=0)
     d = np.concatenate([d[:,K-1::-1],d,d[:,:-K-1:-1]], axis=1)
     d_sm = medfilt(d, 2*K+1)
@@ -145,6 +184,18 @@ def detrend_medfilt(d, K=8):
     return f[K:-K,K:-K]
 
 def xrfi(d, f=None, K=8, sig_init=6, sig_adj=2):
+    """ 
+        Run best rfi exciion we have. Uses detrending and watershed algorithms above.
+        Args: 
+            d: data array, shape = (Ntimes, Nchans) 
+        Kwargs:
+            f: input flag array, shape = d.shape 
+            K=8: Box size for detrend
+            sig_init: initial sigma to flag.
+            sig_adj: number of sigma to flag adjacent to flagged data (sig_init) 
+        Return:
+            f: array of flags
+    """
     nsig = detrend_medfilt(d, K=K)
     f = watershed_flag(np.abs(nsig), f=f, sig_init=sig_init, sig_adj=sig_adj)
     return f

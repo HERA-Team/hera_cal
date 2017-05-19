@@ -475,7 +475,7 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                 pol = poldict[p][0]
                 if pol not in gains.keys(): gains[pol] = {}
                 # antenna loop
-                for i, ant in enumerate(cal.antenna_numbers):
+                for i, ant in enumerate(cal.ant_array):
                     # if the cal_type is gain, create or concatenate gain_array
                     if cal.cal_type == 'gain':
                         if ant not in gains[pol].keys():
@@ -745,27 +745,20 @@ class HERACal(UVCal):
         super(HERACal, self).__init__()
 
         # helpful dictionaries for antenna polarization of gains
-        str2pol = {'x': -5, 'y': -4}
-        pol2str = {-5: 'x', -4: 'y'}
+        str2pol = {'x': -5, 'y': -6}
+        pol2str = {-5: 'x', -6: 'y'}
 
         chisqdict = {}
         datadict = {}
         flagdict = {}
-        ants = []
-        # generate data (gain) and flag dictionaries.
-        for pol in gains:
-            for ant in np.sort(gains[pol].keys()):
-                datadict['%d%s' % (ant, pol)] = gains[pol][ant]
-                if flags:
-                    flagdict['%d%s' % (ant, pol)] = flags[pol][ant]
-                if ant not in ants:
-                    ants.append(ant)
 
-        # drop antennas that are not solved for.
-        allants = ants + ex_ants  # total number of antennas
+        # drop antennas that are not solved for. Since we are feeding in omnical/firstcal solutions into this,
+        # if we provided an ex_ants those antennas will not have a key in gains. Need to provide ex_ants list 
+        # to HERACal object.
+        ants = list(set([ant for pol in gains.keys() for ant in gains[pol].keys()]))  # create set to get unique antennas from both pol
+        allants = np.sort(ants + ex_ants)  # total number of antennas
         ants = np.sort(ants)
-        allants = np.sort(allants)
-        antnames = ['ant' + str(ant) for ant in ants]
+        antnames = ['ant' + str(ant) for ant in allants]  # antenna names for all antennas
         time = meta['times']
         freq = meta['freqs']  # this is in Hz (should be anyways)
         pols = [str2pol[p] for p in gains.keys()]  # all of the polarizations
@@ -774,48 +767,26 @@ class HERACal(UVCal):
         npol = len(pols)
         ntimes = time.shape[0]
         nfreqs = freq.shape[0]
-        nants = len(ants)
 
-        datarray = []
-        flgarray = []
-        for ii in range(npol):
-            dd = []
-            fl = []
-            for ant in ants:
-                try:
-                    dd.append(datadict[str(ant) + pol2str[pols[ii]]])
-                    if flags:
-                        fl.append(flagdict[str(ant) + pol2str[pols[ii]]])
-                    else:
-                        fl.append(np.zeros_like(dd[-1], dtype=bool))
-                # if antenna not in data dict (aka, a bad antenna)
-                except(KeyError):
-                    print "Can't find antenna {0}".format(ant)
-            datarray.append(dd)
-            flgarray.append(fl)
+        datarray = np.array([ [ gains[pol2str[pol]][ant] for ant in ants ] for pol in pols ]).swapaxes(0,3).swapaxes(0,1)
+        if flags:
+            flgarray  = np.array([ [ flags[pol2str[pol]][ant] for ant in ants] for pol in pols ]).swapaxes(0,3).swapaxes(0,1)
+        else:
+            flgarray = np.zeros(datarray.shape, dtype=bool)  #dont need to swap since datarray alread same shape
+        # do the same for the chisquare, which is the same shape as the data
+        try:
+            chisqarray = np.array([ [meta['chisq'+str(ant)+pol2str[pol]] for ant in ants] for pol in pols ]).swapaxes(0,3).swapaxes(0,1)
+        except:
+            chisqarray = np.ones(datarray.shape, dtype=bool)
 
-        datarray = np.array(datarray)
-        datarray = datarray.swapaxes(0, 3).swapaxes(0, 1)
 
-        flgarray = np.array(flgarray)
-        flgarray = flgarray.swapaxes(0, 3).swapaxes(0, 1)
 
         tarray = time
         parray = np.array(pols)
         farray = np.array(freq)
-        numarray = list(map(int, ants))
+        antarray = list(map(int, ants))
+        numarray = list(map(int, allants))
         namarray = antnames
-
-        chisqarray = []
-        for ii in range(npol):
-            ch = []
-            for ant in ants:
-                try:
-                    ch.append(meta['chisq'+str(ant)+pol2str[pols[ii]]])
-                except:
-                    ch.append(np.ones_like(dd[-1]))  # array of ones
-            chisqarray.append(ch)
-        chisqarray = np.array(chisqarray).swapaxes(0, 3).swapaxes(0, 1)
 
         # set the optional attributes to UVCal class.
         for key in optional:
@@ -829,10 +800,10 @@ class HERACal(UVCal):
         except KeyError:
             self.history = appendhist
         self.Nants_data = len(ants)  # only ants with data
-        self.antenna_names = namarray[:self.Nants_data]
-        self.antenna_numbers = numarray[:self.Nants_data]
-        self.ant_array = np.array(numarray[:self.Nants_data])
-        self.Nants_telescope = nants  # total number of antennas
+        self.Nants_telescope = len(allants)  # all antennas in telescope
+        self.antenna_names = namarray[:self.Nants_telescope]
+        self.antenna_numbers = numarray[:self.Nants_telescope]
+        self.ant_array = np.array(antarray[:self.Nants_data])
         self.Nspws = 1  # This is by default 1. No support for > 1 in pyuvdata.
 
         self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
