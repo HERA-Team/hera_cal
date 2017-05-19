@@ -18,6 +18,9 @@ Contents:
    :maxdepth: 1
     
    omni
+   firstcal
+   metrics
+   xrfi
 
 
 
