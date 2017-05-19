@@ -32,6 +32,7 @@ First install dependencies.
 * aipy
 * pyuvdata
 * omnical >= 5.0.2
+* matplotlib
 
 ## Install heracal
 Install with ```python setup.py install```

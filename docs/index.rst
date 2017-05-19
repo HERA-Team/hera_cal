@@ -38,6 +38,7 @@ First Install all dependencies.
 -  aipy
 -  pyuvdata >= 1.1
 -  omnical >= 5.0.2
+-  matplotlib
 
 Install heracal
 ---------------
@@ -45,7 +46,6 @@ To get the latest version of heracal, clone the repository with
 ``git clone https://github.com/HERA-Team/heracal.git``
 
 Navigate to into the heracal directory and run ``python setup.py install``.
-Note that this will automatically install dependencies.
 
 To install without dependencies, run
 ``python setup.py install --no-dependencies``

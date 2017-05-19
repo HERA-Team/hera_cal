@@ -9,16 +9,15 @@ import scipy.sparse as sps
 
 
 def fit_line(phs, fqs, valid):
-    '''
-        Fit a line to data points (phs) at some given values (fqs).
+    '''Fit a line to data points (phs) at some given values (fqs).
 
-        Args:
-            phs : array of data points to fit.
-            fqs : array of x-values corresponding to data points. Same shape as phs.
-            valid : Boolean array indicating at which x-values to fit line.
+    Args:
+        phs : array of data points to fit.
+        fqs : array of x-values corresponding to data points. Same shape as phs.
+        valid : Boolean array indicating at which x-values to fit line.
 
-        Returns:
-            dt: slope of line
+    Returns:
+        dt: slope of line
     '''
     fqs = fqs.compress(valid)
     dly = phs.compress(valid)
@@ -30,25 +29,18 @@ def fit_line(phs, fqs, valid):
 
 def redundant_bl_cal_simple(d1, w1, d2, w2, fqs, window='none', finetune=True, verbose=False, average=False):
     '''Gets the phase differnce between two baselines by using the fourier transform and a linear fit to that residual slop.
-        Args:
-            d1,d2 : NXM numpy arrays.
-                Data arrays to find phase difference between. First axis is time, second axis is frequency.
-            w1,w2 : NXM numpy arrays.
-                corrsponding data weight arrays.
-            fqs   : 1XM numpy array
-                Array of frequencies in GHz.
-            window: str
-                Name of window function to use in fourier transform. Default is 'none'.
-            finetune  : boolean
-                Flag if you want to fine tune the phase fit with a linear fit. Default is true.
-            verbose: boolean
-                Be verobse. Default is False.
-            average: boolean
-                Average the data in time before applying analysis. collapses NXM -> 1XM.
 
-        Returns
-            delays : ndarrays
-                Array of delays (if average == False), or single delay.
+    Args:
+        d1,d2 (arrays): Data arrays to find phase difference between. First axis is time, second axis is frequency.
+        w1,w2 (arrays): corrsponding data weight arrays.
+        fqs (array): Array of frequencies in GHz.
+        window (str, optional): Name of window function to use in fourier transform. Default is 'none'.
+        finetune (bool, optional): Flag if you want to fine tune the phase fit with a linear fit. Default is true.
+        verbose (bool, optional): Be verobse. Default is False.
+        average (bool, optional): Average the data in time before applying analysis. collapses NXM -> 1XM.
+
+    Returns
+        delays (array): Array of delays (if average == False), or single delay.
 
 '''
     d12 = d2 * np.conj(d1)  # note that this is d2/d1, not d1/d2 which leads to a reverse conjugation.
@@ -127,14 +119,27 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
     '''
         FirstCalRedundantInfo class that interfaces to the FirstCal class
         for running firstcal. It subclasses the info.RedundantInfo class in omnical.
-
         The extra meta data added to the RedundantInfo object from omnical are:
+    
+    Attributes:
         self.nant : number of antennas
         self.A:  coefficient matrix for firstcal delay calibration. (Nmeasurements, Nants).
                  Measurements are ratios of redundant baselines.
+        self.reds: list of redundant baselines.
+        self.bl_pairs: list of redundant baseline pairs.
+        self.antloc: array of antenna positions in the order of self.subsetant 
+        self.ubl: list of unique baselines 
     '''
     def __init__(self, nant):
-        '''Initialize with number of antennas'''
+        '''Initialize with number of antennas.
+        
+        Args:
+            nant (int): number of antennas.
+        
+        Attributes:
+            nant (int): number of antennas 
+            
+        '''
         omnical.info.RedundantInfo.__init__(self)
         self.nant = nant
 
@@ -149,7 +154,15 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
                         for bl in self.bl_order()]).transpose((1, 2, 0))
 
     def bl_index(self, bl):
-        '''Gets the baseline index from bl_order for a given baseline. Input is antenna tuple.'''
+        '''Gets the baseline index from bl_order for a given baseline.
+        
+        Args:
+            bl (tuple): antenna pair tuple.
+        
+        Return:
+            int: index of baseline in internal ordering.
+            
+        '''
         try: return self._bl2ind[bl]
         except(AttributeError):
             self._bl2ind = {}
@@ -157,8 +170,14 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
             return self._bl2ind[bl]
 
     def blpair_index(self, blpair):
-        '''For a given pair of baselines (tuple of tuples of antenna pairs),
-           returns the index of the pair as references in the A matrix.'''
+        '''Gets the index of baseline pairs in A matrix
+
+        Args:
+            blpair (tuple): tuple of antenna pair tuples.
+
+        Return:
+            int: index of baseline pair in internal ordering of A matrix.
+        '''
         try: return self._blpair2ind[blpair]
         except:
             self._blpair2ind = {}
@@ -166,8 +185,15 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
             return self._blpair2ind[blpair]
 
     def blpair2antind(self, blpair):
-        '''For a given pair of baselines (tuple of tuples),
-           return the individual antenna indexes as referenced in the A matrix.'''
+        '''Get indexes of antennas in blpair in internal ordering.
+        
+        Args:
+            blpair (tuple): tuple of antenna pair tuples.
+        
+        Return:
+            tuple: tuple (4) of antenna indices in internal ordering.
+        '''
+          
         try: return self._blpair2antind[blpair]
         except:
             self._blpair2antind = {}
@@ -182,6 +208,10 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
             when calibrating visibilities listed as j,i data will have to be conjugated (use order_data).
             After initializing, the coefficient matrix for deducing delay solutions per antennas (for firstcal)
             is created by modeling it as per antenna delays.
+
+        Args:
+            reds (list): list of lists of antenna pairs.
+            antpos (array): array of antenna positions in internal antenna order (self.subsetant).
         '''
         self.reds = [[(int(i), int(j)) for i, j in gp] for gp in reds]
         self.init_same(self.reds)
@@ -204,16 +234,38 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
         self.ubl = np.array([np.mean([antpos[j] - antpos[i] for i, j in ublgp], axis=0) for ublgp in reds], dtype=np.float32)
 
     def get_reds(self):
-        '''After initialization, return redundancies.'''
+        '''Returns redundancies.
+
+        Return:
+            list: list if list of redundant baselines.
+        '''
         try: return self.reds
         except(AttributeError):
             print 'Initialize info class!'
 
 
 class FirstCal(object):
-    '''FirstCal class that is used to run firstcal.'''
+    '''FirstCal class that is used to run firstcal.
+
+    Attributes:
+        data: dictionary of visibilities
+        fqs: frequency array
+        info: FirstCalRedundantInfo object
+        wgts: dictionary of wgts. see data.
+    '''
     def __init__(self, data, wgts, fqs, info):
-        '''initialize Firstcal object with data, wgts (inverse of flags), frequency array and an info object'''
+        '''Initialization of FirstCal object.
+
+        Args:
+            data (dict): dictionary of visibilities with keys being antenna pair tuples.
+                Values should be 2D arrays with first axis corresponding to time 
+                and second corresponding to frequencies.
+            wgts (dict): dictionary of weights with keys being antenna pair tuples.
+                see data for format.
+            fqs (array): array of frequencies corresponding to visibilities.
+            info: FirstCalRedundantInfo object. This describes the redundancies 
+                and has the proper least square matrices.
+        '''
         self.data = data
         self.fqs = fqs
         self.info = info
@@ -222,7 +274,7 @@ class FirstCal(object):
     def data_to_delays(self, **kwargs):
         '''
             Returns:
-                dict: baseline pair : solved delays
+                dict: dictionary with keys baseline pair and values solved delays.
         '''
         verbose = kwargs.get('verbose', False)
         blpair2delay = {}
@@ -242,11 +294,20 @@ class FirstCal(object):
         return blpair2delay
 
     def get_N(self, nblpairs):
-        ''' Returns noise matrix. Currently identity matrix'''
+        ''' Returns noise matrix.
+            
+        Currently this is set to the identity.    
+            
+        Returns:
+            sparse array: identity matrix
+        '''
         return sps.eye(nblpairs)
 
     def get_M(self, **kwargs):
-        '''Returns the measurement matrix.'''
+        '''Returns the measurement matrix.
+        
+        Returns:
+            array: vector of measured delays.'''
         blpair2delay = self.data_to_delays(**kwargs)
         sz = len(blpair2delay[blpair2delay.keys()[0]])
         M = np.zeros((len(self.info.bl_pairs), sz))
@@ -255,10 +316,16 @@ class FirstCal(object):
         return M
 
     def run(self, **kwargs):
-        '''
-            Runs firstcal after the class initialized.
-                returns:
-                    dict: antenna delay pair with delay in nanoseconds.
+        '''Runs firstcal after the class initialized.
+
+        Returns:
+            dict: antenna delay pair with delay in nanoseconds.
+
+        Attributes:
+            M: vector of measured delays.
+            _N: inverse of the noise matrix.
+            A: least squares coefficient matrix.
+            xhat: dictionary of solved for delays.
         '''
         verbose = kwargs.get('verbose', False)
         # make measurement matrix
