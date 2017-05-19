@@ -722,6 +722,45 @@ def concatenate_UVCal_on_pol(calfitsList):
         cal0.quality_array = np.concatenate((cal0.quality_array, cal1.quality_array), axis=3)
     return cal0
 
+def miriad_to_dict(uvdata_list):
+    """ Turn a list of miriad files in to a data and flag dictionary
+
+        Uses pyuvdata.UVData() to read miriad files as a dictionary with
+        pol as first key and blpair as second.
+
+        Args:
+            uvdata_list: list of miriad files to read.
+
+        Return:
+            data (dict): dictionary of data indexed by pol and antenna pairs
+            flags (dict): dictionary of flags indexed by pol and antenna pairs
+        """
+    # if it is a single string turn it into a list.
+    if type(uvdata_list)==str: uvdata_list = [uvdata_list]
+
+    d,f = {},{}
+    for filename in uvdata_list:
+        uv_in = UVData()
+        uv_in.read_miriad(filename)
+        # reshape data and flag arrays to make slicing time and baselines easy
+        data = uv_in.data_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
+        flags = uv_in.flag_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
+
+        for ip, pol in enumerate(uv_in.polarization_array):
+            pol = a.miriad.pol2str[pol]
+            if pol not in d:
+                d[pol] = {}
+                f[pol] = {}
+            for nbl, (i,j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
+                if (i,j) not in d[pol]:
+                    d[pol][(i,j)] = data[:, nbl, 0, :, ip]
+                    f[pol][(i,j)] = flags[:, nbl, 0, :, ip]
+                else:
+                    d[pol][(i,j)] = np.append(d[pol][(i,j)], data[:, nbl, 0, :, ip])
+                    f[pol][(i,j)] = np.append(f[pol][(i,j)], flags[:, nbl, 0, :, ip])
+        return d, f
+
+
 
 class HERACal(UVCal):
     '''
