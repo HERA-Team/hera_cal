@@ -16,7 +16,7 @@ setup_args = {
 #    'scripts': glob.glob('scripts/*'),
     'version': __version__,
     # 'package_data':
-    'install_requires': ['numpy>=1.10', 'scipy', 'pyuvdata', 'astropy>1.2', 'aipy']
+#    'install_requires': ['numpy>=1.10', 'scipy', 'pyuvdata', 'astropy>1.2', 'aipy']
 #    'dependency_links': ['https://github.com/zakiali/omnical/tarball/master#egg=omnical-dev',]
 }
 
