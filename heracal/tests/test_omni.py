@@ -280,6 +280,21 @@ class TestMethods(object):
             assert False, 'should not have gotten here'
         except ValueError:
             pass
+
+    def test_miriad_to_dict(self):
+        str2pol = {'xx':-5, 'yy': -6, 'xy':-7, 'yy':-8}
+        uvd =  UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA'))
+    
+        d,f = omni.miriad_to_dict(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA'))
+        for pol in d:
+            for i,j in d[pol]:
+                uvpol = list(uvd.polarization_array).index(str2pol[pol])
+                uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
+                np.testing.assert_equal(d[pol][i,j], uvd.data_array[uvmask][:,0,:,uvpol])
+                np.testing.assert_equal(f[pol][i,j], uvd.flag_array[uvmask][:,0,:,uvpol])
+        
+        
         
         
 class Test_Antpol(object):
