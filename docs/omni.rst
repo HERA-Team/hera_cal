@@ -5,3 +5,4 @@ The Omni module is a set of classes and functions used to interface with the omn
 
 .. automodule:: heracal.omni
   :members:
+  :private-members:
