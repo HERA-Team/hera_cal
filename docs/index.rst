@@ -12,7 +12,52 @@ heracal
 .. image:: https://coveralls.io/repos/github/HERA-Team/heracal/badge.svg?branch=master
            :target: https://coveralls.io/github/HERA-Team/heracal?branch=master
 
-Contents:
+heracal is a package that contains modules and scripts that are required to run
+redundant calibration on the hydrogen epoch of reionization array (HERA) as part
+of the real time calibration system.
+
+
+Package Details
+===============
+heracal aims to have a well supported and tested scripts to run calibration analysis.
+All new functions, classes, modules, and scripts shall be well tested. Test coverage 
+should be > 95%. 
+
+Installation
+============
+
+Dependencies
+------------
+
+First Install all dependencies.
+
+-  numpy >= 1.10
+-  scipy
+-  astropy >=1.2
+-  pyephem
+-  aipy
+-  pyuvdata >= 1.1
+-  omnical >= 5.0.2
+
+Install heracal
+---------------
+To get the latest version of heracal, clone the repository with 
+``git clone https://github.com/HERA-Team/heracal.git``
+
+Navigate to into the heracal directory and run ``python setup.py install``.
+Note that this will automatically install dependencies.
+
+To install without dependencies, run
+``python setup.py install --no-dependencies``
+
+Tests
+-----
+Requires installation of ``nose`` package. From the source heracal 
+directory run ``nosetests heracal``.
+
+
+Further Documentation
+=====================
 
 .. toctree::
    :maxdepth: 1
