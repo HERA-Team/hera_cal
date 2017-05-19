@@ -27,7 +27,7 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
             return MagicMock()
 
-MOCK_MODULES = ['omnical', 'numpy', 'ephem', 'aipy', 'scipy', 'pyuvdata', 'astropy', 'numpy.linalg', 'pylab', 'scipy.sparse']
+MOCK_MODULES = ['omnical', 'numpy', 'ephem', 'aipy', 'scipy', 'pyuvdata', 'astropy', 'numpy.linalg', 'pylab', 'scipy.sparse', 'aipy.miriad', 'scipy.signal']
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 # -- General configuration ------------------------------------------------
