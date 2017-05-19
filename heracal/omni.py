@@ -4,6 +4,7 @@ from copy import deepcopy
 import numpy.linalg as la
 from pyuvdata import UVCal, UVData, uvtel
 from heracal.firstcal import FirstCalRedundantInfo
+from aipy.miriad import pol2str
 import warnings, os
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -763,7 +764,7 @@ def miriad_to_dict(uvdata_list):
         flags = uv_in.flag_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
 
         for ip, pol in enumerate(uv_in.polarization_array):
-            pol = a.miriad.pol2str[pol]
+            pol = pol2str[pol]
             if pol not in d:
                 d[pol] = {}
                 f[pol] = {}
