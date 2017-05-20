@@ -3,12 +3,28 @@ import numpy as np
 from scipy.signal import medfilt
 
 def medmin(d):
-    """ return the med-min of array"""
+    """Calculate the median minus median statistic of array.
+
+    Args:
+        d (array): 2D data array
+
+    Returns:
+        (array): array with the statistic applied.
+    """
     #return np.median(np.min(chisq,axis=0))
     mn = np.min(d,axis=0)
     return 2*np.median(mn) - np.min(mn)
 
 def medminfilt(d, K=8):
+    """Filter an array on scales of K indexes with medmin.
+    
+    Args:
+        d (array): 2D data array.
+        K (int, optional): integer representing box size to apply statistic.
+    
+    Returns:
+        array: filtered array. Same shape as input array.
+    """
     d_sm = np.empty_like(d)
     for i in xrange(d.shape[0]):
         for j in xrange(d.shape[1]):
@@ -48,8 +64,22 @@ def medminfilt(d, K=8):
 
 
 def watershed_flag(d, f=None, sig_init=6, sig_adj=2):
-    '''Returns a watershed flagging of an array that is in units of standard
-    deviation (i.e. how many sigma the datapoint is from the center).'''
+    '''Generates a mask for flags using a watershed algorithm.
+
+    Returns a watershed flagging of an array that is in units of standard
+    deviation (i.e. how many sigma the datapoint is from the center).
+    
+    Args:
+        d (array): 2D array to perform watershed on.
+            d should be in units of standard deviations.
+        f (array, optional): input flags. Same size as d.
+        sig_init (int): number of sigma to flag above, initially.
+        sig_adj (int): number of sigma to flag above for points
+            near flagged points.
+
+    Returns:
+        bool array: Array of mask values for d.
+    '''
     #mask off any points above 'sig' sigma and nan's.
     f1 = np.ma.array(d, mask=np.where(d > sig_init,1,0)) 
     f1.mask |= np.isnan(f1)
@@ -85,21 +115,19 @@ def toss_times_freqs(mask, sig_t=6, sig_f=6):
     return mask
 
 def xrfi_simple(d, f=None, nsig_df=6, nsig_dt=6, nsig_all=0):
-    '''
-        Simple RFI flagging technique that uses derivatives in time 
-        and frequency to determine RFI.
+    '''Flag RFI using derivatives in time and frequency.
         
-        Args:
-            d: data array, shape=(Ntimes, Nfreqs).
-        Kwargs:
-            f: input flags, defaults to zeros
-            nsig_df: float, number of sigma above median to flag in frequency direction
-            nsig_dt: float, number of sigma above median to flag in time direction
-            nsig_all: float, overall flag above some sigma. Skip of 0
+    Args:
+        d (array): 2D data array to flag on with first axis being times
+            and second axis being frequencies.
+        f (array, optional): input flags, defaults to zeros
+        nsig_df (float, optional): number of sigma above median to flag in frequency direction
+        nsig_dt (float, optional): number of sigma above median to flag in time direction
+        nsig_all (float, optional): overall flag above some sigma. Skip if 0.
 
-        Return:
-            f: array of boolean flags
-             
+    Returns:
+        bool array: mask array for flagging.
+         
     '''
     if f is None: f = np.zeros(d.shape, dtype=np.bool)
     if nsig_df > 0:
@@ -145,15 +173,14 @@ def detrend_deriv(d, dt=True, df=True):
     return d_dt / sig
 
 def detrend_medminfilt(d, K=8):
-    """
-        Detrend array using medminfilt statistic. See medminfilt.
-        Args:
-            d: data array
-        Kwargs: 
-            K: box size to apply medminfilt over
+    """Detrend array using medminfilt statistic. See medminfilt.
 
-        return:
-            f: boolean array of flags
+    Args:
+        d (array): data array to detrend.
+        K (int): box size to apply medminfilt over
+
+    Returns:
+        bool array: boolean array of flags
     """
     d_sm = medminfilt(np.abs(d), 2*K+1)
     d_rs = d - d_sm
@@ -163,16 +190,14 @@ def detrend_medminfilt(d, K=8):
     return f
 
 def detrend_medfilt(d, K=8):
-    """
-        Detrend array using a median filter.
-        Args:
-            d: data array
-        Kwargs: 
-            K: box size to apply medminfilt over
+    """Detrend array using a median filter.
 
-        return:
-            f: boolean array of flags
+    Args:
+        d (array): data array to detrend.
+        K (int, optional): box size to apply medminfilt over
 
+    Returns:
+        bool array: boolean array of flags
     """
     d = np.concatenate([d[K-1::-1],d,d[:-K-1:-1]], axis=0)
     d = np.concatenate([d[:,K-1::-1],d,d[:,:-K-1:-1]], axis=1)
@@ -184,17 +209,16 @@ def detrend_medfilt(d, K=8):
     return f[K:-K,K:-K]
 
 def xrfi(d, f=None, K=8, sig_init=6, sig_adj=2):
-    """ 
-        Run best rfi exciion we have. Uses detrending and watershed algorithms above.
-        Args: 
-            d: data array, shape = (Ntimes, Nchans) 
-        Kwargs:
-            f: input flag array, shape = d.shape 
-            K=8: Box size for detrend
-            sig_init: initial sigma to flag.
-            sig_adj: number of sigma to flag adjacent to flagged data (sig_init) 
-        Return:
-            f: array of flags
+    """Run best rfi exciion we have. Uses detrending and watershed algorithms above.
+    Args: 
+        d (array): 2D of data array.
+        f (array, optional): input flag array
+        K (int, optional): Box size for detrend
+        sig_init (float, optional): initial sigma to flag.
+        sig_adj (float, optional): number of sigma to flag adjacent to flagged data (sig_init) 
+
+    Returns:
+        bool array: array of flags
     """
     nsig = detrend_medfilt(d, K=K)
     f = watershed_flag(np.abs(nsig), f=f, sig_init=sig_init, sig_adj=sig_adj)
