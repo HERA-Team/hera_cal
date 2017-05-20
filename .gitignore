@@ -1,6 +1,19 @@
+# Distribution and Packaging
 *.pyc
+*.DS_Store
+build/
+dist/
+*.coverage
+*.egg-info/
 
 # Sphinx documentation
 docs/_build
 docs/_static
 docs/_templates
+
+# Data files (can override if necessary)
+heracal/data/ 
+
+# Test notebooks
+heracal/notebooks
+heracal/.ipynb_checkpoints/
