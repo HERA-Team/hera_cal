@@ -446,7 +446,7 @@ def get_phase(freqs, tau):
     freqs = freqs.reshape(-1,1)
     return np.exp(-2j*np.pi*freqs*tau)
 
-def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
+def from_fits(filename, **kwargs):
     """
     Read a calibration fits file (pyuvdata format). This also finds the model
     visibilities and the xtalkfile. 
@@ -455,23 +455,17 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
         filename: Name of calfits file storing omnical solutions.
             There should also be corresponding files for the visibilities
             and crosstalk. These filenames should have be *vis{xtalk}.fits.
-        pols (optional): Specify polarizations (xx,yy,xy,yx, etc...) to read.
-        bls (optional): Specify bls to read. list of bls
-        ants (optional): Specify ants to read. list of antenna numbers
-        verbose (optional): Be verbose.
-
+        **kwargs : extra keywords that are passed into the select function 
+            for the UVCal object and UVData object. Refer to pyuvdata.UVCal.select
+            and pyuvdata.UVData.select for use.
     Returns:
         meta (dict): dictionary of meta information
         gains (dict): dictionary of gains
         xtalk (dict): dictionary of xtalk
     """
     if type(filename) is str: filename = [filename]
-    if type(pols) is str: pols = [pols]
-    if type(bls) is tuple and type(bls[0]) is int: bls = [bls]
-    if type(ants) is int: ants = [ants]
     meta, gains = {}, {}
     poldict = {-5: 'xx', -6: 'yy', -7:'xy', -8:'yx'}
-    if not pols is None: jones_params = set(x for pol in pols for x in pol)
     
     firstcal = filename[0].split('.')[-2] == 'firstcal'
 
@@ -479,8 +473,8 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
     # filename loop
     for f in filename:
         cal.read_calfits(f)
-        if ants is not None:
-            cal.select(antenna_nums=ants, jones=jones_params)
+        if len(kwargs) != 0:
+            cal.select(**kwargs)
         # number of spectral windows loop
         for nspw in xrange(cal.Nspws):
             # polarization loop
@@ -559,12 +553,9 @@ def from_fits(filename, pols=None, bls=None, ants=None, verbose=False):
                 vis.unphase_to_drift()  # need to do this since all uvfits files are phased! PAPER/HERA miriad files are drift.
                 xtalk.read_uvfits(f2)
                 xtalk.unphase_to_drift()  # need to do this since all uvfits files are phased! PAPER/HERA miriad files are drift.
-                if not ants is None:
-                    vis.select(antenna_nums=ants)
-                    xtalk.select(antenna_nums=ants)
-                if not bls is None:
-                    vis.select(ant_pair_nums=bls)
-                    xtalk.select(ant_pair_nums=bls)
+                if len(kwargs) != 0:
+                    vis.select(**kwargs)
+                    xtalk.select(**kwargs)
                 for p, pol in enumerate(vis.polarization_array):
                     pol = poldict[pol]
                     if pol not in v.keys(): v[pol] = {}

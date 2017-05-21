@@ -237,6 +237,37 @@ class TestMethods(object):
 
         nt.assert_equal(xtalk, {})
 
+        pol2str = {-5: 'x', -6: 'y'}
+        uvcal = UVCal()
+        uvcal.read_calfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.firstcal.fits'))
+        np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
+        np.testing.assert_equal(np.resize(uvcal.time_array, (Ntimes,)), meta['times'])  # need repeat here because reading 2 files.
+        nt.assert_equal(uvcal.history, meta['history'])
+        nt.assert_equal(uvcal.gain_convention, meta['gain_conventions'])
+        for ai, ant in enumerate(uvcal.ant_array):
+            for ip, pol in enumerate(uvcal.jones_array):
+                for nsp in range(uvcal.Nspws):
+                    np.testing.assert_equal(np.resize(omni.get_phase(uvcal.freq_array, uvcal.delay_array[ai, nsp, :, ip]).T, (Ntimes,Nchans)),  gains[pol2str[pol]][ant])
+
+    def test_from_fits_gain(self):
+        Ntimes = 3
+        Nchans = 1024  # hardcoded for this file
+        # read in the same file twice to make sure file concatenation works
+        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits')], antenna_nums=[9, 10, 112, 20, 22])
+        
+        pol2str = {-5: 'x', -6: 'y'}
+        uvcal = UVCal()
+        uvcal.read_calfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.fits'))
+        uvcal.select(antenna_nums=[9,10,112,20,22])
+        np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
+        np.testing.assert_equal(np.resize(uvcal.time_array, (Ntimes,)), meta['times'])  # need repeat here because reading 2 files.
+        nt.assert_equal(uvcal.history, meta['history'])
+        nt.assert_equal(uvcal.gain_convention, meta['gain_conventions'])
+        for ai, ant in enumerate(uvcal.ant_array):
+            for ip, pol in enumerate(uvcal.jones_array):
+                for nsp in range(uvcal.Nspws):
+                    np.testing.assert_equal(np.resize(uvcal.gain_array[ai, nsp, :, :, ip].T, (Ntimes,Nchans)),  gains[pol2str[pol]][ant])
+
     def test_make_uvdata_vis(self):
         sys.path.append(DATA_PATH)  # append data_path to path so we can find calfile.
         aa = a.cal.get_aa('heratest_calfile', np.array([.15])) # This aa is specific for the fits file below.
