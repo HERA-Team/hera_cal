@@ -615,7 +615,7 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     else:
         uv.Ntimes = len(m['times'])
     uv.Npols = len(pols)
-    uv.Nbls = len(v[pols[0]].keys())
+    uv.Nbls = len(bls)
     uv.Nblts = uv.Nbls * uv.Ntimes
     uv.Nfreqs = len(m['freqs'])
     data = {}

@@ -179,6 +179,41 @@ class TestMethods(object):
             for time in range(Ntimes):
                 nt.assert_true(np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
 
+        pol2str = {-5: 'x', -6: 'y'}
+        uvcal = UVCal()
+        uvcal.read_calfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.fits'))
+        np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
+        np.testing.assert_equal(np.resize(uvcal.time_array, (Ntimes,)), meta['times'])  # need repeat here because reading 2 files.
+        nt.assert_equal(uvcal.history, meta['history'])
+        nt.assert_equal(uvcal.gain_convention, meta['gain_conventions'])
+        for ai, ant in enumerate(uvcal.ant_array):
+            for ip, pol in enumerate(uvcal.jones_array):
+                for nsp in range(uvcal.Nspws):
+                    np.testing.assert_equal(np.resize(uvcal.gain_array[ai, nsp, :, :, ip].T, (Ntimes,Nchans)),  gains[pol2str[pol]][ant])
+
+        str2pol = {'xx': -5, 'yy': -6}
+        uvd = UVData()
+        uvd.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.vis.fits'))
+        # frim_fits turns data into drift
+        uvd.unphase_to_drift()
+        for pol in vis:
+            for i,j in vis[pol]:
+                uvpol = list(uvd.polarization_array).index(str2pol[pol])
+                uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
+                # need to resize because test is reading in 2 files with from_fits.
+                np.testing.assert_equal(vis[pol][i,j], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], vis[pol][i,j].shape))
+                
+        uvd = UVData()
+        uvd.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.xtalk.fits'))
+        # from_fits turns data into drift
+        uvd.unphase_to_drift()
+        for pol in xtalk:
+            for i,j in xtalk[pol]:
+                uvpol = list(uvd.polarization_array).index(str2pol[pol])
+                uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
+                # need to resize because test is reading in 2 files with from_fits.
+                np.testing.assert_equal(xtalk[pol][i,j], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], xtalk[pol][i,j].shape)) 
+ 
     def test_from_fits_delay(self):
         Ntimes = 3 * 2  # need 2 here because reading two files
         Nchans = 1024  # hardcoded for this file
