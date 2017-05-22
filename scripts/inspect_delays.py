@@ -21,10 +21,13 @@ for f in args:
         print "Not a file with delays, exiting..."  
         exit()
     
-    for i, ant in enumerate(cal.antenna_numbers):
+    for i, ant in enumerate(cal.ant_array):
         if not ant in delays: delays[ant] = []
         delays[ant].append(cal.delay_array[i,0,:,0])
     
-for ant in cal.antenna_numbers:
-    p.plot(np.concatenate(delays[ant]).flatten(), 'o')
+for ant in cal.ant_array:
+    p.plot(1e9*np.concatenate(delays[ant]).flatten(), '.', label=str(ant))
+p.xlabel('time bins')
+p.ylabel('delays (ns)')
+p.legend(loc='best')
 p.show()
