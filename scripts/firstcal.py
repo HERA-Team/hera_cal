@@ -13,6 +13,9 @@ o.add_option('--outpath', default=None,help='Output path of solution npz files. 
 o.add_option('--verbose', action='store_true', default=False, help='Turn on verbose.')
 o.add_option('--finetune', action='store_false', default=True, help='Fine tune the delay fit.')
 o.add_option('--average', action='store_true', default=False, help='Average all data before finding delays.')
+o.add_option('--observer', default='Observer', help='optional observer input to fits file')
+o.add_option('--git_hash_cal', default='None', help='optionally add the git hash of the cal repo')
+o.add_option('--git_origin_cal', default='None', help='optionally add the git origin of the cal repo')
 opts,args = o.parse_args(sys.argv[1:])
 
 def flatten_reds(reds):
@@ -94,9 +97,9 @@ for filename in args:
     else:
         outname='%s'%filename
 
-    optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)',
-                'git_origin_cal': 'None',
-                'git_hash_cal': 'None'}
+    optional = {'observer': opts.observer,
+                'git_origin_cal': opts.git_origin_cal,
+                'git_hash_cal':  opts.git_hash_cal}
                 
     hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants, DELAY=True, appendhist=' '.join(sys.argv), optional=optional)
     print('     Saving {0}'.format(outname))
