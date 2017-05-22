@@ -4,6 +4,7 @@ import aipy as a
 import pylab as p
 import time
 import omnical
+from heracal.omni import Antpol
 import multiprocessing as mpr
 import scipy.sparse as sps
 
@@ -112,7 +113,7 @@ def redundant_bl_cal_simple(d1, w1, d2, w2, fqs, window='none', finetune=True, v
         dts = np.zeros_like(taus)
     info = {'dtau': dts, 'mx': mxs}
     if verbose: print info, taus, taus + dts
-    return taus + dts
+    return (taus + dts) / 1e9  # convert to seconds
 
 
 class FirstCalRedundantInfo(omnical.info.RedundantInfo):
@@ -143,15 +144,32 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
         omnical.info.RedundantInfo.__init__(self)
         self.nant = nant
 
+    def bl_order(self):
+        '''Returns expected order of baselines.
+
+        Return:
+            (i,j) baseline tuples in the order that they should appear in data.
+            Antenna indicies are in real-world order
+            (as opposed to the internal ordering used in subsetant).
+        '''
+        return [(Antpol(self.subsetant[i], self.nant), Antpol(self.subsetant[j], self.nant)) for (i, j) in self.bl2d]
+
     def order_data(self, dd):
-        '''
-            Order a data dictionary in the order Redundandant Info knows about. 'dd' is
-            a dict whose keys are (i,j) antenna tuples; antennas i,j should be ordered to reflect
-            the conjugation convention of the provided data.  'dd' values are 2D arrays
-            of (time,freq) data.
-        '''
-        return np.array([dd[bl] if dd.has_key(bl) else dd[bl[::-1]].conj()
-                        for bl in self.bl_order()]).transpose((1, 2, 0))
+        """Create a data array ordered for use in _omnical.redcal.
+
+        Args:
+            dd (dict): dictionary whose keys are (i,j) antenna tuples; antennas i,j should be ordered to reflect
+                       the conjugation convention of the provided data.  'dd' values are 2D arrays of (time,freq) data.
+        Return:
+            array: array whose ordering reflects the internal ordering of omnical. Used to pass into pack_calpar
+        """
+        d = []
+        for i, j in self.bl_order():
+            bl = (i.ant(), j.ant())
+            pol = i.pol() + j.pol()
+            try: d.append(dd[bl][pol])
+            except(KeyError): d.append(dd[bl[::-1]][pol[::-1]].conj())
+        return np.array(d).transpose((1, 2, 0))
 
     def bl_index(self, bl):
         '''Gets the baseline index from bl_order for a given baseline.
@@ -348,4 +366,4 @@ class FirstCal(object):
         # definitely want to use pinv here and not solve since invert is probably singular.
         self.xhat = np.dot(np.linalg.pinv(invert), dontinvert)
         # turn solutions into dictionary
-        return dict(zip(self.info.subsetant, self.xhat))
+        return dict(zip(map(Antpol,self.info.subsetant,[self.info.nant]*len(self.info.subsetant)), self.xhat))
