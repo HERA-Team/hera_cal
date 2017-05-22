@@ -53,20 +53,8 @@ for filename in args:
     if uv_in.phase_type != 'drift':
         print("Setting phase type to drift")
         uv_in.unphase_to_drift()
-    data = uv_in.data_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
-    flags = uv_in.flag_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
-     
-    datapack,wgtpack = {},{}
-    for ip, pol in enumerate(uv_in.polarization_array):
-        pol = a.miriad.pol2str[pol]
-        if pol != opts.pol: 
-            continue
-        for nbl, (i,j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
-            if not (i, j) in bls and not (j, i) in bls:
-                continue
-            datapack[(i,j)] = data[:, nbl, 0, :, ip]
-            wgtpack[(i,j)] = np.logical_not( flags[:, nbl, 0, :, ip] )
-    
+    datapack, wgtpack = omni.UVData_to_dict([uv_in])
+    wgtpack = {k : { p : np.logical_not(wgtpack[k][p]) for p in wgtpack[k]} for k in wgtpack}  # logical_not of wgtpack
 
     #gets phase solutions per frequency.
     fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
@@ -83,13 +71,14 @@ for filename in args:
     delays = {}
     antflags = {}
     for pol in opts.pol.split(','):
-        delays[pol[0]] = {}
-        antflags[pol[0]] = {}
+        pol = pol[0]
+        delays[pol] = {}
+        antflags[pol] = {}
         for ant in sols.keys():
-            delays[pol[0]][ant] = sols[ant].T / 1e9  # get into units of seconds
-            antflags[pol[0]][ant] = np.zeros(shape=(len(meta['lsts']), len(meta['freqs'])))
+            delays[ant.pol()][ant.val] = sols[ant].T
+            antflags[ant.pol()][ant.val] = np.zeros(shape=(len(meta['lsts']), len(meta['freqs'])))
             #generate chisq per antenna/pol.
-            meta['chisq{0}{1}'.format(ant,pol[0])] = np.ones(shape=(uv_in.Ntimes, 1))
+            meta['chisq{0}'.format(str(ant))] = np.ones(shape=(uv_in.Ntimes, 1))
     #overall chisq. This is a required parameter for uvcal.
     meta['chisq'] = np.ones_like(sols[ant].T)
 
