@@ -3,7 +3,6 @@
 import aipy
 import numpy as np
 from heracal.omni import from_fits, aa_to_info, run_omnical, compute_xtalk, HERACal, make_uvdata_vis
-from heracal.miriad import read_files
 import pyuvdata
 import optparse
 import os, sys, glob
@@ -19,7 +18,9 @@ o.add_option('--ex_ants', dest='ex_ants', default=None,
 o.add_option('--firstcal', dest='firstcal', type='string',
              help='Path and name of firstcal file. Can pass in wildcards.')
 o.add_option('--minV',action='store_true',
-            help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
+             help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
+o.add_option('--median', action='store_true',
+            help='Take the median over time of the starting calibration gains (e.g. firstcal).')
 opts, args = o.parse_args(sys.argv[1:])
 
 args = np.sort(args)
@@ -139,11 +140,11 @@ for filenumber in range(len(args)/len(pols)):
         uvd_dict[pp] = uvd
     
     ## format g0 for application to data
-    for p in g0.keys():
-        for i in g0[p]:
-            if g0[p][i].shape != (len(t_jd), len(freqs)): #not a big fan of this if/else
-                g0[p][i] = np.resize(g0[p][i], SH)  # resize gains like data
-            else: continue
+    if opts.median:
+        for p in g0.keys():
+            for i in g0[p]:
+                # take median along time axis and resize to shape of data.
+                g0[p][i] = np.resize(np.median(g0[p][i], axis=0), SH)
     
     ## read data into dictionaries
     d,f = {},{}
