@@ -446,7 +446,7 @@ def get_phase(freqs, tau):
     freqs = freqs.reshape(-1,1)
     return np.exp(-2j*np.pi*freqs*tau)
 
-def from_fits(filename, **kwargs):
+def from_fits(filename, keep_delay=False, **kwargs):
     """
     Read a calibration fits file (pyuvdata format). This also finds the model
     visibilities and the xtalkfile. 
@@ -475,6 +475,35 @@ def from_fits(filename, **kwargs):
         cal.read_calfits(f)
         if len(kwargs) != 0:
             cal.select(**kwargs)
+
+        print f
+
+        #######error checks#######
+        # checks to see if all files have the same cal_types
+        if meta.has_key('caltype'):
+            if cal.cal_type == meta['caltype']: pass
+            else: raise ValueError("All caltypes are not the same across files")
+        else: meta['caltype'] = cal.cal_type
+
+        # checks to see if all files have the same gain conventions
+        if meta.has_key('gain_conventions'):
+            if cal.gain_convention == meta['gain_conventions']: pass
+            else: raise ValueError("All gain conventions for calibration solutions is not the same across files.")
+        else: meta['gain_conventions'] = cal.gain_convention
+
+        # checks to see if all files have the same gain conventions
+        if meta.has_key('inttime'):
+            if cal.integration_time == meta['inttime']: pass
+            else: raise ValueError("All integration times for calibration solutions is not the same across files.")
+        else: meta['inttime'] = cal.integration_time
+
+        # checks to see if all files have the same frequencies
+        if meta.has_key('freqs'):
+            if np.all(cal.freq_array.flatten() == meta['freqs']): pass
+            else: raise ValueError("All files don't have the same frequencies")
+        else: meta['freqs'] = cal.freq_array.flatten()
+
+
         # number of spectral windows loop
         for nspw in xrange(cal.Nspws):
             # polarization loop
@@ -496,47 +525,29 @@ def from_fits(filename, **kwargs):
                     # if the cal_type is delay, create or concatenate delay_array
                     elif cal.cal_type == 'delay':
                         if ant not in gains[pol].keys():
-                            gains[pol][ant] = get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T
+                            if keep_delay:
+                                gains[pol][ant] = cal.delay_array[i, nspw, :, k].T
+                            else:
+                                gains[pol][ant] = get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T
                         else:
-                            gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T])
+                            if keep_delay:
+                                gains[pol][ant] = np.concatenate([gains[pol][ant], cal.delay_array[i, nspw, :, k].T])
+                            else:
+                                gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(cal.freq_array, cal.delay_array[i, nspw, :, k]).T])
                         if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
                             meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[i, nspw, :, k].T
                         else:
                             meta['chisq{0}{1}'.format(ant, pol)] = np.concatenate([meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, k].T])
                     else:
-                        print 'Not a recognized file type'
+                        raise ValueError("Not a recognized file type.")
+
         if not 'times' in meta.keys():
             meta['times'] = cal.time_array
         else:
             meta['times'] = np.concatenate([meta['times'], cal.time_array])
 
         meta['history'] = cal.history  # only taking history of the last file
-        # checks to see if all files have the same cal_types
-        if meta.has_key('caltype'):
-            if cal.cal_type == meta['caltype']: pass
-            else: raise ValueError("All caltypes are not the same across files")
-        else: meta['caltype'] = cal.cal_type
-
-        # checks to see if all files have the same gain conventions
-        if meta.has_key('gain_conventions'):
-            if cal.gain_convention == meta['gain_conventions']: pass
-            else: raise ValueError("All gain conventions for calibration solutions is not the same across files.")
-        else: meta['gain_conventions'] = cal.gain_convention
-
-        # checks to see if all files have the same gain conventions
-        if meta.has_key('inttime'):
-            if cal.integration_time == meta['inttime']: pass
-            else: raise ValueError("All integration times for calibration solutions is not the same across files.")
-        else: meta['inttime'] = cal.integration_time
-
-
-        # checks to see if all files have the same frequencies
-        if meta.has_key('freqs'):
-            if np.all(cal.freq_array.flatten() == meta['freqs']): pass
-            else: raise ValueError("All files don't have the same frequencies")
-        else: meta['freqs'] = cal.freq_array.flatten()
-
-
+        
 
     v = {}
     x = {}
@@ -810,6 +821,7 @@ class HERACal(UVCal):
         pols = [str2pol[p] for p in gains.keys()]  # all of the polarizations
 
         # get sizes of things
+        nspw=1 # This is by default 1. No support for > 1 in pyuvdata.
         npol = len(pols)
         ntimes = time.shape[0]
         nfreqs = freq.shape[0]
@@ -818,7 +830,10 @@ class HERACal(UVCal):
         if flags:
             flgarray  = np.array([ [ flags[pol2str[pol]][ant] for ant in ants] for pol in pols ]).swapaxes(0,3).swapaxes(0,1)
         else:
-            flgarray = np.zeros(datarray.shape, dtype=bool)  #dont need to swap since datarray alread same shape
+            if DELAY:
+                flgarray = np.zeros((len(ants), nfreqs, ntimes, npol), dtype=bool)
+            else:
+                flgarray = np.zeros(datarray.shape, dtype=bool)  #dont need to swap since datarray alread same shape
         # do the same for the chisquare, which is the same shape as the data
         try:
             chisqarray = np.array([ [meta['chisq'+str(ant)+pol2str[pol]] for ant in ants] for pol in pols ]).swapaxes(0,3).swapaxes(0,1)
@@ -850,8 +865,7 @@ class HERACal(UVCal):
         self.antenna_names = namarray[:self.Nants_telescope]
         self.antenna_numbers = numarray[:self.Nants_telescope]
         self.ant_array = np.array(antarray[:self.Nants_data])
-        self.Nspws = 1  # This is by default 1. No support for > 1 in pyuvdata.
-
+        self.Nspws = nspw
         self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
         self.jones_array = parray[:self.Njones]

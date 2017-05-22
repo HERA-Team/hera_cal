@@ -52,6 +52,15 @@ class TestMethods(object):
         for rb in info.get_reds():
             nt.assert_true(rb in reds)
 
+        aa_antlayout = deepcopy(self.aa)
+        del(aa_antlayout.antpos_ideal)
+        aa_antlayout.ant_layout = np.array([[0, 1, 2, 3]])
+        info = omni.aa_to_info(aa_antlayout)
+        reds = [[(0, 1), (1, 2), (2, 3)], [(0, 2), (1, 3)]]
+        nt.assert_true(np.all(info.subsetant == np.array([0, 1, 2, 3])))
+        for rb in info.get_reds():
+            nt.assert_true(rb in reds)
+
     def test_filter_reds(self):
         # exclude ants
         reds = omni.filter_reds(self.info.get_reds(), ex_ants=[0, 4])
@@ -249,7 +258,23 @@ class TestMethods(object):
                 for nsp in range(uvcal.Nspws):
                     np.testing.assert_equal(np.resize(omni.get_phase(uvcal.freq_array, uvcal.delay_array[ai, nsp, :, ip]).T, (Ntimes,Nchans)),  gains[pol2str[pol]][ant])
 
-    def test_from_fits_gain(self):
+        # Now test if we keep delays
+        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.firstcal.fits')]*2, keep_delay=True)
+        pol2str = {-5: 'x', -6: 'y'}
+        uvcal = UVCal()
+        uvcal.read_calfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.firstcal.fits'))
+        np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
+        np.testing.assert_equal(np.resize(uvcal.time_array, (Ntimes,)), meta['times'])  # need repeat here because reading 2 files.
+        nt.assert_equal(uvcal.history, meta['history'])
+        nt.assert_equal(uvcal.gain_convention, meta['gain_conventions'])
+        for ai, ant in enumerate(uvcal.ant_array):
+            for ip, pol in enumerate(uvcal.jones_array):
+                for nsp in range(uvcal.Nspws):
+                    np.testing.assert_equal(np.resize(uvcal.delay_array[ai, nsp, :, ip].T, (Ntimes,)),  gains[pol2str[pol]][ant])
+
+
+
+    def test_from_fits_gain_select(self):
         Ntimes = 3
         Nchans = 1024  # hardcoded for this file
         # read in the same file twice to make sure file concatenation works
@@ -267,6 +292,36 @@ class TestMethods(object):
             for ip, pol in enumerate(uvcal.jones_array):
                 for nsp in range(uvcal.Nspws):
                     np.testing.assert_equal(np.resize(uvcal.gain_array[ai, nsp, :, :, ip].T, (Ntimes,Nchans)),  gains[pol2str[pol]][ant])
+
+    def test_from_fits_catch_errors(self):
+        # raise error on caltype
+        args = [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'), os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.firstcal.fits')] 
+        nt.assert_raises(ValueError, omni.from_fits, args)
+
+        # raise error on gain convention
+        uvc = UVCal()
+        uvc.read_calfits(args[1])
+        uvc.gain_convention = 'multiply'
+        uvc.write_calfits(os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+        new_args = [os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+        nt.assert_raises(ValueError, omni.from_fits, new_args)
+    
+        # raise error on inttime
+        uvc = UVCal()
+        uvc.read_calfits(args[1])
+        uvc.integration_time = 3.145
+        uvc.write_calfits(os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+        new_args = [os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+        nt.assert_raises(ValueError, omni.from_fits, new_args)
+        
+        # raise error on freqs
+        uvc = UVCal()
+        uvc.read_calfits(args[1])
+        uvc.freq_array += 1e4
+        uvc.write_calfits(os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+        new_args = [os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+        nt.assert_raises(ValueError, omni.from_fits, new_args)
+        
 
     def test_make_uvdata_vis(self):
         sys.path.append(DATA_PATH)  # append data_path to path so we can find calfile.
@@ -352,13 +407,13 @@ class TestMethods(object):
         uvd =  UVData()
         uvd.read_miriad(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA'))
     
-        d,f = omni.miriad_to_dict(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA'))
+        d,f = omni.miriad_to_dict([os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA')]*2)
         for pol in d:
             for i,j in d[pol]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])
                 uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
-                np.testing.assert_equal(d[pol][i,j], uvd.data_array[uvmask][:,0,:,uvpol])
-                np.testing.assert_equal(f[pol][i,j], uvd.flag_array[uvmask][:,0,:,uvpol])
+                np.testing.assert_equal(d[pol][i,j], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], d[pol][i,j].shape))
+                np.testing.assert_equal(f[pol][i,j], np.resize(uvd.flag_array[uvmask][:,0,:,uvpol], f[pol][i,j].shape))
         
         
         
@@ -513,7 +568,7 @@ class Test_HERACal(UVCal):
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
         meta['inttime'] = np.diff(meta['times'])[0]*60*60*24
         optional = {'observer': 'heracal'}
-        hc = omni.HERACal(meta, gains, optional=optional)  # the fits file was run with ex_ants=[81] and we need to include it here for the test.
+        hc = omni.HERACal(meta, gains, optional=optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.fits'))
         for param in hc:
@@ -522,4 +577,28 @@ class Test_HERACal(UVCal):
                 nt.assert_equal(np.testing.assert_almost_equal(getattr(hc, param).value, getattr(uv, param).value, 5), None)
             else:
                 nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
+
+    def test_delayHC(self):
+        # make test data
+        meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.firstcal.fits'), keep_delay=True)
+        for pol in gains.keys():
+            for k in gains[pol].keys():
+                gains[pol][k] = gains[pol][k].reshape(-1,1)
+        meta['inttime'] = np.diff(meta['times'])[0]*60*60*24
+        meta.pop('chisq9x')
+        optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
+        hc = omni.HERACal(meta, gains, optional=optional, DELAY=True)
+        uv = UVCal()
+        uv.read_calfits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.firstcal.fits'))
+        for param in hc:
+            print param
+            print getattr(hc, param).value, getattr(uv, param).value
+            if param == '_history': continue
+            elif param == '_git_hash_cal': continue            
+            elif param == '_git_origin_cal': continue            
+            elif param == '_time_range':  # why do we need this?
+                nt.assert_equal(np.testing.assert_almost_equal(getattr(hc, param).value, getattr(uv, param).value, 5), None)
+            else:
+                nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
+
 
