@@ -8,10 +8,8 @@ o = optparse.OptionParser()
 o.set_usage('omni_apply.py [options] *uvcRRE')
 o.set_description(__doc__)
 a.scripting.add_standard_options(o,pol=True)
-o.add_option('--xtalk',dest='xtalk',default=False,action='store_true',
-            help='Toggle: apply xtalk solutions to data. Default=False')
-o.add_option('--omnipath',dest='omnipath',default='%s.fits',type='string',
-            help='Format string (e.g. "path/%s.fits", where you actually type the "%s") which converts the input file name to the omnical npz path/file.')
+o.add_option('--omnipath',dest='omnipath',default='*.fits',type='string',
+            help='Filename or format string that gets passed to glob for omnical/firstcal solution fits files.')
 o.add_option('--median', action='store_true',
             help='Take the median in time before applying solution. Applicable only in delay.')
 o.add_option('--firstcal', action='store_true', 
