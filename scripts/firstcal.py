@@ -50,6 +50,9 @@ print 'Number of redundant baselines:',len(bls)
 for filename in args:
     uv_in = UVData()
     uv_in.read_miriad(filename)
+    if uv_in.phase_type != 'drift':
+        print("Setting phase type to drift")
+        uv_in.unphase_to_drift()
     data = uv_in.data_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
     flags = uv_in.flag_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
      

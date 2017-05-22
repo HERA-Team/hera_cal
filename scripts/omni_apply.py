@@ -69,6 +69,8 @@ for f in args:
     mir = pyuvdata.UVData()
     print "  Reading {0}".format(f)
     mir.read_miriad(f)
+    if mir.phase_type != 'drift':
+        mir.unphase_to_drift()
     cal = pyuvdata.UVCal()
     print "  Reading calibration : {0}".format(filedict[f])
     cal.read_calfits(filedict[f])

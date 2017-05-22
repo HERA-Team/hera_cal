@@ -122,6 +122,8 @@ for filenumber in range(len(args)/len(pols)):
     f0 = file_group[pols[0]]
     uvd = pyuvdata.UVData()
     uvd.read_miriad(f0)
+    if uvd.phase_type != 'drift':
+        uvd.phase_to_drift()
     t_jd = uvd.time_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
     t_lst = uvd.lst_array.reshape(uvd.Ntimes, uvd.Nbls)[:,0]
     t_int = uvd.integration_time
@@ -132,6 +134,8 @@ for filenumber in range(len(args)/len(pols)):
     for pp in pols:
         uvd = pyuvdata.UVData()
         uvd.read_miriad(file_group[pp])
+        if uvd.phase_type != 'drift':
+            uvd.unphase_to_drift()
         uvd_dict[pp] = uvd
     
     ## format g0 for application to data
