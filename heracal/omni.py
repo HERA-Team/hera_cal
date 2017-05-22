@@ -761,6 +761,8 @@ def miriad_to_dict(uvdata_list):
     for filename in uvdata_list:
         uv_in = UVData()
         uv_in.read_miriad(filename)
+        if uv_in.phase_type != 'drift':
+            uv_in.unphase_to_drift()
         # reshape data and flag arrays to make slicing time and baselines easy
         data = uv_in.data_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
         flags = uv_in.flag_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)

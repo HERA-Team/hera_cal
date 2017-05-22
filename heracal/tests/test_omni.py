@@ -406,6 +406,8 @@ class TestMethods(object):
         str2pol = {'xx':-5, 'yy': -6, 'xy':-7, 'yy':-8}
         uvd =  UVData()
         uvd.read_miriad(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA'))
+        if uvd.phase_type != 'drift':
+            uvd.unphase_to_drift()
     
         d,f = omni.miriad_to_dict([os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA')]*2)
         for pol in d:
