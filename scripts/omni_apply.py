@@ -12,6 +12,8 @@ o.add_option('--xtalk',dest='xtalk',default=False,action='store_true',
             help='Toggle: apply xtalk solutions to data. Default=False')
 o.add_option('--omnipath',dest='omnipath',default='%s.fits',type='string',
             help='Format string (e.g. "path/%s.fits", where you actually type the "%s") which converts the input file name to the omnical npz path/file.')
+o.add_option('--median', action='store_true',
+            help='Take the median in time before applying solution. Applicable only in delay.')
 o.add_option('--firstcal', action='store_true', 
             help='Applying firstcal solutions.')
 opts,args = o.parse_args(sys.argv[1:])
@@ -34,7 +36,7 @@ if opts.firstcal:
     nf=0
     for pp in pols:
         if isLinPol(pp):
-            firstcal_files[pp] = sorted([s for s in glob.glob(opts.firstcal) if pp in s])
+            firstcal_files[pp] = sorted([s for s in glob.glob(opts.omnipath) if pp in s])
             nf += len(firstcal_files[pp])    
 
 for i, f in enumerate(args):
@@ -80,7 +82,7 @@ for f in args:
         for bl,k in zip(*np.unique(mir.baseline_array, return_index=True)):
             blmask = np.where(mir.baseline_array == bl)[0]
             ai, aj = mir.baseline_to_antnums(bl)
-            if not ai in cal.antenna_numbers or not aj in cal.antenna_numbers:
+            if not ai in cal.ant_array or not aj in cal.ant_array:
                 continue
             for nsp, nspws in enumerate(mir.spw_array):
                 if cal.cal_type == 'gain' and cal.gain_convention == 'multiply':
@@ -96,16 +98,29 @@ for f in args:
                                 np.conj(cal.gain_array[antenna_index[aj], nsp, :, :, p2].T)
     
                 if cal.cal_type == 'delay' and cal.gain_convention == 'multiply':
-                    mir.data_array[blmask, nsp, :, p] =  \
-                                mir.data_array[blmask, nsp, :, p] * \
-                                np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[ai], nsp, :, p1].reshape(-1,1),cal.freq_array)) * \
-                                np.conj(np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[aj], nsp, :, p2].reshape(-1,1),cal.freq_array)))
+                    if opts.median:
+                        mir.data_array[blmask, nsp, :, p] =  \
+                                    mir.data_array[blmask, nsp, :, p] * \
+                                    heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, :, p1])).reshape(1,-1) * \
+                                    np.conj(heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[aj], nsp, :, p2])).reshape(1,-1))
+                    else:
+                        mir.data_array[blmask, nsp, :, p] =  \
+                                    mir.data_array[blmask, nsp, :, p] * \
+                                    heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, :, p1]) * \
+                                    np.conj(heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[aj], nsp, :, p2]))
 
                 if cal.cal_type == 'delay' and cal.gain_convention == 'divide':
-                    mir.data_array[blmask, nsp, :, p] =  \
-                                mir.data_array[blmask, nsp, :, p] / \
-                                np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[ai], nsp, :, p1].reshape(-1,1),cal.freq_array)) / \
-                                np.conj(np.exp(-2j*np.pi*np.dot(cal.delay_array[antenna_index[aj], nsp, :, p2].reshape(-1,1),cal.freq_array)))
+                    if opts.median:
+                        mir.data_array[blmask, nsp, :, p] =  \
+                                    mir.data_array[blmask, nsp, :, p] / \
+                                    heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, :, p1])).reshape(1,-1) / \
+                                    np.conj(heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[aj], nsp, :, p2])).reshape(1,-1))
+                    else:
+                        mir.data_array[blmask, nsp, :, p] =  \
+                                    mir.data_array[blmask, nsp, :, p] / \
+                                    heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, :, p1]).T / \
+                                    np.conj(heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[aj], nsp, :, p2]).T)
+                 
 
 
 
