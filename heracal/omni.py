@@ -3,7 +3,6 @@ import omnical
 from copy import deepcopy
 import numpy.linalg as la
 from pyuvdata import UVCal, UVData, uvtel
-from heracal.firstcal import FirstCalRedundantInfo
 from aipy.miriad import pol2str
 import warnings, os
 with warnings.catch_warnings():
@@ -288,6 +287,7 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     if minV:
         reds = reds_for_minimal_V(reds)
     if fcal:
+        from heracal.firstcal import FirstCalRedundantInfo
         info = FirstCalRedundantInfo(nant)
     else:
         info = RedundantInfo(nant)
@@ -741,44 +741,39 @@ def concatenate_UVCal_on_pol(calfitsList):
         cal0.quality_array = np.concatenate((cal0.quality_array, cal1.quality_array), axis=3)
     return cal0
 
-def miriad_to_dict(uvdata_list):
-    """ Turn a list of miriad files in to a data and flag dictionary
+def UVData_to_dict(uvdata_list):
+    """ Turn a list of UVData objects in to a data and flag dictionary
 
-        Uses pyuvdata.UVData() to read miriad files as a dictionary with
-        pol as first key and blpair as second.
+        Make dictionary with blpair key first and pol second key.
 
         Args:
-            uvdata_list: list of miriad files to read.
+            uvdata_list: list of UVData objects.
 
         Return:
             data (dict): dictionary of data indexed by pol and antenna pairs
             flags (dict): dictionary of flags indexed by pol and antenna pairs
         """
     # if it is a single string turn it into a list.
-    if type(uvdata_list)==str: uvdata_list = [uvdata_list]
+    if type(uvdata_list)!=list: uvdata_list = [uvdata_list]
 
     d,f = {},{}
-    for filename in uvdata_list:
-        uv_in = UVData()
-        uv_in.read_miriad(filename)
-        if uv_in.phase_type != 'drift':
-            uv_in.unphase_to_drift()
+    for uv_in in uvdata_list:
         # reshape data and flag arrays to make slicing time and baselines easy
         data = uv_in.data_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
         flags = uv_in.flag_array.reshape(uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
 
-        for ip, pol in enumerate(uv_in.polarization_array):
-            pol = pol2str[pol]
-            if pol not in d:
-                d[pol] = {}
-                f[pol] = {}
-            for nbl, (i,j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
-                if (i,j) not in d[pol]:
-                    d[pol][(i,j)] = data[:, nbl, 0, :, ip]
-                    f[pol][(i,j)] = flags[:, nbl, 0, :, ip]
+        for nbl, (i,j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
+            if (i,j) not in d:
+                d[i,j] = {}
+                f[i,j] = {}
+            for ip, pol in enumerate(uv_in.polarization_array):
+                pol = pol2str[pol]
+                if pol not in d:
+                    d[(i,j)][pol] = data[:, nbl, 0, :, ip]
+                    f[(i,j)][pol] = flags[:, nbl, 0, :, ip]
                 else:
-                    d[pol][(i,j)] = np.append(d[pol][(i,j)], data[:, nbl, 0, :, ip])
-                    f[pol][(i,j)] = np.append(f[pol][(i,j)], flags[:, nbl, 0, :, ip])
+                    d[(i,j)][pol] = np.append(d[(i,j)][pol], data[:, nbl, 0, :, ip])
+                    f[(i,j)][pol] = np.append(f[(i,j)][pol], flags[:, nbl, 0, :, ip])
         return d, f
 
 
