@@ -94,7 +94,7 @@ for filenumber in range(len(args)/len(pols)):
         bname = os.path.basename(file_group[pols[0]])
     else:
         bname = os.path.basename(file_group[pols[0]]).replace('.%s'%pols[0],'')
-    fitsname = '%s/%s.fits'%(opts.omnipath, bname)
+    fitsname = '%s/%s.omni.calfits'%(opts.omnipath, bname)
     
     if os.path.exists(fitsname):
         print '   %s exists. Skipping...' % fitsname
@@ -190,11 +190,11 @@ for filenumber in range(len(args)/len(pols)):
     print '   Saving %s' % fitsname
     hc = HERACal(m2, g3, ex_ants = ex_ants,  optional=optional)
     hc.write_calfits(fitsname)
-    fsj = '.'.join(fitsname.split('.')[:-1])
+    fsj = '.'.join(fitsname.split('.')[:-2])
     uv_vis = make_uvdata_vis(aa, m2, v3)
     uv_vis.reorder_pols()
-    uv_vis.write_uvfits('%s.vis.fits'%fsj, force_phase=True, spoof_nonessential=True)
+    uv_vis.write_uvfits('%s.vis.uvfits'%fsj, force_phase=True, spoof_nonessential=True)
     uv_xtalk = make_uvdata_vis(aa, m2, xtalk, xtalk=True)
     uv_xtalk.reorder_pols()
-    uv_xtalk.write_uvfits('%s.xtalk.fits'%fsj, force_phase=True, spoof_nonessential=True)
+    uv_xtalk.write_uvfits('%s.xtalk.uvfits'%fsj, force_phase=True, spoof_nonessential=True)
 

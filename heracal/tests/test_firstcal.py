@@ -94,6 +94,7 @@ class Test_FirstCal(object):
         solved_delays = np.array(solved_delays).flatten()
         nt.assert_equal(np.testing.assert_almost_equal(fcal.M.flatten(), solved_delays, decimal=16), None)
 
+
 class TestFCRedInfo(object):
     def test_init_from_reds(self):
         antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])

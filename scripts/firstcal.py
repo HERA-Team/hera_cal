@@ -23,12 +23,13 @@ def flatten_reds(reds):
     for r in reds:
         freds += r
     return freds
-#get frequencies
+
+# get frequencies from miriad file
 uv = a.miriad.UV(args[0])
 fqs = a.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
 del(uv)
 
-#hera info assuming a hex of 19 and 128 antennas
+# Get HERA info and parse command line arguments
 aa = a.cal.get_aa(opts.cal, fqs)
 ex_ants = []
 ubls = []
@@ -40,13 +41,14 @@ for bl in opts.ubls.split(','):
         i,j = bl.split('_')
         ubls.append((int(i),int(j)))
     except: pass
+
 print 'Excluding Antennas:',ex_ants
 if len(ubls) != None: print 'Using Unique Baselines:',ubls
 info = omni.aa_to_info(aa, fcal=True, ubls=ubls, ex_ants=ex_ants)
 bls = flatten_reds(info.get_reds())
 print 'Number of redundant baselines:',len(bls)
-#Read in data here.
 
+# Firstcal loop per file.
 for filename in args:
     uv_in = UVData()
     uv_in.read_miriad(filename)
@@ -60,7 +62,6 @@ for filename in args:
     fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
     sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,average=opts.average,window='none')
 
-    #Converting solutions to a type that heracal can use to write uvfits files.
     meta = {}
     meta['lsts'] = uv_in.lst_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
     meta['times'] = uv_in.time_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
@@ -83,7 +84,7 @@ for filename in args:
     meta['chisq'] = np.ones_like(sols[ant].T)
 
     #Save solutions
-    filename=args[0]+'.firstcal.fits'
+    filename=args[0]+'.first.calfits'
     if not opts.outpath is None:
         outname='%s/%s'%(opts.outpath,filename.split('/')[-1])
     else:
