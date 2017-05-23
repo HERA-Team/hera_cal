@@ -19,7 +19,15 @@ args = np.sort(args)
 pols = opts.pol.split(',')
 
 def file2pol(filename): return filename.split('.')[3] #XXX assumes file naming format
+def file2djd(filename): return re.findall("\d+\.\d+",filename)[0]
 def isLinPol(polstr): return len(list(set(polstr)))==1
+
+jonesLookup = {
+    -5: (-5,-5),
+    -6: (-6,-6),
+    -7: (-5,-6),
+    -8: (-6,-5)
+}
 
 linear_pol_keys = []
 for pp in pols:
@@ -39,16 +47,21 @@ if opts.firstcal:
 
 for i, f in enumerate(args):
     pp = file2pol(f)
+    djd = file2djd(f)
     if not opts.firstcal:
         if len(pols)==1:
-            fexpected = '%s/%s.fits'%(os.path.dirname(opts.omnipath),os.path.basename(f))
-        else: 
-            fexpected = '%s/%s.fits'%(os.path.dirname(opts.omnipath), os.path.basename(f).replace('.%s'%pp,''))
+            # atomic solution application
+            fexpected = solution_files[i] #XXX this is fragile
+        else:
+            # one solution file per djd
+            fexpected = next((s for s in solution_files if djd in s),None)
         try:
             ind = solution_files.index(fexpected)
             filedict[f] = str(solution_files[ind])
         except ValueError:
-           raise Exception('Solution file %s.fits expected; not found.'%f)
+           raise Exception('Solution file %s expected; not found.'%fexpected)
+    
+    
     else:
         if nf == len(solution_files)*len(pols): # atomic firstcal application
             filedict[f] = solution_files[i] # XXX this is fragile
@@ -58,14 +71,8 @@ for i, f in enumerate(args):
             else:
                 filedict[f] = [firstcal_files[lpk][0] for lpk in linear_pol_keys]
 
-jonesLookup = {
-    -5: (-5,-5),
-    -6: (-6,-6),
-    -7: (-5,-6),
-    -8: (-6,-5)
-}
-
 for f in args:
+    import IPython;IPython.embed()
     mir = pyuvdata.UVData()
     print "  Reading {0}".format(f)
     mir.read_miriad(f)
@@ -73,7 +80,13 @@ for f in args:
         mir.unphase_to_drift()
     cal = pyuvdata.UVCal()
     print "  Reading calibration : {0}".format(filedict[f])
-    cal.read_calfits(filedict[f])
+    if len(pols)==1 or not opts.firstcal:
+        cal.read_calfits(filedict[f])
+    else:
+        if isLinPol(file2pol(f)):
+            cal.read_calfits(filedict[f][0])
+        else:
+            cal = heracal.omni.concatenate_UVCal_on_pol(filedict[f])
     
     print "  Calibrating..."
     antenna_index = dict(zip(*(cal.ant_array,range(cal.Nants_data))))

@@ -185,13 +185,15 @@ for filenumber in range(len(args)/len(pols)):
     m2['freqs'] = freqs
     m2['inttime'] = t_int
     optional = {'observer': 'heracal'}
-
+    
     print '   Saving %s' % fitsname
     hc = HERACal(m2, g3, ex_ants = ex_ants,  optional=optional)
     hc.write_calfits(fitsname)
     fsj = '.'.join(fitsname.split('.')[:-1])
     uv_vis = make_uvdata_vis(aa, m2, v3)
+    uv_vis.reorder_pols()
     uv_vis.write_uvfits('%s.vis.fits'%fsj, force_phase=True, spoof_nonessential=True)
     uv_xtalk = make_uvdata_vis(aa, m2, xtalk, xtalk=True)
+    uv_xtalk.reorder_pols()
     uv_xtalk.write_uvfits('%s.xtalk.fits'%fsj, force_phase=True, spoof_nonessential=True)
 
