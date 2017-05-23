@@ -1,3 +1,5 @@
+#! /usr/bin/env python
+
 import numpy, optparse
 from heracal import metrics, omni
 from pyuvdata import UVData
