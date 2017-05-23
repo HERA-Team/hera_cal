@@ -72,7 +72,6 @@ for i, f in enumerate(args):
                 filedict[f] = [firstcal_files[lpk][0] for lpk in linear_pol_keys]
 
 for f in args:
-    import IPython;IPython.embed()
     mir = pyuvdata.UVData()
     print "  Reading {0}".format(f)
     mir.read_miriad(f)
@@ -133,9 +132,6 @@ for f in args:
                                     mir.data_array[blmask, nsp, :, p] / \
                                     heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, :, p1]).T / \
                                     np.conj(heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[aj], nsp, :, p2]).T)
-                 
-
-
 
     if opts.firstcal:
         print " Writing {0}".format(f+'F')
