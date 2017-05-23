@@ -24,7 +24,11 @@ info = omni.aa_to_info(aa)  # we have no info here
 reds = info.get_reds()
 
 for filename in args:
-    data, flags = omni.miriad_to_dict(filename)
+    uvd = UVData()
+    uvd.read_miriad(filename)
+    if uvd.phase_type != 'drift':
+        uvd.unphase_to_drift()
+    data, flags = omni.UVData_to_dict([uvd])
     bad_ants = metrics.check_ants(reds, data)
     total_ba_string = ''
     for ba in bad_ants:
