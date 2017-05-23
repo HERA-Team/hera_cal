@@ -402,20 +402,20 @@ class TestMethods(object):
         except ValueError:
             pass
 
-    def test_miriad_to_dict(self):
+    def test_UVData_to_dict(self):
         str2pol = {'xx':-5, 'yy': -6, 'xy':-7, 'yy':-8}
         uvd =  UVData()
         uvd.read_miriad(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA'))
         if uvd.phase_type != 'drift':
             uvd.unphase_to_drift()
     
-        d,f = omni.miriad_to_dict([os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA')]*2)
-        for pol in d:
-            for i,j in d[pol]:
+        d,f = omni.UVData_to_dict([uvd,uvd])
+        for i,j in d:
+            for pol in d[i,j]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])
                 uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
-                np.testing.assert_equal(d[pol][i,j], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], d[pol][i,j].shape))
-                np.testing.assert_equal(f[pol][i,j], np.resize(uvd.flag_array[uvmask][:,0,:,uvpol], f[pol][i,j].shape))
+                np.testing.assert_equal(d[i,j][pol], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], d[i,j][pol].shape))
+                np.testing.assert_equal(f[i,j][pol], np.resize(uvd.flag_array[uvmask][:,0,:,uvpol], f[i,j][pol].shape))
         
         
         

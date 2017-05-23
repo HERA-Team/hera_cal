@@ -1,5 +1,6 @@
 '''Tests for firstcal.py'''
 import heracal.firstcal as firstcal
+from heracal.omni import compute_reds
 import nose.tools as nt
 import os
 import numpy as np
@@ -13,16 +14,17 @@ class Test_FirstCal(object):
         self.freqs = np.linspace(.1,.2,64)
         self.times = np.arange(1)
         ants = np.arange(len(antpos))
+        reds = compute_reds(len(ants), 'x', antpos, tol=0.1) 
 
         self.info = firstcal.FirstCalRedundantInfo(len(antpos))
         self.info.init_from_reds(reds, antpos)
 
         # Simulate unique "true" visibilities
         np.random.seed(21)
-        self.vis_true = {}
+        self.vis_true = {'xx':{}}
         i = 0
         for rg in reds:
-            self.vis_true[rg[0]] = np.array(1.0*np.random.randn(len(self.times),len(self.freqs)) + 1.0j*np.random.randn(len(self.times),len(self.freqs)), dtype=np.complex64)
+            self.vis_true['xx'][rg[0]] = np.array(1.0*np.random.randn(len(self.times),len(self.freqs)) + 1.0j*np.random.randn(len(self.times),len(self.freqs)), dtype=np.complex64)
 
         # Generate and apply firstcal gains
         self.fcgains = {}
@@ -34,6 +36,7 @@ class Test_FirstCal(object):
                 self.delays[i] = np.random.randn()*30
             fcspectrum = np.exp(2.0j * np.pi * self.delays[i] * self.freqs)
             self.fcgains[i] = np.array([fcspectrum for t in self.times], dtype=np.complex64)
+            self.delays[i] /= 1e9
 
         # Generate fake data
         bl2ublkey = {bl: rg[0] for rg in reds for bl in rg}
@@ -41,20 +44,23 @@ class Test_FirstCal(object):
         self.wgts = {}
         for rg in reds:
             for (i,j) in rg:
-                self.data[(i,j)] = np.array(np.conj(self.fcgains[i]) * self.fcgains[j] * self.vis_true[rg[0]], dtype=np.complex64)
-                self.wgts[(i,j)] = np.ones_like(self.data[(i,j)], dtype=np.bool)
+                self.data[(i.val,j.val)] = {}
+                self.wgts[(i.val,j.val)] = {}
+                for pol in ['xx']:
+                    self.data[(i.val,j.val)][pol] = np.array(np.conj(self.fcgains[i.val]) * self.fcgains[j.val] * self.vis_true['xx'][rg[0]], dtype=np.complex64)
+                    self.wgts[(i.val,j.val)][pol] = np.ones_like(self.data[(i.val,j.val)][pol], dtype=np.bool)
 
     def test_data_to_delays(self):
         fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
         w = fcal.data_to_delays()
         for (i,k), (l,m) in w.keys():
-            nt.assert_almost_equal(w[(i,k), (l,m)][0], self.delays[i]-self.delays[k]-self.delays[l]+self.delays[m], places=7)
+            nt.assert_almost_equal(w[(i,k), (l,m)][0], self.delays[i]-self.delays[k]-self.delays[l]+self.delays[m], places=16)
 
     def test_data_to_delays_average(self):
         fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
         w = fcal.data_to_delays(average=True)
         for (i,k), (l,m) in w.keys():
-            nt.assert_almost_equal(w[(i,k), (l,m)][0], self.delays[i]-self.delays[k]-self.delays[l]+self.delays[m], places=7)
+            nt.assert_almost_equal(w[(i,k), (l,m)][0], self.delays[i]-self.delays[k]-self.delays[l]+self.delays[m], places=16)
 
     def test_get_N(self):
         fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
@@ -64,7 +70,7 @@ class Test_FirstCal(object):
         fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
         nt.assert_equal(fcal.get_M().shape, (len(self.info.bl_pairs), len(self.times)))
         _M = np.array([ 1*(self.delays[i]*np.ones(len(self.times))-self.delays[k]*np.ones(len(self.times))-self.delays[l]*np.ones(len(self.times))+self.delays[m]*np.ones(len(self.times))) for (i,k),(l,m) in self.info.bl_pairs])
-        nt.assert_equal(np.testing.assert_almost_equal(_M, fcal.get_M(), decimal=7), None)
+        nt.assert_equal(np.testing.assert_almost_equal(_M, fcal.get_M(), decimal=16), None)
 
     def test_run(self):
         fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
@@ -75,7 +81,7 @@ class Test_FirstCal(object):
             dlys = fcal.xhat[ant_indexes]
             solved_delays.append(dlys[0] - dlys[1] - dlys[2] + dlys[3])
         solved_delays = np.array(solved_delays).flatten()
-        nt.assert_equal(np.testing.assert_almost_equal(fcal.M.flatten(), solved_delays, decimal=7), None)
+        nt.assert_equal(np.testing.assert_almost_equal(fcal.M.flatten(), solved_delays, decimal=16), None)
         
     def test_run_average(self):
         fcal = firstcal.FirstCal(self.data, self.wgts, self.freqs, self.info)
@@ -86,12 +92,12 @@ class Test_FirstCal(object):
             dlys = fcal.xhat[ant_indexes]
             solved_delays.append(dlys[0] - dlys[1] - dlys[2] + dlys[3])
         solved_delays = np.array(solved_delays).flatten()
-        nt.assert_equal(np.testing.assert_almost_equal(fcal.M.flatten(), solved_delays, decimal=7), None)
+        nt.assert_equal(np.testing.assert_almost_equal(fcal.M.flatten(), solved_delays, decimal=16), None)
 
 class TestFCRedInfo(object):
     def test_init_from_reds(self):
         antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])
-        reds = [[(0,1),(1,2),(2,3)],[(0,2),(1,3)]]
+        reds = compute_reds(4, 'x', antpos)
         blpairs = [((0,1),(1,2)),((0,1),(2,3)),((1,2),(2,3)),((0,2),(1,3))]
         A = np.array([[1, -2, 1, 0], [1,-1,-1,1], [0,1,-2,1], [1,-1,-1,1]])
         i = firstcal.FirstCalRedundantInfo(4)
@@ -105,8 +111,8 @@ class TestFCRedInfo(object):
         nt.assert_true(i.blperant[3] == 2)
         nt.assert_true(np.all(i.A == A))
     def test_bl_index(self):
-        reds = [[(0,1),(1,2),(2,3)],[(0,2),(1,3)]]
         antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])
+        reds = compute_reds(4, 'x', antpos)
         i = firstcal.FirstCalRedundantInfo(4)
         i.init_from_reds(reds,antpos)
         bls_order = [bl for ublgp in reds for bl in ublgp]
@@ -114,7 +120,7 @@ class TestFCRedInfo(object):
             nt.assert_equal(i.bl_index(b),k)
     def test_blpair_index(self):
         antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])
-        reds = [[(0,1),(1,2),(2,3)],[(0,2),(1,3)]]
+        reds = compute_reds(4, 'x', antpos)
         blpairs = [((0,1),(1,2)),((0,1),(2,3)),((1,2),(2,3)),((0,2),(1,3))]
         i = firstcal.FirstCalRedundantInfo(4)
         i.init_from_reds(reds,antpos)
@@ -122,7 +128,7 @@ class TestFCRedInfo(object):
             nt.assert_equal(i.blpair_index(bp), k)
     def test_blpair2antindex(self):
         antpos = np.array([[0.,0,0],[1,0,0],[2,0,0],[3,0,0]])
-        reds = [[(0,1),(1,2),(2,3)],[(0,2),(1,3)]]
+        reds = compute_reds(4, 'x', antpos)
         blpairs = [((0,1),(1,2)),((0,1),(2,3)),((1,2),(2,3)),((0,2),(1,3))]
         i = firstcal.FirstCalRedundantInfo(4)
         i.init_from_reds(reds,antpos)
