@@ -5,6 +5,8 @@
 
 The heracal package inlcudes modules and scripts that are required to run redundant calibration on HERA as part of the real time system.
 
+Full documentation available on [Read the Docs.](http://heracal.readthedocs.io/en/latest/)
+
 # Package Details
 
 ## Modules
