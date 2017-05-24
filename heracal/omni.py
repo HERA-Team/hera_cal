@@ -467,7 +467,7 @@ def from_fits(filename, keep_delay=False, **kwargs):
     meta, gains = {}, {}
     poldict = {-5: 'xx', -6: 'yy', -7:'xy', -8:'yx'}
     
-    firstcal = filename[0].split('.')[-2] == 'firstcal'
+    firstcal = filename[0].split('.')[-2] == 'first'
 
     cal = UVCal()
     # filename loop

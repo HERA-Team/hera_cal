@@ -24,4 +24,4 @@ for calfile in args:
         flags = xrfi.xrfi(avg_chisq_over_ant[:,:,ip])
         for i, ant in enumerate(uvcal.ant_array):
             uvcal.flag_array[i, 0, :, :, ip] = np.logical_or(uvcal.flag_array[i, 0, :, :, ip],flags)
-    uvcal.write_calfits('.'join(calfile.split('.')[:-1]) + '.xrfi.calfits')
+    uvcal.write_calfits('.'.join(calfile.split('.')[:-1]) + '.xrfi.calfits')
