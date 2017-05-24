@@ -39,28 +39,28 @@ omni_run_xid=`echo ${omni_run_xid} | cut -f 1 -d . | cut -f 3 -d ' '`
 # apply omnical solutions to files
 echo omni_apply_yid=qsub -hold_jid ${omni_run_yid} -t 1-72 ~/src/heracal/scripts/batch_omni_apply.sh -p yy  /data4/paper/HERA2015/${jd}/zen.${jd}.*.yy.HH.uvc
 omni_apply_yid=`qsub -hold_jid ${omni_run_yid} -t 1-72 ~/src/heracal/scripts/batch_omni_apply.sh -p yy  /data4/paper/HERA2015/${jd}/zen.${jd}.*.yy.HH.uvc`
-omni_apply_yid=`echo ${omni_apply_yid} | cut -f 1 -d . | cut -f 3 -d`
+omni_apply_yid=`echo ${omni_apply_yid} | cut -f 1 -d . | cut -f 3 -d ' '`
 echo omni_apply_xid=qsub -hold_jid ${omni_run_xid} -t 1-72 ~/src/heracal/scripts/batch_omni_apply.sh -p xx  /data4/paper/HERA2015/${jd}/zen.{jd}.*.xx.HH.uvc
 omni_apply_xid=`qsub -hold_jid ${omni_run_xid} -t 1-72 ~/src/heracal/scripts/batch_omni_apply.sh -p xx  /data4/paper/HERA2015/${jd}/zen.${jd}.*.xx.HH.uvc`
-omni_apply_xid=`echo ${omni_apply_xid} | cut -f 1 -d . | cut -f 3 -d`
+omni_apply_xid=`echo ${omni_apply_xid} | cut -f 1 -d . | cut -f 3 -d ' '`
 
 
 # run xrfi
 echo xrfi_yid=qsub -hold_jid ${omni_apply_yid} -t 1-72 ~/src/heracal/scripts/batch_xrfi.sh /data4/paper/HERA2015/${jd}/zen.${jd}.*.yy.HH.uvc.omni.calfits
 xrfi_yid=`qsub -hold_jid ${omni_apply_yid} -t 1-72 ~/src/heracal/scripts/batch_xrfi.sh /data4/paper/HERA2015/${jd}/zen.${jd}.*.yy.HH.uvc.omni.calfits`
-xrfi_yid=`echo ${xrfi_yid} | cut -f 1 -d . | cut -f 3 -d`
+xrfi_yid=`echo ${xrfi_yid} | cut -f 1 -d . | cut -f 3 -d ' '`
 echo xrfi_xid=qsub -hold_jid ${omni_apply_xid} -t 1-72 ~/src/heracal/scripts/batch_xrfi.sh /data4/paper/HERA2015/${jd}/zen.${jd}.*.xx.HH.uvc.omni.calfits
 xrfi_xid=`qsub -hold_jid ${omni_apply_xid} -t 1-72 ~/src/heracal/scripts/batch_xrfi.sh /data4/paper/HERA2015/${jd}/zen.${jd}.*.xx.HH.uvc.omni.calfits`
-xrfi_xid=`echo ${xrfi_xid} | cut -f 1 -d . | cut -f 3 -d`
+xrfi_xid=`echo ${xrfi_xid} | cut -f 1 -d . | cut -f 3 -d ' '`
 
 
 # apply xrfi omnical solutions
 echo omni_apply_yid=qsub -hold_jid ${xrfi_yid} -t 1-72 ~/src/heracal/scripts/batch_omni_xrfi_apply.sh -p yy  /data4/paper/HERA2015/${jd}/zen.${jd}.*.yy.HH.uvc
 omni_apply_xrfi_yid=`qsub -hold_jid ${xrfi_yid} -t 1-72 ~/src/heracal/scripts/batch_omni_xrfi_apply.sh -p yy  /data4/paper/HERA2015/${jd}/zen.${jd}.*.yy.HH.uvc`
-omni_apply_xrfi_yid=`echo ${omni_apply_xrfi_yid} | cut -f 1 -d . | cut -f 3 -d`
+omni_apply_xrfi_yid=`echo ${omni_apply_xrfi_yid} | cut -f 1 -d . | cut -f 3 -d ' '`
 echo omni_apply_xid=qsub -hold_jid ${xrfi_xid} -t 1-72 ~/src/heracal/scripts/batch_omni_xrfi_apply.sh -p xx  /data4/paper/HERA2015/${jd}/zen.{jd}.*.xx.HH.uvc
 omni_apply_xrfi_xid=`qsub -hold_jid ${xrfi_xid} -t 1-72 ~/src/heracal/scripts/batch_omni_xrfi_apply.sh -p xx  /data4/paper/HERA2015/${jd}/zen.${jd}.*.xx.HH.uvc`
-omni_apply_xrfi_xid=`echo ${omni_apply_xrfi_xid} | cut -f 1 -d . | cut -f 3 -d`
+omni_apply_xrfi_xid=`echo ${omni_apply_xrfi_xid} | cut -f 1 -d . | cut -f 3 -d ' '`
 echo cd ..
 cd ..
 
