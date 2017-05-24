@@ -553,8 +553,8 @@ def from_fits(filename, keep_delay=False, **kwargs):
     x = {}
     # if these are omnical solutions, there vis.fits and xtalk.fits were created.
     if not firstcal:
-        visfile = ['.'.join(fitsname.split('.')[:-1]) + '.vis.fits' for fitsname in filename]
-        xtalkfile = ['.'.join(fitsname.split('.')[:-1]) + '.xtalk.fits' for fitsname in filename]
+        visfile = ['.'.join(fitsname.split('.')[:-2]) + '.vis.uvfits' for fitsname in filename]
+        xtalkfile = ['.'.join(fitsname.split('.')[:-2]) + '.xtalk.uvfits' for fitsname in filename]
 
         vis = UVData()
         xtalk = UVData()
