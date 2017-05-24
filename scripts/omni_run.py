@@ -8,7 +8,7 @@ import optparse
 import os, sys, glob
 
 o = optparse.OptionParser()
-o.set_usage("omni_run.py -C [calfile] -p [pol] --firstcal [firstcal path] [options] *.uvc")
+o.set_usage("omni_run.py -C [calfile] -p [pol] --firstcal=[firstcal path] [options] *.uvc")
 o.set_description(__doc__)
 aipy.scripting.add_standard_options(o, cal=True, pol=True)
 o.add_option('--omnipath', dest='omnipath', default='.', type='string',
