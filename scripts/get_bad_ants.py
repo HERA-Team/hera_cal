@@ -28,9 +28,10 @@ reds = info.get_reds()
 
 # parse ex_ants
 ex_ants = []
-for ant in opts.ex_ants.split(','):
-    try: ex_ants.append(int(ant))
-    except: pass
+if opts.ex_ants:
+    for ant in opts.ex_ants.split(','):
+        try: ex_ants.append(int(ant))
+        except: pass
 
 
 for filename in args:
@@ -40,18 +41,18 @@ for filename in args:
         uvd.unphase_to_drift()
     data, flags = omni.UVData_to_dict([uvd])
     bad_ants = metrics.check_ants(reds, data, skip_ants=ex_ants)
-    total_ba_string = ','.join(map(str,ex_ants))  # start string with known bad ants
+    total_ba = ex_ants  # start string with known bad ants
     for ba in bad_ants:
         # check if bad ants count is larger than some number of antennas.
         if bad_ants[ba] > opts.frac*len(info.subsetant):
             # check if antenna
             if type(ba[-1]) is str:
-                ret_ba = str(ba[0])  # get antenna number of bad ant
+                ret_ba = ba[0]  # get antenna number of bad ant
             # else it's a baseline. Don't support this now
             else: 
                 pass
-            total_ba_string += ret_ba + ','
+            total_ba.append(ret_ba)
     if opts.write:
-        print 'Writing {0} to file'.format(total_ba_string)
+        print 'Writing {0} to file'.format(total_ba)
         writefile = open(filename+'.badants.txt', 'w')
-        writefile.write(total_ba_string)
+        writefile.write(','.join(map(str,total_ba)))

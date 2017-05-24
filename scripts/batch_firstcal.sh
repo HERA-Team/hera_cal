@@ -8,8 +8,6 @@
 
 ARGS=`pull_args.py $*`
 HERA_CALFILE=hsa7458_v000
-EX_ANTS_X=81
-EX_ANTS_Y=81
 POL_VAL=""
 
 # get extra optional parameters
@@ -49,15 +47,8 @@ if [ "${POL_VAL}" != "xx" && "${POL_VAL}" != "yy" ]; then
     exit 1
 fi
 
-# pass in bad antennas
-if [ $POL_VAL == "xx" ]; then
-    EX_ANTS=$EX_ANTS_X
-elif [ $POL_VAL == "yy" ]; then
-    EX_ANTS=$EX_ANTS_Y
-fi
-
 for f in ${ARGS}; do 
-    echo ~/src/heracal/scripts/firstcal.py ${f} -p ${POL_VAL} --ex_ants=${EX_ANTS} -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
-    ~/src/heracal/scripts/firstcal.py ${f} -p ${POL_VAL} --ex_ants=${EX_ANTS} -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
+    echo ~/src/heracal/scripts/firstcal.py ${f} -p ${POL_VAL} --ex_ants=`cat ${f}.badants.txt` -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
+    ~/src/heracal/scripts/firstcal.py ${f} -p ${POL_VAL} --ex_ants=`cat ${f}.badants.txt` -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
 
 done
