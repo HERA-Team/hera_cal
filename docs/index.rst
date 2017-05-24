@@ -13,7 +13,7 @@ heracal
            :target: https://coveralls.io/github/HERA-Team/heracal?branch=master
 
 heracal is a package that contains modules and scripts that are required to run
-redundant calibration on the hydrogen epoch of reionization array (HERA) as part
+redundant calibration on the [hydrogen epoch of reionization array](http://reionization.org/) (HERA) as part
 of the real time calibration system.
 
 
@@ -23,7 +23,7 @@ heracal aims to have a well supported and tested scripts to run calibration anal
 All new functions, classes, modules, and scripts shall be well tested. Test coverage 
 should be > 95%. 
 
-Installation
+Installation Instructions
 ============
 
 Dependencies
@@ -40,7 +40,7 @@ First Install all dependencies.
 -  omnical >= 5.0.2
 -  matplotlib
 
-Install heracal
+Installing heracal
 ---------------
 To get the latest version of heracal, clone the repository with 
 ``git clone https://github.com/HERA-Team/heracal.git``
@@ -62,10 +62,8 @@ Further Documentation
 .. toctree::
    :maxdepth: 1
     
-   omni
-   firstcal
-   metrics
-   xrfi
+   scripts_overview
+   modules
 
 
 
