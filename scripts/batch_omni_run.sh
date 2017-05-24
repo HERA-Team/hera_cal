@@ -8,8 +8,6 @@
 
 ARGS=`pull_args.py $*`
 HERA_CAL_FILE=hsa7458_v000
-EX_ANTS_X=81
-EX_ANTS_Y=81
 POL_VAL=""
 
 # process command line options
@@ -42,14 +40,7 @@ if [ "${POL_VAL}" != "xx" && "${POL_VAL}" != "yy" ]; then
     exit 1
 fi
 
-# pass in bad antennas
-if [ $POL_VAL == "xx" ]; then
-    EX_ANTS=$EX_ANTS_X
-elif [ $POL_VAL == "yy" ]; then
-    EX_ANTS=$EX_ANTS_Y
-fi
-
 for f in ${ARGS}; do
-    echo ~/src/heracal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=${EX_ANTS} ${f} --firstcal="${f}.firstcal.fits"
-    ~/src/heracal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=${EX_ANTS} ${f} --firstcal="${f}.firstcal.fits"
+    echo ~/src/heracal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=`cat ${f}.badants.txt` ${f} --firstcal="${f}.firstcal.fits"
+    ~/src/heracal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=`cat ${f}.badants.txt` ${f} --firstcal="${f}.firstcal.fits"
 done
