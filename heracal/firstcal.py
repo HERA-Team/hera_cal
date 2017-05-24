@@ -249,7 +249,7 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
         self.A = A
         # Don't really need to have these.
         self.antloc = antpos.take(self.subsetant, axis=0).astype(np.float32)
-        self.ubl = np.array([np.mean([antpos[j] - antpos[i] for i, j in ublgp], axis=0) for ublgp in reds], dtype=np.float32)
+        self.ubl = np.array([np.mean([antpos[int(j)] - antpos[int(i)] for i, j in ublgp], axis=0) for ublgp in reds], dtype=np.float32)
 
     def get_reds(self):
         '''Returns redundancies.
