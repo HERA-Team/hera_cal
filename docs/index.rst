@@ -13,8 +13,8 @@ heracal
            :target: https://coveralls.io/github/HERA-Team/heracal?branch=master
 
 heracal is a package that contains modules and scripts that are required to run
-redundant calibration on the [hydrogen epoch of reionization array](http://reionization.org/) (HERA) as part
-of the real time calibration system.
+redundant calibration on the Hydrogen Epoch of Reionization Array (HERA) as part
+of the real time calibration system. For more on HERA, visit http://reionization.org/
 
 
 Package Details
