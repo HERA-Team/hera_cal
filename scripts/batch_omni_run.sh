@@ -6,7 +6,6 @@
 #$ -l paper
 #$ -l h_vmem=12G
 
-ARGS=`pull_args.py $*`
 HERA_CAL_FILE=hsa7458_v000
 POL_VAL=""
 
@@ -28,6 +27,8 @@ while getopts ":p:" opt; do
     esac
 done
 shift $((OPTIND-1))
+
+ARGS=`pull_args.py $*`
 
 # make sure polarization is valid
 if [ "${POL_VAL}" == "" ]; then

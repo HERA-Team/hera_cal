@@ -6,7 +6,6 @@
 #$ -l paper
 #$ -l h_vmem=5G
 
-ARGS=`pull_args.py $*`
 POL_VAL=""
 
 # process command line options
@@ -27,6 +26,8 @@ while getopts ":p:" opt; do
     esac
 done
 shift $((OPTIND-1))
+
+ARGS=`pull_args.py $*`
 
 # make sure polarization is valid
 if [ "${POL_VAL}" == "" ]; then

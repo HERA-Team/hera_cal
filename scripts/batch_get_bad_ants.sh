@@ -7,7 +7,6 @@
 #$ -l h_vmem=8G
 
 # init
-ARGS=`pull_args.py $*`
 BAD_ANTS=""
 
 
@@ -26,6 +25,7 @@ while getopts ":a:" opt; do
 done
 shift $((OPTIND-1))
 
+ARGS=`pull_args.py $*`
 
 for f in ${ARGS}; do
     echo ~/src/heracal/scripts/get_bad_ants.py --ex_ants=${BAD_ANTS} ${f} --write
