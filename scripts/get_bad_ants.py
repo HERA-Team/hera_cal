@@ -7,6 +7,7 @@ import aipy as a
 import sys
 
 o = optparse.OptionParser()
+o.set_usage("omni_run.py -C [calfile] [options] *.uvc")
 a.scripting.add_standard_options(o, cal=True)
 o.add_option('--frac', default=.3, 
              help='Fraction of total number of antennas to flag as bad and write out')
