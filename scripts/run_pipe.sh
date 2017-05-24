@@ -60,6 +60,13 @@ omni_apply_yid=`qsub -hold_jid ${omni_run_yid} -t 1-72 ~/src/mycapo/zsa/scripts/
 echo omni_apply_xid=qsub -hold_jid ${omni_run_xid} -t 1-72 ~/src/mycapo/zsa/scripts/batch_omni_apply.sh -p xx  /data4/paper/HERA2015/${jd}/zen.{jd}.*.xx.HH.uvc
 omni_apply_xid=`qsub -hold_jid ${omni_run_xid} -t 1-72 ~/src/mycapo/zsa/scripts/batch_omni_apply.sh -p xx  /data4/paper/HERA2015/${jd}/zen.${jd}.*.xx.HH.uvc`
 
+
+# run xrfi
+echo xrfi_yid=qsub  -hold_jid ${omni_run_yid} -t 1-72 ~/src/mycapo/zsa/scripts/batch_xrfi.sh /data4/paper/HERA2015/${jd}/zen.${jd}.*.yy.HH.uvc.omni.calfits
+xrfi_yid=`qsub  -hold_jid ${omni_run_yid} -t 1-72 ~/src/mycapo/zsa/scripts/batch_xrfi.sh /data4/paper/HERA2015/${jd}/zen.${jd}.*.yy.HH.uvc.omni.calfits`
+echo xrfi_xid=qsub  -hold_jid ${omni_run_xid} -t 1-72 ~/src/mycapo/zsa/scripts/batch_xrfi.sh /data4/paper/HERA2015/${jd}/zen.${jd}.*.xx.HH.uvc.omni.calfits
+xrfi_xid=`qsub  -hold_jid ${omni_run_xid} -t 1-72 ~/src/mycapo/zsa/scripts/batch_xrfi.sh /data4/paper/HERA2015/${jd}/zen.${jd}.*.xx.HH.uvc.omni.calfits`
+
 echo cd ..
 cd ..
 
