@@ -134,6 +134,12 @@ for f in args:
                                     mir.data_array[blmask, nsp, :, p] / \
                                     heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, :, p1]).T / \
                                     np.conj(heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[aj], nsp, :, p2]).T)
+                
+                # Update miriad flags array 
+                mir.flag_array[blmask, nsp, :, p] = np.logical_or( \
+                            mir.flag_array[blmask, nsp, :, p], \
+                            np.logical_or(cal.flag_array[antenna_index[ai], nsp, :, :, p1].T, \
+                                          cal.flag_array[antenna_index[aj], nsp, :, :, p2].T) )
 
     if opts.firstcal:
         print " Writing {0}".format(f+'F')
