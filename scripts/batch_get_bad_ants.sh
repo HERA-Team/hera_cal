@@ -8,6 +8,7 @@
 
 # init
 BAD_ANTS=""
+CALFILE=hsa7458_v000
 
 
 # process command line options
@@ -28,6 +29,6 @@ shift $((OPTIND-1))
 ARGS=`pull_args.py $*`
 
 for f in ${ARGS}; do
-    echo ~/src/heracal/scripts/get_bad_ants.py --ex_ants=${BAD_ANTS} ${f} --write
-    ~/src/heracal/scripts/get_bad_ants.py --ex_ants=${BAD_ANTS} ${f} --write
+    echo ~/src/heracal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${f} --write
+    ~/src/heracal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${f} --write
 done

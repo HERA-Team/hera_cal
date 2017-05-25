@@ -35,7 +35,7 @@ if [ "${POL_VAL}" == "" ]; then
     exit 1
 fi
 
-if [ "${POL_VAL}" != "xx" && "${POL_VAL}" != "yy" ]; then
+if [ "${POL_VAL}" != "xx" ] && [ "${POL_VAL}" != "yy" ]; then
     echo "polarization value must be 'xx' or 'yy'"
     exit 1
 fi
