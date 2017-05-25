@@ -344,18 +344,26 @@ class TestMethods(object):
         uv_vis_in = UVData()
         uv_vis_in.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
         uv_vis_in.unphase_to_drift()
+        # overwrite history because uvdata writes git stuff whenever data is written to a file.
+        uv_vis_in.history = 'test_history'
 
         uv_xtalk_in = UVData()
         uv_xtalk_in.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
         uv_xtalk_in.unphase_to_drift()
+        # overwrite history because uvdata writes git stuff whenever data is written to a file.
+        uv_xtalk_in.history = 'test_history'
 
         uv_vis_out= UVData()
         uv_vis_out.read_uvfits(os.path.join(DATA_PATH,'write_vis_test.fits'))
         uv_vis_out.unphase_to_drift()
+        # overwrite history because uvdata writes git stuff whenever data is written to a file.
+        uv_vis_out.history = 'test_history'
 
         uv_xtalk_out = UVData()
         uv_xtalk_out.read_uvfits(os.path.join(DATA_PATH,'write_xtalk_test.fits'))
         uv_xtalk_out.unphase_to_drift()
+        # overwrite history because uvdata writes git stuff whenever data is written to a file.
+        uv_xtalk_out.history = 'test_history'
 
         nt.assert_equal(uv_vis_in, uv_vis_out)
         nt.assert_equal(uv_xtalk_in, uv_xtalk_in)
