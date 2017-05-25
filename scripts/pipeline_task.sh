@@ -1,14 +1,20 @@
-#!/bin/bash
+#$ -S /bin/bash
+#$ -V
+#$ -cwd
+#$ -o grid_output
+#$ -e grid_output
+#$ -l paper
+#$ -l h_vmem=12G
 
 # define bad antennas
 EX_ANTS_X=81
 EX_ANTS_Y=81
 
 # cal info
-HERA_CAL=hsa7458_v000
-observer="Zaki Ali"
+CALFILE=hsa7458_v000
+observer="Zaki"
 cd ~/src/heracal/
-git_origin_cal=`git remote -v | grep origin | grep fetch`
+git_origin_cal=`git remote -v | grep origin | grep fetch | cut -f 2 | cut -d' ' -f1`
 git_hash_cal=`git rev-parse HEAD`
 cd -
 
@@ -16,10 +22,10 @@ cd -
 POL_VAL=""
 
 # get polarization information
-for getopts ":p:" opt; do
+while getopts ":p:" opt; do
     case $opt in
 	p)
-	    POL_VAL=`echo "${OPTARG}" | tr '[:upper:]' '[:lower:]`
+	    POL_VAL=`echo "${OPTARG}" | tr '[:upper:]' '[:lower:]'`
 	    ;;
 	\?)
 	    echo "Invalid option: -$OPTARG"
@@ -75,9 +81,9 @@ fi
 # run firstcal
 for i in {0..2}; do
     echo "firstcal iteration $i"
-    echo ~/src/heracal/scripts/firstcal.py ${ARGS} -p ${POL_VAL} --ex_ants=`cat ${ARGS}.badants.txt` -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
-    ~/src/heracal/scripts/firstcal.py ${ARGS} -p ${POL_VAL} --ex_ants=`cat ${ARGS}.badants.txt` -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
-    if [ $? -eq 0]; then
+    echo ~/src/heracal/scripts/firstcal.py ${ARGS} -p ${POL_VAL} --ex_ants=`cat ${ARGS}.badants.txt` -C ${CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
+    ~/src/heracal/scripts/firstcal.py ${ARGS} -p ${POL_VAL} --ex_ants=`cat ${ARGS}.badants.txt` -C ${CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
+    if [ $? -eq 0 ]; then
 	break
     fi
 done
@@ -90,9 +96,9 @@ fi
 # run omnical
 for i in {0..2}; do
     echo "omni_run iteration $i"
-    echo ~/src/heracal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=`cat ${ARGS}.badants.txt` ${ARGS} --firstcal="${ARGS}.first.calfits" --omnipath=`dirname ${ARGS}`
-    ~/src/heracal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=`cat ${ARGS}.badants.txt` ${ARGS} --firstcal="${ARGS}.first.calfits" --omnipath=`dirname ${ARGS}`
-    if [ $? -eq 0]; then
+    echo ~/src/heracal/scripts/omni_run.py -C ${CALFILE} -p $POL_VAL --ex_ants=`cat ${ARGS}.badants.txt` ${ARGS} --firstcal="${ARGS}.first.calfits" --omnipath=`dirname ${ARGS}`
+    ~/src/heracal/scripts/omni_run.py -C ${CALFILE} -p $POL_VAL --ex_ants=`cat ${ARGS}.badants.txt` ${ARGS} --firstcal="${ARGS}.first.calfits" --omnipath=`dirname ${ARGS}`
+    if [ $? -eq 0 ]; then
 	break
     fi
 done
@@ -120,8 +126,8 @@ fi
 # run xrfi
 for i in {0..2}; do
     echo "xrfi iteration $i"
-    echo ~/src/heracal/scripts/omni_xrfi.py ${ARGS}
-    ~/src/heracal/scripts/omni_xrfi.py ${ARGS}
+    echo ~/src/heracal/scripts/omni_xrfi.py ${ARGS}.omni.calfits
+    ~/src/heracal/scripts/omni_xrfi.py ${ARGS}.omni.calfits
     if [ $? -eq 0 ]; then
 	break
     fi
@@ -135,8 +141,8 @@ fi
 # run omni_xrfi_apply
 for i in {0..2}; do
     echo "omni_xrfi_apply itertaion $i"
-    echo ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${f}.omni.xrfi.calfits --extension="OR" ${ARGS}
-    ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${f}.omni.xrfi.calfits --extension="OR" ${ARGS}
+    echo ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.xrfi.calfits --extension="OR" ${ARGS}
+    ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.xrfi.calfits --extension="OR" ${ARGS}
     if [ $? -eq 0 ]; then
 	break
     fi

@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-import numpy as np, optparse, sys
+import numpy as np, optparse, sys, os
 import aipy as a
 from heracal import omni
 from heracal import firstcal
@@ -51,6 +51,16 @@ print 'Number of redundant baselines:',len(bls)
 
 # Firstcal loop per file.
 for filename in args:
+    # make output filename and check for existence
+    if not opts.outpath is None:
+        outname='%s/%s'%(opts.outpath,filename.split('/')[-1]+'.first.calfits')
+    else:
+        outname='%s'%filename+'.first.calfits'
+    if os.path.exists(outname):
+        raise IOError("File {0} already exists".format(outname))
+
+    #read in data and run firstcal
+    print("Reading {0}".format(filename))
     uv_in = UVData()
     uv_in.read_miriad(filename)
     if uv_in.phase_type != 'drift':
@@ -60,7 +70,6 @@ for filename in args:
     wgtpack = {k : { p : np.logical_not(wgtpack[k][p]) for p in wgtpack[k]} for k in wgtpack}  # logical_not of wgtpack
 
     #gets phase solutions per frequency.
-    import IPython; IPython.embed()
     fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
     sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,average=opts.average,window='none')
 
@@ -86,12 +95,6 @@ for filename in args:
     meta['chisq'] = np.ones_like(sols[ant].T)
 
     #Save solutions
-    filename=args[0]+'.first.calfits'
-    if not opts.outpath is None:
-        outname='%s/%s'%(opts.outpath,filename.split('/')[-1])
-    else:
-        outname='%s'%filename
-
     optional = {'observer': opts.observer,
                 'git_origin_cal': opts.git_origin_cal,
                 'git_hash_cal':  opts.git_hash_cal}
