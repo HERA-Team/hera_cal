@@ -45,7 +45,7 @@ for bl in opts.ubls.split(','):
 
 print 'Excluding Antennas:',ex_ants
 if len(ubls) != None: print 'Using Unique Baselines:',ubls
-info = omni.aa_to_info(aa, fcal=True, ubls=ubls, ex_ants=ex_ants)
+info = omni.aa_to_info(aa, pols=[opts.pol[0]], fcal=True, ubls=ubls, ex_ants=ex_ants)
 bls = flatten_reds(info.get_reds())
 print 'Number of redundant baselines:',len(bls)
 
@@ -60,6 +60,7 @@ for filename in args:
     wgtpack = {k : { p : np.logical_not(wgtpack[k][p]) for p in wgtpack[k]} for k in wgtpack}  # logical_not of wgtpack
 
     #gets phase solutions per frequency.
+    import IPython; IPython.embed()
     fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
     sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,average=opts.average,window='none')
 
