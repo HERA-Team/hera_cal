@@ -12,7 +12,7 @@ Full usage instuctions available using ``python get_bad_ants.py -h`` in the scri
 
 firstcal.py
 ---------------
-Uses ratios of visibilities of nominally redundant baselines to determine the delay associated with each antenna (up to some overall delay). Reads in a miriad uv raw data file. Bad antennas are specified on the command line. Saves delays as frequency-dependent gains with magnitude unity in a calfits file, as defined in pyuvdata, that ends with ".first.calfits".
+Uses ratios of visibilities of nominally redundant baselines to determine the delay associated with each antenna (up to some overall delay). Reads in a miriad uv raw data file. Bad antennas are specified on the command line. Saves delays in the calfits format using the "cal_type = delay" mode (as opposed to a frequency-dependent quantity) to a file ends with ".first.calfits".
 
 Full usage instuctions available using ``python firstcal.py -h`` in the scripts directory.
 
