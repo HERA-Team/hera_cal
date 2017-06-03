@@ -5,7 +5,7 @@ from copy import deepcopy
 import numpy.linalg as la
 from pyuvdata import UVCal, UVData, uvtel
 import aipy
-from aipy import pol2str
+from aipy.miriad import pol2str
 import warnings
 import os
 import glob
