@@ -35,35 +35,6 @@ def medminfilt(d, K=8):
             d_sm[i, j] = medmin(d[i0:i1, j0:j1])
     return d_sm
 
-# def omni_chisq_to_flags(chisq, K=8, sigma=6, sigl=2):
-#    '''Returns a mask of RFI given omnical's chisq statistic'''
-#    if False:
-#        w_sm = np.empty_like(chisq)
-#        sig = np.empty_like(chisq)
-#        #get smooth component of chisq
-#        for i in xrange(chisq.shape[0]):
-#            for j in xrange(chisq.shape[1]):
-#                i0,j0 = max(0,i-K), max(0,j-K)
-#                i1,j1 = min(chisq.shape[0], i+K), min(chisq.shape[1], j+K)
-#                #w_sm[i,j] = np.median(chisq[i0:i1,j0:j1])
-#                w_sm[i,j] = medmin(chisq[i0:i1,j0:j1])
-#    else: w_sm = medfilt(chisq, 2*K+1)
-#    #the residual from smooth component
-#    w_rs = chisq - w_sm
-#    w_sq = np.abs(w_rs)**2
-#    #get the standard deviation of the media.
-#    if False:
-#        for i in xrange(chisq.shape[0]):
-#            for j in xrange(chisq.shape[1]):
-#                i0,j0 = max(0,i-K), max(0,j-K)
-#                i1,j1 = min(chisq.shape[0], i+K), min(chisq.shape[1], j+K)
-#                #sig[i,j] = np.sqrt(np.median(w_sq[i0:i1,j0:j1]))
-#                sig[i,j] = np.sqrt(medmin(w_sq[i0:i1,j0:j1]))
-#    else: sig = np.sqrt(medfilt(w_sq, 2*K+1))
-#    #Number of sigma above the residual unsmooth part is.
-#    f1 = w_rs / sig
-#    return watershed_flag(f1, sig_init=sigma, sig_adj=sigl)
-
 
 def watershed_flag(d, f=None, sig_init=6, sig_adj=2):
     '''Generates a mask for flags using a watershed algorithm.
@@ -101,25 +72,6 @@ def watershed_flag(d, f=None, sig_init=6, sig_adj=2):
             f1.mask[xp[i], yp[i]] = 1
             x, y = np.where(f1.mask)
     return f1.mask
-
-
-def toss_times_freqs(mask, sig_t=6, sig_f=6):
-    """XXX what does this function do? Needs test."""
-    f1ch = np.average(f1.mask, axis=0)
-    f1ch.shape = (1, -1)
-    # The cut off value is a made up number here...sig = 'sig' if none flagged.
-    f1.mask = np.logical_or(f1.mask, np.where(
-        f1 > sig_init * (1 - f1ch), 1, 0))
-    f1t = np.average(f1.mask, axis=1)  # band-avg flag vs t
-    ts = np.where(f1t > 2 * np.median(f1t))
-    f1.mask[ts] = 1
-    f1f_sum = np.sum(f1.filled(0), axis=0)
-    f1f_wgt = np.sum(np.logical_not(f1.mask), axis=0)
-    f1f = f1f_sum / f1f_wgt.clip(1, np.Inf)
-    fs = np.where(f1f > 2)
-    f1.mask[:, fs] = 1
-    mask = f1.mask
-    return mask
 
 
 def xrfi_simple(d, f=None, nsig_df=6, nsig_dt=6, nsig_all=0):
