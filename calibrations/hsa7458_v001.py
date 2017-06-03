@@ -1,3 +1,7 @@
+# v001 has a fix to two issues with antpos_ideal. The first was that the separation was 14.0 m, not 14.6 m.
+# The second was an error in the transciption of positions that led to
+# slight non-redundancy on the 10 cm scale. -Josh
+
 import aipy as a
 import numpy as n
 cm_p_m = 100
@@ -9,30 +13,58 @@ class AntennaArray(a.pol.AntennaArray):
         a.pol.AntennaArray.__init__(self, *args, **kwargs)
         self.antpos_ideal = kwargs.pop('antpos_ideal')
 
+    def update_gains(self):
+        gains = self.gain * self.amp_coeffs
+        for i, gain in zip(self.ant_layout.flatten(), gains.flatten()):
+            self[i].set_params({'amp_x': gain})
+            self[i].set_params({'amp_y': gain})
+
+    def update_delays(self):
+        ns, ew = n.indices(self.ant_layout.shape)
+        dlys = ns * self.tau_ns + ew * self.tau_ew + self.dly_coeffs
+        for i, tau in zip(self.ant_layout.flatten(), dlys.flatten()):
+            self[i].set_params({'dly_x': tau})
+            self[i].set_params({'dly_y': tau + self.dly_xx_to_yy.flatten()[i]})
+
     def update(self):
+        #        self.update_gains()
+        #        self.update_delays()
         a.pol.AntennaArray.update(self)
-#    def get_params(self, ant_prms={'*':'*'}):
-#        try: prms = a.pol.AntennaArray.get_params(self, ant_prms)
-#        except(IndexError): return {}
-#        for k in ant_prms:
-#            if k == 'aa':
-#                if not prms.has_key('aa'): prms['aa'] = {}
-#                for val in ant_prms[k]:
-#                    if   val == 'tau_ns': prms['aa']['tau_ns'] = self.tau_ns
-#                    elif val == 'tau_ew': prms['aa']['tau_ew'] = self.tau_ew
-#                    elif val == 'gain': prms['aa']['gain'] = self.gain
-#            else:
-#                try: top_pos = n.dot(self._eq2zen, self[int(k)].pos)
-#                # XXX should multiply this by len_ns to match set_params.
-#                except(ValueError): continue
-#                if ant_prms[k] == '*':
-#                    prms[k].update({'top_x':top_pos[0], 'top_y':top_pos[1], 'top_z':top_pos[2]})
-#                else:
-#                    for val in ant_prms[k]:
-#                        if   val == 'top_x': prms[k]['top_x'] = top_pos[0]
-#                        elif val == 'top_y': prms[k]['top_y'] = top_pos[1]
-#                        elif val == 'top_z': prms[k]['top_z'] = top_pos[2]
-#        return prms
+
+    def get_params(self, ant_prms={'*': '*'}):
+        try:
+            prms = a.pol.AntennaArray.get_params(self, ant_prms)
+        except(IndexError):
+            return {}
+        for k in ant_prms:
+            if k == 'aa':
+                if not prms.has_key('aa'):
+                    prms['aa'] = {}
+                for val in ant_prms[k]:
+                    if val == 'tau_ns':
+                        prms['aa']['tau_ns'] = self.tau_ns
+                    elif val == 'tau_ew':
+                        prms['aa']['tau_ew'] = self.tau_ew
+                    elif val == 'gain':
+                        prms['aa']['gain'] = self.gain
+            else:
+                try:
+                    top_pos = n.dot(self._eq2zen, self[int(k)].pos)
+                # XXX should multiply this by len_ns to match set_params.
+                except(ValueError):
+                    continue
+                if ant_prms[k] == '*':
+                    prms[k].update(
+                        {'top_x': top_pos[0], 'top_y': top_pos[1], 'top_z': top_pos[2]})
+                else:
+                    for val in ant_prms[k]:
+                        if val == 'top_x':
+                            prms[k]['top_x'] = top_pos[0]
+                        elif val == 'top_y':
+                            prms[k]['top_y'] = top_pos[1]
+                        elif val == 'top_z':
+                            prms[k]['top_z'] = top_pos[2]
+        return prms
 
     def set_params(self, prms):
         changed = a.pol.AntennaArray.set_params(self, prms)
@@ -77,31 +109,31 @@ class AntennaArray(a.pol.AntennaArray):
 prms = {
     'loc': ('-30:43:17.5', '21:25:41.9'),  # KAT, SA (GPS)
     'antpos_ideal': {
-        80: {'top_x': -14.0, 'top_y': -24.2871131, 'top_z': 0.0},  # a0
-        104: {'top_x': 0.0, 'top_y': -24.2871131, 'top_z': 0.0},  # a1
-        96: {'top_x': 14.0, 'top_y': -24.2871131, 'top_z': 0.0},  # a2
+        80: {'top_x': -14.6, 'top_y': -25.28794179, 'top_z': 0.0},  # a0
+        104: {'top_x': 0.0, 'top_y': -25.28794179, 'top_z': 0.0},  # a1
+        96: {'top_x': 14.6, 'top_y': -25.28794179, 'top_z': 0.0},  # a2
 
-        64: {'top_x': -21.0, 'top_y': -12.12435565, 'top_z': 0.0},  # a3
-        53: {'top_x': -7.0, 'top_y': -12.12435565, 'top_z': 0.0},  # a4
-        31: {'top_x': 7.0, 'top_y': -12.12435565, 'top_z': 0.0},  # a5
-        65: {'top_x': 21.0, 'top_y': -12.12435565, 'top_z': 0.0},  # a5
+        64: {'top_x': -21.9, 'top_y': -12.6439709, 'top_z': 0.0},  # a3
+        53: {'top_x': -7.3, 'top_y': -12.6439709, 'top_z': 0.0},  # a4
+        31: {'top_x': 7.3,  'top_y': -12.6439709, 'top_z': 0.0},  # a5
+        65: {'top_x': 21.9, 'top_y': -12.6439709, 'top_z': 0.0},  # a5
 
 
-        88: {'top_x': -28.0, 'top_y': 0.0, 'top_z': 0.0},  # a5
-        9: {'top_x': -14.0, 'top_y': 0.0, 'top_z': 0.0},  # a5
+        88: {'top_x': -29.2, 'top_y': 0.0, 'top_z': 0.0},  # a5
+        9: {'top_x': -14.6, 'top_y': 0.0, 'top_z': 0.0},  # a5
         20: {'top_x': 0.0, 'top_y': 0.0, 'top_z': 0.0},  # a5
-        89: {'top_x': 14.0, 'top_y': 0.0, 'top_z': 0.0},  # a5
-        43: {'top_x': 28.0, 'top_y': 0.0, 'top_z': 0.0},  # a5
+        89: {'top_x': 14.6, 'top_y': 0.0, 'top_z': 0.0},  # a5
+        43: {'top_x': 29.2, 'top_y': 0.0, 'top_z': 0.0},  # a5
 
-        105: {'top_x': -21.0, 'top_y': 12.12435565, 'top_z': 0.0},  # a3
-        22: {'top_x': -7.0, 'top_y': 12.12435565, 'top_z': 0.0},  # a4
-        81: {'top_x': 7.0, 'top_y': 12.12435565, 'top_z': 0.0},  # a5
-        10: {'top_x': 21.0, 'top_y': 12.12435565, 'top_z': 0.0},  # a5
+        105: {'top_x': -21.9, 'top_y': 12.6439709, 'top_z': 0.0},  # a3
+        22: {'top_x': -7.3,   'top_y': 12.6439709, 'top_z': 0.0},  # a4
+        81: {'top_x': 7.3,    'top_y': 12.6439709, 'top_z': 0.0},  # a5
+        10: {'top_x': 21.9,   'top_y': 12.6439709, 'top_z': 0.0},  # a5
 
 
-        72: {'top_x': -14.0, 'top_y': 24.2871131, 'top_z': 0.0},  # a0
-        112: {'top_x': 0.0, 'top_y': 24.2871131, 'top_z': 0.0},  # a1
-        97: {'top_x': 14.0, 'top_y': 24.2871131, 'top_z': 0.0},  # a2
+        72: {'top_x': -14.6, 'top_y': 25.28794179, 'top_z': 0.0},  # a0
+        112: {'top_x': 0.0, 'top_y': 25.28794179, 'top_z': 0.0},  # a1
+        97: {'top_x': 14.6, 'top_y': 25.28794179, 'top_z': 0.0},  # a2
 
         0: {'top_x': -1, 'top_y': -1, 'top_z': -1},
         1: {'top_x': -1, 'top_y': -1, 'top_z': -1},
@@ -295,13 +327,3 @@ def get_aa(freqs):
         pos_prms[str(i)] = prms['antpos'][i]
     aa.set_params(pos_prms)
     return aa
-
-# src_prms = {
-#'J071717.6-250454':{'ra':109.32351, 'dec':-25.0817}}
-#
-# def get_catalog(srcs=None, cutoff= None, catalogs=['helm','misc']):
-#    custom_srcs = ['J071717.6-250454', 'J020012.1-305327', 'J002549.1-260210']
-#    if srcs is None:
-#        cat = a.src.get_catalog(srcs=[s for s in srcs if not s in custom_srcs], cutoff=cutoff, catalogs=catalogs)
-#        for src in [s for s in srcs if s in custom_srcs]:
-#            cat[src] = a.fit.RadioFixedBody(

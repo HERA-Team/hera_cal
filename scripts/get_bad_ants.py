@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 
-import numpy, optparse
+import numpy
+import optparse
 from heracal import metrics, omni
 from pyuvdata import UVData
 import aipy as a
@@ -9,13 +10,13 @@ import sys
 o = optparse.OptionParser()
 o.set_usage("omni_run.py -C [calfile] [options] *.uvc")
 a.scripting.add_standard_options(o, cal=True)
-o.add_option('--frac', default=.3, 
+o.add_option('--frac', default=.3,
              help='Fraction of total number of antennas to flag as bad and write out')
 o.add_option('--write', action='store_true',
              help='write out simple txt file of bad antennas/bls')
-o.add_option('--ex_ants', 
+o.add_option('--ex_ants',
              help='list of known bad antennas to exclude from metrics.')
-opts,args = o.parse_args(sys.argv[1:])
+opts, args = o.parse_args(sys.argv[1:])
 
 # read in miriad file to get frequency info for aa
 uv = a.miriad.UV(args[0])
@@ -30,8 +31,10 @@ reds = info.get_reds()
 ex_ants = []
 if opts.ex_ants:
     for ant in opts.ex_ants.split(','):
-        try: ex_ants.append(int(ant))
-        except: pass
+        try:
+            ex_ants.append(int(ant))
+        except:
+            pass
 
 
 for filename in args:
@@ -44,15 +47,15 @@ for filename in args:
     total_ba = ex_ants  # start string with known bad ants
     for ba in bad_ants:
         # check if bad ants count is larger than some number of antennas.
-        if bad_ants[ba] > opts.frac*len(info.subsetant):
+        if bad_ants[ba] > opts.frac * len(info.subsetant):
             # check if antenna
             if type(ba[-1]) is str:
                 ret_ba = ba[0]  # get antenna number of bad ant
             # else it's a baseline. Don't support this now
-            else: 
+            else:
                 pass
             total_ba.append(ret_ba)
     if opts.write:
         print 'Writing {0} to file'.format(total_ba)
-        writefile = open(filename+'.badants.txt', 'w')
-        writefile.write(','.join(map(str,total_ba)))
+        writefile = open(filename + '.badants.txt', 'w')
+        writefile.write(','.join(map(str, total_ba)))

@@ -1,104 +1,31 @@
 #! /usr/bin/env python
-import numpy as np, optparse, sys, os
-import aipy as a
-from heracal import omni
-from heracal import firstcal
-from pyuvdata import UVData
+import optparse
+import sys
+from heracal.firstcal import firstcal_run
 
 o = optparse.OptionParser()
 o.set_usage("omni_run.py -C [calfile] -p [pol] [options] *.uvc")
-a.scripting.add_standard_options(o,cal=True,pol=True)
-o.add_option('--ubls', default='', help='Unique baselines to use, separated by commas (ex: 1_4,64_49).')
-o.add_option('--ex_ants', default='', help='Antennas to exclude, separated by commas (ex: 1,4,64,49).')
-o.add_option('--outpath', default=None,help='Output path of solution npz files. Default will be the same directory as the data files.')
-o.add_option('--verbose', action='store_true', default=False, help='Turn on verbose.')
-o.add_option('--finetune', action='store_false', default=True, help='Fine tune the delay fit.')
-o.add_option('--average', action='store_true', default=False, help='Average all data before finding delays.')
-o.add_option('--observer', default='Observer', help='optional observer input to fits file')
-o.add_option('--git_hash_cal', default='None', help='optionally add the git hash of the cal repo')
-o.add_option('--git_origin_cal', default='None', help='optionally add the git origin of the cal repo')
-opts,args = o.parse_args(sys.argv[1:])
+a.scripting.add_standard_options(o, cal=True, pol=True)
+o.add_option('--ubls', default='',
+             help='Unique baselines to use, separated by commas (ex: 1_4,64_49).')
+o.add_option('--ex_ants', default='',
+             help='Antennas to exclude, separated by commas (ex: 1,4,64,49).')
+o.add_option('--outpath', default=None,
+             help='Output path of solution npz files. Default will be the same directory as the data files.')
+o.add_option('--verbose', action='store_true',
+             default=False, help='Turn on verbose.')
+o.add_option('--finetune', action='store_false',
+             default=True, help='Fine tune the delay fit.')
+o.add_option('--average', action='store_true', default=False,
+             help='Average all data before finding delays.')
+o.add_option('--observer', default='Observer',
+             help='optional observer input to fits file')
+o.add_option('--git_hash_cal', default='None',
+             help='optionally add the git hash of the cal repo')
+o.add_option('--git_origin_cal', default='None',
+             help='optionally add the git origin of the cal repo')
+opts, files = o.parse_args(sys.argv[1:])
 
-def flatten_reds(reds):
-    freds = []
-    for r in reds:
-        freds += r
-    return freds
+history = ' '.join(sys.argv)
 
-# get frequencies from miriad file
-uv = a.miriad.UV(args[0])
-fqs = a.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
-del(uv)
-
-# Get HERA info and parse command line arguments
-aa = a.cal.get_aa(opts.cal, fqs)
-ex_ants = []
-ubls = []
-for ant in opts.ex_ants.split(','):
-    try: ex_ants.append(int(ant))
-    except: pass
-for bl in opts.ubls.split(','):
-    try:
-        i,j = bl.split('_')
-        ubls.append((int(i),int(j)))
-    except: pass
-
-print 'Excluding Antennas:',ex_ants
-if len(ubls) != None: print 'Using Unique Baselines:',ubls
-info = omni.aa_to_info(aa, pols=[opts.pol[0]], fcal=True, ubls=ubls, ex_ants=ex_ants)
-bls = flatten_reds(info.get_reds())
-print 'Number of redundant baselines:',len(bls)
-
-# Firstcal loop per file.
-for filename in args:
-    # make output filename and check for existence
-    if not opts.outpath is None:
-        outname='%s/%s'%(opts.outpath,filename.split('/')[-1]+'.first.calfits')
-    else:
-        outname='%s'%filename+'.first.calfits'
-    if os.path.exists(outname):
-        raise IOError("File {0} already exists".format(outname))
-
-    #read in data and run firstcal
-    print("Reading {0}".format(filename))
-    uv_in = UVData()
-    uv_in.read_miriad(filename)
-    if uv_in.phase_type != 'drift':
-        print("Setting phase type to drift")
-        uv_in.unphase_to_drift()
-    datapack, wgtpack = omni.UVData_to_dict([uv_in])
-    wgtpack = {k : { p : np.logical_not(wgtpack[k][p]) for p in wgtpack[k]} for k in wgtpack}  # logical_not of wgtpack
-
-    #gets phase solutions per frequency.
-    fc = firstcal.FirstCal(datapack,wgtpack,fqs,info)
-    sols = fc.run(finetune=opts.finetune,verbose=opts.verbose,average=opts.average,window='none')
-
-    meta = {}
-    meta['lsts'] = uv_in.lst_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
-    meta['times'] = uv_in.time_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:,0]
-    meta['freqs'] = uv_in.freq_array[0]  # in Hz
-    meta['inttime'] = uv_in.integration_time  # in sec
-    meta['chwidth'] = uv_in.channel_width  # in Hz
-
-    delays = {}
-    antflags = {}
-    for pol in opts.pol.split(','):
-        pol = pol[0]
-        delays[pol] = {}
-        antflags[pol] = {}
-        for ant in sols.keys():
-            delays[ant.pol()][ant.val] = sols[ant].T
-            antflags[ant.pol()][ant.val] = np.zeros(shape=(len(meta['lsts']), len(meta['freqs'])))
-            #generate chisq per antenna/pol.
-            meta['chisq{0}'.format(str(ant))] = np.ones(shape=(uv_in.Ntimes, 1))
-    #overall chisq. This is a required parameter for uvcal.
-    meta['chisq'] = np.ones_like(sols[ant].T)
-
-    #Save solutions
-    optional = {'observer': opts.observer,
-                'git_origin_cal': opts.git_origin_cal,
-                'git_hash_cal':  opts.git_hash_cal}
-                
-    hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants, DELAY=True, appendhist=' '.join(sys.argv), optional=optional)
-    print('     Saving {0}'.format(outname))
-    hc.write_calfits(outname)
+firstcal_run(files, opts, history)

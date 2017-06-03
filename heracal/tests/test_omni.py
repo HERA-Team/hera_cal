@@ -1,7 +1,8 @@
 '''Tests for omni.py'''
 
 import nose.tools as nt
-import os, sys
+import os
+import sys
 import numpy as np
 import aipy as a
 from omnical.calib import RedundantInfo
@@ -13,6 +14,7 @@ from copy import deepcopy
 
 
 class AntennaArray(a.fit.AntennaArray):
+
     def __init__(self, *args, **kwargs):
         a.fit.AntennaArray.__init__(self, *args, **kwargs)
         self.antpos_ideal = kwargs.pop('antpos_ideal')
@@ -31,13 +33,15 @@ def get_aa(freqs, nants=4):
 
 
 class TestMethods(object):
+
     def setUp(self):
         """Set up for basic tests of antenna array to info object."""
         self.freqs = np.linspace(.1, .2, 16)
         self.pols = ['x', 'y']
         self.aa = get_aa(self.freqs)
         self.info = omni.aa_to_info(self.aa, pols=self.pols)
-        self.gains = {pol: {ant: np.ones((1, self.freqs.size)) for ant in range(self.info.nant)} for pol in self.pols}
+        self.gains = {pol: {ant: np.ones((1, self.freqs.size)) for ant in range(
+            self.info.nant)} for pol in self.pols}
 
     def test_aa_to_info(self):
         info = omni.aa_to_info(self.aa)
@@ -64,15 +68,17 @@ class TestMethods(object):
     def test_filter_reds(self):
         # exclude ants
         reds = omni.filter_reds(self.info.get_reds(), ex_ants=[0, 4])
-        nt.assert_equal(reds, [[(1, 2), (2, 3)], [(1, 6), (2, 7)], [(5, 2), (6, 3)], [(5, 6), (6, 7)]])
+        nt.assert_equal(reds, [[(1, 2), (2, 3)], [(1, 6), (2, 7)], [
+                        (5, 2), (6, 3)], [(5, 6), (6, 7)]])
         # include ants
         reds = omni.filter_reds(self.info.get_reds(), ants=[0, 1, 4, 5, 6])
         nt.assert_equal(reds, [[(0, 5), (1, 6)], [(4, 5), (5, 6)]])
         # exclued bls
         reds = omni.filter_reds(self.info.get_reds(), ex_bls=[(0, 2), (1, 2)])
         nt.assert_equal(reds, [[(0, 1), (2, 3)], [(0, 6), (1, 7)], [(0, 5), (1, 6), (2, 7)],
-                               [(4, 2), (5, 3)], [(4, 1), (5, 2), (6, 3)], [(4, 6), (5, 7)],
-                               [(4, 5), (5, 6), (6, 7)]])
+                               [(4, 2), (5, 3)], [
+            (4, 1), (5, 2), (6, 3)], [(4, 6), (5, 7)],
+            [(4, 5), (5, 6), (6, 7)]])
         # include bls
         reds = omni.filter_reds(self.info.get_reds(), bls=[(0, 2), (1, 2)])
         nt.assert_equal(reds, [])
@@ -80,58 +86,68 @@ class TestMethods(object):
         reds = omni.filter_reds(self.info.get_reds(), ubls=[(0, 2), (1, 4)])
         nt.assert_equal(reds, [[(0, 2), (1, 3)], [(4, 1), (5, 2), (6, 3)]])
         # exclude ubls
-        reds = omni.filter_reds(self.info.get_reds(), ex_ubls=[(0, 2), (1, 4), (4, 5), (0, 5), (2, 3)])
-        nt.assert_equal(reds, [[(0, 6), (1, 7)], [(4, 2), (5, 3)], [(4, 6), (5, 7)]])
+        reds = omni.filter_reds(self.info.get_reds(), ex_ubls=[
+                                (0, 2), (1, 4), (4, 5), (0, 5), (2, 3)])
+        nt.assert_equal(
+            reds, [[(0, 6), (1, 7)], [(4, 2), (5, 3)], [(4, 6), (5, 7)]])
         # exclude crosspols
         # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
 
     def test_compute_reds(self):
-        reds = omni.compute_reds(4, self.pols, self.info.antloc[:self.info.nant])
+        reds = omni.compute_reds(
+            4, self.pols, self.info.antloc[:self.info.nant])
         for i in reds:
             for k in i:
                 for l in k:
                     nt.assert_true(isinstance(l, omni.Antpol))
 
     def test_reds_for_minimal_V(self):
-        reds = omni.compute_reds(4, self.pols, self.info.antloc[:self.info.nant])
+        reds = omni.compute_reds(
+            4, self.pols, self.info.antloc[:self.info.nant])
         mVreds = omni.reds_for_minimal_V(reds)
         # test that the new reds array is shorter by 1/4, as expected
-        nt.assert_equal(len(mVreds),len(reds) - len(reds)/4)
+        nt.assert_equal(len(mVreds), len(reds) - len(reds) / 4)
         # test that we haven't invented or lost baselines
-        cr,cmv = 0,0
-        for arr in reds: cr+=len(arr)
-        for arr in mVreds: cmv+=len(arr)
-        nt.assert_equal(cr,cmv)
+        cr, cmv = 0, 0
+        for arr in reds:
+            cr += len(arr)
+        for arr in mVreds:
+            cmv += len(arr)
+        nt.assert_equal(cr, cmv)
         # test that no crosspols are in linpol red arrays and vice versa
         for arr in mVreds:
-            p0 = arr[0][0].pol()+arr[0][1].pol()
+            p0 = arr[0][0].pol() + arr[0][1].pol()
             for ap in arr:
-                p = ap[0].pol()+ap[1].pol()
-                nt.assert_equal(len(set(p)),len(set(p0)))
+                p = ap[0].pol() + ap[1].pol()
+                nt.assert_equal(len(set(p)), len(set(p0)))
         # test that every xy has its corresponding yx in the array
         for arr in mVreds:
-            p0 = arr[0][0].pol()+arr[0][1].pol()
-            if len(set(p0))==1: continue #not interested in linpols
+            p0 = arr[0][0].pol() + arr[0][1].pol()
+            if len(set(p0)) == 1:
+                continue  # not interested in linpols
             for ap in arr:
-                ai,aj = ap
-                bi,bj = omni.Antpol(ai.ant(),aj.pol(),self.info.nant),omni.Antpol(aj.ant(),ai.pol(),self.info.nant) 
-                if not (bi,bj) in arr and not (bj,bi) in arr:
-                    raise ValueError('Something has gone wrong in polarized redundancy calculation (missing crosspols)')
+                ai, aj = ap
+                bi, bj = omni.Antpol(ai.ant(), aj.pol(), self.info.nant), omni.Antpol(
+                    aj.ant(), ai.pol(), self.info.nant)
+                if not (bi, bj) in arr and not (bj, bi) in arr:
+                    raise ValueError(
+                        'Something has gone wrong in polarized redundancy calculation (missing crosspols)')
         # test AssertionError
         _reds = reds[:-1]
         try:
             omni.reds_for_minimal_V(_reds)
             assert False, 'should not have gotten here'
         except Exception:
-            pass   
-    
+            pass
+
     def test_from_npz(self):
-        Ntimes = 3 
+        Ntimes = 3
         Nchans = 1024  # hardcoded for this file
-        meta, gains, vis, xtalk = omni.from_npz(os.path.join(DATA_PATH, 'zen.2457698.50098.xx.pulledtime.npz'))
+        meta, gains, vis, xtalk = omni.from_npz(os.path.join(
+            DATA_PATH, 'zen.2457698.50098.xx.pulledtime.npz'))
         for m in meta.keys():
             if m.startswith('chisq'):
-                nt.assert_equal(meta[m].shape, (Ntimes,Nchans))
+                nt.assert_equal(meta[m].shape, (Ntimes, Nchans))
         nt.assert_equal(len(meta['freqs']), Nchans)
         nt.assert_equal(len(meta['jds']), Ntimes)
         nt.assert_equal(len(meta['lsts']), Ntimes)
@@ -139,8 +155,8 @@ class TestMethods(object):
         nt.assert_equal(gains.keys(), ['x'])
         for ant in gains['x'].keys():
             nt.assert_equal(gains['x'][ant].dtype, np.complex64)
-            nt.assert_equal(gains['x'][ant].shape, (Ntimes,Nchans))
-        
+            nt.assert_equal(gains['x'][ant].shape, (Ntimes, Nchans))
+
         nt.assert_equal(vis.keys(), ['xx'])
         for bl in vis['xx'].keys():
             nt.assert_equal(vis['xx'][bl].dtype, np.complex64)
@@ -151,21 +167,24 @@ class TestMethods(object):
             nt.assert_equal(xtalk['xx'][bl].dtype, np.complex64)
             nt.assert_equal(xtalk['xx'][bl].shape, (Ntimes, Nchans))
             for time in range(Ntimes):
-                nt.assert_true(np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
+                nt.assert_true(
+                    np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
 
     def test_get_phase(self):
-        freqs = np.linspace(.1,.2,1024).reshape(-1,1)  # GHz
-        tau = 10  # ns 
-        nt.assert_true(np.all(omni.get_phase(freqs, tau) == np.exp(-2j*np.pi*freqs*tau)))
+        freqs = np.linspace(.1, .2, 1024).reshape(-1, 1)  # GHz
+        tau = 10  # ns
+        nt.assert_true(np.all(omni.get_phase(freqs, tau) ==
+                              np.exp(-2j * np.pi * freqs * tau)))
 
     def test_from_fits_gain(self):
         Ntimes = 3 * 2  # need 2 here because reading two files
         Nchans = 1024  # hardcoded for this file
         # read in the same file twice to make sure file concatenation works
-        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')]*2)
+        meta, gains, vis, xtalk = omni.from_fits(
+            [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')] * 2)
         for m in meta.keys():
             if m.startswith('chisq'):
-                nt.assert_equal(meta[m].shape, (Ntimes,Nchans))
+                nt.assert_equal(meta[m].shape, (Ntimes, Nchans))
         nt.assert_equal(len(meta['freqs']), Nchans)
         nt.assert_equal(len(meta['times']), Ntimes)
         nt.assert_equal(type(meta['history']), str)
@@ -174,8 +193,8 @@ class TestMethods(object):
         nt.assert_equal(gains.keys(), ['x'])
         for ant in gains['x'].keys():
             nt.assert_equal(gains['x'][ant].dtype, np.complex64)
-            nt.assert_equal(gains['x'][ant].shape, (Ntimes,Nchans))
-        
+            nt.assert_equal(gains['x'][ant].shape, (Ntimes, Nchans))
+
         nt.assert_equal(vis.keys(), ['xx'])
         for bl in vis['xx'].keys():
             nt.assert_equal(vis['xx'][bl].dtype, np.complex64)
@@ -186,49 +205,63 @@ class TestMethods(object):
             nt.assert_equal(xtalk['xx'][bl].dtype, np.complex64)
             nt.assert_equal(xtalk['xx'][bl].shape, (Ntimes, Nchans))
             for time in range(Ntimes):
-                nt.assert_true(np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
+                nt.assert_true(
+                    np.all(xtalk['xx'][bl][0] == xtalk['xx'][bl][time]))
 
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
-        uvcal.read_calfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
+        uvcal.read_calfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
         np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
-        np.testing.assert_equal(np.resize(uvcal.time_array, (Ntimes,)), meta['times'])  # need repeat here because reading 2 files.
+        # need repeat here because reading 2 files.
+        np.testing.assert_equal(
+            np.resize(uvcal.time_array, (Ntimes,)), meta['times'])
         nt.assert_equal(uvcal.history, meta['history'])
         nt.assert_equal(uvcal.gain_convention, meta['gain_conventions'])
         for ai, ant in enumerate(uvcal.ant_array):
             for ip, pol in enumerate(uvcal.jones_array):
                 for nsp in range(uvcal.Nspws):
-                    np.testing.assert_equal(np.resize(uvcal.gain_array[ai, nsp, :, :, ip].T, (Ntimes,Nchans)),  gains[pol2str[pol]][ant])
+                    np.testing.assert_equal(np.resize(uvcal.gain_array[
+                                            ai, nsp, :, :, ip].T, (Ntimes, Nchans)),  gains[pol2str[pol]][ant])
 
         str2pol = {'xx': -5, 'yy': -6}
         uvd = UVData()
-        uvd.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
+        uvd.read_uvfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
         # frim_fits turns data into drift
         uvd.unphase_to_drift()
         for pol in vis:
-            for i,j in vis[pol]:
+            for i, j in vis[pol]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])
-                uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
-                # need to resize because test is reading in 2 files with from_fits.
-                np.testing.assert_equal(vis[pol][i,j], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], vis[pol][i,j].shape))
-                
+                uvmask = np.all(
+                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
+                # need to resize because test is reading in 2 files with
+                # from_fits.
+                np.testing.assert_equal(vis[pol][i, j], np.resize(
+                    uvd.data_array[uvmask][:, 0, :, uvpol], vis[pol][i, j].shape))
+
         uvd = UVData()
-        uvd.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
+        uvd.read_uvfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
         # from_fits turns data into drift
         uvd.unphase_to_drift()
         for pol in xtalk:
-            for i,j in xtalk[pol]:
+            for i, j in xtalk[pol]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])
-                uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
-                # need to resize because test is reading in 2 files with from_fits.
-                np.testing.assert_equal(xtalk[pol][i,j], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], xtalk[pol][i,j].shape)) 
- 
+                uvmask = np.all(
+                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
+                # need to resize because test is reading in 2 files with
+                # from_fits.
+                np.testing.assert_equal(xtalk[pol][i, j], np.resize(
+                    uvd.data_array[uvmask][:, 0, :, uvpol], xtalk[pol][i, j].shape))
+
     def test_from_fits_delay(self):
         Ntimes = 3 * 2  # need 2 here because reading two files
         Nchans = 1024  # hardcoded for this file
         Ndelay = 1  # number of delays per integration
         # read in the same file twice to make sure file concatenation works
-        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')]*2)
+        meta, gains, vis, xtalk = omni.from_fits(
+            [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')] * 2)
         for m in meta.keys():
             if m.startswith('chisq'):
                 nt.assert_equal(meta[m].shape, (Ntimes,))
@@ -240,203 +273,247 @@ class TestMethods(object):
         nt.assert_equal(gains.keys(), ['x'])
         for ant in gains['x'].keys():
             nt.assert_equal(gains['x'][ant].dtype, np.complex128)
-            nt.assert_equal(gains['x'][ant].shape, (Ntimes,Nchans))
-        
+            nt.assert_equal(gains['x'][ant].shape, (Ntimes, Nchans))
+
         nt.assert_equal(vis, {})
 
         nt.assert_equal(xtalk, {})
 
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
-        uvcal.read_calfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.first.calfits'))
+        uvcal.read_calfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
         np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
-        np.testing.assert_equal(np.resize(uvcal.time_array, (Ntimes,)), meta['times'])  # need repeat here because reading 2 files.
+        # need repeat here because reading 2 files.
+        np.testing.assert_equal(
+            np.resize(uvcal.time_array, (Ntimes,)), meta['times'])
         nt.assert_equal(uvcal.history, meta['history'])
         nt.assert_equal(uvcal.gain_convention, meta['gain_conventions'])
         for ai, ant in enumerate(uvcal.ant_array):
             for ip, pol in enumerate(uvcal.jones_array):
                 for nsp in range(uvcal.Nspws):
-                    np.testing.assert_equal(np.resize(omni.get_phase(uvcal.freq_array, uvcal.delay_array[ai, nsp, :, ip]).T, (Ntimes,Nchans)),  gains[pol2str[pol]][ant])
+                    np.testing.assert_equal(np.resize(omni.get_phase(uvcal.freq_array, uvcal.delay_array[
+                                            ai, nsp, :, ip]).T, (Ntimes, Nchans)),  gains[pol2str[pol]][ant])
 
         # Now test if we keep delays
-        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')]*2, keep_delay=True)
+        meta, gains, vis, xtalk = omni.from_fits([os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')] * 2, keep_delay=True)
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
-        uvcal.read_calfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.first.calfits'))
+        uvcal.read_calfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
         np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
-        np.testing.assert_equal(np.resize(uvcal.time_array, (Ntimes,)), meta['times'])  # need repeat here because reading 2 files.
+        # need repeat here because reading 2 files.
+        np.testing.assert_equal(
+            np.resize(uvcal.time_array, (Ntimes,)), meta['times'])
         nt.assert_equal(uvcal.history, meta['history'])
         nt.assert_equal(uvcal.gain_convention, meta['gain_conventions'])
         for ai, ant in enumerate(uvcal.ant_array):
             for ip, pol in enumerate(uvcal.jones_array):
                 for nsp in range(uvcal.Nspws):
-                    np.testing.assert_equal(np.resize(uvcal.delay_array[ai, nsp, :, ip].T, (Ntimes,)),  gains[pol2str[pol]][ant])
-
-
+                    np.testing.assert_equal(np.resize(
+                        uvcal.delay_array[ai, nsp, :, ip].T, (Ntimes,)),  gains[pol2str[pol]][ant])
 
     def test_from_fits_gain_select(self):
         Ntimes = 3
         Nchans = 1024  # hardcoded for this file
         # read in the same file twice to make sure file concatenation works
-        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')], antenna_nums=[9, 10, 112, 20, 22])
-        
+        meta, gains, vis, xtalk = omni.from_fits([os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')], antenna_nums=[9, 10, 112, 20, 22])
+
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
-        uvcal.read_calfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
-        uvcal.select(antenna_nums=[9,10,112,20,22])
+        uvcal.read_calfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
+        uvcal.select(antenna_nums=[9, 10, 112, 20, 22])
         np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
-        np.testing.assert_equal(np.resize(uvcal.time_array, (Ntimes,)), meta['times'])  # need repeat here because reading 2 files.
+        # need repeat here because reading 2 files.
+        np.testing.assert_equal(
+            np.resize(uvcal.time_array, (Ntimes,)), meta['times'])
         nt.assert_equal(uvcal.history, meta['history'])
         nt.assert_equal(uvcal.gain_convention, meta['gain_conventions'])
         for ai, ant in enumerate(uvcal.ant_array):
             for ip, pol in enumerate(uvcal.jones_array):
                 for nsp in range(uvcal.Nspws):
-                    np.testing.assert_equal(np.resize(uvcal.gain_array[ai, nsp, :, :, ip].T, (Ntimes,Nchans)),  gains[pol2str[pol]][ant])
+                    np.testing.assert_equal(np.resize(uvcal.gain_array[
+                                            ai, nsp, :, :, ip].T, (Ntimes, Nchans)),  gains[pol2str[pol]][ant])
 
     def test_from_fits_catch_errors(self):
         # raise error on caltype
-        args = [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'), os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')] 
+        args = [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'), os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')]
         nt.assert_raises(ValueError, omni.from_fits, args)
 
         # raise error on gain convention
         uvc = UVCal()
         uvc.read_calfits(args[1])
         uvc.gain_convention = 'multiply'
-        uvc.write_calfits(os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
-        new_args = [os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+        uvc.write_calfits(os.path.join(
+            DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+        new_args = [os.path.join(
+            DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
         nt.assert_raises(ValueError, omni.from_fits, new_args)
-    
+
         # raise error on inttime
         uvc = UVCal()
         uvc.read_calfits(args[1])
         uvc.integration_time = 3.145
-        uvc.write_calfits(os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
-        new_args = [os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+        uvc.write_calfits(os.path.join(
+            DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+        new_args = [os.path.join(
+            DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
         nt.assert_raises(ValueError, omni.from_fits, new_args)
-        
+
         # raise error on freqs
         uvc = UVCal()
         uvc.read_calfits(args[1])
         uvc.freq_array += 1e4
-        uvc.write_calfits(os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
-        new_args = [os.path.join(DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+        uvc.write_calfits(os.path.join(
+            DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+        new_args = [os.path.join(
+            DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
         nt.assert_raises(ValueError, omni.from_fits, new_args)
-        
 
     def test_make_uvdata_vis(self):
-        sys.path.append(DATA_PATH)  # append data_path to path so we can find calfile.
-        aa = a.cal.get_aa('heratest_calfile', np.array([.15])) # This aa is specific for the fits file below.
+        # append data_path to path so we can find calfile.
+        sys.path.append(DATA_PATH)
+        # This aa is specific for the fits file below.
+        aa = a.cal.get_aa('heratest_calfile', np.array([.15]))
         sys.path[:-1]  # remove last entry from path (DATA_PATH)
 
         # read in meta, gains, vis, xtalk from file.
-        meta, gains, vis, xtalk = omni.from_fits([os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')])
+        meta, gains, vis, xtalk = omni.from_fits(
+            [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')])
         _xtalk = {}
-        # overide xtalk to have single visibility. from fits expands to size of vis data.
+        # overide xtalk to have single visibility. from fits expands to size of
+        # vis data.
         for pol in xtalk.keys():
-            _xtalk[pol] = {key : xtalk[pol][key][0,:] for key in xtalk[pol].keys() }
+            _xtalk[pol] = {key: xtalk[pol][key][0, :]
+                           for key in xtalk[pol].keys()}
         # write to new file for both vis and xtalk
         uv = omni.make_uvdata_vis(aa, meta, vis)
-        uv.write_uvfits(os.path.join(DATA_PATH,'write_vis_test.fits'), force_phase=True, spoof_nonessential=True)
+        uv.write_uvfits(os.path.join(DATA_PATH, 'write_vis_test.fits'),
+                        force_phase=True, spoof_nonessential=True)
         uv = omni.make_uvdata_vis(aa, meta, _xtalk, xtalk=True)
-        uv.write_uvfits(os.path.join(DATA_PATH,'write_xtalk_test.fits'), force_phase=True, spoof_nonessential=True)
-        
+        uv.write_uvfits(os.path.join(DATA_PATH, 'write_xtalk_test.fits'),
+                        force_phase=True, spoof_nonessential=True)
+
         # read in old and newly written files and check equality.
         uv_vis_in = UVData()
-        uv_vis_in.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
+        uv_vis_in.read_uvfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
         uv_vis_in.unphase_to_drift()
-        # overwrite history because uvdata writes git stuff whenever data is written to a file.
+        # overwrite history because uvdata writes git stuff whenever data is
+        # written to a file.
         uv_vis_in.history = 'test_history'
 
         uv_xtalk_in = UVData()
-        uv_xtalk_in.read_uvfits(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
+        uv_xtalk_in.read_uvfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
         uv_xtalk_in.unphase_to_drift()
-        # overwrite history because uvdata writes git stuff whenever data is written to a file.
+        # overwrite history because uvdata writes git stuff whenever data is
+        # written to a file.
         uv_xtalk_in.history = 'test_history'
 
-        uv_vis_out= UVData()
-        uv_vis_out.read_uvfits(os.path.join(DATA_PATH,'write_vis_test.fits'))
+        uv_vis_out = UVData()
+        uv_vis_out.read_uvfits(os.path.join(DATA_PATH, 'write_vis_test.fits'))
         uv_vis_out.unphase_to_drift()
-        # overwrite history because uvdata writes git stuff whenever data is written to a file.
+        # overwrite history because uvdata writes git stuff whenever data is
+        # written to a file.
         uv_vis_out.history = 'test_history'
 
         uv_xtalk_out = UVData()
-        uv_xtalk_out.read_uvfits(os.path.join(DATA_PATH,'write_xtalk_test.fits'))
+        uv_xtalk_out.read_uvfits(os.path.join(
+            DATA_PATH, 'write_xtalk_test.fits'))
         uv_xtalk_out.unphase_to_drift()
-        # overwrite history because uvdata writes git stuff whenever data is written to a file.
+        # overwrite history because uvdata writes git stuff whenever data is
+        # written to a file.
         uv_xtalk_out.history = 'test_history'
 
         nt.assert_equal(uv_vis_in, uv_vis_out)
         nt.assert_equal(uv_xtalk_in, uv_xtalk_in)
-    
+
     def test_concatenate_UVCal_on_pol(self):
-        calname0 = os.path.join(DATA_PATH,'zen.2457705.41052.xx.HH.uvc.first.calfits')
-        calname1 = os.path.join(DATA_PATH,'zen.2457705.41052.yy.HH.uvc.first.calfits')
-        calnameList = [calname0,calname1]
+        calname0 = os.path.join(
+            DATA_PATH, 'zen.2457705.41052.xx.HH.uvc.first.calfits')
+        calname1 = os.path.join(
+            DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.first.calfits')
+        calnameList = [calname0, calname1]
         cal0 = UVCal()
         cal0.read_calfits(calname0)
         cal1 = UVCal()
         cal1.read_calfits(calname1)
-        
+
         # Concatenate and test concatenation
         newcal = omni.concatenate_UVCal_on_pol(calnameList)
-        testpath0 = os.path.join(DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.first.test0.calfits')
-        if os.path.exists(testpath0): os.system('rm %s'%testpath0)
+        testpath0 = os.path.join(
+            DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.first.test0.calfits')
+        if os.path.exists(testpath0):
+            os.system('rm %s' % testpath0)
         newcal.write_calfits(testpath0)
-        
-        nt.assert_equal(newcal.Njones,2)
-        nt.assert_equal(sorted(newcal.jones_array), [-6,-5])
+
+        nt.assert_equal(newcal.Njones, 2)
+        nt.assert_equal(sorted(newcal.jones_array), [-6, -5])
         nt.assert_equal(newcal.flag_array.shape[-1], 2)
         nt.assert_equal(newcal.delay_array.shape[-1], 2)
         nt.assert_equal(newcal.quality_array.shape[-1], 2)
-        
+
         cal1.gain_convention = 'multiply'
-        testpath1 = os.path.join(DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.first.test1.calfits')
-        if os.path.exists(testpath1): os.system('rm %s'%testpath1)
+        testpath1 = os.path.join(
+            DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.first.test1.calfits')
+        if os.path.exists(testpath1):
+            os.system('rm %s' % testpath1)
         cal1.write_calfits(testpath1)
-        
+
         try:
-            failcal = omni.concatenate_UVCal_on_pol([calname0,calname0])
+            failcal = omni.concatenate_UVCal_on_pol([calname0, calname0])
             assert False, 'should not have gotten here'
         except ValueError:
             pass
         try:
-            failcal = omni.concatenate_UVCal_on_pol([calname0,testpath0])
+            failcal = omni.concatenate_UVCal_on_pol([calname0, testpath0])
             assert False, 'should not have gotten here'
         except ValueError:
             pass
         try:
-            failcal = omni.concatenate_UVCal_on_pol([calname0,testpath1])
+            failcal = omni.concatenate_UVCal_on_pol([calname0, testpath1])
             assert False, 'should not have gotten here'
         except ValueError:
             pass
 
     def test_UVData_to_dict(self):
-        str2pol = {'xx':-5, 'yy': -6, 'xy':-7, 'yy':-8}
-        filename = os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA')
-        uvd =  UVData()
+        str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
+        filename = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA')
+        uvd = UVData()
         uvd.read_miriad(filename)
         if uvd.phase_type != 'drift':
             uvd.unphase_to_drift()
-    
-        d,f = omni.UVData_to_dict([uvd,uvd])
-        for i,j in d:
-            for pol in d[i,j]:
+
+        d, f = omni.UVData_to_dict([uvd, uvd])
+        for i, j in d:
+            for pol in d[i, j]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])
-                uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
-                np.testing.assert_equal(d[i,j][pol], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], d[i,j][pol].shape))
-                np.testing.assert_equal(f[i,j][pol], np.resize(uvd.flag_array[uvmask][:,0,:,uvpol], f[i,j][pol].shape))
-        
-        d,f = omni.UVData_to_dict([filename, filename])
-        for i,j in d:
-            for pol in d[i,j]:
+                uvmask = np.all(
+                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
+                np.testing.assert_equal(d[i, j][pol], np.resize(
+                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
+                np.testing.assert_equal(f[i, j][pol], np.resize(
+                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
+
+        d, f = omni.UVData_to_dict([filename, filename])
+        for i, j in d:
+            for pol in d[i, j]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])
-                uvmask = np.all(np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i,j], axis=1)
-                np.testing.assert_equal(d[i,j][pol], np.resize(uvd.data_array[uvmask][:,0,:,uvpol], d[i,j][pol].shape))
-                np.testing.assert_equal(f[i,j][pol], np.resize(uvd.flag_array[uvmask][:,0,:,uvpol], f[i,j][pol].shape))
-        
-        
-        
+                uvmask = np.all(
+                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
+                np.testing.assert_equal(d[i, j][pol], np.resize(
+                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
+                np.testing.assert_equal(f[i, j][pol], np.resize(
+                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
+
+
 class Test_Antpol(object):
+
     def setUp(self):
         self.pols = ['x', 'y']
         antennas = [0]
@@ -456,105 +533,131 @@ class Test_Antpol(object):
 
 
 class Test_RedundantInfo(object):
+
     def setUp(self):
-        self.aa = get_aa(np.linspace(.1,.2,16))
+        self.aa = get_aa(np.linspace(.1, .2, 16))
         self.pol = ['x']
         self.info = omni.aa_to_info(self.aa, pols=self.pol)
         self.reds = self.info.get_reds()
         self.nondegenerategains = {}
         self.gains = {}
         self.vis = {}
-        self.gains[self.pol[0]] = { gn: np.random.randn(1,16) + 1j*np.random.randn(1,16) for gn in self.info.subsetant }
-        self.nondegenerategains[self.pol[0]] = { gn:  np.random.randn(1,16) + 1j*np.random.randn(1,16) for gn in self.info.subsetant}
-        self.vis[self.pol[0]*2] = { red[0]: np.random.randn(1,16)+1j*np.random.randn(1,16) for red in self.reds}
+        self.gains[self.pol[0]] = {gn: np.random.randn(
+            1, 16) + 1j * np.random.randn(1, 16) for gn in self.info.subsetant}
+        self.nondegenerategains[self.pol[0]] = {gn:  np.random.randn(
+            1, 16) + 1j * np.random.randn(1, 16) for gn in self.info.subsetant}
+        self.vis[self.pol[0] * 2] = {red[0]: np.random.randn(
+            1, 16) + 1j * np.random.randn(1, 16) for red in self.reds}
 
     def test_bl_order(self):
-        self.bl_order = [(omni.Antpol(self.info.subsetant[i], self.info.nant), omni.Antpol(self.info.subsetant[j], self.info.nant)) for i, j in self.info.bl2d]
+        self.bl_order = [(omni.Antpol(self.info.subsetant[i], self.info.nant), omni.Antpol(
+            self.info.subsetant[j], self.info.nant)) for i, j in self.info.bl2d]
         nt.assert_equal(self.bl_order, self.info.bl_order())
 
     def test_order_data(self):
         self.data = {}
         for red in self.reds:
-            for i,j in red:
+            for i, j in red:
                 # Randomly swap baseline orientation
                 if np.random.randint(2):
-                    self.data[i,j] = {self.pol[0]*2: np.random.randn(1,16)+1j*np.random.randn(1,16)}
+                    self.data[i, j] = {
+                        self.pol[0] * 2: np.random.randn(1, 16) + 1j * np.random.randn(1, 16)}
                 else:
-                    self.data[j,i] = {self.pol[0]*2: np.random.randn(1,16)+1j*np.random.randn(1,16)}
+                    self.data[j, i] = {
+                        self.pol[0] * 2: np.random.randn(1, 16) + 1j * np.random.randn(1, 16)}
 
         d = []
         for i, j in self.info.bl_order():
             bl = (i.ant(), j.ant())
             pol = i.pol() + j.pol()
-            try: d.append(self.data[bl][pol])
-            except(KeyError): d.append(self.data[bl[::-1]][pol[::-1]].conj())
-        nt.assert_equal(np.testing.assert_equal(np.array(d).transpose((1,2,0)), self.info.order_data(self.data)), None)
-        
+            try:
+                d.append(self.data[bl][pol])
+            except(KeyError):
+                d.append(self.data[bl[::-1]][pol[::-1]].conj())
+        nt.assert_equal(np.testing.assert_equal(np.array(d).transpose(
+            (1, 2, 0)), self.info.order_data(self.data)), None)
+
     def test_pack_calpar(self):
-        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
-        calpar2 = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
-        
+        calpar = np.zeros(
+            (1, 16, self.info.calpar_size(4, len(self.info.ubl))))
+        calpar2 = np.zeros(
+            (1, 16, self.info.calpar_size(4, len(self.info.ubl))))
+
         omni_info = RedundantInfo()
-        reds = omni.compute_reds(4, self.pol, self.info.antloc[:self.info.nant])
+        reds = omni.compute_reds(
+            4, self.pol, self.info.antloc[:self.info.nant])
         omni_info.init_from_reds(reds, self.info.antloc)
         _gains = {}
         for pol in self.gains:
             for ant in self.gains[pol]:
                 _gains[ant] = self.gains[pol][ant].conj()
-                
+
         _vis = {}
         for pol in self.vis:
-            for i,j in self.vis[pol]:
-                _vis[i,j] = self.vis[pol][i,j]
+            for i, j in self.vis[pol]:
+                _vis[i, j] = self.vis[pol][i, j]
         calpar = omni_info.pack_calpar(calpar, gains=_gains, vis=_vis)
-        nt.assert_equal(np.testing.assert_equal(self.info.pack_calpar(calpar2, self.gains, self.vis), calpar), None)
+        nt.assert_equal(np.testing.assert_equal(
+            self.info.pack_calpar(calpar2, self.gains, self.vis), calpar), None)
 
         # again with nondegenerate gains
-        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
-        calpar2 = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
-        
+        calpar = np.zeros(
+            (1, 16, self.info.calpar_size(4, len(self.info.ubl))))
+        calpar2 = np.zeros(
+            (1, 16, self.info.calpar_size(4, len(self.info.ubl))))
+
         omni_info = RedundantInfo()
-        reds = omni.compute_reds(4, self.pol, self.info.antloc[:self.info.nant])
+        reds = omni.compute_reds(
+            4, self.pol, self.info.antloc[:self.info.nant])
         omni_info.init_from_reds(reds, self.info.antloc)
         _gains = {}
         for pol in self.gains:
             for ant in self.gains[pol]:
-                _gains[ant] = self.gains[pol][ant].conj()/self.nondegenerategains[pol][ant].conj()
-                
+                _gains[ant] = self.gains[pol][
+                    ant].conj() / self.nondegenerategains[pol][ant].conj()
+
         _vis = {}
         for pol in self.vis:
-            for i,j in self.vis[pol]:
-                _vis[i,j] = self.vis[pol][i,j]
+            for i, j in self.vis[pol]:
+                _vis[i, j] = self.vis[pol][i, j]
         calpar = omni_info.pack_calpar(calpar, gains=_gains, vis=_vis)
-        nt.assert_equal(np.testing.assert_equal(self.info.pack_calpar(calpar2, self.gains, self.vis,nondegenerategains=self.nondegenerategains), calpar), None)
+        nt.assert_equal(np.testing.assert_equal(self.info.pack_calpar(
+            calpar2, self.gains, self.vis, nondegenerategains=self.nondegenerategains), calpar), None)
 
         # test not giving gains and vis to calpar
-        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
+        calpar = np.zeros(
+            (1, 16, self.info.calpar_size(4, len(self.info.ubl))))
         calpar_out = omni_info.pack_calpar(calpar)
         nt.assert_equal(np.testing.assert_equal(calpar, calpar_out), None)
 
     def test_unpack_calpar(self):
-        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
+        calpar = np.zeros(
+            (1, 16, self.info.calpar_size(4, len(self.info.ubl))))
         calpar = self.info.pack_calpar(calpar, self.gains, self.vis)
-        
-        m,g,v = self.info.unpack_calpar(calpar)
-        for pol in g.keys():
-            for ant in g[pol].keys():
-                nt.assert_equal(np.testing.assert_almost_equal(g[pol][ant], self.gains[pol][ant]), None)
-        nt.assert_equal(np.testing.assert_equal(v, self.vis), None)
-         
 
-        calpar = np.zeros((1,16,self.info.calpar_size(4,len(self.info.ubl))))
-        calpar = self.info.pack_calpar(calpar, self.gains, self.vis, nondegenerategains=self.nondegenerategains)
-        
-        m,g,v = self.info.unpack_calpar(calpar, nondegenerategains=self.nondegenerategains)
+        m, g, v = self.info.unpack_calpar(calpar)
         for pol in g.keys():
             for ant in g[pol].keys():
-                nt.assert_equal(np.testing.assert_almost_equal(g[pol][ant], self.gains[pol][ant]), None)
+                nt.assert_equal(np.testing.assert_almost_equal(
+                    g[pol][ant], self.gains[pol][ant]), None)
+        nt.assert_equal(np.testing.assert_equal(v, self.vis), None)
+
+        calpar = np.zeros(
+            (1, 16, self.info.calpar_size(4, len(self.info.ubl))))
+        calpar = self.info.pack_calpar(
+            calpar, self.gains, self.vis, nondegenerategains=self.nondegenerategains)
+
+        m, g, v = self.info.unpack_calpar(
+            calpar, nondegenerategains=self.nondegenerategains)
+        for pol in g.keys():
+            for ant in g[pol].keys():
+                nt.assert_equal(np.testing.assert_almost_equal(
+                    g[pol][ant], self.gains[pol][ant]), None)
         nt.assert_equal(np.testing.assert_equal(v, self.vis), None)
 
 
 class Test_Redcal_Basics(object):
+
     def setUp(self):
         self.freqs = np.array([.1, .125, .150, .175, .2])
         self.aa = get_aa(self.freqs)
@@ -564,8 +667,10 @@ class Test_Redcal_Basics(object):
         self.data = {}
         self.wgts = {}
         for ai, aj in self.info.bl_order():
-            self.data[ai.ant(), aj.ant()] = {self.pol[0] * 2: np.ones((self.times.size, self.freqs.size), dtype=np.complex64)}
-        self.unitgains = {self.pol[0]: {ant: np.ones((self.times.size, self.freqs.size), dtype=np.complex64) for ant in self.info.subsetant}}
+            self.data[ai.ant(), aj.ant()] = {self.pol[
+                0] * 2: np.ones((self.times.size, self.freqs.size), dtype=np.complex64)}
+        self.unitgains = {self.pol[0]: {ant: np.ones(
+            (self.times.size, self.freqs.size), dtype=np.complex64) for ant in self.info.subsetant}}
 
     def test_run_omnical(self):
         m, g, v = omni.run_omnical(self.data, self.info, gains0=self.unitgains)
@@ -573,50 +678,64 @@ class Test_Redcal_Basics(object):
 
     def test_compute_xtalk(self):
         m, g, v = omni.run_omnical(self.data, self.info, gains0=self.unitgains)
-        wgts = {self.pol[0]*2 : {}}
-        zeros = {self.pol[0]*2: {}}
+        wgts = {self.pol[0] * 2: {}}
+        zeros = {self.pol[0] * 2: {}}
         for ai, aj in self.info.bl_order():
-            wgts[self.pol[0] * 2][ai.ant(), aj.ant()] = np.ones_like(m['res'][self.pol[0]*2][ai.ant(), aj.ant()], dtype=np.bool)
-            zeros[self.pol[0] * 2][ai.ant(), aj.ant()] = np.mean(np.zeros_like(m['res'][self.pol[0]*2][ai.ant(), aj.ant()]), axis=0) # need to average over the times
-        nt.assert_equal(np.testing.assert_equal(omni.compute_xtalk(m['res'], wgts), zeros), None)
+            wgts[self.pol[0] * 2][ai.ant(), aj.ant()] = np.ones_like(m['res']
+                                                                     [self.pol[0] * 2][ai.ant(), aj.ant()], dtype=np.bool)
+            zeros[self.pol[0] * 2][ai.ant(), aj.ant()] = np.mean(np.zeros_like(m['res']
+                                                                               [self.pol[0] * 2][ai.ant(), aj.ant()]), axis=0)  # need to average over the times
+        nt.assert_equal(np.testing.assert_equal(
+            omni.compute_xtalk(m['res'], wgts), zeros), None)
 
 
 class Test_HERACal(UVCal):
+
     def test_gainHC(self):
-        meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
-        meta['inttime'] = np.diff(meta['times'])[0]*60*60*24
+        meta, gains, vis, xtalk = omni.from_fits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
+        meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         optional = {'observer': 'heracal'}
         hc = omni.HERACal(meta, gains, optional=optional)
         uv = UVCal()
-        uv.read_calfits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
+        uv.read_calfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
         for param in hc:
-            if param == '_history': continue
+            if param == '_history':
+                continue
             elif param == '_time_range':  # why do we need this?
-                nt.assert_equal(np.testing.assert_almost_equal(getattr(hc, param).value, getattr(uv, param).value, 5), None)
+                nt.assert_equal(np.testing.assert_almost_equal(
+                    getattr(hc, param).value, getattr(uv, param).value, 5), None)
             else:
-                nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
+                nt.assert_true(
+                    np.all(getattr(hc, param) == getattr(uv, param)))
 
     def test_delayHC(self):
         # make test data
-        meta, gains, vis, xtalk = omni.from_fits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'), keep_delay=True)
+        meta, gains, vis, xtalk = omni.from_fits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'), keep_delay=True)
         for pol in gains.keys():
             for k in gains[pol].keys():
-                gains[pol][k] = gains[pol][k].reshape(-1,1)
-        meta['inttime'] = np.diff(meta['times'])[0]*60*60*24
+                gains[pol][k] = gains[pol][k].reshape(-1, 1)
+        meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         meta.pop('chisq9x')
         optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
         hc = omni.HERACal(meta, gains, optional=optional, DELAY=True)
         uv = UVCal()
-        uv.read_calfits(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
+        uv.read_calfits(os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
         for param in hc:
             print param
             print getattr(hc, param).value, getattr(uv, param).value
-            if param == '_history': continue
-            elif param == '_git_hash_cal': continue            
-            elif param == '_git_origin_cal': continue            
+            if param == '_history':
+                continue
+            elif param == '_git_hash_cal':
+                continue
+            elif param == '_git_origin_cal':
+                continue
             elif param == '_time_range':  # why do we need this?
-                nt.assert_equal(np.testing.assert_almost_equal(getattr(hc, param).value, getattr(uv, param).value, 5), None)
+                nt.assert_equal(np.testing.assert_almost_equal(
+                    getattr(hc, param).value, getattr(uv, param).value, 5), None)
             else:
-                nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
-
-
+                nt.assert_true(
+                    np.all(getattr(hc, param) == getattr(uv, param)))
