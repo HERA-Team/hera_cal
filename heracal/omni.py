@@ -56,21 +56,29 @@ class Antpol:
         except(ValueError):
             self.val, self.nant = args
 
-    def antpol(self): return self.val % self.nant, NUMPOL[self.val / self.nant]
+    def antpol(self):
+        return self.val % self.nant, NUMPOL[self.val // self.nant]
 
-    def ant(self): return self.antpol()[0]
+    def ant(self):
+        return self.antpol()[0]
 
-    def pol(self): return self.antpol()[1]
+    def pol(self):
+        return self.antpol()[1]
 
-    def __int__(self): return self.val
+    def __int__(self):
+        return self.val
 
-    def __hash__(self): return self.ant()
+    def __hash__(self):
+        return self.ant()
 
-    def __str__(self): return ''.join(map(str, self.antpol()))
+    def __str__(self):
+        return ''.join(map(str, self.antpol()))
 
-    def __eq__(self, v): return self.ant() == v
+    def __eq__(self, v):
+        return self.ant() == v
 
-    def __repr__(self): return str(self)
+    def __repr__(self):
+        return str(self)
 
 
 # XXX filter_reds w/ pol support should probably be in omnical
@@ -287,13 +295,13 @@ def reds_for_minimal_V(reds):
     if n % 4 != 0:
         raise ValueError(
             'Expected number of redundant baseline types to be a multiple of 4')
-    _reds += reds[:n / 4]
-    xpols = reds[n / 4:3 * n / 4]
+    _reds += reds[:n // 4]
+    xpols = reds[n // 4:3 * n // 4]
     _xpols = []
-    for i in range(n / 4):
-        _xpols.append(xpols[i] + xpols[i + n / 4])
+    for i in range(n // 4):
+        _xpols.append(xpols[i] + xpols[i + n // 4])
     _reds += _xpols
-    _reds += reds[3 * n / 4:]
+    _reds += reds[3 * n // 4:]
     return _reds
 
 
@@ -1118,7 +1126,7 @@ def omni_run(files, opts, history):
     # XXX can these be combined into one loop?
 
     ### Execute Omnical stages ###
-    for filenumber in range(len(files) / len(pols)):
+    for filenumber in range(len(files) // len(pols)):
         file_group = {}  # there is one file_group per djd
         for pp in pols:
             file_group[pp] = filesByPol[pp][filenumber]
