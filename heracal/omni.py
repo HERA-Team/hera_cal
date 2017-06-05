@@ -480,28 +480,11 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
                     xtalk[pol][bl] = dat
                 else:  # append to array
                     xtalk[pol][bl] = np.vstack((xtalk[pol].get(bl), dat))
-        # for k in [f for f in npz.files if f.startswith('<')]:
-        #     pol,bl = parse_key(k)
-        #     if not vismdl.has_key(pol): vismdl[pol] = {}
-        #     vismdl[pol][bl] = vismdl[pol].get(bl,[]) + [np.copy(npz[k])]
-        # for k in [f for f in npz.files if f.startswith('(')]:
-        #     pol,bl = parse_key(k)
-        #     if not xtalk.has_key(pol): xtalk[pol] = {}
-        #     dat = np.resize(np.copy(npz[k]),vismdl[pol][vismdl[pol].keys()[0]][0].shape) #resize xtalk to be like vismdl (with a time dimension too)
-        #     if xtalk[pol].get(bl) is None: #no bl key yet
-        #         xtalk[pol][bl] = dat
-        #     else: #append to array
-        #         xtalk[pol][bl] = np.vstack((xtalk[pol].get(bl),dat))
-        # for k in [f for f in npz.files if f[0].isdigit()]:
-        #     pol,ant = k[-1:],int(k[:-1])
-        #     if not gains.has_key(pol): gains[pol] = {}
-        #     gains[pol][ant] = gains[pol].get(ant,[]) + [np.copy(npz[k])]
         kws = ['chi', 'hist', 'j', 'l', 'f']
         for kw in kws:
             for k in [f for f in npz.files if f.startswith(kw)]:
                 meta[k] = meta.get(k, []) + [np.copy(npz[k])]
-    # for pol in xtalk: #this is already done above now
-        #for bl in xtalk[pol]: xtalk[pol][bl] = np.concatenate(xtalk[pol][bl])
+
     for pol in vismdl:
         for bl in vismdl[pol]:
             vismdl[pol][bl] = np.concatenate(vismdl[pol][bl])
@@ -1053,7 +1036,7 @@ def isLinPol(polstr):
 
 
 def file2djd(fname):
-    return re.findall("\d+\.\d+", filename)[0]
+    return re.findall("\d+\.\d+", fname)[0]
 
 
 def omni_run(files, opts, history):

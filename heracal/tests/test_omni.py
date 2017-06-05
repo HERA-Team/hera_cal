@@ -10,7 +10,25 @@ import heracal.omni as omni
 from heracal.data import DATA_PATH
 from pyuvdata import UVCal, UVData
 from copy import deepcopy
-#from heracal import omni
+import optparse
+
+
+def omnical_option_parser():
+    o = optparse.OptionParser()
+    o.set_usage(
+        "omni_run.py -C [calfile] -p [pol] --firstcal=[firstcal path] [options] *.uvc")
+    a.scripting.add_standard_options(o, cal=True, pol=True)
+    o.add_option('--omnipath', dest='omnipath', default='.', type='string',
+                 help='Path to save omnical solutions.')
+    o.add_option('--ex_ants', dest='ex_ants', default=None,
+                 help='Antennas to exclude, separated by commas.')
+    o.add_option('--firstcal', dest='firstcal', type='string',
+                 help='Path and name of firstcal file. Can pass in wildcards.')
+    o.add_option('--minV', action='store_true',
+                 help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
+    o.add_option('--median', action='store_true',
+                 help='Take the median over time of the starting calibration gains (e.g. firstcal).')
+    return o
 
 
 class AntennaArray(a.fit.AntennaArray):
@@ -512,6 +530,21 @@ class TestMethods(object):
                     uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
 
 
+    def test_getPol(self):
+        filename = 'zen.2456798.40355.xx.HH.uvcAA'
+        nt.assert_equal(omni.getPol(filename), 'xx')
+
+    def test_isLinPol(self):
+        linpol = 'xx'
+        nt.assert_true(omni.isLinPol(linpol))
+        crosspol = 'xy'
+        nt.assert_false(omni.isLinPol(crosspol))
+
+    def test_file2djd(self):
+        filename = 'zen.2456798.40355.xx.HH.uvcAA'
+        nt.assert_equal(omni.file2djd(filename), '2456798.40355')
+
+
 class Test_Antpol(object):
 
     def setUp(self):
@@ -739,3 +772,11 @@ class Test_HERACal(UVCal):
             else:
                 nt.assert_true(
                     np.all(getattr(hc, param) == getattr(uv, param)))
+
+class Test_omni_run(object):
+
+    def test_empty_fileset(self):
+        o = omnical_option_parser()
+        opts, files = o.parse_args("-C calfile.py -p xx --firstcal=file.first.calfits".split())
+        history = 'history'
+        nt.assert_raises(AssertionError, omni.omni_run, files, opts, history)
