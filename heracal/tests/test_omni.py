@@ -801,7 +801,10 @@ class Test_omni_run(object):
         
     def test_single_file_execution(self):
         o = omnical_option_parser()
-        cmd = "-C %s -p xx --firstcal=%s --ex_ants=81 %s"%(calfile,os.path.join(DATA_PATH,xx_fcal),os.path.join(DATA_PATH,xx_vis))
+        xx_fcal4real = os.path.join(DATA_PATH,xx_fcal)
+        xx_vis4real = os.path.join(DATA_PATH,xx_vis)
+        
+        cmd = "-C %s -p xx --firstcal=%s --ex_ants=81 --omnipath=%s %s"%(calfile,xx_fcal4real,DATA_PATH,xx_vis4real)
         opts,files = o.parse_args(cmd.split())
         history = 'history'
         omni.omni_run(files,opts,history)
