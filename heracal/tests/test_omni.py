@@ -770,21 +770,13 @@ class Test_HERACal(UVCal):
 class Test_omni_run(object):
     
     global xx_vis,calfile,xx_fcal,yy_fcal
-    """
-    xx_vis  = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA')
-    calfile = os.path.join(DATA_PATH, 'heratest_calfile.py')
-    xx_fcal = os.path.join(DATA_PATH, 'zen.2457707.41052.xx.HH.uvc.first.calfits')
-    yy_fcal = os.path.join(DATA_PATH, 'zen.2457707.41052.yy.HH.uvc.first.calfits')
-    """
     xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
     calfile = 'heratest_calfile'
-    xx_fcal = 'zen.2457707.41052.xx.HH.uvc.first.calfits'
-    yy_fcal = 'zen.2457707.41052.yy.HH.uvc.first.calfits'
+    xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
+    #yy_fcal = 'zen.2457707.41052.yy.HH.uvc.first.calfits'
     
     testpath = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0,testpath+':%s'%DATA_PATH)
-    #for var in [xx_vis,calfile,xx_fcal,yy_fcal]:
-    #    sys.path.insert(0,
         
     def test_empty_fileset(self):
         o = omnical_option_parser()
@@ -809,8 +801,9 @@ class Test_omni_run(object):
         
     def test_single_file_execution(self):
         o = omnical_option_parser()
-        cmd = "-C %s -p xx --firstcal=%s %s"%(calfile,xx_fcal,xx_vis)
+        cmd = "-C %s -p xx --firstcal=%s --ex_ants=81 %s"%(calfile,os.path.join(DATA_PATH,xx_fcal),os.path.join(DATA_PATH,xx_vis))
         opts,files = o.parse_args(cmd.split())
         history = 'history'
-        return         
+        omni.omni_run(files,opts,history)
+        nt.assert_true(os.path.exists(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')))        
  
