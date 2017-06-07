@@ -1,11 +1,12 @@
 #! /usr/bin/env python
 import optparse
 import sys
+import aipy
 from heracal.firstcal import firstcal_run
 
 o = optparse.OptionParser()
 o.set_usage("omni_run.py -C [calfile] -p [pol] [options] *.uvc")
-a.scripting.add_standard_options(o, cal=True, pol=True)
+aipy.scripting.add_standard_options(o, cal=True, pol=True)
 o.add_option('--ubls', default='',
              help='Unique baselines to use, separated by commas (ex: 1_4,64_49).')
 o.add_option('--ex_ants', default='',

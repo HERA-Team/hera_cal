@@ -434,7 +434,7 @@ def firstcal_run(files, opts, history):
             k]} for k in wgtpack}  # logical_not of wgtpack
 
         # gets phase solutions per frequency.
-        fc = firstcal.FirstCal(datapack, wgtpack, fqs, info)
+        fc = FirstCal(datapack, wgtpack, fqs, info)
         sols = fc.run(finetune=opts.finetune, verbose=opts.verbose,
                       average=opts.average, window='none')
 
