@@ -147,16 +147,10 @@ class TestMethods(object):
                 ai, aj = ap
                 bi, bj = omni.Antpol(ai.ant(), aj.pol(), self.info.nant), omni.Antpol(
                     aj.ant(), ai.pol(), self.info.nant)
-                if not (bi, bj) in arr and not (bj, bi) in arr:
-                    raise ValueError(
-                        'Something has gone wrong in polarized redundancy calculation (missing crosspols)')
+                nt.assert_true( ((bi, bj) in arr) or ((bj, bi) in arr) )
         # test AssertionError
         _reds = reds[:-1]
-        try:
-            omni.reds_for_minimal_V(_reds)
-            assert False, 'should not have gotten here'
-        except Exception:
-            pass
+        nt.assert_raises(ValueError, omni.reds_for_minimal_V, _reds)
 
     def test_from_npz(self):
         Ntimes = 3
@@ -774,9 +768,49 @@ class Test_HERACal(UVCal):
                     np.all(getattr(hc, param) == getattr(uv, param)))
 
 class Test_omni_run(object):
-
+    
+    global xx_vis,calfile,xx_fcal,yy_fcal
+    """
+    xx_vis  = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA')
+    calfile = os.path.join(DATA_PATH, 'heratest_calfile.py')
+    xx_fcal = os.path.join(DATA_PATH, 'zen.2457707.41052.xx.HH.uvc.first.calfits')
+    yy_fcal = os.path.join(DATA_PATH, 'zen.2457707.41052.yy.HH.uvc.first.calfits')
+    """
+    xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
+    calfile = 'heratest_calfile'
+    xx_fcal = 'zen.2457707.41052.xx.HH.uvc.first.calfits'
+    yy_fcal = 'zen.2457707.41052.yy.HH.uvc.first.calfits'
+    
+    testpath = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0,testpath+':%s'%DATA_PATH)
+    #for var in [xx_vis,calfile,xx_fcal,yy_fcal]:
+    #    sys.path.insert(0,
+        
     def test_empty_fileset(self):
         o = omnical_option_parser()
-        opts, files = o.parse_args("-C calfile.py -p xx --firstcal=file.first.calfits".split())
+        cmd = "-C %s -p xx --firstcal=%s"%(calfile,xx_fcal)
+        opts, files = o.parse_args(cmd.split())
         history = 'history'
         nt.assert_raises(AssertionError, omni.omni_run, files, opts, history)
+
+    def test_minV_without_crosspols(self):
+        o = omnical_option_parser()
+        cmd = "-C %s -p xx --minV --firstcal=%s %s"%(calfile,xx_fcal,xx_vis)
+        opts,files = o.parse_args(cmd.split())
+        history = 'history'
+        nt.assert_raises(AssertionError, omni.omni_run, files, opts, history)
+    
+    def test_without_firstcal_file(self):
+        o = omnical_option_parser()
+        cmd = "-C %s -p xx %s"%(calfile,xx_vis)
+        opts, files = o.parse_args(cmd.split())
+        history = 'history'
+        nt.assert_raises(ValueError, omni.omni_run, files, opts, history)
+        
+    def test_single_file_execution(self):
+        o = omnical_option_parser()
+        cmd = "-C %s -p xx --firstcal=%s %s"%(calfile,xx_fcal,xx_vis)
+        opts,files = o.parse_args(cmd.split())
+        history = 'history'
+        return         
+ 
