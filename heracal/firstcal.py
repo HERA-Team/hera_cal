@@ -1,7 +1,7 @@
 '''Classes and Functions for running Firstcal.'''
 from __future__ import print_function, division, absolute_import
 import numpy as np
-import aipy as a
+import aipy
 import pylab as p
 import time
 import omnical
@@ -51,14 +51,13 @@ def redundant_bl_cal_simple(d1, w1, d2, w2, fqs, window='none', finetune=True, v
         delays (array): Array of delays (if average == False), or single delay.
 
     '''
-    d12 = d2 * \
-        np.conj(
-            d1)  # note that this is d2/d1, not d1/d2 which leads to a reverse conjugation.
+    d12 = d2 * np.conj(d1)
+    # note that this is d2/d1, not d1/d2 which leads to a reverse conjugation.
     # For 2D arrays, assume first axis is time.
     if average:
         if d12.ndim > 1:
             d12_sum = np.sum(d12, axis=0).reshape(1, -1)
-            d12_wgt = np.sum(w1 * w1, axis=0).reshape(1, -1)
+            d12_wgt = np.sum(w1 * w2, axis=0).reshape(1, -1)
         else:
             d12_sum = d12.reshape(1, -1)
             d12_wgt = w1.reshape(1, -1) * w2.reshape(1, -1)
@@ -68,7 +67,7 @@ def redundant_bl_cal_simple(d1, w1, d2, w2, fqs, window='none', finetune=True, v
     # normalize data to maximum so that we minimize fft articats from RFI
     d12_sum *= d12_wgt
     d12_sum = d12_sum / np.where(np.abs(d12_sum) == 0., 1., np.abs(d12_sum))
-    window = a.dsp.gen_window(d12_sum[0, :].size, window=window)
+    window = aipy.dsp.gen_window(d12_sum[0, :].size, window=window)
     dlys = np.fft.fftfreq(fqs.size, fqs[1] - fqs[0])
     # FFT. Note d12_sum has weights multiplied in
     _phs = np.fft.fft(window * d12_sum, axis=-1)
@@ -382,13 +381,17 @@ def flatten_reds(reds):
 
 
 def firstcal_run(files, opts, history):
+    # check that we got files to process
+    if len(files) == 0:
+        raise AssertionError('Please provide visibility files.')
+
     # get frequencies from miriad file
-    uv = a.miriad.UV(files[0])
-    fqs = a.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
+    uv = aipy.miriad.UV(files[0])
+    fqs = aipy.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
     del(uv)
 
     # Get HERA info and parse command line arguments
-    aa = a.cal.get_aa(opts.cal, fqs)
+    aa = aipy.cal.get_aa(opts.cal, fqs)
     ex_ants = []
     ubls = []
     for ant in opts.ex_ants.split(','):
@@ -473,3 +476,34 @@ def firstcal_run(files, opts, history):
         hc.write_calfits(outname)
 
     return
+
+
+def firstcal_option_parser():
+    """
+    Create an optparse option parser for firstcal_run instances.
+
+    Returns:
+       an optparse object containing all of the options for a firstcal_run instance
+    """
+    o = optparse.OptionParser()
+    o.set_usage("firstcal_run.py -C [calfile] -p [pol] [options] *.uvc")
+    aipy.scripting.add_standard_options(o, cal=True, pol=True)
+    o.add_option('--ubls', default='',
+                 help='Unique baselines to use, separated by commas (ex: 1_4,64_49).')
+    o.add_option('--ex_ants', default='',
+                 help='Antennas to exclude, separated by commas (ex: 1,4,64,49).')
+    o.add_option('--outpath', default=None,
+                 help='Output path of solution npz files. Default will be the same directory as the data files.')
+    o.add_option('--verbose', action='store_true',
+                 default=False, help='Turn on verbose.')
+    o.add_option('--finetune', action='store_false',
+                 default=True, help='Fine tune the delay fit.')
+    o.add_option('--average', action='store_true', default=False,
+                 help='Average all data before finding delays.')
+    o.add_option('--observer', default='Observer',
+                 help='optional observer input to fits file')
+    o.add_option('--git_hash_cal', default='None',
+                 help='optionally add the git hash of the cal repo')
+    o.add_option('--git_origin_cal', default='None',
+                 help='optionally add the git origin of the cal repo')
+    return o
