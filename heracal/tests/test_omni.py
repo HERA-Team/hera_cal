@@ -769,12 +769,21 @@ class Test_HERACal(UVCal):
 
 class Test_omni_run(object):
     
-    global xx_vis,calfile,xx_fcal,yy_fcal
+    # single pol tests
+    global xx_vis,calfile,xx_fcal
     xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
     calfile = 'heratest_calfile'
     xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
-    #yy_fcal = 'zen.2457707.41052.yy.HH.uvc.first.calfits'
     
+    # multi pol tests
+    global visXX,visXY,visYX,visYY
+    global fcalXX,fcalYY
+    visXX = 'zen.2457698.40355.xx.HH.uvcA'
+    visXY = 'zen.2457698.40355.xy.HH.uvcA'
+    visYX = 'zen.2457698.40355.yx.HH.uvcA'
+    visYY = 'zen.2457698.40355.yy.HH.uvcA'
+    fcalXX = 'zen.2457698.40355.xx.HH.uvcA.first.calfits'
+    fcalYY = 'zen.2457698.40355.yy.HH.uvcA.first.calfits'
     testpath = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0,testpath+':%s'%DATA_PATH)
         
@@ -799,7 +808,10 @@ class Test_omni_run(object):
         history = 'history'
         nt.assert_raises(ValueError, omni.omni_run, files, opts, history)
         
-    def test_single_file_execution(self):
+    def test_single_file_execution_omni_run(self):
+        objective_file = os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
+        if os.path.exists(objective_file):
+            os.system('rm %s'%objective_file)
         o = omnical_option_parser()
         xx_fcal4real = os.path.join(DATA_PATH,xx_fcal)
         xx_vis4real = os.path.join(DATA_PATH,xx_vis)
@@ -808,5 +820,41 @@ class Test_omni_run(object):
         opts,files = o.parse_args(cmd.split())
         history = 'history'
         omni.omni_run(files,opts,history)
-        nt.assert_true(os.path.exists(os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')))        
- 
+        nt.assert_true(os.path.exists(objective_file))
+        
+    def test_single_file_execution_omni_run_with_median(self):
+        objective_file = os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
+        if os.path.exists(objective_file):
+            os.system('rm %s'%objective_file)
+        o = omnical_option_parser()
+        xx_fcal4real = os.path.join(DATA_PATH,xx_fcal)
+        xx_vis4real = os.path.join(DATA_PATH,xx_vis)
+
+        cmd = "-C %s -p xx --firstcal=%s --ex_ants=81 --omnipath=%s --median %s"%(calfile,xx_fcal4real,DATA_PATH,xx_vis4real)
+        opts,files = o.parse_args(cmd.split())
+        history = 'history'
+        omni.omni_run(files,opts,history)
+        nt.assert_true(os.path.exists(objective_file)) 
+
+    def test_execution_omni_run_4pol(self):
+        objective_file = os.path.join(DATA_PATH,'zen.2457698.40355.HH.uvcA.omni.calfits')
+        if os.path.exists(objective_file):
+            os.system('rm %s'%objective_file)
+        o = omnical_option_parser()
+        visxx = os.path.join(DATA_PATH,visXX)
+        visxy = os.path.join(DATA_PATH,visXY)
+        visyx = os.path.join(DATA_PATH,visYX)
+        visyy = os.path.join(DATA_PATH,visYY)
+        fcalxx = os.path.join(DATA_PATH,fcalXX)
+        fcalyy = os.path.join(DATA_PATH,fcalYY)
+        
+        cmd = "-C %s -p xx,xy,yx,yy --firstcal=%s,%s --ex_ants=81 --omnipath=%s %s %s %s %s"%(calfile, fcalxx, fcalyy, DATA_PATH, visxx, visxy, visyx, visyy)
+        
+        opts,files = o.parse_args(cmd.split())
+        history = 'history'
+        omni.omni_run(files,opts,history)
+        nt.assert_true(os.path.exists(objective_file))
+            
+    def test_single_file_execution_omni_apply(self):
+        pass
+        
