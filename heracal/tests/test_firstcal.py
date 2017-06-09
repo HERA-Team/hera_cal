@@ -222,8 +222,8 @@ class Test_firstcal_run(object):
     xx_vis = "zen.2457698.40355.xx.HH.uvcAA"
 
     # add directory with calfile to path
-    testpath = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0,testpath+':%s'%DATA_PATH)
+    if DATA_PATH not in sys.path:
+        sys.path.append(DATA_PATH)
 
     def test_empty_fileset(self):
         o = firstcal.firstcal_option_parser()
@@ -236,12 +236,12 @@ class Test_firstcal_run(object):
     def test_single_file_execution(self):
         objective_file = os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA.first.calfits')
         xx_vis4real = os.path.join(DATA_PATH,xx_vis)
-        #if os.path.exists(objective_file):
-        #    os.system('rm %s'%objective_file)
+        if os.path.exists(objective_file):
+           os.system('rm %s'%objective_file)
         o = firstcal.firstcal_option_parser()
         cmd = "-C {0} -p xx --ex_ants=81 {1}".format(calfile, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         firstcal.firstcal_run(files, opts, history)
-        nt.assert_true(os.path_exists(objective_file))
+        nt.assert_true(os.path.exists(objective_file))
         return

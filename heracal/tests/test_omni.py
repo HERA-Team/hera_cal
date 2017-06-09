@@ -4,7 +4,7 @@ import nose.tools as nt
 import os
 import sys
 import numpy as np
-import aipy as a
+import aipy
 from omnical.calib import RedundantInfo
 import heracal.omni as omni
 from heracal.data import DATA_PATH
@@ -17,7 +17,7 @@ def omnical_option_parser():
     o = optparse.OptionParser()
     o.set_usage(
         "omni_run.py -C [calfile] -p [pol] --firstcal=[firstcal path] [options] *.uvc")
-    a.scripting.add_standard_options(o, cal=True, pol=True)
+    aipy.scripting.add_standard_options(o, cal=True, pol=True)
     o.add_option('--omnipath', dest='omnipath', default='.', type='string',
                  help='Path to save omnical solutions.')
     o.add_option('--ex_ants', dest='ex_ants', default=None,
@@ -31,20 +31,20 @@ def omnical_option_parser():
     return o
 
 
-class AntennaArray(a.fit.AntennaArray):
+class AntennaArray(aipy.fit.AntennaArray):
 
     def __init__(self, *args, **kwargs):
-        a.fit.AntennaArray.__init__(self, *args, **kwargs)
+        aipy.fit.AntennaArray.__init__(self, *args, **kwargs)
         self.antpos_ideal = kwargs.pop('antpos_ideal')
 
 
 def get_aa(freqs, nants=4):
     lat = "45:00"
     lon = "90:00"
-    beam = a.fit.Beam(freqs)
+    beam = aipy.fit.Beam(freqs)
     ants = []
     for i in range(nants):
-        ants.append(a.fit.Antenna(0, 50 * i, 0, beam))
+        ants.append(aipy.fit.Antenna(0, 50 * i, 0, beam))
     antpos_ideal = np.array([ant.pos for ant in ants])
     aa = AntennaArray((lat, lon), ants, antpos_ideal=antpos_ideal)
     return aa
@@ -388,9 +388,10 @@ class TestMethods(object):
 
     def test_make_uvdata_vis(self):
         # append data_path to path so we can find calfile.
-        sys.path.append(DATA_PATH)
+        if DATA_PATH not in sys.path:
+            sys.path.append(DATA_PATH)
         # This aa is specific for the fits file below.
-        aa = a.cal.get_aa('heratest_calfile', np.array([.15]))
+        aa = aipy.cal.get_aa('heratest_calfile', np.array([.15]))
         sys.path[:-1]  # remove last entry from path (DATA_PATH)
 
         # read in meta, gains, vis, xtalk from file.
@@ -785,7 +786,8 @@ class Test_omni_run(object):
     fcalXX = 'zen.2457698.40355.xx.HH.uvcA.first.calfits'
     fcalYY = 'zen.2457698.40355.yy.HH.uvcA.first.calfits'
     testpath = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0,testpath+':%s'%DATA_PATH)
+    if DATA_PATH not in sys.path:
+        sys.path.append(DATA_PATH)
         
     def test_empty_fileset(self):
         o = omnical_option_parser()
