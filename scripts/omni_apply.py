@@ -1,13 +1,14 @@
 #!/usr/bin/env python
-
+import numpy as np
 import optparse
 from heracal.omni import omni_apply
+import aipy, sys
 
 ### Options ###
 o = optparse.OptionParser()
 o.set_usage('omni_apply.py [options] *uvc')
 o.set_description(__doc__)
-a.scripting.add_standard_options(o, pol=True)
+aipy.scripting.add_standard_options(o, pol=True)
 o.add_option('--omnipath', dest='omnipath', default='*.fits', type='string',
              help='Filename or format string that gets passed to glob for omnical/firstcal solution fits files.')
 o.add_option('--median', action='store_true',

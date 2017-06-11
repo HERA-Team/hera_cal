@@ -12,25 +12,6 @@ from pyuvdata import UVCal, UVData
 from copy import deepcopy
 import optparse
 
-
-def omnical_option_parser():
-    o = optparse.OptionParser()
-    o.set_usage(
-        "omni_run.py -C [calfile] -p [pol] --firstcal=[firstcal path] [options] *.uvc")
-    aipy.scripting.add_standard_options(o, cal=True, pol=True)
-    o.add_option('--omnipath', dest='omnipath', default='.', type='string',
-                 help='Path to save omnical solutions.')
-    o.add_option('--ex_ants', dest='ex_ants', default=None,
-                 help='Antennas to exclude, separated by commas.')
-    o.add_option('--firstcal', dest='firstcal', type='string',
-                 help='Path and name of firstcal file. Can pass in wildcards.')
-    o.add_option('--minV', action='store_true',
-                 help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
-    o.add_option('--median', action='store_true',
-                 help='Take the median over time of the starting calibration gains (e.g. firstcal).')
-    return o
-
-
 class AntennaArray(aipy.fit.AntennaArray):
 
     def __init__(self, *args, **kwargs):
@@ -789,22 +770,22 @@ class Test_omni_run(object):
     if DATA_PATH not in sys.path:
         sys.path.append(DATA_PATH)
         
-    def test_empty_fileset(self):
-        o = omnical_option_parser()
+    def test_empty_fileset_omni_run(self):
+        o = omni.get_optionParser('omni_run')
         cmd = "-C %s -p xx --firstcal=%s"%(calfile,xx_fcal)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         nt.assert_raises(AssertionError, omni.omni_run, files, opts, history)
 
-    def test_minV_without_crosspols(self):
-        o = omnical_option_parser()
+    def test_minV_without_crosspols_omni_run(self):
+        o = omni.get_optionParser('omni_run')
         cmd = "-C %s -p xx --minV --firstcal=%s %s"%(calfile,xx_fcal,xx_vis)
         opts,files = o.parse_args(cmd.split())
         history = 'history'
         nt.assert_raises(AssertionError, omni.omni_run, files, opts, history)
     
-    def test_without_firstcal_file(self):
-        o = omnical_option_parser()
+    def test_without_firstcal_file_omni_run(self):
+        o = omni.get_optionParser('omni_run')
         cmd = "-C %s -p xx %s"%(calfile,xx_vis)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
@@ -814,7 +795,7 @@ class Test_omni_run(object):
         objective_file = os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
         if os.path.exists(objective_file):
             os.system('rm %s'%objective_file)
-        o = omnical_option_parser()
+        o = omni.get_optionParser('omni_run')
         xx_fcal4real = os.path.join(DATA_PATH,xx_fcal)
         xx_vis4real = os.path.join(DATA_PATH,xx_vis)
         
@@ -828,7 +809,7 @@ class Test_omni_run(object):
         objective_file = os.path.join(DATA_PATH,'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
         if os.path.exists(objective_file):
             os.system('rm %s'%objective_file)
-        o = omnical_option_parser()
+        o = omni.get_optionParser('omni_run')
         xx_fcal4real = os.path.join(DATA_PATH,xx_fcal)
         xx_vis4real = os.path.join(DATA_PATH,xx_vis)
 
@@ -842,7 +823,7 @@ class Test_omni_run(object):
         objective_file = os.path.join(DATA_PATH,'zen.2457698.40355.HH.uvcA.omni.calfits')
         if os.path.exists(objective_file):
             os.system('rm %s'%objective_file)
-        o = omnical_option_parser()
+        o = omni.get_optionParser('omni_run')
         visxx = os.path.join(DATA_PATH,visXX)
         visxy = os.path.join(DATA_PATH,visXY)
         visyx = os.path.join(DATA_PATH,visYX)
@@ -858,5 +839,6 @@ class Test_omni_run(object):
         nt.assert_true(os.path.exists(objective_file))
             
     def test_single_file_execution_omni_apply(self):
-        pass
+        o = omni.get_optionParser('omni_apply')
+        pass        
         
