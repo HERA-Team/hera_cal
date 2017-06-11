@@ -1044,14 +1044,18 @@ def get_optionParser(methodName):
         assert(methodName in methods)
     except:
         raise AssertionError('methodName must be one of %s'%(','.join(methods)))
+    
+    o = optparse.OptionParser()
+    
     if methodName=='omni_run':
         cal=True
         median_help_string = 'Take the median over time of the starting calibration gains (e.g. firstcal).'
+        o.set_usage("omni_run.py -C [calfile] -p [pol] --firstcal=[firstcal path] [options] *.uvc")
     elif methodName=='omni_apply':
         cal=False
         median_help_string = 'Take the median in time before applying solution. Applicable only in delay.'
+        o.set_usage("omni_apply.py -p [pol] --omnipath=[/path/to/omni.calfits] --extension=[extension] [options] *.uvc")
     
-    o = optparse.OptionParser()
     aipy.scripting.add_standard_options(o, cal=cal, pol=True)
     o.add_option('--omnipath', dest='omnipath', default='.', type='string', help='Path to/for omnical solutions.')
     o.add_option('--median', action='store_true', help=median_help_string)
@@ -1313,12 +1317,12 @@ def omni_apply(files, opts):
                                    for lpk in linear_pol_keys]
 
     for f in files:
-        mir = pyuvdata.UVData()
+        mir = UVData()
         print("  Reading {0}".format(f))
         mir.read_miriad(f)
         if mir.phase_type != 'drift':
             mir.unphase_to_drift()
-        cal = pyuvdata.UVCal()
+        cal = UVCal()
         print("  Reading calibration : {0}".format(filedict[f]))
         if len(pols) == 1 or not opts.firstcal:
             cal.read_calfits(filedict[f])
