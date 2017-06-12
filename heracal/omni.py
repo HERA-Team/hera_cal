@@ -978,6 +978,13 @@ class HERACal(UVCal):
                                     for ant in ants] for pol in pols]).swapaxes(0, 3).swapaxes(0, 1)
         except:
             chisqarray = np.ones(datarray.shape, dtype=bool)
+        # get the array-wide chisq, which does not have separate axes for
+        # antennas or polarization
+        try:
+            totchisqarray = np.array(meta['chisq']).swapaxes(0, 1)
+        except:
+            # leave it empty
+            totchisqarray = None
 
         tarray = time
         parray = np.array(pols)
@@ -1018,6 +1025,8 @@ class HERACal(UVCal):
             self.delay_array = datarray  # units of seconds
             self.quality_array = chisqarray
             self.flag_array = flgarray.astype(np.bool)[:, np.newaxis, :, :, :]
+            if totchisqarray is not None:
+                self.total_quality_array = totchisqarray[np.newaxis, :, :]
         else:
             self.set_gain()
             # adding new axis for the spectral window axis. This is default to 1.
@@ -1025,6 +1034,8 @@ class HERACal(UVCal):
             self.gain_array = datarray[:, np.newaxis, :, :, :]
             self.quality_array = chisqarray[:, np.newaxis, :, :, :]
             self.flag_array = flgarray.astype(np.bool)[:, np.newaxis, :, :, :]
+            if totchisqarray is not None:
+                self.total_quality_array = totchisqarray[np.newaxis, :, :]
 
 
 # omni_run and omni_apply helper functions
@@ -1032,44 +1043,57 @@ def getPol(fname):
     # XXX assumes file naming format
     return fname.split('.')[3]
 
+
 def isLinPol(polstr):
     return len(list(set(polstr))) == 1
+
 
 def file2djd(fname):
     return re.findall("\d+\.\d+", fname)[0]
 
+
 def get_optionParser(methodName):
-    methods = ['omni_run','omni_apply'] #XXX TODO: include "firstcal_run"
+    methods = ['omni_run', 'omni_apply']  # XXX TODO: include "firstcal_run"
     try:
         assert(methodName in methods)
     except:
-        raise AssertionError('methodName must be one of %s'%(','.join(methods)))
-    
+        raise AssertionError('methodName must be one of %s' %
+                             (','.join(methods)))
+
     o = optparse.OptionParser()
-    
-    if methodName=='omni_run':
-        cal=True
+
+    if methodName == 'omni_run':
+        cal = True
         median_help_string = 'Take the median over time of the starting calibration gains (e.g. firstcal).'
-        o.set_usage("omni_run.py -C [calfile] -p [pol] --firstcal=[firstcal path] [options] *.uvc")
-    elif methodName=='omni_apply':
-        cal=False
+        o.set_usage(
+            "omni_run.py -C [calfile] -p [pol] --firstcal=[firstcal path] [options] *.uvc")
+    elif methodName == 'omni_apply':
+        cal = False
         median_help_string = 'Take the median in time before applying solution. Applicable only in delay.'
-        o.set_usage("omni_apply.py -p [pol] --omnipath=[/path/to/omni.calfits] --extension=[extension] [options] *.uvc")
-    
+        o.set_usage(
+            "omni_apply.py -p [pol] --omnipath=[/path/to/omni.calfits] --extension=[extension] [options] *.uvc")
+
     aipy.scripting.add_standard_options(o, cal=cal, pol=True)
-    o.add_option('--omnipath', dest='omnipath', default='.', type='string', help='Path to/for omnical solutions.')
+    o.add_option('--omnipath', dest='omnipath', default='.',
+                 type='string', help='Path to/for omnical solutions.')
     o.add_option('--median', action='store_true', help=median_help_string)
-    
-    if methodName=='omni_run':
-        o.add_option('--ex_ants', dest='ex_ants', default=None, help='Antennas to exclude, separated by commas.')
-        o.add_option('--firstcal', dest='firstcal', type='string', help='Path and name of firstcal file. Can pass in wildcards.')
-        o.add_option('--minV', action='store_true', help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
-    
-    elif methodName=='omni_apply':
-        o.add_option('--firstcal', action='store_true', help='Applying firstcal solutions.')
-        o.add_option('--extension', dest='extension', default='O', type='string', help='Filename extension to be appended to the input filename')
+
+    if methodName == 'omni_run':
+        o.add_option('--ex_ants', dest='ex_ants', default=None,
+                     help='Antennas to exclude, separated by commas.')
+        o.add_option('--firstcal', dest='firstcal', type='string',
+                     help='Path and name of firstcal file. Can pass in wildcards.')
+        o.add_option('--minV', action='store_true',
+                     help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
+
+    elif methodName == 'omni_apply':
+        o.add_option('--firstcal', action='store_true',
+                     help='Applying firstcal solutions.')
+        o.add_option('--extension', dest='extension', default='O', type='string',
+                     help='Filename extension to be appended to the input filename')
 
     return o
+
 
 def omni_run(files, opts, history):
     pols = opts.pol.split(',')

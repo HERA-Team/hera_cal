@@ -380,6 +380,53 @@ def flatten_reds(reds):
     return freds
 
 
+def process_ex_ants(ex_ants):
+    """
+    Return list of excluded antennas from command line argument.
+
+    Input:
+       comma-separated value list of excluded antennas
+    Output:
+       list of excluded antennas
+    """
+    # test that there are ex_ants to process
+    if ex_ants == '':
+        return []
+    else:
+        xants = []
+        for ant in ex_ants.split(','):
+            try:
+                xants.append(int(ant))
+            except ValueError:
+                raise AssertionError(
+                    "ex_ants must be a comma-separated list of ints")
+        return xants
+
+
+def process_ubls(ubls):
+    """
+    Return list of tuples of unique-baseline pairs from command line argument.
+
+    Input:
+       comma-separated value of baseline pairs (formatted as "b1_b2")
+    Output:
+       list of tuples containing unique baselines
+    """
+    # test that there are ubls to process
+    if ubls == '':
+        return []
+    else:
+        ubaselines = []
+        for bl in ubls.split(','):
+            try:
+                i, j = bl.split('_')
+                ubaselines.append((int(i), int(j)))
+            except ValueError:
+                raise AssertionError(
+                    "ubls must be a comma-separated list of baselines (formatted as b1_b2)")
+        return ubaselines
+
+
 def firstcal_run(files, opts, history):
     # check that we got files to process
     if len(files) == 0:
@@ -392,19 +439,8 @@ def firstcal_run(files, opts, history):
 
     # Get HERA info and parse command line arguments
     aa = aipy.cal.get_aa(opts.cal, fqs)
-    ex_ants = []
-    ubls = []
-    for ant in opts.ex_ants.split(','):
-        try:
-            ex_ants.append(int(ant))
-        except:
-            pass
-    for bl in opts.ubls.split(','):
-        try:
-            i, j = bl.split('_')
-            ubls.append((int(i), int(j)))
-        except:
-            pass
+    ex_ants = process_ex_ants(opts.ex_ants)
+    ubls = process_ubls(opts.ubls)
 
     print('Excluding Antennas:', ex_ants)
     if len(ubls) != None:
