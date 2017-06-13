@@ -8,6 +8,7 @@ import aipy
 from omnical.calib import RedundantInfo
 import heracal.omni as omni
 from heracal.data import DATA_PATH
+from heracal.calibrations import CAL_PATH
 from pyuvdata import UVCal, UVData
 from copy import deepcopy
 import optparse
@@ -755,7 +756,7 @@ class Test_omni_run(object):
     # single pol tests
     global xx_vis, calfile, xx_fcal
     xx_vis = 'zen.2457698.40355.xx.HH.uvcAA'
-    calfile = 'heratest_calfile'
+    calfile = 'hsa7458_v001'
     xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
 
     # multi pol tests
@@ -768,8 +769,8 @@ class Test_omni_run(object):
     fcalXX = 'zen.2457698.40355.xx.HH.uvcA.first.calfits'
     fcalYY = 'zen.2457698.40355.yy.HH.uvcA.first.calfits'
     testpath = os.path.dirname(os.path.abspath(__file__))
-    if DATA_PATH not in sys.path:
-        sys.path.append(DATA_PATH)
+    if CAL_PATH not in sys.path:
+        sys.path.append(CAL_PATH)
 
     def test_empty_fileset_omni_run(self):
         o = omni.get_optionParser('omni_run')
@@ -851,7 +852,7 @@ class Test_omni_apply(object):
     # single pol tests
     global xx_vis,calfile,xx_fcal
     xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
-    calfile = 'heratest_calfile'
+    calfile = 'hsa7458_v001'
     xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
             
     def test_single_file_execution_omni_apply(self):

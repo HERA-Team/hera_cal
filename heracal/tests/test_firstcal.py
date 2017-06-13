@@ -8,6 +8,7 @@ import sys
 import heracal.firstcal as firstcal
 from heracal.omni import compute_reds
 from heracal.data import DATA_PATH
+from heracal.calibrations import CAL_PATH
 
 
 class Test_FirstCal(object):
@@ -249,12 +250,12 @@ class TestFCRedInfo(object):
 class Test_firstcal_run(object):
     global calfile
     global xx_vis
-    calfile = "heratest_calfile"
+    calfile = "hsa7458_v001"
     xx_vis = "zen.2457698.40355.xx.HH.uvcAA"
 
-    # add directory with calfile to path
-    if DATA_PATH not in sys.path:
-        sys.path.append(DATA_PATH)
+    # add directory with calfile
+    if CAL_PATH not in sys.path:
+        sys.path.append(CAL_PATH)
 
     def test_empty_fileset(self):
         o = firstcal.firstcal_option_parser()
