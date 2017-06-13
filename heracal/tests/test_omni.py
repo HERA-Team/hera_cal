@@ -846,6 +846,28 @@ class Test_omni_run(object):
         omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
 
+class Test_omni_apply(object):
+
+    # single pol tests
+    global xx_vis,calfile,xx_fcal
+    xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
+    calfile = 'heratest_calfile'
+    xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
+            
     def test_single_file_execution_omni_apply(self):
         o = omni.get_optionParser('omni_apply')
+        pass        
+    
+    def test_single_file_execution_omni_apply_with_median(self):
+        pass
+
+    def test_execution_omni_apply_4pol(self):
+        pass
+
+    def test_without_solution_file_omni_apply(self):
+        pass
+
+class Test_integration(object):
+    
+    def omni_apply_to_dummy_file(self):
         pass
