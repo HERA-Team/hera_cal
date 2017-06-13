@@ -5,6 +5,7 @@ import numpy as np
 import aipy
 import optparse
 import sys
+from pyuvdata import UVCal, UVData
 import heracal.firstcal as firstcal
 from heracal.omni import compute_reds
 from heracal.data import DATA_PATH
@@ -168,6 +169,36 @@ class Test_FirstCal(object):
         freds = firstcal.flatten_reds(reds)
         nt.assert_equal(freds, [(0, 1), (1, 2), (2, 3), (3, 4)])
         return
+        
+    def test_UVData_to_dict(self):
+        str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
+        filename = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')
+        uvd = UVData()
+        uvd.read_miriad(filename)
+        if uvd.phase_type != 'drift':
+            uvd.unphase_to_drift()
+
+        d, f = UVData_to_dict([uvd, uvd])
+        for i, j in d:
+            for pol in d[i, j]:
+                uvpol = list(uvd.polarization_array).index(str2pol[pol])
+                uvmask = np.all(
+                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
+                np.testing.assert_equal(d[i, j][pol], np.resize(
+                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
+                np.testing.assert_equal(f[i, j][pol], np.resize(
+                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
+
+        d, f = omni.UVData_to_dict([filename, filename])
+        for i, j in d:
+            for pol in d[i, j]:
+                uvpol = list(uvd.polarization_array).index(str2pol[pol])
+                uvmask = np.all(
+                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
+                np.testing.assert_equal(d[i, j][pol], np.resize(
+                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
+                np.testing.assert_equal(f[i, j][pol], np.resize(
+                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
 
     def test_process_ex_ants(self):
         ex_ants = ''

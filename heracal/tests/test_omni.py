@@ -374,7 +374,7 @@ class TestMethods(object):
         if DATA_PATH not in sys.path:
             sys.path.append(DATA_PATH)
         # This aa is specific for the fits file below.
-        aa = aipy.cal.get_aa('heratest_calfile', np.array([.15]))
+        aa = aipy.cal.get_aa('hsa7458_v001', np.array([.15]))
         sys.path[:-1]  # remove last entry from path (DATA_PATH)
 
         # read in meta, gains, vis, xtalk from file.
@@ -460,55 +460,12 @@ class TestMethods(object):
         if os.path.exists(testpath1):
             os.system('rm %s' % testpath1)
         cal1.write_calfits(testpath1)
-
-        try:
-            failcal = omni.concatenate_UVCal_on_pol([calname0, calname0])
-            assert False, 'should not have gotten here'
-        except ValueError:
-            pass
-        try:
-            failcal = omni.concatenate_UVCal_on_pol([calname0, testpath0])
-            assert False, 'should not have gotten here'
-        except ValueError:
-            pass
-        try:
-            failcal = omni.concatenate_UVCal_on_pol([calname0, testpath1])
-            assert False, 'should not have gotten here'
-        except ValueError:
-            pass
-
-    def test_UVData_to_dict(self):
-        str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
-        filename = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA')
-        uvd = UVData()
-        uvd.read_miriad(filename)
-        if uvd.phase_type != 'drift':
-            uvd.unphase_to_drift()
-
-        d, f = omni.UVData_to_dict([uvd, uvd])
-        for i, j in d:
-            for pol in d[i, j]:
-                uvpol = list(uvd.polarization_array).index(str2pol[pol])
-                uvmask = np.all(
-                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
-                np.testing.assert_equal(d[i, j][pol], np.resize(
-                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
-                np.testing.assert_equal(f[i, j][pol], np.resize(
-                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
-
-        d, f = omni.UVData_to_dict([filename, filename])
-        for i, j in d:
-            for pol in d[i, j]:
-                uvpol = list(uvd.polarization_array).index(str2pol[pol])
-                uvmask = np.all(
-                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
-                np.testing.assert_equal(d[i, j][pol], np.resize(
-                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
-                np.testing.assert_equal(f[i, j][pol], np.resize(
-                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
+        nt.assert_raises(ValueError, omni.concatenate_UVCal_on_pol, [calname0, calname0])
+        nt.assert_raises(ValueError, omni.concatenate_UVCal_on_pol, [calname0, testpath0])
+        nt.assert_raises(ValueError, omni.concatenate_UVCal_on_pol, [calname0, testpath1])
 
     def test_getPol(self):
-        filename = 'zen.2456798.40355.xx.HH.uvcAA'
+        filename = 'zen.2457698.40355.xx.HH.uvcA'
         nt.assert_equal(omni.getPol(filename), 'xx')
 
     def test_isLinPol(self):
@@ -518,8 +475,8 @@ class TestMethods(object):
         nt.assert_false(omni.isLinPol(crosspol))
 
     def test_file2djd(self):
-        filename = 'zen.2456798.40355.xx.HH.uvcAA'
-        nt.assert_equal(omni.file2djd(filename), '2456798.40355')
+        filename = 'zen.2457698.40355.xx.HH.uvcA'
+        nt.assert_equal(omni.file2djd(filename), '2457698.40355')
 
 
 class Test_Antpol(object):

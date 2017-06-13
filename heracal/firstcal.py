@@ -379,6 +379,50 @@ def flatten_reds(reds):
         freds += r
     return freds
 
+def UVData_to_dict(uvdata_list, filetype='miriad'):
+    """ Turn a list of UVData objects or filenames in to a data and flag dictionary.
+
+        Make dictionary with blpair key first and pol second key from either a 
+        list of UVData objects or a list of filenames with specific file_type.
+
+        Args:
+            uvdata_list: list of UVData objects or strings of filenames.
+            filetype (string, optional): type of file if uvdata_list is 
+                a list of filenames
+
+        Return:
+            data (dict): dictionary of data indexed by pol and antenna pairs
+            flags (dict): dictionary of flags indexed by pol and antenna pairs
+        """
+
+    d, f = {}, {}
+    for uv_in in uvdata_list:
+        if type(uv_in) == str:
+            fname = uv_in
+            uv_in = UVData()
+            # read in file without multiple if statements
+            getattr(uv_in, 'read_' + filetype)(fname)
+        # reshape data and flag arrays to make slicing time and baselines easy
+        data = uv_in.data_array.reshape(
+            uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
+        flags = uv_in.flag_array.reshape(
+            uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
+
+        for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
+            if (i, j) not in d:
+                d[i, j] = {}
+                f[i, j] = {}
+            for ip, pol in enumerate(uv_in.polarization_array):
+                pol = pol2str[pol]
+                if pol not in d[(i, j)]:
+                    d[(i, j)][pol] = data[:, nbl, 0, :, ip]
+                    f[(i, j)][pol] = flags[:, nbl, 0, :, ip]
+                else:
+                    d[(i, j)][pol] = np.concatenate(
+                        [d[(i, j)][pol], data[:, nbl, 0, :, ip]])
+                    f[(i, j)][pol] = np.concatenate(
+                        [f[(i, j)][pol], flags[:, nbl, 0, :, ip]])
+    return d, f
 
 def process_ex_ants(ex_ants):
     """
@@ -468,7 +512,7 @@ def firstcal_run(files, opts, history):
         if uv_in.phase_type != 'drift':
             print("Setting phase type to drift")
             uv_in.unphase_to_drift()
-        datapack, wgtpack = omni.UVData_to_dict([uv_in])
+        datapack, wgtpack = UVData_to_dict([uv_in])
         wgtpack = {k: {p: np.logical_not(wgtpack[k][p]) for p in wgtpack[
             k]} for k in wgtpack}  # logical_not of wgtpack
 
@@ -512,7 +556,6 @@ def firstcal_run(files, opts, history):
         hc.write_calfits(outname)
 
     return
-
 
 def firstcal_option_parser():
     """
