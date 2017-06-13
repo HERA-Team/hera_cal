@@ -5,6 +5,7 @@ import aipy
 import pylab as p
 import time
 import omnical
+from aipy.miriad import pol2str
 from heracal.omni import Antpol
 import multiprocessing as mpr
 import scipy.sparse as sps

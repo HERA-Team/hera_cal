@@ -178,7 +178,7 @@ class Test_FirstCal(object):
         if uvd.phase_type != 'drift':
             uvd.unphase_to_drift()
 
-        d, f = UVData_to_dict([uvd, uvd])
+        d, f = firstcal.UVData_to_dict([uvd, uvd])
         for i, j in d:
             for pol in d[i, j]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])
@@ -189,7 +189,7 @@ class Test_FirstCal(object):
                 np.testing.assert_equal(f[i, j][pol], np.resize(
                     uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
 
-        d, f = omni.UVData_to_dict([filename, filename])
+        d, f = firstcal.UVData_to_dict([filename, filename])
         for i, j in d:
             for pol in d[i, j]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])

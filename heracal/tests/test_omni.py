@@ -374,7 +374,7 @@ class TestMethods(object):
         if DATA_PATH not in sys.path:
             sys.path.append(DATA_PATH)
         # This aa is specific for the fits file below.
-        aa = aipy.cal.get_aa('hsa7458_v001', np.array([.15]))
+        aa = aipy.cal.get_aa('heratest_calfile', np.array([.15]))
         sys.path[:-1]  # remove last entry from path (DATA_PATH)
 
         # read in meta, gains, vis, xtalk from file.
