@@ -169,7 +169,7 @@ class Test_FirstCal(object):
         freds = firstcal.flatten_reds(reds)
         nt.assert_equal(freds, [(0, 1), (1, 2), (2, 3), (3, 4)])
         return
-        
+
     def test_UVData_to_dict(self):
         str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
         filename = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')

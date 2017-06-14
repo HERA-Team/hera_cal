@@ -994,7 +994,9 @@ class HERACal(UVCal):
 # omni_run and omni_apply helper functions
 def getPol(fname):
     # XXX assumes file naming format
-    return fname.split('.')[3]
+    # extract just the filename if we're passed a path with periods in it
+    fn = re.findall('zen\.\d{7}\.\d{5}\..*', fname)[0]
+    return fn.split('.')[3]
 
 
 def isLinPol(polstr):
@@ -1002,7 +1004,7 @@ def isLinPol(polstr):
 
 
 def file2djd(fname):
-    return re.findall("\d+\.\d+", fname)[0]
+    return re.findall("\d{7}\.\d{5}", fname)[0]
 
 
 def get_optionParser(methodName):

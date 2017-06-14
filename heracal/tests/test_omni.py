@@ -478,6 +478,10 @@ class TestMethods(object):
         filename = 'zen.2457698.40355.xx.HH.uvcA'
         nt.assert_equal(omni.file2djd(filename), '2457698.40355')
 
+    def test_get_optionParser(self):
+        method = 'fake_method'
+        nt.assert_raises(AssertionError, omni.get_optionParser, method)
+
 
 class Test_Antpol(object):
 
@@ -807,15 +811,25 @@ class Test_omni_run(object):
 class Test_omni_apply(object):
 
     # single pol tests
-    global xx_vis,calfile,xx_fcal
+    global xx_vis,calfile,xx_fcal,xx_ocal
     xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
     calfile = 'hsa7458_v001'
     xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
-            
+    xx_ocal = 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits'
+
     def test_single_file_execution_omni_apply(self):
+        objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAO')
+        if os.path.exists(objective_file):
+            os.system('rm -rf {}'.format(objective_file))
         o = omni.get_optionParser('omni_apply')
-        pass        
-    
+        omni_file = os.path.join(DATA_PATH, xx_ocal)
+        vis_file = os.path.join(DATA_PATH, xx_vis)
+        cmd = "-p xx --omnipath={0} --extension=O {1}".format(omni_file, vis_file)
+
+        opts, files = o.parse_args(cmd.split())
+        omni.omni_apply(files, opts)
+        nt.assert_true(os.path.exists(objective_file))
+
     def test_single_file_execution_omni_apply_with_median(self):
         pass
 
