@@ -193,3 +193,6 @@ class TestMethods(unittest.TestCase):
             n = nos[bl+('xx',)]
             self.assertEqual(n.shape, (100-1,))
             np.testing.assert_almost_equal(n, 106*np.ones_like(n), -2)
+
+if __name__ == '__main__':
+    unittest.main()
