@@ -652,10 +652,11 @@ class Test_Redcal_Basics(object):
         wgts = {self.pol[0] * 2: {}}
         zeros = {self.pol[0] * 2: {}}
         for ai, aj in self.info.bl_order():
-            wgts[self.pol[0] * 2][ai.ant(), aj.ant()] = np.ones_like(m['res']
-                                                                     [self.pol[0] * 2][ai.ant(), aj.ant()], dtype=np.bool)
-            zeros[self.pol[0] * 2][ai.ant(), aj.ant()] = np.mean(np.zeros_like(m['res']
-                                                                               [self.pol[0] * 2][ai.ant(), aj.ant()]), axis=0)  # need to average over the times
+            wgts[self.pol[0] * 2][ai.ant(), aj.ant()] = \
+                np.ones_like(m['res'][self.pol[0] * 2][ai.ant(), aj.ant()], dtype=np.bool)
+            zeros[self.pol[0] * 2][ai.ant(), aj.ant()] = \
+                np.mean(np.zeros_like(m['res'][self.pol[0] * 2][ai.ant(), aj.ant()]), axis=0)
+            # need to average over the times
         nt.assert_equal(np.testing.assert_equal(
             omni.compute_xtalk(m['res'], wgts), zeros), None)
 

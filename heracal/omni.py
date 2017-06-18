@@ -963,7 +963,8 @@ class HERACal(UVCal):
         self.antenna_numbers = numarray[:self.Nants_telescope]
         self.ant_array = np.array(antarray[:self.Nants_data])
         self.Nspws = nspw
-        self.spw_array = np.array([self.Nspws])
+        # XXX: needs to change when we support more than 1 spw!
+        self.spw_array = np.array([0])
         self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
         self.jones_array = parray[:self.Njones]
