@@ -1339,29 +1339,29 @@ def omni_apply(files, opts):
                         if opts.median:
                             mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] * \
-                                heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, :, p1])).reshape(1, -1) * \
+                                heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, 0, :, p1])).reshape(1, -1) * \
                                 np.conj(heracal.omni.get_phase(cal.freq_array, np.median(
-                                    cal.delay_array[antenna_index[aj], nsp, :, p2])).reshape(1, -1))
+                                    cal.delay_array[antenna_index[aj], nsp, 0, :, p2])).reshape(1, -1))
                         else:
                             mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] * \
-                                heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, :, p1]) * \
+                                heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, 0, :, p1]) * \
                                 np.conj(heracal.omni.get_phase(
-                                    cal.freq_array, cal.delay_array[antenna_index[aj], nsp, :, p2]))
+                                    cal.freq_array, cal.delay_array[antenna_index[aj], nsp, 0, :, p2]))
 
                     if cal.cal_type == 'delay' and cal.gain_convention == 'divide':
                         if opts.median:
                             mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] / \
-                                heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, :, p1])).reshape(1, -1) / \
+                                heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, 0, :, p1])).reshape(1, -1) / \
                                 np.conj(heracal.omni.get_phase(cal.freq_array, np.median(
-                                    cal.delay_array[antenna_index[aj], nsp, :, p2])).reshape(1, -1))
+                                    cal.delay_array[antenna_index[aj], nsp, 0, :, p2])).reshape(1, -1))
                         else:
                             mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] / \
-                                heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, :, p1]).T / \
+                                heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, 0, :, p1]).T / \
                                 np.conj(heracal.omni.get_phase(
-                                    cal.freq_array, cal.delay_array[antenna_index[aj], nsp, :, p2]).T)
+                                    cal.freq_array, cal.delay_array[antenna_index[aj], nsp, 0, :, p2]).T)
 
                     # Update miriad flags array
                     mir.flag_array[blmask, nsp, :, p] = np.logical_or(
