@@ -614,17 +614,17 @@ def from_fits(filename, keep_delay=False, **kwargs):
                         if ant not in gains[pol].keys():
                             if keep_delay:
                                 gains[pol][ant] = cal.delay_array[
-                                    i, nspw, :, k].T
+                                    i, nspw, 0, :, k].T
                             else:
                                 gains[pol][ant] = get_phase(
-                                    cal.freq_array, cal.delay_array[i, nspw, :, k]).T
+                                    cal.freq_array, cal.delay_array[i, nspw, 0, :, k]).T
                         else:
                             if keep_delay:
                                 gains[pol][ant] = np.concatenate(
-                                    [gains[pol][ant], cal.delay_array[i, nspw, :, k].T])
+                                    [gains[pol][ant], cal.delay_array[i, nspw, 0, :, k].T])
                             else:
                                 gains[pol][ant] = np.concatenate([gains[pol][ant], get_phase(
-                                    cal.freq_array, cal.delay_array[i, nspw, :, k]).T])
+                                    cal.freq_array, cal.delay_array[i, nspw, 0, :, k]).T])
                         if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
                             meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[
                                 i, nspw, :, k].T
@@ -829,7 +829,7 @@ def concatenate_UVCal_on_pol(calfitsList):
     cal0 = UVCal()
     cal0.read_calfits(calname0)
 
-    if not cal0.Njones == 1:
+    if cal0.Njones != 1:
         raise ValueError(
             'Njones!=1; cannot concantenate > 1 polarization at a time')
     for calname1 in calfitsList[1:]:
@@ -852,16 +852,16 @@ def concatenate_UVCal_on_pol(calfitsList):
 
         cal0.Njones += 1
         cal0.jones_array = np.concatenate((cal0.jones_array, cal1.jones_array))
-        if not cal0.delay_array is None:
+        if cal0.delay_array is not None:
             cal0.delay_array = np.concatenate(
-                (cal0.delay_array, cal1.delay_array), axis=3)
-        if not cal0.gain_array is None:
+                (cal0.delay_array, cal1.delay_array), axis=4)
+        if cal0.gain_array is not None:
             cal0.gain_array = np.concatenate(
                 (cal0.gain_array, cal1.gain_array), axis=4)
         cal0.flag_array = np.concatenate(
             (cal0.flag_array, cal1.flag_array), axis=4)
         cal0.quality_array = np.concatenate(
-            (cal0.quality_array, cal1.quality_array), axis=3)
+            (cal0.quality_array, cal1.quality_array), axis=4)
     return cal0
 
 class HERACal(UVCal):
@@ -935,6 +935,8 @@ class HERACal(UVCal):
         # antennas or polarization
         try:
             totchisqarray = np.array(meta['chisq']).swapaxes(0, 1)
+            # add a polarization axis until this is fixed properly
+            totchisqarray = totchisqarray[:, :, np.newaxis]
         except:
             # leave it empty
             totchisqarray = None
@@ -974,23 +976,18 @@ class HERACal(UVCal):
         self.x_orientation = 'east'
         self.time_range = [self.time_array[0], self.time_array[-1]]
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
+        # adding new axis for the spectral window axis. This is default to 1.
+        # This needs to change when support for Nspws>1 in pyuvdata.
+        self.quality_array = chisqarray[:, np.newaxis, :, :, :]
+        self.flag_array = flgarray.astype(np.bool)[:, np.newaxis, :, :, :]
         if DELAY:
             self.set_delay()
-            self.delay_array = datarray  # units of seconds
-            self.quality_array = chisqarray
-            self.flag_array = flgarray.astype(np.bool)[:, np.newaxis, :, :, :]
-            if totchisqarray is not None:
-                self.total_quality_array = totchisqarray[np.newaxis, :, :]
+            self.delay_array = datarray[:, np.newaxis, :, :, :]  # units of seconds
         else:
             self.set_gain()
-            # adding new axis for the spectral window axis. This is default to 1.
-            # This needs to change when support for Nspws>1 in pyuvdata.
             self.gain_array = datarray[:, np.newaxis, :, :, :]
-            self.quality_array = chisqarray[:, np.newaxis, :, :, :]
-            self.flag_array = flgarray.astype(np.bool)[:, np.newaxis, :, :, :]
-            if totchisqarray is not None:
-                self.total_quality_array = totchisqarray[np.newaxis, :, :]
-
+        if totchisqarray is not None:
+            self.total_quality_array = totchisqarray[np.newaxis, :, :, :]
 
 # omni_run and omni_apply helper functions
 def getPol(fname):
