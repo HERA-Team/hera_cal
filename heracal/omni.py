@@ -937,6 +937,8 @@ class HERACal(UVCal):
             totchisqarray = np.array(meta['chisq']).swapaxes(0, 1)
             # add a polarization axis until this is fixed properly
             totchisqarray = totchisqarray[:, :, np.newaxis]
+            # repeat polarization axis npol times for proper shape
+            np.repeat(totchisqarray, npol, axis=-1)
         except:
             # leave it empty
             totchisqarray = None
