@@ -627,10 +627,10 @@ def from_fits(filename, keep_delay=False, **kwargs):
                                     cal.freq_array, cal.delay_array[i, nspw, 0, :, k]).T])
                         if not 'chisq{0}{1}'.format(ant, pol) in meta.keys():
                             meta['chisq{0}{1}'.format(ant, pol)] = cal.quality_array[
-                                i, nspw, :, k].T
+                                i, nspw, 0, :, k].T
                         else:
                             meta['chisq{0}{1}'.format(ant, pol)] = np.concatenate(
-                                [meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, :, k].T])
+                                [meta['chisq{0}{1}'.format(ant, pol)], cal.quality_array[i, nspw, 0, :, k].T])
                     else:
                         raise ValueError("Not a recognized file type.")
 

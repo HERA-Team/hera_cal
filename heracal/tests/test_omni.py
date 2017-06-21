@@ -4,14 +4,15 @@ import nose.tools as nt
 import os
 import sys
 import numpy as np
+import optparse
+import shutil
+from copy import deepcopy
 import aipy
 from omnical.calib import RedundantInfo
+from pyuvdata import UVCal, UVData
 import heracal.omni as omni
 from heracal.data import DATA_PATH
 from heracal.calibrations import CAL_PATH
-from pyuvdata import UVCal, UVData
-from copy import deepcopy
-import optparse
 
 
 class AntennaArray(aipy.fit.AntennaArray):
@@ -139,7 +140,7 @@ class TestMethods(object):
         Ntimes = 3
         Nchans = 1024  # hardcoded for this file
         meta, gains, vis, xtalk = omni.from_npz(os.path.join(
-            DATA_PATH, 'zen.2457698.50098.xx.pulledtime.npz'))
+            DATA_PATH, 'test_input', 'zen.2457698.50098.xx.pulledtime.npz'))
         for m in meta.keys():
             if m.startswith('chisq'):
                 nt.assert_equal(meta[m].shape, (Ntimes, Nchans))
@@ -176,7 +177,7 @@ class TestMethods(object):
         Nchans = 1024  # hardcoded for this file
         # read in the same file twice to make sure file concatenation works
         meta, gains, vis, xtalk = omni.from_fits(
-            [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')] * 2)
+            [os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')] * 2)
         for m in meta.keys():
             if m.startswith('chisq'):
                 nt.assert_equal(meta[m].shape, (Ntimes, Nchans))
@@ -206,7 +207,7 @@ class TestMethods(object):
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
         uvcal.read_calfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
         np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
         # need repeat here because reading 2 files.
         np.testing.assert_equal(
@@ -222,7 +223,7 @@ class TestMethods(object):
         str2pol = {'xx': -5, 'yy': -6}
         uvd = UVData()
         uvd.read_uvfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
         # frim_fits turns data into drift
         uvd.unphase_to_drift()
         for pol in vis:
@@ -237,7 +238,7 @@ class TestMethods(object):
 
         uvd = UVData()
         uvd.read_uvfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
         # from_fits turns data into drift
         uvd.unphase_to_drift()
         for pol in xtalk:
@@ -256,9 +257,10 @@ class TestMethods(object):
         Ndelay = 1  # number of delays per integration
         # read in the same file twice to make sure file concatenation works
         meta, gains, vis, xtalk = omni.from_fits(
-            [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')] * 2)
+            [os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits')] * 2)
         for m in meta.keys():
             if m.startswith('chisq'):
+                print(m)
                 nt.assert_equal(meta[m].shape, (Ntimes,))
         nt.assert_equal(len(meta['freqs']), Nchans)
         nt.assert_equal(len(meta['times']), Ntimes)
@@ -277,7 +279,7 @@ class TestMethods(object):
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
         uvcal.read_calfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
         np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
         # need repeat here because reading 2 files.
         np.testing.assert_equal(
@@ -288,15 +290,15 @@ class TestMethods(object):
             for ip, pol in enumerate(uvcal.jones_array):
                 for nsp in range(uvcal.Nspws):
                     np.testing.assert_equal(np.resize(omni.get_phase(uvcal.freq_array, uvcal.delay_array[
-                                            ai, nsp, :, ip]).T, (Ntimes, Nchans)),  gains[pol2str[pol]][ant])
+                                            ai, nsp, 0, :, ip]).T, (Ntimes, Nchans)),  gains[pol2str[pol]][ant])
 
         # Now test if we keep delays
         meta, gains, vis, xtalk = omni.from_fits([os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')] * 2, keep_delay=True)
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits')] * 2, keep_delay=True)
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
         uvcal.read_calfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
         np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
         # need repeat here because reading 2 files.
         np.testing.assert_equal(
@@ -307,19 +309,19 @@ class TestMethods(object):
             for ip, pol in enumerate(uvcal.jones_array):
                 for nsp in range(uvcal.Nspws):
                     np.testing.assert_equal(np.resize(
-                        uvcal.delay_array[ai, nsp, :, ip].T, (Ntimes,)),  gains[pol2str[pol]][ant])
+                        uvcal.delay_array[ai, nsp, 0, :, ip].T, (Ntimes,)),  gains[pol2str[pol]][ant])
 
     def test_from_fits_gain_select(self):
         Ntimes = 3
         Nchans = 1024  # hardcoded for this file
         # read in the same file twice to make sure file concatenation works
         meta, gains, vis, xtalk = omni.from_fits([os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')], antenna_nums=[9, 10, 112, 20, 22])
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')], antenna_nums=[9, 10, 112, 20, 22])
 
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
         uvcal.read_calfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
         uvcal.select(antenna_nums=[9, 10, 112, 20, 22])
         np.testing.assert_equal(uvcal.freq_array.flatten(), meta['freqs'])
         # need repeat here because reading 2 files.
@@ -335,8 +337,8 @@ class TestMethods(object):
 
     def test_from_fits_catch_errors(self):
         # raise error on caltype
-        args = [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'), os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits')]
+        args = [os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'), os.path.join(
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits')]
         nt.assert_raises(ValueError, omni.from_fits, args)
 
         # raise error on gain convention
@@ -344,9 +346,9 @@ class TestMethods(object):
         uvc.read_calfits(args[1])
         uvc.gain_convention = 'multiply'
         uvc.write_calfits(os.path.join(
-            DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+            DATA_PATH, 'test_output', 'test_from_fits_errors.fits'), clobber=True)
         new_args = [os.path.join(
-            DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+            DATA_PATH, 'test_output', 'test_from_fits_errors.fits'), args[1]]
         nt.assert_raises(ValueError, omni.from_fits, new_args)
 
         # raise error on inttime
@@ -354,9 +356,9 @@ class TestMethods(object):
         uvc.read_calfits(args[1])
         uvc.integration_time = 3.145
         uvc.write_calfits(os.path.join(
-            DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+            DATA_PATH, 'test_output', 'test_from_fits_errors.fits'), clobber=True)
         new_args = [os.path.join(
-            DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+            DATA_PATH, 'test_output', 'test_from_fits_errors.fits'), args[1]]
         nt.assert_raises(ValueError, omni.from_fits, new_args)
 
         # raise error on freqs
@@ -364,9 +366,9 @@ class TestMethods(object):
         uvc.read_calfits(args[1])
         uvc.freq_array += 1e4
         uvc.write_calfits(os.path.join(
-            DATA_PATH, 'test_from_fits_errors.fits'), clobber=True)
+            DATA_PATH, 'test_output', 'test_from_fits_errors.fits'), clobber=True)
         new_args = [os.path.join(
-            DATA_PATH, 'test_from_fits_errors.fits'), args[1]]
+            DATA_PATH, 'test_output', 'test_from_fits_errors.fits'), args[1]]
         nt.assert_raises(ValueError, omni.from_fits, new_args)
 
     def test_make_uvdata_vis(self):
@@ -379,7 +381,7 @@ class TestMethods(object):
 
         # read in meta, gains, vis, xtalk from file.
         meta, gains, vis, xtalk = omni.from_fits(
-            [os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits')])
+            [os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')])
         _xtalk = {}
         # overide xtalk to have single visibility. from fits expands to size of
         # vis data.
@@ -388,16 +390,16 @@ class TestMethods(object):
                            for key in xtalk[pol].keys()}
         # write to new file for both vis and xtalk
         uv = omni.make_uvdata_vis(aa, meta, vis)
-        uv.write_uvfits(os.path.join(DATA_PATH, 'write_vis_test.fits'),
+        uv.write_uvfits(os.path.join(DATA_PATH, 'test_output', 'write_vis_test.fits'),
                         force_phase=True, spoof_nonessential=True)
         uv = omni.make_uvdata_vis(aa, meta, _xtalk, xtalk=True)
-        uv.write_uvfits(os.path.join(DATA_PATH, 'write_xtalk_test.fits'),
+        uv.write_uvfits(os.path.join(DATA_PATH, 'test_output', 'write_xtalk_test.fits'),
                         force_phase=True, spoof_nonessential=True)
 
         # read in old and newly written files and check equality.
         uv_vis_in = UVData()
         uv_vis_in.read_uvfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.vis.uvfits'))
         uv_vis_in.unphase_to_drift()
         # overwrite history because uvdata writes git stuff whenever data is
         # written to a file.
@@ -405,14 +407,14 @@ class TestMethods(object):
 
         uv_xtalk_in = UVData()
         uv_xtalk_in.read_uvfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits'))
         uv_xtalk_in.unphase_to_drift()
         # overwrite history because uvdata writes git stuff whenever data is
         # written to a file.
         uv_xtalk_in.history = 'test_history'
 
         uv_vis_out = UVData()
-        uv_vis_out.read_uvfits(os.path.join(DATA_PATH, 'write_vis_test.fits'))
+        uv_vis_out.read_uvfits(os.path.join(DATA_PATH, 'test_output', 'write_vis_test.fits'))
         uv_vis_out.unphase_to_drift()
         # overwrite history because uvdata writes git stuff whenever data is
         # written to a file.
@@ -420,7 +422,7 @@ class TestMethods(object):
 
         uv_xtalk_out = UVData()
         uv_xtalk_out.read_uvfits(os.path.join(
-            DATA_PATH, 'write_xtalk_test.fits'))
+            DATA_PATH, 'test_output', 'write_xtalk_test.fits'))
         uv_xtalk_out.unphase_to_drift()
         # overwrite history because uvdata writes git stuff whenever data is
         # written to a file.
@@ -431,9 +433,9 @@ class TestMethods(object):
 
     def test_concatenate_UVCal_on_pol(self):
         calname0 = os.path.join(
-            DATA_PATH, 'zen.2457705.41052.xx.HH.uvc.first.calfits')
+            DATA_PATH, 'test_input', 'zen.2457705.41052.xx.HH.uvc.first.calfits')
         calname1 = os.path.join(
-            DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.first.calfits')
+            DATA_PATH, 'test_input', 'zen.2457705.41052.yy.HH.uvc.first.calfits')
         calnameList = [calname0, calname1]
         cal0 = UVCal()
         cal0.read_calfits(calname0)
@@ -443,9 +445,9 @@ class TestMethods(object):
         # Concatenate and test concatenation
         newcal = omni.concatenate_UVCal_on_pol(calnameList)
         testpath0 = os.path.join(
-            DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.first.test0.calfits')
+            DATA_PATH, 'test_output', 'zen.2457705.41052.yy.HH.uvc.first.test0.calfits')
         if os.path.exists(testpath0):
-            os.system('rm %s' % testpath0)
+            os.remove(testpath0)
         newcal.write_calfits(testpath0)
 
         nt.assert_equal(newcal.Njones, 2)
@@ -456,9 +458,9 @@ class TestMethods(object):
 
         cal1.gain_convention = 'multiply'
         testpath1 = os.path.join(
-            DATA_PATH, 'zen.2457705.41052.yy.HH.uvc.first.test1.calfits')
+            DATA_PATH, 'test_output', 'zen.2457705.41052.yy.HH.uvc.first.test1.calfits')
         if os.path.exists(testpath1):
-            os.system('rm %s' % testpath1)
+            os.remove(testpath1)
         cal1.write_calfits(testpath1)
         nt.assert_raises(ValueError, omni.concatenate_UVCal_on_pol, [calname0, calname0])
         nt.assert_raises(ValueError, omni.concatenate_UVCal_on_pol, [calname0, testpath0])
@@ -665,13 +667,13 @@ class Test_HERACal(UVCal):
 
     def test_gainHC(self):
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         optional = {'observer': 'heracal'}
         hc = omni.HERACal(meta, gains, optional=optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
         for param in hc:
             if param == '_history':
                 continue
@@ -685,7 +687,7 @@ class Test_HERACal(UVCal):
     def test_delayHC(self):
         # make test data
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'), keep_delay=True)
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'), keep_delay=True)
         for pol in gains.keys():
             for k in gains[pol].keys():
                 gains[pol][k] = gains[pol][k].reshape(-1, 1)
@@ -695,7 +697,7 @@ class Test_HERACal(UVCal):
         hc = omni.HERACal(meta, gains, optional=optional, DELAY=True)
         uv = UVCal()
         uv.read_calfits(os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
+            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
         for param in hc:
             print param
             print getattr(hc, param).value, getattr(uv, param).value
@@ -758,48 +760,52 @@ class Test_omni_run(object):
 
     def test_single_file_execution_omni_run(self):
         objective_file = os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
+            DATA_PATH, 'test_output', 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
         if os.path.exists(objective_file):
-            os.system('rm %s' % objective_file)
+            os.remove(objective_file)
         o = omni.get_optionParser('omni_run')
-        xx_fcal4real = os.path.join(DATA_PATH, xx_fcal)
+        xx_fcal4real = os.path.join(DATA_PATH, 'test_input', xx_fcal)
         xx_vis4real = os.path.join(DATA_PATH, xx_vis)
+        omnipath = os.path.join(DATA_PATH, 'test_output')
 
         cmd = "-C %s -p xx --firstcal=%s --ex_ants=81 --omnipath=%s %s" % (
-            calfile, xx_fcal4real, DATA_PATH, xx_vis4real)
+            calfile, xx_fcal4real, omnipath, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
+        os.remove(objective_file)
 
     def test_single_file_execution_omni_run_with_median(self):
         objective_file = os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
+            DATA_PATH, 'test_output', 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
         if os.path.exists(objective_file):
-            os.system('rm %s' % objective_file)
+            os.remove(objective_file)
         o = omni.get_optionParser('omni_run')
-        xx_fcal4real = os.path.join(DATA_PATH, xx_fcal)
+        xx_fcal4real = os.path.join(DATA_PATH, 'test_input', xx_fcal)
         xx_vis4real = os.path.join(DATA_PATH, xx_vis)
+        omnipath = os.path.join(DATA_PATH, 'test_output')
 
         cmd = "-C %s -p xx --firstcal=%s --ex_ants=81 --omnipath=%s --median %s" % (
-            calfile, xx_fcal4real, DATA_PATH, xx_vis4real)
+            calfile, xx_fcal4real, omnipath, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
+        os.remove(objective_file)
 
     def test_execution_omni_run_4pol(self):
         objective_file = os.path.join(
             DATA_PATH, 'zen.2457698.40355.HH.uvcA.omni.calfits')
         if os.path.exists(objective_file):
-            os.system('rm %s' % objective_file)
+            os.remove(objective_file)
         o = omni.get_optionParser('omni_run')
         visxx = os.path.join(DATA_PATH, visXX)
         visxy = os.path.join(DATA_PATH, visXY)
         visyx = os.path.join(DATA_PATH, visYX)
         visyy = os.path.join(DATA_PATH, visYY)
-        fcalxx = os.path.join(DATA_PATH, fcalXX)
-        fcalyy = os.path.join(DATA_PATH, fcalYY)
+        fcalxx = os.path.join(DATA_PATH, 'test_input', fcalXX)
+        fcalyy = os.path.join(DATA_PATH, 'test_input', fcalYY)
 
         cmd = "-C %s -p xx,xy,yx,yy --firstcal=%s,%s --ex_ants=81 --omnipath=%s %s %s %s %s" % (
             calfile, fcalxx, fcalyy, DATA_PATH, visxx, visxy, visyx, visyy)
@@ -808,6 +814,8 @@ class Test_omni_run(object):
         history = 'history'
         omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
+        # clean up
+        os.remove(objective_file)
 
 class Test_omni_apply(object):
 
@@ -821,15 +829,17 @@ class Test_omni_apply(object):
     def test_single_file_execution_omni_apply(self):
         objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAO')
         if os.path.exists(objective_file):
-            os.system('rm -rf {}'.format(objective_file))
+            shutil.rmtree(objective_file)
         o = omni.get_optionParser('omni_apply')
-        omni_file = os.path.join(DATA_PATH, xx_ocal)
-        vis_file = os.path.join(DATA_PATH, xx_vis)
+        omni_file = os.path.join(DATA_PATH, 'test_input', xx_ocal)
+        vis_file = os.path.join(DATA_PATH,  xx_vis)
         cmd = "-p xx --omnipath={0} --extension=O {1}".format(omni_file, vis_file)
 
         opts, files = o.parse_args(cmd.split())
         omni.omni_apply(files, opts)
         nt.assert_true(os.path.exists(objective_file))
+        # clean up when we're done
+        shutil.rmtree(objective_file)
 
     def test_single_file_execution_omni_apply_with_median(self):
         pass
