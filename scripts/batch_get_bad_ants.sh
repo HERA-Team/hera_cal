@@ -29,6 +29,6 @@ shift $((OPTIND-1))
 ARGS=`pull_args.py $*`
 
 for f in ${ARGS}; do
-    echo ~/src/heracal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${f} --write
-    ~/src/heracal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${f} --write
+    echo ~/src/hera_cal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${f} --write
+    ~/src/hera_cal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${f} --write
 done

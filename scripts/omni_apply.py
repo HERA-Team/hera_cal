@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import numpy as np
 import optparse
-from heracal import omni
+from hera_cal import omni
 import sys
 
 ### Options ###

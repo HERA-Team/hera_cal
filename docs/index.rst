@@ -1,25 +1,25 @@
-.. heracal documentation master file, created by
+.. hera_cal documentation master file, created by
    sphinx-quickstart on Tue May 16 13:29:04 2017.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-heracal
+hera_cal
 =======
 
-.. image:: https://travis-ci.org/HERA-Team/heracal.svg?branch=master
-           :target: https://travis-ci.org/HERA-Team/heracal
+.. image:: https://travis-ci.org/HERA-Team/hera_cal.svg?branch=master
+           :target: https://travis-ci.org/HERA-Team/hera_cal
 
-.. image:: https://coveralls.io/repos/github/HERA-Team/heracal/badge.svg?branch=master
-           :target: https://coveralls.io/github/HERA-Team/heracal?branch=master
+.. image:: https://coveralls.io/repos/github/HERA-Team/hera_cal/badge.svg?branch=master
+           :target: https://coveralls.io/github/HERA-Team/hera_cal?branch=master
 
-heracal is a package that contains modules and scripts that are required to run
+hera_cal is a package that contains modules and scripts that are required to run
 redundant calibration on the Hydrogen Epoch of Reionization Array (HERA) as part
 of the real time calibration system. For more on HERA, visit http://reionization.org/
 
 
 Package Details
 ===============
-heracal aims to have a well supported and tested scripts to run calibration analysis.
+hera_cal aims to have a well supported and tested scripts to run calibration analysis.
 All new functions, classes, modules, and scripts shall be well tested. Test coverage 
 should be > 95%. 
 
@@ -40,20 +40,20 @@ First Install all dependencies.
 -  omnical >= 5.0.2
 -  matplotlib
 
-Installing heracal
+Installing hera_cal
 ---------------
-To get the latest version of heracal, clone the repository with 
-``git clone https://github.com/HERA-Team/heracal.git``
+To get the latest version of hera_cal, clone the repository with 
+``git clone https://github.com/HERA-Team/hera_cal.git``
 
-Navigate to into the heracal directory and run ``python setup.py install``.
+Navigate to into the hera_cal directory and run ``python setup.py install``.
 
 To install without dependencies, run
 ``python setup.py install --no-dependencies``
 
 Tests
 -----
-Requires installation of ``nose`` package. From the source heracal 
-directory run ``nosetests heracal``.
+Requires installation of ``nose`` package. From the source hera_cal 
+directory run ``nosetests hera_cal``.
 
 
 Further Documentation

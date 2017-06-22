@@ -42,6 +42,6 @@ if [ "${POL_VAL}" != "xx" ] && [ "${POL_VAL}" != "yy" ]; then
 fi
 
 for f in ${ARGS}; do
-    echo ~/src/heracal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=`cat ${f}.badants.txt` ${f} --firstcal="${f}.first.calfits" --omnipath=`dirname ${f}`
-    ~/src/heracal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=`cat ${f}.badants.txt` ${f} --firstcal="${f}.first.calfits" --omnipath=`dirname ${f}`
+    echo ~/src/hera_cal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=`cat ${f}.badants.txt` ${f} --firstcal="${f}.first.calfits" --omnipath=`dirname ${f}`
+    ~/src/hera_cal/scripts/omni_run.py -C ${HERA_CAL_FILE} -p $POL_VAL --ex_ants=`cat ${f}.badants.txt` ${f} --firstcal="${f}.first.calfits" --omnipath=`dirname ${f}`
 done

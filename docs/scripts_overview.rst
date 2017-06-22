@@ -18,7 +18,7 @@ Full usage instuctions available using ``python firstcal.py -h`` in the scripts 
 
 omni_run.py
 ---------------
-Runs the heracal adapation of the omnical package. Includes logcal, lincal, and remove_degen. Reads in both the miriad uv raw data file and the ".first.calfits" file from firstcal. Outputs three results files. ".vis.uvfits" has the omnical model visibilities (one per unique baseline); ".xtalk.uvfits" has the time-averaged visibilities used for cross-talk estimation (one per baseline, but only one time sample); and ".omni.calfits" which includes the combined first-cal and omnical best-guess gains and chi^2 per antenna.
+Runs the hera_cal adapation of the omnical package. Includes logcal, lincal, and remove_degen. Reads in both the miriad uv raw data file and the ".first.calfits" file from firstcal. Outputs three results files. ".vis.uvfits" has the omnical model visibilities (one per unique baseline); ".xtalk.uvfits" has the time-averaged visibilities used for cross-talk estimation (one per baseline, but only one time sample); and ".omni.calfits" which includes the combined first-cal and omnical best-guess gains and chi^2 per antenna.
 
 Full usage instuctions available using ``python omni_run.py -h`` in the scripts directory.
 

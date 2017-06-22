@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# heracal documentation build configuration file, created by
+# hera_cal documentation build configuration file, created by
 # sphinx-quickstart on Tue May 16 13:29:04 2017.
 #
 # This file is execfile()d with the current directory set to its
@@ -62,7 +62,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'heracal'
+project = u'hera_cal'
 copyright = u'2017, HERA Collaboration'
 author = u'HERA Collaboration'
 
@@ -200,7 +200,7 @@ html_static_path = ['_static']
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'heracaldoc'
+htmlhelp_basename = 'hera_caldoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -220,7 +220,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'heracal.tex', u'heracal Documentation',
+    (master_doc, 'hera_cal.tex', u'hera_cal Documentation',
      u'HERA Collaboration', 'manual'),
 ]
 
@@ -250,7 +250,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'heracal', u'heracal Documentation',
+    (master_doc, 'hera_cal', u'hera_cal Documentation',
      [author], 1)
 ]
 
@@ -264,8 +264,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'heracal', u'heracal Documentation',
-     author, 'heracal', 'One line description of project.',
+    (master_doc, 'hera_cal', u'hera_cal Documentation',
+     author, 'hera_cal', 'One line description of project.',
      'Miscellaneous'),
 ]
 

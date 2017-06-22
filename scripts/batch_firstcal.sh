@@ -11,7 +11,7 @@ POL_VAL=""
 
 # get extra optional parameters
 observer="Zaki Ali"
-cd ~/src/heracal/
+cd ~/src/hera_cal/
 git_origin_cal=`git remote -v | grep origin | grep fetch`
 git_hash_cal=`git rev-parse HEAD`
 cd -
@@ -49,7 +49,7 @@ if [ "${POL_VAL}" != "xx" ] && [ "${POL_VAL}" != "yy" ]; then
 fi
 
 for f in ${ARGS}; do 
-    echo ~/src/heracal/scripts/firstcal.py ${f} -p ${POL_VAL} --ex_ants=`cat ${f}.badants.txt` -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
-    ~/src/heracal/scripts/firstcal.py ${f} -p ${POL_VAL} --ex_ants=`cat ${f}.badants.txt` -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
+    echo ~/src/hera_cal/scripts/firstcal.py ${f} -p ${POL_VAL} --ex_ants=`cat ${f}.badants.txt` -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
+    ~/src/hera_cal/scripts/firstcal.py ${f} -p ${POL_VAL} --ex_ants=`cat ${f}.badants.txt` -C ${HERA_CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
 
 done

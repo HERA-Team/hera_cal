@@ -11,9 +11,9 @@ from copy import deepcopy
 import aipy
 from omnical.calib import RedundantInfo
 from pyuvdata import UVCal, UVData
-import heracal.omni as omni
-from heracal.data import DATA_PATH
-from heracal.calibrations import CAL_PATH
+import hera_cal.omni as omni
+from hera_cal.data import DATA_PATH
+from hera_cal.calibrations import CAL_PATH
 
 
 class AntennaArray(aipy.fit.AntennaArray):
@@ -664,14 +664,14 @@ class Test_Redcal_Basics(object):
             omni.compute_xtalk(m['res'], wgts), zeros), None)
 
 
-class Test_HERACal(UVCal):
+class Test_hera_cal(UVCal):
 
     def test_gainHC(self):
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
-        optional = {'observer': 'heracal'}
-        hc = omni.HERACal(meta, gains, optional=optional)
+        optional = {'observer': 'hera_cal'}
+        hc = omni.hera_cal(meta, gains, optional=optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
@@ -695,7 +695,7 @@ class Test_HERACal(UVCal):
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         meta.pop('chisq9x')
         optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
-        hc = omni.HERACal(meta, gains, optional=optional, DELAY=True)
+        hc = omni.hera_cal(meta, gains, optional=optional, DELAY=True)
         uv = UVCal()
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'))

@@ -13,7 +13,7 @@ EX_ANTS_Y=81
 # cal info
 CALFILE=hsa7458_v000
 observer="Zaki"
-cd ~/src/heracal/
+cd ~/src/hera_cal/
 git_origin_cal=`git remote -v | grep origin | grep fetch | cut -f 2 | cut -d' ' -f1`
 git_hash_cal=`git rev-parse HEAD`
 cd -
@@ -66,8 +66,8 @@ date
 # loop several times to provide some fault tolerance
 for i in {0..2}; do
     echo "badants iteration $i"
-    echo ~/src/heracal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${ARGS} --write
-    ~/src/heracal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${ARGS} --write
+    echo ~/src/hera_cal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${ARGS} --write
+    ~/src/hera_cal/scripts/get_bad_ants.py -C ${CALFILE} --ex_ants=${BAD_ANTS} ${ARGS} --write
     if [ $? -eq 0 ]; then
 	break
     fi
@@ -81,8 +81,8 @@ fi
 # run firstcal
 for i in {0..2}; do
     echo "firstcal iteration $i"
-    echo ~/src/heracal/scripts/firstcal.py ${ARGS} -p ${POL_VAL} --ex_ants=`cat ${ARGS}.badants.txt` -C ${CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
-    ~/src/heracal/scripts/firstcal.py ${ARGS} -p ${POL_VAL} --ex_ants=`cat ${ARGS}.badants.txt` -C ${CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
+    echo ~/src/hera_cal/scripts/firstcal.py ${ARGS} -p ${POL_VAL} --ex_ants=`cat ${ARGS}.badants.txt` -C ${CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
+    ~/src/hera_cal/scripts/firstcal.py ${ARGS} -p ${POL_VAL} --ex_ants=`cat ${ARGS}.badants.txt` -C ${CALFILE} --observer=${observer} --git_origin_cal=${git_origin_cal} --git_hash_cal=${git_hash_cal}
     if [ $? -eq 0 ]; then
 	break
     fi
@@ -96,8 +96,8 @@ fi
 # run omnical
 for i in {0..2}; do
     echo "omni_run iteration $i"
-    echo ~/src/heracal/scripts/omni_run.py -C ${CALFILE} -p $POL_VAL --ex_ants=`cat ${ARGS}.badants.txt` ${ARGS} --firstcal="${ARGS}.first.calfits" --omnipath=`dirname ${ARGS}`
-    ~/src/heracal/scripts/omni_run.py -C ${CALFILE} -p $POL_VAL --ex_ants=`cat ${ARGS}.badants.txt` ${ARGS} --firstcal="${ARGS}.first.calfits" --omnipath=`dirname ${ARGS}`
+    echo ~/src/hera_cal/scripts/omni_run.py -C ${CALFILE} -p $POL_VAL --ex_ants=`cat ${ARGS}.badants.txt` ${ARGS} --firstcal="${ARGS}.first.calfits" --omnipath=`dirname ${ARGS}`
+    ~/src/hera_cal/scripts/omni_run.py -C ${CALFILE} -p $POL_VAL --ex_ants=`cat ${ARGS}.badants.txt` ${ARGS} --firstcal="${ARGS}.first.calfits" --omnipath=`dirname ${ARGS}`
     if [ $? -eq 0 ]; then
 	break
     fi
@@ -111,8 +111,8 @@ fi
 # run omni_apply
 for i in {0..2}; do
     echo "omni_apply iteration $i"
-    echo ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.calfits --extension="O" ${ARGS}
-    ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.calfits --extension="O" ${ARGS}
+    echo ~/src/hera_cal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.calfits --extension="O" ${ARGS}
+    ~/src/hera_cal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.calfits --extension="O" ${ARGS}
     if [ $? -eq 0 ]; then
 	break
     fi
@@ -126,8 +126,8 @@ fi
 # run xrfi
 for i in {0..2}; do
     echo "xrfi iteration $i"
-    echo ~/src/heracal/scripts/omni_xrfi.py ${ARGS}.omni.calfits
-    ~/src/heracal/scripts/omni_xrfi.py ${ARGS}.omni.calfits
+    echo ~/src/hera_cal/scripts/omni_xrfi.py ${ARGS}.omni.calfits
+    ~/src/hera_cal/scripts/omni_xrfi.py ${ARGS}.omni.calfits
     if [ $? -eq 0 ]; then
 	break
     fi
@@ -141,8 +141,8 @@ fi
 # run omni_xrfi_apply
 for i in {0..2}; do
     echo "omni_xrfi_apply itertaion $i"
-    echo ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.xrfi.calfits --extension="OR" ${ARGS}
-    ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.xrfi.calfits --extension="OR" ${ARGS}
+    echo ~/src/hera_cal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.xrfi.calfits --extension="OR" ${ARGS}
+    ~/src/hera_cal/scripts/omni_apply.py -p $POL_VAL --omnipath=${ARGS}.omni.xrfi.calfits --extension="OR" ${ARGS}
     if [ $? -eq 0 ]; then
 	break
     fi

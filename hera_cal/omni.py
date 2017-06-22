@@ -342,7 +342,7 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     if minV:
         reds = reds_for_minimal_V(reds)
     if fcal:
-        from heracal.firstcal import FirstCalRedundantInfo
+        from hera_cal.firstcal import FirstCalRedundantInfo
         info = FirstCalRedundantInfo(nant)
     else:
         info = RedundantInfo(nant)
@@ -856,7 +856,7 @@ def concatenate_UVCal_on_pol(calfitsList):
         cal0.quality_array = np.concatenate((cal0.quality_array, cal1.quality_array), axis=4)
     return cal0
 
-class HERACal(UVCal):
+class hera_cal(UVCal):
     '''
        Class that loads in hera omnical data into a pyuvdata calfits object.
        This can then be saved to a file, plotted, etc.
@@ -875,7 +875,7 @@ class HERACal(UVCal):
                 optional (optional): dictionary of optional parameters to be passed to UVCal object.
         '''
 
-        super(HERACal, self).__init__()
+        super(hera_cal, self).__init__()
 
         # helpful dictionaries for antenna polarization of gains
         str2pol = {'x': -5, 'y': -6}
@@ -887,7 +887,7 @@ class HERACal(UVCal):
 
         # drop antennas that are not solved for. Since we are feeding in omnical/firstcal solutions into this,
         # if we provided an ex_ants those antennas will not have a key in gains. Need to provide ex_ants list
-        # to HERACal object.
+        # to hera_cal object.
         # create set to get unique antennas from both pol
         ants = list(set([ant for pol in gains.keys() for ant in gains[pol].keys()]))
         allants = np.sort(ants + ex_ants)  # total number of antennas
@@ -1220,10 +1220,10 @@ def omni_run(files, opts, history):
         m2['lsts'] = t_lst
         m2['freqs'] = freqs
         m2['inttime'] = t_int
-        optional = {'observer': 'heracal'}
+        optional = {'observer': 'hera_cal'}
 
         print('   Saving %s' % fitsname)
-        hc = HERACal(m2, g3, ex_ants=ex_ants,  optional=optional)
+        hc = hera_cal(m2, g3, ex_ants=ex_ants,  optional=optional)
         hc.write_calfits(fitsname)
         fsj = '.'.join(fitsname.split('.')[:-2])
         uv_vis = make_uvdata_vis(aa, m2, v3)
@@ -1299,7 +1299,7 @@ def omni_apply(files, opts):
             if isLinPol(getPol(f)):
                 cal.read_calfits(filedict[f][0])
             else:
-                cal = heracal.omni.concatenate_UVCal_on_pol(filedict[f])
+                cal = hera_cal.omni.concatenate_UVCal_on_pol(filedict[f])
 
         print("  Calibrating...")
         antenna_index = dict(zip(*(cal.ant_array, range(cal.Nants_data))))
@@ -1329,28 +1329,28 @@ def omni_apply(files, opts):
                         if opts.median:
                             mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] * \
-                                heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, 0, :, p1])).reshape(1, -1) * \
-                                np.conj(heracal.omni.get_phase(cal.freq_array, np.median(
+                                hera_cal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, 0, :, p1])).reshape(1, -1) * \
+                                np.conj(hera_cal.omni.get_phase(cal.freq_array, np.median(
                                     cal.delay_array[antenna_index[aj], nsp, 0, :, p2])).reshape(1, -1))
                         else:
                             mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] * \
-                                heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, 0, :, p1]) * \
-                                np.conj(heracal.omni.get_phase(
+                                hera_cal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, 0, :, p1]) * \
+                                np.conj(hera_cal.omni.get_phase(
                                     cal.freq_array, cal.delay_array[antenna_index[aj], nsp, 0, :, p2]))
 
                     if cal.cal_type == 'delay' and cal.gain_convention == 'divide':
                         if opts.median:
                             mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] / \
-                                heracal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, 0, :, p1])).reshape(1, -1) / \
-                                np.conj(heracal.omni.get_phase(cal.freq_array, np.median(
+                                hera_cal.omni.get_phase(cal.freq_array, np.median(cal.delay_array[antenna_index[ai], nsp, 0, :, p1])).reshape(1, -1) / \
+                                np.conj(hera_cal.omni.get_phase(cal.freq_array, np.median(
                                     cal.delay_array[antenna_index[aj], nsp, 0, :, p2])).reshape(1, -1))
                         else:
                             mir.data_array[blmask, nsp, :, p] =  \
                                 mir.data_array[blmask, nsp, :, p] / \
-                                heracal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, 0, :, p1]).T / \
-                                np.conj(heracal.omni.get_phase(
+                                hera_cal.omni.get_phase(cal.freq_array, cal.delay_array[antenna_index[ai], nsp, 0, :, p1]).T / \
+                                np.conj(hera_cal.omni.get_phase(
                                     cal.freq_array, cal.delay_array[antenna_index[aj], nsp, 0, :, p2]).T)
 
                     # Update miriad flags array

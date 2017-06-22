@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 """
-This script uses heracal.xrfi.xrfi to create flags based 
+This script uses hera_cal.xrfi.xrfi to create flags based 
 on the omnical chisq output (currently average over chisq
 per antenna. This creates a new calfits file with a 
 flag array with it.
@@ -9,7 +9,7 @@ flag array with it.
 import numpy as np
 import optparse
 import sys
-from heracal import xrfi
+from hera_cal import xrfi
 from pyuvdata import UVCal
 
 o = optparse.OptionParser()

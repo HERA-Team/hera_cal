@@ -6,10 +6,10 @@ import aipy
 import optparse
 import sys
 from pyuvdata import UVCal, UVData
-import heracal.firstcal as firstcal
-from heracal.omni import compute_reds
-from heracal.data import DATA_PATH
-from heracal.calibrations import CAL_PATH
+import hera_cal.firstcal as firstcal
+from hera_cal.omni import compute_reds
+from hera_cal.data import DATA_PATH
+from hera_cal.calibrations import CAL_PATH
 
 
 class Test_FirstCal(object):

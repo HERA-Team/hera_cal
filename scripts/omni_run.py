@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-from heracal import omni
+from hera_cal import omni
 import optparse
 import sys
 

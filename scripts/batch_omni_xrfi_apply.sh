@@ -41,6 +41,6 @@ if [ "${POL_VAL}" != "xx" ] && [ "${POL_VAL}" != "yy" ]; then
 fi
 
 for f in ${ARGS}; do
-    echo ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${f}.omni.xrfi.calfits --extension="OR" ${f}
-    ~/src/heracal/scripts/omni_apply.py -p $POL_VAL --omnipath=${f}.omni.xrfi.calfits --extension="OR" ${f}
+    echo ~/src/hera_cal/scripts/omni_apply.py -p $POL_VAL --omnipath=${f}.omni.xrfi.calfits --extension="OR" ${f}
+    ~/src/hera_cal/scripts/omni_apply.py -p $POL_VAL --omnipath=${f}.omni.xrfi.calfits --extension="OR" ${f}
 done

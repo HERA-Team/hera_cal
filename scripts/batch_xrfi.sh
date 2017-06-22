@@ -10,6 +10,6 @@ ARGS=`pull_args.py $*`
 
 # run xrfi script on omnical calfits files
 for f in ${ARGS}; do
-    echo ~/src/heracal/scripts/omni_xrfi.py ${f}
-    ~/src/heracal/scripts/omni_xrfi.py ${f}
+    echo ~/src/hera_cal/scripts/omni_xrfi.py ${f}
+    ~/src/hera_cal/scripts/omni_xrfi.py ${f}
 done

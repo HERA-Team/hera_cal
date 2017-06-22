@@ -6,10 +6,10 @@ import pylab as p
 import time
 import omnical
 from aipy.miriad import pol2str
-from heracal.omni import Antpol
+from hera_cal.omni import Antpol
 import multiprocessing as mpr
 import scipy.sparse as sps
-from heracal import omni
+from hera_cal import omni
 from pyuvdata import UVData
 import os
 import optparse
@@ -550,7 +550,7 @@ def firstcal_run(files, opts, history):
                     'git_origin_cal': opts.git_origin_cal,
                     'git_hash_cal':  opts.git_hash_cal}
 
-        hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants,
+        hc = omni.hera_cal(meta, delays, flags=antflags, ex_ants=ex_ants,
                           DELAY=True, appendhist=history, optional=optional)
         print('     Saving {0}'.format(outname))
         hc.write_calfits(outname)
