@@ -1,20 +1,20 @@
-# heracal
+# hera_cal
 
-[![Build Status](https://travis-ci.org/HERA-Team/heracal.svg?branch=master)](https://travis-ci.org/HERA-Team/heracal)
-[![Coverage Status](https://coveralls.io/repos/github/HERA-Team/heracal/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/heracal?branch=master)
+[![Build Status](https://travis-ci.org/HERA-Team/hera_cal.svg?branch=master)](https://travis-ci.org/HERA-Team/hera_cal)
+[![Coverage Status](https://coveralls.io/repos/github/HERA-Team/hera_cal/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/hera_cal?branch=master)
 
-The heracal package inlcudes modules and scripts that are required to run redundant calibration on HERA as part of the real time system.
+The hera_cal package inlcudes modules and scripts that are required to run redundant calibration on HERA as part of the real time system.
 
-Full documentation available on [Read the Docs.](http://heracal.readthedocs.io/en/latest/)
+Full documentation available on [Read the Docs.](http://hera_cal.readthedocs.io/en/latest/)
 
 # Package Details
 
 ## Modules
 
-* heracal.firstcal: module includes the FirstCalRedundantInfo class, FirstCal class that solves for delays, and other helper functions.
-* heracal.omni: includes functions and classes for interfacing with and running omnical.
-* heracal.metrics: includes functions for determining metrics of the array, e.g. determining bad antennas.
-* heracal.xrfi: suite of rfi excision algorithms.
+* hera_cal.firstcal: module includes the FirstCalRedundantInfo class, FirstCal class that solves for delays, and other helper functions.
+* hera_cal.omni: includes functions and classes for interfacing with and running omnical.
+* hera_cal.metrics: includes functions for determining metrics of the array, e.g. determining bad antennas.
+* hera_cal.xrfi: suite of rfi excision algorithms.
 
 ## Scripts
 
@@ -36,5 +36,5 @@ First install dependencies.
 * omnical >= 5.0.2
 * matplotlib
 
-## Install heracal
+## Install hera_cal
 Install with ```python setup.py install```
