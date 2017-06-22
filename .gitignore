@@ -12,7 +12,7 @@ docs/_static
 docs/_templates
 
 # Data files (can override if necessary)
-heracal/data/ 
+#heracal/data/ 
 
 # Test notebooks
 heracal/notebooks

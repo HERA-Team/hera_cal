@@ -1,0 +1,11 @@
+[run]
+omit =
+     */tests/*
+     */calibrations/*
+     */data/*
+
+[report]
+omit =
+     */tests/*
+     */calibrations/*
+     */data/*
