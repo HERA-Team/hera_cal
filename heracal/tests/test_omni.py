@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import optparse
 import shutil
+import re
 from copy import deepcopy
 import aipy
 from omnical.calib import RedundantInfo
@@ -816,6 +817,10 @@ class Test_omni_run(object):
         nt.assert_true(os.path.exists(objective_file))
         # clean up
         os.remove(objective_file)
+        visfile = re.sub('omni\.calfits', 'vis.uvfits', objective_file)
+        xtalkfile = re.sub('omni\.calfits', 'xtalk.uvfits', objective_file)
+        os.remove(visfile)
+        os.remove(xtalkfile)
 
 class Test_omni_apply(object):
 
