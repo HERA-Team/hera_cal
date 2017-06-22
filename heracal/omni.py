@@ -176,8 +176,7 @@ class RedundantInfo(omnical.calib.RedundantInfo):
                     if nondegenerategains is not None:
                         # This conj is necessary to conform to omnical conj
                         # conv.
-                        _gains[int(ai)] = gains[pol][i].conj() / \
-                            nondegenerategains[pol][i].conj()
+                        _gains[int(ai)] = gains[pol][i].conj() / nondegenerategains[pol][i].conj()
                     else:
                         # This conj is necessary to conform to omnical conj
                         # conv.
@@ -466,16 +465,14 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
                 if not xtalk.has_key(pol):
                     xtalk[pol] = {}
                 try:
-                    # resize xtalk to be like vismdl (with a time dimension
-                    # too)
+                    # resize xtalk to be like vismdl (with a time dimension too)
                     dat = np.resize(np.copy(npz[k]), vismdl[pol][
                                     vismdl[pol].keys()[0]][0].shape)
                 except(KeyError):
                     for tempkey in npz.files:
                         if tempkey.startswith('<'):
                             break
-                    # resize xtalk to be like vismdl (with a time dimension
-                    # too)
+                    # resize xtalk to be like vismdl (with a time dimension too)
                     dat = np.resize(np.copy(npz[k]), npz[tempkey].shape)
                 if xtalk[pol].get(bl) is None:  # no bl key yet
                     xtalk[pol][bl] = dat
@@ -718,7 +715,6 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     antnums = np.array(v[pols[0]].keys()).T
 
     uv = UVData()
-    # XXX sort the baselines
     bls = sorted(map(uv.antnums_to_baseline, antnums[0], antnums[1]))
     if xtalk:
         uv.Ntimes = 1
@@ -853,15 +849,11 @@ def concatenate_UVCal_on_pol(calfitsList):
         cal0.Njones += 1
         cal0.jones_array = np.concatenate((cal0.jones_array, cal1.jones_array))
         if cal0.delay_array is not None:
-            cal0.delay_array = np.concatenate(
-                (cal0.delay_array, cal1.delay_array), axis=4)
+            cal0.delay_array = np.concatenate((cal0.delay_array, cal1.delay_array), axis=4)
         if cal0.gain_array is not None:
-            cal0.gain_array = np.concatenate(
-                (cal0.gain_array, cal1.gain_array), axis=4)
-        cal0.flag_array = np.concatenate(
-            (cal0.flag_array, cal1.flag_array), axis=4)
-        cal0.quality_array = np.concatenate(
-            (cal0.quality_array, cal1.quality_array), axis=4)
+            cal0.gain_array = np.concatenate((cal0.gain_array, cal1.gain_array), axis=4)
+        cal0.flag_array = np.concatenate((cal0.flag_array, cal1.flag_array), axis=4)
+        cal0.quality_array = np.concatenate((cal0.quality_array, cal1.quality_array), axis=4)
     return cal0
 
 class HERACal(UVCal):
@@ -897,8 +889,7 @@ class HERACal(UVCal):
         # if we provided an ex_ants those antennas will not have a key in gains. Need to provide ex_ants list
         # to HERACal object.
         # create set to get unique antennas from both pol
-        ants = list(set([ant for pol in gains.keys()
-                         for ant in gains[pol].keys()]))
+        ants = list(set([ant for pol in gains.keys() for ant in gains[pol].keys()]))
         allants = np.sort(ants + ex_ants)  # total number of antennas
         ants = np.sort(ants)
         # antenna names for all antennas
@@ -920,8 +911,7 @@ class HERACal(UVCal):
                                  for pol in pols]).swapaxes(0, 3).swapaxes(0, 1)
         else:
             if DELAY:
-                flgarray = np.zeros(
-                    (len(ants), nfreqs, ntimes, npol), dtype=bool)
+                flgarray = np.zeros((len(ants), nfreqs, ntimes, npol), dtype=bool)
             else:
                 # dont need to swap since datarray alread same shape
                 flgarray = np.zeros(datarray.shape, dtype=bool)
@@ -1327,15 +1317,13 @@ def omni_apply(files, opts):
                         mir.data_array[blmask, nsp, :, p] = \
                             mir.data_array[blmask, nsp, :, p] * \
                             cal.gain_array[antenna_index[ai], nsp, :, :, p1].T * \
-                            np.conj(cal.gain_array[
-                                    antenna_index[aj], nsp, :, :, p2].T)
+                            np.conj(cal.gain_array[antenna_index[aj], nsp, :, :, p2].T)
 
                     if cal.cal_type == 'gain' and cal.gain_convention == 'divide':
                         mir.data_array[blmask, nsp, :, p] =  \
                             mir.data_array[blmask, nsp, :, p] / \
                             cal.gain_array[antenna_index[ai], nsp, :, :, p1].T / \
-                            np.conj(cal.gain_array[
-                                    antenna_index[aj], nsp, :, :, p2].T)
+                            np.conj(cal.gain_array[antenna_index[aj], nsp, :, :, p2].T)
 
                     if cal.cal_type == 'delay' and cal.gain_convention == 'multiply':
                         if opts.median:

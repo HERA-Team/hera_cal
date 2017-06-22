@@ -132,8 +132,7 @@ def check_ants(reds, data, flag_thresh=.2, skip_ants=[]):
                     j += i
                     d2 = dc.get(bl2, pol)
                     pwr12 = np.median(np.abs(np.sum(d1 * d2.conj(), axis=0)))
-                    C[i, j] = C[j, i] = pwr12 / \
-                        np.sqrt(auto_pwr[bl1] * auto_pwr[bl2])
+                    C[i, j] = C[j, i] = pwr12 / np.sqrt(auto_pwr[bl1] * auto_pwr[bl2])
             cnts = _count_flags(np.where(C < flag_thresh, 1, 0), bls)
             for i, j in cnts:
                 Fant[ant2col[i], ant2col[j]] = Fant[
@@ -157,12 +156,8 @@ def check_noise_variance(data, wgts, bandwidth, inttime):
             w = wc.get(bl, pol)
             ai, aj = dc.get((i, i), pol).real, dc.get((j, j), pol).real
             ww = w[1:, 1:] * w[1:, :-1] * w[:-1, 1:] * w[:-1, :-1]
-            dd = ((d[:-1, :-1] - d[:-1, 1:]) -
-                  (d[1:, :-1] - d[1:, 1:])) * ww / np.sqrt(4)
-            dai = ((ai[:-1, :-1] + ai[:-1, 1:]) +
-                   (ai[1:, :-1] + ai[1:, 1:])) * ww / 4
-            daj = ((aj[:-1, :-1] + aj[:-1, 1:]) +
-                   (aj[1:, :-1] + aj[1:, 1:])) * ww / 4
-            Cij[bl + (pol,)] = np.sum(np.abs(dd)**2, axis=0) / \
-                np.sum(dai * daj, axis=0) * (bandwidth * inttime)
+            dd = ((d[:-1, :-1] - d[:-1, 1:]) - (d[1:, :-1] - d[1:, 1:])) * ww / np.sqrt(4)
+            dai = ((ai[:-1, :-1] + ai[:-1, 1:]) + (ai[1:, :-1] + ai[1:, 1:])) * ww / 4
+            daj = ((aj[:-1, :-1] + aj[:-1, 1:]) + (aj[1:, :-1] + aj[1:, 1:])) * ww / 4
+            Cij[bl + (pol,)] = np.sum(np.abs(dd)**2, axis=0) / np.sum(dai * daj, axis=0) * (bandwidth * inttime)
     return Cij

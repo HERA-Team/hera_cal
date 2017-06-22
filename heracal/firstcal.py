@@ -212,8 +212,7 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
         except:
             self._blpair2antind = {}
             for bp in self.bl_pairs:
-                self._blpair2antind[bp] = map(
-                    self.ant_index, np.array(bp).flatten())
+                self._blpair2antind[bp] = map(self.ant_index, np.array(bp).flatten())
             return self._blpair2antind[blpair]
 
     def init_from_reds(self, reds, antpos):
