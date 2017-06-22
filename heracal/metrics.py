@@ -133,10 +133,10 @@ def check_ants(reds, data, flag_thresh=.2, skip_ants=[]):
                     d2 = dc.get(bl2, pol)
                     pwr12 = np.median(np.abs(np.sum(d1 * d2.conj(), axis=0)))
                     C[i, j] = C[j, i] = pwr12 / np.sqrt(auto_pwr[bl1] * auto_pwr[bl2])
-            cnts = _count_flags(np.where(C < flag_thresh, 1, 0), bls)
-            for i, j in cnts:
+            blcnts = _count_flags(np.where(C < flag_thresh, 1, 0), bls)
+            for i, j in blcnts:
                 Fant[ant2col[i], ant2col[j]] = Fant[
-                    ant2col[j], ant2col[i]] = cnts[(i, j)]
+                    ant2col[j], ant2col[i]] = blcnts[(i, j)]
         cnt = _count_flags(np.where(Fant >= 1, 1, 0), [
                            col2ant[i] for i in xrange(nants)])
         for i in cnt:
