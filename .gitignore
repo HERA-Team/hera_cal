@@ -12,8 +12,8 @@ docs/_static
 docs/_templates
 
 # Data files (can override if necessary)
-heracal/data/test_output/*
+hera_cal/data/test_output/*
 
 # Test notebooks
-heracal/notebooks
-heracal/.ipynb_checkpoints/
+hera_cal/notebooks
+hera_cal/.ipynb_checkpoints/
