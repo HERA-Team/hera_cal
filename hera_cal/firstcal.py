@@ -550,7 +550,7 @@ def firstcal_run(files, opts, history):
                     'git_origin_cal': opts.git_origin_cal,
                     'git_hash_cal':  opts.git_hash_cal}
 
-        hc = omni.hera_cal(meta, delays, flags=antflags, ex_ants=ex_ants,
+        hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants,
                           DELAY=True, appendhist=history, optional=optional)
         print('     Saving {0}'.format(outname))
         hc.write_calfits(outname)

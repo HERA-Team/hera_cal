@@ -664,14 +664,14 @@ class Test_Redcal_Basics(object):
             omni.compute_xtalk(m['res'], wgts), zeros), None)
 
 
-class Test_hera_cal(UVCal):
+class Test_HERACal(UVCal):
 
     def test_gainHC(self):
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
-        optional = {'observer': 'hera_cal'}
-        hc = omni.hera_cal(meta, gains, optional=optional)
+        optional = {'observer': 'heracal'} #because it's easier than changing the fits header
+        hc = omni.HERACal(meta, gains, optional=optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
@@ -682,8 +682,9 @@ class Test_hera_cal(UVCal):
                 nt.assert_equal(np.testing.assert_almost_equal(
                     getattr(hc, param).value, getattr(uv, param).value, 5), None)
             else:
-                nt.assert_true(
-                    np.all(getattr(hc, param) == getattr(uv, param)))
+                print param
+                print getattr(hc, param).value, getattr(uv, param).value, '\n'
+                nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
 
     def test_delayHC(self):
         # make test data
@@ -695,7 +696,7 @@ class Test_hera_cal(UVCal):
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         meta.pop('chisq9x')
         optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
-        hc = omni.hera_cal(meta, gains, optional=optional, DELAY=True)
+        hc = omni.HERACal(meta, gains, optional=optional, DELAY=True)
         uv = UVCal()
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
