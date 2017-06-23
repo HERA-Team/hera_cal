@@ -856,7 +856,7 @@ def concatenate_UVCal_on_pol(calfitsList):
         cal0.quality_array = np.concatenate((cal0.quality_array, cal1.quality_array), axis=4)
     return cal0
 
-class hera_cal(UVCal):
+class HERACal(UVCal):
     '''
        Class that loads in hera omnical data into a pyuvdata calfits object.
        This can then be saved to a file, plotted, etc.
@@ -875,7 +875,7 @@ class hera_cal(UVCal):
                 optional (optional): dictionary of optional parameters to be passed to UVCal object.
         '''
 
-        super(hera_cal, self).__init__()
+        super(HERACal, self).__init__()
 
         # helpful dictionaries for antenna polarization of gains
         str2pol = {'x': -5, 'y': -6}
@@ -1223,7 +1223,7 @@ def omni_run(files, opts, history):
         optional = {'observer': 'hera_cal'}
 
         print('   Saving %s' % fitsname)
-        hc = hera_cal(m2, g3, ex_ants=ex_ants,  optional=optional)
+        hc = HERACal(m2, g3, ex_ants=ex_ants,  optional=optional)
         hc.write_calfits(fitsname)
         fsj = '.'.join(fitsname.split('.')[:-2])
         uv_vis = make_uvdata_vis(aa, m2, v3)
