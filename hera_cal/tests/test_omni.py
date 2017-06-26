@@ -872,7 +872,7 @@ class Test_omni_apply(object):
     
         for f in objective_files:
             nt.assert_true(os.path.exists(f))
-    
+        
         for f in objective_files:
             if os.path.exists(f):
                 shutil.rmtree(f)
