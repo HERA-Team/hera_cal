@@ -920,6 +920,7 @@ class HERACal(UVCal):
             chisqarray = np.array([[meta['chisq' + str(ant) + pol2str[pol]]
                                     for ant in ants] for pol in pols]).swapaxes(0, 3).swapaxes(0, 1)
         except:
+            # XXX EXCEPT WHAT?
             chisqarray = np.ones(datarray.shape, dtype=bool)
         # get the array-wide chisq, which does not have separate axes for
         # antennas or polarization
@@ -928,11 +929,12 @@ class HERACal(UVCal):
             # add a polarization axis until this is fixed properly
             totchisqarray = totchisqarray[:, :, np.newaxis]
             # repeat polarization axis npol times for proper shape
-            np.repeat(totchisqarray, npol, axis=-1)
+            totchisqarray = np.repeat(totchisqarray, npol, axis=-1)
         except:
-            # leave it empty
+            # XXX EXCEPT WHAT?
+            # leave it empty 
             totchisqarray = None
-
+        
         tarray = time
         parray = np.array(pols)
         farray = np.array(freq)
@@ -980,7 +982,8 @@ class HERACal(UVCal):
             self.gain_array = datarray[:, np.newaxis, :, :, :]
         if totchisqarray is not None:
             self.total_quality_array = totchisqarray[np.newaxis, :, :, :]
-
+        
+        
 # omni_run and omni_apply helper functions
 def getPol(fname):
     # XXX assumes file naming format
