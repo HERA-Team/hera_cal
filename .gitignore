@@ -11,7 +11,7 @@ docs/_build
 docs/_static
 docs/_templates
 
-# Data files (can override if necessary)
+# Data files
 hera_cal/data/test_output/*
 
 # Test notebooks
