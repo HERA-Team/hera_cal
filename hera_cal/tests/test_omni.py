@@ -826,7 +826,6 @@ class Test_omni_apply(object):
     # single pol tests
     global xx_vis,calfile,xx_fcal,xx_ocal
     xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
-    calfile = 'hsa7458_v001'
     xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
     xx_ocal = 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits'
     
@@ -846,6 +845,21 @@ class Test_omni_apply(object):
         omni_file = os.path.join(DATA_PATH, 'test_input', xx_ocal)
         vis_file = os.path.join(DATA_PATH,  xx_vis)
         cmd = "-p xx --omnipath={0} --extension=O {1}".format(omni_file, vis_file)
+
+        opts, files = o.parse_args(cmd.split())
+        omni.omni_apply(files, opts)
+        nt.assert_true(os.path.exists(objective_file))
+        # clean up when we're done
+        shutil.rmtree(objective_file)
+    
+    def test_single_file_firstcal_omni_apply(self):
+        objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAF')
+        if os.path.exists(objective_file):
+            shutil.rmtree(objective_file)
+        o = omni.get_optionParser('omni_apply')
+        fcal_file = os.path.join(DATA_PATH, 'test_input', xx_fcal)
+        vis_file = os.path.join(DATA_PATH,  xx_vis)
+        cmd = "-p xx --omnipath={0} --median --firstcal {1}".format(fcal_file, vis_file)
 
         opts, files = o.parse_args(cmd.split())
         omni.omni_apply(files, opts)
