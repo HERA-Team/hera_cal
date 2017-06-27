@@ -260,8 +260,7 @@ def compute_reds(nant, pols, *args, **kwargs):
 
 
 def reds_for_minimal_V(reds):
-    '''
-    Manipulate redundancy array to combine crosspols
+    '''Manipulate redundancy array to combine crosspols
     into a single redundancy array - imposing that
     Stokes V = 0.
     This works in the simple way that it does because
@@ -270,6 +269,7 @@ def reds_for_minimal_V(reds):
     reprsents them as 4 co-located arrays in (NS,EW) and
     displaced in z, with the cross-combinations (e.g. 
     polarization xy and yx) _always_ in the middle.
+    
     Args:
         reds: list of list of redundant baselines as antenna tuples
     Return:
@@ -955,6 +955,12 @@ class HERACal(UVCal):
         
 # omni_run and omni_apply helper functions
 def getPol(fname):
+    '''Strips the filename of a HERA visibility to it's polarization
+    Args:
+        fname: name of file (string)
+    Returns:
+        polarization: polarization label e.g. "xx" (string)
+    '''
     # XXX assumes file naming format
     # extract just the filename if we're passed a path with periods in it
     fn = re.findall('zen\.\d{7}\.\d{5}\..*', fname)[0]
@@ -962,15 +968,33 @@ def getPol(fname):
 
 
 def isLinPol(polstr):
+    '''Checks whether a polarization label indicates a linear or a cross polarization.
+    Args:
+        polstr: polarization label e.g. "xx" (string)
+    Returns:
+        is_linear: True if linear polarization, False if cross polarization (Boolean)
+    '''
     return len(list(set(polstr))) == 1
 
 
 def file2djd(fname):
+    '''Strips the filename of a HERA visibility to it's decimal julian date.
+    Args:
+        fname: name of file (string)
+    Returns:
+        decimal_jd: the decimal julian date at the start of the file (string)
+    '''
     return re.findall("\d{7}\.\d{5}", fname)[0]
 
 
 def get_optionParser(methodName):
-    methods = ['omni_run', 'omni_apply']  # XXX TODO: include "firstcal_run"
+    '''Method to obtain OptionParser instances that are set-up to work with the omni_run and omni_apply methods.
+    Args:
+        methodName: name of method -- "omni_run" and "omni_apply" are currently supported. (string)
+    Returns:
+        o: an optparse.OptionParser instance with the relevant options for the selected method (object)
+    '''
+    methods = ['omni_run', 'omni_apply']
     try:
         assert(methodName in methods)
     except:
@@ -1013,6 +1037,16 @@ def get_optionParser(methodName):
 
 
 def omni_run(files, opts, history):
+    '''Execute omnical on a single file or group of files.
+    Args:
+        files: space-separated filenames of HERA visbilities that require calibrating (string)
+        opts: required and optional parameters, as specified by hera_cal.omni.get_optionParser("omni_run") (string)
+        history: additional information to be saved as a parameter in the calibration file (string)
+    Returns:
+        "file".vis.uvfits:  omnical model visibilities (one per unique baseline). (uvfits file)
+        "file".xtalk.uvfits:  time-averaged visibilities used for cross-talk estimation (one per baseline, but only one time sample). (uvfits file)
+        "file".omni.calfits:  combined first-cal and omnical best-guess gains and chi^2 per antenna. (pyuvdata.calfits file)
+    '''
     pols = opts.pol.split(',')
 
     if len(files) == 0:
@@ -1211,6 +1245,13 @@ def omni_run(files, opts, history):
 
 
 def omni_apply(files, opts):
+    '''Execute omnical on a single file or group of files.
+    Args:
+        files: space-separated filenames of HERA visbilities that require calibrating (string)
+        opts: required and optional parameters, as specified by hera_cal.omni.get_optionParser("omni_apply") (string)
+    Returns:
+        calibrated_files: calibrated visibiity files (miriad uv file)
+    '''
     pols = opts.pol.split(',')
     linear_pol_keys = []
     for pp in pols:

@@ -374,6 +374,13 @@ class FirstCal(object):
 
 
 def flatten_reds(reds):
+    #XXX there has gotta be a one-liner for this. freds.ravel()?
+    '''Flatten the redundancy array to a single axis.
+    Args:
+        reds: a list-of-lists of redundant baselines. (list)
+    Returns:
+        freds: a flattened reds array. (list)
+    '''
     freds = []
     for r in reds:
         freds += r
@@ -472,6 +479,14 @@ def process_ubls(ubls):
 
 
 def firstcal_run(files, opts, history):
+    '''Execute firstcal on a single file or group of files.
+    Args:
+        files: space-separated filenames of HERA visbilities that require calibrating (string)
+        opts: required and optional parameters, as specified by hera_cal.firstcal.firstcal_option_parser() (string)
+        history: additional information to be saved as a parameter in the calibration file (string)
+    Returns:
+        "file".first.calfits: delay calibrations for each antenna (up to some overall delay). (pyuvdata.calfits file)
+    '''
     # check that we got files to process
     if len(files) == 0:
         raise AssertionError('Please provide visibility files.')
