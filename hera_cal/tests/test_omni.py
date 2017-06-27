@@ -682,8 +682,6 @@ class Test_HERACal(UVCal):
                 nt.assert_equal(np.testing.assert_almost_equal(
                     getattr(hc, param).value, getattr(uv, param).value, 5), None)
             else:
-                print param
-                print getattr(hc, param).value, getattr(uv, param).value, '\n'
                 nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
 
     def test_delayHC(self):
@@ -828,10 +826,17 @@ class Test_omni_apply(object):
     # single pol tests
     global xx_vis,calfile,xx_fcal,xx_ocal
     xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
-    calfile = 'hsa7458_v001'
     xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
     xx_ocal = 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits'
-
+    
+    # multi pol tests
+    global visXX, visXY, visYX, visYY, fourpol_ocal
+    visXX = 'zen.2457698.40355.xx.HH.uvcA'
+    visXY = 'zen.2457698.40355.xy.HH.uvcA'
+    visYX = 'zen.2457698.40355.yx.HH.uvcA'
+    visYY = 'zen.2457698.40355.yy.HH.uvcA'
+    fourpol_ocal = 'zen.2457698.40355.HH.uvcA.omni.calfits'
+    
     def test_single_file_execution_omni_apply(self):
         objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAO')
         if os.path.exists(objective_file):
@@ -846,17 +851,42 @@ class Test_omni_apply(object):
         nt.assert_true(os.path.exists(objective_file))
         # clean up when we're done
         shutil.rmtree(objective_file)
+    
+    def test_single_file_firstcal_omni_apply(self):
+        objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAF')
+        if os.path.exists(objective_file):
+            shutil.rmtree(objective_file)
+        o = omni.get_optionParser('omni_apply')
+        fcal_file = os.path.join(DATA_PATH, 'test_input', xx_fcal)
+        vis_file = os.path.join(DATA_PATH,  xx_vis)
+        cmd = "-p xx --omnipath={0} --median --firstcal {1}".format(fcal_file, vis_file)
 
-    def test_single_file_execution_omni_apply_with_median(self):
-        pass
+        opts, files = o.parse_args(cmd.split())
+        omni.omni_apply(files, opts)
+        nt.assert_true(os.path.exists(objective_file))
+        # clean up when we're done
+        shutil.rmtree(objective_file)
 
     def test_execution_omni_apply_4pol(self):
-        pass
-
-    def test_without_solution_file_omni_apply(self):
-        pass
-
-class Test_integration(object):
+        objective_files = [os.path.join(DATA_PATH,f+'O') for f in [visXX, visXY, visYX, visYY]]
+        for f in objective_files:
+            if os.path.exists(f):
+                shutil.rmtree(f)
+        
+        fp_ocal = os.path.join(DATA_PATH, 'test_input', fourpol_ocal)
+        visxx = os.path.join(DATA_PATH,visXX)
+        visxy = os.path.join(DATA_PATH,visXY)
+        visyx = os.path.join(DATA_PATH,visYX)
+        visyy = os.path.join(DATA_PATH,visYY)
+        
+        o = omni.get_optionParser('omni_apply')
+        cmd = "-p xx,xy,yx,yy --omnipath={0} --extension=O {1} {2} {3} {4}".format(fp_ocal,visxx,visyy,visyx,visxy)
+        opts, files = o.parse_args(cmd.split())
+        omni.omni_apply(files, opts)
     
-    def omni_apply_to_dummy_file(self):
-        pass
+        for f in objective_files:
+            nt.assert_true(os.path.exists(f))
+        
+        for f in objective_files:
+            if os.path.exists(f):
+                shutil.rmtree(f)

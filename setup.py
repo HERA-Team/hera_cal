@@ -26,11 +26,8 @@ setup_args = {
     'description': 'collection of calibration routines to run on the HERA instrument.',
     'package_dir': {'hera_cal': 'hera_cal'},
     'packages': ['hera_cal'],
-    #    'scripts': glob.glob('scripts/*'),
     'version': __version__,
     'package_data': {'hera_cal': data_files},
-    #    'install_requires': ['numpy>=1.10', 'scipy', 'pyuvdata', 'astropy>1.2', 'aipy']
-    #    'dependency_links': ['https://github.com/zakiali/omnical/tarball/master#egg=omnical-dev',]
     'zip_safe': False,
 }
 
