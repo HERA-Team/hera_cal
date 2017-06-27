@@ -9,7 +9,7 @@ flag array with it.
 import numpy as np
 import optparse
 import sys
-from hera_cal import xrfi
+from hera_qm import xrfi
 from pyuvdata import UVCal
 
 o = optparse.OptionParser()

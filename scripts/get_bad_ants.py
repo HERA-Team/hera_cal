@@ -2,7 +2,8 @@
 
 import numpy
 import optparse
-from hera_cal import metrics, omni
+from hera_cal import omni
+from hera_qm import vis_metrics
 from pyuvdata import UVData
 import aipy as a
 import sys

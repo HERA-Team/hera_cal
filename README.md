@@ -13,13 +13,11 @@ Full documentation available on [Read the Docs.](http://hera_cal.readthedocs.io/
 
 * hera_cal.firstcal: module includes the FirstCalRedundantInfo class, FirstCal class that solves for delays, and other helper functions.
 * hera_cal.omni: includes functions and classes for interfacing with and running omnical.
-* hera_cal.metrics: includes functions for determining metrics of the array, e.g. determining bad antennas.
-* hera_cal.xrfi: suite of rfi excision algorithms.
 
 ## Scripts
 
+* firstcal\_run.py: runs firstcal on a per file basis.
 * omni\_run.py: runs omnical on a per file basis.
-* run\_firstcal.py: runs firstcal on a per file basis.
 * omni\_apply.py: apply calibration solutions to miriad files.
 
 
