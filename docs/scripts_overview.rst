@@ -10,7 +10,7 @@ Reads in a miriad uv raw data file to determine which antennas appear dead or ot
 Full usage instuctions available using ``python get_bad_ants.py -h`` in the scripts directory.
 
 
-firstcal.py
+firstcal_run.py
 ---------------
 Uses ratios of visibilities of nominally redundant baselines to determine the delay associated with each antenna (up to some overall delay). Reads in a miriad uv raw data file. Bad antennas are specified on the command line. Saves delays in the calfits format using the "cal_type = delay" mode (as opposed to a frequency-dependent quantity) to a file ends with ".first.calfits".
 

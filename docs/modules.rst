@@ -1,18 +1,6 @@
 Modules
 ===============
 
-
-Metrics
----------------
-
-The Metrics module is a set of classes and functions used to run checks on a dataset.
-
-.. automodule:: hera_cal.metrics
-  :members:
-  :private-members:
-
-
-
 Firstcal
 ---------------
 
@@ -32,17 +20,5 @@ Omni
 The Omni module is a set of classes and functions used to interface with the omnical package.
 
 .. automodule:: hera_cal.omni
-  :members:
-  :private-members:
-
-
-
-XRFI
----------------
-
-The xrfi module is a set of classes and functions used to run radio frequncy interference (RFI)
-excision on interferometric data.
-
-.. automodule:: hera_cal.xrfi
   :members:
   :private-members:
