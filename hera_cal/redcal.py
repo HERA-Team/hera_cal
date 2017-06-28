@@ -1,5 +1,5 @@
 from hera_qm.datacontainer import DataContainer
-import capo.linsolve as linsolve #TODO: remove this dependency
+import linsolve
 import numpy as np
 from copy import deepcopy
 
