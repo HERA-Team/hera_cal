@@ -20,19 +20,20 @@ Full documentation available on [Read the Docs.](http://hera_cal.readthedocs.io/
 * omni\_run.py: runs omnical on a per file basis.
 * omni\_apply.py: apply calibration solutions to miriad files.
 
-
 # Installation
 ## Dependencies
 First install dependencies. 
 
 * numpy >= 1.10
 * scipy
+* matplotlib
 * astropy >=1.2
 * pyephem
-* aipy
-* pyuvdata
-* omnical >= 5.0.2
-* matplotlib
+* [aipy](https://github.com/HERA-Team/aipy/)
+* [pyuvdata](https://github.com/HERA-Team/pyuvdata/)
+* [omnical](https://github.com/HERA-Team/omnical/) >= 5.0.2
+* [linsolve](https://github.com/HERA-Team/linsolve)
+* [hera_qm](https://github.com/HERA-Team/hera_qm)
 
 ## Install hera_cal
 Install with ```python setup.py install```
