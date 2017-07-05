@@ -1232,7 +1232,6 @@ def omni_run(files, opts, history):
         hc = HERACal(m2, g3, ex_ants=ex_ants,  optional=optional)
         
         if opts.minV:
-            #XXX need to talk about whether or not these need conjugating!
             if 'xy' in v3.keys() and not 'yx' in v3.keys():
                 v3['yx'] = v3['xy']
             elif 'yx' in v3.keys() and not 'xy' in v3.keys():
