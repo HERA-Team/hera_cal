@@ -820,6 +820,33 @@ class Test_omni_run(object):
         xtalkfile = re.sub('omni\.calfits', 'xtalk.uvfits', objective_file)
         os.remove(visfile)
         os.remove(xtalkfile)
+    
+    def test_execution_omni_run_4polminV(self):
+        objective_file = os.path.join(
+            DATA_PATH, 'zen.2457698.40355.HH.uvcA.omni.calfits')
+        if os.path.exists(objective_file):
+            os.remove(objective_file)
+        o = omni.get_optionParser('omni_run')
+        visxx = os.path.join(DATA_PATH, visXX)
+        visxy = os.path.join(DATA_PATH, visXY)
+        visyx = os.path.join(DATA_PATH, visYX)
+        visyy = os.path.join(DATA_PATH, visYY)
+        fcalxx = os.path.join(DATA_PATH, 'test_input', fcalXX)
+        fcalyy = os.path.join(DATA_PATH, 'test_input', fcalYY)
+
+        cmd = "-C %s -p xx,xy,yx,yy --minV --firstcal=%s,%s --ex_ants=81 --omnipath=%s %s %s %s %s" % (
+            calfile, fcalxx, fcalyy, DATA_PATH, visxx, visxy, visyx, visyy)
+
+        opts, files = o.parse_args(cmd.split())
+        history = 'history'
+        omni.omni_run(files, opts, history)
+        nt.assert_true(os.path.exists(objective_file))
+        # clean up
+        os.remove(objective_file)
+        visfile = re.sub('omni\.calfits', 'vis.uvfits', objective_file)
+        xtalkfile = re.sub('omni\.calfits', 'xtalk.uvfits', objective_file)
+        os.remove(visfile)
+        os.remove(xtalkfile)
 
 class Test_omni_apply(object):
 
