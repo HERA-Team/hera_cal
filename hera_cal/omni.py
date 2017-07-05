@@ -1230,9 +1230,19 @@ def omni_run(files, opts, history):
 
         print('   Saving %s' % fitsname)
         hc = HERACal(m2, g3, ex_ants=ex_ants,  optional=optional)
+        
+        if opts.minV:
+            #XXX need to talk about whether or not these need conjugating!
+            if 'xy' in v3.keys() and not 'yx' in v3.keys():
+                v3['yx'] = v3['xy']
+            elif 'yx' in v3.keys() and not 'xy' in v3.keys():
+                v3['xy'] = v3['yx']
+            
         hc.write_calfits(fitsname)
         fsj = '.'.join(fitsname.split('.')[:-2])
+        
         uv_vis = make_uvdata_vis(aa, m2, v3)
+        
         uv_vis.reorder_pols()
         uv_vis.write_uvfits('%s.vis.uvfits' %
                             fsj, force_phase=True, spoof_nonessential=True)
