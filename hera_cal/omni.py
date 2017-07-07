@@ -11,6 +11,7 @@ import os
 import glob
 import re
 import optparse
+import json
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
@@ -1028,7 +1029,7 @@ def process_ex_ants(ex_ants, metrics_json='', pol=''):
             xants_m = metrics["xants"]
             for ant in xants_m:
                 ant_num, pval = ant
-                if pval in pol_vals and ant not in xants:
+                if pval in pol_vals and ant_num not in xants:
                     xants.append(int(ant_num))
         return xants
 
