@@ -988,14 +988,13 @@ def file2djd(fname):
     return re.findall("\d{7}\.\d{5}", fname)[0]
 
 
-def process_ex_ants(ex_ants, metrics_json='', pol=''):
+def process_ex_ants(ex_ants, metrics_json=''):
     """
     Return list of excluded antennas from command line argument.
 
     Input:
        ex_ants -- comma-separated value list of excluded antennas
        metrics_json -- file containing array info from hera_qm
-       pol -- comma-separated value list of included polarizations
     Output:
        list of excluded antennas
     """
@@ -1018,18 +1017,11 @@ def process_ex_ants(ex_ants, metrics_json='', pol=''):
                     raise AssertionError(
                         "ex_ants must be a comma-separated list of ints")
         if metrics_json != '':
-            if pol == '':
-                raise AssertionError("metrics_json must be accompanied by polarization values")
-            pol_vals = []
-            for pval in pol.split(','):
-                for p in pval:
-                    if p not in pol_vals:
-                        pol_vals.append(p)
             metrics = process_metrics_json(metrics_json)
             xants_m = metrics["xants"]
             for ant in xants_m:
-                ant_num, pval = ant
-                if pval in pol_vals and ant_num not in xants:
+                ant_num, pol = ant
+                if ant_num not in xants:
                     xants.append(int(ant_num))
         return xants
 
@@ -1114,7 +1106,7 @@ def omni_run(files, opts, history):
     aa = aipy.cal.get_aa(opts.cal, np.array([.15]))
     print('Getting reds from calfile')
     if opts.ex_ants or opts.metrics_json:
-        ex_ants = process_ex_ants(opts.ex_ants, opts.metrics_json, opts.pol)
+        ex_ants = process_ex_ants(opts.ex_ants, opts.metrics_json)
         print('   Excluding antennas:', sorted(ex_ants))
     else:
         ex_ants = []
