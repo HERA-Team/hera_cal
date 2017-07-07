@@ -496,6 +496,13 @@ class TestMethods(object):
 
         ex_ants = '0,obvious_error'
         nt.assert_raises(AssertionError, omni.process_ex_ants, ex_ants)
+
+        ex_ants = '0,1'
+        json_file = os.path.join(DATA_PATH, 'test_input', 'ant_metrics_output.json')
+        pol = 'xx,yy'
+        xants = omni.process_ex_ants(ex_ants, metrics_json=json_file, pol=pol)
+        nt.assert_equal(xants, [0, 1, 81])
+        nt.assert_raises(AssertionError, omni.process_ex_ants, ex_ants, json_file)
         return
 
 
