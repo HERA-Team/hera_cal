@@ -485,6 +485,19 @@ class TestMethods(object):
         method = 'fake_method'
         nt.assert_raises(AssertionError, omni.get_optionParser, method)
 
+    def test_process_ex_ants(self):
+        ex_ants = ''
+        xants = omni.process_ex_ants(ex_ants)
+        nt.assert_equal(xants, [])
+
+        ex_ants = '0,1,2'
+        xants = omni.process_ex_ants(ex_ants)
+        nt.assert_equal(xants, [0, 1, 2])
+
+        ex_ants = '0,obvious_error'
+        nt.assert_raises(AssertionError, omni.process_ex_ants, ex_ants)
+        return
+
 
 class Test_Antpol(object):
 
