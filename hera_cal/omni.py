@@ -987,6 +987,52 @@ def file2djd(fname):
     return re.findall("\d{7}\.\d{5}", fname)[0]
 
 
+def process_ex_ants(ex_ants, metrics_json='', pol=''):
+    """
+    Return list of excluded antennas from command line argument.
+
+    Input:
+       ex_ants -- comma-separated value list of excluded antennas
+       metrics_json -- file containing array info from hera_qm
+       pol -- comma-separated value list of included polarizations
+    Output:
+       list of excluded antennas
+    """
+    def process_metrics_json(metrics_file):
+        with open(metrics_file, 'r') as infile:
+            jsonMetrics = json.load(infile)
+        return {key: eval(str(val)) for key, val in jsonMetrics.items()}
+
+    # test that there are ex_ants to process
+    if ex_ants == '' and metrics_json == '':
+        return []
+    else:
+        xants = []
+        if ex_ants != '':
+            for ant in ex_ants.split(','):
+                try:
+                    if int(ant) not in xants:
+                        xants.append(int(ant))
+                except ValueError:
+                    raise AssertionError(
+                        "ex_ants must be a comma-separated list of ints")
+        if metrics_json != '':
+            if pol == '':
+                raise AssertionError("metrics_json must be accompanied by polarization values")
+            pol_vals = []
+            for pval in pol.split(','):
+                for p in pval:
+                    if p not in pol_vals:
+                        pol_vals.append(p)
+            metrics = process_metrics_json(metrics_json)
+            xants_m = metrics["xants"]
+            for ant in xants_m:
+                ant_num, pval = ant
+                if pval in pol_vals and ant not in xants:
+                    xants.append(int(ant_num))
+        return xants
+
+
 def get_optionParser(methodName):
     '''Method to obtain OptionParser instances that are set-up to work with the omni_run and omni_apply methods.
     Args:
@@ -1026,6 +1072,8 @@ def get_optionParser(methodName):
                      help='Path and name of firstcal file. Can pass in wildcards.')
         o.add_option('--minV', action='store_true',
                      help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
+        o.add_option('--metrics_json', dest='metrics_json', default='',
+                     help='metrics from hera_qm about array qualities')
 
     elif methodName == 'omni_apply':
         o.add_option('--firstcal', action='store_true',
@@ -1064,9 +1112,8 @@ def omni_run(files, opts, history):
     # generate reds from calfile
     aa = aipy.cal.get_aa(opts.cal, np.array([.15]))
     print('Getting reds from calfile')
-    if opts.ex_ants:
-        # assumes exclusion of the same antennas for every pol
-        ex_ants = map(int, opts.ex_ants.split(','))
+    if opts.ex_ants or opts.metrics_json:
+        ex_ants = process_ex_ants(opts.ex_ants, opts.metrics_json, opts.pol)
         print('   Excluding antennas:', sorted(ex_ants))
     else:
         ex_ants = []
