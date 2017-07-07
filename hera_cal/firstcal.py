@@ -476,7 +476,7 @@ def firstcal_run(files, opts, history):
 
     # Get HERA info and parse command line arguments
     aa = aipy.cal.get_aa(opts.cal, fqs)
-    ex_ants = omni.process_ex_ants(opts.ex_ants, opts.metrics_json, opts.pol)
+    ex_ants = omni.process_ex_ants(opts.ex_ants, opts.metrics_json)
     ubls = process_ubls(opts.ubls)
 
     print('Excluding Antennas:', ex_ants)
