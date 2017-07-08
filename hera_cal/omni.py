@@ -387,12 +387,12 @@ def removedegen_4pol(info, g, v, g0, minV=False):
     if minV:
         # In this case, there's only one phase term which should sum to 0
         Rgains = np.hstack((positions, np.ones((positions.shape[0],1))))
-        Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_pairs),1))))
+        Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_vecs),1))))
     else:
         # In this case, x and y phases get their own columns (separate degens)
         phaseTerms = np.vstack((gainPols==antpols[0],gainPols==antpols[0])).T
         Rgains = np.hstack((positions, phaseTerms))
-        Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_pairs),2))))    
+        Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_vecs),2))))    
     Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
     degenRemoved = np.einsum('ij,jkl',Mgains, np.angle(gains))
     gains *= np.exp(-1.0j * np.einsum('ij,jkl',Rgains,degenRemoved)) 
@@ -408,7 +408,7 @@ def removedegen_4pol(info, g, v, g0, minV=False):
     ind = 0
     for pol in pols:
         for bl_pair in bl_pairs[pol]:
-            v3[bl][bl_pair] = vis[ind]
+            v3[pol][bl_pair] = vis[ind]
             ind += 1
     return g3, v3
 
