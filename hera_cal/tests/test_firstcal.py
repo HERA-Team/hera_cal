@@ -200,19 +200,6 @@ class Test_FirstCal(object):
                 np.testing.assert_equal(f[i, j][pol], np.resize(
                     uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
 
-    def test_process_ex_ants(self):
-        ex_ants = ''
-        xants = firstcal.process_ex_ants(ex_ants)
-        nt.assert_equal(xants, [])
-
-        ex_ants = '0,1,2'
-        xants = firstcal.process_ex_ants(ex_ants)
-        nt.assert_equal(xants, [0, 1, 2])
-
-        ex_ants = '0,obvious_error'
-        nt.assert_raises(AssertionError, firstcal.process_ex_ants, ex_ants)
-        return
-
     def test_process_ubls(self):
         ubls = ''
         ubaselines = firstcal.process_ubls(ubls)

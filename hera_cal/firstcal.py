@@ -431,28 +431,6 @@ def UVData_to_dict(uvdata_list, filetype='miriad'):
                         [f[(i, j)][pol], flags[:, nbl, 0, :, ip]])
     return d, f
 
-def process_ex_ants(ex_ants):
-    """
-    Return list of excluded antennas from command line argument.
-
-    Input:
-       comma-separated value list of excluded antennas
-    Output:
-       list of excluded antennas
-    """
-    # test that there are ex_ants to process
-    if ex_ants == '':
-        return []
-    else:
-        xants = []
-        for ant in ex_ants.split(','):
-            try:
-                xants.append(int(ant))
-            except ValueError:
-                raise AssertionError(
-                    "ex_ants must be a comma-separated list of ints")
-        return xants
-
 
 def process_ubls(ubls):
     """
@@ -498,7 +476,7 @@ def firstcal_run(files, opts, history):
 
     # Get HERA info and parse command line arguments
     aa = aipy.cal.get_aa(opts.cal, fqs)
-    ex_ants = process_ex_ants(opts.ex_ants)
+    ex_ants = omni.process_ex_ants(opts.ex_ants, opts.metrics_json)
     ubls = process_ubls(opts.ubls)
 
     print('Excluding Antennas:', ex_ants)
@@ -600,4 +578,6 @@ def firstcal_option_parser():
                  help='optionally add the git hash of the cal repo')
     o.add_option('--git_origin_cal', default='None',
                  help='optionally add the git origin of the cal repo')
+    o.add_option('--metrics_json', default='',
+                 help='metrics from hera_qm about array qualities')
     return o
