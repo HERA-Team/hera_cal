@@ -331,9 +331,89 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     info.init_from_reds(reds, antpos)
     return info
 
+def removedegen_4pol(info, g, v, g0, minV=False):
+    ''' This function properly removes omnical degeneracies for when all 4 polarizations 
+    are calibrated together. Average 'x' and 'y' amplitudes are set to 1. Tips and tilts 
+    are removed. If minV is True, then there's only one degenerate overall phase whose
+    average is set to zero. Otherwise there are two, one for each antenna polarization.
+    Before removing degeneracies, g0 (generally firstcal gains) are taken out of the gain
+    solutions. They are put back in at the end. This function only works when there are 
+    exactly 4 visibility polarizations and 2 antenna polarizations. See HERA Memo #30 
+    by Dillon et al. for more details on 4-pol omnical degeneracies.
+        
+        Args:
+            info: RedundantInfo object that can parse data
+            g (dict): dictionary of gain solutions (typically from lincal).
+            v (dict): dictionary of model visibilites (typically from lincal).
+            g0 (dict): dictionary of firstcal solutions
+            minV (optional): toggle pseudo-Stokes V minimization.
+
+        Return:
+            g3 (dict): dictionary of gain solutions.
+            v3 (dict): dictionary of model visibilites.
+    '''
+
+    antpols = g.keys()
+    pols = v.keys()
+    antpos = info.get_antpos()
+    if not (len(antpols) == 2 and len(pols) == 4):
+        raise ValueError('Trying to use removedegen_4pol without 4-pol data.')
+
+    # Gains loop over antenna fastest, then antpol.
+    ants = {antpol: [ant for ant in g[antpol].keys()] for antpol in antpols}
+    gains = np.array([g[antpol][ant] / g0[antpol][ant] for antpol in antpols 
+                      for ant in ants[antpol]])
+    gainPols = np.array([antpol for antpol in antpols for ant in ants[antpol]])
+    positions = np.array([antpos[ant,0:2] for antpol in antpols 
+                          for ant in ants[antpol]])
+    
+    # Visibilities loop over bl fastest, then pol.
+    bl_pairs = {pol: [bl for bl in v[pol].keys()] for pol in pols}
+    vis = np.array([v[pol][bl_pair] for pol in pols for bl_pair in bl_pairs[pol]])
+    
+    visPols = np.array([[pol[0],pol[1]] for pol in pols for bl_pair in bl_pairs[pol]])
+    bl_vecs = np.array([antpos[i,0:2] - antpos[j,0:2] for pol in pols 
+                        for (i,j) in bl_pairs[pol]])
+
+    # Amplitude renormalization
+    for antpol in antpols:
+        meanAmplitude = np.mean(np.abs(gains[gainPols==antpol]),axis=0)
+        gains[gainPols == antpol] /= meanAmplitude
+        vis[visPols[:,0] == antpol] *= meanAmplitude
+        vis[visPols[:,1] == antpol] *= meanAmplitude
+
+    # Fix phase degeneracies
+    if minV:
+        # In this case, there's only one phase term which should sum to 0
+        Rgains = np.hstack((positions, np.ones((positions.shape[0],1))))
+        Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_pairs),1))))
+    else:
+        # In this case, x and y phases get their own columns (separate degens)
+        phaseTerms = np.vstack((gainPols==antpols[0],gainPols==antpols[0])).T
+        Rgains = np.hstack((positions, phaseTerms))
+        Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_pairs),2))))    
+    Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
+    degenRemoved = np.einsum('ij,jkl',Mgains, np.angle(gains))
+    gains *= np.exp(-1.0j * np.einsum('ij,jkl',Rgains,degenRemoved)) 
+    vis *= np.exp(-1.0j * np.einsum('ij,jkl',Rvis,degenRemoved)) 
+
+    # Repack into dictionaries and restore g0
+    g3, v3 = deepcopy(g), deepcopy(v)
+    ind = 0
+    for antpol in antpols:
+        for ant in ants[antpol]:
+            g3[antpol][ant] = gains[ind] * g0[antpol][ant]
+            ind += 1
+    ind = 0
+    for pol in pols:
+        for bl_pair in bl_pairs[pol]:
+            v3[bl][bl_pair] = vis[ind]
+            ind += 1
+    return g3, v3
+
 
 def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
-                conv=1e-3, stepsize=.3, trust_period=1):
+                conv=1e-3, stepsize=.3, trust_period=1, minV=False):
     '''Run a full run through of omnical: Logcal, lincal, and removing degeneracies.
     Args:
         data: dictionary of data with pol and blpair keys
@@ -347,6 +427,8 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
         trust_period (optional): This is the number of iterations to trust in lincal. If > 1, uses the
                      previous solution as starting point of lincal's next iteration. This
                      should always be 1!
+        minV (optional): toggle pseudo-Stokes V minimization.
+
     Returns:
         m2 (dict): dictionary of meta information.
         g3 (dict): dictionary of gain solutions.
@@ -360,8 +442,10 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
                                       conv=conv, stepsize=stepsize,
                                       trust_period=trust_period, maxiter=maxiter)
 
-    _, g3, v3 = omnical.calib.removedegen(
-        data, info, g2, v2, nondegenerategains=gains0)
+    if len(g2.keys()) == 2 and len(v2.keys()) == 4:
+        g3, v3 = removedegen_4pol(info, g2, v2, gains0, minV=minV)
+    else:         
+        _, g3, v3 = omnical.calib.removedegen(data, info, g2, v2, nondegenerategains=gains0)
 
     return m2, g3, v3
 
@@ -1204,7 +1288,7 @@ def omni_run(files, opts, history):
 
         # Finally prepared to run omnical
         print('   Running Omnical')
-        m2, g3, v3 = run_omnical(d, info, gains0=g0)
+        m2, g3, v3 = run_omnical(d, info, gains0=g0, minV=opts.minV)
 
         # Collect weights for xtalk
         wgts, xtalk = {}, {}
