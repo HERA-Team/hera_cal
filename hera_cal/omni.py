@@ -357,8 +357,9 @@ def removedegen_4pol(info, g, v, g0, minV=False):
     antpols = g.keys()
     pols = v.keys()
     antpos = info.get_antpos()
-    if not (len(antpols) == 2 and len(pols) == 4):
-        raise ValueError('Trying to use removedegen_4pol without 4-pol data.')
+    if len(antpols) != 2:
+        if not (len(pols) == 3 and minV) and not (len(pols) == 4 and not minV):
+            raise ValueError('Trying to use removedegen_4pol without 4-pol data.')
 
     # Gains loop over antenna fastest, then antpol.
     ants = {antpol: [ant for ant in g[antpol].keys()] for antpol in antpols}
@@ -443,7 +444,7 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
                                       conv=conv, stepsize=stepsize,
                                       trust_period=trust_period, maxiter=maxiter)
 
-    if len(g2.keys()) == 2 and len(v2.keys()) == 4:
+    if len(g2.keys()) == 2 and (len(v2.keys()) == 3 or len(v2.keys()) == 4):
         g3, v3 = removedegen_4pol(info, g2, v2, gains0, minV=minV)
     else:         
         _, g3, v3 = omnical.calib.removedegen(data, info, g2, v2, nondegenerategains=gains0)
