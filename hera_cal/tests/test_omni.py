@@ -747,7 +747,12 @@ class Test_4pol_remove_degen(object):
         self.antpols = ['x', 'y']
         self.info = omni.aa_to_info(self.aa, pols=self.antpols)
         self.bls = [(i.val,j.val) for (i,j) in self.info.bl_order() if (i.val<128 and j.val<128)]
-        #import IPython; IPython.embed()
+        antpos = self.info.get_antpos()
+        positions = np.array([antpos[ant,0:2] for antpol in self.antpols 
+                              for ant in self.info.subsetant])
+        Rgains = positions
+        self.Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
+
 
     def test_remove_degen(self):
         pols = ['xx','xy','yx','yy']
@@ -768,6 +773,8 @@ class Test_4pol_remove_degen(object):
         np.testing.assert_almost_equal(np.mean(np.abs(gains_y), axis=0), 1.0)
         np.testing.assert_almost_equal(np.mean(np.angle(gains_x), axis=0), 0.0)
         np.testing.assert_almost_equal(np.mean(np.angle(gains_y), axis=0), 0.0)
+        degenRemoved = np.einsum('ij,jkl',self.Mgains, np.angle(gains))
+        np.testing.assert_almost_equal(degenRemoved, 0.0)
 
     def test_remove_degen_minV(self):
         pols = ['xx','xy','yx','yy']
@@ -787,6 +794,9 @@ class Test_4pol_remove_degen(object):
         np.testing.assert_almost_equal(np.mean(np.abs(gains_x), axis=0), 1.0)
         np.testing.assert_almost_equal(np.mean(np.abs(gains_y), axis=0), 1.0)
         np.testing.assert_almost_equal(np.mean(np.angle(gains), axis=0), 0.0)
+        degenRemoved = np.einsum('ij,jkl',self.Mgains, np.angle(gains))
+        np.testing.assert_almost_equal(degenRemoved, 0.0)
+
 
 
 
