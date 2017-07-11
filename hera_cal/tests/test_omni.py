@@ -764,6 +764,8 @@ class Test_4pol_remove_degen(object):
                        in self.info.subsetant} for antpol in self.antpols}
         gains0 = {antpol: {ant: np.ones((self.Ntimes, len(self.freqs))) for ant 
                            in self.info.subsetant} for antpol in self.antpols}
+        
+        nt.assert_raises(ValueError, omni.removedegen_4pol, self.info, g2, v2, gains0, minV=True)
         g3, v3 = omni.removedegen_4pol(self.info, g2, v2, gains0, minV=False)
         gains = np.array([g3[antpol][ant] for antpol in self.antpols 
                           for ant in self.info.subsetant])
@@ -777,7 +779,7 @@ class Test_4pol_remove_degen(object):
         np.testing.assert_almost_equal(degenRemoved, 0.0)
 
     def test_remove_degen_minV(self):
-        pols = ['xx','xy','yx','yy']
+        pols = ['xx','xy','yy']
         v2 = {pol: {bl: np.random.randn(self.Ntimes, len(self.freqs)) + 
                     1.0j * np.random.randn(self.Ntimes, len(self.freqs)) 
                     for bl in self.bls} for pol in pols}
@@ -786,6 +788,8 @@ class Test_4pol_remove_degen(object):
                        in self.info.subsetant} for antpol in self.antpols}
         gains0 = {antpol: {ant: np.ones((self.Ntimes, len(self.freqs))) for ant 
                            in self.info.subsetant} for antpol in self.antpols}
+        
+        nt.assert_raises(ValueError, omni.removedegen_4pol, self.info, g2, v2, gains0, minV=False)
         g3, v3 = omni.removedegen_4pol(self.info, g2, v2, gains0, minV=True)
         gains = np.array([g3[antpol][ant] for antpol in self.antpols 
                           for ant in self.info.subsetant])

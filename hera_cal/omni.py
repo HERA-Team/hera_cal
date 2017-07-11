@@ -358,9 +358,9 @@ def removedegen_4pol(info, g, v, g0, minV=False):
     antpols = g.keys()
     pols = v.keys()
     antpos = info.get_antpos()
-    if len(antpols) != 2:
-        if not (len(pols) == 3 and minV) and not (len(pols) == 4 and not minV):
-            raise ValueError('Trying to use removedegen_4pol without 4-pol data.')
+    if (len(antpols) != 2) or (not (len(pols) == 3 and minV) 
+                               and not (len(pols) == 4 and not minV)):
+        raise ValueError('Trying to use removedegen_4pol without 4-pol data.')
 
     # Gains loop over antenna fastest, then antpol.
     ants = {antpol: [ant for ant in g[antpol].keys()] for antpol in antpols}
