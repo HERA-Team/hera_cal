@@ -14,6 +14,7 @@ from pyuvdata import UVCal, UVData
 import hera_cal.omni as omni
 from hera_cal.data import DATA_PATH
 from hera_cal.calibrations import CAL_PATH
+import hera_cal.redcal as rc
 
 
 class AntennaArray(aipy.fit.AntennaArray):
@@ -731,6 +732,62 @@ class Test_HERACal(UVCal):
             else:
                 nt.assert_true(
                     np.all(getattr(hc, param) == getattr(uv, param)))
+
+
+
+
+class Test_4pol_remove_degen(object):
+
+    def setUp(self):
+        self.freqs = np.linspace(.1, .2, 16)
+        self.Ntimes = 3
+        if DATA_PATH not in sys.path:
+            sys.path.append(DATA_PATH)
+        self.aa = aipy.cal.get_aa('heratest_calfile', self.freqs)
+        self.antpols = ['x', 'y']
+        self.info = omni.aa_to_info(self.aa, pols=self.antpols)
+        self.bls = [(i.val,j.val) for (i,j) in self.info.bl_order() if (i.val<128 and j.val<128)]
+        #import IPython; IPython.embed()
+
+    def test_remove_degen(self):
+        pols = ['xx','xy','yx','yy']
+        v2 = {pol: {bl: np.random.randn(self.Ntimes, len(self.freqs)) + 
+                    1.0j * np.random.randn(self.Ntimes, len(self.freqs)) 
+                    for bl in self.bls} for pol in pols}
+        g2 = {antpol: {ant: 1.0 + 0.01 * np.random.randn(self.Ntimes, len(self.freqs)) 
+                       + 0.01j * np.random.randn(self.Ntimes, len(self.freqs)) for ant 
+                       in self.info.subsetant} for antpol in self.antpols}
+        gains0 = {antpol: {ant: np.ones((self.Ntimes, len(self.freqs))) for ant 
+                           in self.info.subsetant} for antpol in self.antpols}
+        g3, v3 = omni.removedegen_4pol(self.info, g2, v2, gains0, minV=False)
+        gains = np.array([g3[antpol][ant] for antpol in self.antpols 
+                          for ant in self.info.subsetant])
+        gains_x = np.array([g3['x'][ant] for ant in self.info.subsetant])
+        gains_y = np.array([g3['y'][ant] for ant in self.info.subsetant])
+        np.testing.assert_almost_equal(np.mean(np.abs(gains_x), axis=0), 1.0)
+        np.testing.assert_almost_equal(np.mean(np.abs(gains_y), axis=0), 1.0)
+        np.testing.assert_almost_equal(np.mean(np.angle(gains_x), axis=0), 0.0)
+        np.testing.assert_almost_equal(np.mean(np.angle(gains_y), axis=0), 0.0)
+
+    def test_remove_degen_minV(self):
+        pols = ['xx','xy','yx','yy']
+        v2 = {pol: {bl: np.random.randn(self.Ntimes, len(self.freqs)) + 
+                    1.0j * np.random.randn(self.Ntimes, len(self.freqs)) 
+                    for bl in self.bls} for pol in pols}
+        g2 = {antpol: {ant: 1.0 + 0.01 * np.random.randn(self.Ntimes, len(self.freqs)) 
+                       + 0.01j * np.random.randn(self.Ntimes, len(self.freqs)) for ant 
+                       in self.info.subsetant} for antpol in self.antpols}
+        gains0 = {antpol: {ant: np.ones((self.Ntimes, len(self.freqs))) for ant 
+                           in self.info.subsetant} for antpol in self.antpols}
+        g3, v3 = omni.removedegen_4pol(self.info, g2, v2, gains0, minV=True)
+        gains = np.array([g3[antpol][ant] for antpol in self.antpols 
+                          for ant in self.info.subsetant])
+        gains_x = np.array([g3['x'][ant] for ant in self.info.subsetant])
+        gains_y = np.array([g3['y'][ant] for ant in self.info.subsetant])
+        np.testing.assert_almost_equal(np.mean(np.abs(gains_x), axis=0), 1.0)
+        np.testing.assert_almost_equal(np.mean(np.abs(gains_y), axis=0), 1.0)
+        np.testing.assert_almost_equal(np.mean(np.angle(gains), axis=0), 0.0)
+
 
 
 class Test_omni_run(object):

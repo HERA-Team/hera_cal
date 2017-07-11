@@ -340,7 +340,8 @@ def removedegen_4pol(info, g, v, g0, minV=False):
     Before removing degeneracies, g0 (generally firstcal gains) are taken out of the gain
     solutions. They are put back in at the end. This function only works when there are 
     exactly 4 visibility polarizations and 2 antenna polarizations. See HERA Memo #30 
-    by Dillon et al. for more details on 4-pol omnical degeneracies.
+    by Dillon et al. for more details on 4-pol omnical degeneracies at 
+    http://reionization.org/wp-content/uploads/2013/03/HERA30_4PolOmniDegen.pdf
         
         Args:
             info: RedundantInfo object that can parse data
@@ -391,7 +392,7 @@ def removedegen_4pol(info, g, v, g0, minV=False):
         Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_vecs),1))))
     else:
         # In this case, x and y phases get their own columns (separate degens)
-        phaseTerms = np.vstack((gainPols==antpols[0],gainPols==antpols[0])).T
+        phaseTerms = np.vstack((gainPols==antpols[0],gainPols==antpols[1])).T
         Rgains = np.hstack((positions, phaseTerms))
         Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_vecs),2))))    
     Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
