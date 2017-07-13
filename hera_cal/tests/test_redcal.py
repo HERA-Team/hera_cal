@@ -20,6 +20,18 @@ def build_reds_hex(hexNum, sep=14.7):
 
 class TestMethods(unittest.TestCase):
     
+    def test_check_pol_mode(self):
+        with self.assertRaises(ValueError):
+            om.check_pol_mode('1pol', ['xx','yy'])
+        with self.assertRaises(ValueError):
+            om.check_pol_mode('2pol', ['xx'])
+        with self.assertRaises(ValueError):
+            om.check_pol_mode('4pol', ['xx','xy','yy'])
+        with self.assertRaises(ValueError):
+            om.check_pol_mode('4pol_minV', ['xx','xy','yy'])
+        with self.assertRaises(ValueError):
+            om.check_pol_mode('4pol', ['xx','xy','yy','yx'], antpols = ['x'])
+
     def test_noise(self):
         n = om.noise((1024,1024))
         self.assertEqual(n.shape, (1024,1024))
