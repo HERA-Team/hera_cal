@@ -12,6 +12,7 @@ import glob
 import re
 import optparse
 import json
+from hera_cal import redcal
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
@@ -332,17 +333,13 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     info.init_from_reds(reds, antpos)
     return info
 
-def removedegen_4pol(info, g, v, g0, minV=False):
-    ''' This function properly removes omnical degeneracies for when all 4 polarizations 
-    are calibrated together. Average 'x' and 'y' amplitudes are set to 1. Tips and tilts 
-    are removed. If minV is True, then there's only one degenerate overall phase whose
-    average is set to zero. Otherwise there are two, one for each antenna polarization.
-    Before removing degeneracies, g0 (generally firstcal gains) are taken out of the gain
-    solutions. They are put back in at the end. This function only works when there are 
-    exactly 4 visibility polarizations and 2 antenna polarizations. See HERA Memo #30 
+
+def remove_degen(info, g, v, g0, minV=False):
+    ''' This function properly removes omnical degeneracies in the 1pol, 2pol, 4pol, and
+    4pol_minV cases. Wraps the remove_degen fucntion in heracal.redcal. See HERA Memo #30 
     by Dillon et al. for more details on 4-pol omnical degeneracies at 
     http://reionization.org/wp-content/uploads/2013/03/HERA30_4PolOmniDegen.pdf
-        
+    
         Args:
             info: RedundantInfo object that can parse data
             g (dict): dictionary of gain solutions (typically from lincal).
@@ -355,63 +352,33 @@ def removedegen_4pol(info, g, v, g0, minV=False):
             v3 (dict): dictionary of model visibilites.
     '''
 
-    antpols = g.keys()
+    # Intitalize relevant lists (pols, reds, etc.)
     pols = v.keys()
-    antpos = info.get_antpos()
-    if (len(antpols) != 2) or (not (len(pols) == 3 and minV) 
-                               and not (len(pols) == 4 and not minV)):
-        raise ValueError('Trying to use removedegen_4pol without 4-pol data.')
-
-    # Gains loop over antenna fastest, then antpol.
-    ants = {antpol: [ant for ant in g[antpol].keys()] for antpol in antpols}
-    gains = np.array([g[antpol][ant] / g0[antpol][ant] for antpol in antpols 
-                      for ant in ants[antpol]])
-    gainPols = np.array([antpol for antpol in antpols for ant in ants[antpol]])
-    positions = np.array([antpos[ant,0:2] for antpol in antpols 
-                          for ant in ants[antpol]])
-    
-    # Visibilities loop over bl fastest, then pol.
-    bl_pairs = {pol: [bl for bl in v[pol].keys()] for pol in pols}
-    vis = np.array([v[pol][bl_pair] for pol in pols for bl_pair in bl_pairs[pol]])
-    
-    visPols = np.array([[pol[0],pol[1]] for pol in pols for bl_pair in bl_pairs[pol]])
-    bl_vecs = np.array([antpos[i,0:2] - antpos[j,0:2] for pol in pols 
-                        for (i,j) in bl_pairs[pol]])
-
-    # Amplitude renormalization
-    for antpol in antpols:
-        meanAmplitude = np.mean(np.abs(gains[gainPols==antpol]),axis=0)
-        gains[gainPols == antpol] /= meanAmplitude
-        vis[visPols[:,0] == antpol] *= meanAmplitude
-        vis[visPols[:,1] == antpol] *= meanAmplitude
-
-    # Fix phase degeneracies
+    antpols = g.keys()
+    info_antpos = info.get_antpos()
+    ants = [(ant,antpol) for antpol in antpols for ant in g[antpol].keys()]
+    bl_pairs = [(bl[0],bl[1],pol) for pol in pols for bl in v[pol].keys()]
+    antpos = dict(zip([ant[0] for ant in ants], 
+        [np.append(info_antpos[ant[0],0:2],[0]) for ant in ants]))
     if minV:
-        # In this case, there's only one phase term which should sum to 0
-        Rgains = np.hstack((positions, np.ones((positions.shape[0],1))))
-        Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_vecs),1))))
-    else:
-        # In this case, x and y phases get their own columns (separate degens)
-        phaseTerms = np.vstack((gainPols==antpols[0],gainPols==antpols[1])).T
-        Rgains = np.hstack((positions, phaseTerms))
-        Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_vecs),2))))    
-    Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
-    degenRemoved = np.einsum('ij,jkl',Mgains, np.angle(gains))
-    gains *= np.exp(-1.0j * np.einsum('ij,jkl',Rgains,degenRemoved)) 
-    vis *= np.exp(-1.0j * np.einsum('ij,jkl',Rvis,degenRemoved)) 
+        reds = redcal.get_reds(antpos, pols, pol_mode='4pol_minV')
+    else: 
+        reds = redcal.get_reds(antpos, pols)
+    
+    # Put sols into properly formatted dictionaries and remove degeneracies
+    sol = {ant: g[ant[1]][ant[0]] for ant in ants}
+    sol.update({bl: v[bl[2]][bl[0:2]] for bl in bl_pairs})
+    sol0 = {ant: g0[ant[1]][ant[0]] for ant in ants}
+    rc = redcal.RedundantCalibrator(reds)
+    newSol = rc.remove_degen(antpos, sol, degen_sol=sol0)
 
-    # Repack into dictionaries and restore g0
-    g3, v3 = deepcopy(g), deepcopy(v)
-    ind = 0
-    for antpol in antpols:
-        for ant in ants[antpol]:
-            g3[antpol][ant] = gains[ind] * g0[antpol][ant]
-            ind += 1
-    ind = 0
-    for pol in pols:
-        for bl_pair in bl_pairs[pol]:
-            v3[pol][bl_pair] = vis[ind]
-            ind += 1
+    # Put back into omnical format dictionaires
+    g3 = {antpol: {} for antpol in antpols}
+    v3 = {pol: {} for pol in pols}
+    for ant in ants:
+        g3[ant[1]][ant[0]] = newSol[ant]
+    for bl in bl_pairs:
+        v3[bl[2]][bl[0:2]] = newSol[bl]
     return g3, v3
 
 
@@ -445,10 +412,7 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
                                       conv=conv, stepsize=stepsize,
                                       trust_period=trust_period, maxiter=maxiter)
 
-    if len(g2.keys()) == 2 and (len(v2.keys()) == 3 or len(v2.keys()) == 4):
-        g3, v3 = removedegen_4pol(info, g2, v2, gains0, minV=minV)
-    else:         
-        _, g3, v3 = omnical.calib.removedegen(data, info, g2, v2, nondegenerategains=gains0)
+    g3, v3 = remove_degen(info, g2, v2, gains0, minV=minV)
 
     return m2, g3, v3
 
