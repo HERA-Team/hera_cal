@@ -335,10 +335,12 @@ class RedundantCalibrator:
         g, v = get_gains_and_vis_from_sol(sol)
         ants = g.keys()
         gainPols = np.array([ant[1] for ant in ants])
+        # gainPols is list of antpols, one per antenna
         antpols = list(set(gainPols))
         positions = np.array([antpos[ant[0]] for ant in ants])
         bl_pairs = v.keys()
         visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
+        # visPols is list of pol, one per baseline
         bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         if self.pol_mode not in ['1pol', '2pol', '4pol', '4pol_minV']:
             raise ValueError, 'Remove_degen cannot operate on pol_mode determined from reds'
