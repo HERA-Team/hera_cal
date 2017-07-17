@@ -805,6 +805,9 @@ class Test_4pol_remove_degen(object):
         np.testing.assert_almost_equal(np.mean(np.angle(gains), axis=0), 0.0)
         degenRemoved = np.einsum('ij,jkl',self.Mgains, np.angle(gains))
         np.testing.assert_almost_equal(degenRemoved, 0.0)
+        np.testing.assert_equal(len(g3.keys()),2)
+        np.testing.assert_equal(len(v3.keys()),4)
+
 
 
 class Test_omni_run(object):

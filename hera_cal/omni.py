@@ -349,9 +349,15 @@ def remove_degen(info, g, v, g0, minV=False):
 
         Return:
             g3 (dict): dictionary of gain solutions.
-            v3 (dict): dictionary of model visibilites.
+            v3 (dict): dictionary of model visibilites (if minV, returns 4 pols, two of them identical)
     '''
 
+    # If minV, make sure xy and yx visibilities are the same in the gain solutions. 
+    # The way get_reds and remove_degen are designed in redcal, if xy and yx are both are present,
+    # whichever is first in pols will be used as the polarization for all the unique baseline keys.
+    if minV:
+        for pol in v.keys():
+            v[pol[::-1]] = v[pol]
     # Intitalize relevant lists (pols, reds, etc.)
     pols = v.keys()
     antpols = g.keys()
@@ -360,11 +366,12 @@ def remove_degen(info, g, v, g0, minV=False):
     bl_pairs = [(bl[0],bl[1],pol) for pol in pols for bl in v[pol].keys()]
     antpos = dict(zip([ant[0] for ant in ants], 
         [np.append(info_antpos[ant[0],0:2],[0]) for ant in ants]))
+    # Reds are only necessary to intialize redcal.RedundantCalibrator and pass pol_mode
     if minV:
         reds = redcal.get_reds(antpos, pols, pol_mode='4pol_minV')
     else: 
         reds = redcal.get_reds(antpos, pols)
-    
+
     # Put sols into properly formatted dictionaries and remove degeneracies
     sol = {ant: g[ant[1]][ant[0]] for ant in ants}
     sol.update({bl: v[bl[2]][bl[0:2]] for bl in bl_pairs})
