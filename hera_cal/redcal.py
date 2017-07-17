@@ -333,6 +333,8 @@ class RedundantCalibrator:
     """
 
         g, v = get_gains_and_vis_from_sol(sol)
+        if degen_sol is None: 
+            degen_sol = {key: np.ones_like(val) for key,val in g.items()}
         ants = g.keys()
         gainPols = np.array([ant[1] for ant in ants])
         # gainPols is list of antpols, one per antenna
@@ -358,19 +360,17 @@ class RedundantCalibrator:
         #Extract gain and model visibiltiy solutions
         gainSols = np.array([sol[ant] for ant in ants])
         visSols = np.array([sol[bl_pair] for bl_pair in bl_pairs])
-        if degen_sol is None: 
-            degenGains = np.ones_like(gainSols)
-        else:
-            degenGains = np.array([degen_sol[ant] for ant in ants])
+        degenGains = np.array([degen_sol[ant] for ant in ants])
 
-        #Amplitude renormalization
-        #TODO: redo the amplidue degeneracy in terms of average gains products instead of average gains (SEE PHOTO)
+        #Amplitude renormalization: fixes the mean abs product of gains (as they appear in visibilities)
         for antpol in antpols:
-            meanAmplitude = np.mean(np.abs(gainSols[gainPols == antpol]),axis=0)
-            degenMeanAmplitude = np.mean(np.abs(degenGains[gainPols == antpol]),axis=0)
-            gainSols[gainPols == antpol] *= (degenMeanAmplitude / meanAmplitude)
-            visSols[visPols[:,0] == antpol] *= (meanAmplitude / degenMeanAmplitude)
-            visSols[visPols[:,1] == antpol] *= (meanAmplitude / degenMeanAmplitude)
+            meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in bl_pairs if pol == 2*antpol], axis=0)
+            degenMeanSqAmplitude = np.mean([np.abs(degen_sol[(ant1,pol[0])] * degen_sol[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in bl_pairs if pol == 2*antpol], axis=0)
+            gainSols[gainPols == antpol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
+            visSols[visPols[:,0] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
+            visSols[visPols[:,1] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
 
         # Fix phase terms
         if self.pol_mode is '1pol' or self.pol_mode is '4pol_minV':
