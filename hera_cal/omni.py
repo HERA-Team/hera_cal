@@ -836,63 +836,6 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
 
     return uv
 
-# XXX Eventually this may belong in pyuvdata
-
-
-def concatenate_UVCal_on_pol(calfitsList):
-    '''
-    Joins UVCal files of different polarizations along 
-    the polarization axis of the delay_array, flag_array,
-    gain_array, and quality_array.
-    Args:
-        calfitsList: list of calfits filenames
-            type: list of strings
-    Returns:
-        a single cal file, with relevant arrays
-        concatenated along the polarization axis
-            type: pyuvdata.UVCal()
-    '''
-    # XXX these could be more flexible if we wanted to have it as optional
-    constProperties = ['antenna_names', 'antenna_numbers', 'cal_type', 'channel_width',  'freq_range', 'gain_convention',
-                       'integration_time', 'Nants_data', 'Nants_telescope', 'Nfreqs', 'Njones', 'Nspws', 'Ntimes',  'time_range', 'x_orientation']
-    constPropertiesArrays = ['ant_array', 'freq_array', 'time_array']
-
-    # check that constProperties match between files
-    calname0 = calfitsList[0]
-    cal0 = UVCal()
-    cal0.read_calfits(calname0)
-
-    if cal0.Njones != 1:
-        raise ValueError(
-            'Njones!=1; cannot concantenate > 1 polarization at a time')
-    for calname1 in calfitsList[1:]:
-        cal1 = UVCal()
-        cal1.read_calfits(calname1)
-        for prp in constProperties:
-            if not getattr(cal0, prp) == getattr(cal1, prp):
-                raise ValueError('%s of %s does not match %s' %
-                                 (prp, calname0, calname1))
-        for prp in constPropertiesArrays:
-            if not (getattr(cal0, prp) == getattr(cal1, prp)).all():
-                raise ValueError('%s of %s does not match %s' %
-                                 (prp, calname0, calname1))
-        if not cal1.Njones == 1:
-            raise ValueError(
-                'Njones!=1; cannot concantenate > 1 polarization at a time')
-        if cal1.jones_array[0] in cal0.jones_array:
-            raise ValueError(
-                'Cannot concatenate calfits files of identical polarization')
-
-        cal0.Njones += 1
-        cal0.jones_array = np.concatenate((cal0.jones_array, cal1.jones_array))
-        if cal0.delay_array is not None:
-            cal0.delay_array = np.concatenate((cal0.delay_array, cal1.delay_array), axis=4)
-        if cal0.gain_array is not None:
-            cal0.gain_array = np.concatenate((cal0.gain_array, cal1.gain_array), axis=4)
-        cal0.flag_array = np.concatenate((cal0.flag_array, cal1.flag_array), axis=4)
-        cal0.quality_array = np.concatenate((cal0.quality_array, cal1.quality_array), axis=4)
-    return cal0
-
 class HERACal(UVCal):
     '''
        Class that loads in hera omnical data into a pyuvdata calfits object.
@@ -1422,7 +1365,15 @@ def omni_apply(files, opts):
             if isLinPol(getPol(f)):
                 cal.read_calfits(filedict[f][0])
             else:
-                cal = concatenate_UVCal_on_pol(filedict[f])
+                # read each file in and add to base file
+                for i,fn in enumerate(filedict[f]):
+                    if i == 0:
+                        cal = UVCal()
+                        cal.read_calfits(fn)
+                    else:
+                        cal0 = UVCal()
+                        cal0.read_calfits(fn)
+                        cal += cal0
 
         print("  Calibrating...")
         antenna_index = dict(zip(*(cal.ant_array, range(cal.Nants_data))))
