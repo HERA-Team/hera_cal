@@ -432,41 +432,6 @@ class TestMethods(object):
         nt.assert_equal(uv_vis_in, uv_vis_out)
         nt.assert_equal(uv_xtalk_in, uv_xtalk_in)
 
-    def test_concatenate_UVCal_on_pol(self):
-        calname0 = os.path.join(
-            DATA_PATH, 'test_input', 'zen.2457705.41052.xx.HH.uvc.first.calfits')
-        calname1 = os.path.join(
-            DATA_PATH, 'test_input', 'zen.2457705.41052.yy.HH.uvc.first.calfits')
-        calnameList = [calname0, calname1]
-        cal0 = UVCal()
-        cal0.read_calfits(calname0)
-        cal1 = UVCal()
-        cal1.read_calfits(calname1)
-
-        # Concatenate and test concatenation
-        newcal = omni.concatenate_UVCal_on_pol(calnameList)
-        testpath0 = os.path.join(
-            DATA_PATH, 'test_output', 'zen.2457705.41052.yy.HH.uvc.first.test0.calfits')
-        if os.path.exists(testpath0):
-            os.remove(testpath0)
-        newcal.write_calfits(testpath0)
-
-        nt.assert_equal(newcal.Njones, 2)
-        nt.assert_equal(sorted(newcal.jones_array), [-6, -5])
-        nt.assert_equal(newcal.flag_array.shape[-1], 2)
-        nt.assert_equal(newcal.delay_array.shape[-1], 2)
-        nt.assert_equal(newcal.quality_array.shape[-1], 2)
-
-        cal1.gain_convention = 'multiply'
-        testpath1 = os.path.join(
-            DATA_PATH, 'test_output', 'zen.2457705.41052.yy.HH.uvc.first.test1.calfits')
-        if os.path.exists(testpath1):
-            os.remove(testpath1)
-        cal1.write_calfits(testpath1)
-        nt.assert_raises(ValueError, omni.concatenate_UVCal_on_pol, [calname0, calname0])
-        nt.assert_raises(ValueError, omni.concatenate_UVCal_on_pol, [calname0, testpath0])
-        nt.assert_raises(ValueError, omni.concatenate_UVCal_on_pol, [calname0, testpath1])
-
     def test_getPol(self):
         filename = 'zen.2457698.40355.xx.HH.uvcA'
         nt.assert_equal(omni.getPol(filename), 'xx')
