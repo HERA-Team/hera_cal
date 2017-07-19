@@ -11,6 +11,7 @@ import os
 import glob
 import re
 import optparse
+from hera_cal import redcal
 from hera_qm import ant_metrics
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -251,7 +252,7 @@ def compute_reds(nant, pols, *args, **kwargs):
     Return:
         reds: list of list of baselines as antenna tuples
        '''
-    _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
+    _reds = omnical.arrayinfo.compute_reds(*args, **kwargs) 
     reds = []
     for pi in pols:
         for pj in pols:
@@ -333,8 +334,72 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     return info
 
 
+def remove_degen(info, g, v, g0, minV=False):
+    ''' This function properly removes omnical degeneracies in the 1pol, 2pol, 4pol, and
+    4pol_minV cases. Wraps the remove_degen fucntion in heracal.redcal. See HERA Memo #30 
+    by Dillon et al. for more details on 4-pol omnical degeneracies at 
+    http://reionization.org/wp-content/uploads/2013/03/HERA30_4PolOmniDegen.pdf
+    
+        Args:
+            info: RedundantInfo object that can parse data
+            g (dict): dictionary of gain solutions (typically from lincal).
+            v (dict): dictionary of model visibilites (typically from lincal).
+            g0 (dict): dictionary of firstcal solutions
+            minV (optional): toggle pseudo-Stokes V minimization.
+
+        Return:
+            g3 (dict): dictionary of gain solutions.
+            v3 (dict): dictionary of model visibilites (if minV, returns 4 pols, two of them identical)
+    '''
+
+    # If minV, make sure xy and yx visibilities are the same in the gain solutions. 
+    # The way get_reds and remove_degen are designed in redcal, if xy and yx are both are present,
+    # whichever is first in pols will be used as the polarization for all the unique baseline keys.
+    if minV:
+        for pol in v.keys():
+            v[pol[::-1]] = v[pol]
+    # Intitalize relevant lists to build input sols and get positions
+    pols = v.keys()
+    antpols = g.keys()
+    ants = [(ant,antpol) for antpol in antpols for ant in g[antpol].keys()]
+    bl_pairs = [(i,j,pol) for pol in pols for (i,j) in v[pol].keys()]
+
+    # Taking polarization non-aware stuff from omnical and reextracting the relevant info for remove_degen
+    info_antpos = info.get_antpos()
+    antpos = dict(zip([ant[0] for ant in ants], 
+        [np.append(info_antpos[ant[0],0:2],[0]) for ant in ants]))
+
+    # Set up redcal with empy reds (reds not needed for remove_degen) and then automatically determine pol_mode
+    rc = redcal.RedundantCalibrator(reds = [])
+    if len(pols) == 1 and len(antpols) == 1:
+        rc.pol_mode = '1pol'
+    elif len(pols) == 2 and len(antpols) == 2:
+        rc.pol_mode = '2pol'
+    elif len(pols) == 4 and len(antpols) == 2 and minV:
+        rc.pol_mode = '4pol_minV'
+    elif len(pols) == 4 and len(antpols) == 2:
+        rc.pol_mode = '4pol'
+    else:
+        rc.pol_mode = 'unrecognized_pol_mode'
+
+    # Put sols into properly formatted dictionaries and remove degeneracies
+    sol = {(i,antpol): g[antpol][i] for (i,antpol) in ants}
+    sol.update({(i,j,pol): v[pol][(i,j)] for (i,j,pol) in bl_pairs})
+    sol0 = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
+    newSol = rc.remove_degen(antpos, sol, degen_sol=sol0)
+
+    # Put back into omnical format dictionaires
+    g3 = {antpol: {} for antpol in antpols}
+    v3 = {pol: {} for pol in pols}
+    for (i,antpol) in ants:
+        g3[antpol][i] = newSol[(i,antpol)]
+    for (i,j,pol) in bl_pairs:
+        v3[pol][(i,j)] = newSol[(i,j,pol)]
+    return g3, v3
+
+
 def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
-                conv=1e-3, stepsize=.3, trust_period=1):
+                conv=1e-3, stepsize=.3, trust_period=1, minV=False):
     '''Run a full run through of omnical: Logcal, lincal, and removing degeneracies.
     Args:
         data: dictionary of data with pol and blpair keys
@@ -348,6 +413,8 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
         trust_period (optional): This is the number of iterations to trust in lincal. If > 1, uses the
                      previous solution as starting point of lincal's next iteration. This
                      should always be 1!
+        minV (optional): toggle pseudo-Stokes V minimization.
+
     Returns:
         m2 (dict): dictionary of meta information.
         g3 (dict): dictionary of gain solutions.
@@ -361,8 +428,7 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
                                       conv=conv, stepsize=stepsize,
                                       trust_period=trust_period, maxiter=maxiter)
 
-    _, g3, v3 = omnical.calib.removedegen(
-        data, info, g2, v2, nondegenerategains=gains0)
+    g3, v3 = remove_degen(info, g2, v2, gains0, minV=minV)
 
     return m2, g3, v3
 
@@ -1182,7 +1248,7 @@ def omni_run(files, opts, history):
 
         # Finally prepared to run omnical
         print('   Running Omnical')
-        m2, g3, v3 = run_omnical(d, info, gains0=g0)
+        m2, g3, v3 = run_omnical(d, info, gains0=g0, minV=opts.minV)
 
         # Collect weights for xtalk
         wgts, xtalk = {}, {}
