@@ -11,8 +11,8 @@ import os
 import glob
 import re
 import optparse
-import json
 from hera_cal import redcal
+from hera_qm import ant_metrics
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
@@ -1055,11 +1055,6 @@ def process_ex_ants(ex_ants, metrics_json=''):
     Output:
        list of excluded antennas
     """
-    def process_metrics_json(metrics_file):
-        with open(metrics_file, 'r') as infile:
-            jsonMetrics = json.load(infile)
-        return {key: eval(str(val)) for key, val in jsonMetrics.items()}
-
     # test that there are ex_ants to process
     if ex_ants == '' and metrics_json == '':
         return []
@@ -1074,7 +1069,7 @@ def process_ex_ants(ex_ants, metrics_json=''):
                     raise AssertionError(
                         "ex_ants must be a comma-separated list of ints")
         if metrics_json != '':
-            metrics = process_metrics_json(metrics_json)
+            metrics = ant_metrics.load_antenna_metrics(metrics_json)
             xants_m = metrics["xants"]
             for ant in xants_m:
                 ant_num, pol = ant
