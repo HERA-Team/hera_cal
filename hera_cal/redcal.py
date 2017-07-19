@@ -88,14 +88,14 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol'):
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
     """
 
-    redsWithPols, reverseDoneForMinV = [], False
+    redsWithPols, didBothCrossPolsForMinV = [], False
     for pol in pols:
         if pol_mode is not '4pol_minV' or pol[0] == pol[1]:
             redsWithPols += [[bl + (pol,) for bl in bls] for bls in reds]
-        elif pol_mode is '4pol_minV' and not reverseDoneForMinV:
+        elif pol_mode is '4pol_minV' and not didBothCrossPolsForMinV:
             #Combine together e.g. 'xy' and 'yx' visibilities as redundant
             redsWithPols += [([bl + (pol,) for bl in bls] + [bl + (pol[::-1],) for bl in bls]) for bls in reds]
-            reverseDoneForMinV = True
+            didBothCrossPolsForMinV = True
     return redsWithPols
 
 

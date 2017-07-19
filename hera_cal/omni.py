@@ -252,7 +252,7 @@ def compute_reds(nant, pols, *args, **kwargs):
     Return:
         reds: list of list of baselines as antenna tuples
        '''
-    _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
+    _reds = omnical.arrayinfo.compute_reds(*args, **kwargs) 
     reds = []
     for pi in pols:
         for pj in pols:
@@ -358,34 +358,43 @@ def remove_degen(info, g, v, g0, minV=False):
     if minV:
         for pol in v.keys():
             v[pol[::-1]] = v[pol]
-    # Intitalize relevant lists (pols, reds, etc.)
+    # Intitalize relevant lists to build input sols and get positions
     pols = v.keys()
     antpols = g.keys()
-    info_antpos = info.get_antpos()
     ants = [(ant,antpol) for antpol in antpols for ant in g[antpol].keys()]
-    bl_pairs = [(bl[0],bl[1],pol) for pol in pols for bl in v[pol].keys()]
+    bl_pairs = [(i,j,pol) for pol in pols for (i,j) in v[pol].keys()]
+
+    # Taking polarization non-aware stuff from omnical and reextracting the relevant info for remove_degen
+    info_antpos = info.get_antpos()
     antpos = dict(zip([ant[0] for ant in ants], 
         [np.append(info_antpos[ant[0],0:2],[0]) for ant in ants]))
-    # Reds are only necessary to intialize redcal.RedundantCalibrator and pass pol_mode
-    if minV:
-        reds = redcal.get_reds(antpos, pols, pol_mode='4pol_minV')
-    else: 
-        reds = redcal.get_reds(antpos, pols)
+
+    # Set up redcal with empy reds (reds not needed for remove_degen) and then automatically determine pol_mode
+    rc = redcal.RedundantCalibrator(reds = [])
+    if len(pols) == 1 and len(antpols) == 1:
+        rc.pol_mode = '1pol'
+    elif len(pols) == 2 and len(antpols) == 2:
+        rc.pol_mode = '2pol'
+    elif len(pols) == 4 and len(antpols) == 2 and minV:
+        rc.pol_mode = '4pol_minV'
+    elif len(pols) == 4 and len(antpols) == 2:
+        rc.pol_mode = '4pol'
+    else:
+        rc.pol_mode = 'unrecognized_pol_mode'
 
     # Put sols into properly formatted dictionaries and remove degeneracies
-    sol = {ant: g[ant[1]][ant[0]] for ant in ants}
-    sol.update({bl: v[bl[2]][bl[0:2]] for bl in bl_pairs})
-    sol0 = {ant: g0[ant[1]][ant[0]] for ant in ants}
-    rc = redcal.RedundantCalibrator(reds)
+    sol = {(i,antpol): g[antpol][i] for (i,antpol) in ants}
+    sol.update({(i,j,pol): v[pol][(i,j)] for (i,j,pol) in bl_pairs})
+    sol0 = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
     newSol = rc.remove_degen(antpos, sol, degen_sol=sol0)
 
     # Put back into omnical format dictionaires
     g3 = {antpol: {} for antpol in antpols}
     v3 = {pol: {} for pol in pols}
-    for ant in ants:
-        g3[ant[1]][ant[0]] = newSol[ant]
-    for bl in bl_pairs:
-        v3[bl[2]][bl[0:2]] = newSol[bl]
+    for (i,antpol) in ants:
+        g3[antpol][i] = newSol[(i,antpol)]
+    for (i,j,pol) in bl_pairs:
+        v3[pol][(i,j)] = newSol[(i,j,pol)]
     return g3, v3
 
 
