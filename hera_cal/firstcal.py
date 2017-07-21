@@ -116,8 +116,8 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
                  Measurements are ratios of redundant baselines.
         self.reds: list of redundant baselines.
         self.bl_pairs: list of redundant baseline pairs.
-        self.antloc: array of antenna positions in the order of self.subsetant 
-        self.ubl: list of unique baselines 
+        self.antloc: array of antenna positions in the order of self.subsetant
+        self.ubl: list of unique baselines
     '''
 
     def __init__(self, nant):
@@ -127,7 +127,7 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
             nant (int): number of antennas.
 
         Attributes:
-            nant (int): number of antennas 
+            nant (int): number of antennas
 
         '''
         omnical.info.RedundantInfo.__init__(self)
@@ -277,12 +277,12 @@ class FirstCal(object):
 
         Args:
             data (dict): dictionary of visibilities with keys being antenna pair tuples.
-                Values should be 2D arrays with first axis corresponding to time 
+                Values should be 2D arrays with first axis corresponding to time
                 and second corresponding to frequencies.
             wgts (dict): dictionary of weights with keys being antenna pair tuples.
                 see data for format.
             fqs (array): array of frequencies corresponding to visibilities.
-            info: FirstCalRedundantInfo object. This describes the redundancies 
+            info: FirstCalRedundantInfo object. This describes the redundancies
                 and has the proper least square matrices.
         '''
         self.data = data
@@ -315,7 +315,7 @@ class FirstCal(object):
     def get_N(self, nblpairs):
         ''' Returns noise matrix.
 
-        Currently this is set to the identity.    
+        Currently this is set to the identity.
 
         Returns:
             sparse array: identity matrix
@@ -389,12 +389,12 @@ def flatten_reds(reds):
 def UVData_to_dict(uvdata_list, filetype='miriad'):
     """ Turn a list of UVData objects or filenames in to a data and flag dictionary.
 
-        Make dictionary with blpair key first and pol second key from either a 
+        Make dictionary with blpair key first and pol second key from either a
         list of UVData objects or a list of filenames with specific file_type.
 
         Args:
             uvdata_list: list of UVData objects or strings of filenames.
-            filetype (string, optional): type of file if uvdata_list is 
+            filetype (string, optional): type of file if uvdata_list is
                 a list of filenames
 
         Return:
