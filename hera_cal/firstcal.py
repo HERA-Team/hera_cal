@@ -473,9 +473,12 @@ def firstcal_run(files, opts, history):
     uv = aipy.miriad.UV(files[0])
     fqs = aipy.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
     del(uv)
+    (uvw,array_epoch_jd,d) = uv.read()
+    del(uv,uvw,d)
 
     # Get HERA info and parse command line arguments
     aa = aipy.cal.get_aa(opts.cal, fqs)
+    aa = hera_cal.get_aa(opts.cal, fqs,array_epoch_jd=array_epoch_jd)
     ex_ants = omni.process_ex_ants(opts.ex_ants, opts.metrics_json)
     ubls = process_ubls(opts.ubls)
 
