@@ -14,9 +14,9 @@ def sim_red_data(reds, gains=None, shape=(10,10), gain_scatter=.1):
     """ Simulate noise-free random but redundant (up to differing gains) visibilities.
 
         Args:
-            reds: list of lists of baseline (or bl-pol) tuples where each sublist has only 
+            reds: list of lists of baseline (or bl-pol) tuples where each sublist has only
                 redundant pairs
-            gains: pre-specify base gains to then scatter on top of in the 
+            gains: pre-specify base gains to then scatter on top of in the
                 {(index,antpol): np.array} format. Default gives all ones.
             shape: tuple of (Ntimes, Nfreqs). Default is (10,10).
             gain_scatter: Relative amplitude of per-antenna complex gain scatter. Default is 0.1.
@@ -41,8 +41,8 @@ def sim_red_data(reds, gains=None, shape=(10,10), gain_scatter=.1):
 
 
 def get_pos_reds(antpos, precisionFactor=1e6):
-    """ Figure out and return list of lists of redundant baseline pairs. Ordered by length. 
-        All baselines have the same orientation with a preference for positive b_y and, 
+    """ Figure out and return list of lists of redundant baseline pairs. Ordered by length.
+        All baselines have the same orientation with a preference for positive b_y and,
         when b_y==0, positive b_x where b((i,j)) = pos(i) - pos(j).
 
         Args:
@@ -79,7 +79,7 @@ def get_pos_reds(antpos, precisionFactor=1e6):
                     break
             if not reds.has_key(newKey):
                 reds[delta] = [bl_pair]
-    orderedDeltas = [delta for (length,delta) in sorted(zip([np.linalg.norm(delta) for delta in reds.keys()],reds.keys()))]   
+    orderedDeltas = [delta for (length,delta) in sorted(zip([np.linalg.norm(delta) for delta in reds.keys()],reds.keys()))]
     return [reds[delta] for delta in orderedDeltas]
 
 
@@ -112,8 +112,8 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol'):
 
 
 def get_reds(antpos, pols=['xx'], pol_mode='1pol', precisionFactor=1e6):
-    """ Combines redcal.get_pos_reds() and redcal.add_pol_reds(). 
-    
+    """ Combines redcal.get_pos_reds() and redcal.add_pol_reds().
+
     Args:
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
         pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
@@ -152,7 +152,7 @@ def check_polLists_minV(polLists):
 
 def parse_pol_mode(reds):
     """Based on reds, figures out the pol_mode.
-    
+
     Args:
         reds: list of list of baselines (with polarizations) considered redundant
 
@@ -200,7 +200,7 @@ class RedundantCalibrator:
         and lincal, both utilizing linsolve, and also degeneracy removal.
 
         Args:
-            reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol). The first 
+            reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol). The first
                 item in each list will be treated as the key for the unique baseline
         """
 
@@ -209,8 +209,8 @@ class RedundantCalibrator:
 
 
     def build_eqs(self, bls_in_data):
-        """Function for generating linsolve equation strings. Takes in a list of baselines that 
-        occur in the data in the (ant1,ant2,pol) format and returns a dictionary that maps 
+        """Function for generating linsolve equation strings. Takes in a list of baselines that
+        occur in the data in the (ant1,ant2,pol) format and returns a dictionary that maps
         linsolve string to (ant1, ant2, pol) for all visibilities."""
 
         eqs = {}
@@ -236,14 +236,14 @@ class RedundantCalibrator:
         Returns:
             solver: instantiated solver with redcal equations and weights
         """
-        
+
         dc = DataContainer(data)
         eqs = self.build_eqs(dc.keys())
         self.phs_avg = {} # detrend phases within redundant group, used for logcal to avoid phase wraps
         if detrend_phs:
             for blgrp in self.reds:
                 self.phs_avg[blgrp[0]] = np.exp(-1j*np.median(np.unwrap([np.log(dc[bl]).imag for bl in blgrp],axis=0), axis=0))
-                for bl in blgrp: 
+                for bl in blgrp:
                     self.phs_avg[bl] = self.phs_avg[blgrp[0]]
         d_ls,w_ls = {}, {}
         for eq,key in eqs.items():
@@ -273,7 +273,7 @@ class RedundantCalibrator:
 
 
     def compute_ubls(self, data, gain_sols):
-        """Given a set of guess gain solutions, return a dictionary of calibrated visbilities 
+        """Given a set of guess gain solutions, return a dictionary of calibrated visbilities
         averged over a redundant group. Not strictly necessary for typical operation."""
 
         dc = DataContainer(data)
@@ -283,7 +283,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0) # XXX add option for median here?
         return ubl_sols
 
-    
+
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False):
         """Takes the log to linearize redcal equations and minimizes chi^2.
@@ -319,7 +319,7 @@ class RedundantCalibrator:
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
             sol0: dictionary of guess gains and unique model visibilities, keyed by antenna tuples
-                like (ant,antpol) or baseline tuples like 
+                like (ant,antpol) or baseline tuples like
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             conv_crit: maximum allowed relative change in solutions to be considered converged
@@ -330,25 +330,28 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        
+<<<<<<< HEAD
+
         try:
             import linsolve
         except(ImportError):
             import unittest
             raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
+=======
+>>>>>>> don't import linsolve
 
         sol0 = {self.pack_sol_key(k):sol0[k] for k in sol0.keys()}
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
         return meta, {self.unpack_sol_key(k):sol[k] for k in sol.keys()}
-    
+
 
     def remove_degen(self, antpos, sol, degen_sol=None):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).
 
         Args:
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
-            sol: dictionary that contains both visibility and gain solutions in the 
+            sol: dictionary that contains both visibility and gain solutions in the
                 {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
@@ -358,7 +361,7 @@ class RedundantCalibrator:
     """
 
         g, v = get_gains_and_vis_from_sol(sol)
-        if degen_sol is None: 
+        if degen_sol is None:
             degen_sol = {key: np.ones_like(val) for key,val in g.items()}
         ants = g.keys()
         gainPols = np.array([ant[1] for ant in ants])
@@ -375,9 +378,9 @@ class RedundantCalibrator:
         #if mode is 2pol, run as two 1pol remove degens
         if self.pol_mode is '2pol':
             self.pol_mode = '1pol'
-            newSol = self.remove_degen(antpos, {key: val for key,val in sol.items() 
+            newSol = self.remove_degen(antpos, {key: val for key,val in sol.items()
                      if antpols[0] in key[-1]}, degen_sol=degen_sol)
-            newSol.update(self.remove_degen(antpos, {key: val for key,val in sol.items() 
+            newSol.update(self.remove_degen(antpos, {key: val for key,val in sol.items()
                      if antpols[1] in key[-1]}, degen_sol=degen_sol))
             self.pol_mode = '2pol'
             return newSol
@@ -389,9 +392,9 @@ class RedundantCalibrator:
 
         #Amplitude renormalization: fixes the mean abs product of gains (as they appear in visibilities)
         for antpol in antpols:
-            meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+            meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])])
                 for (ant1,ant2,pol) in bl_pairs if pol == 2*antpol], axis=0)
-            degenMeanSqAmplitude = np.mean([np.abs(degen_sol[(ant1,pol[0])] * degen_sol[(ant2,pol[1])]) 
+            degenMeanSqAmplitude = np.mean([np.abs(degen_sol[(ant1,pol[0])] * degen_sol[(ant2,pol[1])])
                 for (ant1,ant2,pol) in bl_pairs if pol == 2*antpol], axis=0)
             gainSols[gainPols == antpol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
             visSols[visPols[:,0] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
@@ -418,11 +421,10 @@ class RedundantCalibrator:
         # degenToRemove is the amount we need to move in the degenerate subspace
         degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols)-np.angle(degenGains))
         # Now correct gains and visibilities while preserving chi^2
-        gainSols *= np.exp(-1.0j * np.einsum('ij,jkl',Rgains,degenToRemove)) 
-        visSols *= np.exp(-1.0j * np.einsum('ij,jkl',Rvis,degenToRemove)) 
+        gainSols *= np.exp(-1.0j * np.einsum('ij,jkl',Rgains,degenToRemove))
+        visSols *= np.exp(-1.0j * np.einsum('ij,jkl',Rvis,degenToRemove))
 
         #Create new solutions dictionary
         newSol = {ant: gainSol for ant,gainSol in zip(ants,gainSols)}
         newSol.update({bl_pair: visSol for bl_pair,visSol in zip(bl_pairs,visSols)})
         return newSol
-        
