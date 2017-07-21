@@ -57,17 +57,30 @@ def get_pos_reds(antpos, precisionFactor=1e6):
 
     keys = antpos.keys()
     reds = {}
+    array_is_2D = np.all(np.all(np.array(antpos.values())[:,2]==0))
     for i,ant1 in enumerate(keys):
         for ant2 in keys[i+1:]:
             delta = tuple((precisionFactor * (np.array(antpos[ant1]) - np.array(antpos[ant2]))).astype(int))
-            if delta[1] > 0 or (delta[1]==0 and delta[0] > 0):
-                if reds.has_key(delta): reds[delta] += [(ant1,ant2)]
-                else: reds[delta] = [(ant1,ant2)]
+            if delta[0] > 0 or (delta[0]==0 and delta[1] > 0) or (delta[0]==0 and delta[1]==0 and delta[2] > 0):
+                bl_pair = (ant1,ant2)
             else:
                 delta = tuple([-d for d in delta])
-                if reds.has_key(delta): reds[delta] += [(ant2,ant1)]
-                else: reds[delta] = [(ant2,ant1)]
-    orderedDeltas = [delta for (delta,length) in sorted(zip(reds.keys(), [np.linalg.norm(delta) for delta in reds.keys()]))]
+                bl_pair = (ant2,ant1)
+            
+            # Check to make sure reds doesn't have the key plus or minus rounding error
+            p_or_m = (0,-1,1)
+            if array_is_2D:
+                epsilons = [[dx,dy,0] for dx in p_or_m for dy in p_or_m]
+            else:
+                epsilons = [[dx,dy,dz] for dx in p_or_m for dy in p_or_m for dz in p_or_m]
+            for epsilon in epsilons:
+                newKey = (delta[0]+epsilon[0], delta[1]+epsilon[1], delta[2]+epsilon[2])
+                if reds.has_key(newKey):
+                    reds[newKey].append(bl_pair)
+                    break
+            if not reds.has_key(newKey):
+                reds[delta] = [bl_pair]
+    orderedDeltas = [delta for (length,delta) in sorted(zip([np.linalg.norm(delta) for delta in reds.keys()],reds.keys()))]   
     return [reds[delta] for delta in orderedDeltas]
 
 

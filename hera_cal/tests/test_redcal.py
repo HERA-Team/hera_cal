@@ -114,6 +114,26 @@ class TestMethods(unittest.TestCase):
         reds = [[(0,1,'xx')],[(0,1,'xy'), (0,1,'yy')],[(0,1,'yx')]]
         self.assertEqual(om.parse_pol_mode(reds), 'unrecognized_pol_mode')
 
+    def test_get_pos_red(self):
+        pos = build_hex_array(11,sep=1)
+        self.assertEqual(len(om.get_pos_reds(pos)),630)
+        pos = build_hex_array(11,sep=14.7)
+        self.assertEqual(len(om.get_pos_reds(pos)),630)
+        pos = build_hex_array(3,sep=14.7)
+        self.assertEqual(len(om.get_pos_reds(pos)),30)
+
+
+    def test_add_pol_reds(self):
+        reds = [[(1,2)]]
+        polReds = om.add_pol_reds(reds, pols=['xx'], pol_mode='1pol')
+        self.assertEqual(polReds, [[(1,2,'xx')]])
+        polReds = om.add_pol_reds(reds, pols=['xx','yy'], pol_mode='2pol')
+        self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'yy')]])
+        polReds = om.add_pol_reds(reds, pols=['xx','xy','yx','yy'], pol_mode='4pol')
+        self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'xy')],[(1,2,'yx')],[(1,2,'yy')]])
+        polReds = om.add_pol_reds(reds, pols=['xx','xy','yx','yy'], pol_mode='4pol_minV')
+        self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'xy'),(1,2,'yx')],[(1,2,'yy')]])
+
 
 class TestRedundantCalibrator(unittest.TestCase):
     
