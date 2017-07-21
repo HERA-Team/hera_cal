@@ -1,5 +1,6 @@
 import numpy as np
 from copy import deepcopy
+from hera_qm.datacontainer import DataContainer
 
 
 def noise(size):
@@ -223,7 +224,6 @@ class RedundantCalibrator:
             solver: instantiated solver with redcal equations and weights
         """
         
-        from hera_qm.datacontainer import DataContainer
         dc = DataContainer(data)
         eqs = self.build_eqs(dc.keys())
         self.phs_avg = {} # detrend phases within redundant group, used for logcal to avoid phase wraps
@@ -263,7 +263,6 @@ class RedundantCalibrator:
         """Given a set of guess gain solutions, return a dictionary of calibrated visbilities 
         averged over a redundant group. Not strictly necessary for typical operation."""
 
-        from hera_qm.datacontainer import DataContainer
         dc = DataContainer(data)
         ubl_sols = {}
         for ubl, blgrp in enumerate(self.reds):
@@ -286,7 +285,13 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        import linsolve
+
+        try:
+            import linsolve
+        except(ImportError):
+            import unittest
+            raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
+
         ls = self._solver(linsolve.LogProductSolver, data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve()
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
@@ -313,7 +318,12 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
         
-        import linsolve
+        try:
+            import linsolve
+        except(ImportError):
+            import unittest
+            raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
+
         sol0 = {self.pack_sol_key(k):sol0[k] for k in sol0.keys()}
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
