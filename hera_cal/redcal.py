@@ -330,12 +330,15 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-        
+<<<<<<< HEAD
+
         try:
             import linsolve
         except(ImportError):
             import unittest
             raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
+=======
+>>>>>>> don't import linsolve
 
         sol0 = {self.pack_sol_key(k):sol0[k] for k in sol0.keys()}
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
