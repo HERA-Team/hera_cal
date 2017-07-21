@@ -60,13 +60,13 @@ def get_pos_reds(antpos, precisionFactor=1e6):
     array_is_2D = np.all(np.all(np.array(antpos.values())[:,2]==0))
     for i,ant1 in enumerate(keys):
         for ant2 in keys[i+1:]:
-            delta = tuple((precisionFactor * (np.array(antpos[ant1]) - np.array(antpos[ant2]))).astype(int))
+            delta = tuple((precisionFactor*2.0 * (np.array(antpos[ant1]) - np.array(antpos[ant2]))).astype(int))
+            # Multiply by 2.0 because rounding errors can mimic changes below the grid spacing
             if delta[0] > 0 or (delta[0]==0 and delta[1] > 0) or (delta[0]==0 and delta[1]==0 and delta[2] > 0):
                 bl_pair = (ant1,ant2)
             else:
                 delta = tuple([-d for d in delta])
                 bl_pair = (ant2,ant1)
-            
             # Check to make sure reds doesn't have the key plus or minus rounding error
             p_or_m = (0,-1,1)
             if array_is_2D:
