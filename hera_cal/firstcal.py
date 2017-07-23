@@ -9,7 +9,7 @@ from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
 import multiprocessing as mpr
 import scipy.sparse as sps
-from hera_cal import omni
+from hera_cal import omni,get_HERA_aa
 from pyuvdata import UVData
 import os
 import optparse
@@ -472,11 +472,11 @@ def firstcal_run(files, opts, history):
     # get frequencies from miriad file
     uv = aipy.miriad.UV(files[0])
     fqs = aipy.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
-    (uvw,array_epoch_jd,d) = uv.read()
+    (uvw,array_epoch_jd,ij),d = uv.read()
     del(uv,uvw,d)
 
     # Get HERA info and parse command line arguments
-    aa = hera_cal.get_aa(opts.cal, fqs,array_epoch_jd=array_epoch_jd)
+    aa = get_HERA_aa(opts.cal, fqs,array_epoch_jd=array_epoch_jd)
     ex_ants = omni.process_ex_ants(opts.ex_ants, opts.metrics_json)
     ubls = process_ubls(opts.ubls)
 
