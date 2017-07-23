@@ -305,7 +305,7 @@ class Test_firstcal_run(object):
         if os.path.exists(objective_file):
             os.remove(objective_file)
         o = firstcal.firstcal_option_parser()
-        cmd = "-p xx --ex_ants=81 {1}".format(xx_vis4real)
+        cmd = "-p xx --ex_ants=81 {0}".format(xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         firstcal.firstcal_run(files, opts, history)
