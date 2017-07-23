@@ -7,7 +7,7 @@ from astropy.time import Time
 from dateutil.parser import parse
 
 cm_p_m = 100
-locations_file = os.path.join(os.path.dirname(__file__), 'data/hera_ant_locs_05_16_2017.csv')
+#locations_file = os.path.join(os.path.dirname(__file__), 'data/hera_ant_locs_05_16_2017.csv')
 
 # this sets when to find the antenna positions for (they changed as HERA was built)
 # this should not be later than the date that the file was pulled from M&C
@@ -123,7 +123,7 @@ def cofa_latlonalt(locations_file):
 
 
 def antpos_enu(locations_file,array_epoch_jd):
-    cofa_lat, cofa_lon, cofa_alt = cofa_latlonalt()
+    cofa_lat, cofa_lon, cofa_alt = cofa_latlonalt(locations_file)
 
     stn_locs_df = pd.read_csv(locations_file)
     stn_locs_df = stn_locs_df[stn_locs_df['station_type'] != 'cofa']
@@ -145,9 +145,9 @@ def antpos_enu(locations_file,array_epoch_jd):
             ant_pos[stn['antenna_number']] = {'top_x': enu[0], 'top_y': enu[1], 'top_z': enu[2]}
     return ant_pos
 
-cofa_lat, cofa_lon, cofa_alt = cofa_latlonalt()
 
-prms = {'loc': (cofa_lat, cofa_lon),
+
+prms = {#'loc': (cofa_lat, cofa_lon),
         #'antpos_ideal': antpos_enu(locations_file,array_epoch_jd),
         'amps': dict(zip(range(128), np.ones(128))),
         'amp_coeffs': np.array([1] * 128),
@@ -186,11 +186,12 @@ prms = {'loc': (cofa_lat, cofa_lon),
 
 def get_aa(freqs,locations_file,array_epoch_jd=array_epoch_jd):
     '''Return the HERA AntennaArray.'''
-    location = prms['loc']
+    cofa_lat, cofa_lon, cofa_alt = cofa_latlonalt(locations_file)
+    location = (cofa_lat, cofa_lon)
     antennas = []
     #load the positions from the file, filter by epoch
     antpos = antpos_enu(locations_file,array_epoch_jd)
-    nants = len(antpos)
+    nants = np.max(antpos.keys())+1
     antpos_ideal = np.zeros(shape=(nants, 3), dtype=float)
     tops = {'top_x': 0, 'top_y': 1, 'top_z': 2}
     for k in antpos.keys():
@@ -216,9 +217,9 @@ def get_aa(freqs,locations_file,array_epoch_jd=array_epoch_jd):
 #    aa = AntennaArray(prms['loc'], antennas, tau_ew=prms['tau_ew'], tau_ns=prms['tau_ns'],
 #        gain=prms['gain'], amp_coeffs=prms['amp_coeffs'],
 #        dly_coeffs=prms['dly_coeffs'], dly_xx_to_yy=prms['dly_xx_to_yy'], ant_layout=prms['ant_layout'])
-    aa = AntennaArray(prms['loc'], antennas, antpos_ideal=antpos_ideal)
+    aa = AntennaArray(location, antennas, antpos_ideal=antpos_ideal)
     pos_prms = {}
-    for i in range(nants):
+    for i in antpos.keys():
         pos_prms[str(i)] = antpos[i]
     aa.set_params(pos_prms)
     return aa
