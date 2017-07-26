@@ -713,7 +713,7 @@ class Test_4pol_remove_degen(object):
         self.info = omni.aa_to_info(self.aa, pols=self.antpols)
         self.bls = [(i.val,j.val) for (i,j) in self.info.bl_order() if (i.val<128 and j.val<128)]
         antpos = self.info.get_antpos()
-        positions = np.array([antpos[ant,0:2] for antpol in self.antpols 
+        positions = np.array([antpos[ant,0:2] for antpol in self.antpols
                               for ant in self.info.subsetant])
         Rgains = positions
         self.Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
@@ -721,24 +721,24 @@ class Test_4pol_remove_degen(object):
 
     def test_remove_degen(self):
         pols = ['xx','xy','yx','yy']
-        v2 = {pol: {bl: np.random.randn(self.Ntimes, len(self.freqs)) + 
-                    1.0j * np.random.randn(self.Ntimes, len(self.freqs)) 
+        v2 = {pol: {bl: np.random.randn(self.Ntimes, len(self.freqs)) +
+                    1.0j * np.random.randn(self.Ntimes, len(self.freqs))
                     for bl in self.bls} for pol in pols}
-        g2 = {antpol: {ant: 1.0 + 0.01 * np.random.randn(self.Ntimes, len(self.freqs)) 
-                       + 0.01j * np.random.randn(self.Ntimes, len(self.freqs)) for ant 
+        g2 = {antpol: {ant: 1.0 + 0.01 * np.random.randn(self.Ntimes, len(self.freqs))
+                       + 0.01j * np.random.randn(self.Ntimes, len(self.freqs)) for ant
                        in self.info.subsetant} for antpol in self.antpols}
-        gains0 = {antpol: {ant: np.ones((self.Ntimes, len(self.freqs))) for ant 
+        gains0 = {antpol: {ant: np.ones((self.Ntimes, len(self.freqs))) for ant
                            in self.info.subsetant} for antpol in self.antpols}
-        
+
         g3, v3 = omni.remove_degen(self.info, g2, v2, gains0, minV=False)
-        gains = np.array([g3[antpol][ant] for antpol in self.antpols 
+        gains = np.array([g3[antpol][ant] for antpol in self.antpols
                           for ant in self.info.subsetant])
         gains_x = np.array([g3['x'][ant] for ant in self.info.subsetant])
         gains_y = np.array([g3['y'][ant] for ant in self.info.subsetant])
-        meanSqAmplitude = np.mean([np.abs(g3['x'][ant1] * g3['x'][ant2]) 
+        meanSqAmplitude = np.mean([np.abs(g3['x'][ant1] * g3['x'][ant2])
                 for (ant1,ant2) in v3['xx'].keys()], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1.0)
-        meanSqAmplitude = np.mean([np.abs(g3['y'][ant1] * g3['y'][ant2]) 
+        meanSqAmplitude = np.mean([np.abs(g3['y'][ant1] * g3['y'][ant2])
                 for (ant1,ant2) in v3['yy'].keys()], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1.0)
         np.testing.assert_almost_equal(np.mean(np.angle(gains_x), axis=0), 0.0)
@@ -749,22 +749,22 @@ class Test_4pol_remove_degen(object):
 
     def test_remove_degen_minV(self):
         pols = ['xx','xy','yy']
-        v2 = {pol: {bl: np.random.randn(self.Ntimes, len(self.freqs)) + 
-                    1.0j * np.random.randn(self.Ntimes, len(self.freqs)) 
+        v2 = {pol: {bl: np.random.randn(self.Ntimes, len(self.freqs)) +
+                    1.0j * np.random.randn(self.Ntimes, len(self.freqs))
                     for bl in self.bls} for pol in pols}
-        g2 = {antpol: {ant: 1.0 + 0.01 * np.random.randn(self.Ntimes, len(self.freqs)) 
-                       + 0.01j * np.random.randn(self.Ntimes, len(self.freqs)) for ant 
+        g2 = {antpol: {ant: 1.0 + 0.01 * np.random.randn(self.Ntimes, len(self.freqs))
+                       + 0.01j * np.random.randn(self.Ntimes, len(self.freqs)) for ant
                        in self.info.subsetant} for antpol in self.antpols}
-        gains0 = {antpol: {ant: np.ones((self.Ntimes, len(self.freqs))) for ant 
+        gains0 = {antpol: {ant: np.ones((self.Ntimes, len(self.freqs))) for ant
                            in self.info.subsetant} for antpol in self.antpols}
-        
+
         g3, v3 = omni.remove_degen(self.info, g2, v2, gains0, minV=True)
-        gains = np.array([g3[antpol][ant] for antpol in self.antpols 
+        gains = np.array([g3[antpol][ant] for antpol in self.antpols
                           for ant in self.info.subsetant])
-        meanSqAmplitude = np.mean([np.abs(g3['x'][ant1] * g3['x'][ant2]) 
+        meanSqAmplitude = np.mean([np.abs(g3['x'][ant1] * g3['x'][ant2])
                 for (ant1,ant2) in v3['xx'].keys()], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1.0)
-        meanSqAmplitude = np.mean([np.abs(g3['y'][ant1] * g3['y'][ant2]) 
+        meanSqAmplitude = np.mean([np.abs(g3['y'][ant1] * g3['y'][ant2])
                 for (ant1,ant2) in v3['yy'].keys()], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1.0)
         np.testing.assert_almost_equal(np.mean(np.angle(gains), axis=0), 0.0)
@@ -780,7 +780,7 @@ class Test_omni_run(object):
     # single pol tests
     global xx_vis, calfile, xx_fcal
     xx_vis = 'zen.2457698.40355.xx.HH.uvcAA'
-    calfile = 'hsa7458_v001'
+    calfile = 'hera_test_calfile'
     xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
 
     # multi pol tests
@@ -880,7 +880,7 @@ class Test_omni_run(object):
         xtalkfile = re.sub('omni\.calfits', 'xtalk.uvfits', objective_file)
         os.remove(visfile)
         os.remove(xtalkfile)
-    
+
     def test_execution_omni_run_4polminV(self):
         objective_file = os.path.join(
             DATA_PATH, 'zen.2457698.40355.HH.uvcA.omni.calfits')
@@ -915,7 +915,7 @@ class Test_omni_apply(object):
     xx_vis  = 'zen.2457698.40355.xx.HH.uvcAA'
     xx_fcal = 'zen.2457698.40355.xx.HH.uvcAA.first.calfits'
     xx_ocal = 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits'
-    
+
     # multi pol tests
     global visXX, visXY, visYX, visYY, fourpol_ocal
     visXX = 'zen.2457698.40355.xx.HH.uvcA'
@@ -923,7 +923,7 @@ class Test_omni_apply(object):
     visYX = 'zen.2457698.40355.yx.HH.uvcA'
     visYY = 'zen.2457698.40355.yy.HH.uvcA'
     fourpol_ocal = 'zen.2457698.40355.HH.uvcA.omni.calfits'
-    
+
     def test_single_file_execution_omni_apply(self):
         objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAO')
         if os.path.exists(objective_file):
@@ -938,7 +938,7 @@ class Test_omni_apply(object):
         nt.assert_true(os.path.exists(objective_file))
         # clean up when we're done
         shutil.rmtree(objective_file)
-    
+
     def test_single_file_firstcal_omni_apply(self):
         objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAF')
         if os.path.exists(objective_file):
@@ -959,21 +959,21 @@ class Test_omni_apply(object):
         for f in objective_files:
             if os.path.exists(f):
                 shutil.rmtree(f)
-        
+
         fp_ocal = os.path.join(DATA_PATH, 'test_input', fourpol_ocal)
         visxx = os.path.join(DATA_PATH,visXX)
         visxy = os.path.join(DATA_PATH,visXY)
         visyx = os.path.join(DATA_PATH,visYX)
         visyy = os.path.join(DATA_PATH,visYY)
-        
+
         o = omni.get_optionParser('omni_apply')
         cmd = "-p xx,xy,yx,yy --omnipath={0} --extension=O {1} {2} {3} {4}".format(fp_ocal,visxx,visyy,visyx,visxy)
         opts, files = o.parse_args(cmd.split())
         omni.omni_apply(files, opts)
-    
+
         for f in objective_files:
             nt.assert_true(os.path.exists(f))
-        
+
         for f in objective_files:
             if os.path.exists(f):
                 shutil.rmtree(f)
