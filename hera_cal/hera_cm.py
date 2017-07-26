@@ -168,7 +168,6 @@ def get_aa(freqs,locations_file,array_epoch_jd=array_epoch_jd):
     #load the positions from the file, filter by epoch
     antpos = antpos_enu(locations_file,array_epoch_jd,station_type='herahex')
     print("found {0} antennas".format(len(antpos)))
-    print(np.sort(antpos.keys()))
     nants = np.max(antpos.keys())+1
     antpos_ideal = np.zeros(shape=(nants, 3), dtype=float) - 1
     tops = {'top_x': 0, 'top_y': 1, 'top_z': 2}
