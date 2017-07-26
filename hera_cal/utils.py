@@ -17,8 +17,11 @@ def get_HERA_aa(freqs,calfile='hera_cm',
     #sometimes the default option is None, but we really mean no input
     if calfile is None:
         calfile='hera_cm'
+        #set defaults that hera_cm needs.
     if locations_file is None:
         locations_file = os.path.join(os.path.dirname(__file__), 'data/hera_ant_locs_05_16_2017.csv')
+    if array_epoch_jd is None:
+        array_epoch_jd = 2457458  #need a date
 
 
     exec('from {calfile} import get_aa'.format(calfile=calfile))
