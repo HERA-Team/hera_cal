@@ -268,7 +268,7 @@ class TestFCRedInfo(object):
 class Test_firstcal_run(object):
     global calfile
     global xx_vis
-    calfile = "hsa7458_v001"
+    calfile = "hera_test_calfile"
     xx_vis = "zen.2457698.40355.xx.HH.uvcAA"
 
     # add directory with calfile
