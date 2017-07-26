@@ -27,6 +27,4 @@ def get_HERA_aa(freqs,calfile='hera_cm',
         #IT IS PROBABLY NOT UP TO DATE
         return get_aa(freqs)
     else:
-
-        exec('from {calfile} import get_aa'.format(calfile=calfile))
         return get_aa(freqs,locations_file,array_epoch_jd)
