@@ -14,20 +14,18 @@ def get_HERA_aa(freqs,calfile='hera_cm',**kwargs):
     # array_epoch_id = julian date of desired configuration
     #   - if not input uses default date set in calfile, hera_cal.hera_cm
     # locations_file = antenna location csv file exported from m&c
-    #   - default file included
+    #   - default file included in hera_cal
     #   - create a new one with hera_mc/scripts/write_antenna_location_file.py
     #
-    #
-    #
 
-    #sometimes the default option is None, but we really mean default
+    #sometimes the input is set to None, which implies default
     if calfile is None:
         calfile='hera_cm'
 
     exec('from {calfile} import get_aa'.format(calfile=calfile))
-    if calfile!='hera_cm': #load an alternate cal file
-        #WARNING, array position is being set by whatever happens to be in your cal file
-        #IT IS PROBABLY NOT UP TO DATE
+    if calfile!='hera_cm':
+        #array position is set based on user input cal file
         return get_aa(freqs)
     else:
+        #use the time and position file aware get_aa
         return get_aa(freqs,**kwargs)
