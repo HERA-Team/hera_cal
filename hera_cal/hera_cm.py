@@ -56,8 +56,11 @@ class AntennaArray(aipy.pol.AntennaArray):
                         prms['aa']['gain'] = self.gain
             else:
                 try:
+                    #rotate from equatorial to zenith
                     top_pos = np.dot(self._eq2zen, self[int(k)].pos)
-                # XXX should multiply this by len_ns to match set_params.
+                    #convert from ns to m
+                    top_pos *= aipy.const.len_ns / cm_p_m
+
                 except(ValueError):
                     continue
                 if ant_prms[k] == '*':
@@ -93,6 +96,7 @@ class AntennaArray(aipy.pol.AntennaArray):
             except(KeyError):
                 pass
             if ant_changed:
+                #rotate from zenith to equatorial, convert from meters to ns
                 ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * cm_p_m
             changed |= ant_changed
         try:
