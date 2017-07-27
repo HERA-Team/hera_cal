@@ -20,22 +20,8 @@ class AntennaArray(aipy.pol.AntennaArray):
         aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
         self.antpos_ideal = kwargs.pop('antpos_ideal')
 
-    def update_gains(self):
-        gains = self.gain * self.amp_coeffs
-        for i, gain in zip(self.ant_layout.flatten(), gains.flatten()):
-            self[i].set_params({'amp_x': gain})
-            self[i].set_params({'amp_y': gain})
-
-    def update_delays(self):
-        ns, ew = np.indices(self.ant_layout.shape)
-        dlys = ns * self.tau_ns + ew * self.tau_ew + self.dly_coeffs
-        for i, tau in zip(self.ant_layout.flatten(), dlys.flatten()):
-            self[i].set_params({'dly_x': tau})
-            self[i].set_params({'dly_y': tau + self.dly_xx_to_yy.flatten()[i]})
 
     def update(self):
-        # self.update_gains()
-        # self.update_delays()
         aipy.pol.AntennaArray.update(self)
 
     def get_params(self, ant_prms={'*': '*'}):
@@ -44,35 +30,24 @@ class AntennaArray(aipy.pol.AntennaArray):
         except(IndexError):
             return {}
         for k in ant_prms:
-            if k == 'aa':
-                if 'aa' not in prms:
-                    prms['aa'] = {}
-                for val in ant_prms[k]:
-                    if val == 'tau_ns':
-                        prms['aa']['tau_ns'] = self.tau_ns
-                    elif val == 'tau_ew':
-                        prms['aa']['tau_ew'] = self.tau_ew
-                    elif val == 'gain':
-                        prms['aa']['gain'] = self.gain
-            else:
-                try:
-                    #rotate from equatorial to zenith
-                    top_pos = np.dot(self._eq2zen, self[int(k)].pos)
-                    #convert from ns to m
-                    top_pos *= aipy.const.len_ns / cm_p_m
+            try:
+                #rotate from equatorial to zenith
+                top_pos = np.dot(self._eq2zen, self[int(k)].pos)
+                #convert from ns to m
+                top_pos *= aipy.const.len_ns / cm_p_m
 
-                except(ValueError):
-                    continue
-                if ant_prms[k] == '*':
-                    prms[k].update({'top_x': top_pos[0], 'top_y': top_pos[1], 'top_z': top_pos[2]})
-                else:
-                    for val in ant_prms[k]:
-                        if val == 'top_x':
-                            prms[k]['top_x'] = top_pos[0]
-                        elif val == 'top_y':
-                            prms[k]['top_y'] = top_pos[1]
-                        elif val == 'top_z':
-                            prms[k]['top_z'] = top_pos[2]
+            except(ValueError):
+                continue
+            if ant_prms[k] == '*':
+                prms[k].update({'top_x': top_pos[0], 'top_y': top_pos[1], 'top_z': top_pos[2]})
+            else:
+                for val in ant_prms[k]:
+                    if val == 'top_x':
+                        prms[k]['top_x'] = top_pos[0]
+                    elif val == 'top_y':
+                        prms[k]['top_y'] = top_pos[1]
+                    elif val == 'top_z':
+                        prms[k]['top_z'] = top_pos[2]
         return prms
 
     def set_params(self, prms):
@@ -99,18 +74,6 @@ class AntennaArray(aipy.pol.AntennaArray):
                 #rotate from zenith to equatorial, convert from meters to ns
                 ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * cm_p_m
             changed |= ant_changed
-        try:
-            self.tau_ns, changed = prms['aa']['tau_ns'], 1
-        except(KeyError):
-            pass
-        try:
-            self.tau_ew, changed = prms['aa']['tau_ew'], 1
-        except(KeyError):
-            pass
-        try:
-            self.gain, changed = prms['aa']['gain'], 1
-        except(KeyError):
-            pass
         if changed:
             self.update()
         return changed
