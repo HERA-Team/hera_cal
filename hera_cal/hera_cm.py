@@ -160,8 +160,9 @@ prms = {#'loc': (cofa_lat, cofa_lon),
         'bp_i': np.array([[0., 0., 0.]] * 128),
         'twist': np.array([0] * 128),
         'beam': aipy.fit.Beam2DGaussian,
-        'bm_prms': {'bm_xwidth':8*np.pi/180,'bm_ywidth':8*np.pi/180}#no idea what the units are here
-        # or even if Beam2DGaussian will work as advertised
+        'bm_prms': {'bm_xwidth':3.39*np.pi/180,'bm_ywidth':3.39*np.pi/180}
+        # Gaussian Beam is put in because something is needed.
+        #   here we are specifying a 8 deg FWHM beam, bm_xwidth = 1 sigma
 }
 
 
