@@ -165,10 +165,11 @@ prms = {#'loc': (cofa_lat, cofa_lon),
 }
 
 
-def get_aa(freqs,locations_file,array_epoch_jd=array_epoch_jd):
+def get_aa(freqs,locations_file=locations_file,array_epoch_jd=array_epoch_jd):
+
     '''Return the HERA AntennaArray.'''
     cofa_lat, cofa_lon, cofa_alt = cofa_latlonalt(locations_file)
-    location = (cofa_lat, cofa_lon)
+    location = (cofa_lat * np.pi/180, cofa_lon * np.pi/180)
     antennas = []
     #load the positions from the file, filter by epoch
     antpos = antpos_enu(locations_file,array_epoch_jd,station_type='herahex')
