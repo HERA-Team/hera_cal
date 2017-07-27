@@ -8,9 +8,10 @@ from dateutil.parser import parse
 
 cm_p_m = 100 #centimeters per meter, used in AntennaArray
 
+#default locations file
+locations_file = os.path.join(os.path.dirname(__file__), 'data/hera_ant_locs_05_16_2017.csv')
 
-# this sets when to find the antenna positions for (they changed as HERA was built)
-# this should not be later than the date that the file was pulled from M&C
+#default locations epoch
 array_epoch_jd = 2457458
 
 
