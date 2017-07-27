@@ -16,3 +16,8 @@ class Test_utils(object):
     def test_get_HERA_aa_mycal(self):
         aa = get_HERA_aa(freqs,calfile=calfile)
         nt.assert_equal(len(aa),128)
+    def test_get_HERA_aa_cofa(self):
+        aa = get_HERA_aa(freqs,calfile=calfile)
+        #check the position is correct to ~6m
+        nt.assert_almost_equal(aa.lat,-30.7215261207*np.pi/180,places=6)
+        nt.assert_almost_equal(aa.lon,21.4283038269*np.pi/180,places=6)
