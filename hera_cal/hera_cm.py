@@ -6,8 +6,8 @@ import pyuvdata.utils as uv_utils
 from astropy.time import Time
 from dateutil.parser import parse
 
-cm_p_m = 100
-#locations_file = os.path.join(os.path.dirname(__file__), 'data/hera_ant_locs_05_16_2017.csv')
+cm_p_m = 100 #centimeters per meter, used in AntennaArray
+
 
 # this sets when to find the antenna positions for (they changed as HERA was built)
 # this should not be later than the date that the file was pulled from M&C
