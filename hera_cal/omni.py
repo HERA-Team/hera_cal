@@ -252,7 +252,7 @@ def compute_reds(nant, pols, *args, **kwargs):
     Return:
         reds: list of list of baselines as antenna tuples
        '''
-    _reds = omnical.arrayinfo.compute_reds(*args, **kwargs) 
+    _reds = omnical.arrayinfo.compute_reds(*args, **kwargs)
     reds = []
     for pi in pols:
         for pj in pols:
@@ -269,9 +269,9 @@ def reds_for_minimal_V(reds):
     of the way the reds arrays are constructed in
     aa_to_info when 4 polarizations are present: it
     reprsents them as 4 co-located arrays in (NS,EW) and
-    displaced in z, with the cross-combinations (e.g. 
+    displaced in z, with the cross-combinations (e.g.
     polarization xy and yx) _always_ in the middle.
-    
+
     Args:
         reds: list of list of redundant baselines as antenna tuples
     Return:
@@ -336,10 +336,10 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
 
 def remove_degen(info, g, v, g0, minV=False):
     ''' This function properly removes omnical degeneracies in the 1pol, 2pol, 4pol, and
-    4pol_minV cases. Wraps the remove_degen fucntion in heracal.redcal. See HERA Memo #30 
-    by Dillon et al. for more details on 4-pol omnical degeneracies at 
+    4pol_minV cases. Wraps the remove_degen fucntion in heracal.redcal. See HERA Memo #30
+    by Dillon et al. for more details on 4-pol omnical degeneracies at
     http://reionization.org/wp-content/uploads/2013/03/HERA30_4PolOmniDegen.pdf
-    
+
         Args:
             info: RedundantInfo object that can parse data
             g (dict): dictionary of gain solutions (typically from lincal).
@@ -352,7 +352,7 @@ def remove_degen(info, g, v, g0, minV=False):
             v3 (dict): dictionary of model visibilites (if minV, returns 4 pols, two of them identical)
     '''
 
-    # If minV, make sure xy and yx visibilities are the same in the gain solutions. 
+    # If minV, make sure xy and yx visibilities are the same in the gain solutions.
     # The way get_reds and remove_degen are designed in redcal, if xy and yx are both are present,
     # whichever is first in pols will be used as the polarization for all the unique baseline keys.
     if minV:
@@ -366,7 +366,7 @@ def remove_degen(info, g, v, g0, minV=False):
 
     # Taking polarization non-aware stuff from omnical and reextracting the relevant info for remove_degen
     info_antpos = info.get_antpos()
-    antpos = dict(zip([ant[0] for ant in ants], 
+    antpos = dict(zip([ant[0] for ant in ants],
         [np.append(info_antpos[ant[0],0:2],[0]) for ant in ants]))
 
     # Set up redcal with empy reds (reds not needed for remove_degen) and then automatically determine pol_mode
@@ -555,12 +555,12 @@ def get_phase(freqs, tau):
 def from_fits(filename, keep_delay=False, **kwargs):
     """
     Read a calibration fits file (pyuvdata format). This also finds the model
-    visibilities and the xtalkfile. 
+    visibilities and the xtalkfile.
     Args:
         filename: Name of calfits file storing omnical solutions.
             There should also be corresponding files for the visibilities
             and crosstalk. These filenames should have be *vis{xtalk}.fits.
-        **kwargs : extra keywords that are passed into the select function 
+        **kwargs : extra keywords that are passed into the select function
             for the UVCal object and UVData object. Refer to pyuvdata.UVCal.select
             and pyuvdata.UVData.select for use.
     Returns:
@@ -911,9 +911,9 @@ class HERACal(UVCal):
             totchisqarray = np.repeat(totchisqarray, npol, axis=-1)
         except:
             # XXX EXCEPT WHAT?
-            # leave it empty 
+            # leave it empty
             totchisqarray = None
-        
+
         tarray = time
         parray = np.array(pols)
         farray = np.array(freq)
@@ -961,8 +961,8 @@ class HERACal(UVCal):
             self.gain_array = datarray[:, np.newaxis, :, :, :]
         if totchisqarray is not None:
             self.total_quality_array = totchisqarray[np.newaxis, :, :, :]
-        
-        
+
+
 # omni_run and omni_apply helper functions
 def getPol(fname):
     '''Strips the filename of a HERA visibility to it's polarization
@@ -1274,18 +1274,18 @@ def omni_run(files, opts, history):
 
         print('   Saving %s' % fitsname)
         hc = HERACal(m2, g3, ex_ants=ex_ants,  optional=optional)
-        
+
         if opts.minV:
             if 'xy' in v3.keys() and not 'yx' in v3.keys():
                 v3['yx'] = v3['xy']
             elif 'yx' in v3.keys() and not 'xy' in v3.keys():
                 v3['xy'] = v3['yx']
-            
+
         hc.write_calfits(fitsname)
         fsj = '.'.join(fitsname.split('.')[:-2])
-        
+
         uv_vis = make_uvdata_vis(aa, m2, v3)
-        
+
         uv_vis.reorder_pols()
         uv_vis.write_uvfits('%s.vis.uvfits' %
                             fsj, force_phase=True, spoof_nonessential=True)
