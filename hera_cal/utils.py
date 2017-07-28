@@ -11,7 +11,7 @@ def get_HERA_aa(freqs,calfile='hera_cm',**kwargs):
     #   - default value is hera_cal.hera_cm handles import from M&C
     #   - don't include the .py
     #   - needs to be in your python path
-    # array_epoch_id = julian date of desired configuration
+    # array_epoch_jd = julian date of desired configuration
     #   - if not input uses default date set in calfile, hera_cal.hera_cm
     # locations_file = antenna location csv file exported from m&c
     #   - default file included in hera_cal
