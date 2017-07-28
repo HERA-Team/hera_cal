@@ -8,7 +8,7 @@ def get_HERA_aa(freqs,calfile='hera_cm',**kwargs):
     #   - for applications using antenna locations in meters, a nominal input
     #        value of np.array([0.15]) is probably fine
     # calfile = python library containing get_aa function.
-    #   - default value is heral_cal.hera_cm handles import from M&C
+    #   - default value is hera_cal.hera_cm handles import from M&C
     #   - don't include the .py
     #   - needs to be in your python path
     # array_epoch_id = julian date of desired configuration
