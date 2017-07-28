@@ -14,7 +14,7 @@ def sim_red_data(reds, gains=None, shape=(10,10), gain_scatter=.1):
     """ Simulate noise-free random but redundant (up to differing gains) visibilities.
 
         Args:
-            reds: list of lists of baseline (or bl-pol) tuples where each sublist has only
+            reds: list of lists of baseline-pol tuples where each sublist has only
                 redundant pairs
             gains: pre-specify base gains to then scatter on top of in the
                 {(index,antpol): np.array} format. Default gives all ones.
