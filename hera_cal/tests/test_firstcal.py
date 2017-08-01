@@ -303,6 +303,7 @@ class Test_firstcal_run(object):
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
         return
+
     def test_mc_calfile(self):
         objective_file = os.path.join(
             DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.first.calfits')
@@ -313,7 +314,18 @@ class Test_firstcal_run(object):
         cmd = "-p xx --ex_ants=81,6 {0}".format(xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
-        firstcal.firstcal_run(files, opts, history)
+        # We get 29 warnings: 28 from a pandas/numpy binary incompatibitliy,
+        # and one from pyuvdata. Need to build up the messages and warnings types
+        msg_numpy = 'numpy.'
+        msg_pyuvdata = 'antenna_diameters is not set'
+        messages = ([msg_numpy]*28)
+        messages.append(msg_pyuvdata)
+        # All warnings are RuntimeWarning except for pyuvdata one
+        categories = ([RuntimeWarning]*28)
+        categories.append(UserWarning)
+
+        uvtest.checkWarnings(firstcal.firstcal_run, [files, opts, history],
+                             nwarnings=29, message=messages, category=categories)
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
         return
