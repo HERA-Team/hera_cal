@@ -22,7 +22,7 @@ install:
   # create environment and install dependencies
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy=1.11.2 scipy astropy nose pip matplotlib coverage pandas
   - source activate test-environment
-  - conda install -c pkgw-forge aipy
+  - conda install -c conda-forge aipy
   - pip install coveralls
   - pip install git+https://github.com/HERA-Team/pyuvdata.git
   - pip install git+https://github.com/HERA-Team/omnical.git
