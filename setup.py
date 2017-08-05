@@ -26,6 +26,7 @@ setup_args = {
     'description': 'collection of calibration routines to run on the HERA instrument.',
     'package_dir': {'hera_cal': 'hera_cal'},
     'packages': ['hera_cal'],
+    'scripts': ['scripts/firstcal_run.py', 'scripts/omni_apply.py', 'scripts/omni_run.py'],
     'version': __version__,
     'package_data': {'hera_cal': data_files},
     'zip_safe': False,
