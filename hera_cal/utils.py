@@ -1,4 +1,3 @@
-import os
 def get_HERA_aa(freqs,calfile='hera_cm',**kwargs):
     # create an aipy AntennaArray object using positions and hookup info in M&C.
     #
