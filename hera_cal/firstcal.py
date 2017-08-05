@@ -2,12 +2,9 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 import aipy
-import pylab as p
-import time
 import omnical
 from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
-import multiprocessing as mpr
 import scipy.sparse as sps
 from hera_cal import omni,utils
 from pyuvdata import UVData

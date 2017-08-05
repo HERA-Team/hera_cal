@@ -1,8 +1,6 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 import omnical
-from copy import deepcopy
-import numpy.linalg as la
 from pyuvdata import UVCal, UVData, uvtel
 import aipy
 from aipy.miriad import pol2str
