@@ -1,0 +1,7 @@
+include *.md
+include hera_cal/VERSION
+include hera_cal/GIT_INFO
+recursive-include hera_cal/data *
+prune hera_cal/data/test
+recursive-include docs *
+prune docs/_build
