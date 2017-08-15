@@ -10,6 +10,7 @@ import glob
 import re
 import optparse
 from hera_cal import redcal
+from hera_cal import utils
 from hera_qm import ant_metrics
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -1104,8 +1105,15 @@ def omni_run(files, opts, history):
             linear_pol_keys.append(pp)
 
     # Create info
-    # generate reds from calfile
-    aa = aipy.cal.get_aa(opts.cal, np.array([.15]))
+    # get frequencies from miriad file
+    uv = aipy.miriad.UV(files[0])
+    fqs = aipy.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
+    (uvw, array_epoch_jd, ij), d = uv.read()
+    del (uv, uvw, d)
+
+    # get HERA info
+    aa = utils.get_HERA_aa(fqs, calfile=opts.cal, array_epoch_jd=array_epoch_jd)
+
     print('Getting reds from calfile')
     if opts.ex_ants or opts.metrics_json:
         ex_ants = process_ex_ants(opts.ex_ants, opts.metrics_json)
