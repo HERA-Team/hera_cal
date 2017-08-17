@@ -1,6 +1,6 @@
 import numpy as np
 from copy import deepcopy
-from hera_qm.datacontainer import DataContainer
+from hera_cal.datacontainer import DataContainer
 
 
 def noise(size):
