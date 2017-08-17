@@ -833,6 +833,9 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
 
     uv.antenna_positions = np.array(antpos)
 
+    # do a consistency check
+    uv.check()
+
     return uv
 
 class HERACal(UVCal):
@@ -1112,7 +1115,7 @@ def omni_run(files, opts, history):
     del (uv, uvw, d)
 
     # get HERA info
-    aa = utils.get_HERA_aa(fqs, calfile=opts.cal, array_epoch_jd=array_epoch_jd)
+    aa = utils.get_HERA_aa(fqs[0], calfile=opts.cal, array_epoch_jd=array_epoch_jd)
 
     print('Getting reds from calfile')
     if opts.ex_ants or opts.metrics_json:
