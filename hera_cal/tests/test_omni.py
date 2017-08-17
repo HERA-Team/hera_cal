@@ -831,7 +831,8 @@ class Test_omni_run(object):
 
     def test_without_firstcal_file_omni_run(self):
         o = omni.get_optionParser('omni_run')
-        cmd = "-C %s -p xx %s" % (calfile, xx_vis)
+        xx_vis_path = os.path.join(DATA_PATH, xx_vis)
+        cmd = "-C %s -p xx %s" % (calfile, xx_vis_path)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         nt.assert_raises(ValueError, omni.omni_run, files, opts, history)
