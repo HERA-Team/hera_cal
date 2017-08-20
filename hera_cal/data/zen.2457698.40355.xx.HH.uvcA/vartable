@@ -17,8 +17,9 @@ i nblts
 a visunits
 a instrume
 d altitude
+d diameter
 d antnums
-d antnames
+a antnames
 d lst
 d ra
 d dec

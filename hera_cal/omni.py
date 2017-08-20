@@ -831,6 +831,7 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
         antpos.append(k.pos)
 
     uv.antenna_positions = np.array(antpos)
+    uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_telescope)
 
     # do a consistency check
     uv.check()
