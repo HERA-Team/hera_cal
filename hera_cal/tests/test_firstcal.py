@@ -6,7 +6,6 @@ import aipy
 import optparse
 import sys
 from pyuvdata import UVCal, UVData
-import pyuvdata.tests as uvtest
 import hera_cal.firstcal as firstcal
 from hera_cal.omni import compute_reds
 from hera_cal.data import DATA_PATH
@@ -175,8 +174,7 @@ class Test_FirstCal(object):
         str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
         filename = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')
         uvd = UVData()
-        uvtest.checkWarnings(uvd.read_miriad, [filename], nwarnings=1,
-                             message='antenna_diameters is not set')
+        uvd.read_miriad(filename)
         if uvd.phase_type != 'drift':
             uvd.unphase_to_drift()
 
@@ -191,9 +189,7 @@ class Test_FirstCal(object):
                 np.testing.assert_equal(f[i, j][pol], np.resize(
                     uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
 
-        d, f = uvtest.checkWarnings(firstcal.UVData_to_dict, [[filename, filename]], nwarnings=2,
-                                    message='antenna_diameters is not set',
-                                    category=[UserWarning, UserWarning])
+        d, f = firstcal.UVData_to_dict([filename, filename])
         for i, j in d:
             for pol in d[i, j]:
                 uvpol = list(uvd.polarization_array).index(str2pol[pol])
@@ -298,8 +294,7 @@ class Test_firstcal_run(object):
         cmd = "-C {0} -p xx --ex_ants=81 {1}".format(calfile, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
-        uvtest.checkWarnings(firstcal.firstcal_run, [files, opts, history], nwarnings=1,
-                             message='antenna_diameters is not set')
+        firstcal.firstcal_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
         return
@@ -314,8 +309,7 @@ class Test_firstcal_run(object):
         cmd = "-p xx --ex_ants=81,6 {0}".format(xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
-        uvtest.checkWarnings(firstcal.firstcal_run, [files, opts, history], nwarnings=1,
-                             message='antenna_diameters is not set')
+        firstcal.firstcal_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
         return

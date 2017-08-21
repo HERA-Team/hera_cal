@@ -11,7 +11,6 @@ from copy import deepcopy
 import aipy
 from omnical.calib import RedundantInfo
 from pyuvdata import UVCal, UVData
-import pyuvdata.tests as uvtest
 import hera_cal.omni as omni
 from hera_cal.data import DATA_PATH
 from hera_cal.calibrations import CAL_PATH
@@ -179,11 +178,8 @@ class TestMethods(object):
         Ntimes = 3 * 2  # need 2 here because reading two files
         Nchans = 1024  # hardcoded for this file
         # read in the same file twice to make sure file concatenation works
-        meta, gains, vis, xtalk = uvtest.checkWarnings(omni.from_fits, [
-            [os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')] * 2],
-                                                       nwarnings=4,
-                                                       message='antenna_diameters is not set',
-                                                       category=([UserWarning]*4))
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
+        meta, gains, vis, xtalk = omni.from_fits([fn, fn])
         for m in meta.keys():
             if m.startswith('chisq'):
                 nt.assert_equal(meta[m].shape, (Ntimes, Nchans))
@@ -228,10 +224,9 @@ class TestMethods(object):
 
         str2pol = {'xx': -5, 'yy': -6}
         uvd = UVData()
-        uvtest.checkWarnings(uvd.read_uvfits, [
-            os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.vis.uvfits')],
-                             nwarnings=1, message='antenna_diamteres is not set')
-        # frim_fits turns data into drift
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.vis.uvfits')
+        uvd.read_uvfits(fn)
+        # from_fits turns data into drift
         uvd.unphase_to_drift()
         for pol in vis:
             for i, j in vis[pol]:
@@ -244,9 +239,8 @@ class TestMethods(object):
                     uvd.data_array[uvmask][:, 0, :, uvpol], vis[pol][i, j].shape))
 
         uvd = UVData()
-        uvtest.checkWarnings(uvd.read_uvfits, [
-            os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits')],
-                             nwarnings=1, message='antenna_diameters is not set')
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits')
+        uvd.read_uvfits(fn)
         # from_fits turns data into drift
         uvd.unphase_to_drift()
         for pol in xtalk:
@@ -323,11 +317,8 @@ class TestMethods(object):
         Ntimes = 3
         Nchans = 1024  # hardcoded for this file
         # read in the same file twice to make sure file concatenation works
-        meta, gains, vis, xtalk = uvtest.checkWarnings(omni.from_fits, [[os.path.join(
-            DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')]],
-                                                       {"antenna_nums": [9, 10, 112, 20, 22]},
-                                                       nwarnings=2, message='antenna_diameters is not set',
-                                                       category=([UserWarning]*2))
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
+        meta, gains, vis, xtalk = omni.from_fits(fn, antenna_nums=[9, 10, 112, 20, 22])
 
         pol2str = {-5: 'x', -6: 'y'}
         uvcal = UVCal()
@@ -391,10 +382,8 @@ class TestMethods(object):
         sys.path[:-1]  # remove last entry from path (DATA_PATH)
 
         # read in meta, gains, vis, xtalk from file.
-        meta, gains, vis, xtalk = uvtest.checkWarnings(omni.from_fits, [
-            [os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')]],
-                                                       nwarnings=2, message='antenna_diameters is not set',
-                                                       category=([UserWarning]*2))
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
+        meta, gains, vis, xtalk = omni.from_fits(fn)
         _xtalk = {}
         # overide xtalk to have single visibility. from fits expands to size of
         # vis data.
@@ -411,36 +400,32 @@ class TestMethods(object):
 
         # read in old and newly written files and check equality.
         uv_vis_in = UVData()
-        uvtest.checkWarnings(uv_vis_in.read_uvfits, [
-            os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.vis.uvfits')],
-                             nwarnings=1, message='antenna_diameters is not set')
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.vis.uvfits')
+        uv_vis_in.read_uvfits(fn)
         uv_vis_in.unphase_to_drift()
         # overwrite history because uvdata writes git stuff whenever data is
         # written to a file.
         uv_vis_in.history = 'test_history'
 
         uv_xtalk_in = UVData()
-        uvtest.checkWarnings(uv_xtalk_in.read_uvfits, [
-            os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits')],
-                             nwarnings=1, message='antenna_diameters is not set')
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.xtalk.uvfits')
+        uv_xtalk_in.read_uvfits(fn)
         uv_xtalk_in.unphase_to_drift()
         # overwrite history because uvdata writes git stuff whenever data is
         # written to a file.
         uv_xtalk_in.history = 'test_history'
 
         uv_vis_out = UVData()
-        uvtest.checkWarnings(uv_vis_out.read_uvfits, [
-            os.path.join(DATA_PATH, 'test_output', 'write_vis_test.fits')], nwarnings=1,
-                             message='antenna_diameters is not set')
+        fn = os.path.join(DATA_PATH, 'test_output', 'write_vis_test.fits')
+        uv_vis_out.read_uvfits(fn)
         uv_vis_out.unphase_to_drift()
         # overwrite history because uvdata writes git stuff whenever data is
         # written to a file.
         uv_vis_out.history = 'test_history'
 
         uv_xtalk_out = UVData()
-        uvtest.checkWarnings(uv_xtalk_out.read_uvfits, [
-            os.path.join(DATA_PATH, 'test_output', 'write_xtalk_test.fits')], nwarnings=1,
-                             message='antenna_diameters is not set')
+        fn = os.path.join(DATA_PATH, 'test_output', 'write_xtalk_test.fits')
+        uv_xtalk_out.read_uvfits(fn)
         uv_xtalk_out.unphase_to_drift()
         # overwrite history because uvdata writes git stuff whenever data is
         # written to a file.
@@ -667,10 +652,8 @@ class Test_Redcal_Basics(object):
 class Test_HERACal(UVCal):
 
     def test_gainHC(self):
-        meta, gains, vis, xtalk = uvtest.checkWarnings(omni.from_fits, [
-            os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')],
-                                                       nwarnings=2, message='antenna_diameters is not set',
-                                                       category=([UserWarning]*2))
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
+        meta, gains, vis, xtalk = omni.from_fits(fn)
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         optional = {'observer': 'heracal'} #because it's easier than changing the fits header
         hc = omni.HERACal(meta, gains, optional=optional)
@@ -851,9 +834,7 @@ class Test_omni_run(object):
             calfile, xx_fcal4real, omnipath, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
-        uvtest.checkWarnings(omni.omni_run, [files, opts, history], nwarnings=2,
-                             message='antenna_diameters is not set',
-                             category=([UserWarning]*2))
+        omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
 
@@ -871,8 +852,7 @@ class Test_omni_run(object):
             calfile, xx_fcal4real, omnipath, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
-        uvtest.checkWarnings(omni.omni_run, [files, opts, history], nwarnings=2,
-                             message='antenna_diameters is not set', category=([UserWarning]*2))
+        omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
 
@@ -894,8 +874,7 @@ class Test_omni_run(object):
 
         opts, files = o.parse_args(cmd.split())
         history = 'history'
-        uvtest.checkWarnings(omni.omni_run, [files, opts, history], nwarnings=5,
-                             message='antenna_diameters is not set', category=([UserWarning]*5))
+        omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         # clean up
         os.remove(objective_file)
@@ -922,8 +901,7 @@ class Test_omni_run(object):
 
         opts, files = o.parse_args(cmd.split())
         history = 'history'
-        uvtest.checkWarnings(omni.omni_run, [files, opts, history], nwarnings=5,
-                             message='antenna_diameters is not set', category=([UserWarning]*5))
+        omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         # clean up
         os.remove(objective_file)
@@ -958,8 +936,7 @@ class Test_omni_apply(object):
         cmd = "-p xx --omnipath={0} --extension=O {1}".format(omni_file, vis_file)
 
         opts, files = o.parse_args(cmd.split())
-        uvtest.checkWarnings(omni.omni_apply, [files, opts], nwarnings=1,
-                             message='antenna_diameters is not set')
+        omni.omni_apply(files, opts)
         nt.assert_true(os.path.exists(objective_file))
         # clean up when we're done
         shutil.rmtree(objective_file)
@@ -974,8 +951,7 @@ class Test_omni_apply(object):
         cmd = "-p xx --omnipath={0} --median --firstcal {1}".format(fcal_file, vis_file)
 
         opts, files = o.parse_args(cmd.split())
-        uvtest.checkWarnings(omni.omni_apply, [files, opts], nwarnings=1,
-                             message='antenna_diameters is not set')
+        omni.omni_apply(files, opts)
         nt.assert_true(os.path.exists(objective_file))
         # clean up when we're done
         shutil.rmtree(objective_file)
@@ -995,8 +971,7 @@ class Test_omni_apply(object):
         o = omni.get_optionParser('omni_apply')
         cmd = "-p xx,xy,yx,yy --omnipath={0} --extension=O {1} {2} {3} {4}".format(fp_ocal,visxx,visyy,visyx,visxy)
         opts, files = o.parse_args(cmd.split())
-        uvtest.checkWarnings(omni.omni_apply, [files, opts], nwarnings=4, message='antenna_diameters is not set',
-                             category=([UserWarning]*4))
+        omni.omni_apply(files, opts)
         for f in objective_files:
             nt.assert_true(os.path.exists(f))
 

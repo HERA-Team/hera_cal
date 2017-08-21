@@ -11,7 +11,6 @@ import re
 import optparse
 from hera_cal import redcal
 from hera_cal import utils
-from hera_qm import ant_metrics
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
@@ -832,6 +831,7 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
         antpos.append(k.pos)
 
     uv.antenna_positions = np.array(antpos)
+    uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_telescope)
 
     # do a consistency check
     uv.check()
@@ -1009,6 +1009,8 @@ def process_ex_ants(ex_ants, metrics_json=''):
     Output:
        list of excluded antennas
     """
+    from hera_qm import ant_metrics
+
     # test that there are ex_ants to process
     if ex_ants == '' and metrics_json == '':
         return []
