@@ -1,4 +1,4 @@
-def get_HERA_aa(freqs,calfile='hera_cm',**kwargs):
+def get_HERA_aa(freqs, calfile='hera_cm', **kwargs):
     # create an aipy AntennaArray object using positions and hookup info in M&C.
     #
     # Inputs:
@@ -27,4 +27,4 @@ def get_HERA_aa(freqs,calfile='hera_cm',**kwargs):
         return get_aa(freqs)
     else:
         #use the time and position file aware get_aa
-        return get_aa(freqs,**kwargs)
+        return get_aa(freqs, **kwargs)
