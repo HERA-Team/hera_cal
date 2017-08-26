@@ -1067,7 +1067,7 @@ def get_optionParser(methodName):
     o.add_option('--median', action='store_true', help=median_help_string)
 
     if methodName == 'omni_run':
-        o.add_option('--ex_ants', dest='ex_ants', default=None,
+        o.add_option('--ex_ants', dest='ex_ants', default='',
                      help='Antennas to exclude, separated by commas.')
         o.add_option('--firstcal', dest='firstcal', type='string',
                      help='Path and name of firstcal file. Can pass in wildcards.')
