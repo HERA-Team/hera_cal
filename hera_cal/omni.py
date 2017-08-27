@@ -1081,6 +1081,8 @@ def get_optionParser(methodName):
                      help='Applying firstcal solutions.')
         o.add_option('--extension', dest='extension', default='O', type='string',
                      help='Filename extension to be appended to the input filename')
+        o.add_option('--outpath', dest='outpath', default=None, type='string',
+                     help='Directory to write-out omnical-ibrated visibility data. Will use input file path by default.')
 
     return o
 
@@ -1444,11 +1446,20 @@ def omni_apply(files, opts):
                         np.logical_or(cal.flag_array[antenna_index[ai], nsp, :, :, p1].T,
                                       cal.flag_array[antenna_index[aj], nsp, :, :, p2].T))
 
-        if opts.firstcal:
-            print(" Writing {0}".format(f + 'F'))
-            mir.write_miriad(f + 'F')
+        # Define output path and filename
+        inp_filename = f.split('/')[-1]
+        if opts.outpath is None:
+            outpath = '/'.join(f.split('/')[:-1])
         else:
-            print(" Writing {0}".format(f + opts.extension))
-            mir.write_miriad(f + opts.extension)
+            outpath = opts.outpath
+        out_filename = "%s/%s" % (outpath, inp_filename)
+
+        # Write to file
+        if opts.firstcal:
+            print(" Writing {0}".format(out_filename + 'F'))
+            mir.write_miriad(out_filename + 'F')
+        else:
+            print(" Writing {0}".format(out_filename + opts.extension))
+            mir.write_miriad(out_filename + opts.extension)
 
     return
