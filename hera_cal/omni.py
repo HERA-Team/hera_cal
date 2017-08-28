@@ -1452,7 +1452,7 @@ def omni_apply(files, opts):
             outpath = '/'.join(f.split('/')[:-1])
         else:
             outpath = opts.outpath
-        out_filename = "%s/%s" % (outpath, inp_filename)
+        out_filename = "{0}/{1}".format(outpath, inp_filename)
 
         # Write to file
         if opts.firstcal:
