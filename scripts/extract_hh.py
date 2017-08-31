@@ -23,8 +23,8 @@ for filename in args.files:
         uv.read_uvfits(filename)
     else:
         raise ValueError('Unrecognized file type ' + str(args.filetype))
-    st_type_str = uv.extra_keywords.pop('st_type')
-    st_type_list = st_type_str.split(', ')
+    st_type_str = uv.extra_keywords.pop('st_type').replace('\x00', '')
+    st_type_list = st_type_str[1:-1].split(', ')
     ind = [i for i, x in enumerate(st_type_list) if x == 'herahex']
     uv.select(antenna_nums=uv.antenna_numbers[ind])
     uv.history += ' Hera Hex antennas selected with hera_cal/scripts/extract_hh.py' \
