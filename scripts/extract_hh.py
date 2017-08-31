@@ -30,7 +30,8 @@ for filename in args.files:
     uv.history += ' Hera Hex antennas selected with hera_cal/scripts/extract_hh.py' \
                   ', hera_cal version: ' + str(version_info) + '.'
     if args.filetype is 'miriad':
-        uv.write_miriad(filename + args.extension)
+        base, ext = os.path.splitext(filename)
+        uv.write_miriad(base + '.' + args.extension + ext)
     else:
         base, ext = os.path.splitext(filename)
         uv.write_uvfits(base + args.extension + ext)
