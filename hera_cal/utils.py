@@ -1,7 +1,7 @@
 import numpy as np
 import aipy
 import pyuvdata.utils as uvutils
-
+cm_p_m = 100 #yes, this is a thing. cm per meter
 
 class AntennaArray(aipy.pol.AntennaArray):
     def __init__(self, *args, **kwargs):
@@ -107,7 +107,7 @@ def get_aa_from_uv(uvd):
     antenna positions are in the correct miriad format (ECEF, rotated
     so the x-axis passes through the local meridian), and that the CofA
     (center of array) values are set properly for performing coordinate
-    transformations. 
+    transformations.
 
     Arguments
     ====================
@@ -144,7 +144,7 @@ def get_aa_from_uv(uvd):
     for i, antnum in enumerate(uvd.antenna_numbers):
         # miriad antenna positions are rotated ECEF, so we need to convert:
         #   rotECEF -> ECEF -> ENU (east-north-up)
-        pos = uvd.antenna_positions[i, :]
+        pos = uvd.antenna_positions[i, :] + uvd.telescope_location
         ecef = uvutils.ECEF_from_rotECEF(pos, cofa_lon)
         enu = uvutils.ENU_from_ECEF(ecef, cofa_lat, cofa_lon, cofa_alt)
 
@@ -159,16 +159,12 @@ def get_aa_from_uv(uvd):
     for k in antpos.keys():
         for i, m in enumerate(antpos[k]):
             antpos_ideal[k, tops[m]] = antpos[k][m]
-
+    freqs = np.array([0.15])
     # Make list of antennas.
     # These are values for a zenith-pointing antenna, with a dummy Gaussian beam.
     antennas = []
     for i in range(nants):
-        beam = prms['beam'](freqs)
-        try:
-            beam.set_params(prms['bm_prms'])
-        except AttributeError:
-            pass
+        beam = aipy.fit.Beam(freqs)
         phsoff = {'x': [0., 0.], 'y': [0., 0.]}
         amp = prms['amps'].get(i, 4e-3)
         amp = {'x': amp, 'y': amp}
