@@ -31,8 +31,9 @@ for filename in args.files:
     st_type_list = st_type_str[1:-1].split(', ')
     ind = [i for i, x in enumerate(st_type_list) if x == 'herahex']
     uv.select(antenna_nums=uv.antenna_numbers[ind])
-    uv.history += ' Hera Hex antennas selected with hera_cal/scripts/extract_hh.py' \
-                  ', hera_cal version: ' + str(version_info) + '.'
+    st_type_list = list(np.array(st_type_list)[np.array(ind, dtype=int)])
+    uv.extra_keywords['st_type'] = '[' + ', '.join(st_type_list) + ']'
+    uv.history += ' Hera Hex antennas selected'
     if args.fixuvws:
         antpos = uv.antenna_positions + uv.telescope_location
         antpos = uvutils.ENU_from_ECEF(antpos.T, *uv.telescope_location_lat_lon_alt).T
@@ -40,6 +41,9 @@ for filename in args.files:
         for i, ant in enumerate(uv.antenna_numbers):
             antmap[ant] = i
         uv.uvw_array = antpos[antmap[uv.ant_2_array], :] - antpos[antmap[uv.ant_1_array], :]
+        uv.history += ' and uvws corrected'
+    uv.history += ' with hera_cal/scripts/extract_hh.py, hera_cal version: ' +\
+                  str(version_info) + '.'
     if args.filetype is 'miriad':
         base, ext = os.path.splitext(filename)
         uv.write_miriad(base + '.' + args.extension + ext)
