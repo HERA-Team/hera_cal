@@ -1,5 +1,6 @@
 import numpy as np
 import aipy
+import astropy.constants as const
 import pyuvdata.utils as uvutils
 cm_p_m = 100 #yes, this is a thing. cm per meter
 
@@ -67,47 +68,20 @@ class AntennaArray(aipy.pol.AntennaArray):
         return changed
 
 
-def get_HERA_aa(freqs,calfile='hera_cm',**kwargs):
-    # create an aipy AntennaArray object using positions and hookup info in M&C.
-    #
-    # Inputs:
-    # freqs = numpy array of frequencies in GHz
-    #   - used to compute uvws by some aipy functions
-    #   - for applications using antenna locations in meters, a nominal input
-    #        value of np.array([0.15]) is probably fine
-    # calfile = python library containing get_aa function.
-    #   - default value is hera_cal.hera_cm handles import from M&C
-    #   - don't include the .py
-    #   - needs to be in your python path
-    # array_epoch_jd = julian date of desired configuration
-    #   - if not input uses default date set in calfile, hera_cal.hera_cm
-    # locations_file = antenna location csv file exported from m&c
-    #   - default file included in hera_cal
-    #   - create a new one with hera_mc/scripts/write_antenna_location_file.py
-    #
-
-    #sometimes the input is set to None, which implies default
-    if calfile is None:
-        calfile='hera_cm'
-
-    exec('from {calfile} import get_aa'.format(calfile=calfile))
-    if calfile!='hera_cm':
-        #array position is set based on user input cal file
-        return get_aa(freqs)
-    else:
-        #use the time and position file aware get_aa
-        return get_aa(freqs,**kwargs)
-
 def get_aa_from_uv(uvd):
     '''
     Generate an AntennaArray object from a pyuvdata UVData object.
 
     This function creates an AntennaArray object from the metadata
-    contained in a UVData object. Critically, it assumes that the
-    antenna positions are in the correct miriad format (ECEF, rotated
-    so the x-axis passes through the local meridian), and that the CofA
-    (center of array) values are set properly for performing coordinate
-    transformations.
+    contained in a UVData object. It assumes that the antenna_positions
+    array in the UVData object is in earth-centered, earth-fixed (ECEF)
+    coordinates, relative to the center of the array, also given in
+    ECEF coordinates. We must add these together, and then rotate so that
+    the x-axis is aligned with the local meridian (rotECEF). rotECEF is the
+    coordinate system for Antenna objects in the AntennaArray object (which
+    inherits this behavior from MIRIAD). It is also expected that distances
+    are given in nanoseconds, rather than meters, also because of the
+    default behavior in MIRIAD.
 
     Arguments
     ====================
@@ -135,30 +109,30 @@ def get_aa_from_uv(uvd):
     }
 
     # center of array values from file
-    # MAKE SURE COORDINATES ARE CORRECT (aipy is expecting lat/lon in radians)
     cofa_lat, cofa_lon, cofa_alt = uvd.telescope_location_lat_lon_alt
     location = (cofa_lat, cofa_lon, cofa_alt)
 
     # get antenna positions from file
     antpos = {}
     for i, antnum in enumerate(uvd.antenna_numbers):
-        # miriad antenna positions are rotated ECEF, so we need to convert:
-        #   rotECEF -> ECEF -> ENU (east-north-up)
+        # we need to add the CofA location to the relative coordinates
         pos = uvd.antenna_positions[i, :] + uvd.telescope_location
-        ecef = uvutils.ECEF_from_rotECEF(pos, cofa_lon)
-        enu = uvutils.ENU_from_ECEF(ecef, cofa_lat, cofa_lon, cofa_alt)
+        # convert from meters to nanoseconds
+        c_ns = const.c.to('m/ns').value
+        pos = pos / c_ns
+
+        # rotate from ECEF -> rotECEF
+        rotECEF = uvutils.rotECEF_from_ECEF(pos, cofa_lon)
 
         # make a dict for parameter-setting purposes later
-        antpos[antnum] = {'top_x': enu[0], 'top_y': enu[1], 'top_z': enu[2]}
+        antpos[antnum] = {'x': rotECEF[0], 'y': rotECEF[1], 'z': rotECEF[2]}
 
     # make antpos_ideal array
     nants = np.max(antpos.keys()) + 1
     antpos_ideal = np.zeros(shape=(nants, 3), dtype=float) - 1
-    tops = {'top_x': 0, 'top_y': 1, 'top_z': 2}
     # unpack from dict -> numpy array
     for k in antpos.keys():
-        for i, m in enumerate(antpos[k]):
-            antpos_ideal[k, tops[m]] = antpos[k][m]
+        antpos_ideal[k, :] = np.array([antpos[k]['x'], antpos[k]['y'], antpos[k]['z']])
     freqs = np.array([0.15])
     # Make list of antennas.
     # These are values for a zenith-pointing antenna, with a dummy Gaussian beam.

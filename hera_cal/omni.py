@@ -1113,13 +1113,11 @@ def omni_run(files, opts, history):
     # get frequencies from miriad file
     uv = aipy.miriad.UV(files[0])
     fqs = aipy.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
-    (uvw, array_epoch_jd, ij), d = uv.read()
-    del (uv, uvw, d)
+    aa = utils.get_aa_from_uv(uv)
+    del (uv)
 
     # get HERA info
-    aa = utils.get_HERA_aa(fqs[0], calfile=opts.cal, array_epoch_jd=array_epoch_jd)
-
-    print('Getting reds from calfile')
+    print('Getting reds from file')
     if opts.ex_ants or opts.metrics_json:
         ex_ants = process_ex_ants(opts.ex_ants, opts.metrics_json)
         print('   Excluding antennas:', sorted(ex_ants))

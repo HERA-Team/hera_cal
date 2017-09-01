@@ -466,14 +466,14 @@ def firstcal_run(files, opts, history):
     if len(files) == 0:
         raise AssertionError('Please provide visibility files.')
 
-    # get frequencies from miriad file
+    # get frequencies and redundancy information from miriad file
+    # N.B: assumes redundancy is the same for all files in the list
     uv = aipy.miriad.UV(files[0])
     fqs = aipy.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
-    (uvw,array_epoch_jd,ij),d = uv.read()
-    del(uv,uvw,d)
+    aa = utils.get_aa_from_uv(uv)
+    del(uv)
 
-    # Get HERA info and parse command line arguments
-    aa = utils.get_HERA_aa(fqs,calfile=opts.cal,array_epoch_jd=array_epoch_jd)
+    # Parse command line arguments
     ex_ants = omni.process_ex_ants(opts.ex_ants, opts.metrics_json)
     ubls = process_ubls(opts.ubls)
 
