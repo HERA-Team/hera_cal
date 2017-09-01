@@ -19,8 +19,8 @@ parser.add_argument('files', metavar='files', type=str, nargs='+',
                     help='Files to be processed.')
 args = parser.parse_args()
 
-uv = pyuvdata.UVData()
 for filename in args.files:
+    uv = pyuvdata.UVData()
     if args.filetype is 'miriad':
         uv.read_miriad(filename)
     elif args.filetype is 'uvfits':
@@ -46,3 +46,4 @@ for filename in args.files:
     else:
         base, ext = os.path.splitext(filename)
         uv.write_uvfits(base + args.extension + ext)
+    del(uv)  # Reset for next loop
