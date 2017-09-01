@@ -834,6 +834,8 @@ class Test_omni_run(object):
             calfile, xx_fcal4real, omnipath, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
+        if os.path.exists(objective_file):
+            os.remove(objective_file)
         omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
@@ -852,6 +854,8 @@ class Test_omni_run(object):
             calfile, xx_fcal4real, omnipath, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
+        if os.path.exists(objective_file):
+            os.remove(objective_file)
         omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
@@ -874,6 +878,8 @@ class Test_omni_run(object):
 
         opts, files = o.parse_args(cmd.split())
         history = 'history'
+        if os.path.exists(objective_file):
+            os.remove(objective_file)
         omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
         # clean up

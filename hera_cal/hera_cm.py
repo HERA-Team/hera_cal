@@ -8,10 +8,10 @@ from dateutil.parser import parse
 
 cm_p_m = 100 #centimeters per meter, used in AntennaArray
 
-#default locations file
+# default locations file
 locations_file = os.path.join(os.path.dirname(__file__), 'data/hera_ant_locs_05_16_2017.csv')
 
-#default locations epoch
+# default locations epoch
 array_epoch_jd = 2457458
 
 
@@ -90,7 +90,7 @@ def cofa_latlonalt(locations_file):
     return cofa_lat, cofa_lon, cofa_alt
 
 
-def antpos_enu(locations_file,array_epoch_jd,station_type='herahex'):
+def antpos_enu(locations_file, array_epoch_jd, station_type='herahex'):
     cofa_lat, cofa_lon, cofa_alt = cofa_latlonalt(locations_file)
 
     stn_locs_df = pd.read_csv(locations_file)
@@ -114,6 +114,59 @@ def antpos_enu(locations_file,array_epoch_jd,station_type='herahex'):
     return ant_pos
 
 
+def antpos_enu_mc(station_type='herahex'):
+    '''
+    Perform a live call to the M&C database to get current antenna positions.
+
+    This function uses the get_cminfo_correlator function from hera_mc to get
+    the current locations of the array antennas. There is no support for
+    historical data, so post-dated processing should be done by using the
+    antpos_enu function above with a generated calfile.
+
+    Arguments
+    ====================
+    station_type: what kind of antenna we should filter on (e.g., herahex,
+        paperimaging, etc.)
+
+    Returns
+    ====================
+    ant_pos: dictionary-of-dictionaries of antenna positions. Primary
+        keys are station numbers. Secondary keys are 'top_x', 'top_y',
+        and 'top_z', which are the antenna positions in local ENU
+        coordinates.
+    '''
+    # connect to M&C database
+    from hera_mc import geo_handling
+    h = geo_handling.Handling()
+    stations_conn = h.get_cminfo_correlator()
+
+    # antenna info
+    antenna_names = cminfo['antenna_numbers']
+    antenna_positions = cminfo['antenna_positions']
+    station_types = cminfo['station_types']
+
+    # cofa info
+    cofa_loc = h.cofa()[0]
+
+    # build up dict of ant_pos
+    ant_pos = {}
+    for i, stn in enumerate(antenna_names):
+        # make sure this station is the correct type
+        if station_types[i] != station_type:
+            continue
+
+        # get positions in rotated ECEF
+        rotECEF = antenna_positions[i, :]
+
+        # rotate to ECEF
+        ecef = uv_utils.ECEF_from_rotECEF(rotECEF, cofa_loc.lon)
+
+        # get ENU (east, north, up) at HERA
+        enu = uv_utils.ENU_from_ECEF(ecef, cofa_loc.lat * np.pi / 180.0,
+                                     cofa_loc.lon * np.pi / 180.0, cofa_alt)
+        ant_pos[stn] = {'top_x': enu[0], 'top_y': enu[1], 'top_z': enu[2]}
+    return ant_pos
+
 
 prms = {#'loc': (cofa_lat, cofa_lon),
         #'antpos_ideal': antpos_enu(locations_file,array_epoch_jd),
@@ -129,15 +182,18 @@ prms = {#'loc': (cofa_lat, cofa_lon),
 }
 
 
-def get_aa(freqs,locations_file=locations_file,array_epoch_jd=array_epoch_jd):
-
+def get_aa(freqs, locations_file=locations_file, array_epoch_jd=array_epoch_jd):
     '''Return the HERA AntennaArray.'''
     cofa_lat, cofa_lon, cofa_alt = cofa_latlonalt(locations_file)
     location = (cofa_lat * np.pi/180, cofa_lon * np.pi/180)
     antennas = []
-    #load the positions from the file, filter by epoch
-    antpos = antpos_enu(locations_file,array_epoch_jd,station_type='herahex')
-    nants = np.max(antpos.keys())+1
+    try:
+        # make a live call to get current configuration
+        antpos = antpos_enu_mc(station_type='herahex')
+    except:
+        # load the positions from the file, filter by epoch
+        antpos = antpos_enu(locations_file, array_epoch_jd, station_type='herahex')
+    nants = np.max(antpos.keys()) + 1
     antpos_ideal = np.zeros(shape=(nants, 3), dtype=float) - 1
     tops = {'top_x': 0, 'top_y': 1, 'top_z': 2}
     for k in antpos.keys():
