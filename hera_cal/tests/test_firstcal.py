@@ -298,3 +298,18 @@ class Test_firstcal_run(object):
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
         return
+
+    def test_single_file_execution_nocalfile(self):
+        objective_file = os.path.join(
+            DATA_PATH, 'zen.2457999.76839.xx.HH.uvA.first.calfits')
+        xx_vis = os.path.join(DATA_PATH, 'zen.2457999.76839.xx.HH.uvA')
+        if os.path.exists(objective_file):
+            os.remove(objective_file)
+        o = firstcal.firstcal_option_parser()
+        cmd = "-p xx {0}".format(xx_vis)
+        opts, files = o.parse_args(cmd.split())
+        history = 'history'
+        firstcal.firstcal_run(files, opts, history)
+        nt.assert_true(os.path.exists(objective_file))
+        #os.remove(objective_file)
+        return

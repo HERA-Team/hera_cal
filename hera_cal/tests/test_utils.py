@@ -60,4 +60,3 @@ class TestAA(object):
         new_top = [new_params['0'][key] for key in antpos.keys()]
         old_top = [antpos[key] for key in antpos.keys()]
         nt.assert_true(np.allclose(old_top, new_top))
-
