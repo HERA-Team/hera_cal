@@ -468,10 +468,19 @@ def firstcal_run(files, opts, history):
 
     # get frequencies and redundancy information from miriad file
     # N.B: assumes redundancy is the same for all files in the list
-    uv = aipy.miriad.UV(files[0])
-    fqs = aipy.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
-    aa = utils.get_aa_from_uv(uv)
-    del(uv)
+    uvd = UVData()
+    uvd.read_miriad(files[0])
+    # convert frequencies from Hz -> GHz
+    fqs = uvd.freq_array[0, :] / 1e9
+    if opts.cal is not None:
+        # generate aa from calfile
+        aa = utils.get_aa_from_calfile(fqs, opts.cal)
+    else:
+        # generate aa from file
+        # N.B.: this requires correct antenna postitions and telescope location,
+        #   and in general is not applicable to data files taken before H1C (~JD 2458000)
+        aa = utils.get_aa_from_uv(uvd)
+    del(uvd)
 
     # Parse command line arguments
     ex_ants = omni.process_ex_ants(opts.ex_ants, opts.metrics_json)

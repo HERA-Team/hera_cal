@@ -157,3 +157,23 @@ def get_aa_from_uv(uvd):
         pos_prms[str(i)] = antpos[i]
     aa.set_params(pos_prms)
     return aa
+
+
+def get_aa_from_calfile(freqs, calfile, **kwargs):
+    '''
+    Generate an AntennaArray object from the specified calfile.
+
+    Arguments:
+    ====================
+    freqs: list of frequencies in file, in GHz
+    calfile: name of calfile, without the .py extension (e.g., hsa7458_v001)
+
+
+    Returns:
+    ====================
+    aa: AntennaArray object
+    '''
+    exec('from {calfile} import get_aa'.format(calfile=calfile))
+
+    # generate aa
+    return get_aa(freqs, **kwargs)
