@@ -18,25 +18,6 @@ class AntennaArray(aipy.pol.AntennaArray):
             prms = aipy.pol.AntennaArray.get_params(self, ant_prms)
         except(IndexError):
             return {}
-        for k in ant_prms:
-            try:
-                #rotate from equatorial to zenith
-                top_pos = np.dot(self._eq2zen, self[int(k)].pos)
-                #convert from ns to m
-                top_pos *= aipy.const.len_ns / self.cm_p_m
-
-            except(ValueError):
-                continue
-            if ant_prms[k] == '*':
-                prms[k].update({'top_x': top_pos[0], 'top_y': top_pos[1], 'top_z': top_pos[2]})
-            else:
-                for val in ant_prms[k]:
-                    if val == 'top_x':
-                        prms[k]['top_x'] = top_pos[0]
-                    elif val == 'top_y':
-                        prms[k]['top_y'] = top_pos[1]
-                    elif val == 'top_z':
-                        prms[k]['top_z'] = top_pos[2]
         return prms
 
     def set_params(self, prms):
