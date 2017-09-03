@@ -1,8 +1,38 @@
 import nose.tools as nt
-#from hera_cal.utils import get_HERA_aa
-import numpy as np,sys
+import numpy as np
+import sys
+import os
+from pyuvdata import UVData
+from hera_cal import utils
 from hera_cal.calibrations import CAL_PATH
-freqs = np.array([0.15])
+from hera_cal.data import DATA_PATH
+
+
+class TestAaFromCalfile(object):
+    def setUp(self):
+        # define frequencies
+        self.freqs = np.array([0.15])
+
+        # add directory with calfile
+        if CAL_PATH not in sys.path:
+            sys.path.append(CAL_PATH)
+        self.calfile = "hera_test_calfile"
+
+        # define test file that is compatible with get_aa_from_uv
+        self.test_file = "zen.2457999.76839.xx.HH.uvA"
+
+    def test_get_aa_from_calfile(self):
+        aa = utils.get_aa_from_calfile(self.freqs, self.calfile)
+        nt.assert_equal(len(aa), 128)
+
+    def test_get_aa_from_uv(self):
+        fn = os.path.join(DATA_PATH, self.test_file)
+        uvd = UVData()
+        uvd.read_miriad(fn)
+        aa = utils.get_aa_from_uv(uvd)
+        # like miriad, aipy will pad the aa with non-existent antennas,
+        #   because there is no concept of antenna names
+        nt.assert_equal(len(aa), 88)
 
 # def count_ants(aa):
 #     nants = 0

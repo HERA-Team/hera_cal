@@ -2,13 +2,13 @@ import numpy as np
 import aipy
 import astropy.constants as const
 import pyuvdata.utils as uvutils
-cm_p_m = 100 #yes, this is a thing. cm per meter
 
 class AntennaArray(aipy.pol.AntennaArray):
     def __init__(self, *args, **kwargs):
         aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
         self.antpos_ideal = kwargs.pop('antpos_ideal')
-
+        # yes, this is a thing. cm per meter
+        self.cm_p_m = 100.
 
     def update(self):
         aipy.pol.AntennaArray.update(self)
@@ -23,7 +23,7 @@ class AntennaArray(aipy.pol.AntennaArray):
                 #rotate from equatorial to zenith
                 top_pos = np.dot(self._eq2zen, self[int(k)].pos)
                 #convert from ns to m
-                top_pos *= aipy.const.len_ns / cm_p_m
+                top_pos *= aipy.const.len_ns / self.cm_p_m
 
             except(ValueError):
                 continue
@@ -61,7 +61,7 @@ class AntennaArray(aipy.pol.AntennaArray):
                 pass
             if ant_changed:
                 #rotate from zenith to equatorial, convert from meters to ns
-                ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * cm_p_m
+                ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * self.cm_p_m
             changed |= ant_changed
         if changed:
             self.update()
@@ -165,9 +165,9 @@ def get_aa_from_calfile(freqs, calfile, **kwargs):
 
     Arguments:
     ====================
-    freqs: list of frequencies in file, in GHz
-    calfile: name of calfile, without the .py extension (e.g., hsa7458_v001)
-
+    freqs: list of frequencies in data file, in GHz
+    calfile: name of calfile, without the .py extension (e.g., hsa7458_v001). Note that this
+        file must be in sys.path.
 
     Returns:
     ====================
