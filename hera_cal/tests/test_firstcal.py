@@ -299,17 +299,17 @@ class Test_firstcal_run(object):
         os.remove(objective_file)
         return
 
-    def test_mc_calfile(self):
+    def test_single_file_execution_nocalfile(self):
         objective_file = os.path.join(
-            DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.first.calfits')
-        xx_vis4real = os.path.join(DATA_PATH, xx_vis)
+            DATA_PATH, 'zen.2457999.76839.xx.HH.uvA.first.calfits')
+        xx_vis = os.path.join(DATA_PATH, 'zen.2457999.76839.xx.HH.uvA')
         if os.path.exists(objective_file):
             os.remove(objective_file)
         o = firstcal.firstcal_option_parser()
-        cmd = "-p xx --ex_ants=81,6 {0}".format(xx_vis4real)
+        cmd = "-p xx {0}".format(xx_vis)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         firstcal.firstcal_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
-        os.remove(objective_file)
+        #os.remove(objective_file)
         return

@@ -838,6 +838,23 @@ class Test_omni_run(object):
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
 
+    def test_single_file_execution_omni_run_nocalfile(self):
+        objective_file = os.path.join(
+            DATA_PATH, 'test_output', 'zen.2457999.76839.xx.HH.uvA.omni.calfits')
+        if os.path.exists(objective_file):
+            os.remove(objective_file)
+        o = omni.get_optionParser('omni_run')
+        xx_fcal = os.path.join(DATA_PATH, 'test_input',
+                               'zen.2457999.76839.xx.HH.uvA.first.calfits')
+        xx_vis = os.path.join(DATA_PATH, 'zen.2457999.76839.xx.HH.uvA')
+        omnipath = os.path.join(DATA_PATH, 'test_output')
+        cmd = "-p xx --firstcal={0} --omnipath={1} {2}".format(xx_fcal, omnipath, xx_vis)
+        opts, files = o.parse_args(cmd.split())
+        history = 'history'
+        omni.omni_run(files, opts, history)
+        nt.assert_true(os.path.exists(objective_file))
+        os.remove(objective_file)
+
     def test_single_file_execution_omni_run_with_median(self):
         objective_file = os.path.join(
             DATA_PATH, 'test_output', 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
