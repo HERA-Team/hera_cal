@@ -73,22 +73,6 @@ def get_aa_from_uv(uvd):
     aa: AntennaArray object that can be used to calculate redundancies from
        antenna positions.
     '''
-    # Define parameters necessary for the AntnnaArary object.
-    # The exact values are not important, the object just requires
-    #    that these are set.
-    prms = {
-        'amps': dict(zip(range(128), np.ones(128))),
-        'amp_coeffs': np.array([1] * 128),
-        'bp_r': np.array([[1.]] * 128),
-        'bp_i': np.array([[0., 0., 0.]] * 128),
-        'twist': np.array([0] * 128),
-        'beam': aipy.fit.Beam2DGaussian,
-        'bm_prms': {'bm_xwidth': 3.39 * np.pi / 180,
-                    'bm_ywidth': 3.39 * np.pi / 180}
-        # Gaussian Beam is put in because something is needed.
-        #   here we are specifying a 8 deg FWHM beam, bm_xwidth = 1 sigma
-    }
-
     # center of array values from file
     cofa_lat, cofa_lon, cofa_alt = uvd.telescope_location_lat_lon_alt
     location = (cofa_lat, cofa_lon, cofa_alt)
@@ -121,13 +105,13 @@ def get_aa_from_uv(uvd):
     for i in range(nants):
         beam = aipy.fit.Beam(freqs)
         phsoff = {'x': [0., 0.], 'y': [0., 0.]}
-        amp = prms['amps'].get(i, 4e-3)
+        amp = 1.
         amp = {'x': amp, 'y': amp}
-        bp_r = prms['bp_r'][i]
+        bp_r = [1.]
         bp_r = {'x': bp_r, 'y': bp_r}
-        bp_i = prms['bp_i'][i]
+        bp_i = [0., 0., 0.]
         bp_i = {'x': bp_i, 'y': bp_i}
-        twist = prms['twist'][i]
+        twist = 0.
         antennas.append(aipy.pol.Antenna(0., 0., 0., beam, phsoff=phsoff,
                         amp=amp, bp_r=bp_r, bp_i=bp_i, pointing=(0., np.pi / 2, twist)))
 
