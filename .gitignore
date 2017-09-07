@@ -5,6 +5,7 @@ build/
 dist/
 *.coverage
 *.egg-info/
+hera_cal/GIT_INFO
 
 # Sphinx documentation
 docs/_build

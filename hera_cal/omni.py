@@ -1,8 +1,6 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 import omnical
-from copy import deepcopy
-import numpy.linalg as la
 from pyuvdata import UVCal, UVData, uvtel
 import aipy
 from aipy.miriad import pol2str
@@ -11,7 +9,8 @@ import os
 import glob
 import re
 import optparse
-import json
+from hera_cal import redcal
+from hera_cal import utils
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
@@ -268,9 +267,9 @@ def reds_for_minimal_V(reds):
     of the way the reds arrays are constructed in
     aa_to_info when 4 polarizations are present: it
     reprsents them as 4 co-located arrays in (NS,EW) and
-    displaced in z, with the cross-combinations (e.g. 
+    displaced in z, with the cross-combinations (e.g.
     polarization xy and yx) _always_ in the middle.
-    
+
     Args:
         reds: list of list of redundant baselines as antenna tuples
     Return:
@@ -333,8 +332,72 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
     return info
 
 
+def remove_degen(info, g, v, g0, minV=False):
+    ''' This function properly removes omnical degeneracies in the 1pol, 2pol, 4pol, and
+    4pol_minV cases. Wraps the remove_degen fucntion in heracal.redcal. See HERA Memo #30
+    by Dillon et al. for more details on 4-pol omnical degeneracies at
+    http://reionization.org/wp-content/uploads/2013/03/HERA30_4PolOmniDegen.pdf
+
+        Args:
+            info: RedundantInfo object that can parse data
+            g (dict): dictionary of gain solutions (typically from lincal).
+            v (dict): dictionary of model visibilites (typically from lincal).
+            g0 (dict): dictionary of firstcal solutions
+            minV (optional): toggle pseudo-Stokes V minimization.
+
+        Return:
+            g3 (dict): dictionary of gain solutions.
+            v3 (dict): dictionary of model visibilites (if minV, returns 4 pols, two of them identical)
+    '''
+
+    # If minV, make sure xy and yx visibilities are the same in the gain solutions.
+    # The way get_reds and remove_degen are designed in redcal, if xy and yx are both are present,
+    # whichever is first in pols will be used as the polarization for all the unique baseline keys.
+    if minV:
+        for pol in v.keys():
+            v[pol[::-1]] = v[pol]
+    # Intitalize relevant lists to build input sols and get positions
+    pols = v.keys()
+    antpols = g.keys()
+    ants = [(ant,antpol) for antpol in antpols for ant in g[antpol].keys()]
+    bl_pairs = [(i,j,pol) for pol in pols for (i,j) in v[pol].keys()]
+
+    # Taking polarization non-aware stuff from omnical and reextracting the relevant info for remove_degen
+    info_antpos = info.get_antpos()
+    antpos = dict(zip([ant[0] for ant in ants],
+        [np.append(info_antpos[ant[0],0:2],[0]) for ant in ants]))
+
+    # Set up redcal with empy reds (reds not needed for remove_degen) and then automatically determine pol_mode
+    rc = redcal.RedundantCalibrator(reds = [])
+    if len(pols) == 1 and len(antpols) == 1:
+        rc.pol_mode = '1pol'
+    elif len(pols) == 2 and len(antpols) == 2:
+        rc.pol_mode = '2pol'
+    elif len(pols) == 4 and len(antpols) == 2 and minV:
+        rc.pol_mode = '4pol_minV'
+    elif len(pols) == 4 and len(antpols) == 2:
+        rc.pol_mode = '4pol'
+    else:
+        rc.pol_mode = 'unrecognized_pol_mode'
+
+    # Put sols into properly formatted dictionaries and remove degeneracies
+    sol = {(i,antpol): g[antpol][i] for (i,antpol) in ants}
+    sol.update({(i,j,pol): v[pol][(i,j)] for (i,j,pol) in bl_pairs})
+    sol0 = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
+    newSol = rc.remove_degen(antpos, sol, degen_sol=sol0)
+
+    # Put back into omnical format dictionaires
+    g3 = {antpol: {} for antpol in antpols}
+    v3 = {pol: {} for pol in pols}
+    for (i,antpol) in ants:
+        g3[antpol][i] = newSol[(i,antpol)]
+    for (i,j,pol) in bl_pairs:
+        v3[pol][(i,j)] = newSol[(i,j,pol)]
+    return g3, v3
+
+
 def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
-                conv=1e-3, stepsize=.3, trust_period=1):
+                conv=1e-3, stepsize=.3, trust_period=1, minV=False):
     '''Run a full run through of omnical: Logcal, lincal, and removing degeneracies.
     Args:
         data: dictionary of data with pol and blpair keys
@@ -348,6 +411,8 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
         trust_period (optional): This is the number of iterations to trust in lincal. If > 1, uses the
                      previous solution as starting point of lincal's next iteration. This
                      should always be 1!
+        minV (optional): toggle pseudo-Stokes V minimization.
+
     Returns:
         m2 (dict): dictionary of meta information.
         g3 (dict): dictionary of gain solutions.
@@ -361,8 +426,7 @@ def run_omnical(data, info, gains0=None, xtalk=None, maxiter=50,
                                       conv=conv, stepsize=stepsize,
                                       trust_period=trust_period, maxiter=maxiter)
 
-    _, g3, v3 = omnical.calib.removedegen(
-        data, info, g2, v2, nondegenerategains=gains0)
+    g3, v3 = remove_degen(info, g2, v2, gains0, minV=minV)
 
     return m2, g3, v3
 
@@ -489,12 +553,12 @@ def get_phase(freqs, tau):
 def from_fits(filename, keep_delay=False, **kwargs):
     """
     Read a calibration fits file (pyuvdata format). This also finds the model
-    visibilities and the xtalkfile. 
+    visibilities and the xtalkfile.
     Args:
         filename: Name of calfits file storing omnical solutions.
             There should also be corresponding files for the visibilities
             and crosstalk. These filenames should have be *vis{xtalk}.fits.
-        **kwargs : extra keywords that are passed into the select function 
+        **kwargs : extra keywords that are passed into the select function
             for the UVCal object and UVData object. Refer to pyuvdata.UVCal.select
             and pyuvdata.UVData.select for use.
     Returns:
@@ -767,65 +831,12 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
         antpos.append(k.pos)
 
     uv.antenna_positions = np.array(antpos)
+    uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_telescope)
+
+    # do a consistency check
+    uv.check()
 
     return uv
-
-# XXX Eventually this may belong in pyuvdata
-
-
-def concatenate_UVCal_on_pol(calfitsList):
-    '''
-    Joins UVCal files of different polarizations along 
-    the polarization axis of the delay_array, flag_array,
-    gain_array, and quality_array.
-    Args:
-        calfitsList: list of calfits filenames
-            type: list of strings
-    Returns:
-        a single cal file, with relevant arrays
-        concatenated along the polarization axis
-            type: pyuvdata.UVCal()
-    '''
-    # XXX these could be more flexible if we wanted to have it as optional
-    constProperties = ['antenna_names', 'antenna_numbers', 'cal_type', 'channel_width',  'freq_range', 'gain_convention',
-                       'integration_time', 'Nants_data', 'Nants_telescope', 'Nfreqs', 'Njones', 'Nspws', 'Ntimes',  'time_range', 'x_orientation']
-    constPropertiesArrays = ['ant_array', 'freq_array', 'time_array']
-
-    # check that constProperties match between files
-    calname0 = calfitsList[0]
-    cal0 = UVCal()
-    cal0.read_calfits(calname0)
-
-    if cal0.Njones != 1:
-        raise ValueError(
-            'Njones!=1; cannot concantenate > 1 polarization at a time')
-    for calname1 in calfitsList[1:]:
-        cal1 = UVCal()
-        cal1.read_calfits(calname1)
-        for prp in constProperties:
-            if not getattr(cal0, prp) == getattr(cal1, prp):
-                raise ValueError('%s of %s does not match %s' %
-                                 (prp, calname0, calname1))
-        for prp in constPropertiesArrays:
-            if not (getattr(cal0, prp) == getattr(cal1, prp)).all():
-                raise ValueError('%s of %s does not match %s' %
-                                 (prp, calname0, calname1))
-        if not cal1.Njones == 1:
-            raise ValueError(
-                'Njones!=1; cannot concantenate > 1 polarization at a time')
-        if cal1.jones_array[0] in cal0.jones_array:
-            raise ValueError(
-                'Cannot concatenate calfits files of identical polarization')
-
-        cal0.Njones += 1
-        cal0.jones_array = np.concatenate((cal0.jones_array, cal1.jones_array))
-        if cal0.delay_array is not None:
-            cal0.delay_array = np.concatenate((cal0.delay_array, cal1.delay_array), axis=4)
-        if cal0.gain_array is not None:
-            cal0.gain_array = np.concatenate((cal0.gain_array, cal1.gain_array), axis=4)
-        cal0.flag_array = np.concatenate((cal0.flag_array, cal1.flag_array), axis=4)
-        cal0.quality_array = np.concatenate((cal0.quality_array, cal1.quality_array), axis=4)
-    return cal0
 
 class HERACal(UVCal):
     '''
@@ -902,9 +913,9 @@ class HERACal(UVCal):
             totchisqarray = np.repeat(totchisqarray, npol, axis=-1)
         except:
             # XXX EXCEPT WHAT?
-            # leave it empty 
+            # leave it empty
             totchisqarray = None
-        
+
         tarray = time
         parray = np.array(pols)
         farray = np.array(freq)
@@ -952,8 +963,8 @@ class HERACal(UVCal):
             self.gain_array = datarray[:, np.newaxis, :, :, :]
         if totchisqarray is not None:
             self.total_quality_array = totchisqarray[np.newaxis, :, :, :]
-        
-        
+
+
 # omni_run and omni_apply helper functions
 def getPol(fname):
     '''Strips the filename of a HERA visibility to it's polarization
@@ -998,10 +1009,7 @@ def process_ex_ants(ex_ants, metrics_json=''):
     Output:
        list of excluded antennas
     """
-    def process_metrics_json(metrics_file):
-        with open(metrics_file, 'r') as infile:
-            jsonMetrics = json.load(infile)
-        return {key: eval(str(val)) for key, val in jsonMetrics.items()}
+    from hera_qm import ant_metrics
 
     # test that there are ex_ants to process
     if ex_ants == '' and metrics_json == '':
@@ -1017,7 +1025,7 @@ def process_ex_ants(ex_ants, metrics_json=''):
                     raise AssertionError(
                         "ex_ants must be a comma-separated list of ints")
         if metrics_json != '':
-            metrics = process_metrics_json(metrics_json)
+            metrics = ant_metrics.load_antenna_metrics(metrics_json)
             xants_m = metrics["xants"]
             for ant in xants_m:
                 ant_num, pol = ant
@@ -1059,7 +1067,7 @@ def get_optionParser(methodName):
     o.add_option('--median', action='store_true', help=median_help_string)
 
     if methodName == 'omni_run':
-        o.add_option('--ex_ants', dest='ex_ants', default=None,
+        o.add_option('--ex_ants', dest='ex_ants', default='',
                      help='Antennas to exclude, separated by commas.')
         o.add_option('--firstcal', dest='firstcal', type='string',
                      help='Path and name of firstcal file. Can pass in wildcards.')
@@ -1073,6 +1081,8 @@ def get_optionParser(methodName):
                      help='Applying firstcal solutions.')
         o.add_option('--extension', dest='extension', default='O', type='string',
                      help='Filename extension to be appended to the input filename')
+        o.add_option('--outpath', dest='outpath', default=None, type='string',
+                     help='Directory to write-out omnical-ibrated visibility data. Will use input file path by default.')
 
     return o
 
@@ -1101,10 +1111,24 @@ def omni_run(files, opts, history):
         if isLinPol(pp):
             linear_pol_keys.append(pp)
 
-    # Create info
-    # generate reds from calfile
-    aa = aipy.cal.get_aa(opts.cal, np.array([.15]))
-    print('Getting reds from calfile')
+    # get frequencies and redundancy information from miriad file
+    # N.B: assumes redundancy is the same for all files in the list
+    uvd = UVData()
+    uvd.read_miriad(files[0])
+    if opts.cal is not None:
+        # generate from calfile
+        # get frequencies, and convert from Hz -> GHz
+        fqs = uvd.freq_array[0, :] / 1e9
+        aa = utils.get_aa_from_calfile(fqs[0], opts.cal)
+    else:
+        # generate aa from file
+        # N.B.: this requires correct antenna postitions and telescope location,
+        #   and in general is not applicable to data files taken before H1C (~JD 2458000)
+        aa = utils.get_aa_from_uv(uvd)
+    del (uvd)
+
+    # get HERA info
+    print('Getting reds from file')
     if opts.ex_ants or opts.metrics_json:
         ex_ants = process_ex_ants(opts.ex_ants, opts.metrics_json)
         print('   Excluding antennas:', sorted(ex_ants))
@@ -1244,7 +1268,7 @@ def omni_run(files, opts, history):
 
         # Finally prepared to run omnical
         print('   Running Omnical')
-        m2, g3, v3 = run_omnical(d, info, gains0=g0)
+        m2, g3, v3 = run_omnical(d, info, gains0=g0, minV=opts.minV)
 
         # Collect weights for xtalk
         wgts, xtalk = {}, {}
@@ -1270,18 +1294,18 @@ def omni_run(files, opts, history):
 
         print('   Saving %s' % fitsname)
         hc = HERACal(m2, g3, ex_ants=ex_ants,  optional=optional)
-        
+
         if opts.minV:
             if 'xy' in v3.keys() and not 'yx' in v3.keys():
                 v3['yx'] = v3['xy']
             elif 'yx' in v3.keys() and not 'xy' in v3.keys():
                 v3['xy'] = v3['yx']
-            
+
         hc.write_calfits(fitsname)
         fsj = '.'.join(fitsname.split('.')[:-2])
-        
+
         uv_vis = make_uvdata_vis(aa, m2, v3)
-        
+
         uv_vis.reorder_pols()
         uv_vis.write_uvfits('%s.vis.uvfits' %
                             fsj, force_phase=True, spoof_nonessential=True)
@@ -1361,7 +1385,15 @@ def omni_apply(files, opts):
             if isLinPol(getPol(f)):
                 cal.read_calfits(filedict[f][0])
             else:
-                cal = concatenate_UVCal_on_pol(filedict[f])
+                # read each file in and add to base file
+                for i,fn in enumerate(filedict[f]):
+                    if i == 0:
+                        cal = UVCal()
+                        cal.read_calfits(fn)
+                    else:
+                        cal0 = UVCal()
+                        cal0.read_calfits(fn)
+                        cal += cal0
 
         print("  Calibrating...")
         antenna_index = dict(zip(*(cal.ant_array, range(cal.Nants_data))))
@@ -1421,11 +1453,20 @@ def omni_apply(files, opts):
                         np.logical_or(cal.flag_array[antenna_index[ai], nsp, :, :, p1].T,
                                       cal.flag_array[antenna_index[aj], nsp, :, :, p2].T))
 
-        if opts.firstcal:
-            print(" Writing {0}".format(f + 'F'))
-            mir.write_miriad(f + 'F')
+        # Define output path and filename
+        inp_filename = f.split('/')[-1]
+        if opts.outpath is None:
+            outpath = '/'.join(f.split('/')[:-1])
         else:
-            print(" Writing {0}".format(f + opts.extension))
-            mir.write_miriad(f + opts.extension)
+            outpath = opts.outpath
+        out_filename = "{0}/{1}".format(outpath, inp_filename)
+
+        # Write to file
+        if opts.firstcal:
+            print(" Writing {0}".format(out_filename + 'F'))
+            mir.write_miriad(out_filename + 'F')
+        else:
+            print(" Writing {0}".format(out_filename + opts.extension))
+            mir.write_miriad(out_filename + opts.extension)
 
     return

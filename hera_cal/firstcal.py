@@ -2,14 +2,11 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 import aipy
-import pylab as p
-import time
 import omnical
 from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
-import multiprocessing as mpr
 import scipy.sparse as sps
-from hera_cal import omni
+from hera_cal import omni,utils
 from pyuvdata import UVData
 import os
 import optparse
@@ -116,8 +113,8 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
                  Measurements are ratios of redundant baselines.
         self.reds: list of redundant baselines.
         self.bl_pairs: list of redundant baseline pairs.
-        self.antloc: array of antenna positions in the order of self.subsetant 
-        self.ubl: list of unique baselines 
+        self.antloc: array of antenna positions in the order of self.subsetant
+        self.ubl: list of unique baselines
     '''
 
     def __init__(self, nant):
@@ -127,7 +124,7 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
             nant (int): number of antennas.
 
         Attributes:
-            nant (int): number of antennas 
+            nant (int): number of antennas
 
         '''
         omnical.info.RedundantInfo.__init__(self)
@@ -277,12 +274,12 @@ class FirstCal(object):
 
         Args:
             data (dict): dictionary of visibilities with keys being antenna pair tuples.
-                Values should be 2D arrays with first axis corresponding to time 
+                Values should be 2D arrays with first axis corresponding to time
                 and second corresponding to frequencies.
             wgts (dict): dictionary of weights with keys being antenna pair tuples.
                 see data for format.
             fqs (array): array of frequencies corresponding to visibilities.
-            info: FirstCalRedundantInfo object. This describes the redundancies 
+            info: FirstCalRedundantInfo object. This describes the redundancies
                 and has the proper least square matrices.
         '''
         self.data = data
@@ -315,7 +312,7 @@ class FirstCal(object):
     def get_N(self, nblpairs):
         ''' Returns noise matrix.
 
-        Currently this is set to the identity.    
+        Currently this is set to the identity.
 
         Returns:
             sparse array: identity matrix
@@ -389,12 +386,12 @@ def flatten_reds(reds):
 def UVData_to_dict(uvdata_list, filetype='miriad'):
     """ Turn a list of UVData objects or filenames in to a data and flag dictionary.
 
-        Make dictionary with blpair key first and pol second key from either a 
+        Make dictionary with blpair key first and pol second key from either a
         list of UVData objects or a list of filenames with specific file_type.
 
         Args:
             uvdata_list: list of UVData objects or strings of filenames.
-            filetype (string, optional): type of file if uvdata_list is 
+            filetype (string, optional): type of file if uvdata_list is
                 a list of filenames
 
         Return:
@@ -469,13 +466,23 @@ def firstcal_run(files, opts, history):
     if len(files) == 0:
         raise AssertionError('Please provide visibility files.')
 
-    # get frequencies from miriad file
-    uv = aipy.miriad.UV(files[0])
-    fqs = aipy.cal.get_freqs(uv['sdf'], uv['sfreq'], uv['nchan'])
-    del(uv)
+    # get frequencies and redundancy information from miriad file
+    # N.B: assumes redundancy is the same for all files in the list
+    uvd = UVData()
+    uvd.read_miriad(files[0])
+    # convert frequencies from Hz -> GHz
+    fqs = uvd.freq_array[0, :] / 1e9
+    if opts.cal is not None:
+        # generate aa from calfile
+        aa = utils.get_aa_from_calfile(fqs, opts.cal)
+    else:
+        # generate aa from file
+        # N.B.: this requires correct antenna postitions and telescope location,
+        #   and in general is not applicable to data files taken before H1C (~JD 2458000)
+        aa = utils.get_aa_from_uv(uvd)
+    del(uvd)
 
-    # Get HERA info and parse command line arguments
-    aa = aipy.cal.get_aa(opts.cal, fqs)
+    # Parse command line arguments
     ex_ants = omni.process_ex_ants(opts.ex_ants, opts.metrics_json)
     ubls = process_ubls(opts.ubls)
 

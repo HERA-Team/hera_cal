@@ -18,6 +18,12 @@ a visunits
 a instrume
 d altitude
 d diameter
+a cminfo
+d stopt
+d startt
+i obsid
+a cmver
+d duration
 d antnums
 a antnames
 d lst

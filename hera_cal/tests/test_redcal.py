@@ -4,11 +4,11 @@ import unittest
 
 np.random.seed(0)
 
-def build_reds_linear(nants, sep=14.7):
+def build_linear_array(nants, sep=14.7):
     antpos = {i: np.array([sep*i, 0, 0]) for i in range(nants)}
-    return om.get_reds(antpos), antpos
+    return antpos
 
-def build_reds_hex(hexNum, sep=14.7):
+def build_hex_array(hexNum, sep=14.7):
     antpos, i = {}, 0
     for row in range(hexNum-1,-(hexNum),-1):
         for col in range(2*hexNum-abs(row)-1):
@@ -16,103 +16,169 @@ def build_reds_hex(hexNum, sep=14.7):
             yPos = row*sep*3**.5/2;
             antpos[i] = np.array([xPos, yPos, 0])
             i += 1
-    return om.get_reds(antpos), antpos
+    return antpos
 
 class TestMethods(unittest.TestCase):
+
     def test_noise(self):
         n = om.noise((1024,1024))
         self.assertEqual(n.shape, (1024,1024))
         self.assertAlmostEqual(np.var(n), 1, 2)
+    
     def test_sim_red_data(self):
-        reds,antpos = build_reds_linear(10)
-        pols = ['xx']
-        gains, true_vis, data = om.sim_red_data(reds, pols, stokes_v_indep=True)
+        antpos = build_linear_array(10)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        gains, true_vis, data = om.sim_red_data(reds)
         self.assertEqual(len(gains), 10)
         self.assertEqual(len(data), 45)
         for bls in reds:
             bl0 = bls[0]
-            ai,aj = bl0
-            ans0 = data[bl0+('xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
+            ai,aj,pol = bl0
+            ans0 = data[bl0] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
             for bl in bls[1:]:
-                ai,aj = bl
-                ans = data[bl+('xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
+                ai,aj,pol = bl
+                ans = data[bl] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
                 np.testing.assert_almost_equal(ans0, ans, 7)
-        pols = ['xx','yy','xy','yx']
-        gains, true_vis, data = om.sim_red_data(reds, pols, stokes_v_indep=True)
+        
+        reds = om.get_reds(antpos, pols=['xx','yy','xy','yx'], pol_mode='4pol')
+        gains, true_vis, data = om.sim_red_data(reds)
         self.assertEqual(len(gains), 20)
         self.assertEqual(len(data), 4*(45))
         for bls in reds:
             bl0 = bls[0]
-            ai,aj = bl0
-            ans0xx = data[bl0+('xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
-            ans0xy = data[bl0+('xy',)] / (gains[(ai,'x')] * gains[(aj,'y')].conj())
-            ans0yx = data[bl0+('yx',)] / (gains[(ai,'y')] * gains[(aj,'x')].conj())
-            ans0yy = data[bl0+('yy',)] / (gains[(ai,'y')] * gains[(aj,'y')].conj())
+            ai,aj,pol = bl0
+            ans0xx = data[(ai,aj,'xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
+            ans0xy = data[(ai,aj,'xy',)] / (gains[(ai,'x')] * gains[(aj,'y')].conj())
+            ans0yx = data[(ai,aj,'yx',)] / (gains[(ai,'y')] * gains[(aj,'x')].conj())
+            ans0yy = data[(ai,aj,'yy',)] / (gains[(ai,'y')] * gains[(aj,'y')].conj())
             for bl in bls[1:]:
-                ai,aj = bl
-                ans_xx = data[bl+('xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
-                ans_xy = data[bl+('xy',)] / (gains[(ai,'x')] * gains[(aj,'y')].conj())
-                ans_yx = data[bl+('yx',)] / (gains[(ai,'y')] * gains[(aj,'x')].conj())
-                ans_yy = data[bl+('yy',)] / (gains[(ai,'y')] * gains[(aj,'y')].conj())
-                np.testing.assert_almost_equal(ans0xx, ans_xx, 7)
-                np.testing.assert_almost_equal(ans0xy, ans_xy, 7)
-                np.testing.assert_almost_equal(ans0yx, ans_yx, 7)
-                np.testing.assert_almost_equal(ans0yy, ans_yy, 7)
-        gains, true_vis, data = om.sim_red_data(reds, pols, stokes_v_indep=False)
-        self.assertEqual(len(gains), 20)
-        self.assertEqual(len(data), 4*(45))
-        for bls in reds:
-            bl0 = bls[0]
-            ai,aj = bl0
-            ans0xx = data[bl0+('xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
-            ans0xy = data[bl0+('xy',)] / (gains[(ai,'x')] * gains[(aj,'y')].conj())
-            ans0yx = data[bl0+('yx',)] / (gains[(ai,'y')] * gains[(aj,'x')].conj())
-            ans0yy = data[bl0+('yy',)] / (gains[(ai,'y')] * gains[(aj,'y')].conj())
-            np.testing.assert_almost_equal(ans0xy, ans0yx, 7)
-            for bl in bls[1:]:
-                ai,aj = bl
-                ans_xx = data[bl+('xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
-                ans_xy = data[bl+('xy',)] / (gains[(ai,'x')] * gains[(aj,'y')].conj())
-                ans_yx = data[bl+('yx',)] / (gains[(ai,'y')] * gains[(aj,'x')].conj())
-                ans_yy = data[bl+('yy',)] / (gains[(ai,'y')] * gains[(aj,'y')].conj())
+                ai,aj,pol = bl
+                ans_xx = data[(ai,aj,'xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
+                ans_xy = data[(ai,aj,'xy',)] / (gains[(ai,'x')] * gains[(aj,'y')].conj())
+                ans_yx = data[(ai,aj,'yx',)] / (gains[(ai,'y')] * gains[(aj,'x')].conj())
+                ans_yy = data[(ai,aj,'yy',)] / (gains[(ai,'y')] * gains[(aj,'y')].conj())
                 np.testing.assert_almost_equal(ans0xx, ans_xx, 7)
                 np.testing.assert_almost_equal(ans0xy, ans_xy, 7)
                 np.testing.assert_almost_equal(ans0yx, ans_yx, 7)
                 np.testing.assert_almost_equal(ans0yy, ans_yy, 7)
 
+        reds = om.get_reds(antpos, pols=['xx','yy','xy','yx'], pol_mode='4pol_minV')
+        gains, true_vis, data = om.sim_red_data(reds)
+        self.assertEqual(len(gains), 20)
+        self.assertEqual(len(data), 4*(45))
+        for bls in reds:
+            bl0 = bls[0]
+            ai,aj,pol = bl0
+            ans0xx = data[(ai,aj,'xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
+            ans0xy = data[(ai,aj,'xy',)] / (gains[(ai,'x')] * gains[(aj,'y')].conj())
+            ans0yx = data[(ai,aj,'yx',)] / (gains[(ai,'y')] * gains[(aj,'x')].conj())
+            ans0yy = data[(ai,aj,'yy',)] / (gains[(ai,'y')] * gains[(aj,'y')].conj())
+            np.testing.assert_almost_equal(ans0xy, ans0yx, 7)
+            for bl in bls[1:]:
+                ai,aj,pol = bl
+                ans_xx = data[(ai,aj,'xx',)] / (gains[(ai,'x')] * gains[(aj,'x')].conj())
+                ans_xy = data[(ai,aj,'xy',)] / (gains[(ai,'x')] * gains[(aj,'y')].conj())
+                ans_yx = data[(ai,aj,'yx',)] / (gains[(ai,'y')] * gains[(aj,'x')].conj())
+                ans_yy = data[(ai,aj,'yy',)] / (gains[(ai,'y')] * gains[(aj,'y')].conj())
+                np.testing.assert_almost_equal(ans0xx, ans_xx, 7)
+                np.testing.assert_almost_equal(ans0xy, ans_xy, 7)
+                np.testing.assert_almost_equal(ans0yx, ans_yx, 7)
+                np.testing.assert_almost_equal(ans0yy, ans_yy, 7)
+
+    def test_check_polLists_minV(self):
+        polLists = [['xy']]
+        self.assertFalse(om.check_polLists_minV(polLists))
+        polLists = [['xx','xy']]
+        self.assertFalse(om.check_polLists_minV(polLists))
+        polLists = [['xx','xy','yx']]
+        self.assertFalse(om.check_polLists_minV(polLists))
+        polLists = [['xy','yx'],['xx'],['yy'],['xx'],['yx','xy'],['yy']]
+        self.assertTrue(om.check_polLists_minV(polLists))
+
+    def test_parse_pol_mode(self):
+        reds = [[(0,1,'xx')]]
+        self.assertEqual(om.parse_pol_mode(reds), '1pol')
+        reds = [[(0,1,'xx')], [(0,1,'yy')]]
+        self.assertEqual(om.parse_pol_mode(reds), '2pol')
+        reds = [[(0,1,'xx')],[(0,1,'xy')],[(0,1,'yx')],[(0,1,'yy')]]
+        self.assertEqual(om.parse_pol_mode(reds), '4pol')
+        reds = [[(0,1,'xx')],[(0,1,'xy'), (0,1,'yx')],[(0,1,'yy')]]
+        self.assertEqual(om.parse_pol_mode(reds), '4pol_minV')
+
+        reds = [[(0,1,'xx')],[(0,1,'xy'), (0,1,'yx')],[(0,1,'zz')]]
+        self.assertEqual(om.parse_pol_mode(reds), 'unrecognized_pol_mode')
+        reds = [[(0,1,'xx')],[(0,1,'xy')]]
+        self.assertEqual(om.parse_pol_mode(reds), 'unrecognized_pol_mode')
+        reds = [[(0,1,'xy')]]
+        self.assertEqual(om.parse_pol_mode(reds), 'unrecognized_pol_mode')
+        reds = [[(0,1,'xx')],[(0,1,'xy'), (0,1,'yy')],[(0,1,'yx')]]
+        self.assertEqual(om.parse_pol_mode(reds), 'unrecognized_pol_mode')
+
+    def test_get_pos_red(self):
+        pos = build_hex_array(11,sep=1)
+        self.assertEqual(len(om.get_pos_reds(pos)),630)
+        pos = build_hex_array(11,sep=14.7)
+        self.assertEqual(len(om.get_pos_reds(pos)),630)
+        pos = build_hex_array(3,sep=14.7)
+        self.assertEqual(len(om.get_pos_reds(pos)),30)
+
+
+    def test_add_pol_reds(self):
+        reds = [[(1,2)]]
+        polReds = om.add_pol_reds(reds, pols=['xx'], pol_mode='1pol')
+        self.assertEqual(polReds, [[(1,2,'xx')]])
+        polReds = om.add_pol_reds(reds, pols=['xx','yy'], pol_mode='2pol')
+        self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'yy')]])
+        polReds = om.add_pol_reds(reds, pols=['xx','xy','yx','yy'], pol_mode='4pol')
+        self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'xy')],[(1,2,'yx')],[(1,2,'yy')]])
+        polReds = om.add_pol_reds(reds, pols=['xx','xy','yx','yy'], pol_mode='4pol_minV')
+        self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'xy'),(1,2,'yx')],[(1,2,'yy')]])
+
+
 class TestRedundantCalibrator(unittest.TestCase):
+    
     def test_build_eq(self):
-        reds, antpos = build_reds_linear(3)
-        bls = reduce(lambda x,y: x+y, reds)
-        info = om.RedundantCalibrator(reds, antpos)
-        eqs = info.build_eqs(bls, ['xx'])
+        antpos = build_linear_array(3)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        gains, true_vis, data = om.sim_red_data(reds)
+        info = om.RedundantCalibrator(reds)
+        eqs = info.build_eqs(data.keys())
         self.assertEqual(len(eqs), 3)
         self.assertEqual(eqs['g1x * g0x_ * u0xx'], (1,0,'xx'))
         self.assertEqual(eqs['g2x * g1x_ * u0xx'], (2,1,'xx'))
         self.assertEqual(eqs['g2x * g0x_ * u1xx'], (2,0,'xx'))
-        pols = ['xx','yy','xy','yx']
-        info = om.RedundantCalibrator(reds, antpos)
-        eqs = info.build_eqs(bls, pols)
+        
+        reds = om.get_reds(antpos, pols=['xx','yy','xy','yx'], pol_mode='4pol')
+        gains, true_vis, data = om.sim_red_data(reds)
+        info = om.RedundantCalibrator(reds)
+        eqs = info.build_eqs(data.keys())
         self.assertEqual(len(eqs), 3*4)
-        self.assertEqual(eqs['g1x * g0y_ * u0xy'], (1,0,'xy'))
-        self.assertEqual(eqs['g2x * g1y_ * u0xy'], (2,1,'xy'))
-        self.assertEqual(eqs['g2x * g0y_ * u1xy'], (2,0,'xy'))
-        self.assertEqual(eqs['g1y * g0x_ * u0yx'], (1,0,'yx'))
-        self.assertEqual(eqs['g2y * g1x_ * u0yx'], (2,1,'yx'))
-        self.assertEqual(eqs['g2y * g0x_ * u1yx'], (2,0,'yx'))
-        info = om.RedundantCalibrator(reds, antpos,stokes_v_indep=False)
-        eqs = info.build_eqs(bls, pols)
+        self.assertEqual(eqs['g1x * g0y_ * u4xy'], (1,0,'xy'))
+        self.assertEqual(eqs['g2x * g1y_ * u4xy'], (2,1,'xy'))
+        self.assertEqual(eqs['g2x * g0y_ * u5xy'], (2,0,'xy'))
+        self.assertEqual(eqs['g1y * g0x_ * u6yx'], (1,0,'yx'))
+        self.assertEqual(eqs['g2y * g1x_ * u6yx'], (2,1,'yx'))
+        self.assertEqual(eqs['g2y * g0x_ * u7yx'], (2,0,'yx'))
+
+
+        reds = om.get_reds(antpos, pols=['xx','yy','xy','yx'], pol_mode='4pol_minV')
+        gains, true_vis, data = om.sim_red_data(reds)
+        info = om.RedundantCalibrator(reds)
+        eqs = info.build_eqs(data.keys())
         self.assertEqual(len(eqs), 3*4)
-        self.assertEqual(eqs['g1x * g0y_ * u0xy'], (1,0,'xy'))
-        self.assertEqual(eqs['g2x * g1y_ * u0xy'], (2,1,'xy'))
-        self.assertEqual(eqs['g2x * g0y_ * u1xy'], (2,0,'xy'))
-        self.assertEqual(eqs['g1y * g0x_ * u0xy'], (1,0,'yx'))
-        self.assertEqual(eqs['g2y * g1x_ * u0xy'], (2,1,'yx'))
-        self.assertEqual(eqs['g2y * g0x_ * u1xy'], (2,0,'yx'))
+        self.assertEqual(eqs['g1x * g0y_ * u4xy'], (1,0,'xy'))
+        self.assertEqual(eqs['g2x * g1y_ * u4xy'], (2,1,'xy'))
+        self.assertEqual(eqs['g2x * g0y_ * u5xy'], (2,0,'xy'))
+        self.assertEqual(eqs['g1y * g0x_ * u4xy'], (1,0,'yx'))
+        self.assertEqual(eqs['g2y * g1x_ * u4xy'], (2,1,'yx'))
+        self.assertEqual(eqs['g2y * g0x_ * u5xy'], (2,0,'yx'))
+
+
     def test_solver(self):
-        reds, antpos = build_reds_linear(3)
-        info = om.RedundantCalibrator(reds, antpos)
-        gains, true_vis, d = om.sim_red_data(reds, ['xx'])
+        antpos = build_linear_array(3)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds)
         w = {}
         w = dict([(k,1.) for k in d.keys()])
         def solver(data, wgts, sparse, **kwargs):
@@ -126,29 +192,34 @@ class TestRedundantCalibrator(unittest.TestCase):
             return
         info._solver(solver, d)
         info._solver(solver, d, w)
+    
+
     def test_logcal(self):
         NANTS = 18
-        reds, antpos = build_reds_linear(NANTS)
-        info = om.RedundantCalibrator(reds, antpos)
-        gains, true_vis, d = om.sim_red_data(reds, ['xx'], gain_scatter=.55)
+        antpos = build_linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.05)
         w = dict([(k,1.) for k in d.keys()])
         sol = info.logcal(d)
         for i in xrange(NANTS):
             self.assertEqual(sol[(i,'x')].shape, (10,10))
         for bls in reds:
-            ubl = sol[bls[0]+('xx',)]
+            ubl = sol[bls[0]]
             self.assertEqual(ubl.shape, (10,10))
             for bl in bls:
-                d_bl = d[bl+('xx',)]
+                d_bl = d[bl]
                 mdl = sol[(bl[0],'x')] * sol[(bl[1],'x')].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
+    
+
     def test_lincal(self):
         NANTS = 18
-        reds, antpos = build_reds_linear(NANTS)
-        info = om.RedundantCalibrator(reds, antpos)
-        #gains, true_vis, d = om.sim_red_data(reds, ['xx'], gain_scatter=.01) # XXX causes svd error
-        gains, true_vis, d = om.sim_red_data(reds, ['xx'], gain_scatter=.0099999)
+        antpos = build_linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.0099999)
         w = dict([(k,1.) for k in d.keys()])
         sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
         sol0.update(info.compute_ubls(d,sol0))
@@ -158,10 +229,10 @@ class TestRedundantCalibrator(unittest.TestCase):
         for i in xrange(NANTS):
             self.assertEqual(sol[(i,'x')].shape, (10,10))
         for bls in reds:
-            ubl = sol[bls[0]+('xx',)]
+            ubl = sol[bls[0]]
             self.assertEqual(ubl.shape, (10,10))
             for bl in bls:
-                d_bl = d[bl+('xx',)]
+                d_bl = d[bl]
                 mdl = sol[(bl[0],'x')] * sol[(bl[1],'x')].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
@@ -179,10 +250,12 @@ class TestRedundantCalibrator(unittest.TestCase):
                 sol0.update(rc.compute_ubls(d,sol0))
                 meta, sol = rc.lincal(d, sol0) # should not raise 'np.linalg.linalg.LinAlgError: SVD did not converge'
     
-    def test_lincal_hex_end_to_end_with_remove_degen(self):
-        reds, antpos = build_reds_hex(3)
-        rc = om.RedundantCalibrator(reds, antpos)
-        gains, true_vis, d = om.sim_red_data(reds, ['xx'], gain_scatter=.01)
+
+    def test_lincal_hex_end_to_end_1pol_with_remove_degen(self):
+        antpos = build_hex_array(3)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1)
         w = dict([(k,1.) for k in d.keys()])
         sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
         sol0.update(rc.compute_ubls(d,sol0))
@@ -195,33 +268,307 @@ class TestRedundantCalibrator(unittest.TestCase):
         for i in xrange(len(antpos)):
             self.assertEqual(sol[(i,'x')].shape, (10,10))
         for bls in reds:
-            ubl = sol[bls[0]+('xx',)]
+            ubl = sol[bls[0]]
             self.assertEqual(ubl.shape, (10,10))
             for bl in bls:
-                d_bl = d[bl+('xx',)]
+                d_bl = d[bl]
                 mdl = sol[(bl[0],'x')] * sol[(bl[1],'x')].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
-        
-        sol_rd = rc.remove_degen(sol)
+
+        sol_rd = rc.remove_degen(antpos, sol)
+        g, v = om.get_gains_and_vis_from_sol(sol_rd)
         ants = [key for key in sol_rd.keys() if len(key)==2]
         gainSols = np.array([sol_rd[ant] for ant in ants])
-        np.testing.assert_almost_equal(np.mean(np.abs(gainSols), axis=0), 1, 10)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+        np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
         np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
 
         for bls in reds:
-            ubl = sol_rd[bls[0]+('xx',)]
+            ubl = sol_rd[bls[0]]
             self.assertEqual(ubl.shape, (10,10))
             for bl in bls:
-                d_bl = d[bl+('xx',)]
+                d_bl = d[bl]
                 mdl = sol_rd[(bl[0],'x')] * sol_rd[(bl[1],'x')].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(sol, degen_sol=gains)
+        sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
+        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+        degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
+            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+        
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
+        #np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
+
+
+
         for key,val in sol_rd.items():
             if len(key)==2: np.testing.assert_almost_equal(val,gains[key],10)
             if len(key)==3: np.testing.assert_almost_equal(val,true_vis[key],10)
+
+
+
+        rc.pol_mode = 'unrecognized_pol_mode'
+        with self.assertRaises(ValueError):
+            sol_rd = rc.remove_degen(antpos, sol)
+
+
+    def test_lincal_hex_end_to_end_4pol_with_remove_degen(self):
+        antpos = build_hex_array(3)
+        reds = om.get_reds(antpos, pols=['xx','xy','yx','yy'], pol_mode='4pol')
+        rc = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.01, shape=(3,4))
+        w = dict([(k,1.) for k in d.keys()])
+        sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
+        sol0.update(rc.compute_ubls(d,sol0))
+        meta, sol = rc.lincal(d, sol0)
+
+        np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
+        np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
+
+        np.testing.assert_almost_equal(meta['chisq'],0,10)
+        for i in xrange(len(antpos)):
+            self.assertEqual(sol[(i,'x')].shape, (3,4))
+            self.assertEqual(sol[(i,'y')].shape, (3,4))
+        for bls in reds:
+            for bl in bls:
+                ubl = sol[bls[0]]
+                self.assertEqual(ubl.shape, (3,4))
+                d_bl = d[bl]
+                mdl = sol[(bl[0],bl[2][0])] * sol[(bl[1],bl[2][1])].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
+        
+        sol_rd = rc.remove_degen(antpos, sol)
+        
+        ants = [key for key in sol_rd.keys() if len(key)==2]
+        gainPols = np.array([ant[1] for ant in ants])
+        bl_pairs = [key for key in sol.keys() if len(key)==3]
+        visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
+        bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
+        gainSols = np.array([sol_rd[ant] for ant in ants])
+        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+        np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+            for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)
+        np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='x']), axis=0), 0, 10)
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='y']), axis=0), 0, 10)
+
+        for bls in reds:
+            for bl in bls:
+                ubl = sol_rd[bls[0]]
+                self.assertEqual(ubl.shape, (3,4))
+                d_bl = d[bl]
+                mdl = sol_rd[(bl[0],bl[2][0])] * sol_rd[(bl[1],bl[2][1])].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
+        
+
+        sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
+        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+        degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
+            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+            for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)
+        degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
+            for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
+
+        gainSols = np.array([sol_rd[ant] for ant in ants])
+        degenGains = np.array([gains[ant] for ant in ants])
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='x']), axis=0), 
+            np.mean(np.angle(degenGains[gainPols=='x']), axis=0), 10)
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='y']), axis=0), 
+            np.mean(np.angle(degenGains[gainPols=='y']), axis=0), 10)
+
+        for key,val in sol_rd.items():
+            if len(key)==2: np.testing.assert_almost_equal(val,gains[key],10)
+            if len(key)==3: np.testing.assert_almost_equal(val,true_vis[key],10)
+
+
+    def test_lincal_hex_end_to_end_4pol_minV_with_remove_degen(self):
+
+        antpos = build_hex_array(3)
+        reds = om.get_reds(antpos, pols=['xx','xy','yx','yy'], pol_mode='4pol_minV')
+
+        rc = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.01, shape=(3,4))
+        w = dict([(k,1.) for k in d.keys()])
+        sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
+        sol0.update(rc.compute_ubls(d,sol0))
+        meta, sol = rc.lincal(d, sol0)
+
+        np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
+        np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
+
+        np.testing.assert_almost_equal(meta['chisq'],0,10)
+        for i in xrange(len(antpos)):
+            self.assertEqual(sol[(i,'x')].shape, (3,4))
+            self.assertEqual(sol[(i,'y')].shape, (3,4))
+        for bls in reds:
+            ubl = sol[bls[0]]
+            for bl in bls:
+                self.assertEqual(ubl.shape, (3,4))
+                d_bl = d[bl]
+                mdl = sol[(bl[0],bl[2][0])] * sol[(bl[1],bl[2][1])].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
+        
+        sol_rd = rc.remove_degen(antpos, sol)
+        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        ants = [key for key in sol_rd.keys() if len(key)==2]
+        gainPols = np.array([ant[1] for ant in ants])
+        bl_pairs = [key for key in sol.keys() if len(key)==3]
+        visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
+        visPolsStr = np.array([bl[2] for bl in bl_pairs])
+        bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
+        gainSols = np.array([sol_rd[ant] for ant in ants])
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+        np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+        np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
+
+
+        for bls in reds:
+            ubl = sol_rd[bls[0]]
+            for bl in bls:
+                self.assertEqual(ubl.shape, (3,4))
+                d_bl = d[bl]
+                mdl = sol_rd[(bl[0],bl[2][0])] * sol_rd[(bl[1],bl[2][1])].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
+
+
+        sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
+        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+
+        for bls in reds:
+            ubl = sol_rd[bls[0]]
+            for bl in bls:
+                self.assertEqual(ubl.shape, (3,4))
+                d_bl = d[bl]
+                mdl = sol_rd[(bl[0],bl[2][0])] * sol_rd[(bl[1],bl[2][1])].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
+        
+        gainSols = np.array([sol_rd[ant] for ant in ants])
+        degenGains = np.array([gains[ant] for ant in ants])
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 
+            np.mean(np.angle(degenGains), axis=0), 10)
+        
+        degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
+        
+        degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
+
+        visSols = np.array([sol_rd[bl] for bl in bl_pairs])
+        degenVis = np.array([true_vis[bl] for bl in bl_pairs])
+        np.testing.assert_almost_equal(np.mean(np.angle(visSols), axis=0), 
+            np.mean(np.angle(degenVis), axis=0), 10)
+
+        for key,val in sol_rd.items():
+            if len(key)==2: np.testing.assert_almost_equal(val,gains[key],10)
+            if len(key)==3: np.testing.assert_almost_equal(val,true_vis[key],10)
+
+    def test_lincal_hex_end_to_end_2pol_with_remove_degen(self):
+        antpos = build_hex_array(3)
+        reds = om.get_reds(antpos, pols=['xx','yy'], pol_mode='2pol')
+        rc = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.01, shape=(3,4))
+        sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
+        sol0.update(rc.compute_ubls(d,sol0))
+        meta, sol = rc.lincal(d, sol0)
+
+        np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
+        np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
+
+        np.testing.assert_almost_equal(meta['chisq'],0,10)
+        for i in xrange(len(antpos)):
+            self.assertEqual(sol[(i,'x')].shape, (3,4))
+            self.assertEqual(sol[(i,'y')].shape, (3,4))
+        for bls in reds:
+            for bl in bls:
+                ubl = sol[bls[0]]
+                self.assertEqual(ubl.shape, (3,4))
+                d_bl = d[bl]
+                mdl = sol[(bl[0],bl[2][0])] * sol[(bl[1],bl[2][1])].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
+        
+        sol_rd = rc.remove_degen(antpos, sol)
+
+        ants = [key for key in sol_rd.keys() if len(key)==2]
+        gainPols = np.array([ant[1] for ant in ants])
+        bl_pairs = [key for key in sol.keys() if len(key)==3]
+        visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
+        bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
+        gainSols = np.array([sol_rd[ant] for ant in ants])
+        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+        np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+        np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='x']), axis=0), 0, 10)
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='y']), axis=0), 0, 10)
+
+        for bls in reds:
+            for bl in bls:
+                ubl = sol_rd[bls[0]]
+                self.assertEqual(ubl.shape, (3,4))
+                d_bl = d[bl]
+                mdl = sol_rd[(bl[0],bl[2][0])] * sol_rd[(bl[1],bl[2][1])].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
+        
+
+        sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
+        g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        gainSols = np.array([sol_rd[ant] for ant in ants])
+        degenGains = np.array([gains[ant] for ant in ants])
+
+        degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
+        
+        degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+        meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
+                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+        np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
+
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='x']), axis=0), 
+            np.mean(np.angle(degenGains[gainPols=='x']), axis=0), 10)
+        np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='y']), axis=0), 
+            np.mean(np.angle(degenGains[gainPols=='y']), axis=0), 10)
+
+        for key,val in sol_rd.items():
+            if len(key)==2: np.testing.assert_almost_equal(val,gains[key],10)
+            if len(key)==3: np.testing.assert_almost_equal(val,true_vis[key],10)
+
 
 if __name__ == '__main__':
     unittest.main()
