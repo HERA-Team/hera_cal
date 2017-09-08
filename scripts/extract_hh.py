@@ -21,9 +21,9 @@ args = parser.parse_args()
 
 for filename in args.files:
     uv = pyuvdata.UVData()
-    if args.filetype is 'miriad':
+    if args.filetype == 'miriad':
         uv.read_miriad(filename)
-    elif args.filetype is 'uvfits':
+    elif args.filetype == 'uvfits':
         uv.read_uvfits(filename)
     else:
         raise ValueError('Unrecognized file type ' + str(args.filetype))
@@ -44,7 +44,7 @@ for filename in args.files:
         uv.history += ' and uvws corrected'
     uv.history += ' with hera_cal/scripts/extract_hh.py, hera_cal version: ' +\
                   str(version_info) + '.'
-    if args.filetype is 'miriad':
+    if args.filetype == 'miriad':
         base, ext = os.path.splitext(filename)
         uv.write_miriad(base + '.' + args.extension + ext)
     else:
