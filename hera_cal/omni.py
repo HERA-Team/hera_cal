@@ -1461,7 +1461,7 @@ def omni_apply(files, opts):
             outpath = dirname
         else:
             outpath = opts.outpath
-        out_filename = "{0}/{1}".format(outpath, inp_filename)
+        out_filename = os.path.join(outpath, inp_filename)
 
         # Write to file
         if opts.firstcal:
