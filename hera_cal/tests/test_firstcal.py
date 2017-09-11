@@ -311,5 +311,5 @@ class Test_firstcal_run(object):
         history = 'history'
         firstcal.firstcal_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
-        #os.remove(objective_file)
+        os.remove(objective_file)
         return
