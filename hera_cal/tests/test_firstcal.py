@@ -322,12 +322,16 @@ class Test_firstcal_run(object):
             os.remove(objective_file)
         _ = open(objective_file, 'a').close()
         o = firstcal.firstcal_option_parser()
-        cmd = "-C {0} -p xx --ex_ants=81 --overwrite {1}".format(calfile, xx_vis4real)
+        cmd = "-C {0} -p xx --overwrite {1}".format(calfile, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         firstcal.firstcal_run(files, opts, history)
+        # check its a calfits file
         uvc = UVCal()
         uvc.read_calfits(objective_file)
+        # check a metadata column for accuracy
+        nt.assert_equal(uvc.Nants_data, 19)
+        # remove file
         os.remove(objective_file)
         return
 
