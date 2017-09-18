@@ -865,7 +865,9 @@ class Test_omni_run(object):
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         omni.omni_run(files, opts, history)
-        nt.assert_true(os.path.exists(objective_file))
+        nt.assert_true(os.path.exists(objective_file1))
+        nt.assert_true(os.path.exists(objective_file2))
+        nt.assert_true(os.path.exists(objective_file3))
             # check the files are calfits and uvfits
         uv1, uv2, uv3 = UVCal(), UVFITS(), UVFITS()
         uv1.read_calfits(objective_file1)
