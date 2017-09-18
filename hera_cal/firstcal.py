@@ -502,7 +502,8 @@ def firstcal_run(files, opts, history):
                                  [-1] + '.first.calfits')
         else:
             outname = '%s' % filename + '.first.calfits'
-        if os.path.exists(outname):
+        if os.path.exists(outname) == True and opts.overwrite == False:
+            print(opts.overwrite)
             raise IOError("File {0} already exists".format(outname))
 
         # read in data and run firstcal
@@ -553,7 +554,7 @@ def firstcal_run(files, opts, history):
         hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants,
                           DELAY=True, appendhist=history, optional=optional)
         print('     Saving {0}'.format(outname))
-        hc.write_calfits(outname)
+        hc.write_calfits(outname, clobber=opts.overwrite)
 
     return
 
@@ -579,6 +580,8 @@ def firstcal_option_parser():
                  default=True, help='Fine tune the delay fit.')
     o.add_option('--average', action='store_true', default=False,
                  help='Average all data before finding delays.')
+    o.add_option('--overwrite', action='store_true', default=False,
+                 help='Overwrite file if it exists.')
     o.add_option('--observer', default='Observer',
                  help='optional observer input to fits file')
     o.add_option('--git_hash_cal', default='None',
