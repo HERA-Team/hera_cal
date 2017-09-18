@@ -855,26 +855,26 @@ class Test_omni_run(object):
         xx_fcal4real = os.path.join(DATA_PATH, 'test_input', xx_fcal)
         xx_vis4real = os.path.join(DATA_PATH, xx_vis)
         omnipath = os.path.join(DATA_PATH, 'test_output')
-	# create blank files
-	_ = open(objective_file1, 'a').close()
+        # create blank files
+        _ = open(objective_file1, 'a').close()
         _ = open(objective_file2, 'a').close()
         _ = open(objective_file3, 'a').close()
-	# run firstcal
+        # run firstcal
         cmd = "-C %s -p xx --firstcal=%s --ex_ants=81 --omnipath=%s --overwrite %s" % (
             calfile, xx_fcal4real, omnipath, xx_vis4real)
         opts, files = o.parse_args(cmd.split())
         history = 'history'
         omni.omni_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
-	# check the files are calfits and uvfits
-	uv1, uv2, uv3 = UVCal(), UVFITS(), UVFITS()
-	uv1.read_calfits(objective_file1)
-	uv2.read_uvfits(objective_file2)
-	uv3.read_uvfits(objective_file3)
-	# do a quick meta data check
-	nt.assert_equal(uv1.Nants_data, 18)
-	nt.assert_equal(uv2.Nants_data, 17)
-	nt.assert_equal(uv3.Nants_data, 18)	
+            # check the files are calfits and uvfits
+        uv1, uv2, uv3 = UVCal(), UVFITS(), UVFITS()
+        uv1.read_calfits(objective_file1)
+        uv2.read_uvfits(objective_file2)
+        uv3.read_uvfits(objective_file3)
+        # do a quick meta data check
+        nt.assert_equal(uv1.Nants_data, 18)
+        nt.assert_equal(uv2.Nants_data, 17)
+        nt.assert_equal(uv3.Nants_data, 18)	
         os.remove(objective_file1)
         os.remove(objective_file2)
         os.remove(objective_file3)
