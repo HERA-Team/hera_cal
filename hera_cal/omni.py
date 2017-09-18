@@ -915,13 +915,11 @@ class HERACal(UVCal):
             # XXX EXCEPT WHAT?
             # leave it empty
             totchisqarray = None
-
-        tarray = time
-        parray = np.array(pols)
-        farray = np.array(freq)
+        
+        pols = np.array(pols)
+        freq = np.array(freq)
         antarray = list(map(int, ants))
         numarray = list(map(int, allants))
-        namarray = antnames
 
         # set the optional attributes to UVCal class.
         for key in optional:
@@ -936,21 +934,23 @@ class HERACal(UVCal):
             self.history = appendhist
         self.Nants_data = len(ants)  # only ants with data
         self.Nants_telescope = len(allants)  # all antennas in telescope
-        self.antenna_names = namarray[:self.Nants_telescope]
-        self.antenna_numbers = numarray[:self.Nants_telescope]
+        self.antenna_names = antnames
+        self.antenna_numbers = numarray
         self.ant_array = np.array(antarray[:self.Nants_data])
-        self.Nspws = nspw
-        # XXX: needs to change when we support more than 1 spw!
+        
+        self.Nspws = nspw # XXX: needs to change when we support more than 1 spw!
         self.spw_array = np.array([0])
-        self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
+        
+        self.freq_array = freq.reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
-        self.jones_array = parray[:self.Njones]
-        self.time_array = tarray[:self.Ntimes]
+        self.jones_array = pols
+        self.time_array = time
         self.integration_time = meta['inttime']
         self.gain_convention = 'divide'
         self.x_orientation = 'east'
         self.time_range = [self.time_array[0], self.time_array[-1]]
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
+        
         # adding new axis for the spectral window axis. This is default to 1.
         # This needs to change when support for Nspws>1 in pyuvdata.
         self.quality_array = chisqarray[:, np.newaxis, :, :, :]
