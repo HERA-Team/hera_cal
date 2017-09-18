@@ -1075,6 +1075,8 @@ def get_optionParser(methodName):
                      help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
         o.add_option('--metrics_json', dest='metrics_json', default='',
                      help='metrics from hera_qm about array qualities')
+        o.add_option('--overwrite', action='store_true', default=False,
+                     help="Overwrite output files even if they already exist.")
 
     elif methodName == 'omni_apply':
         o.add_option('--firstcal', action='store_true',
@@ -1192,7 +1194,7 @@ def omni_run(files, opts, history):
                 file_group[pols[0]]).replace('.%s' % pols[0], '')
         fitsname = '%s/%s.omni.calfits' % (opts.omnipath, bname)
 
-        if os.path.exists(fitsname):
+        if os.path.exists(fitsname) == True and opts.overwrite==False:
             print('   %s exists. Skipping...' % fitsname)
             continue
 

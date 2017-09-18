@@ -10,7 +10,7 @@ import re
 from copy import deepcopy
 import aipy
 from omnical.calib import RedundantInfo
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, UVFITS
 import hera_cal.omni as omni
 from hera_cal.data import DATA_PATH
 from hera_cal.calibrations import CAL_PATH
@@ -838,6 +838,47 @@ class Test_omni_run(object):
         nt.assert_true(os.path.exists(objective_file))
         os.remove(objective_file)
 
+    def test_single_file_execution_omni_run_overwrite(self):
+        objective_file1 = os.path.join(
+            DATA_PATH, 'test_output', 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits')
+        objective_file2 = os.path.join(
+            DATA_PATH, 'test_output', 'zen.2457698.40355.xx.HH.uvcAA.vis.uvfits')
+        objective_file3 = os.path.join(
+            DATA_PATH, 'test_output', 'zen.2457698.40355.xx.HH.uvcAA.xtalk.uvfits')
+        if os.path.exists(objective_file1):
+            os.remove(objective_file1)
+        if os.path.exists(objective_file2):
+            os.remove(objective_file2)
+        if os.path.exists(objective_file3):
+            os.remove(objective_file3)
+        o = omni.get_optionParser('omni_run')
+        xx_fcal4real = os.path.join(DATA_PATH, 'test_input', xx_fcal)
+        xx_vis4real = os.path.join(DATA_PATH, xx_vis)
+        omnipath = os.path.join(DATA_PATH, 'test_output')
+	# create blank files
+	_ = open(objective_file1, 'a').close()
+        _ = open(objective_file2, 'a').close()
+        _ = open(objective_file3, 'a').close()
+	# run firstcal
+        cmd = "-C %s -p xx --firstcal=%s --ex_ants=81 --omnipath=%s --overwrite %s" % (
+            calfile, xx_fcal4real, omnipath, xx_vis4real)
+        opts, files = o.parse_args(cmd.split())
+        history = 'history'
+        omni.omni_run(files, opts, history)
+        nt.assert_true(os.path.exists(objective_file))
+	# check the files are calfits and uvfits
+	uv1, uv2, uv3 = UVCal(), UVFITS(), UVFITS()
+	uv1.read_calfits(objective_file1)
+	uv2.read_uvfits(objective_file2)
+	uv3.read_uvfits(objective_file3)
+	# do a quick meta data check
+	nt.assert_equal(uv1.Nants_data, 18)
+	nt.assert_equal(uv2.Nants_data, 17)
+	nt.assert_equal(uv3.Nants_data, 18)	
+        os.remove(objective_file1)
+        os.remove(objective_file2)
+        os.remove(objective_file3)
+
     def test_single_file_execution_omni_run_nocalfile(self):
         objective_file = os.path.join(
             DATA_PATH, 'test_output', 'zen.2457999.76839.xx.HH.uvA.omni.calfits')
@@ -971,27 +1012,11 @@ class Test_omni_apply(object):
         opts, files = o.parse_args(cmd.split())
         omni.omni_apply(files, opts)
         nt.assert_true(os.path.exists(objective_file))
-	# make sure its a miriad file
-	uvd = UVData()
-	uvd.read_miriad(objective_file)
-	# make sure a metadata column is set correctly
+        # make sure its a miriad file
+        uvd = UVData()
+        uvd.read_miriad(objective_file)
+        # make sure a metadata column is set correctly
         nt.assert_equal(uvd.Nants_data, 19)
-        # clean up when we're done
-        shutil.rmtree(objective_file)
-
-    def test_single_file_execution_omni_apply_overwrite(self):
-        objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAO')
-        if os.path.exists(objective_file):
-            shutil.rmtree(objective_file)
-	os.system("mkdir {0}".format(objective_file))
-        o = omni.get_optionParser('omni_apply')
-        omni_file = os.path.join(DATA_PATH, 'test_input', xx_ocal)
-        vis_file = os.path.join(DATA_PATH,  xx_vis)
-        cmd = "-p xx --omnipath={0} --extension=O --overwrite {1}".format(omni_file, vis_file)
-
-        opts, files = o.parse_args(cmd.split())
-        omni.omni_apply(files, opts)
-        nt.assert_true(os.path.exists(objective_file))
         # clean up when we're done
         shutil.rmtree(objective_file)
 
