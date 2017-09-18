@@ -1083,6 +1083,7 @@ def get_optionParser(methodName):
                      help='Filename extension to be appended to the input filename')
         o.add_option('--outpath', dest='outpath', default=None, type='string',
                      help='Directory to write-out omnical-ibrated visibility data. Will use input file path by default.')
+        o.add_option('--overwrite', action='store_true', default=False, help='Overwrite output file if it exists.')
 
     return o
 
@@ -1466,9 +1467,9 @@ def omni_apply(files, opts):
         # Write to file
         if opts.firstcal:
             print(" Writing {0}".format(out_filename + 'F'))
-            mir.write_miriad(out_filename + 'F')
+            mir.write_miriad(out_filename + 'F', clobber=opts.overwrite)
         else:
             print(" Writing {0}".format(out_filename + opts.extension))
-            mir.write_miriad(out_filename + opts.extension)
+            mir.write_miriad(out_filename + opts.extension, clobber=opts.overwrite)
 
     return
