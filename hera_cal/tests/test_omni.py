@@ -958,6 +958,22 @@ class Test_omni_apply(object):
         # clean up when we're done
         shutil.rmtree(objective_file)
 
+    def test_single_file_execution_omni_apply_overwrite(self):
+        objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAO')
+        if os.path.exists(objective_file):
+            shutil.rmtree(objective_file)
+	os.system("mkdir {0}".format(objective_file))
+        o = omni.get_optionParser('omni_apply')
+        omni_file = os.path.join(DATA_PATH, 'test_input', xx_ocal)
+        vis_file = os.path.join(DATA_PATH,  xx_vis)
+        cmd = "-p xx --omnipath={0} --extension=O --overwrite {1}".format(omni_file, vis_file)
+
+        opts, files = o.parse_args(cmd.split())
+        omni.omni_apply(files, opts)
+        nt.assert_true(os.path.exists(objective_file))
+        # clean up when we're done
+        shutil.rmtree(objective_file)
+
     def test_single_file_execution_omni_apply_custompath(self):
         objective_file = os.path.join('./', 'zen.2457698.40355.xx.HH.uvcAAO')
         if os.path.exists(objective_file):
