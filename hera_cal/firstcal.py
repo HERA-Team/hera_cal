@@ -503,7 +503,6 @@ def firstcal_run(files, opts, history):
         else:
             outname = '%s' % filename + '.first.calfits'
         if os.path.exists(outname) == True and opts.overwrite == False:
-            print(opts.overwrite)
             raise IOError("File {0} already exists".format(outname))
 
         # read in data and run firstcal
