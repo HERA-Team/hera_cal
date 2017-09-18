@@ -1453,12 +1453,14 @@ def omni_apply(files, opts):
                                       cal.flag_array[antenna_index[aj], nsp, :, :, p2].T))
 
         # Define output path and filename
-        inp_filename = f.split('/')[-1]
+        inp_filename = os.path.basename(f)
         if opts.outpath is None:
-            outpath = '/'.join(f.split('/')[:-1])
+            abspath = os.path.abspath(f)
+            dirname = os.path.dirname(abspath)
+            outpath = dirname
         else:
             outpath = opts.outpath
-        out_filename = "{0}/{1}".format(outpath, inp_filename)
+        out_filename = os.path.join(outpath, inp_filename)
 
         # Write to file
         if opts.firstcal:
