@@ -1075,6 +1075,8 @@ def get_optionParser(methodName):
                      help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
         o.add_option('--metrics_json', dest='metrics_json', default='',
                      help='metrics from hera_qm about array qualities')
+        o.add_option('--overwrite', action='store_true', default=False,
+                     help="Overwrite output files even if they already exist.")
 
     elif methodName == 'omni_apply':
         o.add_option('--firstcal', action='store_true',
@@ -1083,6 +1085,7 @@ def get_optionParser(methodName):
                      help='Filename extension to be appended to the input filename')
         o.add_option('--outpath', dest='outpath', default=None, type='string',
                      help='Directory to write-out omnical-ibrated visibility data. Will use input file path by default.')
+        o.add_option('--overwrite', action='store_true', default=False, help='Overwrite output file if it exists.')
 
     return o
 
@@ -1191,7 +1194,7 @@ def omni_run(files, opts, history):
                 file_group[pols[0]]).replace('.%s' % pols[0], '')
         fitsname = '%s/%s.omni.calfits' % (opts.omnipath, bname)
 
-        if os.path.exists(fitsname):
+        if os.path.exists(fitsname) == True and opts.overwrite==False:
             print('   %s exists. Skipping...' % fitsname)
             continue
 
@@ -1301,7 +1304,7 @@ def omni_run(files, opts, history):
             elif 'yx' in v3.keys() and not 'xy' in v3.keys():
                 v3['xy'] = v3['yx']
 
-        hc.write_calfits(fitsname)
+        hc.write_calfits(fitsname, clobber=opts.overwrite)
         fsj = '.'.join(fitsname.split('.')[:-2])
 
         uv_vis = make_uvdata_vis(aa, m2, v3)
@@ -1466,9 +1469,9 @@ def omni_apply(files, opts):
         # Write to file
         if opts.firstcal:
             print(" Writing {0}".format(out_filename + 'F'))
-            mir.write_miriad(out_filename + 'F')
+            mir.write_miriad(out_filename + 'F', clobber=opts.overwrite)
         else:
             print(" Writing {0}".format(out_filename + opts.extension))
-            mir.write_miriad(out_filename + opts.extension)
+            mir.write_miriad(out_filename + opts.extension, clobber=opts.overwrite)
 
     return
