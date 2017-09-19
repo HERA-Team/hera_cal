@@ -381,17 +381,18 @@ def remove_degen(info, g, v, g0, minV=False):
         rc.pol_mode = 'unrecognized_pol_mode'
 
     # Put sols into properly formatted dictionaries and remove degeneracies
-    sol = {(i,antpol): g[antpol][i]/g0[antpol][i] for (i,antpol) in ants}
-    sol.update({(i,j,pol): v[pol][(i,j)] / (g0[pol[0]][i] * np.conj(g0[pol[1]][j])) for (i,j,pol) in bl_pairs})
-    newSol = rc.remove_degen(antpos, sol)
+    sol = {(i,antpol): g[antpol][i] for (i,antpol) in ants}
+    sol.update({(i,j,pol): v[pol][(i,j)] for (i,j,pol) in bl_pairs})
+    sol_fc = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
+    newSol = rc.remove_degen(antpos, sol, firstcal_sol=sol_fc)
 
     # Put back into omnical format dictionaires
     g3 = {antpol: {} for antpol in antpols}
     v3 = {pol: {} for pol in pols}
     for (i,antpol) in ants:
-        g3[antpol][i] = newSol[(i,antpol)] * g0[antpol][i]
+        g3[antpol][i] = newSol[(i,antpol)]
     for (i,j,pol) in bl_pairs:
-        v3[pol][(i,j)] = newSol[(i,j,pol)] * g0[pol[0]][i] * np.conj(g0[pol[1]][j])
+        v3[pol][(i,j)] = newSol[(i,j,pol)]
     return g3, v3
 
 

@@ -193,6 +193,53 @@ def get_gains_and_vis_from_sol(sol):
         return g, v
 
 
+def apply_gains(target, gains, target_type='vis', mode='/', ants='all'):
+    """Helper function for applying/removing gains to/from visibilities or other gains, 
+        e.g. for applying or removing firstcal solutions. 
+
+    Args:
+        target: dictionary of gains in the {(ant,antpol): np.array} or visibilities in the
+            {(ant1,ant2,pol): np.array} format. Target is copied and the original is untouched.
+        gains: dictionary of gains in the {(ant,antpol): np.array} to apply or remove. It can be
+            a full "sol" dictionary with both gains and visibilities, but only the gains are used.
+        target_type: either 'vis' (default) or 'gain'. For 'vis', only len=3 keys in the target 
+            are modified. For 'gain', only len=2 keys are modified.
+        mode: either '/' (default) or '*'. '/' applies gains to target. '*' removes them.
+        ants: List of antennas in the (ant,antpol) format allowed to be modified. This lets the 
+            target have more data than necessary. Default to 'all', meaning all antennas in target.
+
+    Returns:
+        output: copy of target with gains applied or removed. 
+    """
+    
+    output = deepcopy(target)
+    
+    if target_type is 'vis':
+        #loop over len=3 keys in target
+        for (ant1,ant2,pol) in [key for key in output.keys() if len(key)==3]:
+            if ants is 'all' or ((ant1, pol[0]) in ants and (ant2, pol[1]) in ants):
+                if mode is '/':
+                    output[(ant1,ant2,pol)] /= (gains[(ant1,pol[0])] * np.conj(gains[(ant2,pol[1])]))
+                elif mode is '*':
+                    output[(ant1,ant2,pol)] *= (gains[(ant1,pol[0])] * np.conj(gains[(ant2,pol[1])]))
+                else:
+                    raise ValueError, 'mode must be "/" or "*".'
+    elif target_type is 'gain':
+        #loop over len=2 keys in target
+        for ant in [key for key in output.keys() if len(key)==2]:
+            if ants is 'all' or ant in ants:
+                if mode is '/':
+                    output[ant] /= gains[ant]
+                elif mode is '*':
+                    output[ant] *= gains[ant]
+                else:
+                    raise ValueError, 'mode must be "/" or "*".'
+    else:
+        raise ValueError, 'target_type must be "vis" or "gain".'
+
+    return output
+
+
 class RedundantCalibrator:
 
     def __init__(self, reds):
@@ -205,6 +252,8 @@ class RedundantCalibrator:
         """
 
         self.reds = reds
+        self.ants = list(set([ant for bls in reds for bl in bls for ant in 
+                             [(bl[0],bl[2][0]), (bl[1],bl[2][1])]]))
         self.pol_mode = parse_pol_mode(self.reds)
 
 
@@ -284,13 +333,14 @@ class RedundantCalibrator:
         return ubl_sols
 
 
-
-    def logcal(self, data, sol0={}, wgts={}, sparse=False):
+    def logcal(self, data, firstcal_sol=None, wgts={}, sparse=False):
         """Takes the log to linearize redcal equations and minimizes chi^2.
 
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
-            sol0: placeholder. TODO: figure out what we're supposed to do with firstcal solutions
+            firstcal_sol: dictionary that includes all firstcal gains in the {(ant,antpol): np.array}
+                format. These are divided out of the data before logcal and then multiplied back 
+                into the returned gains in the solution. Default does nothing.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
 
@@ -305,12 +355,16 @@ class RedundantCalibrator:
             import unittest
             raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
 
-        ls = self._solver(linsolve.LogProductSolver, data, wgts=wgts, detrend_phs=True, sparse=sparse)
+        if firstcal_sol is None:
+            firstcal_sol = {ant: 1.0 for ant in self.ants}
+        fc_data = apply_gains(data, firstcal_sol, target_type='vis', mode='/', ants=self.ants)
+        ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve()
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         for ubl_key in [k for k in sol.keys() if len(k) == 3]:
             sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
-        return sol
+        sol_with_fc = apply_gains(sol, firstcal_sol, target_type='gain', mode='*', ants=self.ants)
+        return sol_with_fc
 
 
     def lincal(self, data, sol0, wgts={}, sparse=False, conv_crit=1e-10, maxiter=50):
@@ -319,7 +373,7 @@ class RedundantCalibrator:
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
             sol0: dictionary of guess gains and unique model visibilities, keyed by antenna tuples
-                like (ant,antpol) or baseline tuples like
+                like (ant,antpol) or baseline tuples like. Gains should include firstcal gains.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             conv_crit: maximum allowed relative change in solutions to be considered converged
@@ -337,31 +391,41 @@ class RedundantCalibrator:
             import unittest
             raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
 
-
-        sol0 = {self.pack_sol_key(k):sol0[k] for k in sol0.keys()}
-        ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
+        precal_data = apply_gains(data, sol0, target_type='vis', mode='/', ants=self.ants)
+        ones = {self.pack_sol_key(k): np.ones_like(sol0[k]) for k in sol0.keys()}
+        ls = self._solver(linsolve.LinProductSolver, precal_data, sol0=ones, wgts=wgts, sparse=sparse)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
-        return meta, {self.unpack_sol_key(k):sol[k] for k in sol.keys()}
+        sol = {self.unpack_sol_key(k):sol[k] for k in sol.keys()}
+        recal_sol = apply_gains(sol, sol0, target_type='gain', mode='*', ants=self.ants)
+        return meta, recal_sol
 
 
-    def remove_degen(self, antpos, sol, degen_sol=None):
+    def remove_degen(self, antpos, sol, firstcal_sol=None, degen_sol=None):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).
 
         Args:
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
             sol: dictionary that contains both visibility and gain solutions in the
                 {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
+            firstcal_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases 
+                in firstcal_sol are divided out of both the sol and the degen_sol before 
+                remove_degen is run. They are then put back into the final solutions. Visibilities
+                in firstcal_sol are ignored. Default (None) simply divides everything by 1.0.
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
-                left as None, average gain amplitudes will be 1 and average phase terms will be 0.
+                left as None, average gain amplitudes will be 1 and average phase terms will be 0. 
+                Visibilties in degen_sol are ignored.
         Returns:
             newSol: sol with degeneracy removal/replacement performed
     """
 
         g, v = get_gains_and_vis_from_sol(sol)
+        if firstcal_sol is None:
+            firstcal_sol = {key: np.ones_like(val) for key,val in g.items()}
         if degen_sol is None:
             degen_sol = {key: np.ones_like(val) for key,val in g.items()}
         ants = g.keys()
+
         gainPols = np.array([ant[1] for ant in ants])
         # gainPols is list of antpols, one per antenna
         antpols = list(set(gainPols))
@@ -377,11 +441,15 @@ class RedundantCalibrator:
         if self.pol_mode is '2pol':
             self.pol_mode = '1pol'
             newSol = self.remove_degen(antpos, {key: val for key,val in sol.items()
-                     if antpols[0] in key[-1]}, degen_sol=degen_sol)
+                     if antpols[0] in key[-1]}, firstcal_sol=firstcal_sol, degen_sol=degen_sol)
             newSol.update(self.remove_degen(antpos, {key: val for key,val in sol.items()
-                     if antpols[1] in key[-1]}, degen_sol=degen_sol))
+                     if antpols[1] in key[-1]}, firstcal_sol=firstcal_sol, degen_sol=degen_sol))
             self.pol_mode = '2pol'
             return newSol
+
+        # divide out firstcal solution
+        sol = apply_gains(sol, firstcal_sol, target_type='gain', mode='/', ants=self.ants)
+        degen_sol = apply_gains(degen_sol, firstcal_sol, target_type='gain', mode='/', ants=self.ants)
 
         #Extract gain and model visibiltiy solutions
         gainSols = np.array([sol[ant] for ant in ants])
@@ -425,4 +493,8 @@ class RedundantCalibrator:
         #Create new solutions dictionary
         newSol = {ant: gainSol for ant,gainSol in zip(ants,gainSols)}
         newSol.update({bl_pair: visSol for bl_pair,visSol in zip(bl_pairs,visSols)})
+        
+        # put back in firstcal solution
+        newSol = apply_gains(newSol, firstcal_sol, target_type='gain', mode='*', ants=ants)
+
         return newSol
