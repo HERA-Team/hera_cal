@@ -1304,7 +1304,7 @@ def omni_run(files, opts, history):
             elif 'yx' in v3.keys() and not 'xy' in v3.keys():
                 v3['xy'] = v3['yx']
 
-        hc.write_calfits(fitsname)
+        hc.write_calfits(fitsname, clobber=opts.overwrite)
         fsj = '.'.join(fitsname.split('.')[:-2])
 
         uv_vis = make_uvdata_vis(aa, m2, v3)
