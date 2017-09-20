@@ -902,7 +902,7 @@ class HERACal(UVCal):
                                     for ant in ants] for pol in pols]).swapaxes(0, 3).swapaxes(0, 1)
         except:
             # XXX EXCEPT WHAT?
-            chisqarray = np.ones(datarray.shape, dtype=bool)
+            chisqarray = np.ones(datarray.shape, dtype=float)
         # get the array-wide chisq, which does not have separate axes for
         # antennas or polarization
         try:
@@ -963,6 +963,9 @@ class HERACal(UVCal):
             self.gain_array = datarray[:, np.newaxis, :, :, :]
         if totchisqarray is not None:
             self.total_quality_array = totchisqarray[np.newaxis, :, :, :]
+
+        # run a check
+        self.check()
 
 
 # omni_run and omni_apply helper functions
