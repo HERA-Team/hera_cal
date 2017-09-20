@@ -383,8 +383,8 @@ def remove_degen(info, g, v, g0, minV=False):
     # Put sols into properly formatted dictionaries and remove degeneracies
     sol = {(i,antpol): g[antpol][i] for (i,antpol) in ants}
     sol.update({(i,j,pol): v[pol][(i,j)] for (i,j,pol) in bl_pairs})
-    sol_fc = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
-    newSol = rc.remove_degen(antpos, sol, degen_sol=sol_fc)
+    sol0 = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
+    newSol = rc.remove_degen(antpos, sol, degen_sol=sol0)
 
     # Put back into omnical format dictionaires
     g3 = {antpol: {} for antpol in antpols}
