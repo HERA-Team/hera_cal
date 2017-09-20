@@ -1,6 +1,7 @@
 import hera_cal.redcal as om
 import numpy as np
 import unittest
+from copy import deepcopy
 
 np.random.seed(0)
 
@@ -134,6 +135,36 @@ class TestMethods(unittest.TestCase):
         polReds = om.add_pol_reds(reds, pols=['xx','xy','yx','yy'], pol_mode='4pol_minV')
         self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'xy'),(1,2,'yx')],[(1,2,'yy')]])
 
+    def test_multiply_by_gains(self):
+        vis_in = {(1,2,'xx'):1.6+2.3j}
+        gains = {(1,'x'):.3+2.6j, (2,'x'):-1.2-7.3j}
+        vis_out = om.multiply_by_gains(vis_in, gains, target_type='vis', ants='all')
+        self.assertAlmostEqual(1.6+2.3j, vis_in[(1,2,'xx')], 10)
+        self.assertAlmostEqual(-28.805 - 45.97j, vis_out[(1,2,'xx')], 10)
+
+        gains_out = om.multiply_by_gains(gains, gains, target_type='gain', ants='all')
+        self.assertAlmostEqual(.3+2.6j, gains[(1,'x')], 10)
+        self.assertAlmostEqual(-6.67 + 1.56j, gains_out[(1,'x')], 10)
+
+        gains_out = om.multiply_by_gains(gains, gains, target_type='gain', ants=[(1,'x')])
+        self.assertAlmostEqual(-6.67 + 1.56j, gains_out[(1,'x')], 10)
+        self.assertAlmostEqual(-1.2-7.3j, gains_out[(2,'x')], 10)
+
+    def test_divide_by_gains(self):
+        vis_in = {(1,2,'xx'):1.6+2.3j}
+        gains = {(1,'x'):.3+2.6j, (2,'x'):-1.2-7.3j}
+        vis_out = om.divide_by_gains(vis_in, gains, target_type='vis', ants='all')
+        self.assertAlmostEqual(1.6+2.3j, vis_in[(1,2,'xx')], 10)
+        self.assertAlmostEqual(-0.088244747606364887-0.11468109538397521j, vis_out[(1,2,'xx')], 10)
+
+        gains_out = om.divide_by_gains(gains, gains, target_type='gain', ants='all')
+        self.assertAlmostEqual(.3+2.6j, gains[(1,'x')], 10)
+        self.assertAlmostEqual(1.0, gains_out[(1,'x')], 10)
+
+        gains_out = om.divide_by_gains(gains, gains, target_type='gain', ants=[(1,'x')])
+        self.assertAlmostEqual(1.0, gains_out[(1,'x')], 10)
+        self.assertAlmostEqual(-1.2-7.3j, gains_out[(2,'x')], 10)
+
 
 class TestRedundantCalibrator(unittest.TestCase):
     
@@ -238,25 +269,33 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
     
 
-    def test_lincal_hex_end_to_end_1pol_with_remove_degen(self):
+    def test_lincal_hex_end_to_end_1pol_with_remove_degen_and_firstcal(self):
+
         antpos = build_hex_array(3)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1)
+        freqs = np.linspace(.1,.2,10)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(1,len(freqs)))
+        fc_delays = {ant: .1 * np.random.randn() for ant in gains.keys()} #in ns
+        fc_gains = {ant: np.reshape(np.exp(-1.0j * freqs * delay), (1,len(freqs))) for ant,delay in fc_delays.items()}
+        for ant1,ant2,pol in d.keys():
+            d[(ant1,ant2,pol)] *= fc_gains[(ant1,pol[0])] * np.conj(fc_gains[(ant2, pol[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+
         w = dict([(k,1.) for k in d.keys()])
-        sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
-        sol0.update(rc.compute_ubls(d,sol0))
-        meta, sol = rc.lincal(d, sol0)
+        sol0 = rc.logcal(d, firstcal_sol=fc_gains, wgts=w)
+        meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'],0,10)
         for i in xrange(len(antpos)):
-            self.assertEqual(sol[(i,'x')].shape, (10,10))
+            self.assertEqual(sol[(i,'x')].shape, (1,len(freqs)))
         for bls in reds:
             ubl = sol[bls[0]]
-            self.assertEqual(ubl.shape, (10,10))
+            self.assertEqual(ubl.shape, (1,len(freqs)))
             for bl in bls:
                 d_bl = d[bl]
                 mdl = sol[(bl[0],'x')] * sol[(bl[1],'x')].conj() * ubl
@@ -274,7 +313,7 @@ class TestRedundantCalibrator(unittest.TestCase):
 
         for bls in reds:
             ubl = sol_rd[bls[0]]
-            self.assertEqual(ubl.shape, (10,10))
+            self.assertEqual(ubl.shape, (1,len(freqs)))
             for bl in bls:
                 d_bl = d[bl]
                 mdl = sol_rd[(bl[0],'x')] * sol_rd[(bl[1],'x')].conj() * ubl
@@ -291,40 +330,43 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
         #np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
 
-
-
         for key,val in sol_rd.items():
             if len(key)==2: np.testing.assert_almost_equal(val,gains[key],10)
             if len(key)==3: np.testing.assert_almost_equal(val,true_vis[key],10)
-
-
 
         rc.pol_mode = 'unrecognized_pol_mode'
         with self.assertRaises(ValueError):
             sol_rd = rc.remove_degen(antpos, sol)
 
 
-    def test_lincal_hex_end_to_end_4pol_with_remove_degen(self):
+    def test_lincal_hex_end_to_end_4pol_with_remove_degen_and_firstcal(self):
         antpos = build_hex_array(3)
         reds = om.get_reds(antpos, pols=['xx','xy','yx','yy'], pol_mode='4pol')
         rc = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.01, shape=(3,4))
+        freqs = np.linspace(.1,.2,10)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(1,len(freqs)))
+        fc_delays = {ant: .1 * np.random.randn() for ant in gains.keys()} #in ns
+        fc_gains = {ant: np.reshape(np.exp(-1.0j * freqs * delay), (1,len(freqs))) for ant,delay in fc_delays.items()}
+        for ant1,ant2,pol in d.keys():
+            d[(ant1,ant2,pol)] *= fc_gains[(ant1,pol[0])] * np.conj(fc_gains[(ant2, pol[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+
         w = dict([(k,1.) for k in d.keys()])
-        sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
-        sol0.update(rc.compute_ubls(d,sol0))
-        meta, sol = rc.lincal(d, sol0)
+        sol0 = rc.logcal(d, firstcal_sol=fc_gains, wgts=w)
+        meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'],0,10)
         for i in xrange(len(antpos)):
-            self.assertEqual(sol[(i,'x')].shape, (3,4))
-            self.assertEqual(sol[(i,'y')].shape, (3,4))
+            self.assertEqual(sol[(i,'x')].shape, (1,len(freqs)))
+            self.assertEqual(sol[(i,'y')].shape, (1,len(freqs)))
         for bls in reds:
             for bl in bls:
                 ubl = sol[bls[0]]
-                self.assertEqual(ubl.shape, (3,4))
+                self.assertEqual(ubl.shape, (1,len(freqs)))
                 d_bl = d[bl]
                 mdl = sol[(bl[0],bl[2][0])] * sol[(bl[1],bl[2][1])].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
@@ -351,7 +393,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         for bls in reds:
             for bl in bls:
                 ubl = sol_rd[bls[0]]
-                self.assertEqual(ubl.shape, (3,4))
+                self.assertEqual(ubl.shape, (1,len(freqs)))
                 d_bl = d[bl]
                 mdl = sol_rd[(bl[0],bl[2][0])] * sol_rd[(bl[1],bl[2][1])].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
@@ -383,29 +425,35 @@ class TestRedundantCalibrator(unittest.TestCase):
             if len(key)==3: np.testing.assert_almost_equal(val,true_vis[key],10)
 
 
-    def test_lincal_hex_end_to_end_4pol_minV_with_remove_degen(self):
-
+    def test_lincal_hex_end_to_end_4pol_minV_with_remove_degen_and_firstcal(self):
+        
         antpos = build_hex_array(3)
         reds = om.get_reds(antpos, pols=['xx','xy','yx','yy'], pol_mode='4pol_minV')
-
         rc = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.01, shape=(3,4))
+        freqs = np.linspace(.1,.2,10)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(1,len(freqs)))
+        fc_delays = {ant: .1 * np.random.randn() for ant in gains.keys()} #in ns
+        fc_gains = {ant: np.reshape(np.exp(-1.0j * freqs * delay), (1,len(freqs))) for ant,delay in fc_delays.items()}
+        for ant1,ant2,pol in d.keys():
+            d[(ant1,ant2,pol)] *= fc_gains[(ant1,pol[0])] * np.conj(fc_gains[(ant2, pol[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+
         w = dict([(k,1.) for k in d.keys()])
-        sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
-        sol0.update(rc.compute_ubls(d,sol0))
-        meta, sol = rc.lincal(d, sol0)
+        sol0 = rc.logcal(d, firstcal_sol=fc_gains, wgts=w)
+        meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'],0,10)
         for i in xrange(len(antpos)):
-            self.assertEqual(sol[(i,'x')].shape, (3,4))
-            self.assertEqual(sol[(i,'y')].shape, (3,4))
+            self.assertEqual(sol[(i,'x')].shape, (1,len(freqs)))
+            self.assertEqual(sol[(i,'y')].shape, (1,len(freqs)))
         for bls in reds:
             ubl = sol[bls[0]]
             for bl in bls:
-                self.assertEqual(ubl.shape, (3,4))
+                self.assertEqual(ubl.shape, (1,len(freqs)))
                 d_bl = d[bl]
                 mdl = sol[(bl[0],bl[2][0])] * sol[(bl[1],bl[2][1])].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
@@ -432,7 +480,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         for bls in reds:
             ubl = sol_rd[bls[0]]
             for bl in bls:
-                self.assertEqual(ubl.shape, (3,4))
+                self.assertEqual(ubl.shape, (1,len(freqs)))
                 d_bl = d[bl]
                 mdl = sol_rd[(bl[0],bl[2][0])] * sol_rd[(bl[1],bl[2][1])].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
@@ -445,7 +493,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         for bls in reds:
             ubl = sol_rd[bls[0]]
             for bl in bls:
-                self.assertEqual(ubl.shape, (3,4))
+                self.assertEqual(ubl.shape, (1,len(freqs)))
                 d_bl = d[bl]
                 mdl = sol_rd[(bl[0],bl[2][0])] * sol_rd[(bl[1],bl[2][1])].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
@@ -477,26 +525,36 @@ class TestRedundantCalibrator(unittest.TestCase):
             if len(key)==2: np.testing.assert_almost_equal(val,gains[key],10)
             if len(key)==3: np.testing.assert_almost_equal(val,true_vis[key],10)
 
-    def test_lincal_hex_end_to_end_2pol_with_remove_degen(self):
+    def test_lincal_hex_end_to_end_2pol_with_remove_degen_and_firstcal(self):
+
         antpos = build_hex_array(3)
         reds = om.get_reds(antpos, pols=['xx','yy'], pol_mode='2pol')
         rc = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.01, shape=(3,4))
-        sol0 = dict([(k,np.ones_like(v)) for k,v in gains.items()])
-        sol0.update(rc.compute_ubls(d,sol0))
-        meta, sol = rc.lincal(d, sol0)
+        freqs = np.linspace(.1,.2,10)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(1,len(freqs)))
+        fc_delays = {ant: .1 * np.random.randn() for ant in gains.keys()} #in ns
+        fc_gains = {ant: np.reshape(np.exp(-1.0j * freqs * delay), (1,len(freqs))) for ant,delay in fc_delays.items()}
+        for ant1,ant2,pol in d.keys():
+            d[(ant1,ant2,pol)] *= fc_gains[(ant1,pol[0])] * np.conj(fc_gains[(ant2, pol[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+
+        w = dict([(k,1.) for k in d.keys()])
+        sol0 = rc.logcal(d, firstcal_sol=fc_gains, wgts=w)
+        meta, sol = rc.lincal(d, sol0, wgts=w)
+
 
         np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'],0,10)
         for i in xrange(len(antpos)):
-            self.assertEqual(sol[(i,'x')].shape, (3,4))
-            self.assertEqual(sol[(i,'y')].shape, (3,4))
+            self.assertEqual(sol[(i,'x')].shape, (1,len(freqs)))
+            self.assertEqual(sol[(i,'y')].shape, (1,len(freqs)))
         for bls in reds:
             for bl in bls:
                 ubl = sol[bls[0]]
-                self.assertEqual(ubl.shape, (3,4))
+                self.assertEqual(ubl.shape, (1,len(freqs)))
                 d_bl = d[bl]
                 mdl = sol[(bl[0],bl[2][0])] * sol[(bl[1],bl[2][1])].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
@@ -523,7 +581,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         for bls in reds:
             for bl in bls:
                 ubl = sol_rd[bls[0]]
-                self.assertEqual(ubl.shape, (3,4))
+                self.assertEqual(ubl.shape, (1,len(freqs)))
                 d_bl = d[bl]
                 mdl = sol_rd[(bl[0],bl[2][0])] * sol_rd[(bl[1],bl[2][1])].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
