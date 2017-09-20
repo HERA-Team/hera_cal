@@ -344,7 +344,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx','xy','yx','yy'], pol_mode='4pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(.1,.2,10)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(1,len(freqs)))
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.09, shape=(1,len(freqs)))
         fc_delays = {ant: .1 * np.random.randn() for ant in gains.keys()} #in ns
         fc_gains = {ant: np.reshape(np.exp(-1.0j * freqs * delay), (1,len(freqs))) for ant,delay in fc_delays.items()}
         for ant1,ant2,pol in d.keys():
