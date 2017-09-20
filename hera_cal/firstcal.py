@@ -6,7 +6,7 @@ import omnical
 from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
 import scipy.sparse as sps
-from hera_cal import omni,utils
+from hera_cal import omni, utils, cal_formats
 from pyuvdata import UVData
 import os
 import optparse
@@ -550,8 +550,8 @@ def firstcal_run(files, opts, history):
                     'git_origin_cal': opts.git_origin_cal,
                     'git_hash_cal':  opts.git_hash_cal}
 
-        hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants,
-                          DELAY=True, appendhist=history, optional=optional)
+        hc = cal_formats.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants,
+                                 DELAY=True, appendhist=history, optional=optional)
         print('     Saving {0}'.format(outname))
         hc.write_calfits(outname, clobber=opts.overwrite)
 
