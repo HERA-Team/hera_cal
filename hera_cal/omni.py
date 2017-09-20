@@ -384,7 +384,7 @@ def remove_degen(info, g, v, g0, minV=False):
     sol = {(i,antpol): g[antpol][i] for (i,antpol) in ants}
     sol.update({(i,j,pol): v[pol][(i,j)] for (i,j,pol) in bl_pairs})
     sol_fc = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
-    newSol = rc.remove_degen(antpos, sol, firstcal_sol=sol_fc)
+    newSol = rc.remove_degen(antpos, sol, degen_sol=sol_fc)
 
     # Put back into omnical format dictionaires
     g3 = {antpol: {} for antpol in antpols}
