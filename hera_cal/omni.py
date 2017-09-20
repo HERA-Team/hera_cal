@@ -1063,7 +1063,7 @@ def get_optionParser(methodName):
 
     aipy.scripting.add_standard_options(o, cal=cal, pol=True)
     o.add_option('--omnipath', dest='omnipath', default='.',
-                 type='string', help='Path to/for omnical solutions.')
+                 type='string', help='Path to/for omnical solutions. Note that solutions are handled via glob, so for multiple files, make `omnipath` glob-parselable.')
     o.add_option('--median', action='store_true', help=median_help_string)
 
     if methodName == 'omni_run':
@@ -1100,6 +1100,10 @@ def omni_run(files, opts, history):
         "file".vis.uvfits:  omnical model visibilities (one per unique baseline). (uvfits file)
         "file".xtalk.uvfits:  time-averaged visibilities used for cross-talk estimation (one per baseline, but only one time sample). (uvfits file)
         "file".omni.calfits:  combined first-cal and omnical best-guess gains and chi^2 per antenna. (pyuvdata.calfits file)
+    
+    Example:
+        - 4pol calibration:
+            ./scripts/omni_run.py -C ${CALFILE} -p xx,xy,yx,yy --ex_ants=22,43,81 --firstcal=${firstcal_xx},${firstcal_yy} --omnipath=/path/for/solutions ${file_xx} ${file_xy} ${file_yx} ${file_yy}
     '''
     pols = opts.pol.split(',')
 
@@ -1327,6 +1331,14 @@ def omni_apply(files, opts):
         opts: required and optional parameters, as specified by hera_cal.omni.get_optionParser("omni_apply") (string)
     Returns:
         calibrated_files: calibrated visibiity files (miriad uv file)
+    
+    Examples:
+        - Apply Omnical solution in 4pol mode:
+            ./scripts/omni_apply.py -p xx,xy,yx,yy --omnipath=${omni_calfile} --extension="O" ${file_xx} ${file_xy} ${file_yx} ${file_yy}
+        - Apply Firstcal solution in single pol mode:
+            ./scripts/omni_apply.py -p xx --omnipath=/path/to/file.xx.first.calfits --firstcal --extension="F" --outpath=/path/for/output ${file_xx}
+        - Apply Firstcal solution in 4pol mode:
+            ./scripts/omni_apply.py -p xx,xy,yx,yy --omnipath=/path/to/file.??.first.calfits --firstcal --extension="F" --outpath=/path/for/output ${file_xx} ${file_xy} ${file_yx} ${file_yy}
     '''
     pols = opts.pol.split(',')
     linear_pol_keys = []
