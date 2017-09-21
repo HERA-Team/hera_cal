@@ -502,7 +502,8 @@ def firstcal_run(files, opts, history):
 
             # Now we need to check if antennas are flipped
             medians = {}
-            cal_data = _apply_cal(datapack, sols, fqs*1e9, switched)
+            cal_data = copy.deepcopy(datapack)
+            cal_data = _apply_cal(cal_data, sols, fqs*1e9, switched)
 
             ratio_bls = [(bl1, bl2) for bls in info.get_reds() for b1, bl1 in enumerate(bls) for bl2 in bls[b1 + 1:] if bl1 != bl2]
             for i, ((a1, a2), (a3, a4)) in enumerate(ratio_bls):
