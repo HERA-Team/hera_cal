@@ -1,15 +1,18 @@
 '''Classes and Functions for running Firstcal.'''
 from __future__ import print_function, division, absolute_import
+import copy
+import optparse
+import os
+
 import numpy as np
+import scipy.sparse as sps
+
 import aipy
-import omnical
 from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
-import scipy.sparse as sps
 from hera_cal import omni,utils
+import omnical
 from pyuvdata import UVData
-import os
-import optparse
 
 
 def fit_line(phs, fqs, valid):
@@ -383,7 +386,7 @@ def flatten_reds(reds):
         freds += r
     return freds
 
-def UVData_to_dict(uvdata_list, filetype='miriad'):
+def UVData_to_dict(uvdata_list, filetype='miriad', ex_ants=[]):
     """ Turn a list of UVData objects or filenames in to a data and flag dictionary.
 
         Make dictionary with blpair key first and pol second key from either a
@@ -413,6 +416,8 @@ def UVData_to_dict(uvdata_list, filetype='miriad'):
             uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
 
         for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
+            if i in ex_ants or j in ex_ants:
+                continue
             if (i, j) not in d:
                 d[i, j] = {}
                 f[i, j] = {}
@@ -462,6 +467,69 @@ def firstcal_run(files, opts, history):
     Returns:
         "file".first.calfits: delay calibrations for each antenna (up to some overall delay). (pyuvdata.calfits file)
     '''
+
+    def _apply_cal(data_dict, sols, fqs, invert_these):
+        for ai, aj in data_dict.keys():
+            for pol in data_dict[ai, aj].keys():
+                if str(ai)+pol[0] in invert_these:
+                    mfi = -1.0
+                else:
+                    mfi = 1.0
+                if str(aj)+pol[0] in invert_these:
+                    mfj = -1.0
+                else:
+                    mfj = 1.0
+                data_dict[ai, aj][pol] /= np.multiply(mfi*omni.get_phase(fqs, sols[ai]).T, np.conj(mfj*omni.get_phase(fqs, sols[aj]).T))
+        return data_dict
+
+    
+    def _search_and_iterate_firstcal(uv, fqs, info, option_parser):
+        '''Searches and iterates over firstcal'''
+        switched_history = []
+        switched = []
+        niters = 0
+        ex_ants = map(int, option_parser.ex_ants.split(','))
+        while niters == 0 or len(switched) > 0:
+            datapack, wgtpack = UVData_to_dict([uv], ex_ants=ex_ants)
+            wgtpack = {k: {p: np.logical_not(wgtpack[k][p]) for p in wgtpack[k]} for k in wgtpack} 
+
+            # gets phase solutions per frequency.
+            fc = FirstCal(datapack, wgtpack, fqs, info)
+            sols = fc.run(finetune=option_parser.finetune,
+                          verbose=option_parser.verbose,
+                          average=option_parser.average, 
+                          window='none')
+
+            # Now we need to check if antennas are flipped
+            medians = {}
+            cal_data = _apply_cal(datapack, sols, fqs*1e9, switched)
+
+            ratio_bls = [(bl1, bl2) for bls in info.get_reds() for b1, bl1 in enumerate(bls) for bl2 in bls[b1 + 1:] if bl1 != bl2]
+            for i, ((a1, a2), (a3, a4)) in enumerate(ratio_bls):
+                # need to get polarizations if run in dual pol. This works because we are looking at reds
+                # so that if one antenna is x, all should be x.
+                if a1 < info.nant:
+                    pol = 'x'
+                else:
+                    pol = 'y'  
+                if (a1, a2) not in cal_data.keys():
+                    a1, a2 = a2, a1
+                if (a3, a4) not in cal_data.keys():
+                    a3, a4 = a4, a3
+                median = np.median(np.angle(cal_data[(a1,a2)][pol*2]*np.conj(cal_data[(a3,a4)][pol*2])), axis=1)
+                for ai in [a1, a2, a3, a4]:
+                    antpol = str(ai) + pol
+                    if antpol in medians:
+                       medians[antpol] = np.append(medians[antpol], median)
+                    else:
+                        medians[antpol] = median
+            medians = {k: np.median(np.abs(m)) for k, m in medians.items()}
+            switched = [k for k, m in medians.items() if m > 1.7]
+            switched_history += switched
+            import IPython; IPython.embed()
+            niters += 1 
+        return sols, switched_history
+
     # check that we got files to process
     if len(files) == 0:
         raise AssertionError('Please provide visibility files.')
@@ -512,14 +580,8 @@ def firstcal_run(files, opts, history):
         if uv_in.phase_type != 'drift':
             print("Setting phase type to drift")
             uv_in.unphase_to_drift()
-        datapack, wgtpack = UVData_to_dict([uv_in])
-        wgtpack = {k: {p: np.logical_not(wgtpack[k][p]) for p in wgtpack[
-            k]} for k in wgtpack}  # logical_not of wgtpack
-
-        # gets phase solutions per frequency.
-        fc = FirstCal(datapack, wgtpack, fqs, info)
-        sols = fc.run(finetune=opts.finetune, verbose=opts.verbose,
-                      average=opts.average, window='none')
+        
+        sols, write_to_json = _search_and_iterate_firstcal(uv_in, fqs, info, opts)
 
         meta = {}
         meta['lsts'] = uv_in.lst_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:, 0]
