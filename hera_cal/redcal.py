@@ -346,14 +346,15 @@ class RedundantCalibrator:
         return ubl_sols
 
 
-    def logcal(self, data, firstcal_sol=None, wgts={}, sparse=False):
+    def logcal(self, data, sol0=None, wgts={}, sparse=False):
         """Takes the log to linearize redcal equations and minimizes chi^2.
 
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
-            firstcal_sol: dictionary that includes all firstcal gains in the {(ant,antpol): np.array}
-                format. These are divided out of the data before logcal and then multiplied back 
-                into the returned gains in the solution. Default does nothing.
+            sol0: dictionary that includes all starting (e.g. firstcal) gains in the 
+                {(ant,antpol): np.array} format. These are divided out of the data before 
+                logcal and then multiplied back into the returned gains in the solution. 
+                Default does nothing.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
 
@@ -368,15 +369,15 @@ class RedundantCalibrator:
             import unittest
             raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
 
-        if firstcal_sol is None:
-            firstcal_sol = {ant: 1.0 for ant in self.ants}
-        fc_data = divide_by_gains(data, firstcal_sol, target_type='vis', ants=self.ants)
+        if sol0 is None:
+            sol0 = {ant: 1.0 for ant in self.ants}
+        fc_data = divide_by_gains(data, sol0, target_type='vis', ants=self.ants)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve()
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         for ubl_key in [k for k in sol.keys() if len(k) == 3]:
             sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
-        sol_with_fc = multiply_by_gains(sol, firstcal_sol, target_type='gain', ants=self.ants)
+        sol_with_fc = multiply_by_gains(sol, sol0, target_type='gain', ants=self.ants)
         return sol_with_fc
 
 
