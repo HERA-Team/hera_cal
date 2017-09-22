@@ -1,6 +1,7 @@
 '''Classes and Functions for running Firstcal.'''
 from __future__ import print_function, division, absolute_import
 import copy
+import json
 import optparse
 import os
 
@@ -478,7 +479,7 @@ def firstcal_run(files, opts, history):
     def _apply_pi_shift(data_dict, invert_these):
         for ai, aj in data_dict.keys():
             for pol in data_dict[ai, aj].keys():
-                if str(ai)+pol[0] in invert_these or str(aj)+pol[0] in invert_these:
+                if (ai, pol[0]) in invert_these or (aj, pol[1]) in invert_these:
                     data_dict[ai,aj][pol] *= -1 
 
         return data_dict
@@ -524,7 +525,7 @@ def firstcal_run(files, opts, history):
                     a3, a4 = a4, a3
                 median = np.median(np.angle(cal_data[(a1,a2)][pol*2]*np.conj(cal_data[(a3,a4)][pol*2])), axis=1)
                 for ai in [a1, a2, a3, a4]:
-                    antpol = str(ai) + pol
+                    antpol = (ai,pol)
                     if antpol in medians:
                        medians[antpol] = np.append(medians[antpol], median)
                     else:
@@ -588,6 +589,7 @@ def firstcal_run(files, opts, history):
             uv_in.unphase_to_drift()
         
         sols, write_to_json = _search_and_iterate_firstcal(uv_in, fqs, info, opts)
+        rotated_antennas = {'rotated_antennas': str(write_to_json)}
 
         meta = {}
         meta['lsts'] = uv_in.lst_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:, 0]
@@ -622,6 +624,10 @@ def firstcal_run(files, opts, history):
                           DELAY=True, appendhist=history, optional=optional)
         print('     Saving {0}'.format(outname))
         hc.write_calfits(outname, clobber=opts.overwrite)
+        json_name = '{0}.{1}'.format(outname, 'rotated_metric.json')
+        print ('     Writing {0}'.format(json_name))
+        with open(json_name, 'w') as f:
+            json.dump(rotated_antennas, f, indent=4)
 
     return
 
