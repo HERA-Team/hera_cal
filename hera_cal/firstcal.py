@@ -468,20 +468,19 @@ def firstcal_run(files, opts, history):
         "file".first.calfits: delay calibrations for each antenna (up to some overall delay). (pyuvdata.calfits file)
     '''
 
-    def _apply_cal(data_dict, sols, fqs, invert_these):
+    def _apply_cal(data_dict, sols, fqs):
         for ai, aj in data_dict.keys():
             for pol in data_dict[ai, aj].keys():
-                if str(ai)+pol[0] in invert_these:
-                    mfi = -1.0
-                else:
-                    mfi = 1.0
-                if str(aj)+pol[0] in invert_these:
-                    mfj = -1.0
-                else:
-                    mfj = 1.0
-                data_dict[ai, aj][pol] /= np.multiply(mfi*omni.get_phase(fqs, sols[ai]).T, np.conj(mfj*omni.get_phase(fqs, sols[aj]).T))
+                data_dict[ai, aj][pol] /= np.multiply(omni.get_phase(fqs, sols[ai]).T, np.conj(omni.get_phase(fqs, sols[aj]).T))
         return data_dict
 
+    def _apply_pi_shift(data_dict, invert_these):
+        for ai, aj in data_dict.keys():
+            for pol in data_dict[ai, aj].keys():
+                if str(ai)+pol[0] in invert_these or str(aj)+pol[0] in invert_these:
+                    data_dict[ai,aj][pol] *= -1 
+
+        return data_dict
     
     def _search_and_iterate_firstcal(uv, fqs, info, option_parser):
         '''Searches and iterates over firstcal'''
@@ -491,6 +490,7 @@ def firstcal_run(files, opts, history):
         ex_ants = map(int, option_parser.ex_ants.split(','))
         while niters == 0 or len(switched) > 0:
             datapack, wgtpack = UVData_to_dict([uv], ex_ants=ex_ants)
+            datapack = _apply_pi_shift(datapack, switched)
             wgtpack = {k: {p: np.logical_not(wgtpack[k][p]) for p in wgtpack[k]} for k in wgtpack} 
 
             # gets phase solutions per frequency.
@@ -503,7 +503,7 @@ def firstcal_run(files, opts, history):
             # Now we need to check if antennas are flipped
             medians = {}
             cal_data = copy.deepcopy(datapack)
-            cal_data = _apply_cal(cal_data, sols, fqs*1e9, switched)
+            cal_data = _apply_cal(cal_data, sols, fqs*1e9)
 
             ratio_bls = [(bl1, bl2) for bls in info.get_reds() for b1, bl1 in enumerate(bls) for bl2 in bls[b1 + 1:] if bl1 != bl2]
             for i, ((a1, a2), (a3, a4)) in enumerate(ratio_bls):
