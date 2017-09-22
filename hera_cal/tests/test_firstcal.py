@@ -311,5 +311,27 @@ class Test_firstcal_run(object):
         history = 'history'
         firstcal.firstcal_run(files, opts, history)
         nt.assert_true(os.path.exists(objective_file))
-        #os.remove(objective_file)
+        os.remove(objective_file)
         return
+
+    def test_overwrite(self):
+        objective_file = os.path.join(
+            DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.first.calfits')
+        xx_vis4real = os.path.join(DATA_PATH, xx_vis)
+        if os.path.exists(objective_file):
+            os.remove(objective_file)
+        _ = open(objective_file, 'a').close()
+        o = firstcal.firstcal_option_parser()
+        cmd = "-C {0} -p xx --overwrite {1}".format(calfile, xx_vis4real)
+        opts, files = o.parse_args(cmd.split())
+        history = 'history'
+        firstcal.firstcal_run(files, opts, history)
+        # check its a calfits file
+        uvc = UVCal()
+        uvc.read_calfits(objective_file)
+        # check a metadata column for accuracy
+        nt.assert_equal(uvc.Nants_data, 19)
+        # remove file
+        os.remove(objective_file)
+        return
+

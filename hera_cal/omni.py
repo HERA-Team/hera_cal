@@ -902,7 +902,7 @@ class HERACal(UVCal):
                                     for ant in ants] for pol in pols]).swapaxes(0, 3).swapaxes(0, 1)
         except:
             # XXX EXCEPT WHAT?
-            chisqarray = np.ones(datarray.shape, dtype=bool)
+            chisqarray = np.ones(datarray.shape, dtype=float)
         # get the array-wide chisq, which does not have separate axes for
         # antennas or polarization
         try:
@@ -915,13 +915,11 @@ class HERACal(UVCal):
             # XXX EXCEPT WHAT?
             # leave it empty
             totchisqarray = None
-
-        tarray = time
-        parray = np.array(pols)
-        farray = np.array(freq)
+        
+        pols = np.array(pols)
+        freq = np.array(freq)
         antarray = list(map(int, ants))
         numarray = list(map(int, allants))
-        namarray = antnames
 
         # set the optional attributes to UVCal class.
         for key in optional:
@@ -936,21 +934,23 @@ class HERACal(UVCal):
             self.history = appendhist
         self.Nants_data = len(ants)  # only ants with data
         self.Nants_telescope = len(allants)  # all antennas in telescope
-        self.antenna_names = namarray[:self.Nants_telescope]
-        self.antenna_numbers = numarray[:self.Nants_telescope]
+        self.antenna_names = antnames
+        self.antenna_numbers = numarray
         self.ant_array = np.array(antarray[:self.Nants_data])
-        self.Nspws = nspw
-        # XXX: needs to change when we support more than 1 spw!
+        
+        self.Nspws = nspw # XXX: needs to change when we support more than 1 spw!
         self.spw_array = np.array([0])
-        self.freq_array = farray[:self.Nfreqs].reshape(self.Nspws, -1)
+        
+        self.freq_array = freq.reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
-        self.jones_array = parray[:self.Njones]
-        self.time_array = tarray[:self.Ntimes]
+        self.jones_array = pols
+        self.time_array = time
         self.integration_time = meta['inttime']
         self.gain_convention = 'divide'
         self.x_orientation = 'east'
         self.time_range = [self.time_array[0], self.time_array[-1]]
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
+        
         # adding new axis for the spectral window axis. This is default to 1.
         # This needs to change when support for Nspws>1 in pyuvdata.
         self.quality_array = chisqarray[:, np.newaxis, :, :, :]
@@ -963,6 +963,9 @@ class HERACal(UVCal):
             self.gain_array = datarray[:, np.newaxis, :, :, :]
         if totchisqarray is not None:
             self.total_quality_array = totchisqarray[np.newaxis, :, :, :]
+
+        # run a check
+        self.check()
 
 
 # omni_run and omni_apply helper functions
@@ -1063,7 +1066,7 @@ def get_optionParser(methodName):
 
     aipy.scripting.add_standard_options(o, cal=cal, pol=True)
     o.add_option('--omnipath', dest='omnipath', default='.',
-                 type='string', help='Path to/for omnical solutions.')
+                 type='string', help='Path to/for omnical solutions. Note that solutions are handled via glob, so for multiple files, make `omnipath` glob-parselable.')
     o.add_option('--median', action='store_true', help=median_help_string)
 
     if methodName == 'omni_run':
@@ -1075,6 +1078,8 @@ def get_optionParser(methodName):
                      help='Toggle V minimization capability. This only makes sense in the case of 4-pol cal, which will set crosspols (xy & yx) equal to each other')
         o.add_option('--metrics_json', dest='metrics_json', default='',
                      help='metrics from hera_qm about array qualities')
+        o.add_option('--overwrite', action='store_true', default=False,
+                     help="Overwrite output files even if they already exist.")
 
     elif methodName == 'omni_apply':
         o.add_option('--firstcal', action='store_true',
@@ -1083,6 +1088,7 @@ def get_optionParser(methodName):
                      help='Filename extension to be appended to the input filename')
         o.add_option('--outpath', dest='outpath', default=None, type='string',
                      help='Directory to write-out omnical-ibrated visibility data. Will use input file path by default.')
+        o.add_option('--overwrite', action='store_true', default=False, help='Overwrite output file if it exists.')
 
     return o
 
@@ -1097,6 +1103,10 @@ def omni_run(files, opts, history):
         "file".vis.uvfits:  omnical model visibilities (one per unique baseline). (uvfits file)
         "file".xtalk.uvfits:  time-averaged visibilities used for cross-talk estimation (one per baseline, but only one time sample). (uvfits file)
         "file".omni.calfits:  combined first-cal and omnical best-guess gains and chi^2 per antenna. (pyuvdata.calfits file)
+    
+    Example:
+        - 4pol calibration:
+            ./scripts/omni_run.py -C ${CALFILE} -p xx,xy,yx,yy --ex_ants=22,43,81 --firstcal=${firstcal_xx},${firstcal_yy} --omnipath=/path/for/solutions ${file_xx} ${file_xy} ${file_yx} ${file_yy}
     '''
     pols = opts.pol.split(',')
 
@@ -1191,7 +1201,7 @@ def omni_run(files, opts, history):
                 file_group[pols[0]]).replace('.%s' % pols[0], '')
         fitsname = '%s/%s.omni.calfits' % (opts.omnipath, bname)
 
-        if os.path.exists(fitsname):
+        if os.path.exists(fitsname) == True and opts.overwrite==False:
             print('   %s exists. Skipping...' % fitsname)
             continue
 
@@ -1301,7 +1311,7 @@ def omni_run(files, opts, history):
             elif 'yx' in v3.keys() and not 'xy' in v3.keys():
                 v3['xy'] = v3['yx']
 
-        hc.write_calfits(fitsname)
+        hc.write_calfits(fitsname, clobber=opts.overwrite)
         fsj = '.'.join(fitsname.split('.')[:-2])
 
         uv_vis = make_uvdata_vis(aa, m2, v3)
@@ -1324,6 +1334,14 @@ def omni_apply(files, opts):
         opts: required and optional parameters, as specified by hera_cal.omni.get_optionParser("omni_apply") (string)
     Returns:
         calibrated_files: calibrated visibiity files (miriad uv file)
+    
+    Examples:
+        - Apply Omnical solution in 4pol mode:
+            ./scripts/omni_apply.py -p xx,xy,yx,yy --omnipath=${omni_calfile} --extension="O" ${file_xx} ${file_xy} ${file_yx} ${file_yy}
+        - Apply Firstcal solution in single pol mode:
+            ./scripts/omni_apply.py -p xx --omnipath=/path/to/file.xx.first.calfits --firstcal --extension="F" --outpath=/path/for/output ${file_xx}
+        - Apply Firstcal solution in 4pol mode:
+            ./scripts/omni_apply.py -p xx,xy,yx,yy --omnipath=/path/to/file.??.first.calfits --firstcal --extension="F" --outpath=/path/for/output ${file_xx} ${file_xy} ${file_yx} ${file_yy}
     '''
     pols = opts.pol.split(',')
     linear_pol_keys = []
@@ -1454,19 +1472,21 @@ def omni_apply(files, opts):
                                       cal.flag_array[antenna_index[aj], nsp, :, :, p2].T))
 
         # Define output path and filename
-        inp_filename = f.split('/')[-1]
+        inp_filename = os.path.basename(f)
         if opts.outpath is None:
-            outpath = '/'.join(f.split('/')[:-1])
+            abspath = os.path.abspath(f)
+            dirname = os.path.dirname(abspath)
+            outpath = dirname
         else:
             outpath = opts.outpath
-        out_filename = "{0}/{1}".format(outpath, inp_filename)
+        out_filename = os.path.join(outpath, inp_filename)
 
         # Write to file
         if opts.firstcal:
             print(" Writing {0}".format(out_filename + 'F'))
-            mir.write_miriad(out_filename + 'F')
+            mir.write_miriad(out_filename + 'F', clobber=opts.overwrite)
         else:
             print(" Writing {0}".format(out_filename + opts.extension))
-            mir.write_miriad(out_filename + opts.extension)
+            mir.write_miriad(out_filename + opts.extension, clobber=opts.overwrite)
 
     return
