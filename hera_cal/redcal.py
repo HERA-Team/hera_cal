@@ -364,7 +364,7 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
 
-        try:
+        try: # XXX Can this be done in the unittests instead? -ARP
             import linsolve
         except(ImportError):
             import unittest
@@ -398,7 +398,7 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
 
-        try:
+        try: # XXX Can this be done in the unittests instead? -ARP
             import linsolve
         except(ImportError):
             import unittest
