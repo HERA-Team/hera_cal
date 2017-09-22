@@ -406,6 +406,7 @@ class RedundantCalibrator:
 
         precal_data = divide_by_gains(data, sol0, target_type='vis')
         ones = {self.pack_sol_key(k): np.ones_like(sol0[k]) for k in sol0.keys()}
+        # dividing out gains may not strictly be necessary here, but is done out of an abundance of caution
         ls = self._solver(linsolve.LinProductSolver, precal_data, sol0=ones, wgts=wgts, sparse=sparse)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
         sol = {self.unpack_sol_key(k):sol[k] for k in sol.keys()}
