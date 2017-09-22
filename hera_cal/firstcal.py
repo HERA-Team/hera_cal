@@ -396,6 +396,7 @@ def UVData_to_dict(uvdata_list, filetype='miriad', ex_ants=[]):
             uvdata_list: list of UVData objects or strings of filenames.
             filetype (string, optional): type of file if uvdata_list is
                 a list of filenames
+            ex_ants: list of antenna numbers to remove from the dictionary
 
         Return:
             data (dict): dictionary of data indexed by pol and antenna pairs
@@ -468,7 +469,7 @@ def firstcal_run(files, opts, history):
         "file".first.calfits: delay calibrations for each antenna (up to some overall delay). (pyuvdata.calfits file)
     '''
 
-    def _apply_cal(data_dict, sols, fqs):
+    def _apply_first_cal(data_dict, sols, fqs):
         for ai, aj in data_dict.keys():
             for pol in data_dict[ai, aj].keys():
                 data_dict[ai, aj][pol] /= np.multiply(omni.get_phase(fqs, sols[ai]).T, np.conj(omni.get_phase(fqs, sols[aj]).T))
@@ -484,10 +485,14 @@ def firstcal_run(files, opts, history):
     
     def _search_and_iterate_firstcal(uv, fqs, info, option_parser):
         '''Searches and iterates over firstcal'''
-        switched_history = []
-        switched = []
+        switched_history = []  # keep track of all rotated antennas
+        switched = []  # keep track of rotated antennas in each iteration
         niters = 0
-        ex_ants = map(int, option_parser.ex_ants.split(','))
+        try:
+            ex_ants = map(int, option_parser.ex_ants.split(','))
+        except ValueError:
+            ex_ants = []
+
         while niters == 0 or len(switched) > 0:
             datapack, wgtpack = UVData_to_dict([uv], ex_ants=ex_ants)
             datapack = _apply_pi_shift(datapack, switched)
@@ -503,7 +508,7 @@ def firstcal_run(files, opts, history):
             # Now we need to check if antennas are flipped
             medians = {}
             cal_data = copy.deepcopy(datapack)
-            cal_data = _apply_cal(cal_data, sols, fqs*1e9)
+            cal_data = _apply_first_cal(cal_data, sols, fqs*1e9)
 
             ratio_bls = [(bl1, bl2) for bls in info.get_reds() for b1, bl1 in enumerate(bls) for bl2 in bls[b1 + 1:] if bl1 != bl2]
             for i, ((a1, a2), (a3, a4)) in enumerate(ratio_bls):
@@ -525,9 +530,9 @@ def firstcal_run(files, opts, history):
                     else:
                         medians[antpol] = median
             medians = {k: np.median(np.abs(m)) for k, m in medians.items()}
-            switched = [k for k, m in medians.items() if m > 1.7]
+            # if the ratio is greater than np.pi/2, it is a switched antenna.
+            switched = [k for k, m in medians.items() if m > np.pi / 2] 
             switched_history += switched
-            import IPython; IPython.embed()
             niters += 1 
         return sols, switched_history
 
