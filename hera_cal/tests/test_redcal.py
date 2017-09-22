@@ -284,7 +284,7 @@ class TestRedundantCalibrator(unittest.TestCase):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k,1.) for k in d.keys()])
-        sol0 = rc.logcal(d, firstcal_sol=fc_gains, wgts=w)
+        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
@@ -353,7 +353,7 @@ class TestRedundantCalibrator(unittest.TestCase):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k,1.) for k in d.keys()])
-        sol0 = rc.logcal(d, firstcal_sol=fc_gains, wgts=w)
+        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
@@ -440,7 +440,7 @@ class TestRedundantCalibrator(unittest.TestCase):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k,1.) for k in d.keys()])
-        sol0 = rc.logcal(d, firstcal_sol=fc_gains, wgts=w)
+        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50*np.ones_like(meta['iter']))
@@ -540,7 +540,7 @@ class TestRedundantCalibrator(unittest.TestCase):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k,1.) for k in d.keys()])
-        sol0 = rc.logcal(d, firstcal_sol=fc_gains, wgts=w)
+        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
 
