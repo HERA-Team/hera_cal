@@ -138,32 +138,24 @@ class TestMethods(unittest.TestCase):
     def test_multiply_by_gains(self):
         vis_in = {(1,2,'xx'):1.6+2.3j}
         gains = {(1,'x'):.3+2.6j, (2,'x'):-1.2-7.3j}
-        vis_out = om.multiply_by_gains(vis_in, gains, target_type='vis', ants='all')
+        vis_out = om.multiply_by_gains(vis_in, gains, target_type='vis')
         self.assertAlmostEqual(1.6+2.3j, vis_in[(1,2,'xx')], 10)
         self.assertAlmostEqual(-28.805 - 45.97j, vis_out[(1,2,'xx')], 10)
 
-        gains_out = om.multiply_by_gains(gains, gains, target_type='gain', ants='all')
+        gains_out = om.multiply_by_gains(gains, gains, target_type='gain')
         self.assertAlmostEqual(.3+2.6j, gains[(1,'x')], 10)
         self.assertAlmostEqual(-6.67 + 1.56j, gains_out[(1,'x')], 10)
-
-        gains_out = om.multiply_by_gains(gains, gains, target_type='gain', ants=[(1,'x')])
-        self.assertAlmostEqual(-6.67 + 1.56j, gains_out[(1,'x')], 10)
-        self.assertAlmostEqual(-1.2-7.3j, gains_out[(2,'x')], 10)
 
     def test_divide_by_gains(self):
         vis_in = {(1,2,'xx'):1.6+2.3j}
         gains = {(1,'x'):.3+2.6j, (2,'x'):-1.2-7.3j}
-        vis_out = om.divide_by_gains(vis_in, gains, target_type='vis', ants='all')
+        vis_out = om.divide_by_gains(vis_in, gains, target_type='vis')
         self.assertAlmostEqual(1.6+2.3j, vis_in[(1,2,'xx')], 10)
         self.assertAlmostEqual(-0.088244747606364887-0.11468109538397521j, vis_out[(1,2,'xx')], 10)
 
-        gains_out = om.divide_by_gains(gains, gains, target_type='gain', ants='all')
+        gains_out = om.divide_by_gains(gains, gains, target_type='gain')
         self.assertAlmostEqual(.3+2.6j, gains[(1,'x')], 10)
         self.assertAlmostEqual(1.0, gains_out[(1,'x')], 10)
-
-        gains_out = om.divide_by_gains(gains, gains, target_type='gain', ants=[(1,'x')])
-        self.assertAlmostEqual(1.0, gains_out[(1,'x')], 10)
-        self.assertAlmostEqual(-1.2-7.3j, gains_out[(2,'x')], 10)
 
 
 class TestRedundantCalibrator(unittest.TestCase):

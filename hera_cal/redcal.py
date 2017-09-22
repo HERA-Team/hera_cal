@@ -193,7 +193,7 @@ def get_gains_and_vis_from_sol(sol):
     return g, v
 
 
-def _apply_gains(target, gains, operation, target_type, ants):
+def _apply_gains(target, gains, operation, target_type):
     """Helper function designed to be used with divide_by_gains and multiply_by_gains."""
 
     assert(target_type in ['vis','gain'])
@@ -201,18 +201,25 @@ def _apply_gains(target, gains, operation, target_type, ants):
     if target_type is 'vis':
         #loop over len=3 keys in target
         for (ant1,ant2,pol) in [key for key in output.keys() if len(key)==3]:
-            if ants is 'all' or ((ant1, pol[0]) in ants and (ant2, pol[1]) in ants):
-                gainProduct = (gains[(ant1,pol[0])] * np.conj(gains[(ant2,pol[1])]))
-                output[(ant1,ant2,pol)] = operation(output[(ant1,ant2,pol)], gainProduct)
+            try:
+                output[(ant1,ant2,pol)] = operation(output[(ant1,ant2,pol)], gains[(ant1,pol[0])])
+            except KeyError:
+                pass
+            try:
+                output[(ant1,ant2,pol)] = operation(output[(ant1,ant2,pol)], np.conj(gains[(ant2,pol[1])]))
+            except KeyError:
+                pass
     elif target_type is 'gain':
         #loop over len=2 keys in target
         for ant in [key for key in output.keys() if len(key)==2]:
-            if ants is 'all' or ant in ants:
+            try:
                 output[ant] = operation(output[ant], gains[ant])
+            except KeyError:
+                pass
     return output
 
 
-def divide_by_gains(target, gains, target_type='vis', ants='all'):
+def divide_by_gains(target, gains, target_type='vis'):
     """Helper function for applying gains to visibilities or other gains, e.g. for firstcal.
 
     Args:
@@ -222,17 +229,15 @@ def divide_by_gains(target, gains, target_type='vis', ants='all'):
             'sol' dictionary with both gains and visibilities, but only the gains are used.
         target_type: either 'vis' (default) or 'gain'. For 'vis', only len=3 keys in the target 
             are modified. For 'gain', only len=2 keys are modified.
-        ants: List of antennas in the (ant,antpol) format allowed to be modified. This lets the 
-            target have more data than necessary. Default to 'all', meaning all antennas in target.
 
     Returns:
         output: copy of target with gains divided out.
     """
 
-    return _apply_gains(target, gains, (lambda x,y: x/y), target_type, ants)
+    return _apply_gains(target, gains, (lambda x,y: x/y), target_type)
 
 
-def multiply_by_gains(target, gains, target_type='vis', ants='all'):
+def multiply_by_gains(target, gains, target_type='vis'):
     """Helper function for removing gains from visibilities or other gains, e.g. for firstcal.
 
     Args:
@@ -242,14 +247,12 @@ def multiply_by_gains(target, gains, target_type='vis', ants='all'):
             'sol' dictionary with both gains and visibilities, but only the gains are used.
         target_type: either 'vis' (default) or 'gain'. For 'vis', only len=3 keys in the target 
             are modified. For 'gain', only len=2 keys are modified.
-        ants: List of antennas in the (ant,antpol) format allowed to be modified. This lets the 
-            target have more data than necessary. Default to 'all', meaning all antennas in target.
 
     Returns:
         output: copy of target with gains multiplied back in.
     """
 
-    return _apply_gains(target, gains, (lambda x,y: x*y), target_type, ants)
+    return _apply_gains(target, gains, (lambda x,y: x*y), target_type)
 
 
 
@@ -265,8 +268,6 @@ class RedundantCalibrator:
         """
 
         self.reds = reds
-        self.ants = list(set([ant for bls in reds for bl in bls for ant in 
-                             [(bl[0],bl[2][0]), (bl[1],bl[2][1])]]))
         self.pol_mode = parse_pol_mode(self.reds)
 
 
@@ -346,7 +347,7 @@ class RedundantCalibrator:
         return ubl_sols
 
 
-    def logcal(self, data, sol0=None, wgts={}, sparse=False):
+    def logcal(self, data, sol0={}, wgts={}, sparse=False):
         """Takes the log to linearize redcal equations and minimizes chi^2.
 
         Args:
@@ -354,7 +355,7 @@ class RedundantCalibrator:
             sol0: dictionary that includes all starting (e.g. firstcal) gains in the 
                 {(ant,antpol): np.array} format. These are divided out of the data before 
                 logcal and then multiplied back into the returned gains in the solution. 
-                Default does nothing.
+                Default empty dictionary does nothing.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
 
@@ -369,15 +370,13 @@ class RedundantCalibrator:
             import unittest
             raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
 
-        if sol0 is None:
-            sol0 = {ant: 1.0 for ant in self.ants}
-        fc_data = divide_by_gains(data, sol0, target_type='vis', ants=self.ants)
+        fc_data = divide_by_gains(data, sol0, target_type='vis')
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve()
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         for ubl_key in [k for k in sol.keys() if len(k) == 3]:
             sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
-        sol_with_fc = multiply_by_gains(sol, sol0, target_type='gain', ants=self.ants)
+        sol_with_fc = multiply_by_gains(sol, sol0, target_type='gain')
         return sol_with_fc
 
 
@@ -405,12 +404,12 @@ class RedundantCalibrator:
             import unittest
             raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
 
-        precal_data = divide_by_gains(data, sol0, target_type='vis', ants=self.ants)
+        precal_data = divide_by_gains(data, sol0, target_type='vis')
         ones = {self.pack_sol_key(k): np.ones_like(sol0[k]) for k in sol0.keys()}
         ls = self._solver(linsolve.LinProductSolver, precal_data, sol0=ones, wgts=wgts, sparse=sparse)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
         sol = {self.unpack_sol_key(k):sol[k] for k in sol.keys()}
-        recal_sol = multiply_by_gains(sol, sol0, target_type='gain', ants=self.ants)
+        recal_sol = multiply_by_gains(sol, sol0, target_type='gain')
         return meta, recal_sol
 
 
