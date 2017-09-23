@@ -471,12 +471,28 @@ def firstcal_run(files, opts, history):
     '''
 
     def _apply_first_cal(data_dict, sols, fqs):
+        """Apply delay calibration solutions.
+        
+        Args:
+            data_dict (dict): Dictionary of visibilities indexed by bl and pol.
+            sols (dict): Sictionary of delay solutions (output of Firstcal.run)
+            fqs (array): frequencies associated with visibilities in Hz
+        
+        Returns:
+            dict : calibrated visibilities in dictionary format (see data_dict)
+        """
         for ai, aj in data_dict.keys():
             for pol in data_dict[ai, aj].keys():
                 data_dict[ai, aj][pol] /= np.multiply(omni.get_phase(fqs, sols[ai]).T, np.conj(omni.get_phase(fqs, sols[aj]).T))
         return data_dict
 
     def _apply_pi_shift(data_dict, invert_these):
+        """Apply a pi shift to visibilities.
+
+        Args:
+            data_dict (dict): Dictionary of visibilities indexed by bl and pol.
+            invert_these (list): list of antennas to add a pi phase shift too
+        """
         for ai, aj in data_dict.keys():
             for pol in data_dict[ai, aj].keys():
                 if (ai, pol[0]) in invert_these or (aj, pol[1]) in invert_these:
@@ -484,8 +500,22 @@ def firstcal_run(files, opts, history):
 
         return data_dict
     
-    def _search_and_iterate_firstcal(uv, fqs, info, option_parser):
-        '''Searches and iterates over firstcal'''
+    def _search_and_iterate_firstcal(uv, info, option_parser):
+        '''Searches and iterates over firstcal
+
+            Iteratively run firstcal and look for rotated antennas.
+            If rotated antennas found, fix the antenna and rerun firstcal.
+            Saves rotated antennas to a json file.
+
+        Args:
+            uv (pyuvdata.UVData): UVData object
+            info (FirstcalRedundantInfo): info object
+            option_parser (OptionParser): option parser object
+
+        Return:
+            dict : firstcal solutions
+            list : list of rotated antennas
+        '''
         switched_history = []  # keep track of all rotated antennas
         switched = []  # keep track of rotated antennas in each iteration
         niters = 0
@@ -498,6 +528,8 @@ def firstcal_run(files, opts, history):
             datapack, wgtpack = UVData_to_dict([uv], ex_ants=ex_ants)
             datapack = _apply_pi_shift(datapack, switched)
             wgtpack = {k: {p: np.logical_not(wgtpack[k][p]) for p in wgtpack[k]} for k in wgtpack} 
+
+            fqs = uv.freq_array[0, :] / 1e9
 
             # gets phase solutions per frequency.
             fc = FirstCal(datapack, wgtpack, fqs, info)
@@ -588,7 +620,7 @@ def firstcal_run(files, opts, history):
             print("Setting phase type to drift")
             uv_in.unphase_to_drift()
         
-        sols, write_to_json = _search_and_iterate_firstcal(uv_in, fqs, info, opts)
+        sols, write_to_json = _search_and_iterate_firstcal(uv_in, info, opts)
         rotated_antennas = {'rotated_antennas': str(write_to_json)}
 
         meta = {}
