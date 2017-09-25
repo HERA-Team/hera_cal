@@ -335,7 +335,7 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
 
 def remove_degen(info, g, v, g0, minV=False):
     ''' This function properly removes omnical degeneracies in the 1pol, 2pol, 4pol, and
-    4pol_minV cases. Wraps the remove_degen fucntion in her_acal.redcal. See HERA Memo #30
+    4pol_minV cases. Wraps the remove_degen fucntion in hera_cal.redcal. See HERA Memo #30
     by Dillon et al. for more details on 4-pol omnical degeneracies at
     http://reionization.org/wp-content/uploads/2013/03/HERA30_4PolOmniDegen.pdf
 
