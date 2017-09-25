@@ -150,6 +150,10 @@ class AbsCal(UVCal):
         (to get important metadata). It assumes that the gains have been specified as a function
         of frequency, and pads them out to apply to all times in the miriad file.
 
+        Note that currently, this will only form gain-type (i.e., omnical-type) calfits files, and
+        not delay-type (i.e., firstcal-type). There are plans to add this functionality in the future.
+
+
         Args:
         ====================
         miriad_filename (string) -- full path to miriad file used to generate absolute calibration
@@ -176,7 +180,8 @@ class AbsCal(UVCal):
             raise AssertionError("gain_convention must be 'mulitply' or 'divide'")
 
         # make sure that npz and miriad file have the polarization specified
-        if polname not in miriad_filename:
+        miriad_basename = os.path.basename(miriad_filename)
+        if polname not in miriad_basename:
             raise AssertionError("specified polarization does not match the one in the name of the miriad file")
 
         # make sure that we have all the polarizations necessary for the calibration
@@ -196,28 +201,29 @@ class AbsCal(UVCal):
                                                                                    len(abscal_npznames)))
 
         # load npzs
-        npzdict, filedict = {}, {}
+        gainsdict, flagsdict, filedict = {}, {}, {}
         for npz in abscal_npznames:
             basename = os.path.basename(npz)
             for polchar in set(polname):
                 if polchar in basename:
                     _d = dict(np.load(npz))
-                if 'flags' in _d.keys():
-                    _f = _d.pop('flags')
-                else:
-                    _f = None
-                npzdict[polchar] = _d
+                    if 'flags' in _d.keys():
+                        _f = _d.pop('flags')
+                    else:
+                        _f = None
+                    gainsdict[polchar] = _d
+                    flagsdict[polchar] = _f
 
         # check that for the case of 2 abscal files, we have the same antennas
         if len(abscal_npznames) > 1:
-            ants1 = npzdict[polname[0]].keys()
-            ants2 = npzdict[polname[1]].keys()
-            if sorted(nants1) != sorted(ants2):
+            ants1 = gainsdict[polname[0]].keys()
+            ants2 = gainsdict[polname[1]].keys()
+            if sorted(ants1) != sorted(ants2):
                 raise AssertionError("The two abscal files do not have the same antennas")
             ants_gains = ants1
             nants_gains = len(ants_gains)
         else:
-            ants_gains = npzdict[polname[0]].keys()
+            ants_gains = gainsdict[polname[0]].keys()
             nants_gains = len(ants_gains)
 
         # save miriad filename too
@@ -252,12 +258,13 @@ class AbsCal(UVCal):
         antnames = ['ant{}'.format(a) for a in allants]
 
         # construct data and flag array
-        tmp_spec = npzdict[polname[0]][good_antnames[0]]
+        tmp_spec = gainsdict[polname[0]][good_antnames[0]]
         # check to see if our data are already the right size
         if tmp_spec.shape != (ntimes, nfreqs):
             # make sure we've got the right number of frequency channels
             if tmp_spec.shape != (nfreqs,):
                 raise AssertionError("Cannot interpret gain spectrum shape")
+        _f = flagsdict[polname[0]]
         if _f is not None:
             if _f.shape != tmp_spec.shape:
                 raise AssertionError("Flags must be the same shape as gain spectrum")
@@ -265,13 +272,13 @@ class AbsCal(UVCal):
         else:
             flags = np.zeros_like(tmp_spec)
 
-        data_array = np.array([[npzdict[polchar][ant] * np.ones((ntimes, nfreqs))
-                                for ant in good_antnames
-                                for polchar in set(polname)]]).swapaxes(0, 3).swapaxes(0, 1)
+        data_array = np.array([[gainsdict[polchar][ant] * np.ones((ntimes, nfreqs))
+                                for ant in good_antnames]
+                                for polchar in set(polname)]).swapaxes(0, 3).swapaxes(0, 1)
 
         flag_array = np.array([[flags * np.ones((ntimes, nfreqs))
-                                for ant in good_antnames
-                                for polchar in set(polname)]]).swapaxes(0, 3).swapaxes(0, 1)
+                                for ant in good_antnames]
+                                for polchar in set(polname)]).swapaxes(0, 3).swapaxes(0, 1)
 
         # fill out other required arrays
         chisqarray = np.ones(data_array.shape)
