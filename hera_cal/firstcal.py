@@ -374,20 +374,7 @@ class FirstCal(object):
         return dict(zip(map(Antpol, self.info.subsetant, [self.info.nant] * len(self.info.subsetant)), self.xhat))
 
 
-def flatten_reds(reds):
-    #XXX there has gotta be a one-liner for this. freds.ravel()?
-    '''Flatten the redundancy array to a single axis.
-    Args:
-        reds: a list-of-lists of redundant baselines. (list)
-    Returns:
-        freds: a flattened reds array. (list)
-    '''
-    freds = []
-    for r in reds:
-        freds += r
-    return freds
-
-def UVData_to_dict(uvdata_list, filetype='miriad', ex_ants=[]):
+def UVData_to_dict(uvdata_list, filetype='miriad'):
     """ Turn a list of UVData objects or filenames in to a data and flag dictionary.
 
         Make dictionary with blpair key first and pol second key from either a
@@ -397,7 +384,6 @@ def UVData_to_dict(uvdata_list, filetype='miriad', ex_ants=[]):
             uvdata_list: list of UVData objects or strings of filenames.
             filetype (string, optional): type of file if uvdata_list is
                 a list of filenames
-            ex_ants: list of antenna numbers to remove from the dictionary
 
         Return:
             data (dict): dictionary of data indexed by pol and antenna pairs
@@ -418,8 +404,6 @@ def UVData_to_dict(uvdata_list, filetype='miriad', ex_ants=[]):
             uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
 
         for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
-            if i in ex_ants or j in ex_ants:
-                continue
             if (i, j) not in d:
                 d[i, j] = {}
                 f[i, j] = {}
@@ -470,18 +454,22 @@ def firstcal_run(files, opts, history):
         "file".first.calfits: delay calibrations for each antenna (up to some overall delay). (pyuvdata.calfits file)
     '''
 
-    def _apply_first_cal(data_dict, sols, fqs):
+    def _apply_first_cal(data_dict, sols, fqs, info):
         """Apply delay calibration solutions.
         
         Args:
             data_dict (dict): Dictionary of visibilities indexed by bl and pol.
-            sols (dict): Sictionary of delay solutions (output of Firstcal.run)
+            sols (dict): Dictionary of delay solutions (output of Firstcal.run)
             fqs (array): frequencies associated with visibilities in Hz
         
         Returns:
             dict : calibrated visibilities in dictionary format (see data_dict)
         """
+        # need to check if bls are in the info object. No need to calibrate otherwise
+        bls = bls = [bl for bls in info.get_reds() for bl in bls]
         for ai, aj in data_dict.keys():
+            if (ai, aj) not in bls and (aj, ai) not in bls:
+                continue
             for pol in data_dict[ai, aj].keys():
                 data_dict[ai, aj][pol] /= np.multiply(omni.get_phase(fqs, sols[ai]).T, np.conj(omni.get_phase(fqs, sols[aj]).T))
         return data_dict
@@ -495,7 +483,7 @@ def firstcal_run(files, opts, history):
         """
         for ai, aj in data_dict.keys():
             for pol in data_dict[ai, aj].keys():
-                if (ai, pol[0]) in invert_these or (aj, pol[1]) in invert_these:
+                if ((ai, pol[0]) in invert_these) ^ ((aj, pol[1]) in invert_these):
                     data_dict[ai,aj][pol] *= -1 
 
         return data_dict
@@ -519,15 +507,11 @@ def firstcal_run(files, opts, history):
         switched_history = []  # keep track of all rotated antennas
         switched = []  # keep track of rotated antennas in each iteration
         niters = 0
-        try:
-            ex_ants = map(int, option_parser.ex_ants.split(','))
-        except ValueError:
-            ex_ants = []
 
         while niters == 0 or len(switched) > 0:
-            datapack, wgtpack = UVData_to_dict([uv], ex_ants=ex_ants)
+            datapack, flagpack = UVData_to_dict([uv])
             datapack = _apply_pi_shift(datapack, switched)
-            wgtpack = {k: {p: np.logical_not(wgtpack[k][p]) for p in wgtpack[k]} for k in wgtpack} 
+            wgtpack = {k: {p: np.logical_not(flagpack[k][p]) for p in flagpack[k]} for k in flagpack} 
 
             fqs = uv.freq_array[0, :] / 1e9
 
@@ -541,7 +525,7 @@ def firstcal_run(files, opts, history):
             # Now we need to check if antennas are flipped
             medians = {}
             cal_data = copy.deepcopy(datapack)
-            cal_data = _apply_first_cal(cal_data, sols, fqs*1e9)
+            cal_data = _apply_first_cal(cal_data, sols, fqs*1e9, info)
 
             ratio_bls = [(bl1, bl2) for bls in info.get_reds() for b1, bl1 in enumerate(bls) for bl2 in bls[b1 + 1:] if bl1 != bl2]
             for i, ((a1, a2), (a3, a4)) in enumerate(ratio_bls):
@@ -552,22 +536,29 @@ def firstcal_run(files, opts, history):
                 else:
                     pol = 'y'  
                 if (a1, a2) not in cal_data.keys():
-                    a1, a2 = a2, a1
+                    # conjugate
+                    d1 = np.conj(cal_data[a2, a1][pol * 2])
+                else:
+                    d1 = cal_data[a1, a2][pol * 2]
                 if (a3, a4) not in cal_data.keys():
-                    a3, a4 = a4, a3
-                median = np.median(np.angle(cal_data[(a1,a2)][pol*2]*np.conj(cal_data[(a3,a4)][pol*2])), axis=1)
+                    # conjugate
+                    d2 = np.conj(cal_data[a4, a3][pol * 2])
+                else:
+                    d2 = cal_data[a3, a4][pol * 2]
+                median_over_freqs = np.median(np.angle(d1 * np.conj(d2)), axis=1)
                 for ai in [a1, a2, a3, a4]:
-                    antpol = (ai,pol)
+                    antpol = (ai, pol)
                     if antpol in medians:
-                       medians[antpol] = np.append(medians[antpol], median)
+                       medians[antpol] = np.append(medians[antpol], median_over_freqs)
                     else:
-                        medians[antpol] = median
-            medians = {k: np.median(np.abs(m)) for k, m in medians.items()}
+                        medians[antpol] = median_over_freqs
+            median_over_ant_time = {k: np.median(np.abs(m)) for k, m in medians.items()}
             # if the ratio is greater than np.pi/2, it is a switched antenna.
-            switched = [k for k, m in medians.items() if m > np.pi / 2] 
+            switched = [k for k, m in median_over_ant_time.items() if m > np.pi / 2] 
             switched_history += switched
             niters += 1 
         return sols, switched_history
+
 
     # check that we got files to process
     if len(files) == 0:
@@ -598,7 +589,7 @@ def firstcal_run(files, opts, history):
         print('Using Unique Baselines:', ubls)
     info = omni.aa_to_info(aa, pols=[opts.pol[0]],
                            fcal=True, ubls=ubls, ex_ants=ex_ants)
-    bls = flatten_reds(info.get_reds())
+    bls = [bl for bls in info.get_reds() for bl in bls]
     print('Number of redundant baselines:', len(bls))
 
     # Firstcal loop per file.
@@ -621,7 +612,14 @@ def firstcal_run(files, opts, history):
             uv_in.unphase_to_drift()
         
         sols, write_to_json = _search_and_iterate_firstcal(uv_in, info, opts)
-        rotated_antennas = {'rotated_antennas': str(write_to_json)}
+        rotated_antennas = {'rotated_antennas': str(write_to_json),
+                            'delays': {str(ai.ant())+ ai.pol(): sols[ai].tolist() for ai in sols.keys()}}
+        # convert delays to a gain solution
+        gain_solutions = {ai: omni.get_phase(uv_in.freq_array[0, :], sols[ai]) for ai in sols.keys()}
+        # fix 180 phase offset in gain solutions
+        for ant, pol in write_to_json:
+            gain_solutions[ant] *= -1
+             
 
         meta = {}
         meta['lsts'] = uv_in.lst_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:, 0]
@@ -631,29 +629,27 @@ def firstcal_run(files, opts, history):
         meta['inttime'] = uv_in.integration_time  # in sec
         meta['chwidth'] = uv_in.channel_width  # in Hz
 
-        delays = {}
+        gains = {}
         antflags = {}
         for pol in opts.pol.split(','):
             pol = pol[0]
-            delays[pol] = {}
+            gains[pol] = {}
             antflags[pol] = {}
-            for ant in sols.keys():
-                delays[ant.pol()][ant.val] = sols[ant].T
-                antflags[ant.pol()][ant.val] = np.zeros(
-                    shape=(len(meta['lsts']), len(meta['freqs'])))
+            for ant in gain_solutions.keys():
+                gains[ant.pol()][ant.val] = gain_solutions[ant].T
+                antflags[ant.pol()][ant.val] = np.zeros_like(gain_solutions[ant].T, dtype=np.bool)
                 # generate chisq per antenna/pol.
-                meta['chisq{0}'.format(str(ant))] = np.ones(
-                    shape=(uv_in.Ntimes, 1))
+                meta['chisq{0}'.format(str(ant))] = np.ones_like(gain_solutions[ant].T, dtype=np.float)
         # overall chisq. This is a required parameter for uvcal.
-        meta['chisq'] = np.ones_like(sols[ant].T)
+        meta['chisq'] = np.ones_like(gain_solutions[ant].T, dtype=np.float)
 
         # Save solutions
         optional = {'observer': opts.observer,
                     'git_origin_cal': opts.git_origin_cal,
                     'git_hash_cal':  opts.git_hash_cal}
 
-        hc = omni.HERACal(meta, delays, flags=antflags, ex_ants=ex_ants,
-                          DELAY=True, appendhist=history, optional=optional)
+        hc = omni.HERACal(meta, gains, flags=antflags, ex_ants=ex_ants,
+                          appendhist=history, optional=optional)
         print('     Saving {0}'.format(outname))
         hc.write_calfits(outname, clobber=opts.overwrite)
         json_name = '{0}.{1}'.format(outname, 'rotated_metric.json')
