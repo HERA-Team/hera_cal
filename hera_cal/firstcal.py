@@ -526,15 +526,10 @@ def firstcal_run(files, opts, history):
             medians = {}
             cal_data = copy.deepcopy(datapack)
             cal_data = _apply_first_cal(cal_data, sols, fqs*1e9, info)
+            pol = cal_data.values()[0].keys()[0][0]
 
             ratio_bls = [(bl1, bl2) for bls in info.get_reds() for b1, bl1 in enumerate(bls) for bl2 in bls[b1 + 1:] if bl1 != bl2]
             for i, ((a1, a2), (a3, a4)) in enumerate(ratio_bls):
-                # need to get polarizations if run in dual pol. This works because we are looking at reds
-                # so that if one antenna is x, all should be x.
-                if a1 < info.nant:
-                    pol = 'x'
-                else:
-                    pol = 'y'  
                 if (a1, a2) not in cal_data.keys():
                     # conjugate
                     d1 = np.conj(cal_data[a2, a1][pol * 2])
