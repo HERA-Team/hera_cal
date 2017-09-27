@@ -165,12 +165,6 @@ class Test_FirstCal(object):
         nt.assert_equal(np.testing.assert_almost_equal(
             fcal.M.flatten(), solved_delays, decimal=16), None)
 
-    def test_flatten_reds(self):
-        reds = [[(0, 1), (1, 2)], [(2, 3), (3, 4)]]
-        freds = firstcal.flatten_reds(reds)
-        nt.assert_equal(freds, [(0, 1), (1, 2), (2, 3), (3, 4)])
-        return
-
     def test_UVData_to_dict(self):
         str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
         filename = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')
@@ -352,6 +346,7 @@ class Test_firstcal_run(object):
         os.remove(objective_file)
         with open(objective_file_2, 'r') as rotation_file:
             rot_dict = json.load(rotation_file)
-        nt.assert_equal(rot_dict['rotated_antennas'], "[(43, 'x')]") 
+        nt.assert_equal(rot_dict['rotated_antennas'], ['43x']) 
+        nt.assert_equal(len(rot_dict['delays'].keys()), 17)
         os.remove(objective_file_2)
         return
