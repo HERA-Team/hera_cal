@@ -608,8 +608,8 @@ def firstcal_run(files, opts, history):
         
         sols, write_to_json = _search_and_iterate_firstcal(uv_in, info, opts)
         write_to_json = [str(ai)+pol for (ai, pol) in write_to_json]
-        rotated_antennas = {'rotated_antennas': write_to_json,
-                            'delays': {str(ai.ant())+ ai.pol(): sols[ai].tolist() for ai in sols.keys()}}
+        dict_for_json = {'rotated_antennas': write_to_json,
+                         'delays': {str(ai.ant())+ ai.pol(): sols[ai].tolist() for ai in sols.keys()}}
         # convert delays to a gain solution
         gain_solutions = {ai: omni.get_phase(uv_in.freq_array[0, :], sols[ai]) for ai in sols.keys()}
         # fix 180 phase offset in gain solutions
@@ -651,7 +651,7 @@ def firstcal_run(files, opts, history):
         json_name = '{0}.{1}'.format(outname, 'rotated_metric.json')
         print ('     Writing {0}'.format(json_name))
         with open(json_name, 'w') as f:
-            json.dump(rotated_antennas, f, indent=4)
+            json.dump(dict_for_json, f, indent=4)
 
     return
 
