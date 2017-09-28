@@ -11,7 +11,7 @@ import scipy.sparse as sps
 import aipy
 from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
-from hera_cal import omni,utils
+from hera_cal import omni, utils, cal_formats
 import omnical
 from pyuvdata import UVData
 
@@ -644,8 +644,8 @@ def firstcal_run(files, opts, history):
                     'git_origin_cal': opts.git_origin_cal,
                     'git_hash_cal':  opts.git_hash_cal}
 
-        hc = omni.HERACal(meta, gains, flags=antflags, ex_ants=ex_ants,
-                          appendhist=history, optional=optional)
+        hc = cal_formats.HERACal(meta, gains, flags=antflags, ex_ants=ex_ants,
+                                 appendhist=history, optional=optional)
         print('     Saving {0}'.format(outname))
         hc.write_calfits(outname, clobber=opts.overwrite)
         json_name = '{0}.{1}'.format(outname, 'rotated_metric.json')
