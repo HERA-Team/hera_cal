@@ -346,7 +346,7 @@ class Test_firstcal_run(object):
         os.remove(objective_file)
         with open(objective_file_2, 'r') as rotation_file:
             rot_dict = json.load(rotation_file)
-        nt.assert_equal(rot_dict['rotated_antennas'], ['43x']) 
+        nt.assert_equal(rot_dict['rotated_antennas'], ['43']) 
         nt.assert_equal(len(rot_dict['delays'].keys()), 17)
         os.remove(objective_file_2)
         return
