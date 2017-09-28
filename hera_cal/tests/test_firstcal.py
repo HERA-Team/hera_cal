@@ -1,6 +1,7 @@
 '''Tests for firstcal.py'''
 import nose.tools as nt
 import os
+import json
 import numpy as np
 import aipy
 import optparse
@@ -163,12 +164,6 @@ class Test_FirstCal(object):
         solved_delays = np.array(solved_delays).flatten()
         nt.assert_equal(np.testing.assert_almost_equal(
             fcal.M.flatten(), solved_delays, decimal=16), None)
-
-    def test_flatten_reds(self):
-        reds = [[(0, 1), (1, 2)], [(2, 3), (3, 4)]]
-        freds = firstcal.flatten_reds(reds)
-        nt.assert_equal(freds, [(0, 1), (1, 2), (2, 3), (3, 4)])
-        return
 
     def test_UVData_to_dict(self):
         str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
@@ -335,3 +330,23 @@ class Test_firstcal_run(object):
         os.remove(objective_file)
         return
 
+    def test_rotated_antennas(self):
+        objective_file = os.path.join(
+            DATA_PATH, 'zen.2457555.42443.xx.HH.uvcA.first.calfits')
+        objective_file_2 = os.path.join(
+            DATA_PATH, 'zen.2457555.42443.xx.HH.uvcA.first.calfits.rotated_metric.json')
+        xx_vis = os.path.join(
+            DATA_PATH, 'zen.2457555.42443.xx.HH.uvcA')
+        o = firstcal.firstcal_option_parser()
+        cmd = "-p xx -C {0} --ex_ants=22,81 {1}".format(calfile, xx_vis)
+        opts, files = o.parse_args(cmd.split())
+        history = 'history'
+        firstcal.firstcal_run(files, opts, history)
+        nt.assert_true(os.path.exists(objective_file))
+        os.remove(objective_file)
+        with open(objective_file_2, 'r') as rotation_file:
+            rot_dict = json.load(rotation_file)
+        nt.assert_equal(rot_dict['rotated_antennas'], ['43']) 
+        nt.assert_equal(len(rot_dict['delays'].keys()), 17)
+        os.remove(objective_file_2)
+        return
