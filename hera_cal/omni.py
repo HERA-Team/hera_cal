@@ -291,7 +291,7 @@ def reds_for_minimal_V(reds):
     return _reds
 
 
-def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
+def aa_to_info(aa, pols=['x'], fcal=False, minV=False, tol=0.1, **kwargs):
     '''Generate set of redundancies given an antenna array with idealized antenna positions.
     Args:
         aa: aipy antenna array object. Must have antpos_ideal or ant_layout attributes.
@@ -299,6 +299,7 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
         pols (optional): list of antenna polarizations to include. default is ['x'].
         fcal (optional): toggle for using FirstCalRedundantInfo.
         minV (optional): toggle pseudo-Stokes V minimization.
+        to; (optional): tolerance for determining redundancy from antenna postions (see compute_reds)
     Return:
         info: omnical info object. e.g. RedundantInfo or FirstCalRedundantInfo
     '''
@@ -317,7 +318,7 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, **kwargs):
             z = 2**z  # exponential ensures diff xpols aren't redundant w/ each other
             i = Antpol(ant, pol, len(aa))
             antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
-    reds = compute_reds(nant, pols, antpos[:nant], tol=.1)
+    reds = compute_reds(nant, pols, antpos[:nant], tol=tol)
     ex_ants = [Antpol(i, nant).ant()
                for i in range(antpos.shape[0]) if antpos[i, 0] == -1]
     kwargs['ex_ants'] = kwargs.get('ex_ants', []) + ex_ants
