@@ -291,7 +291,7 @@ def reds_for_minimal_V(reds):
     return _reds
 
 
-def aa_to_info(aa, pols=['x'], fcal=False, minV=False, tol=0.1, **kwargs):
+def aa_to_info(aa, pols=['x'], fcal=False, minV=False, tol=1.0, **kwargs):
     '''Generate set of redundancies given an antenna array with idealized antenna positions.
     Args:
         aa: aipy antenna array object. Must have antpos_ideal or ant_layout attributes.
