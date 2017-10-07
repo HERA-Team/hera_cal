@@ -43,7 +43,7 @@ class TestMethods(object):
         self.freqs = np.linspace(.1, .2, 16)
         self.pols = ['x', 'y']
         self.aa = get_aa(self.freqs)
-        self.info = omni.aa_to_info(self.aa, pols=self.pols)
+        self.info = omni.aa_to_info(self.aa, pols=self.pols, tol=0.1)
         self.gains = {pol: {ant: np.ones((1, self.freqs.size)) for ant in range(
             self.info.nant)} for pol in self.pols}
 
@@ -496,7 +496,7 @@ class Test_RedundantInfo(object):
     def setUp(self):
         self.aa = get_aa(np.linspace(.1, .2, 16))
         self.pol = ['x']
-        self.info = omni.aa_to_info(self.aa, pols=self.pol)
+        self.info = omni.aa_to_info(self.aa, pols=self.pol, tol=0.1)
         self.reds = self.info.get_reds()
         self.nondegenerategains = {}
         self.gains = {}
