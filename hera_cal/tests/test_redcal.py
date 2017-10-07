@@ -260,19 +260,6 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 10)
 
-    def test_svd_convergence(self):
-        for hexnum in (2,3,4):
-            for dtype in (np.complex64, np.complex128):
-                reds, antpos = build_reds_hex(hexnum)
-                rc = om.RedundantCalibrator(reds, antpos)
-                gains, _, d = om.sim_red_data(reds, ['xx'], gain_scatter=.01)
-                d = {k:dk.astype(dtype) for k,dk in d.items()}
-                w = {k:1. for k in d.keys()}
-                gains = {k:gk.astype(dtype) for k,gk in gains.items()}
-                sol0 = {k:np.ones_like(gk) for k,gk in gains.items()}
-                sol0.update(rc.compute_ubls(d,sol0))
-                meta, sol = rc.lincal(d, sol0) # should not raise 'np.linalg.linalg.LinAlgError: SVD did not converge'
-    
 
     def test_lincal_hex_end_to_end_1pol_with_remove_degen_and_firstcal(self):
 
