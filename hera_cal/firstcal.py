@@ -493,7 +493,6 @@ def firstcal_run(files, opts, history):
 
             Iteratively run firstcal and look for rotated antennas.
             If rotated antennas found, fix the antenna and rerun firstcal.
-            Saves rotated antennas to a json file.
 
         Args:
             uv (pyuvdata.UVData): UVData object
@@ -587,6 +586,9 @@ def firstcal_run(files, opts, history):
     bls = [bl for bls in info.get_reds() for bl in bls]
     print('Number of redundant baselines:', len(bls))
 
+    # append reds to history
+    history += '\n{0}'.format(info.get_reds) 
+
     # Firstcal loop per file.
     for filename in files:
         # make output filename and check for existence
@@ -606,14 +608,12 @@ def firstcal_run(files, opts, history):
             print("Setting phase type to drift")
             uv_in.unphase_to_drift()
         
-        sols, write_to_json = _search_and_iterate_firstcal(uv_in, info, opts)
-        write_to_json = [str(ai) for (ai, pol) in write_to_json]
-        dict_for_json = {'rotated_antennas': write_to_json,
-                         'delays': {str(ai.ant()): sols[ai].tolist() for ai in sols.keys()}}
+        sols, rotated_antennas = _search_and_iterate_firstcal(uv_in, info, opts)
+        rotated_antennas = [str(ai) for (ai, pol) in rotated_antennas]
         # convert delays to a gain solution
         gain_solutions = {ai: omni.get_phase(uv_in.freq_array[0, :], sols[ai]) for ai in sols.keys()}
         # fix 180 phase offset in gain solutions
-        for antpol in write_to_json:
+        for antpol in rotated_antennas:
             gain_solutions[int(antpol)] *= -1
              
 
@@ -648,10 +648,6 @@ def firstcal_run(files, opts, history):
                                  appendhist=history, optional=optional)
         print('     Saving {0}'.format(outname))
         hc.write_calfits(outname, clobber=opts.overwrite)
-        json_name = '{0}.{1}'.format(outname, 'rotated_metric.json')
-        print ('     Writing {0}'.format(json_name))
-        with open(json_name, 'w') as f:
-            json.dump(dict_for_json, f, indent=4)
 
     return
 

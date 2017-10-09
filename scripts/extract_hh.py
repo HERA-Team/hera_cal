@@ -15,6 +15,8 @@ parser.add_argument('--filetype', type=str, help='Input and output file type. '
                     default='miriad')
 parser.add_argument('--fixuvws', action='store_true', help='Optional flag to '
                     'use antenna positions to replace uvws.')
+parser.add_argument('--overwrite', action='store_true', default=False,
+                    help='Optional flag to overwrite output file if it exists.')
 parser.add_argument('files', metavar='files', type=str, nargs='+',
                     help='Files to be processed.')
 args = parser.parse_args()
@@ -46,8 +48,8 @@ for filename in args.files:
                   str(version_info) + '.'
     if args.filetype == 'miriad':
         base, ext = os.path.splitext(filename)
-        uv.write_miriad(base + '.' + args.extension + ext)
+        uv.write_miriad(base + '.' + args.extension + ext, clobber=args.overwrite)
     else:
         base, ext = os.path.splitext(filename)
-        uv.write_uvfits(base + args.extension + ext)
+        uv.write_uvfits(base + args.extension + ext, clobber=args.overwrite)
     del(uv)  # Reset for next loop

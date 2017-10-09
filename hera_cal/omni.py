@@ -291,7 +291,7 @@ def reds_for_minimal_V(reds):
     return _reds
 
 
-def aa_to_info(aa, pols=['x'], fcal=False, minV=False, tol=0.1, **kwargs):
+def aa_to_info(aa, pols=['x'], fcal=False, minV=False, tol=1.0, **kwargs):
     '''Generate set of redundancies given an antenna array with idealized antenna positions.
     Args:
         aa: aipy antenna array object. Must have antpos_ideal or ant_layout attributes.
@@ -1022,6 +1022,8 @@ def omni_run(files, opts, history):
     reds = info.get_reds()
     bls = [bl for red in reds for bl in red]
 
+    # append reds to history
+    history += '\n{0}'.format(reds)
     ### Collect all firstcal files ###
     firstcal_files = {}
     if not opts.firstcal:

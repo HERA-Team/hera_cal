@@ -299,7 +299,7 @@ class RedundantCalibrator:
         Returns:
             solver: instantiated solver with redcal equations and weights
         """
-
+        # XXX ARP: concerned about detrend_phs.  Why is it necessary?
         dc = DataContainer(data)
         eqs = self.build_eqs(dc.keys())
         self.phs_avg = {} # detrend phases within redundant group, used for logcal to avoid phase wraps

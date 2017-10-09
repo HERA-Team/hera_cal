@@ -275,7 +275,6 @@ class TestRedundantCalibrator(unittest.TestCase):
     
 
     def test_lincal_hex_end_to_end_1pol_with_remove_degen_and_firstcal(self):
-
         antpos = build_hex_array(3)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
