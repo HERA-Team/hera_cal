@@ -1047,7 +1047,6 @@ class Test_omni_apply(object):
         for ant in ants:
             blts = uvd.antpair2ind(ant, 81)
             flags = uvd.flag_array[blts, 0, :, 0]
-            print(flags)
             nt.assert_true(np.allclose(flags, True))
 
         # clean up when we're done
