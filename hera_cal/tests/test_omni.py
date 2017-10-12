@@ -1029,7 +1029,7 @@ class Test_omni_apply(object):
         o = omni.get_optionParser('omni_apply')
         omni_file = os.path.join(DATA_PATH, 'test_input', xx_ocal)
         vis_file = os.path.join(DATA_PATH,  xx_vis)
-        cmd = "-p xx --omnipath={0} --extension=O --flag_missing {1}".format(omni_file, vis_file)
+        cmd = "-p xx --omnipath={0} --extension=O {1}".format(omni_file, vis_file)
 
         opts, files = o.parse_args(cmd.split())
         omni.omni_apply(files, opts)
@@ -1046,8 +1046,24 @@ class Test_omni_apply(object):
         # we should have all visibilities for antenna 81 flagged
         for ant in ants:
             blts = uvd.antpair2ind(ant, 81)
-            flags = uvd.flag_array[blts, 0, :, 0]
+            flags = uvd.flag_array[blts, :, :, :]
             nt.assert_true(np.allclose(flags, True))
+
+        # clean up when we're done
+        shutil.rmtree(objective_file)
+
+
+        # now test with option not to flag; we should have no flags present
+        cmd = "-p xx --omnipath={0} --extension=O --noflag_missing {1}".format(omni_file, vis_file)
+        opts, files = o.parse_args(cmd.split())
+        omni.omni_apply(files, opts)
+        nt.assert_true(os.path.exists(objective_file))
+        # read in calibrated data
+        uvd = UVData()
+        uvd.read_miriad(objective_file)
+
+        # no visibilities should be flagged
+        nt.assert_true(np.allclose(uvd.flag_array, False))
 
         # clean up when we're done
         shutil.rmtree(objective_file)
