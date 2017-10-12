@@ -1021,3 +1021,34 @@ class Test_omni_apply(object):
         for f in objective_files:
             if os.path.exists(f):
                 shutil.rmtree(f)
+
+    def test_single_file_execution_omni_apply_flag_missing(self):
+        objective_file = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAAO')
+        if os.path.exists(objective_file):
+            shutil.rmtree(objective_file)
+        o = omni.get_optionParser('omni_apply')
+        omni_file = os.path.join(DATA_PATH, 'test_input', xx_ocal)
+        vis_file = os.path.join(DATA_PATH,  xx_vis)
+        cmd = "-p xx --omnipath={0} --extension=O --flag_missing {1}".format(omni_file, vis_file)
+
+        opts, files = o.parse_args(cmd.split())
+        omni.omni_apply(files, opts)
+        nt.assert_true(os.path.exists(objective_file))
+        # read in calibrated data
+        uvd = UVData()
+        uvd.read_miriad(objective_file)
+
+        # read in calfits file to get list of antennas with solutions
+        uvc = UVCal()
+        uvc.read_calfits(omni_file)
+        ants = uvc.ant_array
+
+        # we should have all visibilities for antenna 81 flagged
+        for ant in ants:
+            blts = uvd.antpair2ind(ant, 81)
+            flags = uvd.flag_array[blts, 0, :, 0]
+            print(flags)
+            nt.assert_true(np.allclose(flags, True))
+
+        # clean up when we're done
+        shutil.rmtree(objective_file)

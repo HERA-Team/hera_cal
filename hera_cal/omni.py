@@ -962,6 +962,9 @@ def get_optionParser(methodName):
         o.add_option('--outpath', dest='outpath', default=None, type='string',
                      help='Directory to write-out omnical-ibrated visibility data. Will use input file path by default.')
         o.add_option('--overwrite', action='store_true', default=False, help='Overwrite output file if it exists.')
+        o.add_option('--flag_missing', action='store_true', default=False,
+                     help='Flag visibilities of antennas that exist in the data, but do not have a '
+                     'corresponding gain in the calibration solution. Default is False')
 
     return o
 
@@ -1297,7 +1300,10 @@ def omni_apply(files, opts):
             for bl, k in zip(*np.unique(mir.baseline_array, return_index=True)):
                 blmask = np.where(mir.baseline_array == bl)[0]
                 ai, aj = mir.baseline_to_antnums(bl)
-                if not ai in cal.ant_array or not aj in cal.ant_array:
+                if ai not in cal.ant_array or aj not in cal.ant_array:
+                    if opts.flag_missing:
+                        # flag the visibilities if either antenna is missing from calibration solutions
+                        mir.flag_array[blmask, nsp, :, p] = True
                     continue
                 for nsp, nspws in enumerate(mir.spw_array):
                     if cal.cal_type == 'gain' and cal.gain_convention == 'multiply':
