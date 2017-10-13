@@ -1026,7 +1026,7 @@ def omni_run(files, opts, history):
     bls = [bl for red in reds for bl in red]
 
     # append reds to history
-    history += '\n{0}'.format(reds)
+    history += '\nredundant_baslines = {0}'.format(reds)
     ### Collect all firstcal files ###
     firstcal_files = {}
     if not opts.firstcal:

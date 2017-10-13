@@ -587,7 +587,7 @@ def firstcal_run(files, opts, history):
     print('Number of redundant baselines:', len(bls))
 
     # append reds to history
-    history += '\n{0}'.format(info.get_reds) 
+    history += '\nredundant_baselines = {0}\n'.format(info.get_reds)
 
     # Firstcal loop per file.
     for filename in files:
