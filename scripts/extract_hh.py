@@ -19,6 +19,12 @@ parser.add_argument('--overwrite', action='store_true', default=False,
                     help='Optional flag to overwrite output file if it exists.')
 parser.add_argument('files', metavar='files', type=str, nargs='+',
                     help='Files to be processed.')
+parser.add_argument('--ex_ants_file', type=str, help='Text file with list of antennas'
+                    ' which are excluded downstream in RTP. Generally, these are '
+                    'antennas which are being actively commissioned, or known as bad.'
+                    ' Note these values are only stored in the history, not actually '
+                    'flagged at this step.',
+                    default=None)
 args = parser.parse_args()
 
 for filename in args.files:
@@ -46,6 +52,10 @@ for filename in args.files:
         uv.history += ' and uvws corrected'
     uv.history += ' with hera_cal/scripts/extract_hh.py, hera_cal version: ' +\
                   str(version_info) + '.'
+    if args.ex_ants_file:
+        ex_ants = np.loadtxt(args.ex_ants_file, dtype=int)
+        ex_ants = [str(ant) for ant in ex_ants if ant in uv.get_ants()]
+        uv.history += ' Antennas to exclude in RTP: ' + ','.join(ex_ants) + '.'
     if args.filetype == 'miriad':
         base, ext = os.path.splitext(filename)
         uv.write_miriad(base + '.' + args.extension + ext, clobber=args.overwrite)
