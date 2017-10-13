@@ -953,6 +953,8 @@ def get_optionParser(methodName):
                      help='metrics from hera_qm about array qualities')
         o.add_option('--overwrite', action='store_true', default=False,
                      help="Overwrite output files even if they already exist.")
+        o.add_option('--reds_tolerance', type='float', default=1.0,
+                     help="Tolerance level for calculating reds. Default is 1.0ns")
 
     elif methodName == 'omni_apply':
         o.add_option('--firstcal', action='store_true',
@@ -1021,7 +1023,7 @@ def omni_run(files, opts, history):
     else:
         ex_ants = []
     info = aa_to_info(aa, pols=list(set(''.join(pols))),
-                      ex_ants=ex_ants, crosspols=pols, minV=opts.minV)
+                      ex_ants=ex_ants, crosspols=pols, minV=opts.minV, tol=opts.reds_tolerance)
     reds = info.get_reds()
     bls = [bl for red in reds for bl in red]
 
