@@ -582,7 +582,7 @@ def firstcal_run(files, opts, history):
     if len(ubls) != None:
         print('Using Unique Baselines:', ubls)
     info = omni.aa_to_info(aa, pols=[opts.pol[0]],
-                           fcal=True, ubls=ubls, ex_ants=ex_ants)
+                           fcal=True, ubls=ubls, ex_ants=ex_ants, tol=opts.reds_tolerance)
     bls = [bl for bls in info.get_reds() for bl in bls]
     print('Number of redundant baselines:', len(bls))
 
@@ -683,4 +683,6 @@ def firstcal_option_parser():
                  help='optionally add the git origin of the cal repo')
     o.add_option('--metrics_json', default='',
                  help='metrics from hera_qm about array qualities')
+    o.add_option('--reds_tolerance', type='float', default=1.0,
+                 help='Tolerance level for calculating reds. Default is 1.0ns')
     return o
