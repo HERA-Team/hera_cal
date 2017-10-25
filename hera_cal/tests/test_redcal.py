@@ -298,8 +298,9 @@ class TestRedundantCalibrator(unittest.TestCase):
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
         ants = [key for key in sol_rd.keys() if len(key)==2]
         gainSols = np.array([sol_rd[ant] for ant in ants])
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'xx') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+                for (ant1,ant2,pol) in bls_for_average], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
         #np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
 
@@ -315,9 +316,9 @@ class TestRedundantCalibrator(unittest.TestCase):
         sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+            for (ant1,ant2,pol) in bls_for_average], axis=0)
         degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
-            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+            for (ant1,ant2,pol) in bls_for_average], axis=0)
         
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
         #np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
@@ -373,11 +374,13 @@ class TestRedundantCalibrator(unittest.TestCase):
         bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         gainSols = np.array([sol_rd[ant] for ant in ants])
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'xx') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+            for (ant1,ant2,pol) in bls_for_average], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'yy') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-            for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)
+            for (ant1,ant2,pol) in bls_for_average], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
         #np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='x']), axis=0), 0, 10)
         #np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='y']), axis=0), 0, 10)
@@ -394,15 +397,17 @@ class TestRedundantCalibrator(unittest.TestCase):
 
         sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'xx') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+            for (ant1,ant2,pol) in bls_for_average], axis=0)
         degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
-            for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)
+            for (ant1,ant2,pol) in bls_for_average], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'yy') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-            for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)
+            for (ant1,ant2,pol) in bls_for_average], axis=0)
         degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
-            for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)
+            for (ant1,ant2,pol) in bls_for_average], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
 
         gainSols = np.array([sol_rd[ant] for ant in ants])
@@ -460,11 +465,13 @@ class TestRedundantCalibrator(unittest.TestCase):
         visPolsStr = np.array([bl[2] for bl in bl_pairs])
         bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         gainSols = np.array([sol_rd[ant] for ant in ants])
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'xx') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'yy') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
         #np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
 
@@ -496,16 +503,18 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 
             np.mean(np.angle(degenGains), axis=0), 10)
         
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'xx') and (bls[0] in v.keys())]
         degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
         
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'yy') and (bls[0] in v.keys())]
         degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
 
         visSols = np.array([sol_rd[bl] for bl in bl_pairs])
@@ -561,11 +570,14 @@ class TestRedundantCalibrator(unittest.TestCase):
         bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         gainSols = np.array([sol_rd[ant] for ant in ants])
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
+        
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'xx') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'yy') and (bls[0] in v.keys())]
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
         #np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='x']), axis=0), 0, 10)
         #np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='y']), axis=0), 0, 10)
@@ -585,16 +597,18 @@ class TestRedundantCalibrator(unittest.TestCase):
         gainSols = np.array([sol_rd[ant] for ant in ants])
         degenGains = np.array([gains[ant] for ant in ants])
 
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'xx') and (bls[0] in v.keys())]
         degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'xx'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
         
+        bls_for_average = [bl for bls in reds for bl in bls if (bl[2] == 'yy') and (bls[0] in v.keys())]
         degenMeanSqAmplitude = np.mean([np.abs(gains[(ant1,pol[0])] * gains[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])]) 
-                for (ant1,ant2,pol) in v.keys() if pol == 'yy'], axis=0)        
+                for (ant1,ant2,pol) in bls_for_average], axis=0)        
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
 
         np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='x']), axis=0), 

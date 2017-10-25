@@ -470,6 +470,11 @@ class TestMethods(object):
         nt.assert_equal(xants, [0, 1, 81])
         return
 
+    def test_info_reds_to_redcal_reds(self):
+        reds_in = [[(0,1),(1,2)], [(3,4),(4,5)]]
+        reds_out_correct  = [[(0,1,'xx'), (1,2,'xx')], [(0,1,'yy'), (1,2,'yy')]]
+        reds_out = omni.info_reds_to_redcal_reds(reds_in, 3, pol_to_factor={'x':0, 'y':1})
+        nt.assert_equal(reds_out_correct, reds_out)
 
 class Test_Antpol(object):
 
