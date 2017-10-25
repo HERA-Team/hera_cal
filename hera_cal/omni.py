@@ -334,6 +334,18 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, tol=1.0, **kwargs):
     return info
 
 
+def info_reds_to_redcal_reds(reds, nant, pol_to_factor=POLNUM):
+    '''Converts the notion of reds from info.get_reds() here to the one used by redcal. 
+    Takes a pol_to_factor dict (default global dictionary POLNUM) of the form {'x':0, 'y':1} 
+    to figure from a number what the antpol is. E.g. 129 is actually (1,'y'). 
+    nant usually comes from info.nant.'''
+    
+    reverse_POLNUM = {factor:pol for pol,factor in pol_to_factor.items()}
+    redcal_reds = [[(i%nant, j%nant, reverse_POLNUM[i // nant] + reverse_POLNUM[j // nant]) 
+                    for (i,j) in bls] for bls in reds]
+    return redcal_reds
+
+
 def remove_degen(info, g, v, g0, minV=False):
     ''' This function properly removes omnical degeneracies in the 1pol, 2pol, 4pol, and
     4pol_minV cases. Wraps the remove_degen fucntion in hera_cal.redcal. See HERA Memo #30
@@ -369,23 +381,11 @@ def remove_degen(info, g, v, g0, minV=False):
     antpos = dict(zip([ant[0] for ant in ants],
         [np.append(info_antpos[ant[0],0:2],[0]) for ant in ants]))
 
-    # Set up redcal with empy reds (reds not needed for remove_degen) and then automatically determine pol_mode
-    rc = redcal.RedundantCalibrator(reds = [])
-    if len(pols) == 1 and len(antpols) == 1:
-        rc.pol_mode = '1pol'
-    elif len(pols) == 2 and len(antpols) == 2:
-        rc.pol_mode = '2pol'
-    elif len(pols) == 4 and len(antpols) == 2 and minV:
-        rc.pol_mode = '4pol_minV'
-    elif len(pols) == 4 and len(antpols) == 2:
-        rc.pol_mode = '4pol'
-    else:
-        rc.pol_mode = 'unrecognized_pol_mode'
-
     # Put sols into properly formatted dictionaries and remove degeneracies
     sol = {(i,antpol): g[antpol][i] for (i,antpol) in ants}
     sol.update({(i,j,pol): v[pol][(i,j)] for (i,j,pol) in bl_pairs})
     sol0 = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
+    rc = redcal.RedundantCalibrator(info_reds_to_redcal_reds(info.get_reds(), info.nant, pol_to_factor=POLNUM))
     newSol = rc.remove_degen(antpos, sol, degen_sol=sol0)
 
     # Put back into omnical format dictionaires
