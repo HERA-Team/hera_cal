@@ -49,7 +49,7 @@ class AntennaArray(aipy.pol.AntennaArray):
         return changed
 
 
-def get_aa_from_uv(uvd):
+def get_aa_from_uv(uvd, freqs=None):
     '''
     Generate an AntennaArray object from a pyuvdata UVData object.
 
@@ -98,7 +98,9 @@ def get_aa_from_uv(uvd):
     # unpack from dict -> numpy array
     for k in antpos.keys():
         antpos_ideal[k, :] = np.array([antpos[k]['x'], antpos[k]['y'], antpos[k]['z']])
-    freqs = np.array([0.15])
+    if freqs == None:
+        # Default to single frequency (150 MHz) for getting redundancy info
+        freqs = np.array([0.15])
     # Make list of antennas.
     # These are values for a zenith-pointing antenna, with a dummy Gaussian beam.
     antennas = []
