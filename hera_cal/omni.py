@@ -2,6 +2,7 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 import omnical
 from pyuvdata import UVCal, UVData, uvtel
+import pyuvdata.utils as uvutils
 import aipy
 from aipy.miriad import pol2str
 import warnings
@@ -9,6 +10,7 @@ import os
 import glob
 import re
 import optparse
+import astropy.constants as const
 from hera_cal import redcal
 from hera_cal import utils
 from hera_cal import cal_formats
@@ -823,14 +825,43 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     uv.zenith_dec = np.array([aa.lat] * uv.Nblts)
 
     # antenna information
+    ants_data = np.unique(np.concatenate([uv.ant_1_array, uv.ant_2_array]).flatten())
     uv.Nants_telescope = len(aa)
     uv.antenna_numbers = np.arange(uv.Nants_telescope, dtype=int)
-    uv.Nants_data = len(np.unique(np.concatenate(
-        [uv.ant_1_array, uv.ant_2_array]).flatten()))
+    uv.Nants_data = len(ants_data)
     uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
-    antpos = []
-    for k in aa:
-        antpos.append(k.pos)
+
+    # Compute antenna positions.
+    # AntennaArray positions are in rotECEF, absolutely referenced (rather than relative to
+    # the array center), and are in nanoseconds (instead of meters).
+    # pyuvdata is expecting antenna_positions in ECEF, relative to the array location, in meters.
+    # We can use utility functions in pyuvdata to perform these conversions.
+    # Also note that AntennaArray antenna positions do _not_ follow the above convention when
+    # generated from a calfile (get_aa_from_calfile), as opposed to the data
+    # (using get_aa_from_uv). Antenna positions in the uvfits files will be wrong for
+    # calfile-generated files.
+    antpos = np.zeros((len(aa), 3))
+    c_ns = const.c.to('m/ns').value
+    lat, lon, alt = uv.telescope_location_lat_lon_alt
+
+    for iant, ant in enumerate(aa):
+        # test to see if antenna is included in antenna array
+        if iant in ants_data:
+            # convert from ns -> m
+            pos = ant.pos * c_ns
+
+            # rotate from rotECEF -> ECEF
+            pos_ecef = uvutils.ECEF_from_rotECEF(pos, lon)
+
+            # subtract off array location, to get just relative positions
+            rel_pos = pos_ecef - uv.telescope_location
+
+            # save in array
+            antpos[iant, :] = rel_pos
+        else:
+            # save antenna position as equal and opposite to telescope_location,
+            # so it ends up at the center of the earth
+            antpos[iant, :] = -1 * uv.telescope_location
 
     uv.antenna_positions = np.array(antpos)
     uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_telescope)
