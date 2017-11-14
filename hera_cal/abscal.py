@@ -14,6 +14,7 @@ from hera_cal import omni, utils
 import linsolve
 from collections import OrderedDict as odict
 import copy
+from scipy import signal
 
 
 
@@ -36,7 +37,7 @@ def amp_lincal(model, data, wgts=None, verbose=False):
     data : visibility data of measurements, type=dictionary
         keys are antenna pair tuples (must match model), values are complex ndarray visibilities
             these visibilities must be 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency
+            and [1] axis indexing frequency 
 
     wgts : least square weights of data, type=dictionry, [default=None]
         keys are antenna pair tuples (must match model), values are real floats
@@ -175,7 +176,7 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False):
 class AbsCal(object):
     """
     """
-    def __init__(self, model, data, wgts=None, bls=None, antpos=None, ants=None, freqs=None, ):
+    def __init__(self, model, data, wgts=None, bls=None, antpos=None, ants=None, freqs=None):
         """
         AbsCal object for absolute calibration of flux scale and phasing
         given a visibility model and measured data. model, data and weights
@@ -255,14 +256,14 @@ class AbsCal(object):
         wgts = copy.deepcopy(self.wgts)
 
         if unravel_time:
-            self.unravel(data, 't', 0)
-            self.unravel(model, 't', 0)
-            self.unravel(wgts, 't', 0)
+            unravel(data, 't', 0)
+            unravel(model, 't', 0)
+            unravel(wgts, 't', 0)
 
         if unravel_freq:
-            self.unravel(data, 'f', 1)
-            self.unravel(model, 'f', 1)
-            self.unravel(wgts, 'f', 1)
+            unravel(data, 'f', 1)
+            unravel(model, 'f', 1)
+            unravel(wgts, 'f', 1)
 
         # run linsolve
         fit = amp_lincal(model, data, wgts=wgts, verbose=verbose)
@@ -361,11 +362,28 @@ def run_abscal(data_files, model_files):
         AC.run()
 
 
-def smooth_model(model):
+def smooth_model(model, kernel=(3, 15)):
     """
-    Fourier smooth model visibility real and imag components separately
+    smooth model visibility real and imag components separately
+    using a median filter, then recombine into complex visibility
+
+    Warning: too aggressive smoothing can lead to signal loss
+    and can introduce artifacts
+    
+    Parameters:
+    -----------
+    model : dictionary
 
     """
+    model = copy.deepcopy(model)
+    for i, k in enumerate(model.keys()):
+        mreal = np.real(model[k])
+        mimag = np.imag(model[k])
+        mreal_smoothed = signal.medfilt(mreal, kernel_size=kernel)
+        mimag_smoothed = signal.medfilt(mimag, kernel_size=kernel)
+        model[k] = (mreal_smoothed + 1j*mimag_smoothed)
+
+    return model
 
 
 
@@ -383,7 +401,9 @@ def unravel(data, prefix, axis, copy_dict=None):
     axis : which axis of the visibility to "promote" or unravel, type=int
 
     copy_dict : ancillary dictionary that matches data in keys, but 
-        needs to get its values copied to match new data dictionary
+        needs to get its values directly copied (not unraveled)
+        just to match shape of new data dictionary. This is necessary, 
+        for example, for the baselines (bls) dictionary 
     """
     # loop over keys
     for i, k in enumerate(data.keys()):
@@ -392,9 +412,11 @@ def unravel(data, prefix, axis, copy_dict=None):
             data[k+("{}{}".format(prefix, str(j)),)] = np.take(data[k], j, axis=axis)
             if copy_dict is not None:
                 copy_dict[k+("{}{}".format(prefix, str(j)),)] = copy_dict[k]
+        # remove original key
         data.pop(k)
         if copy_dict is not None:
             copy_dict.pop(k)
+
 
 def echo(message, type=0, verbose=True):
     if verbose:
@@ -405,7 +427,8 @@ def echo(message, type=0, verbose=True):
             print(message)
             print("-"*40)
 
-def lst_align(model, data, time_array, freq_array):
+
+def vis_align(model, data, time_array, freq_array):
     """
     interpolate model complex visibility onto the time-frequency basis of data
 
@@ -416,8 +439,6 @@ def lst_align(model, data, time_array, freq_array):
 
     """
     
-
-
 
 
 def gains2calfits(fname, gain_array, ants, freq_array, time_array, pol_array,
