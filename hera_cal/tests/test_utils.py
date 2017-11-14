@@ -60,3 +60,27 @@ class TestAA(object):
         new_top = [new_params['0'][key] for key in antpos.keys()]
         old_top = [antpos[key] for key in antpos.keys()]
         nt.assert_true(np.allclose(old_top, new_top))
+
+class Test_get_antpos(object):
+    def setUp(self):
+        uvd = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, "zen.2457999.76839.xx.HH.uvA"))
+        self.uvd = uvd
+
+    def test_antpos(self):
+        # no center, no pick data ants
+        antpos, ants = utils.get_antpos(self.uvd, center=False, pick_data_ants=False)
+        nt.assert_equal(len(ants), 30)
+        nt.assert_almost_equal(antpos[0,0], -112.58077902467922)
+        nt.assert_equal(ants[0], 67)
+    def test_antpos_center(self):
+        # center
+        antpos, ants = utils.get_antpos(self.uvd, center=True, pick_data_ants=False)
+        nt.assert_almost_equal(antpos[0,0], -22.008372688776944)
+    def test_antpos_pick_data_ants(self):
+        # pick data ants
+        antpos, ants = utils.get_antpos(self.uvd, center=True, pick_data_ants=True)
+        nt.assert_equal(ants[0], 0)
+
+
+
