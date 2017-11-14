@@ -4,5 +4,6 @@ import firstcal
 import redcal
 import cal_formats
 import version
+import abscal
 
 __version__ = version.version
