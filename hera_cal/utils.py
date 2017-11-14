@@ -144,3 +144,37 @@ def get_aa_from_calfile(freqs, calfile, **kwargs):
 
     # generate aa
     return get_aa(freqs, **kwargs)
+
+def get_antpos(uvd, center=True, pick_data_ants=False):
+    """
+    get antenna positions in topocentric coordinates in units of meters
+	from a pyuvdata.UVData instance
+
+	Parameters:
+	-----------
+    uvd : pyuvdata.UVData object with data loaded in
+    center : bool, if True: subtract median of array position from antpos
+	pick_data_ants : bool, if True: return only antennas found in data
+
+	Returns:
+	--------
+	(antpos, ants)
+
+	antpos : ndarray, antennas positions in TOPO frame and units of meters, shape=(Nants, 3)
+	ants : ndarray, antenna numbers matching ordering of antpos, shape=(Nants,)
+    """
+    antpos = uvutils.ENU_from_ECEF((uvd.antenna_positions + uvd.telescope_location).T, *uvd.telescope_location_lat_lon_alt).T
+    ants = uvd.antenna_numbers
+
+    if pick_data_ants:
+        data_ants = np.unique(np.concatenate([uvd.ant_1_array, uvd.ant_2_array]))
+        telescope_ants = uvd.antenna_numbers
+        select = map(lambda x: x in data_ants, telescope_ants)
+        antpos = antpos[select, :]
+        ants = data_ants
+
+    if center is True:
+        antpos -= np.median(antpos, axis=0)
+
+    return antpos, ants
+
