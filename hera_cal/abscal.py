@@ -429,7 +429,7 @@ class AbsCal(object):
 def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
                save=False, calfits_fname=None, output_gains=False, overwrite=False, **kwargs):
     """
-    iterate over a single miriad visibility file and run AbsCal.
+    run AbsCal on  a single miriad visibility file.
 
     Parameters:
     -----------
@@ -448,6 +448,9 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
     for i, k in enumerate(data.keys()):
         if k[0] == k[1]:
             data.pop(k)
+    for i, k in enumerate(flags.keys()):
+        if k[0] == k[1]:
+            flags.pop(k)
 
     # get data params
     data_times = uvd.time_array.reshape(uvd.Ntimes, uvd.Nbls)[:, 0]
@@ -473,6 +476,9 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
         else:
             uvm += uv
     model, mflags, mpols = UVData2AbsCalDict([uvm])
+    for i, k in enumerate(model.keys()):
+        if k[0] == k[1]:
+            model.pop(k)
 
     # get model params
     model_times = uvm.time_array.reshape(uvm.Ntimes, uvm.Nbls)[:, 0]
