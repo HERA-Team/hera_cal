@@ -471,6 +471,8 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
     output_gains : boolean, if True: return AbsCal gains
     """
     # load data
+    echo("loading data files", type=1, verbose=verbose)
+    echo("loading {}".format(data_file), type=0, verbose=verbose)
     uvd = UVData()
     uvd.read_miriad(data_file)
     data, flags, pols = UVData2AbsCalDict([uvd])
@@ -498,6 +500,7 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
 
     # load models
     for i, mf in enumerate(model_files):
+        echo("loading {}".format(mf), type=0, verbose=verbose)
         uv = UVData()
         uv.read_miriad(mf)
         if i == 0:
@@ -529,6 +532,9 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
 
     # write to file
     if save:
+        if calfits_fname is None:
+            calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
+        echo("saving {}".format(calfits_fname), type=1, verbose=verbose)
         gains2calfits(calfits_fname, AC.gain_array, data_freqs, data_times, data_pols,
                       gain_convention='multiply', inttime=10.7, overwrite=overwrite, **kwargs)
 
@@ -799,6 +805,17 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
         print("{} already exists, not overwriting...".format(calfits_fname))
     else:
         uvc.write_calfits(calfits_fname, clobber=overwrite)
+
+
+def abscal_arg_parser():
+    a = argparse.ArgumentParser()
+    a.add_argument("--data_file", type=str, help="path to miriad data file to-be-calibrated.", required=True)
+    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of miriad files for visibility model.", required=True)
+    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
+    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
+    a.add_argument("--unravel_time", default=False, action='store_true', help="couple all times together into linsolve equations.")
+    return a
 
 
 def echo(message, type=0, verbose=True):
