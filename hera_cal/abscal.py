@@ -80,6 +80,18 @@ def amp_lincal(model, data, wgts=None, verbose=False):
         nan_select = np.isnan(ydata[k])
         ydata[k][nan_select] = 0.0
         wgts[k][nan_select] = 0.0
+        nan_select = np.isnan(model[k])
+        model[k][nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
+
+    # replace infs
+    for i, k in enumerate(keys):
+        inf_select = np.isinf(ydata[k])
+        ydata[k][inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
+        inf_select = np.isinf(model[k])
+        model[k][inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
 
     # setup linsolve equations
     eqns = odict([(k, "a{}*amp".format(str(i))) for i, k in enumerate(keys)])
@@ -168,7 +180,19 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False):
     for i, k in enumerate(keys):
         nan_select = np.isnan(ydata[k])
         ydata[k][nan_select] = 0.0
-        wgts[k][nan_select] = 1e-10
+        wgts[k][nan_select] = 0.0
+        nan_select = np.isnan(model[k])
+        model[k][nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
+
+    # replace infs
+    for i, k in enumerate(keys):
+        inf_select = np.isinf(ydata[k])
+        ydata[k][inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
+        inf_select = np.isinf(model[k])
+        model[k][inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
 
     # setup baseline terms
     bx = odict([(k, ["bx_{}_{}".format(k[0], k[1]), bls[k][0]]) for i, k in enumerate(keys)])
@@ -319,6 +343,7 @@ class AbsCal(object):
         # run linsolve
         fit = amp_lincal(model, data, wgts=wgts, verbose=verbose)
         self.gain_amp = np.sqrt(fit['amp'])
+
         
     def phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=False):
         """
@@ -389,7 +414,7 @@ class AbsCal(object):
         gain_array *= amps
 
         # multiply phase
-        phases = np.exp(self.gain_psi[np.newaxis] - 1j*np.einsum("ijkl, hi -> hjkl", self.gain_phi, self.antpos[:, :2]))
+        phases = np.exp(-1j*self.gain_psi[np.newaxis] - 1j*np.einsum("ijkl, hi -> hjkl", self.gain_phi, self.antpos[:, :2]))
         gain_array *= phases
 
         self.gain_array = gain_array
@@ -417,29 +442,33 @@ class AbsCal(object):
         """
 
         # run amp cal
+        echo("running amp_lincal", type=1, verbose=verbose)
         self.amp_lincal(unravel_freq=unravel_freq, unravel_time=unravel_time, unravel_pol=False, verbose=verbose)
 
         # run phs cal
+        echo("running phs_logcal", type=1, verbose=verbose)
         self.phs_logcal(unravel_freq=unravel_freq, unravel_time=unravel_time, unravel_pol=False, verbose=verbose)
 
         # make gains
+        echo("making gains", type=1, verbose=verbose)
         self.make_gains(gains2dict=gains2dict)
 
 
 def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
                save=False, calfits_fname=None, output_gains=False, overwrite=False, **kwargs):
     """
-    run AbsCal on  a single miriad visibility file.
+    run AbsCal on a single data miriad file
 
     Parameters:
     -----------
-    data_file : path to miriad file, type=string
+    data_file : path to data miriad file, type=string
         a single miriad file containing complex visibility data
 
     model_files : path(s) to miriad files(s), type=list
         a list of one or more miriad files containing complex visibility data
-        that overlaps the time and frequency range of data_file
+        that ** overlaps ** the time and frequency range of data_file
 
+    output_gains : boolean, if True: return AbsCal gains
     """
     # load data
     uvd = UVData()
@@ -484,8 +513,15 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
     model_times = uvm.time_array.reshape(uvm.Ntimes, uvm.Nbls)[:, 0]
     model_freqs = uvm.freq_array.squeeze()
 
-    # align data
+    # align model freq-time axes to data axes
     model = interp_model(model, model_times, model_freqs, data_times, data_freqs, kind='cubic', fill_value=0)
+
+    # check if model has only unique baseline data
+    # this is the case if, for example, the model Nbls in less than the data Nbls
+    if uvm.Nbls < uvd.Nbls:
+        # try to expand model data into redundant baseline groups
+        red_info = hc.omni.aa_to_info(hc.utils.get_aa_from_uv(uvm))
+        model = mirror_data_to_red_bls(model, red_info)
 
     # run abscal
     AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, pols=data_pols)
@@ -643,6 +679,11 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs, kind='
                                                kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
             interp_imag = interpolate.interp2d(model_freqs, model_times, np.imag(model[k][:, :, p]),
                                                kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
+
+            # force things near zero to zero
+            interp_real[np.isclose(interp_real, 0.0)] *= 0.0
+            interp_imag[np.isclose(interp_imag, 0.0)] *= 0.0
+
             # rejoin
             new_data.append(interp_real + 1j*interp_imag)
 
@@ -653,14 +694,63 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs, kind='
 
 def mirror_data_to_red_bls(data, red_info):
     """
-    Given unique baseline data, copy over to all other
-    baselines in the same redundant group
+    Given unique baseline data (like omnical model visibilities),
+    copy the data over to all other baselines in the same redundant group
 
+    Parameters:
+    -----------
+    data : data dictionary in AbsCal form, see AbsCal docstring for details
+
+    red_info : RedundantInfo object of the array.
+        See hera_cal.utils.get_aa_from_uv and hera_cal.omni.aa_to_info methods
+        to generate a red_info object.
+
+    Output:
+    -------
+    red_data : data dictionary in AbsCal form, with unique baseline data
+        distributed to redundant baseline groups.
 
     """
+    # get data and ants
     data = copy.deepcopy(data)
+    ants = np.unique(np.concatenate([data.keys()]))
 
-    return data
+    # get redundant baselines
+    reds = red_info.get_reds()
+
+    # ensure these reds are antennas pairs of antennas in the data
+    pop_reds = []
+    for i, bls in enumerate(reds):
+        pop_bls = []
+        for j, bl in enumerate(bls):
+            if bl[0] not in ants or bl[1] not in ants:
+                pop_bls.append(j)
+        for j in pop_bls[::-1]:
+            reds[i].pop(j)
+        if len(reds[i]) == 0:
+            pop_reds.append(i)
+    for i in pop_reds[::-1]:
+        reds.pop(i)
+
+    # make red_data dictionary
+    red_data = odict()
+
+    # iterate over red bls
+    for i, bls in enumerate(reds):
+        # find which key in data is in this group
+        select = np.array(map(lambda x: x in data.keys(), reds[i]))
+        if True not in select:
+            continue
+        k = reds[i][np.argmax(select)]
+
+        # iterate over bls and insert data into red_data
+        for j, bl in enumerate(bls):
+            red_data[bl] = copy.copy(data[k])
+
+    # re-sort
+    red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
+
+    return red_data
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
