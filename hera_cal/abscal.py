@@ -795,7 +795,7 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
     uvc = cal_formats.HERACal(meta, heracal_gains)
 
     # write to file
-    if os.path.exists(calfits_fname) and overwrite is False:
+    if os.path.exists(calfits_fname) is True and overwrite is False:
         print("{} already exists, not overwriting...".format(calfits_fname))
     else:
         uvc.write_calfits(calfits_fname, clobber=overwrite)
