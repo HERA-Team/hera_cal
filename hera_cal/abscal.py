@@ -10,12 +10,15 @@ import sys
 import argparse
 import numpy as np
 from pyuvdata import UVCal, UVData
-from hera_cal import omni, utils
+from pyuvdata import utils as uvutils
+from hera_cal import omni, utils, firstcal, cal_formats
 import linsolve
 from collections import OrderedDict as odict
 import copy
 from scipy import signal
+from scipy import interpolate
 
+from get_antpos import get_antpos
 
 
 def amp_lincal(model, data, wgts=None, verbose=False):
@@ -28,18 +31,25 @@ def amp_lincal(model, data, wgts=None, verbose=False):
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-        keys are antenna pair tuples, values are complex ndarray visibilities
-        these visibilities must be 2D arrays, with [0] axis indexing time
-        and [1] axis indexing frequency
-        Example: Ntimes = 2, Nfreqs = 3
+        keys are antenna-pair tuples, values are complex ndarray visibilities
+        these visibilities must be at least 2D arrays, with [0] axis indexing time
+        and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
+        should index polarization.
+
+        Example: Ntimes = 2, Nfreqs = 3, Npol = 0
         model = {(0, 1): np.array([[1+0j, 2+1j, 0+2j], [3-1j, -1+2j, 0+2j]]), ...}
 
-    data : visibility data of measurements, type=dictionary
-        keys are antenna pair tuples (must match model), values are complex ndarray visibilities
-            these visibilities must be 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency 
+        Example: Ntimes = 2, Nfreqs = 3, Npol = 2
+        model = {(0, 1): np.array([ [[1+0j, 2+1j, 0+2j],
+                                     [3-1j,-1+2j, 0+2j]],
+                                    [[3+1j, 4+0j,-1-3j],
+                                     [4+2j, 0+0j, 0-1j]] ]), ...}
 
-    wgts : least square weights of data, type=dictionry, [default=None]
+    data : visibility data of measurements, type=dictionary
+        keys are antenna pair tuples (must match model), values are
+        complex ndarray visibilities matching shape of model
+
+    wgts : weights of data, type=dictionry, [default=None]
         keys are antenna pair tuples (must match model), values are real floats
         matching shape of model and data
 
@@ -63,23 +73,24 @@ def amp_lincal(model, data, wgts=None, verbose=False):
     if wgts is None:
         wgts = copy.deepcopy(ydata)
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(ydata[k]).astype(np.float)
+            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
     # replace nans
     for i, k in enumerate(keys):
         nan_select = np.isnan(ydata[k])
-        ydata[k][nan_select] = -1.0
-        wgts[k][nan_select] = 1e-10
+        ydata[k][nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
 
     # setup linsolve equations
-    eqn = "1*A"
+    eqns = odict([(k, "a{}*amp".format(str(i))) for i, k in enumerate(keys)])
+    ls_design_matrix = odict([("a{}".format(str(i)), np.ones(ydata[k].shape, dtype=np.float)) for i, k in enumerate(keys)])
 
     # setup linsolve dictionaries
-    ls_data = odict([(eqn, ydata[k]) for i, k in enumerate(keys)])
-    ls_wgts = odict([(eqn, wgts[k]) for i, k in enumerate(keys)])
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
 
     # setup linsolve and run
-    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts)
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
     echo("...running linsolve", verbose=verbose)
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
@@ -104,22 +115,30 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False):
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-        keys are antenna pair tuples, values are complex ndarray visibilities
-        these visibilities must be 2D arrays, with [0] axis indexing time
-        and [1] axis indexing frequency
-        Example: Ntimes = 2, Nfreqs = 3
+        keys are antenna-pair tuples, values are complex ndarray visibilities
+        these visibilities must be at least 2D arrays, with [0] axis indexing time
+        and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
+        should index polarization.
+
+        Example: Ntimes = 2, Nfreqs = 3, Npol = 0
         model = {(0, 1): np.array([[1+0j, 2+1j, 0+2j], [3-1j, -1+2j, 0+2j]]), ...}
 
+        Example: Ntimes = 2, Nfreqs = 3, Npol = 2
+        model = {(0, 1): np.array([ [[1+0j, 2+1j, 0+2j],
+                                     [3-1j,-1+2j, 0+2j]],
+                                    [[3+1j, 4+0j,-1-3j],
+                                     [4+2j, 0+0j, 0-1j]] ]), ...}
+
     data : visibility data of measurements, type=dictionary
-        keys are antenna pair tuples (must match model), values are complex ndarray visibilities
-            these visibilities must be 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency
+        keys are antenna pair tuples (must match model), values are
+        complex ndarray visibilities matching shape of model
 
     bls : baseline vectors of antenna pairs, type=dictionary
         keys are antenna pair tuples (must match model), values are 2D or 3D ndarray
-        baseline vectors in meters, with [0] index containing X separation, and [1] index Y separation.
+        baseline vectors in meters, with [0] index containing X (E-W) separation
+        and [1] index Y (N-S) separation.
 
-    wgts : least square weights of data, type=dictionry, [default=None]
+    wgts : weights of data, type=dictionry, [default=None]
         keys are antenna pair tuples (must match model), values are real floats
         matching shape of model and data
 
@@ -143,7 +162,7 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False):
     if wgts is None:
         wgts = copy.deepcopy(ydata)
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(ydata[k]).astype(np.float)
+            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
     # replace nans
     for i, k in enumerate(keys):
@@ -152,20 +171,21 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False):
         wgts[k][nan_select] = 1e-10
 
     # setup baseline terms
-    bx = odict([("bx_{}_{}".format(k[0], k[1]), bls[k][0]) for i, k in enumerate(keys)])
-    by = odict([("by_{}_{}".format(k[0], k[1]), bls[k][1]) for i, k in enumerate(keys)])
-    ls_bldata = copy.deepcopy(bx)
-    ls_bldata.update(by)
+    bx = odict([(k, ["bx_{}_{}".format(k[0], k[1]), bls[k][0]]) for i, k in enumerate(keys)])
+    by = odict([(k, ["by_{}_{}".format(k[0], k[1]), bls[k][1]]) for i, k in enumerate(keys)])
 
     # setup linsolve equations
-    eqns = odict([(k, "psi + PHIx*bx_{}_{} + PHIy*by_{}_{}".format(k[0], k[1], k[0], k[1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, "psi*a{} + PHIx*{} + PHIy*{}".format(str(i), bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+    ls_design_matrix = odict([("a{}".format(str(i)), np.ones(ydata[k].shape, dtype=np.float)) for i, k in enumerate(keys)])
+    ls_design_matrix.update(odict(bx.values()))
+    ls_design_matrix.update(odict(by.values()))
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
     ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
 
     # setup linsolve and run
-    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_bldata)
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
     echo("...running linsolve", verbose=verbose)
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
@@ -174,9 +194,8 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False):
 
 
 class AbsCal(object):
-    """
-    """
-    def __init__(self, model, data, wgts=None, bls=None, antpos=None, ants=None, freqs=None):
+
+    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, pols=None):
         """
         AbsCal object for absolute calibration of flux scale and phasing
         given a visibility model and measured data. model, data and weights
@@ -186,40 +205,58 @@ class AbsCal(object):
         -----------
         model : visibility data of refence model, type=dictionary
             keys are antenna pair tuples, values are complex ndarray visibilities
-            these visibilities must be 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency
-            Example: Ntimes = 2, Nfreqs = 3
-            model = {(0, 1): np.array([[1+0j, 2+1j, 0+2j], [3-1j, -1+2j, 0+2j]]), ...}
+            these visibilities must be 3D arrays, with the [0] axis indexing time,
+            the [1] axis indexing frequency and the [2] axis indexing polarization
+
+            Example: Ntimes = 2, Nfreqs = 3, Npol = 2
+            model = {(0, 1): np.array([ [[1+0j, 2+1j, 0+2j],
+                                         [3-1j,-1+2j, 0+2j]],
+                                        [[3+1j, 4+0j,-1-3j],
+                                         [4+2j, 0+0j, 0-1j]] ]), ...}
 
         data : visibility data of measurements, type=dictionary
-            keys are antenna pair tuples (must match model), values are complex ndarray visibilities
-            these visibilities must be 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency
+            keys are antenna pair tuples (must match model), values are
+            complex ndarray visibilities, with shape matching model
 
-        bls : baseline vectors of antenna pairs, type=dictionary
-            keys are antenna pair tuples (must match model), values are 2D or 3D ndarray
-            baseline vectors in meters (topocentric coordinates),
-            with [0] index containing East separation, and [1] index North separation.
+        antpos : antenna position vectors in TOPO frame in meters, type=dictionary
+            keys are antenna integers and values are 2D or 3D ndarray
+            position vectors in meters (topocentric coordinates),
+            with [0] index containing X (E-W) distance, and [1] index Y (N-S) distance.
 
-        wgts : least square weights of data, type=dictionry, [default=None]
+        wgts : weights of data, type=dictionry, [default=None]
             keys are antenna pair tuples (must match model), values are real floats
             matching shape of model and data
 
         freqs : frequency array, type=ndarray, dtype=float
             1d array containing visibility frequencies in Hz
     
-        verbose : print output, type=boolean, [default=False]
+        pols : polarization array, type=ndarray, dtype=int
+            array containing polarization integers
+            in pyuvdata.UVData.polarization_array format
 
+        verbose : print output, type=boolean, [default=False]
         """
         # append attributes
         self.model = model
         self.data = data
 
-        # setup baselines and antenna positions
-        self.bls = bls
-
         # setup frequencies
-        self.freqs = freqs
+        self.Nfreqs = model[model.keys()[0]].shape[1]
+        if freqs is None:
+            self.freqs = np.zeros(self.Nfreqs)
+        else:
+            self.freqs = freqs
+        if self.Nfreqs != len(self.freqs):
+            raise TypeError("shape of 'freqs' does not match shape of arrays in model dictionary: {}".format(model[model.keys()[0]].shape[1]))
+
+        # setup polarization
+        self.Npols = model[model.keys()[0]].shape[2]
+        if pols is None:
+            self.pols = np.zeros((self.Npols))
+        else:
+            self.pols = pols
+        if len(self.pols) != self.Npols:
+            raise TypeError("shape of 'pols' does not match shape of arrays in model dictionary: {}".format(model[model.keys()[2]].shape[1]))
 
         # setup weights
         if wgts is None:
@@ -228,15 +265,21 @@ class AbsCal(object):
                 wgts[k] = np.ones_like(wgts[k], dtype=np.float)
         self.wgts = wgts
 
-        # get data parameters
+        # setup times
         self.Ntimes = model[model.keys()[0]].shape[0]
-        self.Nfreq = model[model.keys()[0]].shape[1]
-        self.ants = np.unique(sorted(np.array(map(lambda x: [x[0], x[1]], model.values())).ravel()))
+
+        # setup ants
+        self.ants = np.unique(sorted(np.array(map(lambda x: [x[0], x[1]], model.keys())).ravel()))
         self.Nants = len(self.ants)
-        # TODO add polarization (correlation) axis to everything
 
+        # setup baselines and antenna positions
+        self.antpos = antpos
+        if self.antpos is not None:
+            self.bls = odict([((x[0], x[1]), self.antpos[x[1]] - self.antpos[x[0]]) for x in self.model.keys()])
+            self.antpos = np.array(map(lambda x: self.antpos[x], self.ants))
+            self.antpos -= np.median(self.antpos, axis=0)
 
-    def amp_lincal(self, unravel_freq=False, unravel_time=False, verbose=False):
+    def amp_lincal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=False):
         """
         call abscal.amp_lincal() method. see its docstring for more details.
 
@@ -249,6 +292,9 @@ class AbsCal(object):
         unravel_time : tie all times together, type=boolean, [default=False]
             if True, unravel time axis in linsolve call, such that you get
             one result for all times
+
+        unravel_pol : tie all polarizations together, type=boolean, [default=False]
+            if True, unravel polarization
         """
         # copy data
         model = copy.deepcopy(self.model)
@@ -265,12 +311,16 @@ class AbsCal(object):
             unravel(model, 'f', 1)
             unravel(wgts, 'f', 1)
 
+        if unravel_pol:
+            unravel(data, 'p', 2)
+            unravel(model, 'p', 2)
+            unravel(wgts, 'p', 2)
+
         # run linsolve
         fit = amp_lincal(model, data, wgts=wgts, verbose=verbose)
-        self.gain_amp = fit['A']
-
+        self.gain_amp = np.sqrt(fit['amp'])
         
-    def phs_logcal(self, unravel_freq=False, unravel_time=False, verbose=False):
+    def phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=False):
         """
         call abscal.amp_lincal() method. see its docstring for more details.
 
@@ -283,6 +333,9 @@ class AbsCal(object):
         unravel_time : tie all times together, type=boolean, [default=False]
             if True, unravel time axis in linsolve call, such that you get
             one result for all times
+
+        unravel_pol : tie all polarizations together, type=boolean, [default=False]
+            if True, unravel polarization
         """
         # copy data
         model = copy.deepcopy(self.model)
@@ -300,91 +353,213 @@ class AbsCal(object):
             unravel(model, 'f', 1, copy_dict=bls)
             unravel(wgts, 'f', 1)
 
+        if unravel_pol:
+            unravel(data, 'p', 2)
+            unravel(model, 'p', 2, copy_dict=bls)
+            unravel(wgts, 'p', 2)
+           
         # run linsolve
         fit = phs_logcal(model, data, bls, wgts=wgts, verbose=verbose)
         self.gain_psi = fit['psi']
         self.gain_phi = np.array([fit['PHIx'], fit['PHIy']])
 
-    def run(self, calfits_filename=None, save=False, overwrite=False, unravel_freq=False, unravel_time=False, verbose=False):
+    def make_gains(self, gains2dict=False):
         """
+        use self.gain_amp and self.gain_phi ane self.gain_psi
+        to construct a complex gain array per antenna assuming
+        a gain convention of multiply.
+
+        Parameters:
+        -----------
+        gains2dict : boolean, if True convert gains into dictionary form
+            with antenna number as key and ndarray as value
+        """
+        if hasattr(self, "gain_amp") is False:
+            raise NameError("self.gain_amp doesn't exist...")
+        if hasattr(self, "gain_psi") is False:
+            raise NameError("self.gain_psi doesn't exist...")
+        if hasattr(self, "gain_phi") is False:
+            raise NameError("self.gain_phi doesn't exist...")
+
+        # form gains
+        gain_array = np.ones((self.Nants, self.Ntimes, self.Nfreqs, self.Npols), dtype=np.complex)
+
+        # multiply amplitude
+        amps = self.gain_amp[np.newaxis]
+        gain_array *= amps
+
+        # multiply phase
+        phases = np.exp(self.gain_psi[np.newaxis] - 1j*np.einsum("ijkl, hi -> hjkl", self.gain_phi, self.antpos[:, :2]))
+        gain_array *= phases
+
+        self.gain_array = gain_array
+
+        if gains2dict:
+            self.gain_array = odict((a, self.gain_array[i]) for i, a in enumerate(self.ants))
+
+    def run(self, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=False, gains2dict=False):
+        """
+        run amp_lincal and phs_logcal on self.model and self.data, and optionally write out 
+        gains to a calfits file.
+
+        run Parameters:
+        -----------
+        calfits_filename : string, path to output calfits file, default=None
+        save : boolean, if True, save gains to a calfits file
+        overwrite : boolean, if True, overwrite if calfits_filename exists
+
+        amp_lincal & phs_logcal Parameters:
+        -----------------------------------
+        unravel_pol : type=boolean, see amp_lincal or phs_logcal for details
+        unravel_freq : type=boolean, see amp_lincal or phs_logcal for details
+        unravel_time : type=boolean, see amp_lincal or phs_logcal for details
+        verbose : type=boolean, see amp_lincal or phs_logcal for details
         """
 
         # run amp cal
-        self.amp_logcal(unravel_freq=unravel_freq, unravel_time=unravel_time, verbose=verbose)
+        self.amp_lincal(unravel_freq=unravel_freq, unravel_time=unravel_time, unravel_pol=False, verbose=verbose)
 
         # run phs cal
-        self.phs_logcal(unravel_freq=unravel_freq, unravel_time=unravel_time, verbose=verbose)
+        self.phs_logcal(unravel_freq=unravel_freq, unravel_time=unravel_time, unravel_pol=False, verbose=verbose)
 
-        # form gains
-        self.gain_array = np.ones((self.Nants, self.Nfreqs, self.Ntimes, self.Npols), dtype=np.complex)
-
-        # add amplitude to gains
-        self.gain_array *= self.gain_amp
-
-        # add phases to gains
-        for i, a in enumerate(self.ants):
-            self.gain_array[i] *= np.exp(self.gain_psi - 1j*np.dot(self.gain_phi, self.antpos[:, :2].T))
-
-        # TODO : extract select degrees of freedom
-
-        # TODO : write to calfits
+        # make gains
+        self.make_gains(gains2dict=gains2dict)
 
 
-
-def run_abscal(data_files, model_files):
+def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
+               save=False, calfits_fname=None, output_gains=False, overwrite=False, **kwargs):
     """
-    iterate over miriad visibility files and run AbsCal
-
-
+    iterate over a single miriad visibility file and run AbsCal.
 
     Parameters:
     -----------
+    data_file : path to miriad file, type=string
+        a single miriad file containing complex visibility data
+
+    model_files : path(s) to miriad files(s), type=list
+        a list of one or more miriad files containing complex visibility data
+        that overlaps the time and frequency range of data_file
+
     """
+    # load data
+    uvd = UVData()
+    uvd.read_miriad(data_file)
+    data, flags, pols = UVData2AbsCalDict([uvd])
+    for i, k in enumerate(data.keys()):
+        if k[0] == k[1]:
+            data.pop(k)
 
-    # configure vars
+    # get data params
+    data_times = uvd.time_array.reshape(uvd.Ntimes, uvd.Nbls)[:, 0]
+    data_freqs = uvd.freq_array.squeeze()
+    data_pols = uvd.polarization_array
+
+    # load weights
+    wgts = copy.deepcopy(flags)
+    for k in wgts.keys():
+        wgts[k] = (~wgts[k]).astype(np.float)
+
+    # load antenna positions and make baseline dictionary
+    antpos, ants = get_antpos(uvd, center=True, pick_data_ants=True)
+    antpos = odict(map(lambda x: (x, antpos[ants.tolist().index(x)]), ants))
+    bls = odict([((x[0], x[1]), antpos[x[1]] - antpos[x[0]]) for x in data.keys()])
+
+    # load models
+    for i, mf in enumerate(model_files):
+        uv = UVData()
+        uv.read_miriad(mf)
+        if i == 0:
+            uvm = uv
+        else:
+            uvm += uv
+    model, mflags, mpols = UVData2AbsCalDict([uvm])
+
+    # get model params
+    model_times = uvm.time_array.reshape(uvm.Ntimes, uvm.Nbls)[:, 0]
+    model_freqs = uvm.freq_array.squeeze()
+
+    # align data
+    model = interp_model(model, model_times, model_freqs, data_times, data_freqs, kind='cubic', fill_value=0)
+
+    # run abscal
+    AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, pols=data_pols)
+    AC.run(unravel_pol=unravel_pol, unravel_freq=unravel_freq, unravel_time=unravel_time, verbose=verbose, gains2dict=True)
+
+    # write to file
+    if save:
+        gains2calfits(calfits_fname, AC.gain_array, data_freqs, data_times, data_pols,
+                      gain_convention='multiply', inttime=10.7, overwrite=overwrite, **kwargs)
+
+    if output_gains:
+        return AC.gain_array
 
 
-
-    # loop over data files
-    for i, f in enumerate(data_files):
-        # load data
-
-        # load models
-
-        # load weights
-
-        # get params
-
-        # lst align
-
-        # run abscal
-        AC = AbsCal()
-        AC.run()
-
-
-def smooth_model(model, kernel=(3, 15)):
+def UVData2AbsCalDict(filenames):
     """
-    smooth model visibility real and imag components separately
-    using a median filter, then recombine into complex visibility
+    turn pyuvdata.UVData objects or miriad filenames 
+    into the dictionary form that AbsCal requires
 
-    Warning: too aggressive smoothing can lead to signal loss
-    and can introduce artifacts
-    
     Parameters:
     -----------
-    model : dictionary
+    filenames : list of either strings to miriad filenames or list of UVData instances
 
+    Output:
+    -------
+    DATA_LIST, FLAG_LIST, POL_LIST
+
+    DATA_LIST : list of dictionaries containing data from UVData objects
+        if len(filenames) == 1, just outputs the dictionary itself
+
+    FLAG_LIST : list of dictionaries containing flag data
+        if len(filenames) == 1, just outputs dictionary
+
+    POL_LIST : list of polarizations in UVData objects
+        if len(filenames) == 1, just outputs polarization string itself
     """
-    model = copy.deepcopy(model)
-    for i, k in enumerate(model.keys()):
-        mreal = np.real(model[k])
-        mimag = np.imag(model[k])
-        mreal_smoothed = signal.medfilt(mreal, kernel_size=kernel)
-        mimag_smoothed = signal.medfilt(mimag, kernel_size=kernel)
-        model[k] = (mreal_smoothed + 1j*mimag_smoothed)
+    # initialize containers for data dicts and pol keys
+    DATA_LIST = []
+    FLAG_LIST = []
+    POL_LIST = []
 
-    return model
+    # loop over filenames    
+    for i, fname in enumerate(filenames):
+        # initialize UVData object
+        if type(fname) == str:
+            uvd = UVData()
+            uvd.read_miriad(fname)
+        elif type(fname) == UVData:
+            uvd = fname
+        # load data into dictionary
+        data_temp, flag_temp = firstcal.UVData_to_dict([uvd])
+        # eliminate autos
+        for i, k in enumerate(data_temp.keys()):
+            if k[0] == k[1]:
+                data_temp.pop(k)
+                flag_temp.pop(k)
+        # reconfigure polarization nesting
+        data = odict()
+        flags = odict()
+        pol_keys = sorted(data_temp[data_temp.keys()[0]].keys())
+        data_keys = sorted(data_temp.keys())
+        for i, p in enumerate(pol_keys):
+            for j, k in enumerate(data_keys):
+                if i == 0:
+                    data[k] = data_temp[k][p][:, :, np.newaxis]
+                    flags[k] = flag_temp[k][p][:, :, np.newaxis]
+                elif i > 0:
+                    data[k] = np.dstack([data[k], data_temp[k][p][:, :, np.newaxis]])
+                    flags[k] = np.dstack([flags[k], flag_temp[k][p][:, :, np.newaxis]])
+        # append
+        DATA_LIST.append(data)
+        FLAG_LIST.append(flags)
+        POL_LIST.append(pol_keys)
 
+    if len(DATA_LIST) == 1:
+        DATA_LIST = DATA_LIST[0]
+        FLAG_LIST = FLAG_LIST[0]
+        POL_LIST = POL_LIST[0]
+
+    return DATA_LIST, FLAG_LIST, POL_LIST
 
 
 def unravel(data, prefix, axis, copy_dict=None):
@@ -409,13 +584,125 @@ def unravel(data, prefix, axis, copy_dict=None):
     for i, k in enumerate(data.keys()):
         # loop over row / columns of data
         for j in range(data[k].shape[axis]):
-            data[k+("{}{}".format(prefix, str(j)),)] = np.take(data[k], j, axis=axis)
+            if axis == 0:
+                data[k+("{}{}".format(prefix, str(j)),)] = copy.copy(data[k][j:j+1])
+            elif axis == 1:
+                data[k+("{}{}".format(prefix, str(j)),)] = copy.copy(data[k][:, j:j+1])
+            elif axis == 2:
+                data[k+("{}{}".format(prefix, str(j)),)] = copy.copy(data[k][:, :, j:j+1])
+            elif axis == 3:
+                data[k+("{}{}".format(prefix, str(j)),)] = copy.copy(data[k][:, :, :, j:j+1])
+            else:
+                raise TypeError("can't support axis > 3")
+            
             if copy_dict is not None:
                 copy_dict[k+("{}{}".format(prefix, str(j)),)] = copy_dict[k]
         # remove original key
         data.pop(k)
         if copy_dict is not None:
             copy_dict.pop(k)
+
+
+def interp_model(model, model_times, model_freqs, data_times, data_freqs, kind='cubic', fill_value=0):
+    """
+    interpolate model complex visibility onto the time-frequency basis of data.
+    ** Note: ** this is just a simple wrapper for scipy.interpolate.interp2d
+
+    Parameters:
+    -----------
+    model : visibility data of model, type=dictionary, see AbsCal for details on format
+
+    model_times : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
+
+    model_freqs : 1D array of the model freq axis, dtype=float, shape=(Nfreqs,)
+
+    data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
+
+    data_freqs : 1D array of the data freq axis of, dtype=float, shape=(Nfreqs,)
+
+    kind : kind of interpolation method, type=str, options=['linear', 'cubic', ...]
+        see scipy.interpolate.interp2d for details
+
+    fill_value : values to put for interpolation points outside training set
+        if None, values are extrapolated
+    """
+    model = copy.deepcopy(model)
+    # loop over keys
+    for i, k in enumerate(model.keys()):
+        # loop over polarizations
+        new_data = []
+        for p in range(model[k].shape[2]):
+            # interpolate real and imag separately
+            interp_real = interpolate.interp2d(model_freqs, model_times, np.real(model[k][:, :, p]),
+                                               kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
+            interp_imag = interpolate.interp2d(model_freqs, model_times, np.imag(model[k][:, :, p]),
+                                               kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
+            # rejoin
+            new_data.append(interp_real + 1j*interp_imag)
+
+        model[k] = np.moveaxis(np.array(new_data), 0, 2)
+
+    return model
+
+
+def mirror_data_to_red_bls(data, red_info):
+    """
+    Given unique baseline data, copy over to all other
+    baselines in the same redundant group
+
+
+    """
+    data = copy.deepcopy(data)
+
+    return data
+
+
+def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
+                  gain_convention='multiply', inttime=10.7, overwrite=False, **kwargs):
+    """
+    write out gain_array in calfits file format
+
+    Parameters:
+    -----------
+
+    calfits_fname : string
+
+    abscal_gains : complex gain in dictionary form from AbsCal.make_gains()
+
+    freq_array : frequency array of data in Hz
+
+    time_array : time array of data in Julian Date
+
+    pol_array : polarization array of data, in 'x' or 'y' form. 
+
+    """
+    # ensure pol is string
+    int2pol = {-5: 'x', -6: 'y'}
+    if pol_array.dtype == np.int:
+        pol_array = list(pol_array)
+        for i, p in enumerate(pol_array):
+            pol_array[i] = int2pol[p]
+
+    # reconfigure AbsCal gain dictionary into HERACal gain dictionary
+    heracal_gains = {}
+    for i, p in enumerate(pol_array):
+        pol_dict = {}
+        for j, k in enumerate(abscal_gains.keys()):
+            pol_dict[k] = abscal_gains[k][:, :, i]
+        heracal_gains[p] = pol_dict
+
+    # configure meta
+    meta = {'times':time_array, 'freqs':freq_array, 'inttime':inttime, 'gain_convention': gain_convention}
+    meta.update(**kwargs)
+
+    # convert to UVCal
+    uvc = cal_formats.HERACal(meta, heracal_gains)
+
+    # write to file
+    if os.path.exists(calfits_fname) and overwrite is False:
+        print("{} already exists, not overwriting...".format(calfits_fname))
+    else:
+        uvc.write_calfits(calfits_fname, clobber=overwrite)
 
 
 def echo(message, type=0, verbose=True):
@@ -426,50 +713,5 @@ def echo(message, type=0, verbose=True):
             print('')
             print(message)
             print("-"*40)
-
-
-def vis_align(model, data, time_array, freq_array):
-    """
-    interpolate model complex visibility onto the time-frequency basis of data
-
-    Parameters:
-    -----------
-    model : model (reference) visibility data, type=2D-ndarray, shape=(Ntimes, Nfreqs)
-
-
-    """
-    
-
-
-def gains2calfits(fname, gain_array, ants, freq_array, time_array, pol_array,
-                gain_convention='multiply', clobber=False):
-    """
-    write out gain_array in calfits file format
-
-    Parameters:
-    -----------
-
-
-
-    """
-    pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
