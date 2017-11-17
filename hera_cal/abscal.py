@@ -202,13 +202,14 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
 
     # setup linsolve equations
     eqns = odict([(k, "psi*a{} + PHIx*{} + PHIy*{}".format(str(i), bx[k][0], by[k][0])) for i, k in enumerate(keys)])
-    ls_design_matrix = odict([("a{}".format(str(i)), np.ones(ydata[k].shape, dtype=np.float)) for i, k in enumerate(keys)])
+
+    # fill in other variables in the design matrix
+    if zero_psi:
+        ls_design_matrix = odict([("a{}".format(str(i)), 0.0) for i, k in enumerate(keys)])
+    else:
+        ls_design_matrix = odict([("a{}".format(str(i)), 1.0) for i, k in enumerate(keys)])
     ls_design_matrix.update(odict(bx.values()))
     ls_design_matrix.update(odict(by.values()))
-
-    # set psi to zero
-    if zero_psi:
-        ls_design_matrix['psi'] = 0.0
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
