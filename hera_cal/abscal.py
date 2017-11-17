@@ -691,8 +691,8 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs,
 
             # force things near amplitude of zero to zero
             zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
-            interp_real[zero_select] *= 0.0
-            interp_imag[zero_select] *= 0.0
+            interp_real[zero_select] *= 0.0 * interp_real[zero_select]
+            interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
 
             # rejoin
             new_data.append(interp_real + 1j*interp_imag)
