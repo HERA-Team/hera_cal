@@ -651,7 +651,8 @@ def unravel(data, prefix, axis, copy_dict=None):
             copy_dict.pop(k)
 
 
-def interp_model(model, model_times, model_freqs, data_times, data_freqs, kind='cubic', fill_value=0):
+def interp_model(model, model_times, model_freqs, data_times, data_freqs,
+                 kind='cubic', fill_value=0, zero_tol=1e-5):
     """
     interpolate model complex visibility onto the time-frequency basis of data.
     ** Note: ** this is just a simple wrapper for scipy.interpolate.interp2d
@@ -673,6 +674,8 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs, kind='
 
     fill_value : values to put for interpolation points outside training set
         if None, values are extrapolated
+
+    zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
     """
     model = copy.deepcopy(model)
     # loop over keys
@@ -686,9 +689,10 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs, kind='
             interp_imag = interpolate.interp2d(model_freqs, model_times, np.imag(model[k][:, :, p]),
                                                kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
 
-            # force things near zero to zero
-            interp_real[np.isclose(interp_real, 0.0)] *= 0.0
-            interp_imag[np.isclose(interp_imag, 0.0)] *= 0.0
+            # force things near amplitude of zero to zero
+            zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
+            interp_real[zero_select] *= 0.0
+            interp_imag[zero_select] *= 0.0
 
             # rejoin
             new_data.append(interp_real + 1j*interp_imag)
