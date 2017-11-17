@@ -110,7 +110,7 @@ def amp_lincal(model, data, wgts=None, verbose=False):
     return fit
 
 
-def phs_logcal(model, data, bls, wgts=None, verbose=False):
+def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
     """
     calculate overall gain phase and gain phase slopes (EW and NS)
     with a linear solver applied to the logarithmically
@@ -155,6 +155,8 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False):
         matching shape of model and data
 
     verbose : print output, type=boolean, [default=False]
+
+    zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
 
     Output:
     -------
@@ -204,6 +206,10 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False):
     ls_design_matrix.update(odict(bx.values()))
     ls_design_matrix.update(odict(by.values()))
 
+    # set psi to zero
+    if zero_psi:
+        ls_design_matrix['psi'] = 0.0
+
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
     ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
@@ -227,7 +233,7 @@ class AbsCal(object):
 
         Parameters:
         -----------
-        model : visibility data of refence model, type=dictionary
+        model : dict of visibility data of refence model, type=dictionary
             keys are antenna pair tuples, values are complex ndarray visibilities
             these visibilities must be 3D arrays, with the [0] axis indexing time,
             the [1] axis indexing frequency and the [2] axis indexing polarization
@@ -238,23 +244,23 @@ class AbsCal(object):
                                         [[3+1j, 4+0j,-1-3j],
                                          [4+2j, 0+0j, 0-1j]] ]), ...}
 
-        data : visibility data of measurements, type=dictionary
+        data : dict of visibility data of measurements, type=dictionary
             keys are antenna pair tuples (must match model), values are
             complex ndarray visibilities, with shape matching model
 
-        antpos : antenna position vectors in TOPO frame in meters, type=dictionary
+        antpos : dict of antenna position vectors in TOPO frame in meters, type=dictionary
             keys are antenna integers and values are 2D or 3D ndarray
             position vectors in meters (topocentric coordinates),
             with [0] index containing X (E-W) distance, and [1] index Y (N-S) distance.
 
-        wgts : weights of data, type=dictionry, [default=None]
+        wgts : dict of weights of data, type=dictionry, [default=None]
             keys are antenna pair tuples (must match model), values are real floats
             matching shape of model and data
 
-        freqs : frequency array, type=ndarray, dtype=float
+        freqs : ndarray of frequency array, type=ndarray, dtype=float
             1d array containing visibility frequencies in Hz
     
-        pols : polarization array, type=ndarray, dtype=int
+        pols : ndarray of polarization array, type=ndarray, dtype=int
             array containing polarization integers
             in pyuvdata.UVData.polarization_array format
 
