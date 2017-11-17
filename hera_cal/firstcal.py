@@ -405,12 +405,8 @@ def UVData_to_dict(uvdata_list, filetype='miriad'):
                 f[i, j] = {}
             for ip, pol in enumerate(uv_in.polarization_array):
                 pol = pol2str[pol]
-                try:
-                    new_data = copy.copy(uv_in.get_data((i, j))[:, :, ip])
-                    new_flags = copy.copy(uv_in.get_flags((i, j))[:, :, ip])
-                except:
-                    new_data = copy.copy(uv_in.get_data((i, j)))
-                    new_flags = copy.copy(uv_in.get_flags((i, j)))
+                new_data = copy.copy(uv_in.get_data((i, j, pol)))
+                new_flags = copy.copy(uv_in.get_flags((i, j, pol)))
 
                 if pol not in d[(i, j)]:
                     d[(i, j)][pol] = new_data
