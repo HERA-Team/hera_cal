@@ -397,26 +397,29 @@ def UVData_to_dict(uvdata_list, filetype='miriad'):
             uv_in = UVData()
             # read in file without multiple if statements
             getattr(uv_in, 'read_' + filetype)(fname)
-        # reshape data and flag arrays to make slicing time and baselines easy
-        data = uv_in.data_array.reshape(
-            uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
-        flags = uv_in.flag_array.reshape(
-            uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
 
+        # iterate over unique baselines
         for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, np.unique(uv_in.baseline_array))):
             if (i, j) not in d:
                 d[i, j] = {}
                 f[i, j] = {}
             for ip, pol in enumerate(uv_in.polarization_array):
                 pol = pol2str[pol]
+                try:
+                    new_data = copy.copy(uv_in.get_data((i, j))[:, :, ip])
+                    new_flags = copy.copy(uv_in.get_flags((i, j))[:, :, ip])
+                except:
+                    new_data = copy.copy(uv_in.get_data((i, j)))
+                    new_flags = copy.copy(uv_in.get_flags((i, j)))
+
                 if pol not in d[(i, j)]:
-                    d[(i, j)][pol] = data[:, nbl, 0, :, ip]
-                    f[(i, j)][pol] = flags[:, nbl, 0, :, ip]
+                    d[(i, j)][pol] = new_data
+                    f[(i, j)][pol] = new_flags
                 else:
                     d[(i, j)][pol] = np.concatenate(
-                        [d[(i, j)][pol], data[:, nbl, 0, :, ip]])
+                        [d[(i, j)][pol], new_data ])
                     f[(i, j)][pol] = np.concatenate(
-                        [f[(i, j)][pol], flags[:, nbl, 0, :, ip]])
+                        [f[(i, j)][pol], new_flags ])
     return d, f
 
 
