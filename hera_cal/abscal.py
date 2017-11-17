@@ -351,7 +351,7 @@ class AbsCal(object):
         self.gain_amp = np.sqrt(fit['amp'])
 
         
-    def phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=False):
+    def phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=False, zero_psi=False):
         """
         call abscal.amp_lincal() method. see its docstring for more details.
 
@@ -390,7 +390,7 @@ class AbsCal(object):
             unravel(wgts, 'p', 2)
            
         # run linsolve
-        fit = phs_logcal(model, data, bls, wgts=wgts, verbose=verbose)
+        fit = phs_logcal(model, data, bls, wgts=wgts, verbose=verbose, zero_psi=zero_psi)
         self.gain_psi = fit['psi']
         self.gain_phi = np.array([fit['PHIx'], fit['PHIy']])
 
@@ -428,7 +428,7 @@ class AbsCal(object):
         if gains2dict:
             self.gain_array = odict((a, self.gain_array[i]) for i, a in enumerate(self.ants))
 
-    def run(self, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=False, gains2dict=False):
+    def run(self, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=False, gains2dict=False, zero_psi=False):
         """
         run amp_lincal and phs_logcal on self.model and self.data, and optionally write out 
         gains to a calfits file.
@@ -453,7 +453,7 @@ class AbsCal(object):
 
         # run phs cal
         echo("running phs_logcal", type=1, verbose=verbose)
-        self.phs_logcal(unravel_freq=unravel_freq, unravel_time=unravel_time, unravel_pol=False, verbose=verbose)
+        self.phs_logcal(unravel_freq=unravel_freq, unravel_time=unravel_time, unravel_pol=False, verbose=verbose, zero_psi=zero_psi)
 
         # make gains
         echo("making gains", type=1, verbose=verbose)
@@ -461,7 +461,7 @@ class AbsCal(object):
 
 
 def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
-               save=False, calfits_fname=None, output_gains=False, overwrite=False, **kwargs):
+               save=False, calfits_fname=None, output_gains=False, overwrite=False, zero_psi=False, **kwargs):
     """
     run AbsCal on a single data miriad file
 
@@ -534,7 +534,8 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
 
     # run abscal
     AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, pols=data_pols)
-    AC.run(unravel_pol=unravel_pol, unravel_freq=unravel_freq, unravel_time=unravel_time, verbose=verbose, gains2dict=True)
+    AC.run(unravel_pol=unravel_pol, unravel_freq=unravel_freq, unravel_time=unravel_time,
+           verbose=verbose, gains2dict=True, zero_psi=zero_psi)
 
     # write to file
     if save:
