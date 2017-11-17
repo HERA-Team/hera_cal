@@ -403,7 +403,7 @@ def UVData_to_dict(uvdata_list, filetype='miriad'):
         flags = uv_in.flag_array.reshape(
             uv_in.Ntimes, uv_in.Nbls, uv_in.Nspws, uv_in.Nfreqs, uv_in.Npols)
 
-        for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, uv_in.baseline_array[:uv_in.Nbls])):
+        for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, np.unique(uv_in.baseline_array))):
             if (i, j) not in d:
                 d[i, j] = {}
                 f[i, j] = {}

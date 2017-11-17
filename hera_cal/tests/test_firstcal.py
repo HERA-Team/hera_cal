@@ -195,6 +195,14 @@ class Test_FirstCal(object):
                 np.testing.assert_equal(f[i, j][pol], np.resize(
                     uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
 
+    def test_UVData_to_dict_keys(self):
+        uvd = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA'))
+        nt.assert_equal(len(firstcal.UVData_to_dict([uvd])[0]), uvd.Nbls)
+        # reorder baseline array
+        uvd.baseline_array = uvd.baseline_array[np.argsort(uvd.baseline_array)]
+        nt.assert_equal(len(firstcal.UVData_to_dict([uvd])[0]), uvd.Nbls)
+
     def test_process_ubls(self):
         ubls = ''
         ubaselines = firstcal.process_ubls(ubls)
