@@ -19,8 +19,6 @@ from scipy import signal
 from scipy import interpolate
 import functools
 
-from get_antpos import get_antpos
-
 
 def amp_lincal(model, data, wgts=None, verbose=False):
     """
@@ -496,7 +494,7 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
             flags.pop(k)
 
     # get data params
-    data_times = uvd.time_array.reshape(uvd.Ntimes, uvd.Nbls)[:, 0]
+    data_times = np.unique(uvd.lst_array)
     data_freqs = uvd.freq_array.squeeze()
     data_pols = uvd.polarization_array
 
@@ -529,7 +527,7 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
             model.pop(k)
 
     # get model params
-    model_times = uvm.time_array.reshape(uvm.Ntimes, uvm.Nbls)[:, 0]
+    model_times = np.unique(uvm.lst_array)
     model_freqs = uvm.freq_array.squeeze()
 
     # align model freq-time axes to data axes
@@ -563,7 +561,7 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
         return AC.gain_array
 
 
-def UVData2AbsCalDict(filenames):
+def UVData2AbsCalDict(filenames, pol_select=None):
     """
     turn pyuvdata.UVData objects or miriad filenames 
     into the dictionary form that AbsCal requires
@@ -571,6 +569,8 @@ def UVData2AbsCalDict(filenames):
     Parameters:
     -----------
     filenames : list of either strings to miriad filenames or list of UVData instances
+
+    pol_select : list of polarization strings to keep
 
     Output:
     -------
@@ -605,11 +605,28 @@ def UVData2AbsCalDict(filenames):
             if k[0] == k[1]:
                 data_temp.pop(k)
                 flag_temp.pop(k)
-        # reconfigure polarization nesting
+                
+        ## reconfigure polarization nesting ##
+        # setup empty dictionaries
         data = odict()
         flags = odict()
+
+        # configure pol keys
         pol_keys = sorted(data_temp[data_temp.keys()[0]].keys())
+        if pol_select is not None:
+            # ensure it is a list
+            if type(pol_select) == str:
+                pol_select = [pol_select]
+
+            # ensure desired pols are in data
+            if functools.reduce(lambda x, y: x*y, map(lambda x: x in pol_keys, pol_select)) == 0:
+                raise KeyError("desired pols(s) {} not found in data pols {}".format(pol_select, pol_keys))
+            pol_keys = pol_select
+
+        # configure data keys
         data_keys = sorted(data_temp.keys())
+
+        # iterate over pols and data keys
         for i, p in enumerate(pol_keys):
             for j, k in enumerate(data_keys):
                 if i == 0:
