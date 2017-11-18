@@ -764,12 +764,14 @@ def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
     for i, bl_group in enumerate(reds):
         # find which key in data is in this group
         select = np.array(map(lambda x: x in keys or x[::-1] in keys, reds[i]))
+
         if True not in select:
             continue
         k = reds[i][np.argmax(select)]
 
         # iterate over bls and insert data into red_data
         for j, bl in enumerate(bl_group):
+
             red_data[bl] = copy.copy(data[k])
 
     # re-sort
