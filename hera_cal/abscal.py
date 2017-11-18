@@ -788,7 +788,7 @@ def compute_reds(bls, antpos, tol=2.0):
 
     antpos : dictionary, antennas integers as keys, baseline vectors as values
 
-    tol : float, tolerance for redundant baseline determination
+    tol : float, tolerance for redundant baseline determination in units of the baseline vector units
 
     Output:
     -------
