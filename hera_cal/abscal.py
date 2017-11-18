@@ -17,6 +17,7 @@ from collections import OrderedDict as odict
 import copy
 from scipy import signal
 from scipy import interpolate
+import functools
 
 from get_antpos import get_antpos
 
@@ -481,7 +482,11 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
     echo("loading data files", type=1, verbose=verbose)
     echo("loading {}".format(data_file), type=0, verbose=verbose)
     uvd = UVData()
-    uvd.read_miriad(data_file)
+    try:
+        uvd.read_miriad(data_file)
+    except:
+        uvd.read_uvfits(data_file)
+        uvd.unphase_to_drift()
     data, flags, pols = UVData2AbsCalDict([uvd])
     for i, k in enumerate(data.keys()):
         if k[0] == k[1]:
@@ -500,8 +505,8 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
     for k in wgts.keys():
         wgts[k] = (~wgts[k]).astype(np.float)
 
-    # load antenna positions and make baseline dictionary
-    antpos, ants = get_antpos(uvd, center=True, pick_data_ants=True)
+    # load antenna positions and make antpos and baseline dictionary
+    antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
     antpos = odict(map(lambda x: (x, antpos[ants.tolist().index(x)]), ants))
     bls = odict([((x[0], x[1]), antpos[x[1]] - antpos[x[0]]) for x in data.keys()])
 
@@ -509,7 +514,11 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
     for i, mf in enumerate(model_files):
         echo("loading {}".format(mf), type=0, verbose=verbose)
         uv = UVData()
-        uv.read_miriad(mf)
+        try:
+            uv.read_miriad(mf)
+        except:
+            uv.read_uvfits(mf)
+            uv.unphase_to_drift()
         if i == 0:
             uvm = uv
         else:
@@ -530,8 +539,12 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
     # this is the case if, for example, the model Nbls in less than the data Nbls
     if uvm.Nbls < uvd.Nbls:
         # try to expand model data into redundant baseline groups
-        red_info = hc.omni.aa_to_info(hc.utils.get_aa_from_uv(uvm))
-        model = mirror_data_to_red_bls(model, red_info)
+        model = mirror_data_to_red_bls(model, bls, antpos, tol=2.0)
+
+        # ensure data keys match model keys
+        for i, k in enumerate(data):
+            if k not in model:
+                data.pop(k)
 
     # run abscal
     AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, pols=data_pols)
@@ -710,7 +723,7 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs,
     return model
 
 
-def mirror_data_to_red_bls(data, red_info):
+def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
     """
     Given unique baseline data (like omnical model visibilities),
     copy the data over to all other baselines in the same redundant group
@@ -719,9 +732,14 @@ def mirror_data_to_red_bls(data, red_info):
     -----------
     data : data dictionary in AbsCal form, see AbsCal docstring for details
 
-    red_info : RedundantInfo object of the array.
-        See hera_cal.utils.get_aa_from_uv and hera_cal.omni.aa_to_info methods
-        to generate a red_info object.
+    bls : baseline list
+        list of all antenna pair tuples that "data" needs to expand into
+
+    antpos : antenna positions dictionary
+        keys are antenna integers, values are ndarray baseline vectors
+
+    tol : redundant baseline distance tolerance, dtype=float
+        fed into abscal.compute_reds
 
     Output:
     -------
@@ -729,46 +747,75 @@ def mirror_data_to_red_bls(data, red_info):
         distributed to redundant baseline groups.
 
     """
+    # get data keys
+    keys = data.keys()
+
     # get data and ants
     data = copy.deepcopy(data)
-    ants = np.unique(np.concatenate([data.keys()]))
+    ants = np.unique(np.concatenate([keys]))
 
     # get redundant baselines
-    reds = red_info.get_reds()
-
-    # ensure these reds are antennas pairs of antennas in the data
-    pop_reds = []
-    for i, bls in enumerate(reds):
-        pop_bls = []
-        for j, bl in enumerate(bls):
-            if bl[0] not in ants or bl[1] not in ants:
-                pop_bls.append(j)
-        for j in pop_bls[::-1]:
-            reds[i].pop(j)
-        if len(reds[i]) == 0:
-            pop_reds.append(i)
-    for i in pop_reds[::-1]:
-        reds.pop(i)
+    reds = compute_reds(bls, antpos, tol=tol)
 
     # make red_data dictionary
     red_data = odict()
 
     # iterate over red bls
-    for i, bls in enumerate(reds):
+    for i, bl_group in enumerate(reds):
         # find which key in data is in this group
-        select = np.array(map(lambda x: x in data.keys(), reds[i]))
+        select = np.array(map(lambda x: x in keys or x[::-1] in keys, reds[i]))
+
         if True not in select:
             continue
         k = reds[i][np.argmax(select)]
 
         # iterate over bls and insert data into red_data
-        for j, bl in enumerate(bls):
+        for j, bl in enumerate(bl_group):
+
             red_data[bl] = copy.copy(data[k])
 
     # re-sort
     red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
 
     return red_data
+
+
+def compute_reds(bls, antpos, tol=2.0):
+    """
+    compute redundant baselines
+
+    Parameters:
+    -----------
+    bls : baseline list, list of antenna pair tuples
+
+    antpos : dictionary, antennas integers as keys, baseline vectors as values
+
+    tol : float, tolerance for redundant baseline determination in units of the baseline vector units
+
+    Output:
+    -------
+    red_bls : redundant baseline list of input bls list
+        ordered by smallest separation to longest separation    
+    """
+    red_bl_vecs = []
+    red_bl_dists = []
+    red_bls = []
+    for i, k in enumerate(bls):
+        try:
+            bl_vec = antpos[k[1]] - antpos[k[0]]
+        except KeyError:
+            continue
+        unique = map(lambda x: np.linalg.norm(bl_vec - x) > tol, red_bl_vecs)
+        if len(unique) == 0 or functools.reduce(lambda x, y: x*y, unique) == 1:
+            red_bl_vecs.append(bl_vec)
+            red_bl_dists.append(np.linalg.norm(bl_vec))
+            red_bls.append([k])
+        else:
+            red_id = np.where(np.array(unique) == False)[0][0]
+            red_bls[red_id].append(k)
+
+    red_bls = list(np.array(red_bls)[np.argsort(red_bl_dists)])
+    return red_bls
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
@@ -819,6 +866,12 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
         uvc.write_calfits(calfits_fname, clobber=overwrite)
 
 
+def param2calfits(calfits_fname, abscal_param, param_name, freq_array, time_array, pol_array, overwrite=False):
+    """
+    """
+    pass
+    
+
 def abscal_arg_parser():
     a = argparse.ArgumentParser()
     a.add_argument("--data_file", type=str, help="path to miriad data file to-be-calibrated.", required=True)
@@ -826,7 +879,8 @@ def abscal_arg_parser():
     a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--unravel_time", default=False, action='store_true', help="couple all times together into linsolve equations.")
+    a.add_argument("--unravel_time", default=False, action='store_true', help="couple all times together in the linsolve equations.")
+    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
     return a
 
 
