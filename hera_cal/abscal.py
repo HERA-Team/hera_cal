@@ -605,6 +605,7 @@ def UVData2AbsCalDict(filenames, pol_select=None):
             if k[0] == k[1]:
                 data_temp.pop(k)
                 flag_temp.pop(k)
+                
         ## reconfigure polarization nesting ##
         # setup empty dictionaries
         data = odict()
