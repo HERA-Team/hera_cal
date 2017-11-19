@@ -22,7 +22,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 import linsolve
 from astropy import stats as astats
-
+import functools
 
 def amp_lincal(model, data, wgts=None, verbose=False):
     """
