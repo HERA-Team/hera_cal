@@ -248,7 +248,7 @@ class AbsCal(object):
 
         # multiply overall phase
         try:
-            gain_phase = np.exp(-1j*self.gain_psi[np.newaxis]) - 1j*np.einsum("ijkl, hi -> hjkl", self.gain_phi, self.antpos[:, :2]))
+            gain_phase = np.exp(-1j*self.gain_psi[np.newaxis])
             gain_array *= gain_phase
         except AttributeError:
             echo("...gain_psi doesn't exist", verbose=verbose)
