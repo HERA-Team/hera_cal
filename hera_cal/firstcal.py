@@ -550,6 +550,8 @@ def firstcal_run(files, opts, history):
             switched = [k for k, m in median_over_ant_time.items() if m > np.pi / 2] 
             switched_history += switched
             niters += 1 
+            if niters >= option_parser.maxiter:
+                break
         return sols, switched_history
 
 
@@ -684,4 +686,6 @@ def firstcal_option_parser():
                  help='metrics from hera_qm about array qualities')
     o.add_option('--reds_tolerance', type='float', default=1.0,
                  help='Tolerance level for calculating reds. Default is 1.0ns')
+    o.add_option('--maxiter', type=int, default=5,
+                 help="max number of iterations in firstcal._search_and_iterate_firstcal")
     return o
