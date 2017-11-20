@@ -11,7 +11,6 @@ for certain calibration quantities:
 3. gain phase slope vector : phi
 
 V_ij^model = A * exp(psi + phi * b_ij) * V_ij^measured
-
 """
 import os
 import sys
@@ -97,6 +96,7 @@ class AbsCal(object):
 
         # setup times
         self.Ntimes = model[model.keys()[0]].shape[0]
+        self.times = times
 
         # setup ants
         self.ants = np.unique(sorted(np.array(map(lambda x: [x[0], x[1]], model.keys())).ravel()))
@@ -196,33 +196,62 @@ class AbsCal(object):
         self._gain_psi = copy.copy(fit['psi'])
         self._gain_phi = copy.copy(np.array([fit['PHIx'], fit['PHIy']]))
 
-    def smooth_params(self, data, flags=None, kind='linear', params='all', axis='both'):
+    def smooth_data(self, data, flags=None, kind='linear'):
         """
 
 
         Parameters:
         -----------
+        data : 
 
-        kind : type=str, kind of smoothing, opts=['linear','const']
-            'const' : fit an average across frequency
-            'linear' : fit a line across frequency
-            'poly' : fit a polynomial across frequency
-            'gp' : fit a gaussian process across frequency
 
-        params : type=str, which parameter to smooth, opts=['all', 'amp', 'psi', 'phi']
-            'all' : smooth all gain parameters
-            'amp' : smooth just amplitude
-            'phs' : smooth both phase parameters
-            'psi' : smooth just gain phase
-            'phi' : smooth just phase slope
-
-        axis : type=str, which data axis to smooth, opts=['both', 'time', 'freq']
-            'both' : smooth time and frequency together
-            'time' : smooth time axis independently
-            'freq' : smooth freq axis independently
+        flags : 
+    
         """
+        # configure parameters
 
 
+
+        Ntimes
+        Nfreqs
+
+        # interpolate flagged data
+
+
+        # sphere training data x-values
+
+
+        # ravel training data
+
+
+
+        if kind == 'poly':
+            # fit polynomial
+            data = smooth_data(Xtrain_raveled, ytrain_raveled, Xpred_raveled, kind=kind, degree=degree)
+
+        if kind == 'gp':
+            # construct GP mean function from a degree-order polynomial
+            MF = make_pipeline(PolynomialFeatures(degree), linear_model.RANSACRegressor())
+            MF.fit(Xtrain_raveled, ytrain_raveled)
+            y_mean = MF.predict(Xtrain_raveled)
+
+            # make residual and normalize by std
+            y_resid = (ytrain_raveled - y_mean).reshape(Ntimes, Nfreqs)
+            y_std = np.sqrt(astats.biweight_midvariance(y_resid.ravel()))
+            y_resid /= y_std
+
+            # average residual across time
+            ytrain = np.mean(y_resid, axis=0)
+
+            # ravel training data
+            Xtrain_raveled = Xtrain[0, :].reshape(-1, 1)
+            ytrain_raveled = ytrain
+            Xpred_raveled = Xpred[0, :]
+
+            # fit GP and predict MF
+            y_pred = smooth_data(Xtrain_raveled, ytrain_raveled, Xpred_raveled) * y_std
+            y_pred = np.repeat(y_pred, Ntimes)
+            data = (y_pred + y_mean).reshape(Ntimes, Nfreqs)
 
 
     def make_gains(self, gains2dict=False, verbose=True):

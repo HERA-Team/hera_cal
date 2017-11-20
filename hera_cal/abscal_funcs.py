@@ -227,7 +227,7 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
     return fit
 
 
-def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
+def run_abscal(data_files, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
                save=False, calfits_fname=None, output_gains=False, overwrite=False, zero_psi=False,
                smooth=False, **kwargs):
     """
@@ -235,24 +235,30 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
 
     Parameters:
     -----------
-    data_file : path to data miriad file, type=string
-        a single miriad file containing complex visibility data
+    data_files : path(s) to data miriad files, type=list
+        a list of one or more miriad file(s) containing complex
+        visibility data
 
     model_files : path(s) to miriad files(s), type=list
         a list of one or more miriad files containing complex visibility data
-        that ** overlaps ** the time and frequency range of data_file
+        that *overlaps* the time and frequency range of data_files
 
     output_gains : boolean, if True: return AbsCal gains
     """
     # load data
     echo("loading data files", type=1, verbose=verbose)
-    echo("loading {}".format(data_file), type=0, verbose=verbose)
-    uvd = UVData()
-    try:
-        uvd.read_miriad(data_file)
-    except:
-        uvd.read_uvfits(data_file)
-        uvd.unphase_to_drift()
+    for i, df in enumerate(data_files):
+        echo("loading {}".format(df), type=0, verbose=verbose)
+        uv = UVData()
+        try:
+            uv.read_miriad(df)
+        except:
+            uv.read_uvfits(df)
+            uv.unphase_to_drift()
+        if i == 0:
+            uvd = uv
+        else:
+            uvd += uv
 
     data, flags, pols = UVData2AbsCalDict([uvd])
     for i, k in enumerate(data.keys()):
@@ -424,55 +430,45 @@ def UVData2AbsCalDict(filenames, pol_select=None):
     return DATA_LIST, FLAG_LIST, POL_LIST
 
 
-def smooth_param(param, flags=None, kind='gp', degree=5, cov=None, axis='both'):
+def smooth_data(Xtrain, ytrain, Xpred, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
     """
 
 
     Parameters:
     -----------
-    param : ndarray containing parameter values across time and/or frequency
-        type=ndarray, dtype=float
-
-    flags : ndarray containing parameter flags in time and/or frequency
-        type=ndarray, dtype=float
+    Xtrain : ndarray containing x-values for regression
+        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
+  
+    ytrain : 1D np.array containing parameter y-values across time and/or frequency (single pol)
+        type=1D-ndarray, dtype=float, shape=(Ndata, Nfeatures)
+  
+    Xpred : ndarray containing x-values for prediction
+        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
 
     kind : kind of smoothing to perform, type=str, opts=['linear','const']
         'poly' : fit a Nth order polynomial across frequency, with order set by "degree"
         'gp' : fit a gaussian process across frequency
-
-    axis : which data axis to smooth, type=str, opts=['both', 'time', 'freq']
-        'both' : smooth time and frequency together
-        'time' : smooth time axis independently
-        'freq' : smooth freq axis independently
+        'boxcar' : convolve ytrain with a boxcar window
     """
+    # get number of dimensions
+    ndim = Xtrain.shape[1]
 
     if kind == 'poly':
         # robust linear regression via sklearn
         model = make_pipeline(PolynomialFeatures(degree), linear_model.RANSACRegressor())
-        model.fit(X, y)
-        pred = model.predict(X)
+        model.fit(Xtrain, ytrain)
 
     elif kind == 'gp':
-        # use 1st order polynomial to get rid of outliers
-        model = make_pipeline(PolynomialFeatures(1), linear_model.RANSACRegressor())
-        model.fit(X, y)
-        pred = model.predict(X)
-        residual = y - pred
-        std = np.sqrt(astats.biweight_midvariance(residual))
-        inliers = np.where(np.abs(residual) < std*4)[0]
-        model.fit(X[inliers], y[inliers])
-        pred = model.predict(X[inliers])
+        # construct GP kernel
+        ls = np.array([1e-1 for i in range(ndim)])
+        kernel = 1.0**2 * gaussian_process.kernels.RBF(ls, np.array([1e-2, 1e1])) + \
+                 gaussian_process.kernels.WhiteKernel(1e-4, (1e-8, 1e1))
+        model = gaussian_process.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=n_restart)
+        # fit GP
+        model.fit(Xtrain, ytrain)
 
+    ypred = model.Predict(X)
 
-        kernel = gaussian_process.kernels.RBF()
-        model = gaussian_process.GaussianProcessRegressor
-
-    model.fit(X, y)
-    ypred = model.predict(X)
-
-    # check if complex, if so, smooth real and imag separately
-    if param.dtype == np.complex:
-        pass
 
 
 
@@ -720,12 +716,11 @@ def param2calfits(calfits_fname, abscal_param, param_name, freq_array, time_arra
 
 def abscal_arg_parser():
     a = argparse.ArgumentParser()
-    a.add_argument("--data_file", type=str, help="path to miriad data file to-be-calibrated.", required=True)
-    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of miriad files for visibility model.", required=True)
+    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
+    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of data-overlapping miriad files for visibility model.", required=True)
     a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--unravel_time", default=False, action='store_true', help="couple all times together in the linsolve equations.")
     a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
     return a
 
