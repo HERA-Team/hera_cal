@@ -825,8 +825,14 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     uv.zenith_dec = np.array([aa.lat] * uv.Nblts)
 
     # antenna information
-    uv.Nants_telescope = len(aa)
-    ants_data = []
+    ants_data = np.unique(np.concatenate([uv.ant_1_array, uv.ant_2_array]).flatten())
+    uv.Nants_data = len(ants_data)
+
+    ants_telescope = []
+    antpos = np.zeros((len(aa), 3))
+    c_ns = const.c.to('m/ns').value
+    lat, lon, alt = uv.telescope_location_lat_lon_alt
+    idx = 0
 
     # Compute antenna positions.
     # AntennaArray positions are in rotECEF, absolutely referenced (rather than relative to
@@ -836,12 +842,7 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     # Also note that AntennaArray antenna positions do _not_ follow the above convention when
     # generated from a calfile (get_aa_from_calfile), as opposed to the data
     # (using get_aa_from_uv). Antenna positions in the uvfits files will be wrong for
-    # calfile-generated files.
-    antpos = np.zeros((len(aa), 3))
-    c_ns = const.c.to('m/ns').value
-    lat, lon, alt = uv.telescope_location_lat_lon_alt
-    idx = 0
-
+    # calfile-generated aa objects.
     for iant, ant in enumerate(aa):
         # test to see if antenna is "far" from center of the Earth
         if np.linalg.norm(ant.pos) > 1e6:
@@ -858,17 +859,26 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
             antpos[idx, :] = rel_pos
 
             # also save antenna number to list of antennas
-            ants_data.append(iant)
+            ants_telescope.append(iant)
 
             # increment counter
             idx += 1
 
-    uv.antenna_numbers = np.asarray(ants_data)
-    uv.Nants_data = len(ants_data)
-    uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
+    # Save antenna information.
+    if len(ants_telescope) < uv.Nants_data:
+        # Not enough valid antenna positions; default to antennas in data
+        # and give them positions of 0.
+        uv.Nants_telescope = uv.Nants_data
+        uv.antenna_numbers = np.asarray(sorted(ants_data))
+        uv.antenna_positions = np.zeros((uv.Nants_data, 3))
+    else:
+        # Save antenna positions we computed.
+        uv.Nants_telescope = len(ants_telescope)
+        uv.antenna_numbers = np.asarray(ants_telescope)
+        uv.antenna_positions = np.array(antpos[:idx, :])
 
-    uv.antenna_positions = np.array(antpos[:idx, :])
-    uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_data)
+    uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
+    uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_telescope)
 
     # do a consistency check
     uv.check()
