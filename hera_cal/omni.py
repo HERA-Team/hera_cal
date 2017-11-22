@@ -825,11 +825,8 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     uv.zenith_dec = np.array([aa.lat] * uv.Nblts)
 
     # antenna information
-    ants_data = np.unique(np.concatenate([uv.ant_1_array, uv.ant_2_array]).flatten())
     uv.Nants_telescope = len(aa)
-    uv.antenna_numbers = np.arange(uv.Nants_telescope, dtype=int)
-    uv.Nants_data = len(ants_data)
-    uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
+    ants_data = []
 
     # Compute antenna positions.
     # AntennaArray positions are in rotECEF, absolutely referenced (rather than relative to
@@ -843,10 +840,11 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     antpos = np.zeros((len(aa), 3))
     c_ns = const.c.to('m/ns').value
     lat, lon, alt = uv.telescope_location_lat_lon_alt
+    idx = 0
 
     for iant, ant in enumerate(aa):
-        # test to see if antenna is included in antenna array
-        if iant in ants_data:
+        # test to see if antenna is "far" from center of the Earth
+        if np.linalg.norm(ant.pos) > 1e6:
             # convert from ns -> m
             pos = ant.pos * c_ns
 
@@ -857,14 +855,20 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
             rel_pos = pos_ecef - uv.telescope_location
 
             # save in array
-            antpos[iant, :] = rel_pos
-        else:
-            # save antenna position as equal and opposite to telescope_location,
-            # so it ends up at the center of the earth
-            antpos[iant, :] = -1 * uv.telescope_location
+            antpos[idx, :] = rel_pos
 
-    uv.antenna_positions = np.array(antpos)
-    uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_telescope)
+            # also save antenna number to list of antennas
+            ants_data.append(iant)
+
+            # increment counter
+            idx += 1
+
+    uv.antenna_numbers = np.asarray(ants_data)
+    uv.Nants_data = len(ants_data)
+    uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
+
+    uv.antenna_positions = np.array(antpos[:idx, :])
+    uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_data)
 
     # do a consistency check
     uv.check()
