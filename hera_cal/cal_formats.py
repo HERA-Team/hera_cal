@@ -254,7 +254,7 @@ class AbsCal(UVCal):
         # make a list of "good antennas"
         ants = sorted(map(int, ants_gains))
         good_antnames = sorted(ants_gains)
-        allants = np.sort(ants + ex_ants)
+        allants = map(int,np.sort(ants + ex_ants))
         antnames = ['ant{}'.format(a) for a in allants]
 
         # construct data and flag array
