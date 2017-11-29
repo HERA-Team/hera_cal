@@ -461,9 +461,9 @@ class RedundantCalibrator:
         #Amplitude renormalization: fixes the mean abs product of gains (as they appear in visibilities)
         for antpol in antpols:
             meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys() 
-                for key2 in g.keys() if key1[1] == antpol and key2[1] == antpol], axis=0)
+                for key2 in g.keys() if key1[1] == antpol and key2[1] == antpol and key1[0] != key2[0]], axis=0)
             degenMeanSqAmplitude = np.mean([np.abs(degen_sol[key1] * degen_sol[key2]) for key1 in g.keys() 
-                for key2 in g.keys() if key1[1] == antpol and key2[1] == antpol], axis=0)
+                for key2 in g.keys() if key1[1] == antpol and key2[1] == antpol and key1[0] != key2[0]], axis=0)
             gainSols[gainPols == antpol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
             visSols[visPols[:,0] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
             visSols[visPols[:,1] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
