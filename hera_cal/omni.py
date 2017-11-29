@@ -791,7 +791,10 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     # generate uvw
     uvw = []
     # get first frequency in aa object, and convert from GHz -> Hz
-    freq = aa.get_freqs()[0] * 1e9
+    try:
+        freq = aa.get_freqs()[0] * 1e9
+    except IndexError:
+        freq = aa.get_freqs() * 1e9
     # get wavelength in meters
     lamb = const.c.to('m/s').value / freq
     for t in range(uv.Ntimes):
