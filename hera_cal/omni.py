@@ -790,11 +790,16 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
 
     # generate uvw
     uvw = []
+    # get first frequency in aa object, and convert from GHz -> Hz
+    freq = aa.get_freqs()[0] * 1e9
+    # get wavelength in meters
+    lamb = const.c.to('m/s').value / freq
     for t in range(uv.Ntimes):
         for bl in bls:
             uvw.append(aa.gen_uvw(
                 *uv.baseline_to_antnums(bl), src='z').reshape(3, -1))
-    uv.uvw_array = np.array(uvw).reshape(-1, 3)
+    # multiply by wavelength
+    uv.uvw_array = np.array(uvw).reshape(-1, 3) * lamb
 
     uv.ant_1_array = uv.baseline_to_antnums(blts)[0]
     uv.ant_2_array = uv.baseline_to_antnums(blts)[1]
