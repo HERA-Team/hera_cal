@@ -10,6 +10,7 @@ import sys
 from collections import OrderedDict as odict
 import copy
 import argparse
+import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
@@ -22,7 +23,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 import linsolve
 from astropy import stats as astats
-import functools
+
 
 def amp_lincal(model, data, wgts=None, verbose=False):
     """
@@ -98,7 +99,7 @@ def amp_lincal(model, data, wgts=None, verbose=False):
 
     # setup linsolve equations
     eqns = odict([(k, "a{}*amp".format(str(i))) for i, k in enumerate(keys)])
-    ls_design_matrix = odict([("a{}".format(str(i)), np.ones(ydata[k].shape, dtype=np.float)) for i, k in enumerate(keys)])
+    ls_design_matrix = odict([("a{}".format(str(i)), 1.0) for i, k in enumerate(keys)])
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -227,6 +228,60 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
     return fit
 
 
+def delay_lincal(model, data, refant, df=9.765625e4, kernel=(1, 11), verbose=True, time_ax=0, freq_ax=1):
+    """
+    Solve for per-antenna delay according to the equation
+
+    tau_ij^model = tau_i - tau_j + tau_ij^data
+
+    Parameters:
+    -----------
+
+    """
+    # verify refant
+    if refant not in np.concatenate(model.keys()):
+        raise KeyError("refant {} not in model dictionary".format(refant))
+
+    # unpack model and data
+    model_values = np.array(model.values())
+    model_keys = model.keys()
+    data_values = np.array(data.values())
+    data_keys = data.keys()
+
+    # median filter and FFT to get delays
+    model_dlys, data_dlys = [], []
+    for i, mv in enumerate(model_values):
+        m_dly, m_off = fft_dly(mv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        model_dlys.append(m_dly)
+    for i, dv in enumerate(data_values):
+        d_dly, d_off = fft_dly(mv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        data_dlys.append(d_dly)
+
+    model_dlys = odict([(k, model_dlys[i]) for i, k in enumerate(model_keys)])
+    data_dlys = odict([(k, data_dlys[i]) for i, k in enumerate(data_keys)])
+
+    # form ydata
+    ydata = odict([(k, model_dlys[k] - data_dlys[k]) for i, k in enumerate(model_keys)])
+
+    # setup linsolve equation dictionary
+    eqns = odict([(k, "a_{}_{}*tau_{} + a_{}_{}*tau_{}".format(k[0], k[1], k[0], k[1], k[0], k[1])) for i, k in enumerate(model_keys)])
+
+    # setup design matrix dictionary
+    ls_design_matrix = odict([("a_{}_{}".format(k[0], k[1]), 1.0) if k[0] != refant else ("a_{}_{}".format(k[0], k[1]), 0.0) for i, k in enumerate(model_keys)])
+    ls_design_matrix.update(odict([("a_{}_{}".format(k[1], k[0]), -1.0) if k[1] != refant else ("a_{}_{}".format(k[1], k[0]), 0.0) for i, k in enumerate(model_keys)]))
+
+    # setup linsolve data dictionary
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(model_keys)])
+
+    # setup linsolve and run
+    sol = linsolve.LinearSolver(ls_data, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
+
+    return fit
+
+
 def run_abscal(data_files, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
                save=False, calfits_fname=None, output_gains=False, overwrite=False, zero_psi=False,
                smooth=False, **kwargs):
@@ -343,7 +398,7 @@ def run_abscal(data_files, model_files, unravel_pol=False, unravel_freq=False, u
         return AC.gain_array
 
 
-def UVData2AbsCalDict(filenames, pol_select=None):
+def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
     """
     turn pyuvdata.UVData objects or miriad filenames 
     into the dictionary form that AbsCal requires
@@ -353,6 +408,8 @@ def UVData2AbsCalDict(filenames, pol_select=None):
     filenames : list of either strings to miriad filenames or list of UVData instances
 
     pol_select : list of polarization strings to keep
+
+    pop_autos : boolean, if True: remove autocorrelations
 
     Output:
     -------
@@ -382,11 +439,13 @@ def UVData2AbsCalDict(filenames, pol_select=None):
             uvd = fname
         # load data into dictionary
         data_temp, flag_temp = firstcal.UVData_to_dict([uvd])
-        # eliminate autos
-        for i, k in enumerate(data_temp.keys()):
-            if k[0] == k[1]:
-                data_temp.pop(k)
-                flag_temp.pop(k)
+
+        if pop_autos:
+            # eliminate autos
+            for i, k in enumerate(data_temp.keys()):
+                if k[0] == k[1]:
+                    data_temp.pop(k)
+                    flag_temp.pop(k)
 
         ## reconfigure polarization nesting ##
         # setup empty dictionaries
@@ -514,6 +573,81 @@ def unravel(data, prefix, axis, copy_dict=None):
             copy_dict.pop(k)
 
 
+def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
+    """
+    get delay of visibility across band
+
+    vis : 2D ndarray of visibility data, dtype=complex, shape=(Ntimes, Nfreqs)
+
+    df : frequency channel width in Hz
+
+    time_ax : time axis of data
+
+    freq_ax : frequency axis of data
+
+    pol_ax : polarization axis of data (if exists)
+
+    edgecut : fraction of band edges to cut before FFT
+    """
+    # get array params
+    Nfreqs = vis.shape[freq_ax]
+    Ntimes = vis.shape[time_ax]
+
+    # smooth via median filter
+    vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j*signal.medfilt(np.imag(vis), kernel_size=kernel)
+
+    # fft
+    window = np.moveaxis(signal.windows.blackmanharris(Nfreqs).reshape(-1, 1), 0, freq_ax)
+    vfft = np.fft.fft(vis_smooth, axis=freq_ax)
+
+    # get argmax of abs
+    amp = np.abs(vfft)
+    argmax = np.moveaxis(np.argmax(amp, axis=freq_ax)[np.newaxis], 0, freq_ax)
+
+    # get delays
+    fftfreqs = np.fft.fftfreq(Nfreqs, 1)
+    dfreq = np.median(np.diff(fftfreqs))
+    dlys = fftfreqs[argmax]
+
+    # get peak shifts, and add to dlys
+    def get_peak(amp, max_ind):
+        y = amp[max_ind-1:max_ind+2]
+        if len(y) < 3:
+            return 0
+        r = np.abs(np.diff(y))
+        r = r[0] / r[1]
+        peak = 0.5 * (r-1) / (r+1)
+        return peak
+
+    peak_shifts = np.array([get_peak(np.take(amp, i, axis=time_ax), np.take(argmax, i, axis=time_ax)[0]) for i in range(Ntimes)])
+    dlys += np.moveaxis(peak_shifts.reshape(-1, 1) * dfreq, 0, time_ax)
+
+    # get phase offsets by interpolating real and imag component of FFT
+    vfft_real = []
+    vfft_imag = []
+    for i, a in enumerate(argmax):
+        # get real and imag of each argmax
+        real = np.take(vfft.real, i, axis=time_ax)
+        imag = np.take(vfft.imag, i, axis=time_ax)
+
+        # add interpolation component
+        rl = interpolate.interp1d(np.arange(Nfreqs), real)(a + peak_shifts[i])
+        im = interpolate.interp1d(np.arange(Nfreqs), imag)(a + peak_shifts[i])
+
+        # insert into arrays
+        vfft_real.append(rl)
+        vfft_imag.append(im)
+
+    vfft_real = np.moveaxis(np.array(vfft_real), 0, time_ax)
+    vfft_imag = np.moveaxis(np.array(vfft_imag), 0, time_ax)
+    vfft_interp = vfft_real + 1j*vfft_imag
+    phi = np.angle(vfft_interp)
+
+    dlys /= df
+
+    return dlys, phi
+
+
 def interp_model(model, model_times, model_freqs, data_times, data_freqs,
                  kind='cubic', fill_value=0, zero_tol=1e-5):
     """
@@ -639,6 +773,8 @@ def compute_reds(bls, antpos, tol=2.0):
     red_bls : redundant baseline list of input bls list
         ordered by smallest separation to longest separation    
     """
+    if type(antpos) is not dict:
+        raise AttributeError("antpos is not a dict")
     red_bl_vecs = []
     red_bl_dists = []
     red_bls = []

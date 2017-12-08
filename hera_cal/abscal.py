@@ -22,7 +22,7 @@ from abscal_funcs import *
 
 class AbsCal(object):
 
-    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, times=None, pols=None):
+    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, times=None, pols=[None]):
         """
         AbsCal object for absolute calibration of flux scale and phasing
         given a visibility model and measured data. model, data and weights
@@ -195,6 +195,34 @@ class AbsCal(object):
         self.gain_phi = copy.copy(np.array([fit['PHIx'], fit['PHIy']]))
         self._gain_psi = copy.copy(fit['psi'])
         self._gain_phi = copy.copy(np.array([fit['PHIx'], fit['PHIy']]))
+
+    def delay_lincal(self, refant, kernel=(1, 11), verbose=True):
+        """
+        Solve for per-antenna delay according to the equation
+        by calling abscal.delay_lincal method. See abscal.delay_lincal
+        for details.
+
+        Parameters:
+        -----------
+
+        """
+        # copy data
+        model = copy.deepcopy(self.model)
+        data = copy.deepcopy(self.data)
+
+        df = np.median(np.diff(self.freqs))
+
+        # iterate over polarizations
+        dlys = []
+        for i, p in enumerate(self.pols):
+            # run linsolve
+            m = odict(zip(model.keys(), map(lambda k: model[k][:, :, i], model.keys())))
+            d = odict(zip(data.keys(), map(lambda k: data[k][:, :, i], data.keys())))
+            fit = delay_lincal(m, d, refant, df=df, kernel=kernel, verbose=verbose, time_ax=0, freq_ax=1)
+            dlys.append(odict(zip(self.ants, map(lambda x: fit['tau_{}'.format(x)], self.ants))))
+
+        self.delays = odict(zip(self.ants, [np.moveaxis(map(lambda d: d[a], dlys), 0, 2) for a in self.ants]))
+        self._delays = copy.deepcopy(self.delays)
 
     def smooth_data(self, data, flags=None, kind='linear'):
         """
