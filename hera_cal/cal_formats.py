@@ -216,14 +216,14 @@ class AbsCal(UVCal):
 
         # check that for the case of 2 abscal files, we have the same antennas
         if len(abscal_npznames) > 1:
-            ants1 = gainsdict[polname[0]].keys()
-            ants2 = gainsdict[polname[1]].keys()
+            ants1 = set(gainsdict[polname[0]].keys()) - set(map(str, ex_ants))
+            ants2 = set(gainsdict[polname[1]].keys()) - set(map(str, ex_ants))
             if sorted(ants1) != sorted(ants2):
                 raise AssertionError("The two abscal files do not have the same antennas")
-            ants_gains = ants1
+            ants_gains = list(ants1)
             nants_gains = len(ants_gains)
         else:
-            ants_gains = gainsdict[polname[0]].keys()
+            ants_gains = list(set(gainsdict[polname[0]].keys()) - set(map(str, ex_ants)))
             nants_gains = len(ants_gains)
 
         # save miriad filename too
@@ -253,9 +253,8 @@ class AbsCal(UVCal):
 
         # make a list of "good antennas"
         ants = sorted(map(int, ants_gains))
-        good_antnames = sorted(ants_gains)
-        allants = np.sort(ants + ex_ants)
-        antnames = ['ant{}'.format(a) for a in allants]
+        good_antnames = map(str, ants)
+        antnames = ['ant{}'.format(a) for a in ants]
 
         # construct data and flag array
         tmp_spec = gainsdict[polname[0]][good_antnames[0]]
@@ -287,7 +286,6 @@ class AbsCal(UVCal):
         farray = np.array(freqs)
         tarray = times
         antarray = list(ants)
-        numarray = list(allants)
         namarray = antnames
 
         for key in optional:
@@ -299,9 +297,9 @@ class AbsCal(UVCal):
         self.Ntimes = ntimes
         self.history = history + append2hist
         self.Nants_data = len(ants)
-        self.Nants_telescope = len(allants)
+        self.Nants_telescope = len(ants)
         self.antenna_names = namarray[:self.Nants_telescope]
-        self.antenna_numbers = numarray[:self.Nants_telescope]
+        self.antenna_numbers = antarray[:self.Nants_telescope]
         self.ant_array = np.array(antarray[:self.Nants_data])
         self.Nspws = nspw
         self.spw_array = np.array([0])

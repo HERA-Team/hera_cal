@@ -22,6 +22,8 @@ class Test_HERACal(UVCal):
             elif param == '_time_range':  # why do we need this?
                 nt.assert_equal(np.testing.assert_almost_equal(
                     getattr(hc, param).value, getattr(uv, param).value, 5), None)
+            elif param == '_extra_keywords':
+                continue
             else:
                 nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
 
@@ -51,6 +53,8 @@ class Test_HERACal(UVCal):
             elif param == '_time_range':  # why do we need this?
                 nt.assert_equal(np.testing.assert_almost_equal(
                     getattr(hc, param).value, getattr(uv, param).value, 5), None)
+            elif param == '_extra_keywords':
+                continue
             else:
                 nt.assert_true(
                     np.all(getattr(hc, param) == getattr(uv, param)))

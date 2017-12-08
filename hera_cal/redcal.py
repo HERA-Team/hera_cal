@@ -460,11 +460,10 @@ class RedundantCalibrator:
 
         #Amplitude renormalization: fixes the mean abs product of gains (as they appear in visibilities)
         for antpol in antpols:
-            bls_for_average = [bl for bls in self.reds for bl in bls if (bl[2] == 2*antpol) and (bls[0] in bl_pairs)]
-            meanSqAmplitude = np.mean([np.abs(g[(ant1,pol[0])] * g[(ant2,pol[1])])
-                for (ant1,ant2,pol) in bls_for_average], axis=0)
-            degenMeanSqAmplitude = np.mean([np.abs(degen_sol[(ant1,pol[0])] * degen_sol[(ant2,pol[1])])
-                for (ant1,ant2,pol) in bls_for_average], axis=0)
+            meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys() 
+                for key2 in g.keys() if key1[1] == antpol and key2[1] == antpol and key1[0] != key2[0]], axis=0)
+            degenMeanSqAmplitude = np.mean([np.abs(degen_sol[key1] * degen_sol[key2]) for key1 in g.keys() 
+                for key2 in g.keys() if key1[1] == antpol and key2[1] == antpol and key1[0] != key2[0]], axis=0)
             gainSols[gainPols == antpol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
             visSols[visPols[:,0] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
             visSols[visPols[:,1] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
