@@ -648,23 +648,23 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     return dlys, phi
 
 
-def interp_model(model, model_times, model_freqs, data_times, data_freqs,
+def interp_vis(data, data_times, data_freqs, model_times, model_freqs,
                  kind='cubic', fill_value=0, zero_tol=1e-5):
     """
-    interpolate model complex visibility onto the time-frequency basis of data.
+    interpolate data complex visibility onto the time-frequency basis of a model.
     ** Note: ** this is just a simple wrapper for scipy.interpolate.interp2d
 
     Parameters:
     -----------
-    model : visibility data of model, type=dictionary, see AbsCal for details on format
-
-    model_times : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
-
-    model_freqs : 1D array of the model freq axis, dtype=float, shape=(Nfreqs,)
+    data : visibility data of data, type=dictionary, see AbsCal for details on format
 
     data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
 
-    data_freqs : 1D array of the data freq axis of, dtype=float, shape=(Nfreqs,)
+    data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
+
+    model_times : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
+
+    model_freqs : 1D array of the model freq axis of, dtype=float, shape=(Nfreqs,)
 
     kind : kind of interpolation method, type=str, options=['linear', 'cubic', ...]
         see scipy.interpolate.interp2d for details
@@ -674,17 +674,17 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs,
 
     zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
     """
-    model = copy.deepcopy(model)
+    data = copy.deepcopy(data)
     # loop over keys
-    for i, k in enumerate(model.keys()):
+    for i, k in enumerate(data.keys()):
         # loop over polarizations
         new_data = []
-        for p in range(model[k].shape[2]):
+        for p in range(data[k].shape[2]):
             # interpolate real and imag separately
-            interp_real = interpolate.interp2d(model_freqs, model_times, np.real(model[k][:, :, p]),
-                                               kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
-            interp_imag = interpolate.interp2d(model_freqs, model_times, np.imag(model[k][:, :, p]),
-                                               kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
+            interp_real = interpolate.interp2d(data_freqs, data_times, np.real(data[k][:, :, p]),
+                                               kind=kind, fill_value=fill_value, bounds_error=False)(model_freqs, model_times)
+            interp_imag = interpolate.interp2d(data_freqs, data_times, np.imag(data[k][:, :, p]),
+                                               kind=kind, fill_value=fill_value, bounds_error=False)(model_freqs, model_times)
 
             # force things near amplitude of zero to zero
             zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
@@ -694,9 +694,9 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs,
             # rejoin
             new_data.append(interp_real + 1j*interp_imag)
 
-        model[k] = np.moveaxis(np.array(new_data), 0, 2)
+        data[k] = np.moveaxis(np.array(new_data), 0, 2)
 
-    return model
+    return data
 
 
 def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
