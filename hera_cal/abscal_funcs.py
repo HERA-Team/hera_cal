@@ -23,6 +23,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 import linsolve
 from astropy import stats as astats
+from JD2LST import LST2JD
 
 
 def amp_lincal(model, data, wgts=None, verbose=False):
@@ -649,14 +650,15 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
 
 
 def interp_vis(data, data_times, data_freqs, model_times, model_freqs,
-                 kind='cubic', fill_value=0, zero_tol=1e-5):
+                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True):
     """
-    interpolate data complex visibility onto the time-frequency basis of a model.
-    ** Note: ** this is just a simple wrapper for scipy.interpolate.interp2d
+    interpolate complex visibility data onto the time & frequency basis of
+    a model visibility.
+    ** Note: this is just a simple wrapper for scipy.interpolate.interp2d **
 
     Parameters:
     -----------
-    data : visibility data of data, type=dictionary, see AbsCal for details on format
+    data : complex visibility data, type=dictionary, see AbsCal for details on format
 
     data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
 
@@ -664,7 +666,7 @@ def interp_vis(data, data_times, data_freqs, model_times, model_freqs,
 
     model_times : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
 
-    model_freqs : 1D array of the model freq axis of, dtype=float, shape=(Nfreqs,)
+    model_freqs : 1D array of the model freq axis, dtype=float, shape=(Nfreqs,)
 
     kind : kind of interpolation method, type=str, options=['linear', 'cubic', ...]
         see scipy.interpolate.interp2d for details
@@ -673,30 +675,45 @@ def interp_vis(data, data_times, data_freqs, model_times, model_freqs,
         if None, values are extrapolated
 
     zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
+
+    flag_extrapolate : flag extrapolated data if True
     """
+    # copy data and flags
     data = copy.deepcopy(data)
+    flags = odict()
+
     # loop over keys
     for i, k in enumerate(data.keys()):
         # loop over polarizations
         new_data = []
+        new_flags = []
         for p in range(data[k].shape[2]):
             # interpolate real and imag separately
             interp_real = interpolate.interp2d(data_freqs, data_times, np.real(data[k][:, :, p]),
-                                               kind=kind, fill_value=fill_value, bounds_error=False)(model_freqs, model_times)
+                                               kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
             interp_imag = interpolate.interp2d(data_freqs, data_times, np.imag(data[k][:, :, p]),
-                                               kind=kind, fill_value=fill_value, bounds_error=False)(model_freqs, model_times)
+                                               kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
 
-            # force things near amplitude of zero to zero
+            # set flags
+            f = np.zeros_like(interp_real, dtype=float)
+            if flag_extrapolate:
+                f[np.isnan(interp_real) + np.isnan(interp_imag)] = 1.0
+            interp_real[np.isnan(interp_real)] = fill_value
+            interp_imag[np.isnan(interp_imag)] = fill_value
+
+            # force things near amplitude of zero to (positive) zero
             zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
             interp_real[zero_select] *= 0.0 * interp_real[zero_select]
             interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
 
             # rejoin
             new_data.append(interp_real + 1j*interp_imag)
+            new_flags.append(f)
 
         data[k] = np.moveaxis(np.array(new_data), 0, 2)
+        flags[k] = np.moveaxis(np.array(new_flags), 0, 2)
 
-    return data
+    return data, flags
 
 
 def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
@@ -869,4 +886,120 @@ def echo(message, type=0, verbose=True):
             print('')
             print(message)
             print("-"*40)
+
+class Baseline(object):
+    """
+    Baseline object for making antenna-independent, unique baseline labels
+    for baselines up to 1km in length. Only __eq__ operator is overloaded.
+    """
+    def __init__(self, bl, tol=1.0):
+        """
+        bl : list containing [dx, dy] float separation in meters
+        tol : tolerance for baseline length comparison in meters
+        """
+        self.label = "{:06.1f}:{:06.1f}".format(float(bl[0]), float(bl[1]))
+        self.tol = tol
+
+    def __repr__(self):
+        return self.label
+
+    @property
+    def bl(self):
+        return map(float, self.label.split(':'))
+
+    @property
+    def len(self):
+        return np.linalg.norm(self.bl)
+
+    def __eq__(self, B2):
+        if np.isclose(self.len, B2.len, atol=np.max([self.tol, B2.tol])):
+            if np.isclose(self.bl[0], -B2.bl[0], atol=np.max([self.tol, B2.tol])):
+                return 'conjugated'
+            else:
+                return True
+        else:
+            return False
+
+
+def lst_align(data_fname, model_fname=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
+              verbose=True):
+    """
+    """
+    # try to load model
+    if model_fname is not None:
+        uvm = UVData()
+        uvm.read_miriad(model_fname)
+        lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
+        model_freqs = np.unique(uvm.freq_array)
+    else:
+        # generate LST array
+        lst_arr = np.arange(0, 24, dLST)
+        model_freqs = None
+
+    # load file
+    echo("loading {}".format(data_fname), verbose=verbose)
+    uvd = UVData()
+    uvd.read_miriad(data_fname)
+
+    # get data
+    data, flags, pols = UVData2AbsCalDict([uvd], pop_autos=False)
+
+    # get data lst and freq arrays
+    data_lsts, data_freqs = np.unique(uvd.lst_array) * 12/np.pi, np.unique(uvd.freq_array)
+    Ntimes = len(data_lsts)
+
+    # get closest lsts
+    start = np.argmin(np.abs(lst_arr - data_lsts[0]))
+    lst_indices = np.arange(start, start+Ntimes)
+    model_lsts = lst_arr[lst_indices]
+    if model_freqs is None:
+        model_freqs = data_freqs
+    Nfreqs = len(model_freqs)
+
+    # interpolate data
+    echo("interpolating data", verbose=verbose)
+    interp_data, interp_flags = interp_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, kind='cubic')
+    Nbls = len(interp_data)
+
+    # reorder into arrays
+    uvd_data = np.array(interp_data.values())
+    uvd_data = uvd_data.reshape(-1, 1, Nfreqs, 1)
+    uvd_flags = np.array(interp_flags.values()).astype(np.bool)
+    uvd_flags = uvd_flags.reshape(-1, 1, Nfreqs, 1)
+    uvd_keys = np.repeat(np.array(interp_data.keys()).reshape(-1, 1, 2), Ntimes, axis=1).reshape(-1, 2)
+    uvd_bls = np.array(map(lambda k: uvd.antnums_to_baseline(k[0], k[1]), uvd_keys))
+    uvd_times = np.array(map(lambda x: JD2LST.LST2JD(x, np.median(np.floor(uvd.time_array)), uvd.telescope_location_lat_lon_alt_degrees[1]), model_lsts))
+    uvd_times = np.repeat(uvd_times[np.newaxis], Nbls, axis=0).reshape(-1)
+    uvd_lsts = np.repeat(model_lsts[np.newaxis], Nbls, axis=0).reshape(-1)
+    uvd_freqs = model_freqs.reshape(1, -1)
+
+    # assign to uvdata object
+    uvd.data_array = uvd_data
+    uvd.flag_array = uvd_flags
+    uvd.baseline_array = uvd_bls
+    uvd.ant_1_array = uvd_keys[:, 0]
+    uvd.ant_2_array = uvd_keys[:, 1]
+    uvd.time_array = uvd_times
+    uvd.lst_array = uvd_lsts * np.pi / 12
+    uvd.freq_array = uvd_freqs
+    uvd.Nfreqs = Nfreqs
+
+    # check output
+    if outdir is None:
+        outdir = os.path.dirname(data_fname)
+    if output_fname is None:
+        output_fname = data_fname.split('.')
+        output_fname.pop(2)
+        output_fname = '.'.join(output_fname) + 'L.{:07.4f}'.format(model_lsts[0])
+    output_fname = os.path.join(outdir, output_fname)
+    if os.path.exists(output_fname) and overwrite is False:
+        raise IOError("{} exists, not overwriting".format(output_fname))
+
+    # write to file
+    echo("saving {}".format(output_fname), verbose=verbose)
+    uvd.write_miriad(output_fname, clobber=True)
+
+
+
+
 

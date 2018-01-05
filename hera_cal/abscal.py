@@ -3,20 +3,58 @@ abscal.py
 ---------
 
 Calibrate measured visibility
-data to a visibility model, solving
-for certain calibration quantities:
+data to a visibility model using
+linerizations of the
+(complex) calibration equation:
 
-1. overall amplitude scalar : A
-2. overall gain phase scalar : psi
-3. gain phase slope vector : phi
+V_ij^model = g_i x g_j^* x V_ij^data
 
-V_ij^model = A * exp(psi + phi * b_ij) * V_ij^measured
+where
+
+V_ij^model = exp(eta_ij^model + i x phi_ij^model)
+g_i = exp(eta_i + i x phi_i)
+g_j = exp(eta_j + i x phi_j)
+V_ij^data = exp(eta_ij^data + i x phi_ij^data)
+
+There are five calibration methods, where the
+RHS of each equation contains the free parameters:
+
+1. Absolute amplitude logarithmic calibration
+---------------------------------------------
+
+eta_ij^model - eta_ij^data = eta_i + eta_j
+
+
+2. Absolute phase logarithmic calibration
+-----------------------------------------
+
+phi_ij^model - phi_ij^data = phi_i - phi_j
+
+
+3. Average amplitude linear calibration
+----------------------------------------
+
+|V_ij^model| / |V_ij^data| = |g_avg|
+
+
+4. Tip-Tilt phase logarithmic calibration 
+-----------------------------------------
+
+phi_ij^model - phi_ij^data = PSI + dot(THETA, B_ij)
+
+where PSI is an overall gain phase scalar, 
+THETA is the gain phase slope vector [radians / meter]
+and B_ij is the baseline vector between antenna i and j.
+
+
+5. delay linear calibration
+---------------------------
+
+tau_ij^model - tau_ij^data = tau_i - tau_j
+
+where tau is the delay that can be turned
+into a complex gain via: g_i = exp(i x 2pi x tau_i x nu)
 """
-import os
-import sys
-from collections import OrderedDict as odict
-import copy
-import numpy as np
 from abscal_funcs import *
 
 
@@ -327,8 +365,8 @@ class AbsCal(object):
         run amp_lincal and phs_logcal on self.model and self.data, and optionally write out 
         gains to a calfits file.
 
-        run Parameters:
-        -----------
+        run parameters:
+        ---------------
         calfits_filename : string, path to output calfits file, default=None
         save : boolean, if True, save gains to a calfits file
         overwrite : boolean, if True, overwrite if calfits_filename exists
