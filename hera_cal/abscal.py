@@ -3,27 +3,64 @@ abscal.py
 ---------
 
 Calibrate measured visibility
-data to a visibility model, solving
-for certain calibration quantities:
+data to a visibility model using
+linerizations of the
+(complex) calibration equation:
 
-1. overall amplitude scalar : A
-2. overall gain phase scalar : psi
-3. gain phase slope vector : phi
+V_ij^model = g_i x g_j^* x V_ij^data
 
-V_ij^model = A * exp(psi + phi * b_ij) * V_ij^measured
+where
 
+V_ij^model = exp(eta_ij^model + i x phi_ij^model)
+g_i = exp(eta_i + i x phi_i)
+g_j = exp(eta_j + i x phi_j)
+V_ij^data = exp(eta_ij^data + i x phi_ij^data)
+
+There are five calibration methods, where the
+RHS of each equation contains the free parameters:
+
+1. Absolute amplitude logarithmic calibration
+---------------------------------------------
+
+eta_ij^model - eta_ij^data = eta_i + eta_j
+
+
+2. Absolute phase logarithmic calibration
+-----------------------------------------
+
+phi_ij^model - phi_ij^data = phi_i - phi_j
+
+
+3. Average amplitude linear calibration
+----------------------------------------
+
+|V_ij^model| / |V_ij^data| = |g_avg|
+
+
+4. Tip-Tilt phase logarithmic calibration 
+-----------------------------------------
+
+phi_ij^model - phi_ij^data = PSI + dot(THETA, B_ij)
+
+where PSI is an overall gain phase scalar, 
+THETA is the gain phase slope vector [radians / meter]
+and B_ij is the baseline vector between antenna i and j.
+
+
+5. delay linear calibration
+---------------------------
+
+tau_ij^model - tau_ij^data = tau_i - tau_j
+
+where tau is the delay that can be turned
+into a complex gain via: g_i = exp(i x 2pi x tau_i x nu)
 """
-import os
-import sys
-from collections import OrderedDict as odict
-import copy
-import numpy as np
 from abscal_funcs import *
 
 
 class AbsCal(object):
 
-    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, times=None, pols=None):
+    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, times=None, pols=[None]):
         """
         AbsCal object for absolute calibration of flux scale and phasing
         given a visibility model and measured data. model, data and weights
@@ -97,6 +134,7 @@ class AbsCal(object):
 
         # setup times
         self.Ntimes = model[model.keys()[0]].shape[0]
+        self.times = times
 
         # setup ants
         self.ants = np.unique(sorted(np.array(map(lambda x: [x[0], x[1]], model.keys())).ravel()))
@@ -196,33 +234,90 @@ class AbsCal(object):
         self._gain_psi = copy.copy(fit['psi'])
         self._gain_phi = copy.copy(np.array([fit['PHIx'], fit['PHIy']]))
 
-    def smooth_params(self, data, flags=None, kind='linear', params='all', axis='both'):
+    def delay_lincal(self, refant, kernel=(1, 11), verbose=True):
+        """
+        Solve for per-antenna delay according to the equation
+        by calling abscal.delay_lincal method. See abscal.delay_lincal
+        for details.
+
+        Parameters:
+        -----------
+
+        """
+        # copy data
+        model = copy.deepcopy(self.model)
+        data = copy.deepcopy(self.data)
+
+        df = np.median(np.diff(self.freqs))
+
+        # iterate over polarizations
+        dlys = []
+        for i, p in enumerate(self.pols):
+            # run linsolve
+            m = odict(zip(model.keys(), map(lambda k: model[k][:, :, i], model.keys())))
+            d = odict(zip(data.keys(), map(lambda k: data[k][:, :, i], data.keys())))
+            fit = delay_lincal(m, d, refant, df=df, kernel=kernel, verbose=verbose, time_ax=0, freq_ax=1)
+            dlys.append(odict(zip(self.ants, map(lambda x: fit['tau_{}'.format(x)], self.ants))))
+
+        self.delays = odict(zip(self.ants, [np.moveaxis(map(lambda d: d[a], dlys), 0, 2) for a in self.ants]))
+        self._delays = copy.deepcopy(self.delays)
+
+    def smooth_data(self, data, flags=None, kind='linear'):
         """
 
 
         Parameters:
         -----------
+        data : 
 
-        kind : type=str, kind of smoothing, opts=['linear','const']
-            'const' : fit an average across frequency
-            'linear' : fit a line across frequency
-            'poly' : fit a polynomial across frequency
-            'gp' : fit a gaussian process across frequency
 
-        params : type=str, which parameter to smooth, opts=['all', 'amp', 'psi', 'phi']
-            'all' : smooth all gain parameters
-            'amp' : smooth just amplitude
-            'phs' : smooth both phase parameters
-            'psi' : smooth just gain phase
-            'phi' : smooth just phase slope
-
-        axis : type=str, which data axis to smooth, opts=['both', 'time', 'freq']
-            'both' : smooth time and frequency together
-            'time' : smooth time axis independently
-            'freq' : smooth freq axis independently
+        flags : 
+    
         """
+        # configure parameters
 
 
+
+        Ntimes
+        Nfreqs
+
+        # interpolate flagged data
+
+
+        # sphere training data x-values
+
+
+        # ravel training data
+
+
+
+        if kind == 'poly':
+            # fit polynomial
+            data = smooth_data(Xtrain_raveled, ytrain_raveled, Xpred_raveled, kind=kind, degree=degree)
+
+        if kind == 'gp':
+            # construct GP mean function from a degree-order polynomial
+            MF = make_pipeline(PolynomialFeatures(degree), linear_model.RANSACRegressor())
+            MF.fit(Xtrain_raveled, ytrain_raveled)
+            y_mean = MF.predict(Xtrain_raveled)
+
+            # make residual and normalize by std
+            y_resid = (ytrain_raveled - y_mean).reshape(Ntimes, Nfreqs)
+            y_std = np.sqrt(astats.biweight_midvariance(y_resid.ravel()))
+            y_resid /= y_std
+
+            # average residual across time
+            ytrain = np.mean(y_resid, axis=0)
+
+            # ravel training data
+            Xtrain_raveled = Xtrain[0, :].reshape(-1, 1)
+            ytrain_raveled = ytrain
+            Xpred_raveled = Xpred[0, :]
+
+            # fit GP and predict MF
+            y_pred = smooth_data(Xtrain_raveled, ytrain_raveled, Xpred_raveled) * y_std
+            y_pred = np.repeat(y_pred, Ntimes)
+            data = (y_pred + y_mean).reshape(Ntimes, Nfreqs)
 
 
     def make_gains(self, gains2dict=False, verbose=True):
@@ -270,8 +365,8 @@ class AbsCal(object):
         run amp_lincal and phs_logcal on self.model and self.data, and optionally write out 
         gains to a calfits file.
 
-        run Parameters:
-        -----------
+        run parameters:
+        ---------------
         calfits_filename : string, path to output calfits file, default=None
         save : boolean, if True, save gains to a calfits file
         overwrite : boolean, if True, overwrite if calfits_filename exists

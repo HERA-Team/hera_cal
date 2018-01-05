@@ -10,6 +10,7 @@ import sys
 from collections import OrderedDict as odict
 import copy
 import argparse
+import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
@@ -22,7 +23,8 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 import linsolve
 from astropy import stats as astats
-import functools
+from JD2LST import LST2JD
+
 
 def amp_lincal(model, data, wgts=None, verbose=False):
     """
@@ -98,7 +100,7 @@ def amp_lincal(model, data, wgts=None, verbose=False):
 
     # setup linsolve equations
     eqns = odict([(k, "a{}*amp".format(str(i))) for i, k in enumerate(keys)])
-    ls_design_matrix = odict([("a{}".format(str(i)), np.ones(ydata[k].shape, dtype=np.float)) for i, k in enumerate(keys)])
+    ls_design_matrix = odict([("a{}".format(str(i)), 1.0) for i, k in enumerate(keys)])
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -227,7 +229,61 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
     return fit
 
 
-def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
+def delay_lincal(model, data, refant, df=9.765625e4, kernel=(1, 11), verbose=True, time_ax=0, freq_ax=1):
+    """
+    Solve for per-antenna delay according to the equation
+
+    tau_ij^model = tau_i - tau_j + tau_ij^data
+
+    Parameters:
+    -----------
+
+    """
+    # verify refant
+    if refant not in np.concatenate(model.keys()):
+        raise KeyError("refant {} not in model dictionary".format(refant))
+
+    # unpack model and data
+    model_values = np.array(model.values())
+    model_keys = model.keys()
+    data_values = np.array(data.values())
+    data_keys = data.keys()
+
+    # median filter and FFT to get delays
+    model_dlys, data_dlys = [], []
+    for i, mv in enumerate(model_values):
+        m_dly, m_off = fft_dly(mv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        model_dlys.append(m_dly)
+    for i, dv in enumerate(data_values):
+        d_dly, d_off = fft_dly(mv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        data_dlys.append(d_dly)
+
+    model_dlys = odict([(k, model_dlys[i]) for i, k in enumerate(model_keys)])
+    data_dlys = odict([(k, data_dlys[i]) for i, k in enumerate(data_keys)])
+
+    # form ydata
+    ydata = odict([(k, model_dlys[k] - data_dlys[k]) for i, k in enumerate(model_keys)])
+
+    # setup linsolve equation dictionary
+    eqns = odict([(k, "a_{}_{}*tau_{} + a_{}_{}*tau_{}".format(k[0], k[1], k[0], k[1], k[0], k[1])) for i, k in enumerate(model_keys)])
+
+    # setup design matrix dictionary
+    ls_design_matrix = odict([("a_{}_{}".format(k[0], k[1]), 1.0) if k[0] != refant else ("a_{}_{}".format(k[0], k[1]), 0.0) for i, k in enumerate(model_keys)])
+    ls_design_matrix.update(odict([("a_{}_{}".format(k[1], k[0]), -1.0) if k[1] != refant else ("a_{}_{}".format(k[1], k[0]), 0.0) for i, k in enumerate(model_keys)]))
+
+    # setup linsolve data dictionary
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(model_keys)])
+
+    # setup linsolve and run
+    sol = linsolve.LinearSolver(ls_data, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
+
+    return fit
+
+
+def run_abscal(data_files, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
                save=False, calfits_fname=None, output_gains=False, overwrite=False, zero_psi=False,
                smooth=False, **kwargs):
     """
@@ -235,24 +291,30 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
 
     Parameters:
     -----------
-    data_file : path to data miriad file, type=string
-        a single miriad file containing complex visibility data
+    data_files : path(s) to data miriad files, type=list
+        a list of one or more miriad file(s) containing complex
+        visibility data
 
     model_files : path(s) to miriad files(s), type=list
         a list of one or more miriad files containing complex visibility data
-        that ** overlaps ** the time and frequency range of data_file
+        that *overlaps* the time and frequency range of data_files
 
     output_gains : boolean, if True: return AbsCal gains
     """
     # load data
     echo("loading data files", type=1, verbose=verbose)
-    echo("loading {}".format(data_file), type=0, verbose=verbose)
-    uvd = UVData()
-    try:
-        uvd.read_miriad(data_file)
-    except:
-        uvd.read_uvfits(data_file)
-        uvd.unphase_to_drift()
+    for i, df in enumerate(data_files):
+        echo("loading {}".format(df), type=0, verbose=verbose)
+        uv = UVData()
+        try:
+            uv.read_miriad(df)
+        except:
+            uv.read_uvfits(df)
+            uv.unphase_to_drift()
+        if i == 0:
+            uvd = uv
+        else:
+            uvd += uv
 
     data, flags, pols = UVData2AbsCalDict([uvd])
     for i, k in enumerate(data.keys()):
@@ -337,7 +399,7 @@ def run_abscal(data_file, model_files, unravel_pol=False, unravel_freq=False, un
         return AC.gain_array
 
 
-def UVData2AbsCalDict(filenames, pol_select=None):
+def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
     """
     turn pyuvdata.UVData objects or miriad filenames 
     into the dictionary form that AbsCal requires
@@ -347,6 +409,8 @@ def UVData2AbsCalDict(filenames, pol_select=None):
     filenames : list of either strings to miriad filenames or list of UVData instances
 
     pol_select : list of polarization strings to keep
+
+    pop_autos : boolean, if True: remove autocorrelations
 
     Output:
     -------
@@ -376,11 +440,13 @@ def UVData2AbsCalDict(filenames, pol_select=None):
             uvd = fname
         # load data into dictionary
         data_temp, flag_temp = firstcal.UVData_to_dict([uvd])
-        # eliminate autos
-        for i, k in enumerate(data_temp.keys()):
-            if k[0] == k[1]:
-                data_temp.pop(k)
-                flag_temp.pop(k)
+
+        if pop_autos:
+            # eliminate autos
+            for i, k in enumerate(data_temp.keys()):
+                if k[0] == k[1]:
+                    data_temp.pop(k)
+                    flag_temp.pop(k)
 
         ## reconfigure polarization nesting ##
         # setup empty dictionaries
@@ -424,55 +490,45 @@ def UVData2AbsCalDict(filenames, pol_select=None):
     return DATA_LIST, FLAG_LIST, POL_LIST
 
 
-def smooth_param(param, flags=None, kind='gp', degree=5, cov=None, axis='both'):
+def smooth_data(Xtrain, ytrain, Xpred, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
     """
 
 
     Parameters:
     -----------
-    param : ndarray containing parameter values across time and/or frequency
-        type=ndarray, dtype=float
-
-    flags : ndarray containing parameter flags in time and/or frequency
-        type=ndarray, dtype=float
+    Xtrain : ndarray containing x-values for regression
+        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
+  
+    ytrain : 1D np.array containing parameter y-values across time and/or frequency (single pol)
+        type=1D-ndarray, dtype=float, shape=(Ndata, Nfeatures)
+  
+    Xpred : ndarray containing x-values for prediction
+        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
 
     kind : kind of smoothing to perform, type=str, opts=['linear','const']
         'poly' : fit a Nth order polynomial across frequency, with order set by "degree"
         'gp' : fit a gaussian process across frequency
-
-    axis : which data axis to smooth, type=str, opts=['both', 'time', 'freq']
-        'both' : smooth time and frequency together
-        'time' : smooth time axis independently
-        'freq' : smooth freq axis independently
+        'boxcar' : convolve ytrain with a boxcar window
     """
+    # get number of dimensions
+    ndim = Xtrain.shape[1]
 
     if kind == 'poly':
         # robust linear regression via sklearn
         model = make_pipeline(PolynomialFeatures(degree), linear_model.RANSACRegressor())
-        model.fit(X, y)
-        pred = model.predict(X)
+        model.fit(Xtrain, ytrain)
 
     elif kind == 'gp':
-        # use 1st order polynomial to get rid of outliers
-        model = make_pipeline(PolynomialFeatures(1), linear_model.RANSACRegressor())
-        model.fit(X, y)
-        pred = model.predict(X)
-        residual = y - pred
-        std = np.sqrt(astats.biweight_midvariance(residual))
-        inliers = np.where(np.abs(residual) < std*4)[0]
-        model.fit(X[inliers], y[inliers])
-        pred = model.predict(X[inliers])
+        # construct GP kernel
+        ls = np.array([1e-1 for i in range(ndim)])
+        kernel = 1.0**2 * gaussian_process.kernels.RBF(ls, np.array([1e-2, 1e1])) + \
+                 gaussian_process.kernels.WhiteKernel(1e-4, (1e-8, 1e1))
+        model = gaussian_process.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=n_restart)
+        # fit GP
+        model.fit(Xtrain, ytrain)
 
+    ypred = model.Predict(X)
 
-        kernel = gaussian_process.kernels.RBF()
-        model = gaussian_process.GaussianProcessRegressor
-
-    model.fit(X, y)
-    ypred = model.predict(X)
-
-    # check if complex, if so, smooth real and imag separately
-    if param.dtype == np.complex:
-        pass
 
 
 
@@ -518,23 +574,99 @@ def unravel(data, prefix, axis, copy_dict=None):
             copy_dict.pop(k)
 
 
-def interp_model(model, model_times, model_freqs, data_times, data_freqs,
-                 kind='cubic', fill_value=0, zero_tol=1e-5):
+def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     """
-    interpolate model complex visibility onto the time-frequency basis of data.
-    ** Note: ** this is just a simple wrapper for scipy.interpolate.interp2d
+    get delay of visibility across band
+
+    vis : 2D ndarray of visibility data, dtype=complex, shape=(Ntimes, Nfreqs)
+
+    df : frequency channel width in Hz
+
+    time_ax : time axis of data
+
+    freq_ax : frequency axis of data
+
+    pol_ax : polarization axis of data (if exists)
+
+    edgecut : fraction of band edges to cut before FFT
+    """
+    # get array params
+    Nfreqs = vis.shape[freq_ax]
+    Ntimes = vis.shape[time_ax]
+
+    # smooth via median filter
+    vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j*signal.medfilt(np.imag(vis), kernel_size=kernel)
+
+    # fft
+    window = np.moveaxis(signal.windows.blackmanharris(Nfreqs).reshape(-1, 1), 0, freq_ax)
+    vfft = np.fft.fft(vis_smooth, axis=freq_ax)
+
+    # get argmax of abs
+    amp = np.abs(vfft)
+    argmax = np.moveaxis(np.argmax(amp, axis=freq_ax)[np.newaxis], 0, freq_ax)
+
+    # get delays
+    fftfreqs = np.fft.fftfreq(Nfreqs, 1)
+    dfreq = np.median(np.diff(fftfreqs))
+    dlys = fftfreqs[argmax]
+
+    # get peak shifts, and add to dlys
+    def get_peak(amp, max_ind):
+        y = amp[max_ind-1:max_ind+2]
+        if len(y) < 3:
+            return 0
+        r = np.abs(np.diff(y))
+        r = r[0] / r[1]
+        peak = 0.5 * (r-1) / (r+1)
+        return peak
+
+    peak_shifts = np.array([get_peak(np.take(amp, i, axis=time_ax), np.take(argmax, i, axis=time_ax)[0]) for i in range(Ntimes)])
+    dlys += np.moveaxis(peak_shifts.reshape(-1, 1) * dfreq, 0, time_ax)
+
+    # get phase offsets by interpolating real and imag component of FFT
+    vfft_real = []
+    vfft_imag = []
+    for i, a in enumerate(argmax):
+        # get real and imag of each argmax
+        real = np.take(vfft.real, i, axis=time_ax)
+        imag = np.take(vfft.imag, i, axis=time_ax)
+
+        # add interpolation component
+        rl = interpolate.interp1d(np.arange(Nfreqs), real)(a + peak_shifts[i])
+        im = interpolate.interp1d(np.arange(Nfreqs), imag)(a + peak_shifts[i])
+
+        # insert into arrays
+        vfft_real.append(rl)
+        vfft_imag.append(im)
+
+    vfft_real = np.moveaxis(np.array(vfft_real), 0, time_ax)
+    vfft_imag = np.moveaxis(np.array(vfft_imag), 0, time_ax)
+    vfft_interp = vfft_real + 1j*vfft_imag
+    phi = np.angle(vfft_interp)
+
+    dlys /= df
+
+    return dlys, phi
+
+
+def interp_vis(data, data_times, data_freqs, model_times, model_freqs,
+                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True):
+    """
+    interpolate complex visibility data onto the time & frequency basis of
+    a model visibility.
+    ** Note: this is just a simple wrapper for scipy.interpolate.interp2d **
 
     Parameters:
     -----------
-    model : visibility data of model, type=dictionary, see AbsCal for details on format
+    data : complex visibility data, type=dictionary, see AbsCal for details on format
+
+    data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
+
+    data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
     model_times : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
 
     model_freqs : 1D array of the model freq axis, dtype=float, shape=(Nfreqs,)
-
-    data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
-
-    data_freqs : 1D array of the data freq axis of, dtype=float, shape=(Nfreqs,)
 
     kind : kind of interpolation method, type=str, options=['linear', 'cubic', ...]
         see scipy.interpolate.interp2d for details
@@ -543,30 +675,45 @@ def interp_model(model, model_times, model_freqs, data_times, data_freqs,
         if None, values are extrapolated
 
     zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
+
+    flag_extrapolate : flag extrapolated data if True
     """
-    model = copy.deepcopy(model)
+    # copy data and flags
+    data = copy.deepcopy(data)
+    flags = odict()
+
     # loop over keys
-    for i, k in enumerate(model.keys()):
+    for i, k in enumerate(data.keys()):
         # loop over polarizations
         new_data = []
-        for p in range(model[k].shape[2]):
+        new_flags = []
+        for p in range(data[k].shape[2]):
             # interpolate real and imag separately
-            interp_real = interpolate.interp2d(model_freqs, model_times, np.real(model[k][:, :, p]),
-                                               kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
-            interp_imag = interpolate.interp2d(model_freqs, model_times, np.imag(model[k][:, :, p]),
-                                               kind=kind, fill_value=fill_value, bounds_error=False)(data_freqs, data_times)
+            interp_real = interpolate.interp2d(data_freqs, data_times, np.real(data[k][:, :, p]),
+                                               kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
+            interp_imag = interpolate.interp2d(data_freqs, data_times, np.imag(data[k][:, :, p]),
+                                               kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
 
-            # force things near amplitude of zero to zero
+            # set flags
+            f = np.zeros_like(interp_real, dtype=float)
+            if flag_extrapolate:
+                f[np.isnan(interp_real) + np.isnan(interp_imag)] = 1.0
+            interp_real[np.isnan(interp_real)] = fill_value
+            interp_imag[np.isnan(interp_imag)] = fill_value
+
+            # force things near amplitude of zero to (positive) zero
             zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
             interp_real[zero_select] *= 0.0 * interp_real[zero_select]
             interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
 
             # rejoin
             new_data.append(interp_real + 1j*interp_imag)
+            new_flags.append(f)
 
-        model[k] = np.moveaxis(np.array(new_data), 0, 2)
+        data[k] = np.moveaxis(np.array(new_data), 0, 2)
+        flags[k] = np.moveaxis(np.array(new_flags), 0, 2)
 
-    return model
+    return data, flags
 
 
 def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
@@ -643,6 +790,8 @@ def compute_reds(bls, antpos, tol=2.0):
     red_bls : redundant baseline list of input bls list
         ordered by smallest separation to longest separation    
     """
+    if type(antpos) is not dict:
+        raise AttributeError("antpos is not a dict")
     red_bl_vecs = []
     red_bl_dists = []
     red_bls = []
@@ -720,15 +869,13 @@ def param2calfits(calfits_fname, abscal_param, param_name, freq_array, time_arra
 
 def abscal_arg_parser():
     a = argparse.ArgumentParser()
-    a.add_argument("--data_file", type=str, help="path to miriad data file to-be-calibrated.", required=True)
-    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of miriad files for visibility model.", required=True)
+    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
+    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of data-overlapping miriad files for visibility model.", required=True)
     a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--unravel_time", default=False, action='store_true', help="couple all times together in the linsolve equations.")
     a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
     return a
-
 
 def echo(message, type=0, verbose=True):
     if verbose:
@@ -738,4 +885,125 @@ def echo(message, type=0, verbose=True):
             print('')
             print(message)
             print("-"*40)
+
+class Baseline(object):
+    """
+    Baseline object for making antenna-independent, unique baseline labels
+    for baselines up to 1km in length. Only __eq__ operator is overloaded.
+    """
+    def __init__(self, bl, tol=1.0):
+        """
+        bl : list containing [dx, dy] float separation in meters
+        tol : tolerance for baseline length comparison in meters
+        """
+        self.label = "{:06.1f}:{:06.1f}".format(float(bl[0]), float(bl[1]))
+        self.tol = tol
+
+    def __repr__(self):
+        return self.label
+
+    @property
+    def bl(self):
+        return map(float, self.label.split(':'))
+
+    @property
+    def len(self):
+        return np.linalg.norm(self.bl)
+
+    def __eq__(self, B2):
+        if np.isclose(self.len, B2.len, atol=np.max([self.tol, B2.tol])):
+            if np.isclose(self.bl[0], -B2.bl[0], atol=np.max([self.tol, B2.tol])):
+                return 'conjugated'
+            else:
+                return True
+        else:
+            return False
+
+
+def lst_align(data_fname, model_fname=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
+              verbose=True, write_miriad=True, output_data=False):
+    """
+    """
+    # try to load model
+    if model_fname is not None:
+        uvm = UVData()
+        uvm.read_miriad(model_fname)
+        lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
+        model_freqs = np.unique(uvm.freq_array)
+    else:
+        # generate LST array
+        lst_arr = np.arange(0, 24, dLST)
+        model_freqs = None
+
+    # load file
+    echo("loading {}".format(data_fname), verbose=verbose)
+    uvd = UVData()
+    uvd.read_miriad(data_fname)
+
+    # get data
+    data, flags, pols = UVData2AbsCalDict([uvd], pop_autos=False)
+
+    # get data lst and freq arrays
+    data_lsts, data_freqs = np.unique(uvd.lst_array) * 12/np.pi, np.unique(uvd.freq_array)
+    Ntimes = len(data_lsts)
+
+    # get closest lsts
+    start = np.argmin(np.abs(lst_arr - data_lsts[0]))
+    lst_indices = np.arange(start, start+Ntimes)
+    model_lsts = lst_arr[lst_indices]
+    if model_freqs is None:
+        model_freqs = data_freqs
+    Nfreqs = len(model_freqs)
+
+    # interpolate data
+    echo("interpolating data", verbose=verbose)
+    interp_data, interp_flags = interp_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, kind='cubic')
+    Nbls = len(interp_data)
+
+    # reorder into arrays
+    uvd_data = np.array(interp_data.values())
+    uvd_data = uvd_data.reshape(-1, 1, Nfreqs, 1)
+    uvd_flags = np.array(interp_flags.values()).astype(np.bool)
+    uvd_flags = uvd_flags.reshape(-1, 1, Nfreqs, 1)
+    uvd_keys = np.repeat(np.array(interp_data.keys()).reshape(-1, 1, 2), Ntimes, axis=1).reshape(-1, 2)
+    uvd_bls = np.array(map(lambda k: uvd.antnums_to_baseline(k[0], k[1]), uvd_keys))
+    uvd_times = np.array(map(lambda x: JD2LST.LST2JD(x, np.median(np.floor(uvd.time_array)), uvd.telescope_location_lat_lon_alt_degrees[1]), model_lsts))
+    uvd_times = np.repeat(uvd_times[np.newaxis], Nbls, axis=0).reshape(-1)
+    uvd_lsts = np.repeat(model_lsts[np.newaxis], Nbls, axis=0).reshape(-1)
+    uvd_freqs = model_freqs.reshape(1, -1)
+
+    # assign to uvdata object
+    uvd.data_array = uvd_data
+    uvd.flag_array = uvd_flags
+    uvd.baseline_array = uvd_bls
+    uvd.ant_1_array = uvd_keys[:, 0]
+    uvd.ant_2_array = uvd_keys[:, 1]
+    uvd.time_array = uvd_times
+    uvd.lst_array = uvd_lsts * np.pi / 12
+    uvd.freq_array = uvd_freqs
+    uvd.Nfreqs = Nfreqs
+
+    # write miriad
+    if write_miriad:
+        # check output
+        if outdir is None:
+            outdir = os.path.dirname(data_fname)
+        if output_fname is None:
+            output_fname = data_fname.split('.')
+            output_fname.pop(2)
+            output_fname = '.'.join(output_fname) + 'L.{:07.4f}'.format(model_lsts[0])
+        output_fname = os.path.join(outdir, output_fname)
+        if os.path.exists(output_fname) and overwrite is False:
+            raise IOError("{} exists, not overwriting".format(output_fname))
+
+        # write to file
+        echo("saving {}".format(output_fname), verbose=verbose)
+        uvd.write_miriad(output_fname, clobber=True)
+
+    # output data and flags
+    if output_data:
+        return interp_data, interp_flags, model_lsts, model_freqs
+
+
+
 
