@@ -531,8 +531,6 @@ def smooth_data(Xtrain, ytrain, Xpred, kind='gp', n_restart=3, degree=1, ls=10.0
 
 
 
-
-
 def unravel(data, prefix, axis, copy_dict=None):
     """
     promote visibility data from within a data key
@@ -716,6 +714,118 @@ def interp_vis(data, data_times, data_freqs, model_times, model_freqs,
     return data, flags
 
 
+def avg_data_across_red_bls(data, bls, antpos, flags=None, broadcast_flags=True, median=False, tol=0.5,
+                            mirror_red_data=False):
+    """
+    Given complex visibility data spanning one or more redundant
+    baseline groups, average redundant visibilities and write to file
+    """
+    # get data keys
+    keys = data.keys()
+
+    # get data, flags and ants
+    data = copy.deepcopy(data)
+    ants = np.unique(np.concatenate(keys))
+    if flags is None:
+        flags = copy.deepcopy(data)
+        for k in flags.keys(): flags[k] = np.zeros_like(flags[k]).astype(np.bool)
+
+    # get redundant baselines
+    reds = compute_reds(bls, antpos, tol=tol)
+
+    # make red_data dictionary
+    red_data = odict()
+    red_flags = odict()
+
+    # iterate over reds
+    for i, bl_group in enumerate(reds):
+        # average redundant baseline group
+        if median:
+            d = np.nanmedian(map(lambda k: data[k], bl_group), axis=0)
+        else:
+            d = np.nanmean(map(lambda k: data[k], bl_group), axis=0)
+
+        # assign to red_data
+        for j, key in enumerate(sorted(bl_group)):
+            red_data[key] = copy.copy(d)
+            if mirror_red_data is False:
+                break
+
+        # assign flags
+        if broadcast_flags:
+            red_flags[key] = np.max(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
+        else:
+            red_flags[key] = np.min(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
+
+    # get red_data keys
+    red_keys = red_data.keys()
+
+    return red_data, red_flags, red_keys
+
+
+def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
+                            write_miriad=True, output_data=False, overwrite=False, 
+                            verbose=True, **kwargs):
+    """
+    """
+    # check output file
+    if outdir is None:
+        outdir = os.path.dirname(data_fname)
+    if output_fname is None:
+        output_fname = os.path.basename(data_fname) + 'M'
+    output_fname = os.path.join(outdir, output_fname)
+    if os.path.exists(output_fname) is True and overwrite is False:
+        raise IOError("{} exists, not overwriting".format(output_fname))
+
+    if type(data_fname) == str:
+        uvd = UVData()
+        uvd.read_miriad(data_fname)
+
+    # get data
+    data, flags, pols = UVData2AbsCalDict([uvd])
+
+    # get antpos and baselines
+    antpos, ants = uvd.get_ENU_antpos()
+    antpos = dict(zip(ants, antpos))
+    bls = data.keys()
+
+    # avg data across reds
+    red_data, red_flags, red_keys = avg_data_across_red_bls(data, bls, antpos, **kwargs)
+    uvd_data = np.array(map(lambda k: red_data[k], red_keys))
+    uvd_flags = np.array(map(lambda k: red_flags[k], red_keys))
+    uvd_bls = np.array(red_keys)
+    blts_select = np.array(map(lambda k: uvd.antpair2ind(*k), uvd_bls)).reshape(-1)
+    Nbls = len(uvd_bls)
+    Nblts = len(blts_select)
+    uvd_bls = np.array(map(lambda k: uvd.baseline_to_antnums(k), uvd.baseline_array[blts_select]))
+
+    # resort data
+    uvd_data = uvd_data.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
+    uvd_flags = uvd_flags.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
+
+    # write to file
+    if write_miriad:
+        echo("saving {}".format(output_fname), verbose=verbose)
+        uvd.data_array = uvd_data
+        uvd.flag_array = uvd_flags
+        uvd.time_array = uvd.time_array[blts_select]
+        uvd.lst_array = uvd.lst_array[blts_select]
+        uvd.baseline_array = uvd.baseline_array[blts_select]
+        uvd.ant_1_array = uvd_bls[:, 0]
+        uvd.ant_2_array = uvd_bls[:, 1]
+        uvd.uvw_array = uvd.uvw_array[blts_select, :]
+        uvd.nsample_array = np.ones_like(uvd.data_array, dtype=np.float)
+        uvd.Nbls = Nbls
+        uvd.Nblts = Nblts
+        uvd.zenith_dec = uvd.zenith_dec[blts_select]
+        uvd.zenith_ra = uvd.zenith_ra[blts_select]
+        uvd.write_miriad(output_fname, clobber=True)
+
+    # output data
+    if output_data:
+        return red_data, red_flags, red_keys
+
+
 def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
     """
     Given unique baseline data (like omnical model visibilities),
@@ -729,7 +839,12 @@ def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
         list of all antenna pair tuples that "data" needs to expand into
 
     antpos : antenna positions dictionary
-        keys are antenna integers, values are ndarray baseline vectors
+        keys are antenna integers, values are ndarray baseline vectors.
+        This can be created via
+        ```
+        antpos, ants = UVData.get_ENU_pos()
+        antpos = dict(zip(ants, antpos))
+        ```
 
     tol : redundant baseline distance tolerance, dtype=float
         fed into abscal.compute_reds
@@ -773,7 +888,7 @@ def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
     return red_data
 
 
-def compute_reds(bls, antpos, tol=2.0):
+def compute_reds(bls, antpos, tol=1.0):
     """
     compute redundant baselines
 
@@ -790,8 +905,9 @@ def compute_reds(bls, antpos, tol=2.0):
     red_bls : redundant baseline list of input bls list
         ordered by smallest separation to longest separation    
     """
-    if type(antpos) is not dict:
-        raise AttributeError("antpos is not a dict")
+    if type(antpos) is not dict and type(antpos) is not odict:
+        raise AttributeError("antpos is not a dictionary type")
+
     red_bl_vecs = []
     red_bl_dists = []
     red_bls = []
@@ -811,6 +927,25 @@ def compute_reds(bls, antpos, tol=2.0):
 
     red_bls = list(np.array(red_bls)[np.argsort(red_bl_dists)])
     return red_bls
+
+
+def match_red_baselines(data_bls, data_ants, data_antpos, model_bls, model_ants, model_antpos, tol=1.0):
+    """
+    match unique data baselines to unique model baselines
+    """
+    # ensure ants are lists
+    if type(data_ants) is not list:
+        data_ants = data_ants.tolist()
+    if type(model_ants) is not list:
+        model_ants = model_ants.tolist()
+
+    # create unique baseline id
+    data_bl_id = np.array(map(lambda bl: Baseline(data_antpos[data_ants.index(bl[1])]-data_antpos[data_ants.index(bl[0])], tol=tol), data_bls))
+    model_bl_id = np.array(map(lambda bl: Baseline(model_antpos[data_ants.index(bl[0])]-model_antpos[model_ants.index(bl[1])], tol=tol), model_bls))
+
+    # iterate over data bls
+    for i, bl in data_bl_id:
+        pass
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
@@ -889,14 +1024,15 @@ def echo(message, type=0, verbose=True):
 class Baseline(object):
     """
     Baseline object for making antenna-independent, unique baseline labels
-    for baselines up to 1km in length. Only __eq__ operator is overloaded.
+    for baselines up to 1km in length to an absolute precison of 10 cm.
+    Only __eq__ operator is overloaded.
     """
-    def __init__(self, bl, tol=1.0):
+    def __init__(self, bl, tol=2.0):
         """
-        bl : list containing [dx, dy] float separation in meters
+        bl : list containing [dx, dy, dz] float separation in meters
         tol : tolerance for baseline length comparison in meters
         """
-        self.label = "{:06.1f}:{:06.1f}".format(float(bl[0]), float(bl[1]))
+        self.label = "{:06.1f}:{:06.1f}:{:06.1f}".format(float(bl[0]), float(bl[1]), float(bl[2]))
         self.tol = tol
 
     def __repr__(self):
@@ -904,21 +1040,32 @@ class Baseline(object):
 
     @property
     def bl(self):
-        return map(float, self.label.split(':'))
+        return np.array(map(float, self.label.split(':')))
+
+    @property
+    def unit(self):
+        return self.bl / np.linalg.norm(self.bl)
 
     @property
     def len(self):
         return np.linalg.norm(self.bl)
 
     def __eq__(self, B2):
-        if np.isclose(self.len, B2.len, atol=np.max([self.tol, B2.tol])):
-            if np.isclose(self.bl[0], -B2.bl[0], atol=np.max([self.tol, B2.tol])):
-                return 'conjugated'
-            else:
+        tol = np.max([self.tol, B2.tol])
+        # check same length
+        if np.isclose(self.len, B2.len, atol=tol):
+            # check x, y, z
+            equiv = bool(reduce(operator.mul, map(lambda x: np.isclose(*x, atol=tol), zip(self.bl, B2.bl))))
+            if equiv:
                 return True
+            # check conjugation
+            elif np.isclose(np.arccos(np.dot(self.unit, B2.unit)), np.pi, atol=tol/self.len):
+                return 'conjugated'
+            # else return False
+            else:
+                return False
         else:
             return False
-
 
 def lst_align(data_fname, model_fname=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
               verbose=True, write_miriad=True, output_data=False):
