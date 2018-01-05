@@ -877,7 +877,6 @@ def abscal_arg_parser():
     a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
     return a
 
-
 def echo(message, type=0, verbose=True):
     if verbose:
         if type == 0:
@@ -922,7 +921,7 @@ class Baseline(object):
 
 
 def lst_align(data_fname, model_fname=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
-              verbose=True):
+              verbose=True, write_miriad=True, output_data=False):
     """
     """
     # try to load model
@@ -984,21 +983,26 @@ def lst_align(data_fname, model_fname=None, dLST=0.00299078, output_fname=None, 
     uvd.freq_array = uvd_freqs
     uvd.Nfreqs = Nfreqs
 
-    # check output
-    if outdir is None:
-        outdir = os.path.dirname(data_fname)
-    if output_fname is None:
-        output_fname = data_fname.split('.')
-        output_fname.pop(2)
-        output_fname = '.'.join(output_fname) + 'L.{:07.4f}'.format(model_lsts[0])
-    output_fname = os.path.join(outdir, output_fname)
-    if os.path.exists(output_fname) and overwrite is False:
-        raise IOError("{} exists, not overwriting".format(output_fname))
+    # write miriad
+    if write_miriad:
+        # check output
+        if outdir is None:
+            outdir = os.path.dirname(data_fname)
+        if output_fname is None:
+            output_fname = data_fname.split('.')
+            output_fname.pop(2)
+            output_fname = '.'.join(output_fname) + 'L.{:07.4f}'.format(model_lsts[0])
+        output_fname = os.path.join(outdir, output_fname)
+        if os.path.exists(output_fname) and overwrite is False:
+            raise IOError("{} exists, not overwriting".format(output_fname))
 
-    # write to file
-    echo("saving {}".format(output_fname), verbose=verbose)
-    uvd.write_miriad(output_fname, clobber=True)
+        # write to file
+        echo("saving {}".format(output_fname), verbose=verbose)
+        uvd.write_miriad(output_fname, clobber=True)
 
+    # output data and flags
+    if output_data:
+        return interp_data, interp_flags, model_lsts, model_freqs
 
 
 
