@@ -23,7 +23,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 import linsolve
 from astropy import stats as astats
-from JD2LST import LST2JD
+import JD2LST
 
 
 def amp_lincal(model, data, wgts=None, verbose=False):
@@ -648,7 +648,7 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
 
 
 def interp_vis(data, data_times, data_freqs, model_times, model_freqs,
-                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True):
+               kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True):
     """
     interpolate complex visibility data onto the time & frequency basis of
     a model visibility.
@@ -1067,16 +1067,26 @@ class Baseline(object):
         else:
             return False
 
-def lst_align(data_fname, model_fname=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
-              verbose=True, write_miriad=True, output_data=False):
+def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
+              verbose=True, write_miriad=True, output_data=False, kind='linear'):
     """
     """
     # try to load model
-    if model_fname is not None:
-        uvm = UVData()
-        uvm.read_miriad(model_fname)
-        lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
-        model_freqs = np.unique(uvm.freq_array)
+    if model_fnames is not None:
+        if type(model_fnames) is str:
+            uvm = UVData()
+            uvm.read_miriad(model_fnames)
+            lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
+            model_freqs = np.unique(uvm.freq_array)
+        elif type(model_fnames) is list:
+            uvm = UVData()
+            uvm.read_miriad(model_fnames[0])
+            for i, f in enumerate(model_fnames[1:]):
+                uv = UVData()
+                uv.read_miriad(f)
+                uvm += uv
+            lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
+            model_freqs = np.unique(uvm.freq_array)
     else:
         # generate LST array
         lst_arr = np.arange(0, 24, dLST)
@@ -1104,7 +1114,7 @@ def lst_align(data_fname, model_fname=None, dLST=0.00299078, output_fname=None, 
 
     # interpolate data
     echo("interpolating data", verbose=verbose)
-    interp_data, interp_flags = interp_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, kind='cubic')
+    interp_data, interp_flags = interp_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, kind=kind)
     Nbls = len(interp_data)
 
     # reorder into arrays
@@ -1136,9 +1146,7 @@ def lst_align(data_fname, model_fname=None, dLST=0.00299078, output_fname=None, 
         if outdir is None:
             outdir = os.path.dirname(data_fname)
         if output_fname is None:
-            output_fname = data_fname.split('.')
-            output_fname.pop(2)
-            output_fname = '.'.join(output_fname) + 'L.{:07.4f}'.format(model_lsts[0])
+            output_fname = os.path.basename(data_fname) + 'L.{:07.4f}'.format(model_lsts[0])
         output_fname = os.path.join(outdir, output_fname)
         if os.path.exists(output_fname) and overwrite is False:
             raise IOError("{} exists, not overwriting".format(output_fname))
