@@ -19,13 +19,13 @@ V_ij^data = exp(eta_ij^data + i x phi_ij^data)
 There are five calibration methods, where the
 RHS of each equation contains the free parameters:
 
-1. Absolute amplitude logarithmic calibration
+1. per-antenna amplitude logarithmic calibration
 ---------------------------------------------
 
 eta_ij^model - eta_ij^data = eta_i + eta_j
 
 
-2. Absolute phase logarithmic calibration
+2. per-antenna phase logarithmic calibration
 -----------------------------------------
 
 phi_ij^model - phi_ij^data = phi_i - phi_j
@@ -147,9 +147,10 @@ class AbsCal(object):
             self.antpos = np.array(map(lambda x: self.antpos[x], self.ants))
             self.antpos -= np.median(self.antpos, axis=0)
 
-    def amp_lincal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=False):
+    def abs_amp_lincal(self, unravel_freq=False, unravel_time=False, unravel_pol=False,
+                       apply_cal=False, verbose=True):
         """
-        call abscal.amp_lincal() method. see its docstring for more details.
+        call abscal_funcs.abs_amp_lincal() method. see its docstring for more details.
 
         Parameters:
         -----------
@@ -163,6 +164,8 @@ class AbsCal(object):
 
         unravel_pol : tie all polarizations together, type=boolean, [default=False]
             if True, unravel polarization
+
+        apply_cal : turn calibration solution into gains and apply to data
         """
         # copy data
         model = copy.deepcopy(self.model)
@@ -185,13 +188,15 @@ class AbsCal(object):
             unravel(wgts, 'p', 2)
 
         # run linsolve
-        fit = amp_lincal(model, data, wgts=wgts, verbose=verbose)
-        self.gain_amp = copy.copy(np.sqrt(fit['amp']))
-        self._gain_amp = copy.copy(np.sqrt(fit['amp']))
+        fit = abs_amp_lincal(model, data, wgts=wgts, verbose=verbose)
+        self.abs_amp = copy.copy(np.sqrt(fit['amp']))
 
-    def phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=False, zero_psi=False):
+        ### TODO apply_cal
+
+    def TT_phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False,
+                      verbose=True, zero_psi=False):
         """
-        call abscal.amp_lincal() method. see its docstring for more details.
+        call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
@@ -228,21 +233,102 @@ class AbsCal(object):
             unravel(wgts, 'p', 2)
            
         # run linsolve
-        fit = phs_logcal(model, data, bls, wgts=wgts, verbose=verbose, zero_psi=zero_psi)
-        self.gain_psi = copy.copy(fit['psi'])
-        self.gain_phi = copy.copy(np.array([fit['PHIx'], fit['PHIy']]))
-        self._gain_psi = copy.copy(fit['psi'])
-        self._gain_phi = copy.copy(np.array([fit['PHIx'], fit['PHIy']]))
+        fit = TT_phs_logcal(model, data, bls, wgts=wgts, verbose=verbose, zero_psi=zero_psi)
+        self.psi = copy.copy(fit['psi'])
+        self.TT_PHI = copy.copy(np.array([fit['PHIx'], fit['PHIy']]))
 
-    def delay_lincal(self, refant, kernel=(1, 11), verbose=True):
+    def amp_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=True):
         """
-        Solve for per-antenna delay according to the equation
-        by calling abscal.delay_lincal method. See abscal.delay_lincal
-        for details.
+        call abscal_funcs.amp_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
+        unravel_freq : tie all frequencies together, type=boolean, [default=False]
+            if True, unravel frequency axis in linsolve call, such that you get
+            one result for all frequencies
 
+        unravel_time : tie all times together, type=boolean, [default=False]
+            if True, unravel time axis in linsolve call, such that you get
+            one result for all times
+
+        unravel_pol : tie all polarizations together, type=boolean, [default=False]
+            if True, unravel polarization
+        """
+        # copy data
+        model = copy.deepcopy(self.model)
+        data = copy.deepcopy(self.data)
+        wgts = copy.deepcopy(self.wgts)
+
+        if unravel_time:
+            unravel(data, 't', 0)
+            unravel(model, 't', 0)
+            unravel(wgts, 't', 0)
+
+        if unravel_freq:
+            unravel(data, 'f', 1)
+            unravel(model, 'f', 1)
+            unravel(wgts, 'f', 1)
+
+        if unravel_pol:
+            unravel(data, 'p', 2)
+            unravel(model, 'p', 2)
+            unravel(wgts, 'p', 2)
+
+        # run linsolve
+        fit = amp_logcal(model, data, wgts=wgts, verbose=verbose)
+        self.ant_eta = np.array(map(lambda a: copy.copy(fit['eta{}'.format(a)]), self.ants))
+
+    def phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=True):
+        """
+        call abscal_funcs.phs_logcal() method. see its docstring for more details.
+
+        Parameters:
+        -----------
+        unravel_freq : tie all frequencies together, type=boolean, [default=False]
+            if True, unravel frequency axis in linsolve call, such that you get
+            one result for all frequencies
+
+        unravel_time : tie all times together, type=boolean, [default=False]
+            if True, unravel time axis in linsolve call, such that you get
+            one result for all times
+
+        unravel_pol : tie all polarizations together, type=boolean, [default=False]
+            if True, unravel polarization
+        """
+        # copy data
+        model = copy.deepcopy(self.model)
+        data = copy.deepcopy(self.data)
+        wgts = copy.deepcopy(self.wgts)
+
+        if unravel_time:
+            unravel(data, 't', 0)
+            unravel(model, 't', 0)
+            unravel(wgts, 't', 0)
+
+        if unravel_freq:
+            unravel(data, 'f', 1)
+            unravel(model, 'f', 1)
+            unravel(wgts, 'f', 1)
+
+        if unravel_pol:
+            unravel(data, 'p', 2)
+            unravel(model, 'p', 2)
+            unravel(wgts, 'p', 2)
+
+        # run linsolve
+        fit = phs_logcal(model, data, wgts=wgts, verbose=verbose)
+        self.ant_phi = np.array(map(lambda a: copy.copy(fit['phi{}'.format(a)]), self.ants))
+
+
+    def delay_lincal(self, kernel=(1, 11), verbose=True):
+        """
+        Solve for per-antenna delay according to the equation
+        by calling abscal_funcs.delay_lincal method.
+        See abscal_funcs.delay_lincal for details.
+
+        Parameters:
+        -----------
+        kernel : size of median filter across (time, freq) axes, type=(int, int)
         """
         # copy data
         model = copy.deepcopy(self.model)
@@ -251,17 +337,83 @@ class AbsCal(object):
         df = np.median(np.diff(self.freqs))
 
         # iterate over polarizations
-        dlys = []
+        dlys = odict(map(lambda a: ('tau{}'.format(a), []), self.ants))
         for i, p in enumerate(self.pols):
             # run linsolve
             m = odict(zip(model.keys(), map(lambda k: model[k][:, :, i], model.keys())))
             d = odict(zip(data.keys(), map(lambda k: data[k][:, :, i], data.keys())))
-            fit = delay_lincal(m, d, refant, df=df, kernel=kernel, verbose=verbose, time_ax=0, freq_ax=1)
-            dlys.append(odict(zip(self.ants, map(lambda x: fit['tau_{}'.format(x)], self.ants))))
+            fit = delay_lincal(m, d, df=df, kernel=kernel, verbose=verbose, time_ax=0, freq_ax=1)
+            for j, k in enumerate(fit.keys()):
+                dlys[k].append(fit[k])
 
-        self.delays = odict(zip(self.ants, [np.moveaxis(map(lambda d: d[a], dlys), 0, 2) for a in self.ants]))
-        self._delays = copy.deepcopy(self.delays)
+        # turn into array
+        self.delays = np.array(map(lambda a: np.moveaxis(dlys['tau{}'.format(a)], 0, 2), self.ants))
 
+
+    def make_gains(self, gains2dict=False, verbose=True):
+        """
+        use self.gain_amp and self.gain_phi and self.gain_psi
+        to construct a complex gain array per antenna assuming
+        a gain convention of multiply.
+
+        Parameters:
+        -----------
+        gains2dict : boolean, if True convert gains into dictionary form
+            with antenna number as key and ndarray as value
+        """
+        # form blank gain array
+        gain_array = np.ones((self.Nants, self.Ntimes, self.Nfreqs, self.Npols), dtype=np.complex)
+
+        # multiply absolute amplitude
+        try:
+            gain_array = self.abs_amp[np.newaxis]
+        except AttributeError:
+            pass
+
+        # multiply overall phase
+        try:
+            gain_array *= np.exp(-1j*self.psi[np.newaxis])
+        except AttributeError:
+            pass
+
+        # multiply phase slope
+        try:
+            gain_array *= np.exp(-1j*np.einsum("ijkl, hi -> hjkl", self.TT_PHI, self.antpos[:, :2]))
+        except AttributeError:
+            pass
+
+        # multiply delay
+        try:
+            gain_array *= np.exp(-1j*2*np.pi*self.freqs.reshape(-1, 1)*self.delays)
+        except AttributeError:
+            pass
+
+        # multiply ant amp
+        try:
+            gain_array *= np.exp(self.ant_amp)
+        except:
+            pass
+
+        # multiply ant phase
+        try:
+            gain_array *= np.exp(-1j*self.ant_phi)
+        except:
+            pass
+
+        self.gain_array = gain_array
+
+        if gains2dict:
+            self.gain_array = odict((a, self.gain_array[i]) for i, a in enumerate(self.ants))
+
+    def write_calfits(self, calfits_fname, verbose=True, overwrite=False, gain_convention='multiply'):
+        """
+        """
+        echo("saving {}".format(calfits_fname), type=1, verbose=verbose)
+        gains2calfits(calfits_fname, self.gain_array, self.freqs, self.times, self.pols,
+                      gain_convention=gain_convention, inttime=10.7, overwrite=overwrite)
+
+
+''' TO DO
     def smooth_data(self, data, flags=None, kind='linear'):
         """
 
@@ -288,7 +440,6 @@ class AbsCal(object):
 
 
         # ravel training data
-
 
 
         if kind == 'poly':
@@ -318,80 +469,4 @@ class AbsCal(object):
             y_pred = smooth_data(Xtrain_raveled, ytrain_raveled, Xpred_raveled) * y_std
             y_pred = np.repeat(y_pred, Ntimes)
             data = (y_pred + y_mean).reshape(Ntimes, Nfreqs)
-
-
-    def make_gains(self, gains2dict=False, verbose=True):
-        """
-        use self.gain_amp and self.gain_phi and self.gain_psi
-        to construct a complex gain array per antenna assuming
-        a gain convention of multiply.
-
-        Parameters:
-        -----------
-        gains2dict : boolean, if True convert gains into dictionary form
-            with antenna number as key and ndarray as value
-        """
-        # form gains
-        gain_array = np.ones((self.Nants, self.Ntimes, self.Nfreqs, self.Npols), dtype=np.complex)
-
-        # multiply amplitude
-        try:
-            amps = self.gain_amp[np.newaxis]
-            gain_array *= amps
-        except AttributeError:
-            echo("...gain_amp doesn't exist", verbose=verbose)
-
-        # multiply overall phase
-        try:
-            gain_phase = np.exp(-1j*self.gain_psi[np.newaxis])
-            gain_array *= gain_phase
-        except AttributeError:
-            echo("...gain_psi doesn't exist", verbose=verbose)
-
-        # multiply phase slope
-        try:
-            gain_phase = np.exp(-1j*np.einsum("ijkl, hi -> hjkl", self.gain_phi, self.antpos[:, :2]))
-            gain_array *= gain_phase
-        except AttributeError:
-            echo("...gain_phi doesn't exist", verbose=verbose)
-
-        self.gain_array = gain_array
-
-        if gains2dict:
-            self.gain_array = odict((a, self.gain_array[i]) for i, a in enumerate(self.ants))
-
-    def run(self, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=False, zero_psi=False):
-        """
-        run amp_lincal and phs_logcal on self.model and self.data, and optionally write out 
-        gains to a calfits file.
-
-        run parameters:
-        ---------------
-        calfits_filename : string, path to output calfits file, default=None
-        save : boolean, if True, save gains to a calfits file
-        overwrite : boolean, if True, overwrite if calfits_filename exists
-
-        amp_lincal & phs_logcal Parameters:
-        -----------------------------------
-        unravel_pol : type=boolean, see amp_lincal or phs_logcal for details
-        unravel_freq : type=boolean, see amp_lincal or phs_logcal for details
-        unravel_time : type=boolean, see amp_lincal or phs_logcal for details
-        verbose : type=boolean, see amp_lincal or phs_logcal for details
-        """
-
-        # run amp cal
-        echo("running amp_lincal", type=1, verbose=verbose)
-        self.amp_lincal(unravel_freq=unravel_freq, unravel_time=unravel_time, unravel_pol=False, verbose=verbose)
-
-        # run phs cal
-        echo("running phs_logcal", type=1, verbose=verbose)
-        self.phs_logcal(unravel_freq=unravel_freq, unravel_time=unravel_time, unravel_pol=False, verbose=verbose, zero_psi=zero_psi)
-
-    def write_calfits(self, calfits_fname, verbose=True, overwrite=False, gain_convention='multiply'):
-        """
-        """
-        echo("saving {}".format(calfits_fname), type=1, verbose=verbose)
-        gains2calfits(calfits_fname, self.gain_array, self.freqs, self.times, self.pols,
-                      gain_convention=gain_convention, inttime=10.7, overwrite=overwrite)
-
-
+'''

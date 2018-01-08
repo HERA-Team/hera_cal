@@ -26,47 +26,37 @@ from astropy import stats as astats
 import JD2LST
 
 
-def amp_lincal(model, data, wgts=None, verbose=False):
+def abs_amp_lincal(model, data, wgts=None, verbose=True):
     """
-    calculate gain amplitude scalar with a linear solver
-    using equation:
+    calculate absolute (array-wide) gain amplitude scalar
+    with a linear solver using equation:
 
     |V_ij^model| = A * |V_ij^data|
 
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-        keys are antenna-pair tuples, values are complex ndarray visibilities
-        these visibilities must be at least 2D arrays, with [0] axis indexing time
-        and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-        should index polarization.
-
-        Example: Ntimes = 2, Nfreqs = 3, Npol = 0
-        model = {(0, 1): np.array([[1+0j, 2+1j, 0+2j], [3-1j, -1+2j, 0+2j]]), ...}
-
-        Example: Ntimes = 2, Nfreqs = 3, Npol = 2
-        model = {(0, 1): np.array([ [[1+0j, 2+1j, 0+2j],
-                                     [3-1j,-1+2j, 0+2j]],
-                                    [[3+1j, 4+0j,-1-3j],
-                                     [4+2j, 0+0j, 0-1j]] ]), ...}
+            keys are antenna-pair tuples, values are complex ndarray visibilities
+            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
+            should index polarization.
 
     data : visibility data of measurements, type=dictionary
-        keys are antenna pair tuples (must match model), values are
-        complex ndarray visibilities matching shape of model
+           keys are antenna pair tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
 
     wgts : weights of data, type=dictionry, [default=None]
-        keys are antenna pair tuples (must match model), values are real floats
-        matching shape of model and data
+           keys are antenna pair tuples (must match model), values are real floats
+           matching shape of model and data
 
     verbose : print output, type=boolean, [default=False]
 
     Output:
     -------
-    fit : dictionary with 'A' key for amplitude scalar, which has the same shape as
+    fit : dictionary with 'amp' key for amplitude scalar, which has the same shape as
         the ndarrays in model
-
     """
-    echo("...configuring linsolve data", verbose=verbose)
+    echo("...configuring linsolve data for abs_amp_lincal", verbose=verbose)
 
     # get keys from model dictionary
     keys = model.keys()
@@ -115,9 +105,9 @@ def amp_lincal(model, data, wgts=None, verbose=False):
     return fit
 
 
-def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
+def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
     """
-    calculate overall gain phase and gain phase slopes (EW and NS)
+    calculate overall gain phase and gain phase Tip-Tilt slopes (EW and NS)
     with a linear solver applied to the logarithmically
     linearized equation:
 
@@ -128,36 +118,26 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
     x axis (east-west) and y axis (north-south) of the array respectively
     in units of [radians / meter].
 
-
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-        keys are antenna-pair tuples, values are complex ndarray visibilities
-        these visibilities must be at least 2D arrays, with [0] axis indexing time
-        and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-        should index polarization.
-
-        Example: Ntimes = 2, Nfreqs = 3, Npol = 0
-        model = {(0, 1): np.array([[1+0j, 2+1j, 0+2j], [3-1j, -1+2j, 0+2j]]), ...}
-
-        Example: Ntimes = 2, Nfreqs = 3, Npol = 2
-        model = {(0, 1): np.array([ [[1+0j, 2+1j, 0+2j],
-                                     [3-1j,-1+2j, 0+2j]],
-                                    [[3+1j, 4+0j,-1-3j],
-                                     [4+2j, 0+0j, 0-1j]] ]), ...}
+            keys are antenna-pair tuples, values are complex ndarray visibilities
+            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
+            should index polarization.
 
     data : visibility data of measurements, type=dictionary
-        keys are antenna pair tuples (must match model), values are
-        complex ndarray visibilities matching shape of model
+           keys are antenna pair tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
 
     bls : baseline vectors of antenna pairs, type=dictionary
-        keys are antenna pair tuples (must match model), values are 2D or 3D ndarray
-        baseline vectors in meters, with [0] index containing X (E-W) separation
-        and [1] index Y (N-S) separation.
+          keys are antenna pair tuples (must match model), values are 2D or 3D ndarray
+          baseline vectors in meters, with [0] index containing X (E-W) separation
+          and [1] index Y (N-S) separation.
 
     wgts : weights of data, type=dictionry, [default=None]
-        keys are antenna pair tuples (must match model), values are real floats
-        matching shape of model and data
+           keys are antenna pair tuples (must match model), values are real floats
+           matching shape of model and data
 
     verbose : print output, type=boolean, [default=False]
 
@@ -165,17 +145,17 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
 
     Output:
     -------
-    fit : dictionary with psi key for overall gain phase
-        PHIx for x-axis phase slope and PHIy for y-axis phase slope
+    fit : dictionary with psi key for overall gain phase and PHI array containing
+        PHIx (x-axis phase slope) and PHIy (y-axis phase slope)
         which all have the same shape as the ndarrays in model
     """
-    echo("...configuring linsolve data", verbose=verbose)
+    echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
 
     # get keys from model dictionary
     keys = model.keys()
 
     # angle of phs ratio is ydata independent variable
-    ydata = odict([(k, np.angle(model[k]/data[k])) for k in model.keys()])
+    ydata = odict([(k, np.angle(model[k]) - np.angle(data[k])) for k in model.keys()])
 
     # make weights if None
     if wgts is None:
@@ -206,15 +186,12 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
     by = odict([(k, ["by_{}_{}".format(k[0], k[1]), bls[k][1]]) for i, k in enumerate(keys)])
 
     # setup linsolve equations
-    eqns = odict([(k, "psi*a{} + PHIx*{} + PHIy*{}".format(str(i), bx[k][0], by[k][0])) for i, k in enumerate(keys)])
-
-    # fill in other variables in the design matrix
     if zero_psi:
-        ls_design_matrix = odict([("a{}".format(str(i)), 0.0) for i, k in enumerate(keys)])
+        eqns = odict([(k, "psi*0 + PHIx*{} + PHIy*{}".format(bx[k][0], by[k][0])) for i, k in enumerate(keys)])
     else:
-        ls_design_matrix = odict([("a{}".format(str(i)), 1.0) for i, k in enumerate(keys)])
-    ls_design_matrix.update(odict(bx.values()))
-    ls_design_matrix.update(odict(by.values()))
+        eqns = odict([(k, "psi + PHIx*{} + PHIy*{}".format(bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+
+    ls_design_matrix = odict(bx.values() + by.values())
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -229,20 +206,184 @@ def phs_logcal(model, data, bls, wgts=None, verbose=False, zero_psi=False):
     return fit
 
 
-def delay_lincal(model, data, refant, df=9.765625e4, kernel=(1, 11), verbose=True, time_ax=0, freq_ax=1):
+def amp_logcal(model, data, wgts=None, verbose=True):
     """
-    Solve for per-antenna delay according to the equation
+    calculate per-antenna gain amplitude via the
+    logarithmically linearized equation
 
-    tau_ij^model = tau_i - tau_j + tau_ij^data
+    ln|V_ij^model| - ln|V_ij^data| = ln|g_i| + ln|g_j|
 
     Parameters:
     -----------
+    model : visibility data of refence model, type=dictionary
+            keys are antenna-pair tuples, values are complex ndarray visibilities
+            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
+            should index polarization.
 
+    data : visibility data of measurements, type=dictionary
+           keys are antenna pair tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
+
+    wgts : weights of data, type=dictionry, [default=None]
+           keys are antenna pair tuples (must match model), values are real floats
+           matching shape of model and data
+
+    Output:
+    -------
+    fit : dictionary containing eta_i = ln|g_i| for each antenna
     """
-    # verify refant
-    if refant not in np.concatenate(model.keys()):
-        raise KeyError("refant {} not in model dictionary".format(refant))
+    echo("...configuring linsolve data for amp_logcal", verbose=verbose)
 
+    # get keys from model dictionary
+    keys = model.keys()
+
+    # difference of log-amplitudes is ydata independent variable
+    ydata = odict([(k, np.log(np.abs(model[k]))-np.log(np.abs(data[k]))) for k in model.keys()])
+
+    # make weights if None
+    if wgts is None:
+        wgts = copy.deepcopy(ydata)
+        for i, k in enumerate(keys):
+            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
+
+    # replace nans
+    for i, k in enumerate(keys):
+        nan_select = np.isnan(ydata[k])
+        ydata[k][nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
+        nan_select = np.isnan(model[k])
+        model[k][nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
+
+    # replace infs
+    for i, k in enumerate(keys):
+        inf_select = np.isinf(ydata[k])
+        ydata[k][inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
+        inf_select = np.isinf(model[k])
+        model[k][inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
+
+    # setup linsolve equations
+    eqns = odict([(k, "eta{} + eta{}".format(k[0], k[1])) for i, k in enumerate(keys)])
+    ls_design_matrix = odict()
+
+    # setup linsolve dictionaries
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
+
+    # setup linsolve and run
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
+
+    return fit
+
+
+def phs_logcal(model, data, wgts=None, verbose=True):
+    """
+    calculate per-antenna gain phase via the 
+    logarithmically linearized equation
+
+    angle(V_ij^model) - angle(V_ij^data) = angle(g_i) - angle(g_j)
+
+    Parameters:
+    -----------
+    model : visibility data of refence model, type=dictionary
+            keys are antenna-pair tuples, values are complex ndarray visibilities
+            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
+            should index polarization.
+
+    data : visibility data of measurements, type=dictionary
+           keys are antenna pair tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
+
+    wgts : weights of data, type=dictionry, [default=None]
+           keys are antenna pair tuples (must match model), values are real floats
+           matching shape of model and data
+
+    Output:
+    -------
+    fit : dictionary containing phi_i = angle(g_i) for each antenna
+    """
+    echo("...configuring linsolve data for phs_logcal", verbose=verbose)
+
+    # get keys from model dictionary
+    keys = model.keys()
+
+    # difference of arg visibility is ydata independent variable
+    ydata = odict([(k, np.angle(model[k])-np.angle(data[k])) for k in model.keys()])
+
+    # make weights if None
+    if wgts is None:
+        wgts = copy.deepcopy(ydata)
+        for i, k in enumerate(keys):
+            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
+
+    # replace nans
+    for i, k in enumerate(keys):
+        nan_select = np.isnan(ydata[k])
+        ydata[k][nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
+        nan_select = np.isnan(model[k])
+        model[k][nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
+
+    # replace infs
+    for i, k in enumerate(keys):
+        inf_select = np.isinf(ydata[k])
+        ydata[k][inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
+        inf_select = np.isinf(model[k])
+        model[k][inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
+
+    # setup linsolve equations
+    eqns = odict([(k, "phi{} - phi{}".format(k[0], k[1])) for i, k in enumerate(keys)])
+    ls_design_matrix = odict()
+
+    # setup linsolve dictionaries
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
+
+    # setup linsolve and run
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
+
+    return fit
+
+
+def delay_lincal(model, data, df=9.765625e4, kernel=(1, 11), verbose=True, time_ax=0, freq_ax=1):
+    """
+    Solve for per-antenna delay according to the equation
+
+    tau_ij^model - tau_ij^data = tau_i - tau_j
+
+    Parameters:
+    -----------
+    model : visibility data of refence model, type=dictionary
+            keys are antenna-pair tuples, values are complex ndarray visibilities
+            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
+            should index polarization.
+
+    data : visibility data of measurements, type=dictionary
+           keys are antenna pair tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
+
+    wgts : weights of data, type=dictionry, [default=None]
+           keys are antenna pair tuples (must match model), values are real floats
+           matching shape of model and data
+
+    Output:
+    -------
+    fit : dictionary containing delay (tau_i) for each antenna
+    """
     # unpack model and data
     model_values = np.array(model.values())
     model_keys = model.keys()
@@ -254,8 +395,9 @@ def delay_lincal(model, data, refant, df=9.765625e4, kernel=(1, 11), verbose=Tru
     for i, mv in enumerate(model_values):
         m_dly, m_off = fft_dly(mv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
         model_dlys.append(m_dly)
+
     for i, dv in enumerate(data_values):
-        d_dly, d_off = fft_dly(mv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        d_dly, d_off = fft_dly(dv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
         data_dlys.append(d_dly)
 
     model_dlys = odict([(k, model_dlys[i]) for i, k in enumerate(model_keys)])
@@ -265,11 +407,10 @@ def delay_lincal(model, data, refant, df=9.765625e4, kernel=(1, 11), verbose=Tru
     ydata = odict([(k, model_dlys[k] - data_dlys[k]) for i, k in enumerate(model_keys)])
 
     # setup linsolve equation dictionary
-    eqns = odict([(k, "a_{}_{}*tau_{} + a_{}_{}*tau_{}".format(k[0], k[1], k[0], k[1], k[0], k[1])) for i, k in enumerate(model_keys)])
+    eqns = odict([(k, 'tau{} - tau{}'.format(k[0], k[1])) for i, k in enumerate(model_keys)])
 
     # setup design matrix dictionary
-    ls_design_matrix = odict([("a_{}_{}".format(k[0], k[1]), 1.0) if k[0] != refant else ("a_{}_{}".format(k[0], k[1]), 0.0) for i, k in enumerate(model_keys)])
-    ls_design_matrix.update(odict([("a_{}_{}".format(k[1], k[0]), -1.0) if k[1] != refant else ("a_{}_{}".format(k[1], k[0]), 0.0) for i, k in enumerate(model_keys)]))
+    ls_design_matrix = odict()
 
     # setup linsolve data dictionary
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(model_keys)])
@@ -281,122 +422,6 @@ def delay_lincal(model, data, refant, df=9.765625e4, kernel=(1, 11), verbose=Tru
     echo("...finished linsolve", verbose=verbose)
 
     return fit
-
-
-def run_abscal(data_files, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
-               save=False, calfits_fname=None, output_gains=False, overwrite=False, zero_psi=False,
-               smooth=False, **kwargs):
-    """
-    run AbsCal on a single data miriad file
-
-    Parameters:
-    -----------
-    data_files : path(s) to data miriad files, type=list
-        a list of one or more miriad file(s) containing complex
-        visibility data
-
-    model_files : path(s) to miriad files(s), type=list
-        a list of one or more miriad files containing complex visibility data
-        that *overlaps* the time and frequency range of data_files
-
-    output_gains : boolean, if True: return AbsCal gains
-    """
-    # load data
-    echo("loading data files", type=1, verbose=verbose)
-    for i, df in enumerate(data_files):
-        echo("loading {}".format(df), type=0, verbose=verbose)
-        uv = UVData()
-        try:
-            uv.read_miriad(df)
-        except:
-            uv.read_uvfits(df)
-            uv.unphase_to_drift()
-        if i == 0:
-            uvd = uv
-        else:
-            uvd += uv
-
-    data, flags, pols = UVData2AbsCalDict([uvd])
-    for i, k in enumerate(data.keys()):
-        if k[0] == k[1]:
-            data.pop(k)
-    for i, k in enumerate(flags.keys()):
-        if k[0] == k[1]:
-            flags.pop(k)
-
-    # get data params
-    data_times = np.unique(uvd.lst_array)
-    data_freqs = uvd.freq_array.squeeze()
-    data_pols = uvd.polarization_array
-
-    # load weights
-    wgts = copy.deepcopy(flags)
-    for k in wgts.keys():
-        wgts[k] = (~wgts[k]).astype(np.float)
-
-    # load antenna positions and make antpos and baseline dictionary
-    antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
-    antpos = odict(map(lambda x: (x, antpos[ants.tolist().index(x)]), ants))
-    bls = odict([((x[0], x[1]), antpos[x[1]] - antpos[x[0]]) for x in data.keys()])
-
-    # load models
-    for i, mf in enumerate(model_files):
-        echo("loading {}".format(mf), type=0, verbose=verbose)
-        uv = UVData()
-        try:
-            uv.read_miriad(mf)
-        except:
-            uv.read_uvfits(mf)
-            uv.unphase_to_drift()
-        if i == 0:
-            uvm = uv
-        else:
-            uvm += uv
-
-    model, mflags, mpols = UVData2AbsCalDict([uvm], pol_select=pols)
-    for i, k in enumerate(model.keys()):
-        if k[0] == k[1]:
-            model.pop(k)
-
-    # get model params
-    model_times = np.unique(uvm.lst_array)
-    model_freqs = uvm.freq_array.squeeze()
-
-    # align model freq-time axes to data axes
-    model = interp_model(model, model_times, model_freqs, data_times, data_freqs,
-                        kind='cubic', fill_value=0, zero_tol=1e-6)
-
-    # check if model has only unique baseline data
-    # this is the case if, for example, the model Nbls in less than the data Nbls
-    if uvm.Nbls < uvd.Nbls:
-        # try to expand model data into redundant baseline groups
-        model = mirror_data_to_red_bls(model, bls, antpos, tol=2.0)
-
-        # ensure data keys match model keys
-        for i, k in enumerate(data):
-            if k not in model:
-                data.pop(k)
-
-    # run abscal
-    AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, times=data_times, pols=data_pols)
-    AC.run(unravel_pol=unravel_pol, unravel_freq=unravel_freq, unravel_time=unravel_time,
-           verbose=verbose, gains2dict=True, zero_psi=zero_psi, **kwargs)
-
-    # smooth gains
-    if smooth:
-        AC.smooth_params()
-
-    # make gains
-    AC.make_gains()
-
-    # write to file
-    if save:
-        if calfits_fname is None:
-            calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
-        AC.write_calfits(calfits_fname, overwrite=overwrite, verbose=verbose)
-
-    if output_gains:
-        return AC.gain_array
 
 
 def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
@@ -430,6 +455,10 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
     FLAG_LIST = []
     POL_LIST = []
 
+    # check filenames is a list
+    if type(filenames) is not list and type(filenames) is not np.ndarray:
+        filenames = [filenames]
+
     # loop over filenames    
     for i, fname in enumerate(filenames):
         # initialize UVData object
@@ -438,6 +467,9 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
             uvd.read_miriad(fname)
         elif type(fname) == UVData:
             uvd = fname
+        else:
+            raise IOError("can't recognize type of {}".format(fname))
+
         # load data into dictionary
         data_temp, flag_temp = firstcal.UVData_to_dict([uvd])
 
@@ -490,47 +522,6 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
     return DATA_LIST, FLAG_LIST, POL_LIST
 
 
-def smooth_data(Xtrain, ytrain, Xpred, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
-    """
-
-
-    Parameters:
-    -----------
-    Xtrain : ndarray containing x-values for regression
-        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
-  
-    ytrain : 1D np.array containing parameter y-values across time and/or frequency (single pol)
-        type=1D-ndarray, dtype=float, shape=(Ndata, Nfeatures)
-  
-    Xpred : ndarray containing x-values for prediction
-        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
-
-    kind : kind of smoothing to perform, type=str, opts=['linear','const']
-        'poly' : fit a Nth order polynomial across frequency, with order set by "degree"
-        'gp' : fit a gaussian process across frequency
-        'boxcar' : convolve ytrain with a boxcar window
-    """
-    # get number of dimensions
-    ndim = Xtrain.shape[1]
-
-    if kind == 'poly':
-        # robust linear regression via sklearn
-        model = make_pipeline(PolynomialFeatures(degree), linear_model.RANSACRegressor())
-        model.fit(Xtrain, ytrain)
-
-    elif kind == 'gp':
-        # construct GP kernel
-        ls = np.array([1e-1 for i in range(ndim)])
-        kernel = 1.0**2 * gaussian_process.kernels.RBF(ls, np.array([1e-2, 1e1])) + \
-                 gaussian_process.kernels.WhiteKernel(1e-4, (1e-8, 1e1))
-        model = gaussian_process.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=n_restart)
-        # fit GP
-        model.fit(Xtrain, ytrain)
-
-    ypred = model.Predict(X)
-
-
-
 def unravel(data, prefix, axis, copy_dict=None):
     """
     promote visibility data from within a data key
@@ -574,19 +565,18 @@ def unravel(data, prefix, axis, copy_dict=None):
 
 def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     """
-    get delay of visibility across band
+    get delay of visibility across band using FFT w/ blackman harris window
+    and quadratic fit to delay peak
 
     vis : 2D ndarray of visibility data, dtype=complex, shape=(Ntimes, Nfreqs)
 
     df : frequency channel width in Hz
 
+    kernel : size of median filter kernel along (time, freq) axes
+
     time_ax : time axis of data
 
     freq_ax : frequency axis of data
-
-    pol_ax : polarization axis of data (if exists)
-
-    edgecut : fraction of band edges to cut before FFT
     """
     # get array params
     Nfreqs = vis.shape[freq_ax]
@@ -647,8 +637,8 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     return dlys, phi
 
 
-def interp_vis(data, data_times, data_freqs, model_times, model_freqs,
-               kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True):
+def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
+                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True):
     """
     interpolate complex visibility data onto the time & frequency basis of
     a model visibility.
@@ -888,7 +878,7 @@ def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
     return red_data
 
 
-def compute_reds(bls, antpos, tol=1.0):
+def compute_reds(bls, antpos, ex_ants=[], tol=1.0):
     """
     compute redundant baselines
 
@@ -897,6 +887,8 @@ def compute_reds(bls, antpos, tol=1.0):
     bls : baseline list, list of antenna pair tuples
 
     antpos : dictionary, antennas integers as keys, baseline vectors as values
+
+    ex_ants : list of flagged (excluded) antennas
 
     tol : float, tolerance for redundant baseline determination in units of the baseline vector units
 
@@ -912,6 +904,8 @@ def compute_reds(bls, antpos, tol=1.0):
     red_bl_dists = []
     red_bls = []
     for i, k in enumerate(bls):
+        if k[0] in ex_ants or k[1] in ex_ants:
+            continue
         try:
             bl_vec = antpos[k[1]] - antpos[k[0]]
         except KeyError:
@@ -929,27 +923,8 @@ def compute_reds(bls, antpos, tol=1.0):
     return red_bls
 
 
-def match_red_baselines(data_bls, data_ants, data_antpos, model_bls, model_ants, model_antpos, tol=1.0):
-    """
-    match unique data baselines to unique model baselines
-    """
-    # ensure ants are lists
-    if type(data_ants) is not list:
-        data_ants = data_ants.tolist()
-    if type(model_ants) is not list:
-        model_ants = model_ants.tolist()
-
-    # create unique baseline id
-    data_bl_id = np.array(map(lambda bl: Baseline(data_antpos[data_ants.index(bl[1])]-data_antpos[data_ants.index(bl[0])], tol=tol), data_bls))
-    model_bl_id = np.array(map(lambda bl: Baseline(model_antpos[data_ants.index(bl[0])]-model_antpos[model_ants.index(bl[1])], tol=tol), model_bls))
-
-    # iterate over data bls
-    for i, bl in data_bl_id:
-        pass
-
-
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
-                  gain_convention='multiply', inttime=10.7, overwrite=False, **kwargs):
+                  gain_convention='multiply', overwrite=False, **kwargs):
     """
     write out gain_array in calfits file format
 
@@ -983,6 +958,7 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
         heracal_gains[p] = pol_dict
 
     # configure meta
+    inttime = np.median(np.diff(time_array)) * 24. * 3600.
     meta = {'times':time_array, 'freqs':freq_array, 'inttime':inttime, 'gain_convention': gain_convention}
     meta.update(**kwargs)
 
@@ -995,23 +971,6 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
     else:
         uvc.write_calfits(calfits_fname, clobber=overwrite)
 
-
-def param2calfits(calfits_fname, abscal_param, param_name, freq_array, time_array, pol_array, overwrite=False):
-    """
-    """
-    pass
-    
-
-def abscal_arg_parser():
-    a = argparse.ArgumentParser()
-    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
-    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
-    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
-    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
-    return a
-
 def echo(message, type=0, verbose=True):
     if verbose:
         if type == 0:
@@ -1021,51 +980,6 @@ def echo(message, type=0, verbose=True):
             print(message)
             print("-"*40)
 
-class Baseline(object):
-    """
-    Baseline object for making antenna-independent, unique baseline labels
-    for baselines up to 1km in length to an absolute precison of 10 cm.
-    Only __eq__ operator is overloaded.
-    """
-    def __init__(self, bl, tol=2.0):
-        """
-        bl : list containing [dx, dy, dz] float separation in meters
-        tol : tolerance for baseline length comparison in meters
-        """
-        self.label = "{:06.1f}:{:06.1f}:{:06.1f}".format(float(bl[0]), float(bl[1]), float(bl[2]))
-        self.tol = tol
-
-    def __repr__(self):
-        return self.label
-
-    @property
-    def bl(self):
-        return np.array(map(float, self.label.split(':')))
-
-    @property
-    def unit(self):
-        return self.bl / np.linalg.norm(self.bl)
-
-    @property
-    def len(self):
-        return np.linalg.norm(self.bl)
-
-    def __eq__(self, B2):
-        tol = np.max([self.tol, B2.tol])
-        # check same length
-        if np.isclose(self.len, B2.len, atol=tol):
-            # check x, y, z
-            equiv = bool(reduce(operator.mul, map(lambda x: np.isclose(*x, atol=tol), zip(self.bl, B2.bl))))
-            if equiv:
-                return True
-            # check conjugation
-            elif np.isclose(np.arccos(np.dot(self.unit, B2.unit)), np.pi, atol=tol/self.len):
-                return 'conjugated'
-            # else return False
-            else:
-                return False
-        else:
-            return False
 
 def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
               verbose=True, write_miriad=True, output_data=False, kind='linear'):
@@ -1160,5 +1074,238 @@ def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None,
         return interp_data, interp_flags, model_lsts, model_freqs
 
 
+''' TO DO
+
+def match_red_baselines(data_bls, data_ants, data_antpos, model_bls, model_ants, model_antpos, tol=1.0):
+    """
+    match unique data baselines to unique model baselines
+    """
+    # ensure ants are lists
+    if type(data_ants) is not list:
+        data_ants = data_ants.tolist()
+    if type(model_ants) is not list:
+        model_ants = model_ants.tolist()
+
+    # create unique baseline id
+    data_bl_id = np.array(map(lambda bl: Baseline(data_antpos[data_ants.index(bl[1])]-data_antpos[data_ants.index(bl[0])], tol=tol), data_bls))
+    model_bl_id = np.array(map(lambda bl: Baseline(model_antpos[data_ants.index(bl[0])]-model_antpos[model_ants.index(bl[1])], tol=tol), model_bls))
+
+    # iterate over data bls
+    for i, bl in data_bl_id:
+        pass
+
+
+class Baseline(object):
+    """
+    Baseline object for making antenna-independent, unique baseline labels
+    for baselines up to 1km in length to an absolute precison of 10 cm.
+    Only __eq__ operator is overloaded.
+    """
+    def __init__(self, bl, tol=2.0):
+        """
+        bl : list containing [dx, dy, dz] float separation in meters
+        tol : tolerance for baseline length comparison in meters
+        """
+        self.label = "{:06.1f}:{:06.1f}:{:06.1f}".format(float(bl[0]), float(bl[1]), float(bl[2]))
+        self.tol = tol
+
+    def __repr__(self):
+        return self.label
+
+    @property
+    def bl(self):
+        return np.array(map(float, self.label.split(':')))
+
+    @property
+    def unit(self):
+        return self.bl / np.linalg.norm(self.bl)
+
+    @property
+    def len(self):
+        return np.linalg.norm(self.bl)
+
+    def __eq__(self, B2):
+        tol = np.max([self.tol, B2.tol])
+        # check same length
+        if np.isclose(self.len, B2.len, atol=tol):
+            # check x, y, z
+            equiv = bool(reduce(operator.mul, map(lambda x: np.isclose(*x, atol=tol), zip(self.bl, B2.bl))))
+            if equiv:
+                return True
+            # check conjugation
+            elif np.isclose(np.arccos(np.dot(self.unit, B2.unit)), np.pi, atol=tol/self.len):
+                return 'conjugated'
+            # else return False
+            else:
+                return False
+        else:
+            return False
+
+def smooth_data(Xtrain, ytrain, Xpred, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
+    """
+
+
+    Parameters:
+    -----------
+    Xtrain : ndarray containing x-values for regression
+        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
+  
+    ytrain : 1D np.array containing parameter y-values across time and/or frequency (single pol)
+        type=1D-ndarray, dtype=float, shape=(Ndata, Nfeatures)
+  
+    Xpred : ndarray containing x-values for prediction
+        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
+
+    kind : kind of smoothing to perform, type=str, opts=['linear','const']
+        'poly' : fit a Nth order polynomial across frequency, with order set by "degree"
+        'gp' : fit a gaussian process across frequency
+        'boxcar' : convolve ytrain with a boxcar window
+    """
+    # get number of dimensions
+    ndim = Xtrain.shape[1]
+
+    if kind == 'poly':
+        # robust linear regression via sklearn
+        model = make_pipeline(PolynomialFeatures(degree), linear_model.RANSACRegressor())
+        model.fit(Xtrain, ytrain)
+
+    elif kind == 'gp':
+        # construct GP kernel
+        ls = np.array([1e-1 for i in range(ndim)])
+        kernel = 1.0**2 * gaussian_process.kernels.RBF(ls, np.array([1e-2, 1e1])) + \
+                 gaussian_process.kernels.WhiteKernel(1e-4, (1e-8, 1e1))
+        model = gaussian_process.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=n_restart)
+        # fit GP
+        model.fit(Xtrain, ytrain)
+
+    ypred = model.Predict(X)
+
+
+def abscal_run(data_files, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
+               save=False, calfits_fname=None, output_gains=False, overwrite=False, zero_psi=False,
+               smooth=False, **kwargs):
+    """
+    run AbsCal on a single data miriad file
+
+    Parameters:
+    -----------
+    data_files : path(s) to data miriad files, type=list
+        a list of one or more miriad file(s) containing complex
+        visibility data
+
+    model_files : path(s) to miriad files(s), type=list
+        a list of one or more miriad files containing complex visibility data
+        that *overlaps* the time and frequency range of data_files
+
+    output_gains : boolean, if True: return AbsCal gains
+    """
+    # load data
+    echo("loading data files", type=1, verbose=verbose)
+    for i, df in enumerate(data_files):
+        echo("loading {}".format(df), type=0, verbose=verbose)
+        uv = UVData()
+        try:
+            uv.read_miriad(df)
+        except:
+            uv.read_uvfits(df)
+            uv.unphase_to_drift()
+        if i == 0:
+            uvd = uv
+        else:
+            uvd += uv
+
+    data, flags, pols = UVData2AbsCalDict([uvd])
+    for i, k in enumerate(data.keys()):
+        if k[0] == k[1]:
+            data.pop(k)
+    for i, k in enumerate(flags.keys()):
+        if k[0] == k[1]:
+            flags.pop(k)
+
+    # get data params
+    data_times = np.unique(uvd.lst_array)
+    data_freqs = uvd.freq_array.squeeze()
+    data_pols = uvd.polarization_array
+
+    # load weights
+    wgts = copy.deepcopy(flags)
+    for k in wgts.keys():
+        wgts[k] = (~wgts[k]).astype(np.float)
+
+    # load antenna positions and make antpos and baseline dictionary
+    antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
+    antpos = odict(map(lambda x: (x, antpos[ants.tolist().index(x)]), ants))
+    bls = odict([((x[0], x[1]), antpos[x[1]] - antpos[x[0]]) for x in data.keys()])
+
+    # load models
+    for i, mf in enumerate(model_files):
+        echo("loading {}".format(mf), type=0, verbose=verbose)
+        uv = UVData()
+        try:
+            uv.read_miriad(mf)
+        except:
+            uv.read_uvfits(mf)
+            uv.unphase_to_drift()
+        if i == 0:
+            uvm = uv
+        else:
+            uvm += uv
+
+    model, mflags, mpols = UVData2AbsCalDict([uvm], pol_select=pols)
+    for i, k in enumerate(model.keys()):
+        if k[0] == k[1]:
+            model.pop(k)
+
+    # get model params
+    model_times = np.unique(uvm.lst_array)
+    model_freqs = uvm.freq_array.squeeze()
+
+    # align model freq-time axes to data axes
+    model = interp_model(model, model_times, model_freqs, data_times, data_freqs,
+                        kind='cubic', fill_value=0, zero_tol=1e-6)
+
+    # check if model has only unique baseline data
+    # this is the case if, for example, the model Nbls in less than the data Nbls
+    if uvm.Nbls < uvd.Nbls:
+        # try to expand model data into redundant baseline groups
+        model = mirror_data_to_red_bls(model, bls, antpos, tol=2.0)
+
+        # ensure data keys match model keys
+        for i, k in enumerate(data):
+            if k not in model:
+                data.pop(k)
+
+    # run abscal
+    AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, times=data_times, pols=data_pols)
+    AC.run(unravel_pol=unravel_pol, unravel_freq=unravel_freq, unravel_time=unravel_time,
+           verbose=verbose, gains2dict=True, zero_psi=zero_psi, **kwargs)
+
+    # smooth gains
+    if smooth:
+        AC.smooth_params()
+
+    # make gains
+    AC.make_gains()
+
+    # write to file
+    if save:
+        if calfits_fname is None:
+            calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
+        AC.write_calfits(calfits_fname, overwrite=overwrite, verbose=verbose)
+
+    if output_gains:
+        return AC.gain_array
+
+def abscal_arg_parser():
+    a = argparse.ArgumentParser()
+    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
+    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of data-overlapping miriad files for visibility model.", required=True)
+    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
+    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
+    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
+    return a
+
+'''
 
 
