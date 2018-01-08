@@ -23,7 +23,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 import linsolve
 from astropy import stats as astats
-import JD2LST
+
 
 def abs_amp_lincal(model, data, wgts=None, verbose=True):
     """
@@ -1037,7 +1037,7 @@ def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None,
     uvd_flags = uvd_flags.reshape(-1, 1, Nfreqs, 1)
     uvd_keys = np.repeat(np.array(interp_data.keys()).reshape(-1, 1, 2), Ntimes, axis=1).reshape(-1, 2)
     uvd_bls = np.array(map(lambda k: uvd.antnums_to_baseline(k[0], k[1]), uvd_keys))
-    uvd_times = np.array(map(lambda x: JD2LST.LST2JD(x, np.median(np.floor(uvd.time_array)), uvd.telescope_location_lat_lon_alt_degrees[1]), model_lsts))
+    uvd_times = np.array(map(lambda x: utils.JD2LST.LST2JD(x, np.median(np.floor(uvd.time_array)), uvd.telescope_location_lat_lon_alt_degrees[1]), model_lsts))
     uvd_times = np.repeat(uvd_times[np.newaxis], Nbls, axis=0).reshape(-1)
     uvd_lsts = np.repeat(model_lsts[np.newaxis], Nbls, axis=0).reshape(-1)
     uvd_freqs = model_freqs.reshape(1, -1)
