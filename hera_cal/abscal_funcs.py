@@ -25,7 +25,6 @@ import linsolve
 from astropy import stats as astats
 import JD2LST
 
-
 def abs_amp_lincal(model, data, wgts=None, verbose=True):
     """
     calculate absolute (array-wide) gain amplitude scalar

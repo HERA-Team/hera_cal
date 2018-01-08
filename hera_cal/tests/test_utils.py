@@ -60,3 +60,13 @@ class TestAA(object):
         new_top = [new_params['0'][key] for key in antpos.keys()]
         old_top = [antpos[key] for key in antpos.keys()]
         nt.assert_true(np.allclose(old_top, new_top))
+
+
+class Test_JD2LST:
+    def test_JD2LST(self):
+        nt.assert_almost_equal(utils.JD2LST(2458042., 21.), 15.013985862647784)
+    def test_LST2JD(self):
+        nt.assert_almost_equal(utils.LST2JD(12.0, 2458042, 21.), 2458042.8720297855)
+
+
+
