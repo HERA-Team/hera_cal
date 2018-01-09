@@ -23,6 +23,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 import linsolve
 from astropy import stats as astats
+import itertools
 
 
 def abs_amp_lincal(model, data, wgts=None, verbose=True):
@@ -154,7 +155,8 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
     keys = model.keys()
 
     # angle of phs ratio is ydata independent variable
-    ydata = odict([(k, np.angle(model[k]) - np.angle(data[k])) for k in model.keys()])
+    # angle after divide
+    ydata = odict([(k, np.angle(model[k]/data[k])) for k in model.keys()])
 
     # make weights if None
     if wgts is None:
@@ -202,7 +204,7 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    return fit
+    return fit 
 
 
 def amp_logcal(model, data, wgts=None, verbose=True):
@@ -314,7 +316,7 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     keys = model.keys()
 
     # difference of arg visibility is ydata independent variable
-    ydata = odict([(k, np.angle(model[k])-np.angle(data[k])) for k in model.keys()])
+    ydata = odict([(k, np.angle(model[k]/data[k])) for k in model.keys()])
 
     # make weights if None
     if wgts is None:
@@ -422,6 +424,11 @@ def delay_lincal(model, data, df=9.765625e4, kernel=(1, 11), verbose=True, time_
 
     return fit
 
+
+## write a AbsCalDict to RedCalDict method
+def AbsCalDict2RedCalDict(dictionary, pols, abscal2redcal=True):
+    """
+    """
 
 def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
     """
@@ -565,8 +572,10 @@ def unravel(data, prefix, axis, copy_dict=None):
 def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     """
     get delay of visibility across band using FFT w/ blackman harris window
-    and quadratic fit to delay peak
+    and quadratic fit to delay peak.
 
+    Parameters:
+    -----------
     vis : 2D ndarray of visibility data, dtype=complex, shape=(Ntimes, Nfreqs)
 
     df : frequency channel width in Hz
@@ -576,6 +585,12 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     time_ax : time axis of data
 
     freq_ax : frequency axis of data
+
+    Output: (dlys, phi)
+    -------
+    dlys : ndarray containing delay for each integration
+
+    phi : ndarray containing phase of delay mode for each integration
     """
     # get array params
     Nfreqs = vis.shape[freq_ax]
@@ -630,7 +645,6 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     vfft_imag = np.moveaxis(np.array(vfft_imag), 0, time_ax)
     vfft_interp = vfft_real + 1j*vfft_imag
     phi = np.angle(vfft_interp)
-
     dlys /= df
 
     return dlys, phi
@@ -664,6 +678,11 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
     zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
 
     flag_extrapolate : flag extrapolated data if True
+
+    Output: (data, flags)
+    -------
+    data : interpolated data, type=dictionary
+    flags : flags associated with data, type=dictionary
     """
     # copy data and flags
     data = copy.deepcopy(data)
@@ -877,14 +896,12 @@ def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
     return red_data
 
 
-def compute_reds(bls, antpos, ex_ants=[], tol=1.0):
+def compute_reds(antpos, ex_ants=[], tol=1.0):
     """
-    compute redundant baselines
+    compute redundant baselines groups.
 
     Parameters:
     -----------
-    bls : baseline list, list of antenna pair tuples
-
     antpos : dictionary, antennas integers as keys, baseline vectors as values
 
     ex_ants : list of flagged (excluded) antennas
@@ -898,6 +915,9 @@ def compute_reds(bls, antpos, ex_ants=[], tol=1.0):
     """
     if type(antpos) is not dict and type(antpos) is not odict:
         raise AttributeError("antpos is not a dictionary type")
+
+    # calculate all permutations
+    bls = sorted(itertools.combinations(antpos.keys(), 2))
 
     red_bl_vecs = []
     red_bl_dists = []
@@ -925,11 +945,10 @@ def compute_reds(bls, antpos, ex_ants=[], tol=1.0):
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
                   gain_convention='multiply', overwrite=False, **kwargs):
     """
-    write out gain_array in calfits file format
+    write out gain_array in calfits file format.
 
     Parameters:
     -----------
-
     calfits_fname : string
 
     abscal_gains : complex gain in dictionary form from AbsCal.make_gains()
@@ -939,7 +958,6 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
     time_array : time array of data in Julian Date
 
     pol_array : polarization array of data, in 'x' or 'y' form. 
-
     """
     # ensure pol is string
     int2pol = {-5: 'x', -6: 'y'}
@@ -966,9 +984,11 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
 
     # write to file
     if os.path.exists(calfits_fname) is True and overwrite is False:
-        print("{} already exists, not overwriting...".format(calfits_fname))
+        echo("{} already exists, not overwriting...".format(calfits_fname))
     else:
+        echo("saving {}".format(calfits_fname))
         uvc.write_calfits(calfits_fname, clobber=overwrite)
+
 
 def echo(message, type=0, verbose=True):
     if verbose:
