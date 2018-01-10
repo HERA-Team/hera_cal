@@ -19,13 +19,43 @@ V_ij^data = exp(eta_ij^data + i * phi_ij^data)
 from abscal_funcs import *
 
 
-class ParentAbsCal(object):
+class AbsCal(object):
+    """
+    AbsCal object used to for phasing and scaling visibility data to an absolute reference model. 
+    A few different calibration methods exist. These include:
 
-    def __init__(self, model, data, wgts=None, freqs=None, times=None, pols=None):
+    1) per-antenna amplitude logarithmic calibration solves the equation:
+            ln[abs(V_ij^model / V_ij^data)] = eta_i + eta_j
+
+    2) per-antenna phase logarithmic calibration solves the equation:
+           angle(V_ij^model / V_ij^data) = phi_i - phi_j
+
+    3) delay linear calibration solves the equation:
+           delay(V_ij^model / V_ij^data) = delay(g_i) - delay(g_j)
+                                         = tau_i - tau_j
+       where tau is the delay that can be turned
+       into a complex gain via: g = exp(i * 2pi * tau * freqs).
+
+    4) Average amplitude linear calibration solves the equation:
+            |V_ij^model / V_ij^data| = |g_avg|
+ 
+    5) Tip-Tilt phase logarithmic calibration solves the equation
+            angle(V_ij^model /  V_ij^data) = psi + dot(TT_Phi, B_ij)
+        where psi is an overall gain phase scalar, 
+        TT_Phi is the gain phase slope vector [radians / meter]
+        and B_ij is the baseline vector between antenna i and j.
+
+    Methods (1), (2) and (3) can be thought of as general bandpass solvers, whereas
+    methods (3), (4) and (5) are methods that would be used for data that has already
+    been redundantly calibrated.
+
+    Be warned that the linearizations of the phase solvers suffer from phase wrapping
+    pathologies, meaning that a delay calibration should generally precede a phs_logcal
+    or a TT_phs_logcal solution.
+    """
+    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, times=None, pols=None):
         """
-        ParentAbsCal object used to setup abscal instance.
-
-        model, data and wgts should be fed as dictionary types.
+        AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
         Parameters:
         -----------
@@ -41,6 +71,20 @@ class ParentAbsCal(object):
         wgts : dict of weights of data, type=dictionry, [default=None]
             keys are antenna pair tuples (must match model), values are real floats
             matching shape of model and data
+
+        antpos : type=dictionary, dict of antenna position vectors in TOPO frame in meters.
+                 keys are antenna integers and values are 2D or 3D ndarray
+                 position vectors in meters (topocentric coordinates),
+                 with [0] index containing X (E-W) distance, and [1] index Y (N-S) distance.
+                 Can be generated from a pyuvdata.UVData instance via
+                 ----
+                 #!/usr/bin/env python
+                 uvd = pyuvdata.UVData()
+                 uvd.read_miriad(<filename>)
+                 antenna_pos, ants = uvd.get_ENU_antpos()
+                 antpos = dict(zip(ants, antenna_pos))
+                 ----
+                 This is needed only Tip Tilt phase calibration.
 
         freqs : ndarray of frequency array, type=ndarray, dtype=float
             1d array containing visibility frequencies in Hz. Needed to write gain solutions
@@ -103,55 +147,124 @@ class ParentAbsCal(object):
         self.ants = np.unique(np.concatenate(map(lambda k: k[:2], self.keys)))
         self.Nants = len(self.ants)
 
-
-class OmniAbsCal(ParentAbsCal):
-    """
-    OmniAbsCal object used specifically for calibrating omnical degeneracies:
-    the absolute amplitude scalar, and Tip-Tilt phase slopes.
-
-    1) Average amplitude linear calibration solves the linear equation:
-            |V_ij^model / V_ij^data| = |g_avg|
- 
-    2) Tip-Tilt phase logarithmic calibration 
-            angle(V_ij^model /  V_ij^data) = psi + dot(TT_Phi, B_ij)
-        where psi is an overall gain phase scalar, 
-        TT_Phi is the gain phase slope vector [radians / meter]
-        and B_ij is the baseline vector between antenna i and j.
-    """
-
-    def __init__(self, model, data, antpos, wgts=None, freqs=None, times=None, pols=[None]):
-        """
-        OmniAbsCal object used specifically for calibrating omnical degeneracies:
-        the absolute amplitude scalar, and Tip-Tilt phase slopes.
-        model, data and wgts should be fed as dictionary types.
-
-        Parameters:
-        -----------
-        See hera_cal.abscal.ParentAbsCal doc string for details on positional and keyword arguments.
-
-        antpos : type=dictionary, dict of antenna position vectors in TOPO frame in meters
-                 keys are antenna integers and values are 2D or 3D ndarray
-                 position vectors in meters (topocentric coordinates),
-                 with [0] index containing X (E-W) distance, and [1] index Y (N-S) distance.
-                 Can be generated from a pyuvdata.UVData instance via
-                 ----
-                 #!/usr/bin/env python
-                 uvd = pyuvdata.UVData()
-                 uvd.read_miriad(<filename>)
-                 antenna_pos, ants = uvd.get_ENU_antpos()
-                 antpos = dict(zip(ants, antenna_pos))
-                 ----
-                 This is needed for Tip Tilt phase calibration, but not for absolute amplitude
-                 calibration.
-        """
-        super(OmniAbsCal, self).__init__(model, data, wgts=wgts, freqs=freqs, times=times, pols=pols)
-
         # setup baselines and antenna positions
         self.antpos = antpos
+        self.bls = None
         if self.antpos is not None:
             self.bls = odict([(x, self.antpos[x[1]] - self.antpos[x[0]]) for x in self.keys])
             self.antpos = np.array(map(lambda x: self.antpos[x], self.ants))
             self.antpos -= np.median(self.antpos, axis=0)
+
+    def amp_logcal(self, separate_pol=False, verbose=True):
+        """
+        call abscal_funcs.amp_logcal() method. see its docstring for more details.
+
+        Parameters:
+        -----------
+        separate_pol : bool, separate polarization to have independent solutions
+            if False, form a joint solution across both pols
+
+        Result:
+        -------
+        per-antenna amplitude and per-antenna amp gains
+        can be accessed via the methods
+            self.get_ant_eta()
+            self.get_ant_eta_gain()
+        """
+        # set data quantities
+        model = self.model
+        data = self.data
+        wgts = self.wgts
+
+        if separate_pol:
+            model, pols = data_key_to_array_axis(model, 2)
+            data, pols = data_key_to_array_axis(data, 2)
+            wgts, pols = data_key_to_array_axis(wgts, 2)
+
+        # run linsolve
+        fit = amp_logcal(model, data, wgts=wgts, verbose=verbose)
+
+        # form result array
+        self._ant_eta = np.array(map(lambda a: fit['eta{}'.format(a)], self.ants))
+
+        # form gain array
+        self._ant_eta_gain = np.exp(self._ant_eta).astype(np.complex)
+
+    def phs_logcal(self, separate_pol=False, verbose=True):
+        """
+        call abscal_funcs.phs_logcal() method. see its docstring for more details.
+
+        Parameters:
+        -----------
+        separate_pol : bool, separate polarization to have independent solutions
+            if False, form a joint solution across both pols
+
+        Result:
+        -------
+        per-antenna phase and per-antenna phase gains
+        can be accessed via the methods
+            self.get_ant_phi()
+            self.get_ant_phi_gain()
+        """
+        # assign data
+        model = self.model
+        data = self.data
+        wgts = self.wgts
+
+        # separate pol
+        if separate_pol:
+            model, pols = data_key_to_array_axis(model, 2)
+            data, pols = data_key_to_array_axis(data, 2)
+            wgts, pols = data_key_to_array_axis(wgts, 2)
+
+        # run linsolve
+        fit = phs_logcal(model, data, wgts=wgts, verbose=verbose)
+
+        # form result array
+        self._ant_phi = np.array(map(lambda a: fit['phi{}'.format(a)], self.ants))
+
+        # form gain array
+        self._ant_phi_gain = np.exp(1j*self._ant_phi)
+
+    def delay_lincal(self, kernel=(1, 11), time_ax=0, freq_ax=1, time_avg=False, verbose=True):
+        """
+        Solve for per-antenna delay according to the equation
+        by calling abscal_funcs.delay_lincal method.
+        See abscal_funcs.delay_lincal for details.
+
+        Currently only supports joint polarization solutions.
+
+        Parameters:
+        -----------
+        kernel : size of median filter across (time, freq) axes, type=(int, int)
+
+        time_avg : boolean, average delays across time
+
+        Result:
+        -------
+        per-antenna delays and per-antenna delay gains
+        can be accessed via the methods
+            self.get_ant_dly()
+            self.get_ant_dly_gain()
+        """
+        # check for freq data
+        if hasattr(self, 'freqs') is False:
+            raise AttributeError("cannot delay_lincal without self.freqs array")
+
+        # assign data
+        model = self.model
+        data = self.data
+        wgts = self.wgts
+
+        # get freq channel width
+        df = np.median(np.diff(self.freqs))
+
+        # run delay_lincal
+        fit = delay_lincal(model, data, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax)
+
+        # turn into array
+        self._ant_dly = np.array(map(lambda a: fit['tau{}'.format(a)], self.ants))
+        self._ant_dly_gain = np.exp(2j*np.pi*self.freqs*self._ant_dly)
 
     def abs_amp_lincal(self, separate_pol=False, verbose=True):
         """
@@ -183,11 +296,9 @@ class OmniAbsCal(ParentAbsCal):
 
         # form result
         self._abs_amp = np.sqrt(fit['amp'])
-        if separate_pol is False:
-            self._abs_amp = np.moveaxis(self._abs_amp[np.newaxis], 0, -1)
 
         # form gain
-        self._abs_amp_gain = np.sqrt(self._abs_amp.astype(np.complex)[np.newaxis])
+        self._abs_amp_gain = np.repeat(np.sqrt(self._abs_amp).astype(np.complex)[np.newaxis], len(self.ants), axis=0)
 
     def TT_phs_logcal(self, separate_pol=False, verbose=True, zero_psi=False):
         """
@@ -223,13 +334,55 @@ class OmniAbsCal(ParentAbsCal):
         # form result
         self._abs_psi = fit['psi']
         self._TT_Phi = np.array([fit['PHIx'], fit['PHIy']])
-        if separate_pol is False:
-            self._abs_psi = np.moveaxis(self._abs_psi[np.newaxis], 0, -1)
-            self._TT_Phi = np.moveaxis(self._TT_Phi[np.newaxis], 0, -1)
 
         # form gains
-        self._abs_psi_gain = np.exp(-1j*self._abs_psi)[np.newaxis]
-        self._TT_Phi_gain = np.exp(-1j*np.einsum("ijkl, hi -> hjkl",self._TT_Phi, self.antpos[:, :2]))
+        self._abs_psi_gain = np.exp(1j*self._abs_psi)[np.newaxis]
+        if separate_pol is False:
+            self._TT_Phi_gain = np.exp(1j*np.einsum("ijk, hi -> hjk",self._TT_Phi, self.antpos[:, :2]))
+        else:
+            self._TT_Phi_gain = np.exp(1j*np.einsum("ijkl, hi -> hjkl",self._TT_Phi, self.antpos[:, :2]))
+            
+    @property
+    def get_ant_eta(self):
+        if hasattr(self, '_ant_eta'):
+            return copy.copy(self._ant_eta)
+        else:
+            return None
+
+    @property
+    def get_ant_eta_gain(self):
+        if hasattr(self, '_ant_eta_gain'):
+            return copy.copy(self._ant_eta_gain)
+        else:
+            return None
+
+    @property
+    def get_ant_phi(self):
+        if hasattr(self, '_ant_phi'):
+            return copy.copy(self._ant_phi)
+        else:
+            return None
+
+    @property
+    def get_ant_phi_gain(self):
+        if hasattr(self, '_ant_phi_gain'):
+            return copy.copy(self._ant_phi_gain)
+        else:
+            return None
+
+    @property
+    def get_ant_dly(self):
+        if hasattr(self, '_ant_dly'):
+            return copy.copy(self._ant_dly)
+        else:
+            return None
+
+    @property
+    def get_ant_dly_gain(self):
+        if hasattr(self, '_ant_dly_gain'):
+            return copy.copy(self._ant_dly_gain)
+        else:
+            return None
 
     @property
     def get_abs_amp(self):
@@ -278,201 +431,6 @@ class OmniAbsCal(ParentAbsCal):
             return copy.copy(self._TT_Phi_gain)
         else:
             return None
-
-
-class AbsCal(ParentAbsCal):
-    """
-    AbsCal object to perform delay and absolute bandpass calibration.
-
-    Three calibration methods exist.
-
-    1) per-antenna amplitude logarithmic calibration
-       solves the equation:
-            ln[abs(V_ij^model / V_ij^data)] = eta_i + eta_j
-
-    2) per-antenna phase logarithmic calibration
-       solves the equation:
-           angle(V_ij^model / V_ij^data) = phi_i - phi_j
-
-    3) delay linear calibration solves the equation:
-           tau_ij^model - tau_ij^data = tau_i - tau_j
-       where tau is the delay that can be turned
-       into a complex gain via: g = exp(i * 2pi * tau * freqs).
-    """ 
-
-    def __init__(self, model, data, wgts=None, freqs=None, times=None, pols=[None]):
-        """
-        AbsCal object used for absolute bandpass calibration.
-
-        model, data and wgts should be fed as dictionary types.
-
-        Parameters:
-        -----------
-        See hera_cal.abscal.ParentAbsCal doc string for details on positional and keyword arguments.
-        """
-        super(AbsCal, self).__init__(model, data, wgts=wgts, freqs=freqs, times=times, pols=pols)
-
-    def amp_logcal(self, separate_pol=False, verbose=True):
-        """
-        call abscal_funcs.amp_logcal() method. see its docstring for more details.
-
-        Parameters:
-        -----------
-        separate_pol : bool, separate polarization to have independent solutions
-            if False, form a joint solution across both pols
-
-        Result:
-        -------
-        per-antenna amplitude and per-antenna amp gains
-        can be accessed via the methods
-            self.get_ant_eta()
-            self.get_ant_eta_gain()
-        """
-        # set data quantities
-        model = self.model
-        data = self.data
-        wgts = self.wgts
-
-        if separate_pol:
-            model, pols = data_key_to_array_axis(model, 2)
-            data, pols = data_key_to_array_axis(data, 2)
-            wgts, pols = data_key_to_array_axis(wgts, 2)
-
-        # run linsolve
-        fit = amp_logcal(model, data, wgts=wgts, verbose=verbose)
-
-        # form result array
-        self._ant_eta = np.array(map(lambda a: fit['eta{}'.format(a)], self.ants))
-
-        # add polarization axis if formed a joint pol solution
-        if separate_pol is False:
-            self._ant_eta = np.moveaxis(self._ant_eta[np.newaxis], 0, -1)
-
-        # form gain array
-        self._ant_eta_gain = np.exp(self._ant_eta).astype(np.complex)
-
-    def phs_logcal(self, separate_pol=False, verbose=True):
-        """
-        call abscal_funcs.phs_logcal() method. see its docstring for more details.
-
-        Parameters:
-        -----------
-        separate_pol : bool, separate polarization to have independent solutions
-            if False, form a joint solution across both pols
-
-        Result:
-        -------
-        per-antenna phase and per-antenna phase gains
-        can be accessed via the methods
-            self.get_ant_phi()
-            self.get_ant_phi_gain()
-        """
-        # assign data
-        model = self.model
-        data = self.data
-        wgts = self.wgts
-
-        # separate pol
-        if separate_pol:
-            model, pols = data_key_to_array_axis(model, 2)
-            data, pols = data_key_to_array_axis(data, 2)
-            wgts, pols = data_key_to_array_axis(wgts, 2)
-
-        # run linsolve
-        fit = phs_logcal(model, data, wgts=wgts, verbose=verbose)
-
-        # form result array
-        self._ant_phi = np.array(map(lambda a: fit['phi{}'.format(a)], self.ants))
-
-        # add polarization axis if formed one solutions
-        if separate_pol is False:
-            self._ant_phi = np.moveaxis(self._ant_phi[np.newaxis], 0, -1)
-
-        # form gain array
-        self._ant_phi_gain = np.exp(-1j*self._ant_phi)
-
-    def delay_lincal(self, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True):
-        """
-        Solve for per-antenna delay according to the equation
-        by calling abscal_funcs.delay_lincal method.
-        See abscal_funcs.delay_lincal for details.
-
-        Currently only supports joint polarization solutions.
-
-        Parameters:
-        -----------
-        kernel : size of median filter across (time, freq) axes, type=(int, int)
-
-        Result:
-        -------
-        per-antenna delays and per-antenna delay gains
-        can be accessed via the methods
-            self.get_ant_dly()
-            self.get_ant_dly_gain()
-        """
-        # check for freq data
-        if hasattr(self, 'freqs') is False:
-            raise AttributeError("cannot delay_lincal without self.freqs array")
-
-        # assign data
-        model = self.model
-        data = self.data
-        wgts = self.wgts
-
-        # get freq channel width
-        df = np.median(np.diff(self.freqs))
-
-        # run delay_lincal
-        fit = delay_lincal(model, data, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax)
-
-        # turn into array
-        self._ant_dly = np.array(map(lambda a: np.moveaxis(dlys['tau{}'.format(a)], 0, 2), self.ants))
-        self._ant_dly = np.moveaxis(self._ant_dly[np.newaxis], 0, -1)
-        self._ant_dly_gain = np.exp(-2j*np.pi*self.freqs.reshape(-1, 1)*self._delays)
-
-    @property
-    def get_ant_eta(self):
-        if hasattr(self, '_ant_eta'):
-            return copy.copy(self._ant_eta)
-        else:
-            return None
-
-    @property
-    def get_ant_eta_gain(self):
-        if hasattr(self, '_ant_eta_gain'):
-            return copy.copy(self._ant_eta_gain)
-        else:
-            return None
-
-    @property
-    def get_ant_phi(self):
-        if hasattr(self, '_ant_phi'):
-            return copy.copy(self._ant_phi)
-        else:
-            return None
-
-    @property
-    def get_ant_phi_gain(self):
-        if hasattr(self, '_ant_phi_gain'):
-            return copy.copy(self._ant_phi_gain)
-        else:
-            return None
-
-    @property
-    def get_ant_dly(self):
-        if hasattr(self, '_ant_dly'):
-            return copy.copy(self._ant_dly)
-        else:
-            return None
-
-    @property
-    def get_ant_dly_gain(self):
-        if hasattr(self, '_ant_dly_gain'):
-            return copy.copy(self._ant_dly_gain)
-        else:
-            return None
-
-
 
 ''' TO DO
     def smooth_data(self, data, flags=None, kind='linear'):
