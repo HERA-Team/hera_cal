@@ -36,7 +36,8 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True):
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-            keys are antenna-pair tuples, values are complex ndarray visibilities
+            keys are antenna-pair tuples.
+            values are complex ndarray visibilities.
             these visibilities must be at least 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
             should index polarization.
@@ -59,7 +60,7 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True):
     echo("...configuring linsolve data for abs_amp_lincal", verbose=verbose)
 
     # get keys from model dictionary
-    keys = model.keys()
+    keys = sorted(set(model.keys()) & set(data.keys()))
 
     # abs of amplitude ratio is ydata independent variable
     ydata = odict([(k, np.abs(model[k]/data[k])) for k in model.keys()])
@@ -152,7 +153,7 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
     echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
 
     # get keys from model dictionary
-    keys = model.keys()
+    keys = sorted(set(model.keys()) & set(data.keys()))
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
@@ -237,10 +238,10 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     echo("...configuring linsolve data for amp_logcal", verbose=verbose)
 
     # get keys from model dictionary
-    keys = model.keys()
+    keys = sorted(set(model.keys()) & set(data.keys()))
 
     # difference of log-amplitudes is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(model[k]))-np.log(np.abs(data[k]))) for k in model.keys()])
+    ydata = odict([(k, np.log(np.abs(model[k]/data[k]))) for k in model.keys()])
 
     # make weights if None
     if wgts is None:
@@ -293,14 +294,14 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-            keys are antenna-pair tuples, values are complex ndarray visibilities
+            keys are antenna-pair tuples (ant1, ant2), or antenna-pair-pol tuples (ant1, ant2, pol).
+            values are complex ndarray visibilities.
             these visibilities must be at least 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
             should index polarization.
 
     data : visibility data of measurements, type=dictionary
-           keys are antenna pair tuples (must match model), values are
-           complex ndarray visibilities matching shape of model
+           must match model in format and array shape
 
     wgts : weights of data, type=dictionry, [default=None]
            keys are antenna pair tuples (must match model), values are real floats
@@ -312,10 +313,10 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     """
     echo("...configuring linsolve data for phs_logcal", verbose=verbose)
 
-    # get keys from model dictionary
-    keys = model.keys()
+    # get keys from match between data and model dictionary
+    keys = sorted(set(model.keys()) & set(data.keys()))
 
-    # difference of arg visibility is ydata independent variable
+    # angle of visibility ratio is ydata independent variable
     ydata = odict([(k, np.angle(model[k]/data[k])) for k in model.keys()])
 
     # make weights if None
@@ -385,36 +386,31 @@ def delay_lincal(model, data, df=9.765625e4, kernel=(1, 11), verbose=True, time_
     -------
     fit : dictionary containing delay (tau_i) for each antenna
     """
-    # unpack model and data
-    model_values = np.array(model.values())
-    model_keys = model.keys()
-    data_values = np.array(data.values())
-    data_keys = data.keys()
+    # get shared keys
+    keys = sorted(set(model.keys()) & set(data.keys()))
 
     # median filter and FFT to get delays
     model_dlys, data_dlys = [], []
-    for i, mv in enumerate(model_values):
-        m_dly, m_off = fft_dly(mv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+    for i, k in enumerate(keys):
+        m_dly, m_off = fft_dly(model[k], df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
         model_dlys.append(m_dly)
-
-    for i, dv in enumerate(data_values):
-        d_dly, d_off = fft_dly(dv, df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        d_dly, d_off = fft_dly(data[k], df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
         data_dlys.append(d_dly)
-
-    model_dlys = odict([(k, model_dlys[i]) for i, k in enumerate(model_keys)])
-    data_dlys = odict([(k, data_dlys[i]) for i, k in enumerate(data_keys)])
+       
+    model_dlys = np.array(model_dlys)
+    data_dlys = np.array(data_dlys)
 
     # form ydata
-    ydata = odict([(k, model_dlys[k] - data_dlys[k]) for i, k in enumerate(model_keys)])
+    ydata = odict(zip(keys, model_dlys - data_dlys))
 
     # setup linsolve equation dictionary
-    eqns = odict([(k, 'tau{} - tau{}'.format(k[0], k[1])) for i, k in enumerate(model_keys)])
+    eqns = odict([(k, 'tau{} - tau{}'.format(k[0], k[1])) for i, k in enumerate(keys)])
 
     # setup design matrix dictionary
     ls_design_matrix = odict()
 
     # setup linsolve data dictionary
-    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(model_keys)])
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, **ls_design_matrix)
@@ -425,10 +421,134 @@ def delay_lincal(model, data, df=9.765625e4, kernel=(1, 11), verbose=True, time_
     return fit
 
 
-## write a AbsCalDict to RedCalDict method
-def AbsCalDict2RedCalDict(dictionary, pols, abscal2redcal=True):
+def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
     """
+    move an index of data.keys() into the data axes
+
+    Parameters:
+    -----------
+    data : dictionary, complex visibility data with
+        antenna-pair (+ pol + other) tuples for keys.
+    
+    key_index : integer, index of keys to consolidate into data arrays
+
+    array_index : integer, which axes of data arrays to append to
+
+    avg_dict : dictionary, a dictionary with same keys as data
+        that will have its data arrays averaged along key_index
+
+    Result:
+    -------
+    new_data : dictionary, complex visibility data
+        with key_index of keys moved into the data arrays
+
+    new_avg_dict : copy of avg_dict. Only returned if avg_dict is not None.
+
+    popped_keys : unique list of keys moved into data array axis
     """
+    # instantiate new data object
+    new_data = odict()
+    new_avg = odict()
+
+    # get keys
+    keys = data.keys()
+
+    # sort keys across key_index
+    key_sort = np.argsort(np.array(keys, dtype=np.object)[:, key_index])
+    keys = map(lambda i: keys[i], key_sort)
+    popped_keys = np.unique(np.array(keys, dtype=np.object)[:, key_index])
+
+    # get new keys
+    new_keys = map(lambda k: k[:key_index] + k[key_index+1:], keys)
+    new_unique_keys = []
+
+    # iterate over new_keys
+    for i, nk in enumerate(new_keys):
+        # check for unique keys
+        if nk in new_unique_keys:
+            continue
+        new_unique_keys.append(nk)
+
+        # get all instances of redundant keys
+        ravel = map(lambda k: k == nk, new_keys)
+
+        # iterate over redundant keys and consolidate into new arrays
+        arr = []
+        avg_arr = []
+        for j, b in enumerate(ravel):
+            if b:
+                arr.append(data[keys[j]])
+                if avg_dict is not None:
+                    avg_arr.append(avg_dict[keys[j]])
+
+        # assign to new_data
+        new_data[nk] = np.moveaxis(arr, 0, array_index)
+        if avg_dict is not None:
+            new_avg[nk] = np.nanmean(avg_arr, axis=0)
+
+    if avg_dict is not None:
+        return new_data, new_avg, popped_keys
+    else:
+        return new_data, popped_keys
+
+
+def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dict=None):
+    """
+    move an axes of data arrays in data out of arrays
+    and into a unique key index in data.keys()
+
+    Parameters:
+    -----------
+    data : dictionary, complex visibility data with
+        antenna-pair (+ pol + other) tuples for keys
+    
+    array_index : integer, which axes of data arrays
+        to extract from arrays and move into keys
+
+    array_keys : list, list of new key from array elements. must have length
+        equal to length of data_array along axis array_index
+
+    key_index : integer, index within the new set of keys to insert array_keys
+
+    copy_dict : dictionary, a dictionary with same keys as data
+        that will have its data arrays copied along array_keys
+
+    Output:
+    -------
+    new_data : dictionary, complex visibility data
+        with array_index of data arrays extracted and moved
+        into a unique set of keys
+
+    new_copy : dictionary, copy of copy_dict
+        with array_index of data arrays copied to unique keys
+    """
+    # instantiate new object
+    new_data = odict()
+    new_copy = odict()
+
+    # get keys
+    keys = sorted(data.keys())
+    new_keys = []
+
+    # iterate over keys
+    for i, k in enumerate(keys):
+        # iterate overy new array keys
+        for j, ak in enumerate(array_keys):
+            new_key = list(k)
+            if key_index == -1:
+                new_key.insert(len(new_key), ak)
+            else:
+                new_key.insert(key_index, ak)
+            new_key = tuple(new_key)
+            new_data[new_key] = np.take(data[k], j, axis=array_index)
+            if copy_dict is not None:
+                new_copy[new_key] = copy.copy(copy_dict[k])
+
+    if copy_dict is not None:
+        return new_data, new_copy
+    else:
+        return new_data
+
 
 def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
     """
@@ -438,6 +558,7 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
     Parameters:
     -----------
     filenames : list of either strings to miriad filenames or list of UVData instances
+                to concatenate into a single dictionary
 
     pol_select : list of polarization strings to keep
 
@@ -445,128 +566,61 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
 
     Output:
     -------
-    DATA_LIST, FLAG_LIST, POL_LIST
+    data, flags
 
-    DATA_LIST : list of dictionaries containing data from UVData objects
-        if len(filenames) == 1, just outputs the dictionary itself
-
-    FLAG_LIST : list of dictionaries containing flag data
-        if len(filenames) == 1, just outputs dictionary
-
-    POL_LIST : list of polarizations in UVData objects
-        if len(filenames) == 1, just outputs polarization string itself
+    data : dictionary containing baseline-pol complex visibility data
+    flags : dictionary containing data flags
     """
-    # initialize containers for data dicts and pol keys
-    DATA_LIST = []
-    FLAG_LIST = []
-    POL_LIST = []
-
     # check filenames is a list
     if type(filenames) is not list and type(filenames) is not np.ndarray:
-        filenames = [filenames]
-
-    # loop over filenames    
-    for i, fname in enumerate(filenames):
-        # initialize UVData object
-        if type(fname) == str:
+        if type(filenames) is str:
             uvd = UVData()
-            uvd.read_miriad(fname)
-        elif type(fname) == UVData:
-            uvd = fname
+            uvd.read_miriad(filenames)
         else:
-            raise IOError("can't recognize type of {}".format(fname))
-
-        # load data into dictionary
-        data_temp, flag_temp = firstcal.UVData_to_dict([uvd])
-
-        if pop_autos:
-            # eliminate autos
-            for i, k in enumerate(data_temp.keys()):
-                if k[0] == k[1]:
-                    data_temp.pop(k)
-                    flag_temp.pop(k)
-
-        ## reconfigure polarization nesting ##
-        # setup empty dictionaries
-        data = odict()
-        flags = odict()
-
-        # configure pol keys
-        pol_keys = sorted(data_temp[data_temp.keys()[0]].keys())
-        if pol_select is not None:
-            # ensure it is a list
-            if type(pol_select) == str:
-                pol_select = [pol_select]
-
-            # ensure desired pols are in data
-            if functools.reduce(lambda x, y: x*y, map(lambda x: x in pol_keys, pol_select)) == 0:
-                raise KeyError("desired pols(s) {} not found in data pols {}".format(pol_select, pol_keys))
-            pol_keys = pol_select
-
-        # configure data keys
-        data_keys = sorted(data_temp.keys())
-
-        # iterate over pols and data keys
-        for i, p in enumerate(pol_keys):
-            for j, k in enumerate(data_keys):
-                if i == 0:
-                    data[k] = data_temp[k][p][:, :, np.newaxis]
-                    flags[k] = flag_temp[k][p][:, :, np.newaxis]
-                elif i > 0:
-                    data[k] = np.dstack([data[k], data_temp[k][p][:, :, np.newaxis]])
-                    flags[k] = np.dstack([flags[k], flag_temp[k][p][:, :, np.newaxis]])
-        # append
-        DATA_LIST.append(data)
-        FLAG_LIST.append(flags)
-        POL_LIST.append(pol_keys)
-
-    if len(DATA_LIST) == 1:
-        DATA_LIST = DATA_LIST[0]
-        FLAG_LIST = FLAG_LIST[0]
-        POL_LIST = POL_LIST[0]
-
-    return DATA_LIST, FLAG_LIST, POL_LIST
-
-
-def unravel(data, prefix, axis, copy_dict=None):
-    """
-    promote visibility data from within a data key
-    to being its own key
-
-    Parameters:
-    -----------
-    data : "data" dictionary, see class docstring for details on specs
-
-    prefix : prefix of the key we are adding to data, type=string
-
-    axis : which axis of the visibility to "promote" or unravel, type=int
-
-    copy_dict : ancillary dictionary that matches data in keys, but 
-        needs to get its values directly copied (not unraveled)
-        just to match shape of new data dictionary. This is necessary, 
-        for example, for the baselines (bls) dictionary 
-    """
-    # loop over keys
-    for i, k in enumerate(data.keys()):
-        # loop over row / columns of data
-        for j in range(data[k].shape[axis]):
-            if axis == 0:
-                data[k+("{}{}".format(prefix, str(j)),)] = copy.copy(data[k][j:j+1])
-            elif axis == 1:
-                data[k+("{}{}".format(prefix, str(j)),)] = copy.copy(data[k][:, j:j+1])
-            elif axis == 2:
-                data[k+("{}{}".format(prefix, str(j)),)] = copy.copy(data[k][:, :, j:j+1])
-            elif axis == 3:
-                data[k+("{}{}".format(prefix, str(j)),)] = copy.copy(data[k][:, :, :, j:j+1])
+            uvd = filenames
+    else:
+        # iterate over extra files and concatenate to original object
+        for i, fname in enumerate(filenames):
+            if i == 0:
+                if type(fname) is str:
+                    uvd = UVData()
+                    uvd.read_miriad(fname)
+                else:
+                    uvd = fname
             else:
-                raise TypeError("can't support axis > 3")
-            
-            if copy_dict is not None:
-                copy_dict[k+("{}{}".format(prefix, str(j)),)] = copy_dict[k]
-        # remove original key
-        data.pop(k)
-        if copy_dict is not None:
-            copy_dict.pop(k)
+                if type(fname) is str:
+                    uv_d = UVData()
+                    uv_d.read_miriad(fname)
+                    uvd += uv_d
+                else:
+                    uvd += fname
+
+    # load data
+    d, f = firstcal.UVData_to_dict([uvd])
+
+    # pop autos
+    if pop_autos:
+        for i, k in enumerate(d.keys()):
+            if k[0] == k[1]:
+                d.pop(k)
+                f.pop(k)
+
+    # reconfigure polarization nesting
+    data = odict()
+    flags = odict()
+
+    # select pols
+    if pol_select is None:
+        pol_select = d[d.keys()[0]].keys()
+
+    # loop over data keys
+    for i, k in enumerate(sorted(d.keys())):
+        for j, p in enumerate(pol_select):
+            key = k + (p,)
+            data[key] = d[k][p]
+            flags[key] = f[k][p]
+
+    return data, flags
 
 
 def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
@@ -576,8 +630,8 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
 
     Parameters:
     -----------
-    vis : 2D ndarray of visibility data, dtype=complex, shape=(Ntimes, Nfreqs)
-
+    vis : ndarray of visibility data, dtype=complex, shape=(Ntimes, Nfreqs, +)
+    
     df : frequency channel width in Hz
 
     kernel : size of median filter kernel along (time, freq) axes
@@ -597,6 +651,7 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     Ntimes = vis.shape[time_ax]
 
     # smooth via median filter
+    kernel += tuple(np.ones((vis.ndim - len(kernel)), np.int))
     vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j*signal.medfilt(np.imag(vis), kernel_size=kernel)
 
     # fft
@@ -659,7 +714,9 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
 
     Parameters:
     -----------
-    data : complex visibility data, type=dictionary, see AbsCal for details on format
+    data : type=dictionary, holds complex visibility data
+        keys are antenna-pair + pol tuples, values are 2d complex visibility data
+        with shape (Ntimes, Nfreqs)
 
     data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
 
@@ -684,216 +741,37 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
     data : interpolated data, type=dictionary
     flags : flags associated with data, type=dictionary
     """
-    # copy data and flags
-    data = copy.deepcopy(data)
+    # make flags
     flags = odict()
 
     # loop over keys
     for i, k in enumerate(data.keys()):
-        # loop over polarizations
-        new_data = []
-        new_flags = []
-        for p in range(data[k].shape[2]):
-            # interpolate real and imag separately
-            interp_real = interpolate.interp2d(data_freqs, data_times, np.real(data[k][:, :, p]),
-                                               kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
-            interp_imag = interpolate.interp2d(data_freqs, data_times, np.imag(data[k][:, :, p]),
-                                               kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
+        # interpolate real and imag separately
+        interp_real = interpolate.interp2d(data_freqs, data_times, np.real(data[k]),
+                                           kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
+        interp_imag = interpolate.interp2d(data_freqs, data_times, np.imag(data[k]),
+                                           kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
 
-            # set flags
-            f = np.zeros_like(interp_real, dtype=float)
-            if flag_extrapolate:
-                f[np.isnan(interp_real) + np.isnan(interp_imag)] = 1.0
-            interp_real[np.isnan(interp_real)] = fill_value
-            interp_imag[np.isnan(interp_imag)] = fill_value
+        # set flags
+        f = np.zeros_like(interp_real, dtype=float)
+        if flag_extrapolate:
+            f[np.isnan(interp_real) + np.isnan(interp_imag)] = 1.0
+        interp_real[np.isnan(interp_real)] = fill_value
+        interp_imag[np.isnan(interp_imag)] = fill_value
 
-            # force things near amplitude of zero to (positive) zero
-            zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
-            interp_real[zero_select] *= 0.0 * interp_real[zero_select]
-            interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
+        # force things near amplitude of zero to (positive) zero
+        zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
+        interp_real[zero_select] *= 0.0 * interp_real[zero_select]
+        interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
 
-            # rejoin
-            new_data.append(interp_real + 1j*interp_imag)
-            new_flags.append(f)
+        # rejoin
+        new_data = interp_real + 1j*interp_imag
+        new_flags = f
 
-        data[k] = np.moveaxis(np.array(new_data), 0, 2)
-        flags[k] = np.moveaxis(np.array(new_flags), 0, 2)
+        data[k] = new_data
+        flags[k] = f
 
     return data, flags
-
-
-def avg_data_across_red_bls(data, bls, antpos, flags=None, broadcast_flags=True, median=False, tol=0.5,
-                            mirror_red_data=False):
-    """
-    Given complex visibility data spanning one or more redundant
-    baseline groups, average redundant visibilities and write to file
-    """
-    # get data keys
-    keys = data.keys()
-
-    # get data, flags and ants
-    data = copy.deepcopy(data)
-    ants = np.unique(np.concatenate(keys))
-    if flags is None:
-        flags = copy.deepcopy(data)
-        for k in flags.keys(): flags[k] = np.zeros_like(flags[k]).astype(np.bool)
-
-    # get redundant baselines
-    reds = compute_reds(bls, antpos, tol=tol)
-
-    # make red_data dictionary
-    red_data = odict()
-    red_flags = odict()
-
-    # iterate over reds
-    for i, bl_group in enumerate(reds):
-        # average redundant baseline group
-        if median:
-            d = np.nanmedian(map(lambda k: data[k], bl_group), axis=0)
-        else:
-            d = np.nanmean(map(lambda k: data[k], bl_group), axis=0)
-
-        # assign to red_data
-        for j, key in enumerate(sorted(bl_group)):
-            red_data[key] = copy.copy(d)
-            if mirror_red_data is False:
-                break
-
-        # assign flags
-        if broadcast_flags:
-            red_flags[key] = np.max(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
-        else:
-            red_flags[key] = np.min(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
-
-    # get red_data keys
-    red_keys = red_data.keys()
-
-    return red_data, red_flags, red_keys
-
-
-def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
-                            write_miriad=True, output_data=False, overwrite=False, 
-                            verbose=True, **kwargs):
-    """
-    """
-    # check output file
-    if outdir is None:
-        outdir = os.path.dirname(data_fname)
-    if output_fname is None:
-        output_fname = os.path.basename(data_fname) + 'M'
-    output_fname = os.path.join(outdir, output_fname)
-    if os.path.exists(output_fname) is True and overwrite is False:
-        raise IOError("{} exists, not overwriting".format(output_fname))
-
-    if type(data_fname) == str:
-        uvd = UVData()
-        uvd.read_miriad(data_fname)
-
-    # get data
-    data, flags, pols = UVData2AbsCalDict([uvd])
-
-    # get antpos and baselines
-    antpos, ants = uvd.get_ENU_antpos()
-    antpos = dict(zip(ants, antpos))
-    bls = data.keys()
-
-    # avg data across reds
-    red_data, red_flags, red_keys = avg_data_across_red_bls(data, bls, antpos, **kwargs)
-    uvd_data = np.array(map(lambda k: red_data[k], red_keys))
-    uvd_flags = np.array(map(lambda k: red_flags[k], red_keys))
-    uvd_bls = np.array(red_keys)
-    blts_select = np.array(map(lambda k: uvd.antpair2ind(*k), uvd_bls)).reshape(-1)
-    Nbls = len(uvd_bls)
-    Nblts = len(blts_select)
-    uvd_bls = np.array(map(lambda k: uvd.baseline_to_antnums(k), uvd.baseline_array[blts_select]))
-
-    # resort data
-    uvd_data = uvd_data.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
-    uvd_flags = uvd_flags.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
-
-    # write to file
-    if write_miriad:
-        echo("saving {}".format(output_fname), verbose=verbose)
-        uvd.data_array = uvd_data
-        uvd.flag_array = uvd_flags
-        uvd.time_array = uvd.time_array[blts_select]
-        uvd.lst_array = uvd.lst_array[blts_select]
-        uvd.baseline_array = uvd.baseline_array[blts_select]
-        uvd.ant_1_array = uvd_bls[:, 0]
-        uvd.ant_2_array = uvd_bls[:, 1]
-        uvd.uvw_array = uvd.uvw_array[blts_select, :]
-        uvd.nsample_array = np.ones_like(uvd.data_array, dtype=np.float)
-        uvd.Nbls = Nbls
-        uvd.Nblts = Nblts
-        uvd.zenith_dec = uvd.zenith_dec[blts_select]
-        uvd.zenith_ra = uvd.zenith_ra[blts_select]
-        uvd.write_miriad(output_fname, clobber=True)
-
-    # output data
-    if output_data:
-        return red_data, red_flags, red_keys
-
-
-def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
-    """
-    Given unique baseline data (like omnical model visibilities),
-    copy the data over to all other baselines in the same redundant group
-
-    Parameters:
-    -----------
-    data : data dictionary in AbsCal form, see AbsCal docstring for details
-
-    bls : baseline list
-        list of all antenna pair tuples that "data" needs to expand into
-
-    antpos : antenna positions dictionary
-        keys are antenna integers, values are ndarray baseline vectors.
-        This can be created via
-        ```
-        antpos, ants = UVData.get_ENU_pos()
-        antpos = dict(zip(ants, antpos))
-        ```
-
-    tol : redundant baseline distance tolerance, dtype=float
-        fed into abscal.compute_reds
-
-    Output:
-    -------
-    red_data : data dictionary in AbsCal form, with unique baseline data
-        distributed to redundant baseline groups.
-
-    """
-    # get data keys
-    keys = data.keys()
-
-    # get data and ants
-    data = copy.deepcopy(data)
-    ants = np.unique(np.concatenate([keys]))
-
-    # get redundant baselines
-    reds = compute_reds(bls, antpos, tol=tol)
-
-    # make red_data dictionary
-    red_data = odict()
-
-    # iterate over red bls
-    for i, bl_group in enumerate(reds):
-        # find which key in data is in this group
-        select = np.array(map(lambda x: x in keys or x[::-1] in keys, reds[i]))
-
-        if True not in select:
-            continue
-        k = reds[i][np.argmax(select)]
-
-        # iterate over bls and insert data into red_data
-        for j, bl in enumerate(bl_group):
-
-            red_data[bl] = copy.copy(data[k])
-
-    # re-sort
-    red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
-
-    return red_data
 
 
 def compute_reds(antpos, ex_ants=[], tol=1.0):
@@ -949,15 +827,18 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
 
     Parameters:
     -----------
-    calfits_fname : string
+    calfits_fname : string, path and filename to output calfits file
 
-    abscal_gains : complex gain in dictionary form from AbsCal.make_gains()
+    abscal_gains : dictionary, antenna integer as key, ndarray complex gain
+        as values with shape (Ntimes, Nfreqs, Npols)
 
-    freq_array : frequency array of data in Hz
+    freq_array : ndarray, frequency array of data in Hz
 
-    time_array : time array of data in Julian Date
+    time_array : ndarray, time array of data in Julian Date
 
-    pol_array : polarization array of data, in 'x' or 'y' form. 
+    pol_array : ndarray, polarization array of data, in 'x' or 'y' form. 
+
+    kwargs : additional kwargs for meta in cal_formats.HERACal(meta, gains)
     """
     # ensure pol is string
     int2pol = {-5: 'x', -6: 'y'}
@@ -966,7 +847,7 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
         for i, p in enumerate(pol_array):
             pol_array[i] = int2pol[p]
 
-    # reconfigure AbsCal gain dictionary into HERACal gain dictionary
+    # reconfigure gain dictionary into HERACal gain dictionary
     heracal_gains = {}
     for i, p in enumerate(pol_array):
         pol_dict = {}
@@ -998,100 +879,6 @@ def echo(message, type=0, verbose=True):
             print('')
             print(message)
             print("-"*40)
-
-
-def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
-              verbose=True, write_miriad=True, output_data=False, kind='linear'):
-    """
-    """
-    # try to load model
-    if model_fnames is not None:
-        if type(model_fnames) is str:
-            uvm = UVData()
-            uvm.read_miriad(model_fnames)
-            lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
-            model_freqs = np.unique(uvm.freq_array)
-        elif type(model_fnames) is list:
-            uvm = UVData()
-            uvm.read_miriad(model_fnames[0])
-            for i, f in enumerate(model_fnames[1:]):
-                uv = UVData()
-                uv.read_miriad(f)
-                uvm += uv
-            lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
-            model_freqs = np.unique(uvm.freq_array)
-    else:
-        # generate LST array
-        lst_arr = np.arange(0, 24, dLST)
-        model_freqs = None
-
-    # load file
-    echo("loading {}".format(data_fname), verbose=verbose)
-    uvd = UVData()
-    uvd.read_miriad(data_fname)
-
-    # get data
-    data, flags, pols = UVData2AbsCalDict([uvd], pop_autos=False)
-
-    # get data lst and freq arrays
-    data_lsts, data_freqs = np.unique(uvd.lst_array) * 12/np.pi, np.unique(uvd.freq_array)
-    Ntimes = len(data_lsts)
-
-    # get closest lsts
-    start = np.argmin(np.abs(lst_arr - data_lsts[0]))
-    lst_indices = np.arange(start, start+Ntimes)
-    model_lsts = lst_arr[lst_indices]
-    if model_freqs is None:
-        model_freqs = data_freqs
-    Nfreqs = len(model_freqs)
-
-    # interpolate data
-    echo("interpolating data", verbose=verbose)
-    interp_data, interp_flags = interp_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, kind=kind)
-    Nbls = len(interp_data)
-
-    # reorder into arrays
-    uvd_data = np.array(interp_data.values())
-    uvd_data = uvd_data.reshape(-1, 1, Nfreqs, 1)
-    uvd_flags = np.array(interp_flags.values()).astype(np.bool)
-    uvd_flags = uvd_flags.reshape(-1, 1, Nfreqs, 1)
-    uvd_keys = np.repeat(np.array(interp_data.keys()).reshape(-1, 1, 2), Ntimes, axis=1).reshape(-1, 2)
-    uvd_bls = np.array(map(lambda k: uvd.antnums_to_baseline(k[0], k[1]), uvd_keys))
-    uvd_times = np.array(map(lambda x: utils.JD2LST.LST2JD(x, np.median(np.floor(uvd.time_array)), uvd.telescope_location_lat_lon_alt_degrees[1]), model_lsts))
-    uvd_times = np.repeat(uvd_times[np.newaxis], Nbls, axis=0).reshape(-1)
-    uvd_lsts = np.repeat(model_lsts[np.newaxis], Nbls, axis=0).reshape(-1)
-    uvd_freqs = model_freqs.reshape(1, -1)
-
-    # assign to uvdata object
-    uvd.data_array = uvd_data
-    uvd.flag_array = uvd_flags
-    uvd.baseline_array = uvd_bls
-    uvd.ant_1_array = uvd_keys[:, 0]
-    uvd.ant_2_array = uvd_keys[:, 1]
-    uvd.time_array = uvd_times
-    uvd.lst_array = uvd_lsts * np.pi / 12
-    uvd.freq_array = uvd_freqs
-    uvd.Nfreqs = Nfreqs
-
-    # write miriad
-    if write_miriad:
-        # check output
-        if outdir is None:
-            outdir = os.path.dirname(data_fname)
-        if output_fname is None:
-            output_fname = os.path.basename(data_fname) + 'L.{:07.4f}'.format(model_lsts[0])
-        output_fname = os.path.join(outdir, output_fname)
-        if os.path.exists(output_fname) and overwrite is False:
-            raise IOError("{} exists, not overwriting".format(output_fname))
-
-        # write to file
-        echo("saving {}".format(output_fname), verbose=verbose)
-        uvd.write_miriad(output_fname, clobber=True)
-
-    # output data and flags
-    if output_data:
-        return interp_data, interp_flags, model_lsts, model_freqs
-
 
 ''' TO DO
 
@@ -1324,6 +1111,273 @@ def abscal_arg_parser():
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
     a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
     return a
+
+
+def avg_data_across_red_bls(data, bls, antpos, flags=None, broadcast_flags=True, median=False, tol=0.5,
+                            mirror_red_data=False):
+    """
+    Given complex visibility data spanning one or more redundant
+    baseline groups, average redundant visibilities and write to file
+    """
+    # get data keys
+    keys = data.keys()
+
+    # get data, flags and ants
+    data = copy.deepcopy(data)
+    ants = np.unique(np.concatenate(keys))
+    if flags is None:
+        flags = copy.deepcopy(data)
+        for k in flags.keys(): flags[k] = np.zeros_like(flags[k]).astype(np.bool)
+
+    # get redundant baselines
+    reds = compute_reds(bls, antpos, tol=tol)
+
+    # make red_data dictionary
+    red_data = odict()
+    red_flags = odict()
+
+    # iterate over reds
+    for i, bl_group in enumerate(reds):
+        # average redundant baseline group
+        if median:
+            d = np.nanmedian(map(lambda k: data[k], bl_group), axis=0)
+        else:
+            d = np.nanmean(map(lambda k: data[k], bl_group), axis=0)
+
+        # assign to red_data
+        for j, key in enumerate(sorted(bl_group)):
+            red_data[key] = copy.copy(d)
+            if mirror_red_data is False:
+                break
+
+        # assign flags
+        if broadcast_flags:
+            red_flags[key] = np.max(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
+        else:
+            red_flags[key] = np.min(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
+
+    # get red_data keys
+    red_keys = red_data.keys()
+
+    return red_data, red_flags, red_keys
+
+
+def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
+                            write_miriad=True, output_data=False, overwrite=False, 
+                            verbose=True, **kwargs):
+    """
+    """
+    # check output file
+    if outdir is None:
+        outdir = os.path.dirname(data_fname)
+    if output_fname is None:
+        output_fname = os.path.basename(data_fname) + 'M'
+    output_fname = os.path.join(outdir, output_fname)
+    if os.path.exists(output_fname) is True and overwrite is False:
+        raise IOError("{} exists, not overwriting".format(output_fname))
+
+    if type(data_fname) == str:
+        uvd = UVData()
+        uvd.read_miriad(data_fname)
+
+    # get data
+    data, flags, pols = UVData2AbsCalDict([uvd])
+
+    # get antpos and baselines
+    antpos, ants = uvd.get_ENU_antpos()
+    antpos = dict(zip(ants, antpos))
+    bls = data.keys()
+
+    # avg data across reds
+    red_data, red_flags, red_keys = avg_data_across_red_bls(data, bls, antpos, **kwargs)
+    uvd_data = np.array(map(lambda k: red_data[k], red_keys))
+    uvd_flags = np.array(map(lambda k: red_flags[k], red_keys))
+    uvd_bls = np.array(red_keys)
+    blts_select = np.array(map(lambda k: uvd.antpair2ind(*k), uvd_bls)).reshape(-1)
+    Nbls = len(uvd_bls)
+    Nblts = len(blts_select)
+    uvd_bls = np.array(map(lambda k: uvd.baseline_to_antnums(k), uvd.baseline_array[blts_select]))
+
+    # resort data
+    uvd_data = uvd_data.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
+    uvd_flags = uvd_flags.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
+
+    # write to file
+    if write_miriad:
+        echo("saving {}".format(output_fname), verbose=verbose)
+        uvd.data_array = uvd_data
+        uvd.flag_array = uvd_flags
+        uvd.time_array = uvd.time_array[blts_select]
+        uvd.lst_array = uvd.lst_array[blts_select]
+        uvd.baseline_array = uvd.baseline_array[blts_select]
+        uvd.ant_1_array = uvd_bls[:, 0]
+        uvd.ant_2_array = uvd_bls[:, 1]
+        uvd.uvw_array = uvd.uvw_array[blts_select, :]
+        uvd.nsample_array = np.ones_like(uvd.data_array, dtype=np.float)
+        uvd.Nbls = Nbls
+        uvd.Nblts = Nblts
+        uvd.zenith_dec = uvd.zenith_dec[blts_select]
+        uvd.zenith_ra = uvd.zenith_ra[blts_select]
+        uvd.write_miriad(output_fname, clobber=True)
+
+    # output data
+    if output_data:
+        return red_data, red_flags, red_keys
+
+
+def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
+    """
+    Given unique baseline data (like omnical model visibilities),
+    copy the data over to all other baselines in the same redundant group
+
+    Parameters:
+    -----------
+    data : data dictionary in AbsCal form, see AbsCal docstring for details
+
+    bls : baseline list
+        list of all antenna pair tuples that "data" needs to expand into
+
+    antpos : antenna positions dictionary
+        keys are antenna integers, values are ndarray baseline vectors.
+        This can be created via
+        ```
+        antpos, ants = UVData.get_ENU_pos()
+        antpos = dict(zip(ants, antpos))
+        ```
+
+    tol : redundant baseline distance tolerance, dtype=float
+        fed into abscal.compute_reds
+
+    Output:
+    -------
+    red_data : data dictionary in AbsCal form, with unique baseline data
+        distributed to redundant baseline groups.
+
+    """
+    # get data keys
+    keys = data.keys()
+
+    # get data and ants
+    data = copy.deepcopy(data)
+    ants = np.unique(np.concatenate([keys]))
+
+    # get redundant baselines
+    reds = compute_reds(bls, antpos, tol=tol)
+
+    # make red_data dictionary
+    red_data = odict()
+
+    # iterate over red bls
+    for i, bl_group in enumerate(reds):
+        # find which key in data is in this group
+        select = np.array(map(lambda x: x in keys or x[::-1] in keys, reds[i]))
+
+        if True not in select:
+            continue
+        k = reds[i][np.argmax(select)]
+
+        # iterate over bls and insert data into red_data
+        for j, bl in enumerate(bl_group):
+
+            red_data[bl] = copy.copy(data[k])
+
+    # re-sort
+    red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
+
+    return red_data
+
+
+def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
+              verbose=True, write_miriad=True, output_data=False, kind='linear'):
+    """
+    """
+    # try to load model
+    if model_fnames is not None:
+        if type(model_fnames) is str:
+            uvm = UVData()
+            uvm.read_miriad(model_fnames)
+            lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
+            model_freqs = np.unique(uvm.freq_array)
+        elif type(model_fnames) is list:
+            uvm = UVData()
+            uvm.read_miriad(model_fnames[0])
+            for i, f in enumerate(model_fnames[1:]):
+                uv = UVData()
+                uv.read_miriad(f)
+                uvm += uv
+            lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
+            model_freqs = np.unique(uvm.freq_array)
+    else:
+        # generate LST array
+        lst_arr = np.arange(0, 24, dLST)
+        model_freqs = None
+
+    # load file
+    echo("loading {}".format(data_fname), verbose=verbose)
+    uvd = UVData()
+    uvd.read_miriad(data_fname)
+
+    # get data
+    data, flags, pols = UVData2AbsCalDict([uvd], pop_autos=False)
+
+    # get data lst and freq arrays
+    data_lsts, data_freqs = np.unique(uvd.lst_array) * 12/np.pi, np.unique(uvd.freq_array)
+    Ntimes = len(data_lsts)
+
+    # get closest lsts
+    start = np.argmin(np.abs(lst_arr - data_lsts[0]))
+    lst_indices = np.arange(start, start+Ntimes)
+    model_lsts = lst_arr[lst_indices]
+    if model_freqs is None:
+        model_freqs = data_freqs
+    Nfreqs = len(model_freqs)
+
+    # interpolate data
+    echo("interpolating data", verbose=verbose)
+    interp_data, interp_flags = interp_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, kind=kind)
+    Nbls = len(interp_data)
+
+    # reorder into arrays
+    uvd_data = np.array(interp_data.values())
+    uvd_data = uvd_data.reshape(-1, 1, Nfreqs, 1)
+    uvd_flags = np.array(interp_flags.values()).astype(np.bool)
+    uvd_flags = uvd_flags.reshape(-1, 1, Nfreqs, 1)
+    uvd_keys = np.repeat(np.array(interp_data.keys()).reshape(-1, 1, 2), Ntimes, axis=1).reshape(-1, 2)
+    uvd_bls = np.array(map(lambda k: uvd.antnums_to_baseline(k[0], k[1]), uvd_keys))
+    uvd_times = np.array(map(lambda x: utils.JD2LST.LST2JD(x, np.median(np.floor(uvd.time_array)), uvd.telescope_location_lat_lon_alt_degrees[1]), model_lsts))
+    uvd_times = np.repeat(uvd_times[np.newaxis], Nbls, axis=0).reshape(-1)
+    uvd_lsts = np.repeat(model_lsts[np.newaxis], Nbls, axis=0).reshape(-1)
+    uvd_freqs = model_freqs.reshape(1, -1)
+
+    # assign to uvdata object
+    uvd.data_array = uvd_data
+    uvd.flag_array = uvd_flags
+    uvd.baseline_array = uvd_bls
+    uvd.ant_1_array = uvd_keys[:, 0]
+    uvd.ant_2_array = uvd_keys[:, 1]
+    uvd.time_array = uvd_times
+    uvd.lst_array = uvd_lsts * np.pi / 12
+    uvd.freq_array = uvd_freqs
+    uvd.Nfreqs = Nfreqs
+
+    # write miriad
+    if write_miriad:
+        # check output
+        if outdir is None:
+            outdir = os.path.dirname(data_fname)
+        if output_fname is None:
+            output_fname = os.path.basename(data_fname) + 'L.{:07.4f}'.format(model_lsts[0])
+        output_fname = os.path.join(outdir, output_fname)
+        if os.path.exists(output_fname) and overwrite is False:
+            raise IOError("{} exists, not overwriting".format(output_fname))
+
+        # write to file
+        echo("saving {}".format(output_fname), verbose=verbose)
+        uvd.write_miriad(output_fname, clobber=True)
+
+    # output data and flags
+    if output_data:
+        return interp_data, interp_flags, model_lsts, model_freqs
 
 '''
 

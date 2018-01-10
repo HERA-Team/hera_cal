@@ -4,8 +4,8 @@ abscal.py
 
 Calibrate measured visibility
 data to a visibility model using
-linerizations of the
-(complex) calibration equation:
+linearizations of the
+(complex) antenna-based calibration equation:
 
 V_ij^model = g_i * conj(g_j) * V_ij^data
 
@@ -21,7 +21,7 @@ from abscal_funcs import *
 
 class ParentAbsCal(object):
 
-    def __init__(self, model, data, wgts=None, freqs=None, times=None, pols=[None]):
+    def __init__(self, model, data, wgts=None, freqs=None, times=None, pols=None):
         """
         ParentAbsCal object used to setup abscal instance.
 
@@ -53,40 +53,54 @@ class ParentAbsCal(object):
             array containing polarization integers in pyuvdata.UVData.polarization_array 
             format. Needed to write out to calfits.
         """
+        # get shared keys
+        self.keys = sorted(set(model.keys()) & set(data.keys()))
+
         # append attributes
         self.model = model
         self.data = data
 
         # setup frequencies
-        self.Nfreqs = model[model.keys()[0]].shape[1]
         self.freqs = freqs
+        if self.freqs is None:
+            self.Nfreqs = None
+        else:
+            self.Nfreqs = len(self.freqs)
 
         # setup polarization
         self.str2pol = {"xx": -5, "yy": -6, "xy": -7, "yx": -8}
-        self.Npols = model[model.keys()[0]].shape[2]
         if pols is not None:
             if type(pols) is list:
                 if type(pols[0]) is str:
                     pols = map(lambda x: self.str2pol[x], pols)
+                elif type(pols[0]) is int:
+                    pols = pols
             elif type(pols) is str:
                 pols = [self.str2pol[pols]]
             elif type(pols) is int:
                 pols = [pols]
-        self.pols = pols
+            self.pols = pols
+            self.Npols = len(pols)
+        else:
+            self.pols = None
+            self.Npols = None
 
         # setup weights
         if wgts is None:
-            wgts = copy.deepcopy(data)
-            for i, k in enumerate(data.keys()):
-                wgts[k] = np.ones_like(wgts[k], dtype=np.float)
+            wgts = odict()
+            for i, k in enumerate(self.keys):
+                wgts[k] = np.ones_like(data[k], dtype=np.float)
         self.wgts = wgts
 
         # setup times
-        self.Ntimes = model[model.keys()[0]].shape[0]
         self.times = times
+        if times is None:
+            self.Ntimes = None
+        else:
+            self.Ntimes = len(self.times)
 
         # setup ants
-        self.ants = np.unique(sorted(np.array(map(lambda x: [x[0], x[1]], model.keys())).ravel()))
+        self.ants = np.unique(np.concatenate(map(lambda k: k[:2], self.keys)))
         self.Nants = len(self.ants)
 
 
@@ -105,7 +119,7 @@ class OmniAbsCal(ParentAbsCal):
         and B_ij is the baseline vector between antenna i and j.
     """
 
-    def __init__(self, antpos, *init_args, **init_kwargs):
+    def __init__(self, model, data, antpos, wgts=None, freqs=None, times=None, pols=[None]):
         """
         OmniAbsCal object used specifically for calibrating omnical degeneracies:
         the absolute amplitude scalar, and Tip-Tilt phase slopes.
@@ -130,117 +144,90 @@ class OmniAbsCal(ParentAbsCal):
                  This is needed for Tip Tilt phase calibration, but not for absolute amplitude
                  calibration.
         """
-        super(OmniAbsCal, self).__init__(*init_args, **init_kwargs)
+        super(OmniAbsCal, self).__init__(model, data, wgts=wgts, freqs=freqs, times=times, pols=pols)
 
         # setup baselines and antenna positions
         self.antpos = antpos
         if self.antpos is not None:
-            self.bls = odict([((x[0], x[1]), self.antpos[x[1]] - self.antpos[x[0]]) for x in self.model.keys()])
+            self.bls = odict([(x, self.antpos[x[1]] - self.antpos[x[0]]) for x in self.keys])
             self.antpos = np.array(map(lambda x: self.antpos[x], self.ants))
             self.antpos -= np.median(self.antpos, axis=0)
 
-    def abs_amp_lincal(self, unravel_freq=False, unravel_time=False, unravel_pol=False,
-                       apply_cal=False, verbose=True):
+    def abs_amp_lincal(self, separate_pol=False, verbose=True):
         """
         call abscal_funcs.abs_amp_lincal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        unravel_freq : tie all frequencies together, type=boolean, [default=False]
-            if True, unravel frequency axis in linsolve call, such that you get
-            one result for all frequencies
-
-        unravel_time : tie all times together, type=boolean, [default=False]
-            if True, unravel time axis in linsolve call, such that you get
-            one result for all times
-
-        unravel_pol : tie all polarizations together, type=boolean, [default=False]
-            if True, unravel polarization
-
-        apply_cal : turn calibration solution into gains and apply to data
+        separate_pol : bool, separate polarization to have independent solutions
+            if False, form a joint solution across both pols
 
         Result:
         -------
-        Results can be accessd via the instance methods
+        Absolute amplitude scalar can be accessed via methods
             self.get_abs_amp()
             self.get_abs_amp_gain()
         """
-        # copy data
-        model = copy.deepcopy(self.model)
-        data = copy.deepcopy(self.data)
-        wgts = copy.deepcopy(self.wgts)
+        # set data quantities
+        model = self.model
+        data = self.data
+        wgts = self.wgts
 
-        if unravel_time:
-            unravel(data, 't', 0)
-            unravel(model, 't', 0)
-            unravel(wgts, 't', 0)
+        if separate_pol:
+            model, pols = data_key_to_array_axis(model, 2)
+            data, pols = data_key_to_array_axis(data, 2)
+            wgts, pols = data_key_to_array_axis(wgts, 2)
 
-        if unravel_freq:
-            unravel(data, 'f', 1)
-            unravel(model, 'f', 1)
-            unravel(wgts, 'f', 1)
-
-        if unravel_pol:
-            unravel(data, 'p', 2)
-            unravel(model, 'p', 2)
-            unravel(wgts, 'p', 2)
-
-        # run linsolve
+        # run abs_amp_lincal
         fit = abs_amp_lincal(model, data, wgts=wgts, verbose=verbose)
-        self._abs_amp = copy.copy(np.sqrt(fit['amp']))
-        self._abs_amp_gain = np.exp(self.abs_amp).astype(np.complex)[np.newaxis]
 
-    def TT_phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False,
-                      verbose=True, zero_psi=False):
+        # form result
+        self._abs_amp = np.sqrt(fit['amp'])
+        if separate_pol is False:
+            self._abs_amp = np.moveaxis(self._abs_amp[np.newaxis], 0, -1)
+
+        # form gain
+        self._abs_amp_gain = np.exp(self._abs_amp).astype(np.complex)[np.newaxis]
+
+    def TT_phs_logcal(self, separate_pol=False, verbose=True, zero_psi=False):
         """
         call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        unravel_freq : tie all frequencies together, type=boolean, [default=False]
-            if True, unravel frequency axis in linsolve call, such that you get
-            one result for all frequencies
-
-        unravel_time : tie all times together, type=boolean, [default=False]
-            if True, unravel time axis in linsolve call, such that you get
-            one result for all times
-
-        unravel_pol : tie all polarizations together, type=boolean, [default=False]
-            if True, unravel polarization
+        separate_pol : bool, separate polarization to have independent solutions
+            if False, form a joint solution across both pols
 
         Result:
         -------
-        Results can be accessed via instance methods
+        Tip-Tilt phase slope fit can be accessed via methods
             self.get_abs_psi()
             self.get_abs_psi_gain()
             self.get_TT_Phi()
             self.get_TT_Phi_gain()
         """
-        # copy data
-        model = copy.deepcopy(self.model)
-        data = copy.deepcopy(self.data)
-        wgts = copy.deepcopy(self.wgts)
-        bls = copy.deepcopy(self.bls)
+        # set data quantities
+        model = self.model
+        data = self.data
+        wgts = self.wgts
+        bls = self.bls
 
-        if unravel_time:
-            unravel(data, 't', 0)
-            unravel(model, 't', 0, copy_dict=bls)
-            unravel(wgts, 't', 0)
+        if separate_pol:
+            model, bls, pols = data_key_to_array_axis(model, 2, avg_dict=bls)
+            data, pols = data_key_to_array_axis(data, 2)
+            wgts, pols = data_key_to_array_axis(wgts, 2)
 
-        if unravel_freq:
-            unravel(data, 'f', 1)
-            unravel(model, 'f', 1, copy_dict=bls)
-            unravel(wgts, 'f', 1)
-
-        if unravel_pol:
-            unravel(data, 'p', 2)
-            unravel(model, 'p', 2, copy_dict=bls)
-            unravel(wgts, 'p', 2)
-           
-        # run linsolve
+        # run TT_phs_logcal
         fit = TT_phs_logcal(model, data, bls, wgts=wgts, verbose=verbose, zero_psi=zero_psi)
+
+        # form result
         self._abs_psi = fit['psi']
         self._TT_Phi = np.array([fit['PHIx'], fit['PHIy']])
+        if separate_pol is False:
+            self._abs_psi = np.moveaxis(self._abs_psi[np.newaxis], 0, -1)
+            self._TT_Phi = np.moveaxis(self._TT_Phi[np.newaxis], 0, -1)
+
+        # form gains
         self._abs_psi_gain = np.exp(-1j*self._abs_psi)[np.newaxis]
         self._TT_Phi_gain = np.exp(-1j*np.einsum("ijkl, hi -> hjkl",self._TT_Phi, self.antpos[:, :2]))
 
@@ -313,7 +300,7 @@ class AbsCal(ParentAbsCal):
        into a complex gain via: g = exp(i * 2pi * tau * freqs).
     """ 
 
-    def __init__(self, *init_args, **init_kwargs):
+    def __init__(self, model, data, wgts=None, freqs=None, times=None, pols=[None]):
         """
         AbsCal object used for absolute bandpass calibration.
 
@@ -323,125 +310,124 @@ class AbsCal(ParentAbsCal):
         -----------
         See hera_cal.abscal.ParentAbsCal doc string for details on positional and keyword arguments.
         """
-        super(AbsCal, self).__init__(*init_args, **init_kwargs)
+        super(AbsCal, self).__init__(model, data, wgts=wgts, freqs=freqs, times=times, pols=pols)
 
-    def amp_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=True):
+    def amp_logcal(self, separate_pol=False, verbose=True):
         """
         call abscal_funcs.amp_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        unravel_freq : tie all frequencies together, type=boolean, [default=False]
-            if True, unravel frequency axis in linsolve call, such that you get
-            one result for all frequencies
+        separate_pol : bool, separate polarization to have independent solutions
+            if False, form a joint solution across both pols
 
-        unravel_time : tie all times together, type=boolean, [default=False]
-            if True, unravel time axis in linsolve call, such that you get
-            one result for all times
-
-        unravel_pol : tie all polarizations together, type=boolean, [default=False]
-            if True, unravel polarization
+        Result:
+        -------
+        per-antenna amplitude and per-antenna amp gains
+        can be accessed via the methods
+            self.get_ant_eta()
+            self.get_ant_eta_gain()
         """
-        # copy data
-        model = copy.deepcopy(self.model)
-        data = copy.deepcopy(self.data)
-        wgts = copy.deepcopy(self.wgts)
+        # set data quantities
+        model = self.model
+        data = self.data
+        wgts = self.wgts
 
-        if unravel_time:
-            unravel(data, 't', 0)
-            unravel(model, 't', 0)
-            unravel(wgts, 't', 0)
-
-        if unravel_freq:
-            unravel(data, 'f', 1)
-            unravel(model, 'f', 1)
-            unravel(wgts, 'f', 1)
-
-        if unravel_pol:
-            unravel(data, 'p', 2)
-            unravel(model, 'p', 2)
-            unravel(wgts, 'p', 2)
+        if separate_pol:
+            model, pols = data_key_to_array_axis(model, 2)
+            data, pols = data_key_to_array_axis(data, 2)
+            wgts, pols = data_key_to_array_axis(wgts, 2)
 
         # run linsolve
         fit = amp_logcal(model, data, wgts=wgts, verbose=verbose)
+
+        # form result array
         self._ant_eta = np.array(map(lambda a: fit['eta{}'.format(a)], self.ants))
+
+        # add polarization axis if formed a joint pol solution
+        if separate_pol is False:
+            self._ant_eta = np.moveaxis(self._ant_eta[np.newaxis], 0, -1)
+
+        # form gain array
         self._ant_eta_gain = np.exp(self._ant_eta)
 
-    def phs_logcal(self, unravel_freq=False, unravel_time=False, unravel_pol=False, verbose=True):
+    def phs_logcal(self, separate_pol=False, verbose=True):
         """
         call abscal_funcs.phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        unravel_freq : tie all frequencies together, type=boolean, [default=False]
-            if True, unravel frequency axis in linsolve call, such that you get
-            one result for all frequencies
+        separate_pol : bool, separate polarization to have independent solutions
+            if False, form a joint solution across both pols
 
-        unravel_time : tie all times together, type=boolean, [default=False]
-            if True, unravel time axis in linsolve call, such that you get
-            one result for all times
-
-        unravel_pol : tie all polarizations together, type=boolean, [default=False]
-            if True, unravel polarization
+        Result:
+        -------
+        per-antenna phase and per-antenna phase gains
+        can be accessed via the methods
+            self.get_ant_phi()
+            self.get_ant_phi_gain()
         """
-        # copy data
-        model = copy.deepcopy(self.model)
-        data = copy.deepcopy(self.data)
-        wgts = copy.deepcopy(self.wgts)
+        # assign data
+        model = self.model
+        data = self.data
+        wgts = self.wgts
 
-        if unravel_time:
-            unravel(data, 't', 0)
-            unravel(model, 't', 0)
-            unravel(wgts, 't', 0)
-
-        if unravel_freq:
-            unravel(data, 'f', 1)
-            unravel(model, 'f', 1)
-            unravel(wgts, 'f', 1)
-
-        if unravel_pol:
-            unravel(data, 'p', 2)
-            unravel(model, 'p', 2)
-            unravel(wgts, 'p', 2)
+        # separate pol
+        if separate_pol:
+            model, pols = data_key_to_array_axis(model, 2)
+            data, pols = data_key_to_array_axis(data, 2)
+            wgts, pols = data_key_to_array_axis(wgts, 2)
 
         # run linsolve
         fit = phs_logcal(model, data, wgts=wgts, verbose=verbose)
+
+        # form result array
         self._ant_phi = np.array(map(lambda a: fit['phi{}'.format(a)], self.ants))
+
+        # add polarization axis if formed one solutions
+        if separate_pol is False:
+            self._ant_phi = np.moveaxis(self._ant_phi[np.newaxis], 0, -1)
+
+        # form gain array
         self._ant_phi_gain = np.exp(-1j*self._ant_phi)
 
-    def delay_lincal(self, kernel=(1, 11), verbose=True):
+    def delay_lincal(self, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True):
         """
         Solve for per-antenna delay according to the equation
         by calling abscal_funcs.delay_lincal method.
         See abscal_funcs.delay_lincal for details.
 
+        Currently only supports joint polarization solutions.
+
         Parameters:
         -----------
         kernel : size of median filter across (time, freq) axes, type=(int, int)
+
+        Result:
+        -------
+        per-antenna delays and per-antenna delay gains
+        can be accessed via the methods
+            self.get_ant_dly()
+            self.get_ant_dly_gain()
         """
         # check for freq data
         if hasattr(self, 'freqs') is False:
             raise AttributeError("cannot delay_lincal without self.freqs array")
 
-        # copy data
-        model = copy.deepcopy(self.model)
-        data = copy.deepcopy(self.data)
+        # assign data
+        model = self.model
+        data = self.data
+        wgts = self.wgts
 
         # get freq channel width
         df = np.median(np.diff(self.freqs))
 
-        # iterate over polarizations
-        dlys = odict(map(lambda a: ('tau{}'.format(a), []), self.ants))
-        for i, p in enumerate(self.pols):
-            # run linsolve
-            m = odict(zip(model.keys(), map(lambda k: model[k][:, :, i], model.keys())))
-            d = odict(zip(data.keys(), map(lambda k: data[k][:, :, i], data.keys())))
-            fit = delay_lincal(m, d, df=df, kernel=kernel, verbose=verbose, time_ax=0, freq_ax=1)
-            for j, k in enumerate(fit.keys()):
-                dlys[k].append(fit[k])
+        # run delay_lincal
+        fit = delay_lincal(model, data, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax)
 
         # turn into array
         self._ant_dly = np.array(map(lambda a: np.moveaxis(dlys['tau{}'.format(a)], 0, 2), self.ants))
+        self._ant_dly = np.moveaxis(self._ant_dly[np.newaxis], 0, -1)
         self._ant_dly_gain = np.exp(-2j*np.pi*self.freqs.reshape(-1, 1)*self._delays)
 
     @property
