@@ -241,11 +241,11 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # difference of log-amplitudes is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(model[k]/data[k]))) for k in model.keys()])
+    ydata = odict([(k, np.log(np.abs(model[k]/data[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
-        wgts = copy.deepcopy(ydata)
+        wgts = odict()
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
@@ -289,7 +289,7 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     calculate per-antenna gain phase via the 
     logarithmically linearized equation
 
-    angle(V_ij^model) - angle(V_ij^data) = angle(g_i) - angle(g_j)
+    angle(V_ij^model / V_ij^data) = angle(g_i * conj(g_j))
 
     Parameters:
     -----------
@@ -317,11 +317,11 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # angle of visibility ratio is ydata independent variable
-    ydata = odict([(k, np.angle(model[k]/data[k])) for k in model.keys()])
+    ydata = odict([(k, np.angle(model[k]/data[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
-        wgts = copy.deepcopy(ydata)
+        wgts = odict()
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 

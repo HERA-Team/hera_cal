@@ -187,7 +187,7 @@ class OmniAbsCal(ParentAbsCal):
             self._abs_amp = np.moveaxis(self._abs_amp[np.newaxis], 0, -1)
 
         # form gain
-        self._abs_amp_gain = np.exp(self._abs_amp).astype(np.complex)[np.newaxis]
+        self._abs_amp_gain = np.sqrt(self._abs_amp.astype(np.complex)[np.newaxis])
 
     def TT_phs_logcal(self, separate_pol=False, verbose=True, zero_psi=False):
         """
@@ -349,7 +349,7 @@ class AbsCal(ParentAbsCal):
             self._ant_eta = np.moveaxis(self._ant_eta[np.newaxis], 0, -1)
 
         # form gain array
-        self._ant_eta_gain = np.exp(self._ant_eta)
+        self._ant_eta_gain = np.exp(self._ant_eta).astype(np.complex)
 
     def phs_logcal(self, separate_pol=False, verbose=True):
         """
@@ -454,7 +454,7 @@ class AbsCal(ParentAbsCal):
     @property
     def get_ant_phi_gain(self):
         if hasattr(self, '_ant_phi_gain'):
-            return copy.copy(self._ant_phi)
+            return copy.copy(self._ant_phi_gain)
         else:
             return None
 
