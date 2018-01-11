@@ -188,6 +188,9 @@ class Test_AbsCal:
                                 times=self.time_array, pols=self.pol_array)
         nt.assert_almost_equal(AC.bls[(11,12,'xx')][0], 14.607843358274238)
         nt.assert_equal(len(AC.times), 60)
+        # init with meta
+        AC = hc.abscal.AbsCal(self.model, self.data, pols=['xx'])
+        AC = hc.abscal.AbsCal(self.model, self.data, pols=-5)
 
     def test_abs_amp_lincal(self):
         self.AC.abs_amp_lincal(verbose=False)
@@ -197,6 +200,9 @@ class Test_AbsCal:
         self.AC.abs_amp_lincal(verbose=False, separate_pol=True)
         nt.assert_equal(self.AC.get_abs_amp.shape, (60, 64, 1))
         nt.assert_equal(self.AC.get_abs_amp_gain.shape, (7, 60, 64, 1))
+        AC = hc.abscal.AbsCal(self.model, self.data)
+        nt.assert_equal(AC.get_abs_amp, None)
+        nt.assert_equal(AC.get_abs_amp_gain, None)
 
     def test_TT_phs_logcal(self):
         self.AC.TT_phs_logcal(verbose=False)
@@ -210,6 +216,11 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.get_abs_psi.shape, (60, 64, 1))
         nt.assert_equal(self.AC.get_TT_Phi_gain.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.get_abs_psi_gain.shape, (7, 60, 64, 1))
+        AC = hc.abscal.AbsCal(self.model, self.data)
+        nt.assert_equal(AC.get_abs_psi, None)
+        nt.assert_equal(AC.get_abs_psi_gain, None)
+        nt.assert_equal(AC.get_TT_Phi, None)
+        nt.assert_equal(AC.get_TT_Phi_gain, None)
 
     def test_amp_logcal(self):
         self.AC.amp_logcal(verbose=False)
@@ -220,6 +231,9 @@ class Test_AbsCal:
         self.AC.amp_logcal(verbose=False, separate_pol=True)
         nt.assert_equal(self.AC.get_ant_eta.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.get_ant_eta_gain.shape, (7, 60, 64, 1))
+        AC = hc.abscal.AbsCal(self.model, self.data)
+        nt.assert_equal(AC.get_ant_eta, None)
+        nt.assert_equal(AC.get_ant_eta_gain, None)
 
     def test_phs_logcal(self):
         self.AC.phs_logcal(verbose=False)
@@ -230,6 +244,9 @@ class Test_AbsCal:
         self.AC.phs_logcal(verbose=False, separate_pol=True)
         nt.assert_equal(self.AC.get_ant_phi.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.get_ant_phi_gain.shape, (7, 60, 64, 1))
+        AC = hc.abscal.AbsCal(self.model, self.data)
+        nt.assert_equal(AC.get_ant_phi, None)
+        nt.assert_equal(AC.get_ant_phi_gain, None)
 
     def test_delay_lincal(self):
         self.AC.delay_lincal(verbose=False, kernel=(1, 3))
@@ -237,6 +254,12 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.get_ant_dly.dtype, np.float)
         nt.assert_equal(self.AC.get_ant_dly_gain.shape, (7, 60, 64))
         nt.assert_equal(self.AC.get_ant_dly_gain.dtype, np.complex)
+        # test exception
+        AC = hc.abscal.AbsCal(self.model, self.data)
+        nt.assert_raises(AttributeError, AC.delay_lincal)
+        AC = hc.abscal.AbsCal(self.model, self.data)
+        nt.assert_equal(AC.get_ant_dly, None)
+        nt.assert_equal(AC.get_ant_dly_gain, None)
 
     def test_apply_gains(self):
         self.AC.abs_amp_lincal(verbose=False)

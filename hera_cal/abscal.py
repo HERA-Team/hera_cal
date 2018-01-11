@@ -246,7 +246,7 @@ class AbsCal(object):
             self.get_ant_dly_gain()
         """
         # check for freq data
-        if hasattr(self, 'freqs') is False:
+        if self.freqs is None:
             raise AttributeError("cannot delay_lincal without self.freqs array")
 
         # assign data
