@@ -226,7 +226,7 @@ class AbsCal(object):
         # form gain array
         self._ant_phi_gain = np.exp(1j*self._ant_phi)
 
-    def delay_lincal(self, kernel=(1, 11), time_ax=0, freq_ax=1, time_avg=False, verbose=True):
+    def delay_lincal(self, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True):
         """
         Solve for per-antenna delay according to the equation
         by calling abscal_funcs.delay_lincal method.
@@ -237,8 +237,6 @@ class AbsCal(object):
         Parameters:
         -----------
         kernel : size of median filter across (time, freq) axes, type=(int, int)
-
-        time_avg : boolean, average delays across time
 
         Result:
         -------
@@ -336,12 +334,12 @@ class AbsCal(object):
         self._TT_Phi = np.array([fit['PHIx'], fit['PHIy']])
 
         # form gains
-        self._abs_psi_gain = np.exp(1j*self._abs_psi)[np.newaxis]
+        self._abs_psi_gain = np.repeat(np.exp(1j*self._abs_psi)[np.newaxis], len(self.ants), axis=0)
         if separate_pol is False:
             self._TT_Phi_gain = np.exp(1j*np.einsum("ijk, hi -> hjk",self._TT_Phi, self.antpos[:, :2]))
         else:
             self._TT_Phi_gain = np.exp(1j*np.einsum("ijkl, hi -> hjkl",self._TT_Phi, self.antpos[:, :2]))
-            
+
     @property
     def get_ant_eta(self):
         if hasattr(self, '_ant_eta'):

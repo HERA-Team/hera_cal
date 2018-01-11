@@ -157,11 +157,11 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
-    ydata = odict([(k, np.angle(model[k]/data[k])) for k in model.keys()])
+    ydata = odict([(k, np.angle(model[k]/data[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
-        wgts = copy.deepcopy(ydata)
+        wgts = odict()
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
@@ -360,11 +360,11 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def delay_lincal(model, data, df=9.765625e4, kernel=(1, 11), verbose=True, time_ax=0, freq_ax=1):
+def delay_lincal(model, data, wgts=None, df=9.765625e4, kernel=(1, 5), verbose=True, time_ax=0, freq_ax=1):
     """
     Solve for per-antenna delay according to the equation
 
-    tau_ij^model - tau_ij^data = tau_i - tau_j
+    delay(V_ij^model / V_ij^data) = delay(g_i) - delay(g_j)
 
     Parameters:
     -----------
@@ -389,19 +389,33 @@ def delay_lincal(model, data, df=9.765625e4, kernel=(1, 11), verbose=True, time_
     # get shared keys
     keys = sorted(set(model.keys()) & set(data.keys()))
 
+    # make wgts
+    if wgts is None:
+        wgts = odict()
+        for i, k in enumerate(keys): wgts[k] = np.ones_like(data[k], dtype=np.float)
+
     # median filter and FFT to get delays
-    model_dlys, data_dlys = [], []
+    ratio_delays = []
     for i, k in enumerate(keys):
-        m_dly, m_off = fft_dly(model[k], df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
-        model_dlys.append(m_dly)
-        d_dly, d_off = fft_dly(data[k], df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
-        data_dlys.append(d_dly)
+        ratio = model[k]/data[k]
+
+        # replace nans
+        nan_select = np.isnan(ratio)
+        ratio[nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
+        # replace infs
+        inf_select = np.isinf(ratio)
+        ratio[inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
+
+        # get delays
+        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        ratio_delays.append(dly)
        
-    model_dlys = np.array(model_dlys)
-    data_dlys = np.array(data_dlys)
+    ratio_delays = np.array(ratio_delays)
 
     # form ydata
-    ydata = odict(zip(keys, model_dlys - data_dlys))
+    ydata = odict(zip(keys, ratio_delays))
 
     # setup linsolve equation dictionary
     eqns = odict([(k, 'tau{} - tau{}'.format(k[0], k[1])) for i, k in enumerate(keys)])
@@ -419,6 +433,46 @@ def delay_lincal(model, data, df=9.765625e4, kernel=(1, 11), verbose=True, time_
     echo("...finished linsolve", verbose=verbose)
 
     return fit
+
+
+def apply_gains(data, gains, gain_convention='multiply'):
+    """
+    apply gain solutions to data
+
+    Parameters:
+    -----------
+    data : type=dictionary, holds complex visibility data
+        keys are antenna-pair tuples + (others)
+        values are ndarray complex visibility data
+
+    gains : type=dictionary, holds complex per-antenna gain data
+        keys are antenna integer tuple + (others)
+        values are complex ndarrays
+        with shape matching data's visibility ndarrays
+
+    Output:
+    -------
+    new_data : type=dictionary, data with gains applied
+    """
+    # form new dictionary
+    new_data = odict()
+
+    # get keys
+    keys = data.keys()
+
+    # iterate over keys:
+    for i, k in enumerate(keys):
+        # form visbility gain product
+        vis_gain = gains[k[0]] * np.conj(gains[k[1]])
+
+        # apply to data
+        if gain_convention == "multiply":
+            new_data[k] = data[k] * vis_gain
+
+        elif gain_convention == "divide":
+            new_data[k] = data[k] / vis_gain
+
+    return new_data
 
 
 def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
@@ -623,7 +677,7 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
     return data, flags
 
 
-def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
+def fft_dly(vis, wgts=None, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     """
     get delay of visibility across band using FFT w/ blackman harris window
     and quadratic fit to delay peak.
@@ -650,13 +704,19 @@ def fft_dly(vis, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
     Nfreqs = vis.shape[freq_ax]
     Ntimes = vis.shape[time_ax]
 
+    # get wgt
+    if wgts is None:
+        wgts = np.ones_like(vis, dtype=np.float)
+
     # smooth via median filter
     kernel += tuple(np.ones((vis.ndim - len(kernel)), np.int))
     vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j*signal.medfilt(np.imag(vis), kernel_size=kernel)
 
     # fft
-    window = np.moveaxis(signal.windows.blackmanharris(Nfreqs).reshape(-1, 1), 0, freq_ax)
-    vfft = np.fft.fft(vis_smooth, axis=freq_ax)
+    window = np.repeat(signal.windows.blackmanharris(Nfreqs)[np.newaxis], Ntimes, axis=time_ax)
+    window = np.moveaxis(window, 0, time_ax)
+    window *= wgts
+    vfft = np.fft.fft(vis_smooth * window, axis=freq_ax)
 
     # get argmax of abs
     amp = np.abs(vfft)

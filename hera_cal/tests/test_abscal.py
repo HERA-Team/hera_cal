@@ -37,6 +37,7 @@ class Test_AbsCal_Funcs:
         # configure baselines
         bls = odict([(x, self.antpos[x[1]] - self.antpos[x[0]]) for x in data.keys()])
 
+        # make mock data
         abs_gain = 0.5
         TT_phi = np.array([-0.004, 0.006, 0])
         model = odict()
@@ -147,7 +148,9 @@ class Test_AbsCal:
         self.uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA"))
         self.freq_array = self.uvd.freq_array.squeeze()
         self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
+        self.antpos = odict(zip(self.ants, self.antpos))
         self.time_array = self.uvd.time_array.reshape(self.uvd.Ntimes, self.uvd.Nbls)[:, 0]
+        self.pol_array = self.uvd.polarization_array
 
         # configure data into dictionaries
         data, flags = hc.abscal.UVData2AbsCalDict(self.uvd, pop_autos=True)
@@ -158,8 +161,9 @@ class Test_AbsCal:
             wgts[k] = (~wgts[k]).astype(np.float)
                 
         # configure baselines
-        bls = OrderedDict([(x, antpos[x[1]] - antpos[x[0]]) for x in data.keys()])
+        bls = odict([(x, self.antpos[x[1]] - self.antpos[x[0]]) for x in data.keys()])
 
+        # make mock data
         abs_gain = 0.5
         TT_phi = np.array([-0.004, 0.006, 0])
         model = odict()
@@ -172,33 +176,85 @@ class Test_AbsCal:
         self.model = model
         self.wgts = wgts
 
-        self.AC = hc.abscal.AbsCal(self.model, self.data, wgts=self.wgts,
+        self.AC = hc.abscal.AbsCal(self.model, self.data, antpos=self.antpos, wgts=self.wgts,
                                    freqs=self.freq_array, times=self.time_array, pols='xx')
-        self.OC = hc.abscal.OmniAbsCal(self.model, self.data, self.antpos, wgts=self.wgts,
-                                       freqs=self.freq_array, times=self.time_array, pols='xx')
 
     def test_init(self):
         # init with no meta
         AC = hc.abscal.AbsCal(self.model, self.data)
+        nt.assert_almost_equal(AC.bls, None)
         # init with meta
-        OC = hc.abscal.OmniAbsCal(self.model, self.data)
+        AC = hc.abscal.AbsCal(self.model, self.data, antpos=self.antpos, freqs=self.freq_array,
+                                times=self.time_array, pols=self.pol_array)
         nt.assert_almost_equal(AC.bls[(11,12,'xx')][0], 14.607843358274238)
-        nt.assert_almost_equal(OC.bls[(11,12,'xx')][0], 14.607843358274238)
-
+        nt.assert_equal(len(AC.times), 60)
 
     def test_abs_amp_lincal(self):
-        pass
+        self.AC.abs_amp_lincal(verbose=False)
+        nt.assert_equal(self.AC.get_abs_amp.shape, (60, 64))
+        nt.assert_equal(self.AC.get_abs_amp_gain.shape, (7, 60, 64))
+        # separate pol
+        self.AC.abs_amp_lincal(verbose=False, separate_pol=True)
+        nt.assert_equal(self.AC.get_abs_amp.shape, (60, 64, 1))
+        nt.assert_equal(self.AC.get_abs_amp_gain.shape, (7, 60, 64, 1))
 
     def test_TT_phs_logcal(self):
-        pass
+        self.AC.TT_phs_logcal(verbose=False)
+        nt.assert_equal(self.AC.get_TT_Phi.shape, (2, 60, 64))
+        nt.assert_equal(self.AC.get_abs_psi.shape, (60, 64))
+        nt.assert_equal(self.AC.get_TT_Phi_gain.shape, (7, 60, 64))
+        nt.assert_equal(self.AC.get_abs_psi_gain.shape, (7, 60, 64))
+        # separate pol
+        self.AC.TT_phs_logcal(verbose=False, separate_pol=True)
+        nt.assert_equal(self.AC.get_TT_Phi.shape, (2, 60, 64, 1))
+        nt.assert_equal(self.AC.get_abs_psi.shape, (60, 64, 1))
+        nt.assert_equal(self.AC.get_TT_Phi_gain.shape, (7, 60, 64, 1))
+        nt.assert_equal(self.AC.get_abs_psi_gain.shape, (7, 60, 64, 1))
 
     def test_amp_logcal(self):
-        pass
+        self.AC.amp_logcal(verbose=False)
+        nt.assert_equal(self.AC.get_ant_eta.shape, (7, 60, 64))
+        nt.assert_equal(self.AC.get_ant_eta.dtype, np.float)
+        nt.assert_equal(self.AC.get_ant_eta_gain.shape, (7, 60, 64))
+        nt.assert_equal(self.AC.get_ant_eta_gain.dtype, np.complex)
+        self.AC.amp_logcal(verbose=False, separate_pol=True)
+        nt.assert_equal(self.AC.get_ant_eta.shape, (7, 60, 64, 1))
+        nt.assert_equal(self.AC.get_ant_eta_gain.shape, (7, 60, 64, 1))
 
     def test_phs_logcal(self):
-        pass
+        self.AC.phs_logcal(verbose=False)
+        nt.assert_equal(self.AC.get_ant_phi.shape, (7, 60, 64))
+        nt.assert_equal(self.AC.get_ant_phi.dtype, np.float)
+        nt.assert_equal(self.AC.get_ant_phi_gain.shape, (7, 60, 64))
+        nt.assert_equal(self.AC.get_ant_phi_gain.dtype, np.complex)
+        self.AC.phs_logcal(verbose=False, separate_pol=True)
+        nt.assert_equal(self.AC.get_ant_phi.shape, (7, 60, 64, 1))
+        nt.assert_equal(self.AC.get_ant_phi_gain.shape, (7, 60, 64, 1))
 
     def test_delay_lincal(self):
-        pass
+        self.AC.delay_lincal(verbose=False, kernel=(1, 3))
+        nt.assert_equal(self.AC.get_ant_dly.shape, (7, 60, 1))
+        nt.assert_equal(self.AC.get_ant_dly.dtype, np.float)
+        nt.assert_equal(self.AC.get_ant_dly_gain.shape, (7, 60, 64))
+        nt.assert_equal(self.AC.get_ant_dly_gain.dtype, np.complex)
+
+    def test_apply_gains(self):
+        self.AC.abs_amp_lincal(verbose=False)
+        self.AC.TT_phs_logcal(verbose=False)
+        self.AC.delay_lincal(verbose=False)
+        self.AC.phs_logcal(verbose=False)
+        self.AC.amp_logcal(verbose=False)
+        gains = odict(zip(self.AC.ants, self.AC.get_abs_amp_gain * \
+                                        self.AC.get_TT_Phi_gain * \
+                                        self.AC.get_abs_psi_gain * \
+                                        self.AC.get_ant_dly_gain * \
+                                        self.AC.get_ant_eta_gain * \
+                                        self.AC.get_ant_phi_gain))
+        corr_data = hc.abscal.apply_gains(self.AC.data, gains, gain_convention='multiply')
+        nt.assert_equal(corr_data[(11, 12, 'xx')].shape, (60, 64))
+        nt.assert_equal(corr_data[(11, 12, 'xx')].dtype, np.complex)
+        corr_data = hc.abscal.apply_gains(self.AC.data, gains, gain_convention='divide')
+        nt.assert_equal(corr_data[(11, 12, 'xx')].shape, (60, 64))
+        nt.assert_equal(corr_data[(11, 12, 'xx')].dtype, np.complex)
 
 
