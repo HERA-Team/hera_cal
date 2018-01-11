@@ -17,12 +17,7 @@ from pyuvdata import utils as uvutils
 from hera_cal import omni, utils, firstcal, cal_formats
 from scipy import signal
 from scipy import interpolate
-from sklearn import linear_model
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn import gaussian_process
 import linsolve
-from astropy import stats as astats
 import itertools
 
 
@@ -941,6 +936,11 @@ def echo(message, type=0, verbose=True):
             print("-"*40)
 
 ''' TO DO
+
+from sklearn import linear_model
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn import gaussian_process
 
 def match_red_baselines(data_bls, data_ants, data_antpos, model_bls, model_ants, model_antpos, tol=1.0):
     """
