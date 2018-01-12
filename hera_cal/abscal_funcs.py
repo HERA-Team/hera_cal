@@ -19,6 +19,7 @@ from scipy import signal
 from scipy import interpolate
 import linsolve
 import itertools
+import operator
 
 
 def abs_amp_lincal(model, data, wgts=None, verbose=True):
@@ -636,8 +637,11 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
         else:
             uvd = filenames
     else:
-        uvd = UVData()
-        uvd.read_miriad(filenames)
+        if type(filenames[0]) is str:
+            uvd = UVData()
+            uvd.read_miriad(filenames)
+        else:
+            uvd = reduce(operator.add, filenames)
 
     # load data
     d, f = firstcal.UVData_to_dict([uvd])

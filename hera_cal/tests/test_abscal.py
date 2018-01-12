@@ -82,6 +82,11 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(data[(11, 12, 'xx')].shape, (120, 64))
         nt.assert_equal(flags[(11, 12, 'xx')].shape, (120, 64))
 
+        # test w/ meta
+        d, f, ap, a, f, t = hc.abscal.UVData2AbsCalDict([fname, fname2], return_meta=True)
+        nt.assert_equal(ap[11].shape, 3)
+        nt.assert_equal(len(f), len(self.freq_array))
+
     def test_data_key_to_array_axis(self):
         m, pk = hc.abscal.data_key_to_array_axis(self.model, 2)
         nt.assert_equal(m[(11, 12)].shape, (60, 64, 1))
@@ -203,6 +208,9 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(self.model, self.data)
         nt.assert_equal(AC.abs_amp, None)
         nt.assert_equal(AC.abs_amp_gain, None)
+        AC.abs_amp_lincal(verbose=False)
+        AC._abs_amp *= 0
+        nt.assert_almost_equal(np.abs(AC.abs_amp_gain[0,0,0]), 0)
 
     def test_TT_phs_logcal(self):
         self.AC.TT_phs_logcal(verbose=False)
@@ -260,6 +268,10 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(self.model, self.data)
         nt.assert_equal(AC.ant_dly, None)
         nt.assert_equal(AC.ant_dly_gain, None)
+        # test medfilt
+        self.AC.delay_lincal(verbose=False, medfilt=False)
+        self.AC.delay_lincal(verbose=False, time_avg=True)
+        nt.assert_almost_equal(np.median(np.diff(self.AC.ant_dly, axis=1)), 0.0)
 
     def test_apply_gains(self):
         self.AC.abs_amp_lincal(verbose=False)
