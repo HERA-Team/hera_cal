@@ -60,19 +60,20 @@ class AbsCal(object):
         Parameters:
         -----------
         model : dict of visibility data of refence model, type=dictionary
-            keys are antenna pair tuples, values are complex ndarray visibilities
-            these visibilities must be 3D arrays, with the [0] axis indexing time,
-            the [1] axis indexing frequency and the [2] axis indexing polarization
+            keys are antenna pair + pol tuples, values are complex ndarray visibilities
+            these visibilities are 2D arrays with the [0] axis indexing time,
+            the [1] axis indexing frequency and (optionally) [2] axis indexing polarization
 
         data : dict of visibility data of measurements, type=dictionary
-            keys are antenna pair tuples (must match model), values are
+            keys are antenna pair + pol tuples (must match model), values are
             complex ndarray visibilities, with shape matching model
 
         wgts : dict of weights of data, type=dictionry, [default=None]
-            keys are antenna pair tuples (must match model), values are real floats
+            keys are antenna pair + pol tuples (must match model), values are real floats
             matching shape of model and data
 
-        antpos : type=dictionary, dict of antenna position vectors in TOPO frame in meters.
+        antpos : type=dictionary, dict of antenna position vectors in ENU frame in meters.
+                 origin of coordinates does not matter.
                  keys are antenna integers and values are 2D or 3D ndarray
                  position vectors in meters (topocentric coordinates),
                  with [0] index containing X (E-W) distance, and [1] index Y (N-S) distance.
@@ -84,7 +85,7 @@ class AbsCal(object):
                  antenna_pos, ants = uvd.get_ENU_antpos()
                  antpos = dict(zip(ants, antenna_pos))
                  ----
-                 This is needed only Tip Tilt phase calibration.
+                 This is needed only for Tip Tilt phase calibration.
 
         freqs : ndarray of frequency array, type=ndarray, dtype=float
             1d array containing visibility frequencies in Hz. Needed to write gain solutions
@@ -167,9 +168,9 @@ class AbsCal(object):
         Result:
         -------
         per-antenna amplitude and per-antenna amp gains
-        can be accessed via the methods
-            self.get_ant_eta()
-            self.get_ant_eta_gain()
+        can be accessed via the get functions
+            self.ant_eta
+            self.ant_eta_gain
         """
         # set data quantities
         model = self.model
@@ -187,9 +188,6 @@ class AbsCal(object):
         # form result array
         self._ant_eta = np.array(map(lambda a: fit['eta{}'.format(a)], self.ants))
 
-        # form gain array
-        self._ant_eta_gain = np.exp(self._ant_eta).astype(np.complex)
-
     def phs_logcal(self, separate_pol=False, verbose=True):
         """
         call abscal_funcs.phs_logcal() method. see its docstring for more details.
@@ -203,8 +201,8 @@ class AbsCal(object):
         -------
         per-antenna phase and per-antenna phase gains
         can be accessed via the methods
-            self.get_ant_phi()
-            self.get_ant_phi_gain()
+            self.ant_phi
+            self.ant_phi_gain
         """
         # assign data
         model = self.model
@@ -223,10 +221,7 @@ class AbsCal(object):
         # form result array
         self._ant_phi = np.array(map(lambda a: fit['phi{}'.format(a)], self.ants))
 
-        # form gain array
-        self._ant_phi_gain = np.exp(1j*self._ant_phi)
-
-    def delay_lincal(self, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True):
+    def delay_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False):
         """
         Solve for per-antenna delay according to the equation
         by calling abscal_funcs.delay_lincal method.
@@ -236,14 +231,18 @@ class AbsCal(object):
 
         Parameters:
         -----------
+        medfilt : boolean, if True median filter data before fft
+
         kernel : size of median filter across (time, freq) axes, type=(int, int)
+
+        time_avg : boolean, if True, average resultant antenna delays across time 
 
         Result:
         -------
         per-antenna delays and per-antenna delay gains
         can be accessed via the methods
-            self.get_ant_dly()
-            self.get_ant_dly_gain()
+            self.ant_dly
+            self.ant_dly_gain
         """
         # check for freq data
         if self.freqs is None:
@@ -258,11 +257,17 @@ class AbsCal(object):
         df = np.median(np.diff(self.freqs))
 
         # run delay_lincal
-        fit = delay_lincal(model, data, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax)
+        fit = delay_lincal(model, data, medfilt=medfilt, df=df, kernel=kernel, verbose=verbose,
+                           time_ax=time_ax, freq_ax=freq_ax)
 
         # turn into array
         self._ant_dly = np.array(map(lambda a: fit['tau{}'.format(a)], self.ants))
-        self._ant_dly_gain = np.exp(2j*np.pi*self.freqs*self._ant_dly)
+
+        # time avg
+        if time_avg:
+            Ntimes = self._ant_dly.shape[time_ax+1]
+            self._ant_dly = np.moveaxis(np.median(self._ant_dly, axis=time_ax+1)[np.newaxis], 0, time_ax+1)
+            self._ant_dly = np.repeat(self._ant_dly, Ntimes, axis=time_ax+1)
 
     def abs_amp_lincal(self, separate_pol=False, verbose=True):
         """
@@ -276,8 +281,8 @@ class AbsCal(object):
         Result:
         -------
         Absolute amplitude scalar can be accessed via methods
-            self.get_abs_amp()
-            self.get_abs_amp_gain()
+            self.abs_amp
+            self.abs_amp_gain
         """
         # set data quantities
         model = self.model
@@ -295,9 +300,6 @@ class AbsCal(object):
         # form result
         self._abs_amp = np.sqrt(fit['amp'])
 
-        # form gain
-        self._abs_amp_gain = np.repeat(np.sqrt(self._abs_amp).astype(np.complex)[np.newaxis], len(self.ants), axis=0)
-
     def TT_phs_logcal(self, separate_pol=False, verbose=True, zero_psi=False):
         """
         call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
@@ -310,10 +312,10 @@ class AbsCal(object):
         Result:
         -------
         Tip-Tilt phase slope fit can be accessed via methods
-            self.get_abs_psi()
-            self.get_abs_psi_gain()
-            self.get_TT_Phi()
-            self.get_TT_Phi_gain()
+            self.abs_psi
+            self.abs_psi_gain
+            self.TT_Phi
+            self.TT_Phi_gain
         """
         # set data quantities
         model = self.model
@@ -333,57 +335,50 @@ class AbsCal(object):
         self._abs_psi = fit['psi']
         self._TT_Phi = np.array([fit['PHIx'], fit['PHIy']])
 
-        # form gains
-        self._abs_psi_gain = np.repeat(np.exp(1j*self._abs_psi)[np.newaxis], len(self.ants), axis=0)
-        if separate_pol is False:
-            self._TT_Phi_gain = np.exp(1j*np.einsum("ijk, hi -> hjk",self._TT_Phi, self.antpos[:, :2]))
-        else:
-            self._TT_Phi_gain = np.exp(1j*np.einsum("ijkl, hi -> hjkl",self._TT_Phi, self.antpos[:, :2]))
-
     @property
-    def get_ant_eta(self):
+    def ant_eta(self):
         if hasattr(self, '_ant_eta'):
             return copy.copy(self._ant_eta)
         else:
             return None
 
     @property
-    def get_ant_eta_gain(self):
-        if hasattr(self, '_ant_eta_gain'):
-            return copy.copy(self._ant_eta_gain)
+    def ant_eta_gain(self):
+        if hasattr(self, '_ant_eta'):
+            return np.exp(self.ant_eta).astype(np.complex)
         else:
             return None
 
     @property
-    def get_ant_phi(self):
+    def ant_phi(self):
         if hasattr(self, '_ant_phi'):
             return copy.copy(self._ant_phi)
         else:
             return None
 
     @property
-    def get_ant_phi_gain(self):
-        if hasattr(self, '_ant_phi_gain'):
-            return copy.copy(self._ant_phi_gain)
+    def ant_phi_gain(self):
+        if hasattr(self, '_ant_phi'):
+            return np.exp(1j*self.ant_phi)
         else:
             return None
 
     @property
-    def get_ant_dly(self):
+    def ant_dly(self):
         if hasattr(self, '_ant_dly'):
             return copy.copy(self._ant_dly)
         else:
             return None
 
     @property
-    def get_ant_dly_gain(self):
-        if hasattr(self, '_ant_dly_gain'):
-            return copy.copy(self._ant_dly_gain)
+    def ant_dly_gain(self):
+        if hasattr(self, '_ant_dly'):
+            return np.exp(2j*np.pi*self.freqs*self.ant_dly)
         else:
             return None
 
     @property
-    def get_abs_amp(self):
+    def abs_amp(self):
         """return _abs_amp array"""
         if hasattr(self, '_abs_amp'):
             return copy.copy(self._abs_amp)
@@ -391,15 +386,15 @@ class AbsCal(object):
             return None
 
     @property
-    def get_abs_amp_gain(self):
+    def abs_amp_gain(self):
         """return _abs_amp_gain array"""
-        if hasattr(self, '_abs_amp_gain'):
-            return copy.copy(self._abs_amp_gain)
+        if hasattr(self, '_abs_amp'):
+            return np.repeat(np.sqrt(self._abs_amp).astype(np.complex)[np.newaxis], len(self.ants), axis=0)
         else:
             return None
 
     @property
-    def get_abs_psi(self):
+    def abs_psi(self):
         """return _abs_psi array"""
         if hasattr(self, '_abs_psi'):
             return copy.copy(self._abs_psi)
@@ -407,15 +402,15 @@ class AbsCal(object):
             return None
 
     @property
-    def get_abs_psi_gain(self):
+    def abs_psi_gain(self):
         """return _abs_psi_gain array"""
-        if hasattr(self, '_abs_psi_gain'):
-            return copy.copy(self._abs_psi_gain)
+        if hasattr(self, '_abs_psi'):
+            return np.repeat(np.exp(1j*self._abs_psi)[np.newaxis], len(self.ants), axis=0)
         else:
             return None
 
     @property
-    def get_TT_Phi(self):
+    def TT_Phi(self):
         """return _TT_Phi array"""
         if hasattr(self, '_TT_Phi'):
             return copy.copy(self._TT_Phi)
@@ -423,10 +418,10 @@ class AbsCal(object):
             return None
 
     @property
-    def get_TT_Phi_gain(self):
+    def TT_Phi_gain(self):
         """return _TT_Phi_gain array"""
-        if hasattr(self, '_TT_Phi_gain'):
-            return copy.copy(self._TT_Phi_gain)
+        if hasattr(self, '_TT_Phi'):
+            return np.exp(1j*np.einsum("i...,hi->h...", self._TT_Phi, self.antpos[:, :2]))
         else:
             return None
 

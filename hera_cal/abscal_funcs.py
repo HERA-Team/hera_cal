@@ -355,7 +355,8 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def delay_lincal(model, data, wgts=None, df=9.765625e4, kernel=(1, 5), verbose=True, time_ax=0, freq_ax=1):
+def delay_lincal(model, data, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
+                 verbose=True, time_ax=0, freq_ax=1):
     """
     Solve for per-antenna delay according to the equation
 
@@ -376,6 +377,8 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, kernel=(1, 5), verbose=T
     wgts : weights of data, type=dictionry, [default=None]
            keys are antenna pair tuples (must match model), values are real floats
            matching shape of model and data
+
+    medfilt : boolean, if True median filter data before fft
 
     Output:
     -------
@@ -404,7 +407,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, kernel=(1, 5), verbose=T
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
         ratio_delays.append(dly)
        
     ratio_delays = np.array(ratio_delays)
@@ -599,7 +602,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
+def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False):
     """
     turn pyuvdata.UVData objects or miriad filenames 
     into the dictionary form that AbsCal requires
@@ -613,9 +616,14 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
 
     pop_autos : boolean, if True: remove autocorrelations
 
+    return_meta : boolean, if True: also return unique frequency and LST arrays
+
     Output:
     -------
-    data, flags
+    if return_meta is True:
+        (data, flags, antpos, ants, freqs, times)
+    else:
+        (data, flags)
 
     data : dictionary containing baseline-pol complex visibility data
     flags : dictionary containing data flags
@@ -628,21 +636,8 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
         else:
             uvd = filenames
     else:
-        # iterate over extra files and concatenate to original object
-        for i, fname in enumerate(filenames):
-            if i == 0:
-                if type(fname) is str:
-                    uvd = UVData()
-                    uvd.read_miriad(fname)
-                else:
-                    uvd = fname
-            else:
-                if type(fname) is str:
-                    uv_d = UVData()
-                    uv_d.read_miriad(fname)
-                    uvd += uv_d
-                else:
-                    uvd += fname
+        uvd = UVData()
+        uvd.read_miriad(filenames)
 
     # load data
     d, f = firstcal.UVData_to_dict([uvd])
@@ -669,10 +664,18 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True):
             data[key] = d[k][p]
             flags[key] = f[k][p]
 
-    return data, flags
+    # get meta
+    if return_meta:
+        freqs = np.unique(uvd.freq_array)
+        times = np.unique(uvd.lst_array)
+        antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
+        antpos = odict(zip(ants, antpos))
+        return data, flags, antpos, ants, freqs, times
+    else:
+        return data, flags
 
 
-def fft_dly(vis, wgts=None, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1):
+def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1):
     """
     get delay of visibility across band using FFT w/ blackman harris window
     and quadratic fit to delay peak.
@@ -682,6 +685,8 @@ def fft_dly(vis, wgts=None, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1)
     vis : ndarray of visibility data, dtype=complex, shape=(Ntimes, Nfreqs, +)
     
     df : frequency channel width in Hz
+
+    medfilt : boolean, median filter data before fft
 
     kernel : size of median filter kernel along (time, freq) axes
 
@@ -705,7 +710,10 @@ def fft_dly(vis, wgts=None, df=9.765625e4, kernel=(1, 11), time_ax=0, freq_ax=1)
 
     # smooth via median filter
     kernel += tuple(np.ones((vis.ndim - len(kernel)), np.int))
-    vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j*signal.medfilt(np.imag(vis), kernel_size=kernel)
+    if medfilt:
+        vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j*signal.medfilt(np.imag(vis), kernel_size=kernel)
+    else:
+        vis_smooth = vis
 
     # fft
     window = np.repeat(signal.windows.blackmanharris(Nfreqs)[np.newaxis], Ntimes, axis=time_ax)
