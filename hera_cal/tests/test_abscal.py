@@ -84,7 +84,7 @@ class Test_AbsCal_Funcs:
 
         # test w/ meta
         d, f, ap, a, f, t = hc.abscal.UVData2AbsCalDict([fname, fname2], return_meta=True)
-        nt.assert_equal(ap[11].shape, 3)
+        nt.assert_equal(len(ap[11]), 3)
         nt.assert_equal(len(f), len(self.freq_array))
 
     def test_data_key_to_array_axis(self):
