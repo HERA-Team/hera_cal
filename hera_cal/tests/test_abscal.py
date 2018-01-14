@@ -120,6 +120,7 @@ class Test_AbsCal_Funcs:
     def test_compute_reds(self):
         reds = hc.abscal.compute_reds(self.antpos)
         nt.assert_equal(len(reds), 9)
+        nt.assert_equal(reds[0][0], (11, 12))
         reds = hc.abscal.compute_reds(self.antpos, ex_ants=[11, 24])
         nt.assert_equal(len(reds), 8)
 

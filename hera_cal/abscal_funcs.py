@@ -862,7 +862,7 @@ def compute_reds(antpos, ex_ants=[], tol=1.0):
         raise AttributeError("antpos is not a dictionary type")
 
     # calculate all permutations
-    bls = sorted(itertools.combinations(antpos.keys(), 2))
+    bls = map(lambda bl: tuple(sorted(bl)), sorted(itertools.combinations(antpos.keys(), 2)))
 
     red_bl_vecs = []
     red_bl_dists = []
