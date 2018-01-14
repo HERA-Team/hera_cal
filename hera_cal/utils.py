@@ -202,3 +202,76 @@ def LST2JD(LST, start_JD, longitude=21.42830):
     return JD
 
 
+def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True):
+    """
+    multiply together multiple calfits gain solutions (overlapping in time and frequency)
+
+    Parameters:
+    -----------
+    files : type=list, dtype=str, list of files to multiply together
+
+    fname : type=str, path to output filename
+
+    outdir : type=str, path to output directory
+
+    overwrite : type=bool, overwrite output file
+
+    broadcast_flags : type=bool, if True, broadcast flags from each calfits to final solution
+    """
+    # get io params
+    if outdir is None:
+        outdir = "./"
+
+    output_fname = os.path.join(outdir, fname)
+    if os.path.exists(fname) and overwrite is False:
+        raise IOError("{} exists, not overwriting".format(output_fname))
+
+    # iterate over files
+    for i, f in enumerate(files):
+        if i == 0:
+            echo("...loading {}".format(f), verbose=True)
+            uvc = UVCal()
+            uvc.read_calfits(f)
+            f1 = copy.copy(f)
+
+            # set flagged data to unity
+            uvc.gain_array[uvc.flag_array] /= uvc.gain_array[uvc.flag_array]
+
+        else:
+            uvc2 = UVCal()
+            uvc2.read_calfits(f)
+
+            # check matching specs
+            if np.isclose(uvc.freq_array, uvc2.freq_array).min() is False:
+                print("skipping {} b/c it doesn't match freqs of {}".format(f, f1))
+                continue
+            elif np.isclose(uvc.jones_array, uvc2.jones_array).min() is False:
+                print("skipping {} b/c it doesn't match jones of {}".format(f, f1))
+                continue
+            elif np.isclose(uvc.time_array, uvc2.time_array).min() is False:
+                print("skipping {} b/c it doesn't match times of {}".format(f, f1))
+                continue
+            elif np.isclose(uvc.spw_array, uvc2.spw_array).min() is False:
+                print("skipping {} b/c it doesn't match spw of {}".format(f, f1))
+                continue
+            elif uvc2.cal_type != uvc.cal_type:
+                print("skipping {} b/c its cal_type doesnt match that of {}".format(f, f1))
+
+            # set flagged data to unity
+            gain_array = uvc2.gain_array
+            gain_array[uvc2.flag_array] /= gain_array[uvc2.flag_array]
+
+            # multiply gain solutions in
+            uvc.gain_array *= uvc2.gain_array
+
+            # pass flags
+            if broadcast_flags:
+                uvc.flag_array += uvc2.flag_array
+            else:
+                uvc.flag_array = uvc.flag_array * uvc2.flag_array
+
+    # write to file
+    echo("...saving {}".format(output_fname))
+    uvc.write_calfits(output_fname, clobber=True)
+
+

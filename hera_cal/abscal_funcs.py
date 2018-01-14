@@ -998,18 +998,44 @@ def echo(message, type=0, verbose=True):
             print(message)
             print("-"*40)
 
-''' TO DO
 
 from sklearn import linear_model
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 
-def match_red_baselines(data_bls, data_ants, data_antpos, model_bls, model_ants, model_antpos, tol=1.0):
+def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0):
     """
-    match unique data baselines to unique model baselines
+    match data baseline keys to model baseline keys based on positional redundancy
+
+    Parameters:
+    -----------
+    data : type=dictionary, data dictionary holding complex visibilities.
+        must conform to AbsCal dictionary format.
+
+    data_antpos : type=dictionary, dictionary holding antennas positions for data dictionary
+        keys are antenna integers, values are ndarrays of position vectors in meters
+
+    model : type=dictionary, model dictionary holding complex visibilities
+        must conform to AbsCal dictionary format.
+
+    model_antpos : type=dictionary, dictionary holding antennas positions for model dictionary
+        same format as data_antpos
+
+    tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
+
+    Output: (data)
+    -------
+    data : type=dictionary, dictionary holding complex visibilities from data that
+        had matching baselines to model
     """
-    # ensure ants are lists
+    # create baseline keys for model
+    model_keys = np.array(map(lambda k: Baseline(model_antpos[k[1]] - model_antpos[k[0]]), model.keys()))
+    # iterate over data keys
+    new_data = odict()
+    for i, k in enumerate(data.keys()):
+
+    if
     if type(data_ants) is not list:
         data_ants = data_ants.tolist()
     if type(model_ants) is not list:
@@ -1502,6 +1528,5 @@ def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None,
     if output_data:
         return interp_data, interp_flags, model_lsts, model_freqs
 
-'''
 
 
