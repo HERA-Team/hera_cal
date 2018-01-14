@@ -841,7 +841,7 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
     return data, flags
 
 
-def compute_reds(antpos, ex_ants=[], tol=1.0):
+def compute_reds(antpos, ex_ants=[], tol=1.0, pol=None):
     """
     compute redundant baselines groups.
 
@@ -853,6 +853,8 @@ def compute_reds(antpos, ex_ants=[], tol=1.0):
 
     tol : float, tolerance for redundant baseline determination in units of the baseline vector units
 
+    pols : type=str, polarization string to append to keys
+
     Output:
     -------
     red_bls : redundant baseline list of input bls list
@@ -863,6 +865,10 @@ def compute_reds(antpos, ex_ants=[], tol=1.0):
 
     # calculate all permutations
     bls = map(lambda bl: tuple(sorted(bl)), sorted(itertools.combinations(antpos.keys(), 2)))
+
+    # add pol string
+    if pol is not None:
+        bls = map(lambda bl: bl + tuple([pol]), bls)
 
     red_bl_vecs = []
     red_bl_dists = []
