@@ -57,26 +57,38 @@ class AbsCal(object):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
+        The format of model, data and wgts is in the AbsCal dictionary format. This is a standard
+        python dictionary or OrderedDictionary, with the convention that keys contain
+        antennas-pairs + polarization, Ex. (1, 2, 'xx'),
+        and values contain 2D complex ndarrays with [0] axis indexing time and [1] axis frequency.
+
+        Optionally, a singe key can hold multiple polarizations, in which case the key loses
+        its polarization, Ex. (1, 2), and the value becomes a 3D complex ndarray, with [2] axis
+        indexing polarizations.
+
         Parameters:
         -----------
-        model : dict of visibility data of refence model, type=dictionary
-            keys are antenna pair + pol tuples, values are complex ndarray visibilities
-            these visibilities are 2D arrays with the [0] axis indexing time,
-            the [1] axis indexing frequency and (optionally) [2] axis indexing polarization
+        model : visibility data of refence model, type=dictionary
+                keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+                values are complex ndarray visibilities.
+                these must be at least 2D arrays, with [0] axis indexing time
+                and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
+                should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
 
-        data : dict of visibility data of measurements, type=dictionary
-            keys are antenna pair + pol tuples (must match model), values are
-            complex ndarray visibilities, with shape matching model
+        data : visibility data of measurements, type=dictionary
+               keys are antenna pair + pol tuples (must match model), values are
+               complex ndarray visibilities matching shape of model
 
-        wgts : dict of weights of data, type=dictionry, [default=None]
-            keys are antenna pair + pol tuples (must match model), values are real floats
-            matching shape of model and data
+        wgts : weights of data, type=dictionry, [default=None]
+               keys are antenna pair + pol tuples (must match model), values are real floats
+               matching shape of model and data
 
         antpos : type=dictionary, dict of antenna position vectors in ENU frame in meters.
                  origin of coordinates does not matter.
                  keys are antenna integers and values are 2D or 3D ndarray
                  position vectors in meters (topocentric coordinates),
-                 with [0] index containing X (E-W) distance, and [1] index Y (N-S) distance.
+                 with [0] index containing X (E-W) distance, and [1] index Y (N-S) distance
+                 and [2] indexing Z (up-down) distance.
                  Can be generated from a pyuvdata.UVData instance via
                  ----
                  #!/usr/bin/env python
@@ -94,9 +106,10 @@ class AbsCal(object):
         times : ndarray of time array, type=ndarray, dtype=float
             1d array containing visibility times in Julian Date. Needed to write out to calfits.
 
-        pols : ndarray of polarization array, type=ndarray, dtype=int
-            array containing polarization integers in pyuvdata.UVData.polarization_array 
-            format. Needed to write out to calfits.
+        pols : list of polarizations, type=list, dtype=int
+            list containing polarization integers in pyuvdata.UVData.polarization_array 
+            format. Needed to write out to calfits. Can also be a single string
+            Can be in {-5, -6, -7, -8} format or {'xx', 'yy', 'xy', 'yx'} format.
         """
         # get shared keys
         self.keys = sorted(set(model.keys()) & set(data.keys()))
@@ -115,13 +128,13 @@ class AbsCal(object):
         # setup polarization
         self.str2pol = {"xx": -5, "yy": -6, "xy": -7, "yx": -8}
         if pols is not None:
-            if type(pols) is list:
+            if type(pols) is list or type(pols) is np.ndarray:
                 if type(pols[0]) is str:
-                    pols = map(lambda x: self.str2pol[x], pols)
+                    pols = map(lambda x: self.str2pol[x.lower()], pols)
                 elif type(pols[0]) is int:
                     pols = pols
             elif type(pols) is str:
-                pols = [self.str2pol[pols]]
+                pols = [self.str2pol[pols.lower()]]
             elif type(pols) is int:
                 pols = [pols]
             self.pols = pols
@@ -133,7 +146,7 @@ class AbsCal(object):
         # setup weights
         if wgts is None:
             wgts = odict()
-            for i, k in enumerate(self.keys):
+            for k in self.keys:
                 wgts[k] = np.ones_like(data[k], dtype=np.float)
         self.wgts = wgts
 
@@ -150,11 +163,12 @@ class AbsCal(object):
 
         # setup baselines and antenna positions
         self.antpos = antpos
+        self.antpos_arr = None
         self.bls = None
         if self.antpos is not None:
             self.bls = odict([(x, self.antpos[x[1]] - self.antpos[x[0]]) for x in self.keys])
-            self.antpos = np.array(map(lambda x: self.antpos[x], self.ants))
-            self.antpos -= np.median(self.antpos, axis=0)
+            self.antpos_arr = np.array(map(lambda x: self.antpos[x], self.ants))
+            self.antpos_arr -= np.median(self.antpos_arr, axis=0)
 
     def amp_logcal(self, separate_pol=False, verbose=True):
         """
@@ -337,6 +351,7 @@ class AbsCal(object):
 
     @property
     def ant_eta(self):
+        """ return _ant_eta array """
         if hasattr(self, '_ant_eta'):
             return copy.copy(self._ant_eta)
         else:
@@ -344,6 +359,7 @@ class AbsCal(object):
 
     @property
     def ant_eta_gain(self):
+        """ form complex gain from _ant_eta array """
         if hasattr(self, '_ant_eta'):
             return np.exp(self.ant_eta).astype(np.complex)
         else:
@@ -351,6 +367,7 @@ class AbsCal(object):
 
     @property
     def ant_phi(self):
+        """ return _ant_phi array """
         if hasattr(self, '_ant_phi'):
             return copy.copy(self._ant_phi)
         else:
@@ -358,6 +375,7 @@ class AbsCal(object):
 
     @property
     def ant_phi_gain(self):
+        """ form complex gain from _ant_phi array """
         if hasattr(self, '_ant_phi'):
             return np.exp(1j*self.ant_phi)
         else:
@@ -365,6 +383,7 @@ class AbsCal(object):
 
     @property
     def ant_dly(self):
+        """ return _ant_dly array """
         if hasattr(self, '_ant_dly'):
             return copy.copy(self._ant_dly)
         else:
@@ -372,6 +391,7 @@ class AbsCal(object):
 
     @property
     def ant_dly_gain(self):
+        """ form complex gain from _ant_dly array """
         if hasattr(self, '_ant_dly'):
             return np.exp(2j*np.pi*self.freqs*self.ant_dly)
         else:
@@ -387,7 +407,7 @@ class AbsCal(object):
 
     @property
     def abs_amp_gain(self):
-        """return _abs_amp_gain array"""
+        """form complex gain from _abs_amp array"""
         if hasattr(self, '_abs_amp'):
             return np.repeat(np.sqrt(self._abs_amp).astype(np.complex)[np.newaxis], len(self.ants), axis=0)
         else:
@@ -403,7 +423,7 @@ class AbsCal(object):
 
     @property
     def abs_psi_gain(self):
-        """return _abs_psi_gain array"""
+        """ form complex gain from _abs_psi array """
         if hasattr(self, '_abs_psi'):
             return np.repeat(np.exp(1j*self._abs_psi)[np.newaxis], len(self.ants), axis=0)
         else:
@@ -419,9 +439,9 @@ class AbsCal(object):
 
     @property
     def TT_Phi_gain(self):
-        """return _TT_Phi_gain array"""
+        """ form complex gain from _TT_Phi array """
         if hasattr(self, '_TT_Phi'):
-            return np.exp(1j*np.einsum("i...,hi->h...", self._TT_Phi, self.antpos[:, :2]))
+            return np.exp(1j*np.einsum("i...,hi->h...", self._TT_Phi, self.antpos_arr[:, :2]))
         else:
             return None
 

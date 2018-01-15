@@ -32,18 +32,18 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True):
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-            keys are antenna-pair tuples.
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
-            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            these must be at least 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization.
+            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
 
     data : visibility data of measurements, type=dictionary
-           keys are antenna pair tuples (must match model), values are
+           keys are antenna pair + poltuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
     wgts : weights of data, type=dictionry, [default=None]
-           keys are antenna pair tuples (must match model), values are real floats
+           keys are antenna pair + poltuples (must match model), values are real floats
            matching shape of model and data
 
     verbose : print output, type=boolean, [default=False]
@@ -118,23 +118,24 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-            keys are antenna-pair tuples, values are complex ndarray visibilities
-            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            values are complex ndarray visibilities.
+            these must be at least 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization.
+            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
 
     data : visibility data of measurements, type=dictionary
-           keys are antenna pair tuples (must match model), values are
+           keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
+
+    wgts : weights of data, type=dictionry, [default=None]
+           keys are antenna pair + pol tuples (must match model), values are real floats
+           matching shape of model and data
 
     bls : baseline vectors of antenna pairs, type=dictionary
           keys are antenna pair tuples (must match model), values are 2D or 3D ndarray
           baseline vectors in meters, with [0] index containing X (E-W) separation
-          and [1] index Y (N-S) separation.
-
-    wgts : weights of data, type=dictionry, [default=None]
-           keys are antenna pair tuples (must match model), values are real floats
-           matching shape of model and data
+          and [1] index Y (N-S) separation and [2] index Z (up-down) separation.
 
     verbose : print output, type=boolean, [default=False]
 
@@ -214,17 +215,18 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-            keys are antenna-pair tuples, values are complex ndarray visibilities
-            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            values are complex ndarray visibilities.
+            these must be at least 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization.
+            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
 
     data : visibility data of measurements, type=dictionary
-           keys are antenna pair tuples (must match model), values are
+           keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
     wgts : weights of data, type=dictionry, [default=None]
-           keys are antenna pair tuples (must match model), values are real floats
+           keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
     Output:
@@ -290,17 +292,18 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-            keys are antenna-pair tuples (ant1, ant2), or antenna-pair-pol tuples (ant1, ant2, pol).
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
-            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            these must be at least 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization.
+            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
 
     data : visibility data of measurements, type=dictionary
-           must match model in format and array shape
+           keys are antenna pair + pol tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
 
     wgts : weights of data, type=dictionry, [default=None]
-           keys are antenna pair tuples (must match model), values are real floats
+           keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
     Output:
@@ -366,17 +369,18 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, medfilt=True, kernel=(1,
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
-            keys are antenna-pair tuples, values are complex ndarray visibilities
-            these visibilities must be at least 2D arrays, with [0] axis indexing time
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            values are complex ndarray visibilities.
+            these must be at least 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization.
+            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
 
     data : visibility data of measurements, type=dictionary
-           keys are antenna pair tuples (must match model), values are
+           keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
     wgts : weights of data, type=dictionry, [default=None]
-           keys are antenna pair tuples (must match model), values are real floats
+           keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
     medfilt : boolean, if True median filter data before fft
@@ -441,11 +445,11 @@ def apply_gains(data, gains, gain_convention='multiply'):
     Parameters:
     -----------
     data : type=dictionary, holds complex visibility data
-        keys are antenna-pair tuples + (others)
-        values are ndarray complex visibility data
+        keys are antenna-pair tuples + pol tuples.
+        values are ndarray complex visibility data.
 
     gains : type=dictionary, holds complex per-antenna gain data
-        keys are antenna integer tuple + (others)
+        keys are antenna integer tuple + pol tuples.
         values are complex ndarrays
         with shape matching data's visibility ndarrays
 
@@ -480,8 +484,8 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
 
     Parameters:
     -----------
-    data : dictionary, complex visibility data with
-        antenna-pair (+ pol + other) tuples for keys.
+    data : type=dictionary, complex visibility data with
+        antenna-pair + pol tuples for keys, in AbsCal dictionary format.
     
     key_index : integer, index of keys to consolidate into data arrays
 
@@ -606,7 +610,9 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
 def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False):
     """
     turn pyuvdata.UVData objects or miriad filenames 
-    into the dictionary form that AbsCal requires
+    into the dictionary form that AbsCal requires. This format is
+    keys as antennas-pair + polarization format, Ex. (1, 2, 'xx')
+    and values as 2D complex ndarrays with [0] axis indexing time and [1] axis frequency.
 
     Parameters:
     -----------
@@ -773,7 +779,8 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
 
 
 def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
-                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True):
+                 kind='cubic', fill_value=0, zero_tol=1e-10, bounds_error=True,
+                 flag_extrapolate=True):
     """
     interpolate complex visibility data onto the time & frequency basis of
     a model visibility.
@@ -801,6 +808,8 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
 
     zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
 
+    bounds_error : type=boolean, if True, raise ValueError when extrapolating. If False, extrapolate.
+
     flag_extrapolate : flag extrapolated data if True
 
     Output: (data, flags)
@@ -815,9 +824,9 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
     for i, k in enumerate(data.keys()):
         # interpolate real and imag separately
         interp_real = interpolate.interp2d(data_freqs, data_times, np.real(data[k]),
-                                           kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
+                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(model_freqs, model_times)
         interp_imag = interpolate.interp2d(data_freqs, data_times, np.imag(data[k]),
-                                           kind=kind, fill_value=np.nan, bounds_error=False)(model_freqs, model_times)
+                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(model_freqs, model_times)
 
         # set flags
         f = np.zeros_like(interp_real, dtype=float)

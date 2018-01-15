@@ -147,13 +147,13 @@ def get_aa_from_calfile(freqs, calfile, **kwargs):
     return get_aa(freqs, **kwargs)
 
 
-def JD2LST(JD, longitude):
+def JD2LST(JD, longitude=21.42830):
     """
     Input:
     ------
     JD : type=float, julian date of observation
 
-    longitude : type=float, longitude of observer in degrees East
+    longitude : type=float, longitude of observer in degrees East, default=HERA Longitude
 
     Output:
     -------
@@ -163,21 +163,21 @@ def JD2LST(JD, longitude):
     return t.sidereal_time('apparent', longitude=longitude).value
 
 
-def LST2JD(LST, start_JD, longitude):
+def LST2JD(LST, start_JD, longitude=21.42830):
     """
-    calculate LST -> JD quickly via a linear fit
+    calculate local sidereal time -> julian day quickly via a linear fit
 
     Input:
     ------
     LST : type=float, local apparent sidereal time [hour angle]
 
-    start_JD : type=int, integer JD to anchor LST2JD conversion
+    start_JD : type=int, integer julian day to use as starting point for LST2JD conversion
 
-    longitude : type=float, degrees East of observer
+    longitude : type=float, degrees East of observer, default=HERA longitude
 
     Output:
     -------
-    JD : type=float, JD when LST is overhead. accurate to ~1 milliseconds
+    JD : type=float, julian day when LST is directly overhead. accurate to ~1 milliseconds
     """
     base_JD = float(start_JD)
     while True:
