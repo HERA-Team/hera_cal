@@ -21,7 +21,10 @@ from scipy import interpolate
 import linsolve
 import itertools
 import operator
-
+from sklearn import linear_model
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn import gaussian_process
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
     """
@@ -824,13 +827,57 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     return dlys, phi
 
 
+def wiener(data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1,13), array=False):
+    """
+    wiener filter complex visibility data. this might be used in constructing
+    model reference. See scipy.signal.wiener for details on method.
+
+    Parameters:
+    -----------
+    data : type=dictionary, AbsCal-format dictionary holding complex visibility data
+        unelss array is True
+
+    window : type=tuple, wiener-filter window along each axis of data
+
+    noise : type=float, estimate of noise. if None will estimate itself
+
+    medfilt : type=bool, if True, median filter data before wiener filtering
+
+    medfilt_kernel : type=tuple, median filter kernel along each axis of data
+
+    array : type=boolean, if True, feeding a single ndarray, rather than a dictionary
+
+    Output: (new_data)
+    -------
+    new_data type=dictionary, AbsCal-format dictionary holding new visibility data
+    """
+    # check if data is an array
+    if array:
+        data = {'arr': data}
+
+    new_data = odict()
+    for i, k in enumerate(data.keys()):
+        real = np.real(data[k])
+        imag = np.imag(data[k])
+        if medfilt:
+            real = signal.medfilt(real, kernel_size=medfilt_kernel)
+            imag = signal.medfilt(imag, kernel_size=medfilt_kernel)
+
+        new_data[k] = signal.wiener(real, mysize=window, noise=noise) + \
+                      1j*signal.wiener(imag, mysize=window, noise=noise)
+
+    if array:
+        return new_data['arr']
+    else:
+        return new_data
+
+
 def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
-                 kind='cubic', fill_value=0, zero_tol=1e-10, bounds_error=True,
-                 flag_extrapolate=True):
+                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
+                 presmooth=False, **wiener_kwargs):
     """
     interpolate complex visibility data onto the time & frequency basis of
     a model visibility.
-    ** Note: this is just a simple wrapper for scipy.interpolate.interp2d **
 
     Parameters:
     -----------
@@ -858,6 +905,10 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
 
     flag_extrapolate : flag extrapolated data if True
 
+    presmooth : type=boolean, if True perform the following steps on real and imag separately:
+        smooth data, perform interpolation, find difference between original and interpolation
+        and add difference to original data.
+
     Output: (data, flags)
     -------
     data : interpolated data, type=dictionary
@@ -870,10 +921,30 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
     # loop over keys
     for i, k in enumerate(data.keys()):
         # interpolate real and imag separately
-        interp_real = interpolate.interp2d(data_freqs, data_times, copy.copy(np.real(data[k])),
+        d = data[k]
+        real = np.real(d)
+        imag = np.imag(d)
+
+        if presmooth:
+            # wiener smooth
+            _real = copy.copy(real)
+            _imag = copy.copy(imag)
+
+            d = wiener(d, array=True, **wiener_kwargs)
+            real = np.real(d)
+            imag = np.imag(d)
+
+        # interpolate
+        interp_real = interpolate.interp2d(data_freqs, data_times, real,
                                            kind=kind, fill_value=np.nan, bounds_error=bounds_error)(model_freqs, model_times)
-        interp_imag = interpolate.interp2d(data_freqs, data_times, copy.copy(np.imag(data[k])),
+        interp_imag = interpolate.interp2d(data_freqs, data_times, imag,
                                            kind=kind, fill_value=np.nan, bounds_error=bounds_error)(model_freqs, model_times)
+        if presmooth:
+            # get differences and add
+            real_diff = interp_real - real
+            imag_diff = interp_imag - imag
+            interp_real = _real + real_diff
+            interp_imag = _imag + imag_diff
 
         # set flags
         f = np.zeros_like(interp_real, dtype=float)
@@ -999,57 +1070,6 @@ def echo(message, type=0, verbose=True):
             print("-"*40)
 
 
-from sklearn import linear_model
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn import gaussian_process
-
-def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0):
-    """
-    match data baseline keys to model baseline keys based on positional redundancy
-
-    Parameters:
-    -----------
-    data : type=dictionary, data dictionary holding complex visibilities.
-        must conform to AbsCal dictionary format.
-
-    data_antpos : type=dictionary, dictionary holding antennas positions for data dictionary
-        keys are antenna integers, values are ndarrays of position vectors in meters
-
-    model : type=dictionary, model dictionary holding complex visibilities
-        must conform to AbsCal dictionary format.
-
-    model_antpos : type=dictionary, dictionary holding antennas positions for model dictionary
-        same format as data_antpos
-
-    tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
-
-    Output: (data)
-    -------
-    data : type=dictionary, dictionary holding complex visibilities from data that
-        had matching baselines to model
-    """
-    # create baseline keys for model
-    model_keys = np.array(map(lambda k: Baseline(model_antpos[k[1]] - model_antpos[k[0]]), model.keys()))
-    # iterate over data keys
-    new_data = odict()
-    for i, k in enumerate(data.keys()):
-
-    if
-    if type(data_ants) is not list:
-        data_ants = data_ants.tolist()
-    if type(model_ants) is not list:
-        model_ants = model_ants.tolist()
-
-    # create unique baseline id
-    data_bl_id = np.array(map(lambda bl: Baseline(data_antpos[data_ants.index(bl[1])]-data_antpos[data_ants.index(bl[0])], tol=tol), data_bls))
-    model_bl_id = np.array(map(lambda bl: Baseline(model_antpos[data_ants.index(bl[0])]-model_antpos[model_ants.index(bl[1])], tol=tol), model_bls))
-
-    # iterate over data bls
-    for i, bl in data_bl_id:
-        pass
-
-
 class Baseline(object):
     """
     Baseline object for making antenna-independent, unique baseline labels
@@ -1096,7 +1116,66 @@ class Baseline(object):
         else:
             return False
 
-def smooth_data(Xtrain, ytrain, Xpred, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
+
+def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0):
+    """
+    match data baseline keys to model baseline keys based on positional redundancy
+
+    Parameters:
+    -----------
+    data : type=dictionary, data dictionary holding complex visibilities.
+        must conform to AbsCal dictionary format.
+
+    data_antpos : type=dictionary, dictionary holding antennas positions for data dictionary
+        keys are antenna integers, values are ndarrays of position vectors in meters
+
+    model : type=dictionary, model dictionary holding complex visibilities
+        must conform to AbsCal dictionary format.
+
+    model_antpos : type=dictionary, dictionary holding antennas positions for model dictionary
+        same format as data_antpos
+
+    tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
+
+    Output: (data)
+    -------
+    data : type=dictionary, dictionary holding complex visibilities from data that
+        had matching baselines to model
+    """
+    # create baseline keys for model
+    model_keys = model.keys()
+    model_bls = np.array(map(lambda k: Baseline(model_antpos[k[1]] - model_antpos[k[0]], tol=tol), model_keys))
+
+    # create baseline keys for data
+    data_keys = data.keys()
+    data_bls = np.array(map(lambda k: Baseline(data_antpos[k[1]] - data_antpos[k[0]], tol=tol), data_keys))
+
+    # iterate over data baselines
+    new_data = OrderedDict()
+    for i, bl in enumerate(data_bls):
+        # compre bl to all model_bls
+        comparison = np.array(map(lambda mbl: bl == mbl, model_bls), np.str)
+
+        # get matches
+        matches = np.where((comparison=='True')|(comparison=='conjugated'))[0]
+
+        # check for matches
+        if len(matches) == 0:
+            print("found zero matches in model for data {}".format(data_keys[i]))
+            continue
+        else:
+            if len(matches) > 1:
+                print("found more than 1 match in model to data {}: {}".format(data_keys[i], map(lambda j: model_keys[j], matches)))
+            # assign to new_data
+            if comparison[matches[0]] == 'True':
+                new_data[model_keys[matches[0]]] = data[data_keys[i]]
+            elif comparison[matches[0]] == 'conjugated':
+                new_data[model_keys[matches[0]]] = np.conj(data[data_keys[i]])
+
+    return new_data
+
+
+def smooth_gains(Xtrain, ytrain, Xpred, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
     """
 
 
