@@ -891,7 +891,7 @@ def wiener(data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1,13)
 
 def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
                  kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
-                 presmooth=False, **wiener_kwargs):
+                 presmooth=False, bounds_error=True, **wiener_kwargs):
     """
     interpolate complex visibility data onto the time & frequency basis of
     a model visibility.
@@ -1475,16 +1475,18 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         return red_data, red_flags, red_keys
 
 
-def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None):
+def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=False):
     """
     Given unique baseline data (like omnical model visibilities),
-    copy the data over to all other baselines in the same redundant group
+    copy the data over to all other baselines in the same redundant group.
+    If weights==True, treat data as a wgts dictionary and multiply values
+    by their redundant baseline weighting.
 
     Parameters:
     -----------
     data : data dictionary in AbsCal form, see AbsCal docstring for details
 
-    bls : type=list, list of antenna-pair tuples to use as total set of baselines.
+    bls : type=list, list of antenna-pair + pol tuples to use as total set of baselines.
                 If None, will use antpos to find all possible combinations.
 
     antpos : type=dictionary, antenna positions dictionary
@@ -1494,10 +1496,14 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None):
 
     pol : type=str, polarization in data.keys() to pass to compute_reds()
 
+    weights : type=bool, if True, treat data as a wgts dictionary and multiply by redundant weighting.
+
     Output: (red_data)
     -------
     red_data : type=dictionary, data dictionary in AbsCal form, with unique baseline data
                 distributed to redundant baseline groups.
+    if weights == True:
+        red_data is a real-valued wgts dictionary with redundant baseline weighting muliplied in.
     """
     # get data keys
     keys = data.keys()
@@ -1508,19 +1514,45 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None):
     # make red_data dictionary
     red_data = odict()
 
-    # iterate over red bls
-    for i, bl_group in enumerate(reds):
-        # find which key in data is in this group
-        select = np.array(map(lambda x: x in keys or x[::-1] in keys, bl_group))
+    # iterate over data keys
+    for i, k in enumerate(keys):
 
-        if True not in select:
-            continue
+        # check for ant-pair + pol key mismatch
+        if len(k) != len(reds[0][0]):
+            raise ValueError("data key {} doesn't match shape of reds key {}. Try changing pol keyword-arugment.".format(k, reds[0][0]))
 
-        k = bl_group[np.argmax(select)]
+        # find which bl_group this key belongs to
+        match = np.array(map(lambda r: k in r, reds))
+        conj_match = np.array(map(lambda r: k[:2][::-1]+k[2:] in r, reds))
 
-        # iterate over bls and insert data into red_data
-        for j, bl in enumerate(bl_group):
-            red_data[bl] = copy.copy(data[k])
+        # if no match, just copy data over to red_data
+        if True not in match and True not in conj_match:
+            red_data[k] = copy.copy(data[k])
+
+        else:
+            # iterate over matches
+            for j, (m, cm) in enumerate(zip(match, conj_match)):
+                if weights:
+                    if m == True:
+                        if (k in red_data) == False:
+                            red_data[k] = copy.copy(data[k])
+                            red_data[k] += len(reds[j]) - 1
+                        else:
+                            red_data[k] += len(reds[j])
+                    elif cm == True:
+                        if (k in red_data) == False:
+                            red_data[k] = copy.copy(data[k])
+                            red_data[k] += len(reds[j]) - 1
+                        else:
+                            red_data[k] += len(reds[j])
+                else:
+                    # if match, insert all bls in bl_group into red_data
+                    if m == True:
+                        for bl in reds[j]:
+                            red_data[bl] = copy.copy(data[k])
+                    elif cm == True:
+                        for bl in reds[j]:
+                            red_data[bl] = np.conj(data[k])
 
     # re-sort
     red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
