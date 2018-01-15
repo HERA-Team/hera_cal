@@ -1527,7 +1527,7 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None):
 
     return red_data
 
-"""
+'''
 def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None,
               overwrite=False, verbose=True, write_miriad=True, output_data=False,
               match='nearest', filetype='miriad', **interp2d_kwargs):
@@ -1658,5 +1658,4 @@ def lstbin_arg_parser():
 
 
 
-"""
-
+'''
