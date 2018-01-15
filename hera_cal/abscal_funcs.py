@@ -1536,15 +1536,15 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=Fa
                     if m == True:
                         if (k in red_data) == False:
                             red_data[k] = copy.copy(data[k])
-                            red_data[k] += len(reds[j]) - 1
+                            red_data[k][red_data[k].astype(np.bool)] += len(reds[j]) - 1
                         else:
-                            red_data[k] += len(reds[j])
+                            red_data[k][red_data[k].astype(np.bool)] += len(reds[j])
                     elif cm == True:
                         if (k in red_data) == False:
                             red_data[k] = copy.copy(data[k])
-                            red_data[k] += len(reds[j]) - 1
+                            red_data[k][red_data[k].astype(np.bool)] += len(reds[j]) - 1
                         else:
-                            red_data[k] += len(reds[j])
+                            red_data[k][red_data[k].astype(np.bool)] += len(reds[j])
                 else:
                     # if match, insert all bls in bl_group into red_data
                     if m == True:

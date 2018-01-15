@@ -382,6 +382,7 @@ class AbsCal(object):
         wgts = copy.deepcopy(self.wgts)
         antpos = self.antpos
 
+
         # run TT_phs_logcal
         fit = TT_phs_logcal(model, data, antpos, wgts=wgts, verbose=verbose, zero_psi=zero_psi, merge_pols=merge_pols)
 
