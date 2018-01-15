@@ -1,3 +1,4 @@
+"""
 #! /usr/bin/env python
 
 from hera_cal import abscal
@@ -13,3 +14,4 @@ abscal.abscal_run(args.data_files, args.model_files,
                   overwrite=args.overwrite,
                   verbose=args.silence is False,
                   save=True)
+"""
