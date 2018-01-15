@@ -61,7 +61,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     """
     echo("...configuring linsolve data for abs_amp_logcal", verbose=verbose)
 
-    # get keys from model dictionary
+    # get keys from model and data dictionary
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # abs of amplitude ratio is ydata independent variable
@@ -646,7 +646,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False):
+def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad'):
     """
     turn pyuvdata.UVData objects or miriad filenames 
     into the dictionary form that AbsCal requires. This format is
@@ -664,6 +664,8 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
 
     return_meta : boolean, if True: also return antenna and unique frequency and LST arrays
 
+    filetype : string, filetype of data if filenames is a string
+
     Output:
     -------
     if return_meta is True:
@@ -678,13 +680,21 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
     if type(filenames) is not list and type(filenames) is not np.ndarray:
         if type(filenames) is str:
             uvd = UVData()
-            uvd.read_miriad(filenames)
+            if filetype == 'miriad':
+                uvd.read_miriad(filenames)
+            elif filetype == 'uvfits':
+                uvd.read_uvfits(filenames)
+                uvd.unphase_to_drift()
         else:
             uvd = filenames
     else:
         if type(filenames[0]) is str:
             uvd = UVData()
-            uvd.read_miriad(filenames)
+            if filetype == 'miriad':
+                uvd.read_miriad(filenames)
+            elif filetype == 'uvfits':
+                uvd.read_uvfits(filenames)
+                uvd.unphase_to_drift()
         else:
             uvd = reduce(operator.add, filenames)
 
@@ -1117,7 +1127,7 @@ class Baseline(object):
             return False
 
 
-def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0):
+def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0, verbose=True):
     """
     match data baseline keys to model baseline keys based on positional redundancy
 
@@ -1151,7 +1161,7 @@ def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0):
     data_bls = np.array(map(lambda k: Baseline(data_antpos[k[1]] - data_antpos[k[0]], tol=tol), data_keys))
 
     # iterate over data baselines
-    new_data = OrderedDict()
+    new_data = odict()
     for i, bl in enumerate(data_bls):
         # compre bl to all model_bls
         comparison = np.array(map(lambda mbl: bl == mbl, model_bls), np.str)
@@ -1161,11 +1171,11 @@ def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0):
 
         # check for matches
         if len(matches) == 0:
-            print("found zero matches in model for data {}".format(data_keys[i]))
+            echo("found zero matches in model for data {}".format(data_keys[i]), verbose=verbose)
             continue
         else:
             if len(matches) > 1:
-                print("found more than 1 match in model to data {}: {}".format(data_keys[i], map(lambda j: model_keys[j], matches)))
+                echo("found more than 1 match in model to data {}: {}".format(data_keys[i], map(lambda j: model_keys[j], matches)), verbose=verbose)
             # assign to new_data
             if comparison[matches[0]] == 'True':
                 new_data[model_keys[matches[0]]] = data[data_keys[i]]
@@ -1175,25 +1185,29 @@ def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0):
     return new_data
 
 
-def smooth_gains(Xtrain, ytrain, Xpred, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
+def smooth_solutions(Xdata, Ydata, Xpred=None, gains=True, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
     """
-
+    Smooth gain (or calibration) solutions across time and/or frequency.
 
     Parameters:
     -----------
-    Xtrain : ndarray containing x-values for regression
-        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
+    Xdata : ndarray containing flattened x-values for regression, type=ndarray, dtype=float
+            shape=(Ndata, Ndimensions)
   
-    ytrain : 1D np.array containing parameter y-values across time and/or frequency (single pol)
-        type=1D-ndarray, dtype=float, shape=(Ndata, Nfeatures)
+    Ydata : type=dictionary, dict holding gain or calibration solutions with values as
+            ndarray containing complex gains or real calibration solution across
+            time and/or frequency (single pol) with shape=(Ndata, 1)
   
-    Xpred : ndarray containing x-values for prediction
-        type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
+    Xpred : ndarray containing flattened x-values for prediction. if None will use Xdata.
+            type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
 
-    kind : kind of smoothing to perform, type=str, opts=['linear','const']
-        'poly' : fit a Nth order polynomial across frequency, with order set by "degree"
-        'gp' : fit a gaussian process across frequency
-        'boxcar' : convolve ytrain with a boxcar window
+    gains : type=boolean, if True input Ydata is complex gains,
+            if False input Ydata is real calibration solutions
+
+
+    Output:
+    -------
+
     """
     # get number of dimensions
     ndim = Xtrain.shape[1]
@@ -1453,7 +1467,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         return red_data, red_flags, red_keys
 
 
-def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
+def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0):
     """
     Given unique baseline data (like omnical model visibilities),
     copy the data over to all other baselines in the same redundant group
@@ -1462,35 +1476,27 @@ def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
     -----------
     data : data dictionary in AbsCal form, see AbsCal docstring for details
 
-    bls : baseline list
-        list of all antenna pair tuples that "data" needs to expand into
+    bls : type=list, list of antenna-pair tuples to use as total set of baselines.
+                If None, will use antpos to find all possible combinations.
 
-    antpos : antenna positions dictionary
-        keys are antenna integers, values are ndarray baseline vectors.
-        This can be created via
-        ```
-        antpos, ants = UVData.get_ENU_pos()
-        antpos = dict(zip(ants, antpos))
-        ```
+    antpos : type=dictionary, antenna positions dictionary
+                keys are antenna integers, values are ndarray baseline vectors.
 
-    tol : redundant baseline distance tolerance, dtype=float
-        fed into abscal.compute_reds
+    tol : type=float, redundant baseline distance tolerance in units of baseline vectors
 
-    Output:
+    Output: (red_data)
     -------
-    red_data : data dictionary in AbsCal form, with unique baseline data
-        distributed to redundant baseline groups.
-
+    red_data : type=dictionary, data dictionary in AbsCal form, with unique baseline data
+                distributed to redundant baseline groups.
     """
     # get data keys
     keys = data.keys()
 
-    # get data and ants
-    data = copy.deepcopy(data)
+    # get ants
     ants = np.unique(np.concatenate([keys]))
 
     # get redundant baselines
-    reds = compute_reds(bls, antpos, tol=tol)
+    reds = compute_reds(antpos, bls=bls, tol=tol)
 
     # make red_data dictionary
     red_data = odict()
@@ -1506,106 +1512,11 @@ def mirror_data_to_red_bls(data, bls, antpos, tol=2.0):
 
         # iterate over bls and insert data into red_data
         for j, bl in enumerate(bl_group):
-
             red_data[bl] = copy.copy(data[k])
 
     # re-sort
     red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
 
     return red_data
-
-
-def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None, overwrite=False,
-              verbose=True, write_miriad=True, output_data=False, kind='linear'):
-    """
-    """
-    # try to load model
-    if model_fnames is not None:
-        if type(model_fnames) is str:
-            uvm = UVData()
-            uvm.read_miriad(model_fnames)
-            lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
-            model_freqs = np.unique(uvm.freq_array)
-        elif type(model_fnames) is list:
-            uvm = UVData()
-            uvm.read_miriad(model_fnames[0])
-            for i, f in enumerate(model_fnames[1:]):
-                uv = UVData()
-                uv.read_miriad(f)
-                uvm += uv
-            lst_arr = np.unique(uvm.lst_array) * 12 / np.pi
-            model_freqs = np.unique(uvm.freq_array)
-    else:
-        # generate LST array
-        lst_arr = np.arange(0, 24, dLST)
-        model_freqs = None
-
-    # load file
-    echo("loading {}".format(data_fname), verbose=verbose)
-    uvd = UVData()
-    uvd.read_miriad(data_fname)
-
-    # get data
-    data, flags, pols = UVData2AbsCalDict([uvd], pop_autos=False)
-
-    # get data lst and freq arrays
-    data_lsts, data_freqs = np.unique(uvd.lst_array) * 12/np.pi, np.unique(uvd.freq_array)
-    Ntimes = len(data_lsts)
-
-    # get closest lsts
-    start = np.argmin(np.abs(lst_arr - data_lsts[0]))
-    lst_indices = np.arange(start, start+Ntimes)
-    model_lsts = lst_arr[lst_indices]
-    if model_freqs is None:
-        model_freqs = data_freqs
-    Nfreqs = len(model_freqs)
-
-    # interpolate data
-    echo("interpolating data", verbose=verbose)
-    interp_data, interp_flags = interp_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, kind=kind)
-    Nbls = len(interp_data)
-
-    # reorder into arrays
-    uvd_data = np.array(interp_data.values())
-    uvd_data = uvd_data.reshape(-1, 1, Nfreqs, 1)
-    uvd_flags = np.array(interp_flags.values()).astype(np.bool)
-    uvd_flags = uvd_flags.reshape(-1, 1, Nfreqs, 1)
-    uvd_keys = np.repeat(np.array(interp_data.keys()).reshape(-1, 1, 2), Ntimes, axis=1).reshape(-1, 2)
-    uvd_bls = np.array(map(lambda k: uvd.antnums_to_baseline(k[0], k[1]), uvd_keys))
-    uvd_times = np.array(map(lambda x: utils.JD2LST.LST2JD(x, np.median(np.floor(uvd.time_array)), uvd.telescope_location_lat_lon_alt_degrees[1]), model_lsts))
-    uvd_times = np.repeat(uvd_times[np.newaxis], Nbls, axis=0).reshape(-1)
-    uvd_lsts = np.repeat(model_lsts[np.newaxis], Nbls, axis=0).reshape(-1)
-    uvd_freqs = model_freqs.reshape(1, -1)
-
-    # assign to uvdata object
-    uvd.data_array = uvd_data
-    uvd.flag_array = uvd_flags
-    uvd.baseline_array = uvd_bls
-    uvd.ant_1_array = uvd_keys[:, 0]
-    uvd.ant_2_array = uvd_keys[:, 1]
-    uvd.time_array = uvd_times
-    uvd.lst_array = uvd_lsts * np.pi / 12
-    uvd.freq_array = uvd_freqs
-    uvd.Nfreqs = Nfreqs
-
-    # write miriad
-    if write_miriad:
-        # check output
-        if outdir is None:
-            outdir = os.path.dirname(data_fname)
-        if output_fname is None:
-            output_fname = os.path.basename(data_fname) + 'L.{:07.4f}'.format(model_lsts[0])
-        output_fname = os.path.join(outdir, output_fname)
-        if os.path.exists(output_fname) and overwrite is False:
-            raise IOError("{} exists, not overwriting".format(output_fname))
-
-        # write to file
-        echo("saving {}".format(output_fname), verbose=verbose)
-        uvd.write_miriad(output_fname, clobber=True)
-
-    # output data and flags
-    if output_data:
-        return interp_data, interp_flags, model_lsts, model_freqs
-
 
 
