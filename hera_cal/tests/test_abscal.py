@@ -87,6 +87,14 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(len(ap[11]), 3)
         nt.assert_equal(len(f), len(self.freq_array))
 
+        # test uvfits
+        fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
+        d, f = hc.abscal.UVData2AbsCalDict(fname, filetype='uvfits')
+        nt.assert_equal(d[(0,1,'xx')].shape, (60,64))
+
+        # test exception
+        nt.assert_raises(IOError, hc.abscal.UVData2AbsCalDict, fname)
+
     def test_data_key_to_array_axis(self):
         m, pk = hc.abscal.data_key_to_array_axis(self.model, 2)
         nt.assert_equal(m[(24, 25)].shape, (60, 64, 1))
@@ -130,6 +138,56 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(os.path.exists(cfname), True)
         if os.path.exists(cfname):
             os.remove(cfname)
+
+    def test_wiener(self):
+        # test smoothing
+        d = hc.abscal.wiener(self.data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1, 13))
+        nt.assert_equal(d[(11,12,'xx')].shape, (60, 64))
+        nt.assert_equal(d[(11,12,'xx')].dtype, np.complex)
+        nt.assert_almost_equal(d[(11,12,'xx')][0,0], (-0.11750913839828359+0.19702827915549379j))
+        # test w/ noise
+        d = hc.abscal.wiener(self.data, window=(5, 15), noise=0.1, medfilt=True, medfilt_kernel=(1, 13))
+        nt.assert_equal(d[(11,12,'xx')].shape, (60, 64))
+        # test w/o medfilt
+        d = hc.abscal.wiener(self.data, window=(5, 15), medfilt=False)
+        nt.assert_equal(d[(11,12,'xx')].shape, (60, 64))
+        # test as array
+        d = hc.abscal.wiener(self.data[(11, 12, 'xx')], window=(5, 15), medfilt=False, array=True)
+        nt.assert_equal(d.shape, (60, 64))
+        nt.assert_equal(d.dtype, np.complex)
+
+    def test_Baseline(self):
+        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), self.data.keys())
+        bls_conj = map(lambda k: hc.abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), self.data.keys())
+        nt.assert_equal(bls[0].__repr__(), '0014.6:0000.1:-000.1')
+        nt.assert_equal(bls_conj[0].__repr__(), '-014.6:-000.1:0000.1')
+        nt.assert_equal(bls[0], bls[0])
+        nt.assert_false(bls[0] == bls[1])
+        nt.assert_equal(bls[0] == bls_conj[0], 'conjugated')
+
+    def test_match_red_baselines(self):
+        model = copy.deepcopy(self.data)
+        model = odict([((k[0]+1, k[1]+1, k[2]), model[k]) for i,k in enumerate(model.keys())])
+        model_antpos = odict([(k+1, self.antpos[k]) for i,k in enumerate(self.antpos.keys())])
+        data = hc.abscal.match_red_baselines(self.data, self.antpos, model, model_antpos, tol=2.0, verbose=False)
+        nt.assert_equal(len(data.keys()), 9)
+        nt.assert_true((12, 13, 'xx') in data.keys())
+
+    def test_mirror_data_to_red_bls(self):
+        # make fake data
+        reds = hc.abscal.compute_reds(self.antpos, pol='xx')
+        data = odict(map(lambda k: (k[0], self.data[k[0]]), reds[:5]))
+        # test execuation
+        d = hc.abscal.mirror_data_to_red_bls(data, self.antpos, pol='xx')
+        nt.assert_equal(len(d), 16)
+        nt.assert_true((23, 24, 'xx') in d)
+        # test execution w/ no pol string
+        reds = hc.abscal.compute_reds(self.antpos)
+        data = odict(map(lambda k: (k[0], self.data[k[0]+('xx',)]), reds[:5]))
+        # test execuation
+        d = hc.abscal.mirror_data_to_red_bls(data, self.antpos)
+        nt.assert_equal(len(d), 16)
+        nt.assert_true((23, 24) in d)
 
     def test_echo(self):
         hc.abscal.echo('hi', verbose=True)

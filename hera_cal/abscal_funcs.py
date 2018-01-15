@@ -681,6 +681,9 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
         if type(filenames) is str:
             uvd = UVData()
             if filetype == 'miriad':
+                if os.path.splitext(filenames)[1] == '.uvfits':
+                    raise IOError("trying to load a uvfits w/ read_miriad will cause system exit. "\
+                                  "try again with filetype='uvfits'")
                 uvd.read_miriad(filenames)
             elif filetype == 'uvfits':
                 uvd.read_uvfits(filenames)
@@ -691,6 +694,9 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
         if type(filenames[0]) is str:
             uvd = UVData()
             if filetype == 'miriad':
+                if os.path.splitext(filenames[0])[1] == '.uvfits':
+                    raise IOError("trying to load a uvfits w/ read_miriad will cause system exit. "\
+                                  "try again with filetype='uvfits'")
                 uvd.read_miriad(filenames)
             elif filetype == 'uvfits':
                 uvd.read_uvfits(filenames)
@@ -1115,10 +1121,11 @@ class Baseline(object):
         if np.isclose(self.len, B2.len, atol=tol):
             # check x, y, z
             equiv = bool(reduce(operator.mul, map(lambda x: np.isclose(*x, atol=tol), zip(self.bl, B2.bl))))
+            dot = np.dot(self.unit, B2.unit)
             if equiv:
                 return True
             # check conjugation
-            elif np.isclose(np.arccos(np.dot(self.unit, B2.unit)), np.pi, atol=tol/self.len):
+            elif np.isclose(np.arccos(dot), np.pi, atol=tol/self.len) or (dot < -1.0):
                 return 'conjugated'
             # else return False
             else:
@@ -1467,7 +1474,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         return red_data, red_flags, red_keys
 
 
-def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0):
+def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None):
     """
     Given unique baseline data (like omnical model visibilities),
     copy the data over to all other baselines in the same redundant group
@@ -1484,6 +1491,8 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0):
 
     tol : type=float, redundant baseline distance tolerance in units of baseline vectors
 
+    pol : type=str, polarization in data.keys() to pass to compute_reds()
+
     Output: (red_data)
     -------
     red_data : type=dictionary, data dictionary in AbsCal form, with unique baseline data
@@ -1492,11 +1501,8 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0):
     # get data keys
     keys = data.keys()
 
-    # get ants
-    ants = np.unique(np.concatenate([keys]))
-
     # get redundant baselines
-    reds = compute_reds(antpos, bls=bls, tol=tol)
+    reds = compute_reds(antpos, bls=bls, tol=tol, pol=pol)
 
     # make red_data dictionary
     red_data = odict()
@@ -1504,11 +1510,12 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0):
     # iterate over red bls
     for i, bl_group in enumerate(reds):
         # find which key in data is in this group
-        select = np.array(map(lambda x: x in keys or x[::-1] in keys, reds[i]))
+        select = np.array(map(lambda x: x in keys or x[::-1] in keys, bl_group))
 
         if True not in select:
             continue
-        k = reds[i][np.argmax(select)]
+
+        k = bl_group[np.argmax(select)]
 
         # iterate over bls and insert data into red_data
         for j, bl in enumerate(bl_group):
