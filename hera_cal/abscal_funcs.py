@@ -680,27 +680,24 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
     if type(filenames) is not list and type(filenames) is not np.ndarray:
         if type(filenames) is str:
             uvd = UVData()
-            if filetype == 'miriad':
-                if os.path.splitext(filenames)[1] == '.uvfits':
-                    raise IOError("trying to load a uvfits w/ read_miriad will cause system exit. "\
-                                  "try again with filetype='uvfits'")
-                uvd.read_miriad(filenames)
-            elif filetype == 'uvfits':
+            suffix = os.path.splitext(filenames)[1]
+            if filetype == 'uvfits' or suffix == '.uvfits':
                 uvd.read_uvfits(filenames)
                 uvd.unphase_to_drift()
+            elif filetype == 'miriad':
+                uvd.read_miriad(filenames)
+
         else:
             uvd = filenames
     else:
         if type(filenames[0]) is str:
             uvd = UVData()
-            if filetype == 'miriad':
-                if os.path.splitext(filenames[0])[1] == '.uvfits':
-                    raise IOError("trying to load a uvfits w/ read_miriad will cause system exit. "\
-                                  "try again with filetype='uvfits'")
-                uvd.read_miriad(filenames)
-            elif filetype == 'uvfits':
+            suffix = os.path.splitext(filenames[0])[1]
+            if filetype == 'uvfits' or suffix == '.uvfits':
                 uvd.read_uvfits(filenames)
                 uvd.unphase_to_drift()
+            elif filetype == 'miriad':
+                uvd.read_miriad(filenames)
         else:
             uvd = reduce(operator.add, filenames)
 
