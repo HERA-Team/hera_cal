@@ -1533,10 +1533,11 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=Fa
             # iterate over matches
             for j, (m, cm) in enumerate(zip(match, conj_match)):
                 if weights:
+                    # if weight dictionary, add repeated baselines 
                     if m == True:
                         if (k in red_data) == False:
                             red_data[k] = copy.copy(data[k])
-                            red_data[k][red_data[k].astype(np.bool)] += len(reds[j]) - 1
+                            red_data[k][red_data[k].astype(np.bool)] = np.sqrt(red_data[k][red_data[k].astype(np.bool)]) + np.sqrt(len(reds[j]) - 1)
                         else:
                             red_data[k][red_data[k].astype(np.bool)] += len(reds[j])
                     elif cm == True:
