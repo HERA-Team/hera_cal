@@ -9,7 +9,7 @@ from abscal_funcs import *
 
 def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None,
               overwrite=False, verbose=True, write_miriad=True, output_data=False,
-              match='nearest', **interp2d_kwargs):
+              match='nearest', filetype='miriad', **interp2d_kwargs):
     """
     Interpolate complex visibilities to align time integrations with an LST grid.
     If output_fname is not provided, write interpolated data as
@@ -24,9 +24,22 @@ def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None,
 
     """
     # try to load model
+    echo("loading models", verbose=verbose)
     if model_fnames is not None:
         uvm = UVData()
-        uvm.read_miriad(model_fnames)
+        # parse suffix
+        if type(model_fnames) == np.str:
+            suffix = os.path.splitext(model_fnames)[1]
+        elif type(model_fnames) == list or type(model_fnames) == np.ndarray:
+            suffix = os.path.splitext(model_fnames[0])[1]
+        else:
+            raise IOError("couldn't parse type of {}".format(model_fnames))
+        if filetype == 'uvfits' or suffix == '.uvfits':
+            uvm.read_uvfits(model_fnames)
+            uvm.unphase_to_drift()
+        elif filetype == 'miriad':
+            uvm.read_miriad(model_fnames)
+        # get meta data
         model_lsts = np.unique(uvm.lst_array) * 12 / np.pi
         model_freqs = np.unique(uvm.freq_array)
     else:
@@ -39,11 +52,9 @@ def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None,
     uvd = UVData()
     uvd.read_miriad(data_fname)
 
-    # get data
-    data, flags = UVData2AbsCalDict(uvd, pop_autos=False)
-
-    # get data lst and freq arrays
-    data_lsts, data_freqs = np.unique(uvd.lst_array) * 12 / np.pi, np.unique(uvd.freq_array)
+    # get data and metadata
+    (data, flags, antpos, ants, data_freqs, data_lsts) = UVData2AbsCalDict(uvd, pop_autos=False, return_meta=True)
+    data_lsts *= 12 / np.pi
     Ntimes = len(data_lsts)
 
     # get closest lsts
@@ -72,7 +83,8 @@ def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None,
     # reorder into arrays
     uvd_data = np.array(interp_data.values())
     uvd_data = uvd_data.reshape(-1, 1, Nfreqs, 1)
-    uvd_flags = np.array(interp_flags.values()).astype(np.bool)
+    uvd_flags = np.array(map(lambda k: interp_flags[k], flags.keys())).astype(np.bool) + \
+                np.array(map(lambda k: flags[k], flags.keys())).astype(np.bool) 
     uvd_flags = uvd_flags.reshape(-1, 1, Nfreqs, 1)
     uvd_keys = np.repeat(np.array(interp_data.keys()).reshape(-1, 1, 2), Ntimes, axis=1).reshape(-1, 2)
     uvd_bls = np.array(map(lambda k: uvd.antnums_to_baseline(k[0], k[1]), uvd_keys))

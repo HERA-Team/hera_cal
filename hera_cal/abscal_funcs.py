@@ -675,6 +675,10 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
 
     data : dictionary containing baseline-pol complex visibility data
     flags : dictionary containing data flags
+    antpos : dictionary containing antennas numbers as keys and position vectors
+    ants : ndarray containing unique antennas
+    freqs : ndarray containing frequency channels (Hz)
+    times : ndarray containing LST bins of data (radians)
     """
     # check filenames is a list
     if type(filenames) is not list and type(filenames) is not np.ndarray:
@@ -1237,7 +1241,7 @@ def abscal_run(data_files, model_files, unravel_pol=False, unravel_freq=False, u
                save=False, calfits_fname=None, output_gains=False, overwrite=False, zero_psi=False,
                smooth=False, **kwargs):
     """
-    run AbsCal on a single data miriad file
+    run AbsCal on a set of contiguous data files
 
     Parameters:
     -----------

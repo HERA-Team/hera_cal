@@ -1,6 +1,5 @@
 """
 #! /usr/bin/env python
-
 from hera_cal import abscal
 import sys
 import os
