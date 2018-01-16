@@ -35,7 +35,7 @@ class Test_AbsCal_Funcs:
             wgts[k] = (~wgts[k]).astype(np.float)
                 
         # configure baselines
-        bls = odict([(x, self.antpos[x[1]] - self.antpos[x[0]]) for x in data.keys()])
+        bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in data.keys()])
 
         # make mock data
         abs_gain = 0.5
@@ -54,19 +54,19 @@ class Test_AbsCal_Funcs:
         # test filename
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         data, flags = hc.abscal.UVData2AbsCalDict(fname, pop_autos=False)
-        nt.assert_equal(data[(11, 12, 'xx')].shape, (60, 64))
-        nt.assert_equal(flags[(11, 12, 'xx')].shape, (60, 64))
-        nt.assert_equal((11, 11, 'xx') in data, True)
+        nt.assert_equal(data[(24, 25, 'xx')].shape, (60, 64))
+        nt.assert_equal(flags[(24, 25, 'xx')].shape, (60, 64))
+        nt.assert_equal((24, 24, 'xx') in data, True)
         data, flags = hc.abscal.UVData2AbsCalDict([fname])
-        nt.assert_equal(data[(11, 12, 'xx')].shape, (60, 64))
+        nt.assert_equal(data[(24, 25, 'xx')].shape, (60, 64))
 
         # test pop autos
         data, flags = hc.abscal.UVData2AbsCalDict(fname, pop_autos=True)
-        nt.assert_equal((11, 11, 'xx') in data, False)
+        nt.assert_equal((24, 24, 'xx') in data, False)
 
         # test pol select
         data, flags = hc.abscal.UVData2AbsCalDict(fname, pop_autos=False, pol_select=['xx'])
-        nt.assert_equal(data[(11, 12, 'xx')].shape, (60, 64))
+        nt.assert_equal(data[(24, 25, 'xx')].shape, (60, 64))
 
         # test uvd object
         uvd = UVData()

@@ -53,7 +53,9 @@ class AbsCal(object):
     pathologies, meaning that a delay calibration should generally precede a phs_logcal
     or a TT_phs_logcal solution.
     """
-    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, times=None, pols=None):
+
+    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, pols=None,
+                 model_ftype='miriad', data_ftype='miriad'):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -74,10 +76,23 @@ class AbsCal(object):
                 these must be at least 2D arrays, with [0] axis indexing time
                 and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
                 should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
+ 
+                Optionally, model can be a path to a miriad file, or a pyuvdata.UVData object
+                with a miriad file read-in, or a list of either ones.
+
+        model_ftype : type=str, if model is a path to a file, this is its filetype
+                      options=['miriad', 'uvfits']
 
         data : visibility data of measurements, type=dictionary
                keys are antenna pair + pol tuples (must match model), values are
                complex ndarray visibilities matching shape of model
+
+                Optionally, model can be a path to a miriad file, or a pyuvdata.UVData object
+                with a miriad file read-in, or a list of either ones. In this case, wgts, antpos, 
+                freqs, times and pols will be overwritten with equivalent information from data.
+
+        data_ftype : type=str, if data is a path to a file, this is its filetype
+                     options=['miriad', 'uvfits']
 
         wgts : weights of data, type=dictionry, [default=None]
                keys are antenna pair + pol tuples (must match model), values are real floats
@@ -100,17 +115,71 @@ class AbsCal(object):
                  This is needed only for Tip Tilt phase calibration.
 
         freqs : ndarray of frequency array, type=ndarray, dtype=float
-            1d array containing visibility frequencies in Hz. Needed to write gain solutions
-            out to calfits.
+                1d array containing visibility frequencies in Hz.
+                Needed for delay calibration.
     
-        times : ndarray of time array, type=ndarray, dtype=float
-            1d array containing visibility times in Julian Date. Needed to write out to calfits.
-
         pols : list of polarizations, type=list, dtype=int
-            list containing polarization integers in pyuvdata.UVData.polarization_array 
-            format. Needed to write out to calfits. Can also be a single string
-            Can be in {-5, -6, -7, -8} format or {'xx', 'yy', 'xy', 'yx'} format.
+               list containing polarization integers of data in
+               pyuvdata.UVData.polarization_array format.
+               Can be in {-5, -6, -7, -8} format or {'xx', 'yy', 'xy', 'yx'} format.
         """
+        # check format of model
+        if type(model) == list or type(model) == np.ndarray:
+            if type(model[0]) == str:
+                # check uvfits
+                uvm = UVData()
+                if os.path.splitext(model[0])[1] == '.uvfits' or model_ftype == 'uvfits':
+                    uvm.read_uvfits(model)
+                    uvm.unphase_to_drift()
+                elif model_ftype == 'miriad':
+                    uvm.read_miriad(model)
+            elif type(model[0]) == UVData:
+                uvm = reduce(operator.add, model)
+            # get dictionary
+            model, mflags = UVData2AbsCalDict(uvm, pop_autos=True)
+        elif type(model) == str:
+            uvm = UVData()
+            if os.path.splitext(model)[1] == '.uvfits' or model_ftype == 'uvfits':
+                uvm.read_uvfits(model)
+                uvm.unphase_to_drift()
+            elif model_ftype == 'miriad':
+                uvm.read_miriad(model)
+            # get dictionary
+            model, mflags = UVData2AbsCalDict(uvm, pop_autos=True)
+        elif type(model) == UVData:
+            # get dictionary
+            model, mflags = UVData2AbsCalDict(model, pop_autos=True)
+
+        # check format of data
+        if type(data) == list or type(data) == np.ndarray:
+            if type(data[0]) == str:
+                # check uvfits
+                uvd = UVData()
+                if os.path.splitext(data[0])[1] == '.uvfits' or data_ftype == 'uvfits':
+                    uvd.read_uvfits(data)
+                    uvd.unphase_to_drift()
+                elif data_ftype == 'miriad':
+                    uvd.read_miriad(data)
+            elif type(data[0]) == UVData:
+                uvd = reduce(operator.add, data)
+            # get dictionary
+            (data, flags, antpos, ants, freqs,
+             times, pols) = UVData2AbsCalDict(uvd, pop_autos=True, return_meta=True)
+        elif type(data) == str:
+            uvd = UVData()
+            if os.path.splitext(data)[1] == '.uvfits' or data_ftype == 'uvfits':
+                uvd.read_uvfits(data)
+                uvd.unphase_to_drift()
+            elif data_ftype == 'miriad':
+                uvd.read_miriad(data)
+            # get dictionary
+            (data, flags, antpos, ants, freqs,
+             times, pols) = UVData2AbsCalDict(uvd, pop_autos=True, return_meta=True)
+        elif type(data) == UVData:
+            # get dictionary
+            (data, flags, antpos, ants, freqs,
+             times, pols) = UVData2AbsCalDict(data, pop_autos=True, return_meta=True)
+
         # get shared keys
         self.keys = sorted(set(model.keys()) & set(data.keys()))
 
@@ -127,21 +196,26 @@ class AbsCal(object):
 
         # setup polarization
         self.str2pol = {"xx": -5, "yy": -6, "xy": -7, "yx": -8}
-        if pols is not None:
-            if type(pols) is list or type(pols) is np.ndarray:
-                if type(pols[0]) is str:
-                    pols = map(lambda x: self.str2pol[x.lower()], pols)
-                elif type(pols[0]) is int:
-                    pols = pols
-            elif type(pols) is str:
-                pols = [self.str2pol[pols.lower()]]
-            elif type(pols) is int:
-                pols = [pols]
-            self.pols = pols
-            self.Npols = len(pols)
-        else:
-            self.pols = None
-            self.Npols = None
+        self.pol2str = {-5:"xx", -6:"yy", -7:"xy", -8:"yx"}
+
+        self.pols = pols
+        if self.pols is None:
+            # if no pols, guess from data
+            self.pols = np.unique(np.array(self.keys)[:, 2])
+        # configure pols to be in integer format
+        if type(self.pols) == list or type(self.pols) == np.ndarray:
+            if type(self.pols[0]) is str or type(self.pols[0]) is np.string_:
+                self.pols = map(lambda x: self.str2pol[x.lower()], self.pols)
+        elif type(self.pols) is str or type(self.pols) is np.string_:
+            self.pols = [self.str2pol[self.pols.lower()]]
+        elif type(self.pols) is int:
+            self.pols = [self.pols]
+        self.Npols = len(self.pols)
+
+        # get pols in string format and get gain_pols
+        self.polstrings = np.array(map(lambda p: self.pol2str[p], self.pols))
+        self.gain_pols = np.unique(map(lambda p: [p[0], p[1]], self.polstrings))
+        self.Ngain_pols = len(self.gain_pols)
 
         # setup weights
         if wgts is None:
@@ -149,13 +223,6 @@ class AbsCal(object):
             for k in self.keys:
                 wgts[k] = np.ones_like(data[k], dtype=np.float)
         self.wgts = wgts
-
-        # setup times
-        self.times = times
-        if times is None:
-            self.Ntimes = None
-        else:
-            self.Ntimes = len(self.times)
 
         # setup ants
         self.ants = np.unique(np.concatenate(map(lambda k: k[:2], self.keys)))
@@ -166,50 +233,52 @@ class AbsCal(object):
         self.antpos_arr = None
         self.bls = None
         if self.antpos is not None:
-            self.bls = odict([(x, self.antpos[x[1]] - self.antpos[x[0]]) for x in self.keys])
+            self.bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in self.keys])
             self.antpos_arr = np.array(map(lambda x: self.antpos[x], self.ants))
             self.antpos_arr -= np.median(self.antpos_arr, axis=0)
 
-    def amp_logcal(self, separate_pol=False, verbose=True):
+        # setup gain solution keys
+        self._gain_keys = map(lambda p: map(lambda a: (a, p), self.ants), self.gain_pols)
+        self._flatten = lambda l: [item for sublist in l for item in sublist]
+
+    def amp_logcal(self, verbose=True):
         """
         call abscal_funcs.amp_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        separate_pol : bool, separate polarization to have independent solutions
-            if False, form a joint solution across both pols
+        verbose : type=boolean, if True print feedback to stdout
 
         Result:
         -------
         per-antenna amplitude and per-antenna amp gains
-        can be accessed via the get functions
+        can be accessed via the getter functions
             self.ant_eta
+            self.ant_eta_arr
             self.ant_eta_gain
+            self.ant_eta_gain_arr
         """
         # set data quantities
         model = self.model
         data = self.data
-        wgts = self.wgts
-
-        if separate_pol:
-            model, pols = data_key_to_array_axis(model, 2)
-            data, pols = data_key_to_array_axis(data, 2)
-            wgts, pols = data_key_to_array_axis(wgts, 2)
+        wgts = copy.copy(self.wgts)
 
         # run linsolve
         fit = amp_logcal(model, data, wgts=wgts, verbose=verbose)
 
         # form result array
-        self._ant_eta = np.array(map(lambda a: fit['eta{}'.format(a)], self.ants))
+        self._ant_eta = odict(map(lambda k: (k, fit["eta_{}_{}".format(k[0], k[1])]), self._flatten(self._gain_keys)))
+        self._ant_eta_arr = np.moveaxis(map(lambda pk: map(lambda k: fit["eta_{}_{}".format(k[0], k[1])], pk), self._gain_keys), 0, -1)
 
-    def phs_logcal(self, separate_pol=False, verbose=True):
+    def phs_logcal(self, avg=False, verbose=True):
         """
         call abscal_funcs.phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        separate_pol : bool, separate polarization to have independent solutions
-            if False, form a joint solution across both pols
+        avg : type=boolean, if True, average across time and frequency
+
+        verbose : type=boolean, if True print feedback to stdout
 
         Result:
         -------
@@ -221,27 +290,21 @@ class AbsCal(object):
         # assign data
         model = self.model
         data = self.data
-        wgts = self.wgts
-
-        # separate pol
-        if separate_pol:
-            model, pols = data_key_to_array_axis(model, 2)
-            data, pols = data_key_to_array_axis(data, 2)
-            wgts, pols = data_key_to_array_axis(wgts, 2)
+        wgts = copy.deepcopy(self.wgts)
 
         # run linsolve
         fit = phs_logcal(model, data, wgts=wgts, verbose=verbose)
 
         # form result array
-        self._ant_phi = np.array(map(lambda a: fit['phi{}'.format(a)], self.ants))
+        self._ant_phi = odict(map(lambda k: (k, fit["phi_{}_{}".format(k[0], k[1])]), self._flatten(self._gain_keys)))
+        self._ant_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: fit["phi_{}_{}".format(k[0], k[1])], pk), self._gain_keys), 0, -1)
 
-    def delay_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False):
+    def delay_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
+                     solve_offsets=True):
         """
         Solve for per-antenna delay according to the equation
         by calling abscal_funcs.delay_lincal method.
         See abscal_funcs.delay_lincal for details.
-
-        Currently only supports joint polarization solutions.
 
         Parameters:
         -----------
@@ -264,64 +327,71 @@ class AbsCal(object):
 
         # assign data
         model = self.model
-        data = self.data
-        wgts = self.wgts
+        data = copy.copy(self.data)
+        wgts = copy.deepcopy(self.wgts)
 
         # get freq channel width
         df = np.median(np.diff(self.freqs))
 
         # run delay_lincal
-        fit = delay_lincal(model, data, medfilt=medfilt, df=df, kernel=kernel, verbose=verbose,
+        fit = delay_lincal(model, data, wgts=wgts, solve_offsets=solve_offsets, medfilt=medfilt, df=df, kernel=kernel, verbose=verbose,
                            time_ax=time_ax, freq_ax=freq_ax)
 
-        # turn into array
-        self._ant_dly = np.array(map(lambda a: fit['tau{}'.format(a)], self.ants))
-
-        # time avg
+        # time average
         if time_avg:
-            Ntimes = self._ant_dly.shape[time_ax+1]
-            self._ant_dly = np.moveaxis(np.median(self._ant_dly, axis=time_ax+1)[np.newaxis], 0, time_ax+1)
-            self._ant_dly = np.repeat(self._ant_dly, Ntimes, axis=time_ax+1)
+            k = self._flatten(self._gain_keys)[0]
+            Ntimes = fit["tau_{}_{}".format(k[0], k[1])].shape[time_ax]
+            for i, k in enumerate(self._flatten(self._gain_keys)):
+                tau_key = "tau_{}_{}".format(k[0], k[1])
+                tau_avg = np.moveaxis(np.median(fit[tau_key], axis=time_ax)[np.newaxis], 0, time_ax)
+                fit[tau_key] = np.repeat(tau_avg, Ntimes, axis=time_ax)
+                if solve_offsets:
+                    phi_key = "phi_{}_{}".format(k[0], k[1])
+                    gain = np.exp(1j*fit[phi_key])
+                    real_avg = np.median(np.real(gain), axis=time_ax)
+                    imag_avg = np.median(np.imag(gain), axis=time_ax)
+                    phi_avg = np.moveaxis(np.angle(real_avg + 1j*imag_avg)[np.newaxis], 0, time_ax)
+                    fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=time_ax)
 
-    def abs_amp_lincal(self, separate_pol=False, verbose=True):
+        # form result
+        self._ant_dly = odict(map(lambda k: (k, copy.copy(fit["tau_{}_{}".format(k[0], k[1])])), self._flatten(self._gain_keys)))
+        self._ant_dly_arr = np.moveaxis(map(lambda pk: map(lambda k: copy.copy(fit["tau_{}_{}".format(k[0], k[1])]), pk), self._gain_keys), 0, -1)
+        self._ant_dly_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0],k[1])])), self._flatten(self._gain_keys)))
+        self._ant_dly_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: copy.copy(fit["phi_{}_{}".format(k[0], k[1])]), pk), self._gain_keys), 0, -1)
+
+    def abs_amp_logcal(self, verbose=True):
         """
-        call abscal_funcs.abs_amp_lincal() method. see its docstring for more details.
+        call abscal_funcs.abs_amp_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        separate_pol : bool, separate polarization to have independent solutions
-            if False, form a joint solution across both pols
+        verbose : type=boolean, if True print feedback to stdout
 
         Result:
         -------
         Absolute amplitude scalar can be accessed via methods
-            self.abs_amp
-            self.abs_amp_gain
+            self.abs_eta
+            self.abs_eta_gain
         """
         # set data quantities
         model = self.model
         data = self.data
-        wgts = self.wgts
+        wgts = copy.deepcopy(self.wgts)
 
-        if separate_pol:
-            model, pols = data_key_to_array_axis(model, 2)
-            data, pols = data_key_to_array_axis(data, 2)
-            wgts, pols = data_key_to_array_axis(wgts, 2)
-
-        # run abs_amp_lincal
-        fit = abs_amp_lincal(model, data, wgts=wgts, verbose=verbose)
+        # run abs_amp_logcal
+        fit = abs_amp_logcal(model, data, wgts=wgts, verbose=verbose)
 
         # form result
-        self._abs_amp = np.sqrt(fit['amp'])
+        self._abs_eta = odict(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), self._flatten(self._gain_keys)))
+        self._abs_eta_arr = np.moveaxis(map(lambda pk: map(lambda k: copy.copy(fit["eta_{}".format(k[1])]), pk), self._gain_keys), 0, -1)
 
-    def TT_phs_logcal(self, separate_pol=False, verbose=True, zero_psi=False):
+    def TT_phs_logcal(self, verbose=True, zero_psi=False):
         """
         call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        separate_pol : bool, separate polarization to have independent solutions
-            if False, form a joint solution across both pols
+        verbose : type=boolean, if True print feedback to stdout
 
         Result:
         -------
@@ -334,82 +404,181 @@ class AbsCal(object):
         # set data quantities
         model = self.model
         data = self.data
-        wgts = self.wgts
+        wgts = copy.deepcopy(self.wgts)
         bls = self.bls
-
-        if separate_pol:
-            model, bls, pols = data_key_to_array_axis(model, 2, avg_dict=bls)
-            data, pols = data_key_to_array_axis(data, 2)
-            wgts, pols = data_key_to_array_axis(wgts, 2)
 
         # run TT_phs_logcal
         fit = TT_phs_logcal(model, data, bls, wgts=wgts, verbose=verbose, zero_psi=zero_psi)
 
         # form result
-        self._abs_psi = fit['psi']
-        self._TT_Phi = np.array([fit['PHIx'], fit['PHIy']])
+        self._abs_psi = odict(map(lambda k: (k, fit["psi_{}".format(k[1])]), self._flatten(self._gain_keys)))
+        self._abs_psi_arr = np.moveaxis(map(lambda pk: map(lambda k: fit["psi_{}".format(k[1])], pk), self._gain_keys), 0, -1)
+
+        self._TT_Phi = odict(map(lambda k: (k, np.array([fit["Phi_ew"], fit["Phi_ns"]])), self._flatten(self._gain_keys)))
+        self._TT_Phi_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([fit["Phi_ew"], fit["Phi_ns"]]), pk), self._gain_keys), 0, -1)
 
     @property
     def ant_eta(self):
-        """ return _ant_eta array """
+        """ return _ant_eta dict """
         if hasattr(self, '_ant_eta'):
-            return copy.copy(self._ant_eta)
+            return copy.deepcopy(self._ant_eta)
         else:
             return None
 
     @property
     def ant_eta_gain(self):
-        """ form complex gain from _ant_eta array """
+        """ form complex gain from _ant_eta dict """
         if hasattr(self, '_ant_eta'):
-            return np.exp(self.ant_eta).astype(np.complex)
+            ant_eta = self.ant_eta
+            return odict(map(lambda k: (k, np.exp(ant_eta[k]).astype(np.complex)), self._flatten(self._gain_keys)))
+        else:
+            return None
+
+    @property
+    def ant_eta_arr(self):
+        """ return _ant_eta_arr array """
+        if hasattr(self, '_ant_eta_arr'):
+            return copy.copy(self._ant_eta_arr)
+        else:
+            return None
+
+    @property
+    def ant_eta_gain_arr(self):
+        """ form complex gain from _ant_eta_arr """
+        if hasattr(self, '_ant_eta_arr'):
+            return np.exp(self.ant_eta_arr).astype(np.complex)
         else:
             return None
 
     @property
     def ant_phi(self):
-        """ return _ant_phi array """
+        """ return _ant_phi dict """
         if hasattr(self, '_ant_phi'):
-            return copy.copy(self._ant_phi)
+            return copy.deepcopy(self._ant_phi)
         else:
             return None
 
     @property
     def ant_phi_gain(self):
-        """ form complex gain from _ant_phi array """
+        """ form complex gain from _ant_phi dict """
         if hasattr(self, '_ant_phi'):
-            return np.exp(1j*self.ant_phi)
+            ant_phi = self.ant_phi
+            return odict(map(lambda k: (k, np.exp(1j*ant_phi[k])), self._flatten(self._gain_keys)))
+        else:
+            return None
+
+    @property
+    def ant_phi_arr(self):
+        """ return _ant_phi_arr array """
+        if hasattr(self, '_ant_phi_arr'):
+            return copy.copy(self._ant_phi_arr)
+        else:
+            return None
+
+    @property
+    def ant_phi_gain_arr(self):
+        """ form complex gain from _ant_phi_arr array """
+        if hasattr(self, '_ant_phi_arr'):
+            return np.exp(1j*self.ant_phi_arr)
         else:
             return None
 
     @property
     def ant_dly(self):
-        """ return _ant_dly array """
+        """ return _ant_dly dict """
         if hasattr(self, '_ant_dly'):
-            return copy.copy(self._ant_dly)
+            return copy.deepcopy(self._ant_dly)
         else:
             return None
 
     @property
     def ant_dly_gain(self):
-        """ form complex gain from _ant_dly array """
+        """ form complex gain from _ant_dly dict """
         if hasattr(self, '_ant_dly'):
-            return np.exp(2j*np.pi*self.freqs*self.ant_dly)
+            ant_dly = self.ant_dly
+            return odict(map(lambda k: (k, np.exp(2j*np.pi*self.freqs.reshape(1, -1)*ant_dly[k])), self._flatten(self._gain_keys)))
         else:
             return None
 
     @property
-    def abs_amp(self):
-        """return _abs_amp array"""
-        if hasattr(self, '_abs_amp'):
-            return copy.copy(self._abs_amp)
+    def ant_dly_arr(self):
+        """ return _ant_dly_arr array """
+        if hasattr(self, '_ant_dly_arr'):
+            return copy.copy(self._ant_dly_arr)
         else:
             return None
 
     @property
-    def abs_amp_gain(self):
-        """form complex gain from _abs_amp array"""
-        if hasattr(self, '_abs_amp'):
-            return np.repeat(np.sqrt(self._abs_amp).astype(np.complex)[np.newaxis], len(self.ants), axis=0)
+    def ant_dly_gain_arr(self):
+        """ form complex gain from _ant_dly_arr array """
+        if hasattr(self, '_ant_dly_arr'):
+            return np.exp(2j*np.pi*self.freqs.reshape(-1, 1)*self.ant_dly_arr)
+        else:
+            return None
+
+    @property
+    def ant_dly_phi(self):
+        """ return _ant_dly_phi dict """
+        if hasattr(self, '_ant_dly_phi'):
+            return copy.deepcopy(self._ant_dly_phi)
+        else:
+            return None
+
+    @property
+    def ant_dly_phi_gain(self):
+        """ form complex gain from _ant_dly_phi dict """
+        if hasattr(self, '_ant_dly_phi'):
+            ant_dly_phi = self.ant_dly_phi
+            return odict(map(lambda k: (k, np.exp(1j*ant_dly_phi[k])), self._flatten(self._gain_keys)))
+        else:
+            return None
+
+    @property
+    def ant_dly_phi_arr(self):
+        """ return _ant_dly_phi_arr array """
+        if hasattr(self, '_ant_dly_phi_arr'):
+            return copy.copy(self._ant_dly_phi_arr)
+        else:
+            return None
+
+    @property
+    def ant_dly_phi_gain_arr(self):
+        """ form complex gain from _ant_dly_phi_arr array """
+        if hasattr(self, '_ant_dly_phi_arr'):
+            return np.exp(1j*self.ant_dly_phi_arr)
+        else:
+            return None
+
+    @property
+    def abs_eta(self):
+        """return _abs_eta array"""
+        if hasattr(self, '_abs_eta'):
+            return copy.deepcopy(self._abs_eta)
+        else:
+            return None
+
+    @property
+    def abs_eta_gain(self):
+        """form complex gain from _abs_eta dict"""
+        if hasattr(self, '_abs_eta'):
+            abs_eta = self.abs_eta
+            return odict(map(lambda k: (k, np.exp(abs_eta[k]).astype(np.complex)), self._flatten(self._gain_keys)))
+        else:
+            return None
+
+    @property
+    def abs_eta_arr(self):
+        """return _abs_eta_arr array"""
+        if hasattr(self, '_abs_eta_arr'):
+            return copy.copy(self._abs_eta_arr)
+        else:
+            return None
+
+    @property
+    def abs_eta_gain_arr(self):
+        """form complex gain from _abs_eta_arr array"""
+        if hasattr(self, '_abs_eta_arr'):
+            return np.repeat(np.exp(self._abs_eta_arr).astype(np.complex)[np.newaxis], len(self.ants), axis=0)
         else:
             return None
 
@@ -417,7 +586,7 @@ class AbsCal(object):
     def abs_psi(self):
         """return _abs_psi array"""
         if hasattr(self, '_abs_psi'):
-            return copy.copy(self._abs_psi)
+            return copy.deepcopy(self._abs_psi)
         else:
             return None
 
@@ -425,7 +594,24 @@ class AbsCal(object):
     def abs_psi_gain(self):
         """ form complex gain from _abs_psi array """
         if hasattr(self, '_abs_psi'):
-            return np.repeat(np.exp(1j*self._abs_psi)[np.newaxis], len(self.ants), axis=0)
+            abs_psi = self.abs_psi
+            return odict(map(lambda k: (k, np.exp(1j*abs_psi[k])), self._flatten(self._gain_keys)))
+        else:
+            return None
+
+    @property
+    def abs_psi_arr(self):
+        """return _abs_psi_arr array"""
+        if hasattr(self, '_abs_psi_arr'):
+            return copy.copy(self._abs_psi_arr)
+        else:
+            return None
+
+    @property
+    def abs_psi_gain_arr(self):
+        """ form complex gain from _abs_psi_arr array """
+        if hasattr(self, '_abs_psi_arr'):
+            return np.repeat(np.exp(1j*self._abs_psi_arr)[np.newaxis], len(self.ants), axis=0)
         else:
             return None
 
@@ -433,7 +619,7 @@ class AbsCal(object):
     def TT_Phi(self):
         """return _TT_Phi array"""
         if hasattr(self, '_TT_Phi'):
-            return copy.copy(self._TT_Phi)
+            return copy.deepcopy(self._TT_Phi)
         else:
             return None
 
@@ -441,9 +627,27 @@ class AbsCal(object):
     def TT_Phi_gain(self):
         """ form complex gain from _TT_Phi array """
         if hasattr(self, '_TT_Phi'):
-            return np.exp(1j*np.einsum("i...,hi->h...", self._TT_Phi, self.antpos_arr[:, :2]))
+            TT_Phi = self.TT_Phi
+            return odict(map(lambda k: (k, np.exp(1j*np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), self._flatten(self._gain_keys)))
         else:
             return None
+
+    @property
+    def TT_Phi_arr(self):
+        """return _TT_Phi_arr array"""
+        if hasattr(self, '_TT_Phi_arr'):
+            return copy.copy(self._TT_Phi_arr)
+        else:
+            return None
+
+    @property
+    def TT_Phi_gain_arr(self):
+        """ form complex gain from _TT_Phi_arr array """
+        if hasattr(self, '_TT_Phi_arr'):
+            return np.exp(1j*np.einsum("hi...,hi->h...", self._TT_Phi_arr, self.antpos_arr[:, :2]))
+        else:
+            return None
+
 
 ''' TO DO
     def smooth_data(self, data, flags=None, kind='linear'):

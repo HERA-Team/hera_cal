@@ -22,21 +22,22 @@ import itertools
 import operator
 
 
-def abs_amp_lincal(model, data, wgts=None, verbose=True):
+def abs_amp_logcal(model, data, wgts=None, verbose=True):
     """
     calculate absolute (array-wide) gain amplitude scalar
-    with a linear solver using equation:
+    with a linear solver using logarithmically linearized equation:
 
-    |V_ij^model| = A * |V_ij^data|
+    ln|V_ij,xy^model / V_ij,xy^data| = eta_x + eta_y
+
+    where {i,j} index antenna numbers and {x,y} index polarizations
 
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
-            these must be at least 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
+            these must be 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
 
     data : visibility data of measurements, type=dictionary
            keys are antenna pair + poltuples (must match model), values are
@@ -50,16 +51,16 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True):
 
     Output:
     -------
-    fit : dictionary with 'amp' key for amplitude scalar, which has the same shape as
-        the ndarrays in model
+    fit : dictionary with 'amp_x' key for amplitude scalar for x polarization,
+            which has the same shape as the ndarrays in the model
     """
-    echo("...configuring linsolve data for abs_amp_lincal", verbose=verbose)
+    echo("...configuring linsolve data for abs_amp_logcal", verbose=verbose)
 
     # get keys from model dictionary
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # abs of amplitude ratio is ydata independent variable
-    ydata = odict([(k, np.abs(model[k]/data[k])) for k in model.keys()])
+    ydata = odict([(k, np.log(np.abs(model[k]/data[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -72,22 +73,16 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True):
         nan_select = np.isnan(ydata[k])
         ydata[k][nan_select] = 0.0
         wgts[k][nan_select] = 0.0
-        nan_select = np.isnan(model[k])
-        model[k][nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
 
     # replace infs
     for i, k in enumerate(keys):
         inf_select = np.isinf(ydata[k])
         ydata[k][inf_select] = 0.0
         wgts[k][inf_select] = 0.0
-        inf_select = np.isinf(model[k])
-        model[k][inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
 
     # setup linsolve equations
-    eqns = odict([(k, "a{}*amp".format(str(i))) for i, k in enumerate(keys)])
-    ls_design_matrix = odict([("a{}".format(str(i)), 1.0) for i, k in enumerate(keys)])
+    eqns = odict([(k, "a{}*eta_{}+a{}*eta_{}".format(i, k[-1][0], i, k[-1][1])) for i, k in enumerate(keys)])
+    ls_design_matrix = odict([("a{}".format(i), 1.0) for i, k in enumerate(keys)])
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -102,27 +97,26 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
+def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False, four_pol=False):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (EW and NS)
     with a linear solver applied to the logarithmically
     linearized equation:
 
-    phi_ij^model = phi_ij^data + psi + PHI^x * b_ij^x + PHI^y * b_ij^y
+    phi_ij,xy^model = phi_ij,xy^data + psi_x - psi_y + PHI^ew * b_ij^ew + PHI^ns * b_ij^ns
 
-    where psi is the overall gain phase across the array [radians],
-    and PHI = <PHI^x, PHI^y> is the gain phase slopes across the
+    where psi is the overall gain phase across the array [radians] for x and y polarizations,
+    and PHI = <PHI^ew, PHI^ns> is the gain phase slopes across the
     x axis (east-west) and y axis (north-south) of the array respectively
-    in units of [radians / meter].
+    in units of [radians / meter], and is the same across all polarizations.
 
     Parameters:
     -----------
     model : visibility data of refence model, type=dictionary
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
-            these must be at least 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
+            these must 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
 
     data : visibility data of measurements, type=dictionary
            keys are antenna pair + pol tuples (must match model), values are
@@ -134,8 +128,8 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
 
     bls : baseline vectors of antenna pairs, type=dictionary
           keys are antenna pair tuples (must match model), values are 2D or 3D ndarray
-          baseline vectors in meters, with [0] index containing X (E-W) separation
-          and [1] index Y (N-S) separation and [2] index Z (up-down) separation.
+          baseline vectors in meters, with [0] index containing east-west separation
+          and [1] index north-south separation and, if available, [2] index up-down separation.
 
     verbose : print output, type=boolean, [default=False]
 
@@ -167,17 +161,11 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
         nan_select = np.isnan(ydata[k])
         ydata[k][nan_select] = 0.0
         wgts[k][nan_select] = 0.0
-        nan_select = np.isnan(model[k])
-        model[k][nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
 
     # replace infs
     for i, k in enumerate(keys):
         inf_select = np.isinf(ydata[k])
         ydata[k][inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
-        inf_select = np.isinf(model[k])
-        model[k][inf_select] = 0.0
         wgts[k][inf_select] = 0.0
 
     # setup baseline terms
@@ -186,9 +174,14 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False):
 
     # setup linsolve equations
     if zero_psi:
-        eqns = odict([(k, "psi*0 + PHIx*{} + PHIy*{}".format(bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+        eqns = odict([(k, "psi_{}*0 - psi_{}*0 + Phi_ew*{} + Phi_ns*{}".format(k[-1][0], k[-1][1], bx[k][0], by[k][0])) for i, k in enumerate(keys)])
     else:
-        eqns = odict([(k, "psi + PHIx*{} + PHIy*{}".format(bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+        eqns = odict([(k, "psi_{} - psi_{} + Phi_ew*{} + Phi_ns*{}".format(k[-1][0], k[-1][1], bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+
+    # check for 4pol
+    if four_pol:
+        eqns = odict([(k, "psi_{} - psi_{} + Phi_ew*{} + Phi_ns*{}".format(k[-1][0], k[-1][1], bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+
 
     ls_design_matrix = odict(bx.values() + by.values())
 
@@ -210,7 +203,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     calculate per-antenna gain amplitude via the
     logarithmically linearized equation
 
-    ln|V_ij^model| - ln|V_ij^data| = ln|g_i| + ln|g_j|
+    ln|V_ij,xy^model / V_ij,xy^data| = ln|g_i_x| + ln|g_j_y|
 
     Parameters:
     -----------
@@ -252,21 +245,15 @@ def amp_logcal(model, data, wgts=None, verbose=True):
         nan_select = np.isnan(ydata[k])
         ydata[k][nan_select] = 0.0
         wgts[k][nan_select] = 0.0
-        nan_select = np.isnan(model[k])
-        model[k][nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
 
     # replace infs
     for i, k in enumerate(keys):
         inf_select = np.isinf(ydata[k])
         ydata[k][inf_select] = 0.0
         wgts[k][inf_select] = 0.0
-        inf_select = np.isinf(model[k])
-        model[k][inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
 
     # setup linsolve equations
-    eqns = odict([(k, "eta{} + eta{}".format(k[0], k[1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, "eta_{}_{} + eta_{}_{}".format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict()
 
     # setup linsolve dictionaries
@@ -287,7 +274,7 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     calculate per-antenna gain phase via the 
     logarithmically linearized equation
 
-    angle(V_ij^model / V_ij^data) = angle(g_i * conj(g_j))
+    angle(V_ij,xy^model / V_ij,xy^data) = angle(g_i_x) - angle(g_j_y)
 
     Parameters:
     -----------
@@ -329,21 +316,15 @@ def phs_logcal(model, data, wgts=None, verbose=True):
         nan_select = np.isnan(ydata[k])
         ydata[k][nan_select] = 0.0
         wgts[k][nan_select] = 0.0
-        nan_select = np.isnan(model[k])
-        model[k][nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
 
     # replace infs
     for i, k in enumerate(keys):
         inf_select = np.isinf(ydata[k])
         ydata[k][inf_select] = 0.0
         wgts[k][inf_select] = 0.0
-        inf_select = np.isinf(model[k])
-        model[k][inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
 
     # setup linsolve equations
-    eqns = odict([(k, "phi{} - phi{}".format(k[0], k[1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, "phi_{}_{} - phi_{}_{}".format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict()
 
     # setup linsolve dictionaries
@@ -359,12 +340,12 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def delay_lincal(model, data, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
+def delay_lincal(model, data, wgts=None, solve_offsets=False, df=9.765625e4, medfilt=True, kernel=(1, 5),
                  verbose=True, time_ax=0, freq_ax=1):
     """
     Solve for per-antenna delay according to the equation
 
-    delay(V_ij^model / V_ij^data) = delay(g_i) - delay(g_j)
+    delay(V_ij,xy^model / V_ij,xy^data) = delay(g_i_x) - delay(g_j_y)
 
     Parameters:
     -----------
@@ -383,12 +364,17 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, medfilt=True, kernel=(1,
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
+    solve_offsets : boolean, if True, setup a system of linear equations for per-antenna phase offset
+                    and solve.
+
     medfilt : boolean, if True median filter data before fft
 
     Output:
     -------
     fit : dictionary containing delay (tau_i) for each antenna
     """
+    echo("...configuring linsolve data for delay_lincal", verbose=verbose)
+
     # get shared keys
     keys = sorted(set(model.keys()) & set(data.keys()))
 
@@ -399,6 +385,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, medfilt=True, kernel=(1,
 
     # median filter and FFT to get delays
     ratio_delays = []
+    ratio_offsets = []
     for i, k in enumerate(keys):
         ratio = model[k]/data[k]
 
@@ -406,6 +393,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, medfilt=True, kernel=(1,
         nan_select = np.isnan(ratio)
         ratio[nan_select] = 0.0
         wgts[k][nan_select] = 0.0
+
         # replace infs
         inf_select = np.isinf(ratio)
         ratio[inf_select] = 0.0
@@ -414,14 +402,16 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, medfilt=True, kernel=(1,
         # get delays
         dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
         ratio_delays.append(dly)
+        ratio_offsets.append(offset)
        
     ratio_delays = np.array(ratio_delays)
+    ratio_offsets = np.array(ratio_offsets)
 
     # form ydata
     ydata = odict(zip(keys, ratio_delays))
 
     # setup linsolve equation dictionary
-    eqns = odict([(k, 'tau{} - tau{}'.format(k[0], k[1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, 'tau_{}_{} - tau_{}_{}'.format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
 
     # setup design matrix dictionary
     ls_design_matrix = odict()
@@ -435,6 +425,19 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, medfilt=True, kernel=(1,
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
+    # solve for offsets
+    if solve_offsets:
+        # setup linsolve parameters
+        ydata = odict(zip(keys, ratio_offsets))
+        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
+        ls_design_matrix = odict()
+        ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+        sol = linsolve.LinearSolver(ls_data, **ls_design_matrix)
+        echo("...running linsolve", verbose=verbose)
+        offset_fit = sol.solve()
+        echo("...finished linsolve", verbose=verbose)
+        fit.update(offset_fit)
+
     return fit
 
 
@@ -444,14 +447,17 @@ def apply_gains(data, gains, gain_convention='multiply'):
 
     Parameters:
     -----------
-    data : type=dictionary, holds complex visibility data
+    data : type=dictionary, holds complex visibility data.
         keys are antenna-pair tuples + pol tuples.
         values are ndarray complex visibility data.
 
-    gains : type=dictionary, holds complex per-antenna gain data
-        keys are antenna integer tuple + pol tuples.
+    gains : type=dictionary, holds complex, per-antenna gain data.
+        keys are antenna integer + gain pol tuples, Ex. (1, 'x').
         values are complex ndarrays
         with shape matching data's visibility ndarrays
+
+        Optionally, can be a tuple holding multiple gains dictionaries
+        that will all be multiplied together.
 
     Output:
     -------
@@ -465,8 +471,20 @@ def apply_gains(data, gains, gain_convention='multiply'):
 
     # iterate over keys:
     for i, k in enumerate(keys):
+        # get gain keys
+        g1 = (k[0], k[-1][0])
+        g2 = (k[1], k[-1][1])
+
         # form visbility gain product
-        vis_gain = gains[k[0]] * np.conj(gains[k[1]])
+        if type(gains) == dict or type(gains) == odict:
+            vis_gain = gains[g1] * np.conj(gains[g2])
+
+        elif type(gains) == tuple or type(gains) == list:
+            for i, g in enumerate(gains):
+                if i == 0:
+                    vis_gain = g[g1] * np.conj(g[g2])
+                else:
+                    vis_gain *= g[g1] * np.conj(g[g2])
 
         # apply to data
         if gain_convention == "multiply":
@@ -628,7 +646,7 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
     Output:
     -------
     if return_meta is True:
-        (data, flags, antpos, ants, freqs, times)
+        (data, flags, antpos, ants, freqs, times, pols)
     else:
         (data, flags)
 
@@ -680,14 +698,15 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
         times = np.unique(uvd.lst_array)
         antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
         antpos = odict(zip(ants, antpos))
-        return data, flags, antpos, ants, freqs, times
+        pols = uvd.polarization_array
+        return data, flags, antpos, ants, freqs, times, pols
     else:
         return data, flags
 
 
 def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1):
     """
-    get delay of visibility across band using FFT w/ blackman harris window
+    get delay of visibility across band using FFT w/ tukey window
     and quadratic fit to delay peak.
 
     Parameters:
@@ -726,7 +745,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
         vis_smooth = vis
 
     # fft
-    window = np.repeat(signal.windows.blackmanharris(Nfreqs)[np.newaxis], Ntimes, axis=time_ax)
+    window = np.repeat(signal.windows.tukey(Nfreqs)[np.newaxis], Ntimes, axis=time_ax)
     window = np.moveaxis(window, 0, time_ax)
     window *= wgts
     vfft = np.fft.fft(vis_smooth * window, axis=freq_ax)
@@ -742,9 +761,10 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
 
     # get peak shifts, and add to dlys
     def get_peak(amp, max_ind):
-        y = amp[max_ind-1:max_ind+2]
-        if len(y) < 3:
-            return 0
+        Nchan = len(amp)
+        y = np.concatenate([amp,amp,amp])
+        max_ind += Nchan
+        y = y[max_ind-1:max_ind+2]
         r = np.abs(np.diff(y))
         r = r[0] / r[1]
         peak = 0.5 * (r-1) / (r+1)
@@ -761,9 +781,14 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
         real = np.take(vfft.real, i, axis=time_ax)
         imag = np.take(vfft.imag, i, axis=time_ax)
 
+        # wrap around
+        real = np.concatenate([real, real, real])
+        imag = np.concatenate([imag, imag, imag])
+        a += Nfreqs
+
         # add interpolation component
-        rl = interpolate.interp1d(np.arange(Nfreqs), real)(a + peak_shifts[i])
-        im = interpolate.interp1d(np.arange(Nfreqs), imag)(a + peak_shifts[i])
+        rl = interpolate.interp1d(np.arange(Nfreqs*3), real)(a + peak_shifts[i])
+        im = interpolate.interp1d(np.arange(Nfreqs*3), imag)(a + peak_shifts[i])
 
         # insert into arrays
         vfft_real.append(rl)
