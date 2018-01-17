@@ -25,11 +25,12 @@ import operator
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
     """
     calculate absolute (array-wide) gain amplitude scalar
-    with a linear solver using logarithmically linearized equation:
+    with a linear solver using the logarithmically linearized equation:
 
     ln|V_ij,xy^model / V_ij,xy^data| = eta_x + eta_y
 
     where {i,j} index antenna numbers and {x,y} index polarizations
+    of the i-th and j-th antennas respectively.
 
     Parameters:
     -----------
@@ -40,18 +41,18 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
             and [1] axis indexing frequency.
 
     data : visibility data of measurements, type=dictionary
-           keys are antenna pair + poltuples (must match model), values are
+           keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
     wgts : weights of data, type=dictionry, [default=None]
-           keys are antenna pair + poltuples (must match model), values are real floats
+           keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
     verbose : print output, type=boolean, [default=False]
 
     Output:
     -------
-    fit : dictionary with 'eta_x' key for amplitude scalar for x polarization,
+    fit : dictionary with 'eta_{}' key for amplitude scalar for {} polarization,
             which has the same shape as the ndarrays in the model
     """
     echo("...configuring linsolve data for abs_amp_logcal", verbose=verbose)
@@ -92,19 +93,19 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
 def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
                   merge_pols=False):
     """
-    calculate overall gain phase and gain phase Tip-Tilt slopes (EW and NS)
-    with a linear solver applied to the logarithmically
-    linearized equation:
+    calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
+    with a linear solver applied to the logarithmically linearized equation:
 
     angle(V_ij,xy^model / V_ij,xy^data) = angle(g_i_x) * angle(conj(g_j_y))
                                         = psi_x - psi_y + PHI^ew_x*r_i^ew + PHI^ns_x*r_i^ns
                                           - PHI^ew_y*r_j^ew - PHI^ns_y*r_j^ns
 
     where psi is the overall gain phase across the array [radians] for x and y polarizations,
-    and PHI = <PHI^ew, PHI^ns> is the gain phase slopes across the east-west and north-south axes
-    of the array in x and y polarizations in units of [radians / meter]. Note that x and y 
-    denote the pol of the first and second gain, and are the same in the 1pol and 2pol case (default),
-    and r_i is the antenna position vector of the i^th antenna.
+    and PHI^ew, PHI^ns are the gain phase slopes across the east-west and north-south axes
+    of the array in units of [radians / meter], where x and y denote the pol of the i-th and j-th
+    antenna respectively. The phase slopes are polarization independent by default (1pol & 2pol cal),
+    but can be merged with the merge_pols parameter (4pol cal). r_i is the antenna position vector
+    of the i^th antenna.
 
     Parameters:
     -----------
@@ -123,8 +124,8 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
            matching shape of model and data
 
     antpos : antenna position vectors, type=dictionary
-          keys are antenna integers, values are 2D or 3D ndarray
-          antenna vectors in meters (preferably centered at origin of array),
+          keys are antenna integers, values are 2D
+          antenna vectors in meters (preferably centered at center of array),
           with [0] index containing east-west separation and [1] index north-south separation
 
     zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
@@ -138,7 +139,8 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
     Output:
     -------
     fit : dictionary with psi key for overall gain phase and Phi_ew and Phi_ns array containing
-            phase slopes across the EW and NS directions of the array.
+            phase slopes across the EW and NS directions of the array. There is a set of each
+            of these variables per polarization.
     """
     echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
 
@@ -200,6 +202,10 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     logarithmically linearized equation
 
     ln|V_ij,xy^model / V_ij,xy^data| = ln|g_i_x| + ln|g_j_y|
+                                     = eta_i_x + eta_j_y
+
+    where {x,y} represent the polarization of the i-th and j-th antenna
+    respectively.
 
     Parameters:
     -----------
@@ -261,6 +267,9 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     logarithmically linearized equation
 
     angle(V_ij,xy^model / V_ij,xy^data) = angle(g_i_x) - angle(g_j_y)
+                                        = phi_i_x - phi_j_y
+
+    where {x,y} represent the pol of the i-th and j-th antenna respectively.
 
     Parameters:
     -----------
@@ -316,12 +325,14 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def delay_lincal(model, data, wgts=None, solve_offsets=True, df=9.765625e4, medfilt=True, kernel=(1, 5),
+def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medfilt=True, kernel=(1, 5),
                  verbose=True, time_ax=0, freq_ax=1):
     """
     Solve for per-antenna delay according to the equation
 
     delay(V_ij,xy^model / V_ij,xy^data) = delay(g_i_x) - delay(g_j_y)
+
+    Can also solve for the phase offset per antenna per polarization.
 
     Parameters:
     -----------
@@ -340,14 +351,23 @@ def delay_lincal(model, data, wgts=None, solve_offsets=True, df=9.765625e4, medf
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
+    df : type=float, frequency spacing between channels in Hz
+
     solve_offsets : type=boolean, if True, setup a system of linear equations for per-antenna phase offset
                     and solve.
 
-    medfilt : boolean, if True median filter data before fft
+    medfilt : type=boolean, median filter visiblity ratio before taking fft
+
+    kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
+
+    time_ax : type=int, time axis of model and data
+
+    freq_ax : type=int, freq axis of model and data
 
     Output:
     -------
-    fit : dictionary containing delay (tau_i) for each antenna
+    fit : dictionary containing delay (tau_i_x) for each antenna and optionally
+            offset (phi_i_x) for each antenna.
     """
     echo("...configuring linsolve data for delay_lincal", verbose=verbose)
 

@@ -4,17 +4,20 @@ abscal.py
 
 Calibrate measured visibility
 data to a visibility model using
-linearizations of the
-(complex) antenna-based calibration equation:
+linearizations of the (complex)
+antenna-based calibration equation:
 
-V_ij^model = g_i * conj(g_j) * V_ij^data
+V_ij,xy^model = g_i_x * conj(g_j_y) * V_ij,xy^data.
 
-where
+Complex-valued parameters are broken into amplitudes and phases as:
 
-V_ij^model = exp(eta_ij^model + i * phi_ij^model)
-g_i = exp(eta_i + i * phi_i)
-g_j = exp(eta_j + i * phi_j)
-V_ij^data = exp(eta_ij^data + i * phi_ij^data)
+V_ij,xy^model = exp(eta_ij,xy^model + i * phi_ij,xy^model)
+g_i_x = exp(eta_i_x + i * phi_i_x)
+g_j_y = exp(eta_j_y + i * phi_j_y)
+V_ij,xy^data = exp(eta_ij,xy^data + i * phi_ij,xy^data)
+
+where {i,j} index antennas and {x,y} are the polarization of
+the i-th and j-th antenna respectively.
 """
 from abscal_funcs import *
 
@@ -37,7 +40,7 @@ class AbsCal(object):
        into a complex gain via: g = exp(i * 2pi * tau * freqs).
 
     4) Average amplitude linear calibration solves the equation:
-            |V_ij^model / V_ij^data| = |g_avg|
+            log|V_ij^model / V_ij^data| = log|g_avg_i| + log|g_avg_j|
  
     5) Tip-Tilt phase logarithmic calibration solves the equation
             angle(V_ij^model /  V_ij^data) = psi + dot(TT_Phi, B_ij)
@@ -50,8 +53,8 @@ class AbsCal(object):
     been redundantly calibrated.
 
     Be warned that the linearizations of the phase solvers suffer from phase wrapping
-    pathologies, meaning that a delay calibration should generally precede a phs_logcal
-    or a TT_phs_logcal solution.
+    pathologies, meaning that a delay calibration and then average phase calibration should
+    generally precede a phs_logcal or a TT_phs_logcal bandpass routine.
     """
 
     def __init__(self, model, data, wgts=None, antpos=None, freqs=None, pol_select=None,
@@ -63,10 +66,6 @@ class AbsCal(object):
         python dictionary or OrderedDictionary, with the convention that keys contain
         antennas-pairs + polarization, Ex. (1, 2, 'xx'),
         and values contain 2D complex ndarrays with [0] axis indexing time and [1] axis frequency.
-
-        Optionally, a singe key can hold multiple polarizations, in which case the key loses
-        its polarization, Ex. (1, 2), and the value becomes a 3D complex ndarray, with [2] axis
-        indexing polarizations.
 
         Parameters:
         -----------
@@ -98,12 +97,10 @@ class AbsCal(object):
                keys are antenna pair + pol tuples (must match model), values are real floats
                matching shape of model and data
 
-        antpos : type=dictionary, dict of antenna position vectors in ENU frame in meters.
-                 origin of coordinates does not matter.
-                 keys are antenna integers and values are 2D or 3D ndarray
-                 position vectors in meters (topocentric coordinates),
-                 with [0] index containing X (E-W) distance, and [1] index Y (N-S) distance
-                 and [2] indexing Z (up-down) distance.
+        antpos : type=dictionary, dict of antenna position vectors in ENU (topo) frame in meters.
+                 origin of coordinates does not matter, but preferably are centered in the array.
+                 keys are antenna integers and values are 2D ndarray position vectors,
+                 with [0] index containing East-West distance, and [1] index North-South distance.
                  Can be generated from a pyuvdata.UVData instance via
                  ----
                  #!/usr/bin/env python
@@ -282,7 +279,9 @@ class AbsCal(object):
         per-antenna phase and per-antenna phase gains
         can be accessed via the methods
             self.ant_phi
+            self.ant_phi_arr
             self.ant_phi_gain
+            self.ant_phi_gain_arr
         """
         # assign data
         model = self.model
@@ -318,10 +317,16 @@ class AbsCal(object):
 
         Result:
         -------
-        per-antenna delays and per-antenna delay gains
+        per-antenna delays, per-antenna delay gains, per-antenna phase + phase gains
         can be accessed via the methods
             self.ant_dly
             self.ant_dly_gain
+            self.ant_dly_arr
+            self.ant_dly_gain_arr
+            self.ant_dly_phi
+            self.ant_dly_phi_gain
+            self.ant_dly_phi_arr
+            self.ant_dly_phi_gain_arr
         """
         # check for freq data
         if self.freqs is None:
@@ -376,6 +381,8 @@ class AbsCal(object):
         Absolute amplitude scalar can be accessed via methods
             self.abs_eta
             self.abs_eta_gain
+            self.abs_eta_arr
+            self.abs_eta_gain_arr
         """
         # set data quantities
         model = self.model
@@ -405,11 +412,15 @@ class AbsCal(object):
 
         Result:
         -------
-        Tip-Tilt phase slope fit can be accessed via methods
+        Tip-Tilt phase slope and overall phase fit can be accessed via methods
             self.abs_psi
             self.abs_psi_gain
             self.TT_Phi
             self.TT_Phi_gain
+            self.abs_psi_arr
+            self.abs_psi_gain_arr
+            self.TT_Phi_arr
+            self.TT_Phi_gain_arr
         """
         # set data quantities
         model = self.model
