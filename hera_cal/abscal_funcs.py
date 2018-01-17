@@ -51,7 +51,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
 
     Output:
     -------
-    fit : dictionary with 'amp_x' key for amplitude scalar for x polarization,
+    fit : dictionary with 'eta_x' key for amplitude scalar for x polarization,
             which has the same shape as the ndarrays in the model
     """
     echo("...configuring linsolve data for abs_amp_logcal", verbose=verbose)
@@ -64,23 +64,15 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
 
     # make weights if None
     if wgts is None:
-        wgts = copy.deepcopy(ydata)
+        wgts = odict()
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
-    # replace nans
-    for i, k in enumerate(keys):
-        nan_select = np.isnan(ydata[k])
-        ydata[k][nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
-
-    # replace infs
-    for i, k in enumerate(keys):
-        inf_select = np.isinf(ydata[k])
-        ydata[k][inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
+    # fill nans and infs
+    fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
+    # a{} is a dummy variable to prevent linsolve from overwriting repeated measurements 
     eqns = odict([(k, "a{}*eta_{}+a{}*eta_{}".format(i, k[-1][0], i, k[-1][1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict([("a{}".format(i), 1.0) for i, k in enumerate(keys)])
 
@@ -97,18 +89,22 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False, four_pol=False):
+def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
+                  merge_pols=False):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (EW and NS)
     with a linear solver applied to the logarithmically
     linearized equation:
 
-    phi_ij,xy^model = phi_ij,xy^data + psi_x - psi_y + PHI^ew * b_ij^ew + PHI^ns * b_ij^ns
+    angle(V_ij,xy^model / V_ij,xy^data) = angle(g_i_x) * angle(conj(g_j_y))
+                                        = psi_x - psi_y + PHI^ew_x*r_i^ew + PHI^ns_x*r_i^ns
+                                          - PHI^ew_y*r_j^ew - PHI^ns_y*r_j^ns
 
     where psi is the overall gain phase across the array [radians] for x and y polarizations,
-    and PHI = <PHI^ew, PHI^ns> is the gain phase slopes across the
-    x axis (east-west) and y axis (north-south) of the array respectively
-    in units of [radians / meter], and is the same across all polarizations.
+    and PHI = <PHI^ew, PHI^ns> is the gain phase slopes across the east-west and north-south axes
+    of the array in x and y polarizations in units of [radians / meter]. Note that x and y 
+    denote the pol of the first and second gain, and are the same in the 1pol and 2pol case (default),
+    and r_i is the antenna position vector of the i^th antenna.
 
     Parameters:
     -----------
@@ -126,25 +122,29 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False, fou
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
-    bls : baseline vectors of antenna pairs, type=dictionary
-          keys are antenna pair tuples (must match model), values are 2D or 3D ndarray
-          baseline vectors in meters, with [0] index containing east-west separation
-          and [1] index north-south separation and, if available, [2] index up-down separation.
-
-    verbose : print output, type=boolean, [default=False]
+    antpos : antenna position vectors, type=dictionary
+          keys are antenna integers, values are 2D or 3D ndarray
+          antenna vectors in meters (preferably centered at origin of array),
+          with [0] index containing east-west separation and [1] index north-south separation
 
     zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
 
+    merge_pols : type=boolean, even if multiple polarizations are present in data, make free
+                variables polarization un-aware: i.e. one solution across all polarizations.
+                This is the same assumption as 4-polarization calibration in omnical.
+
+    verbose : print output, type=boolean, [default=False]
+
     Output:
     -------
-    fit : dictionary with psi key for overall gain phase and PHI array containing
-        PHIx (x-axis phase slope) and PHIy (y-axis phase slope)
-        which all have the same shape as the ndarrays in model
+    fit : dictionary with psi key for overall gain phase and Phi_ew and Phi_ns array containing
+            phase slopes across the EW and NS directions of the array.
     """
     echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
 
     # get keys from model dictionary
     keys = sorted(set(model.keys()) & set(data.keys()))
+    ants = np.unique(antpos.keys())
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
@@ -156,34 +156,30 @@ def TT_phs_logcal(model, data, bls, wgts=None, verbose=True, zero_psi=False, fou
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
-    # replace nans
-    for i, k in enumerate(keys):
-        nan_select = np.isnan(ydata[k])
-        ydata[k][nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
+    # fill nans and infs
+    fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
-    # replace infs
-    for i, k in enumerate(keys):
-        inf_select = np.isinf(ydata[k])
-        ydata[k][inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
-
-    # setup baseline terms
-    bx = odict([(k, ["bx_{}_{}".format(k[0], k[1]), bls[k][0]]) for i, k in enumerate(keys)])
-    by = odict([(k, ["by_{}_{}".format(k[0], k[1]), bls[k][1]]) for i, k in enumerate(keys)])
+    # setup antenna position terms
+    r_ew = odict(map(lambda a: (a, "r_ew_{}".format(a)), ants))
+    r_ns = odict(map(lambda a: (a, "r_ns_{}".format(a)), ants))
 
     # setup linsolve equations
-    if zero_psi:
-        eqns = odict([(k, "psi_{}*0 - psi_{}*0 + Phi_ew*{} + Phi_ns*{}".format(k[-1][0], k[-1][1], bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+    if merge_pols:
+        eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
+                    "".format(k[2][0], k[2][1], r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
     else:
-        eqns = odict([(k, "psi_{} - psi_{} + Phi_ew*{} + Phi_ns*{}".format(k[-1][0], k[-1][1], bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+        eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
+                    "".format(k[2][0], k[2][1], k[2][0], r_ew[k[0]], k[2][0], r_ns[k[0]], k[2][1],
+                              r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
-    # check for 4pol
-    if four_pol:
-        eqns = odict([(k, "psi_{} - psi_{} + Phi_ew*{} + Phi_ns*{}".format(k[-1][0], k[-1][1], bx[k][0], by[k][0])) for i, k in enumerate(keys)])
+    # set design matrix entries
+    ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))
+    ls_design_matrix.update(odict(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants)))
 
-
-    ls_design_matrix = odict(bx.values() + by.values())
+    if zero_psi:
+        ls_design_matrix.update({"a1":0.0, "a2":0.0})
+    else:
+        ls_design_matrix.update({"a1":1.0, "a2":1.0})
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -210,9 +206,8 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     model : visibility data of refence model, type=dictionary
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
-            these must be at least 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
+            these must 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
 
     data : visibility data of measurements, type=dictionary
            keys are antenna pair + pol tuples (must match model), values are
@@ -240,17 +235,8 @@ def amp_logcal(model, data, wgts=None, verbose=True):
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
-    # replace nans
-    for i, k in enumerate(keys):
-        nan_select = np.isnan(ydata[k])
-        ydata[k][nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
-
-    # replace infs
-    for i, k in enumerate(keys):
-        inf_select = np.isinf(ydata[k])
-        ydata[k][inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
+    # fill nans and infs
+    fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
     eqns = odict([(k, "eta_{}_{} + eta_{}_{}".format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
@@ -281,9 +267,8 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     model : visibility data of refence model, type=dictionary
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
-            these must be at least 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
+            these must 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
 
     data : visibility data of measurements, type=dictionary
            keys are antenna pair + pol tuples (must match model), values are
@@ -311,17 +296,8 @@ def phs_logcal(model, data, wgts=None, verbose=True):
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
-    # replace nans
-    for i, k in enumerate(keys):
-        nan_select = np.isnan(ydata[k])
-        ydata[k][nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
-
-    # replace infs
-    for i, k in enumerate(keys):
-        inf_select = np.isinf(ydata[k])
-        ydata[k][inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
+    # fill nans and infs
+    fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
     eqns = odict([(k, "phi_{}_{} - phi_{}_{}".format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
@@ -340,7 +316,7 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def delay_lincal(model, data, wgts=None, solve_offsets=False, df=9.765625e4, medfilt=True, kernel=(1, 5),
+def delay_lincal(model, data, wgts=None, solve_offsets=True, df=9.765625e4, medfilt=True, kernel=(1, 5),
                  verbose=True, time_ax=0, freq_ax=1):
     """
     Solve for per-antenna delay according to the equation
@@ -364,7 +340,7 @@ def delay_lincal(model, data, wgts=None, solve_offsets=False, df=9.765625e4, med
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
-    solve_offsets : boolean, if True, setup a system of linear equations for per-antenna phase offset
+    solve_offsets : type=boolean, if True, setup a system of linear equations for per-antenna phase offset
                     and solve.
 
     medfilt : boolean, if True median filter data before fft
@@ -400,7 +376,7 @@ def delay_lincal(model, data, wgts=None, solve_offsets=False, df=9.765625e4, med
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax, solve_phase=solve_offsets)
         ratio_delays.append(dly)
         ratio_offsets.append(offset)
        
@@ -440,6 +416,31 @@ def delay_lincal(model, data, wgts=None, solve_offsets=False, df=9.765625e4, med
 
     return fit
 
+def merge_gains(gains):
+    """
+    merge multiple gain dictionaries. will merge only shared keys.
+
+    Parameters:
+    -----------
+    gains : type=list or tuple, series of gain dictionaries with (ant, pol) keys
+            and complex ndarrays as values.
+
+    Output:
+    -------
+    merged_gains : type=dictionary, merged gain dictionary with same key-value
+                   structure as input gain dictionaries.
+    """
+    # get shared keys
+    keys = sorted(reduce(operator.and_, map(lambda g: set(g.keys()), gains)))
+
+    # form merged_gains dict
+    merged_gains = odict()
+
+    # iterate over keys
+    for i, k in enumerate(keys):
+        merged_gains[k] = reduce(operator.mul, map(lambda g: g.get(k, 1.0), gains))
+
+    return merged_gains
 
 def apply_gains(data, gains, gain_convention='multiply'):
     """
@@ -452,9 +453,9 @@ def apply_gains(data, gains, gain_convention='multiply'):
         values are ndarray complex visibility data.
 
     gains : type=dictionary, holds complex, per-antenna gain data.
-        keys are antenna integer + gain pol tuples, Ex. (1, 'x').
-        values are complex ndarrays
-        with shape matching data's visibility ndarrays
+            keys are antenna integer + gain pol tuples, Ex. (1, 'x').
+            values are complex ndarrays
+            with shape matching data's visibility ndarrays
 
         Optionally, can be a tuple holding multiple gains dictionaries
         that will all be multiplied together.
@@ -469,6 +470,10 @@ def apply_gains(data, gains, gain_convention='multiply'):
     # get keys
     keys = data.keys()
 
+    # merge gains if multiple gain dictionaries fed
+    if type(gains) == list or type(gains) == tuple or type(gains) == np.ndarray:
+        gains = merge_gains(gains)
+
     # iterate over keys:
     for i, k in enumerate(keys):
         # get gain keys
@@ -476,15 +481,7 @@ def apply_gains(data, gains, gain_convention='multiply'):
         g2 = (k[1], k[-1][1])
 
         # form visbility gain product
-        if type(gains) == dict or type(gains) == odict:
-            vis_gain = gains[g1] * np.conj(gains[g2])
-
-        elif type(gains) == tuple or type(gains) == list:
-            for i, g in enumerate(gains):
-                if i == 0:
-                    vis_gain = g[g1] * np.conj(g[g2])
-                else:
-                    vis_gain *= g[g1] * np.conj(g[g2])
+        vis_gain = gains[g1] * np.conj(gains[g2])
 
         # apply to data
         if gain_convention == "multiply":
@@ -641,7 +638,7 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
 
     pop_autos : boolean, if True: remove autocorrelations
 
-    return_meta : boolean, if True: also return unique frequency and LST arrays
+    return_meta : boolean, if True: also return antenna and unique frequency and LST arrays
 
     Output:
     -------
@@ -704,7 +701,8 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
         return data, flags
 
 
-def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1):
+def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1,
+            solve_phase=True):
     """
     get delay of visibility across band using FFT w/ tukey window
     and quadratic fit to delay peak.
@@ -712,7 +710,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     Parameters:
     -----------
     vis : ndarray of visibility data, dtype=complex, shape=(Ntimes, Nfreqs, +)
-    
+
     df : frequency channel width in Hz
 
     medfilt : boolean, median filter data before fft
@@ -773,32 +771,34 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     peak_shifts = np.array([get_peak(np.take(amp, i, axis=time_ax), np.take(argmax, i, axis=time_ax)[0]) for i in range(Ntimes)])
     dlys += np.moveaxis(peak_shifts.reshape(-1, 1) * dfreq, 0, time_ax)
 
-    # get phase offsets by interpolating real and imag component of FFT
-    vfft_real = []
-    vfft_imag = []
-    for i, a in enumerate(argmax):
-        # get real and imag of each argmax
-        real = np.take(vfft.real, i, axis=time_ax)
-        imag = np.take(vfft.imag, i, axis=time_ax)
+    phi = None
+    if solve_phase:
+        # get phase offsets by interpolating real and imag component of FFT
+        vfft_real = []
+        vfft_imag = []
+        for i, a in enumerate(argmax):
+            # get real and imag of each argmax
+            real = np.take(vfft.real, i, axis=time_ax)
+            imag = np.take(vfft.imag, i, axis=time_ax)
 
-        # wrap around
-        real = np.concatenate([real, real, real])
-        imag = np.concatenate([imag, imag, imag])
-        a += Nfreqs
+            # wrap around
+            real = np.concatenate([real, real, real])
+            imag = np.concatenate([imag, imag, imag])
+            a += Nfreqs
 
-        # add interpolation component
-        rl = interpolate.interp1d(np.arange(Nfreqs*3), real)(a + peak_shifts[i])
-        im = interpolate.interp1d(np.arange(Nfreqs*3), imag)(a + peak_shifts[i])
+            # add interpolation component
+            rl = interpolate.interp1d(np.arange(Nfreqs*3), real)(a + peak_shifts[i])
+            im = interpolate.interp1d(np.arange(Nfreqs*3), imag)(a + peak_shifts[i])
 
-        # insert into arrays
-        vfft_real.append(rl)
-        vfft_imag.append(im)
+            # insert into arrays
+            vfft_real.append(rl)
+            vfft_imag.append(im)
 
-    vfft_real = np.moveaxis(np.array(vfft_real), 0, time_ax)
-    vfft_imag = np.moveaxis(np.array(vfft_imag), 0, time_ax)
-    vfft_interp = vfft_real + 1j*vfft_imag
-    phi = np.angle(vfft_interp)
-    dlys /= df
+        vfft_real = np.moveaxis(np.array(vfft_real), 0, time_ax)
+        vfft_imag = np.moveaxis(np.array(vfft_imag), 0, time_ax)
+        vfft_interp = vfft_real + 1j*vfft_imag
+        phi = np.angle(vfft_interp)
+        dlys /= df
 
     return dlys, phi
 
@@ -843,14 +843,15 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
     flags : flags associated with data, type=dictionary
     """
     # make flags
+    new_data = odict()
     flags = odict()
 
     # loop over keys
     for i, k in enumerate(data.keys()):
         # interpolate real and imag separately
-        interp_real = interpolate.interp2d(data_freqs, data_times, np.real(data[k]),
+        interp_real = interpolate.interp2d(data_freqs, data_times, copy.copy(np.real(data[k])),
                                            kind=kind, fill_value=np.nan, bounds_error=bounds_error)(model_freqs, model_times)
-        interp_imag = interpolate.interp2d(data_freqs, data_times, np.imag(data[k]),
+        interp_imag = interpolate.interp2d(data_freqs, data_times, copy.copy(np.imag(data[k])),
                                            kind=kind, fill_value=np.nan, bounds_error=bounds_error)(model_freqs, model_times)
 
         # set flags
@@ -866,13 +867,10 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
         interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
 
         # rejoin
-        new_data = interp_real + 1j*interp_imag
-        new_flags = f
-
-        data[k] = new_data
+        new_data[k] = interp_real + 1j*interp_imag
         flags[k] = f
 
-    return data, flags
+    return new_data, flags
 
 
 def compute_reds(antpos, ex_ants=[], tol=1.0, pol=None):
@@ -976,6 +974,50 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
     else:
         echo("saving {}".format(calfits_fname))
         uvc.write_calfits(calfits_fname, clobber=overwrite)
+
+def fill_dict_nans(data, wgts=None, nan_fill=None, inf_fill=None, array=False):
+    """
+    take a dictionary and re-fill nan and inf ndarray values.
+
+    Parameters:
+    -----------
+    data : type=dictionary, visibility dictionary in AbsCal dictionary format
+
+    wgts : type=dictionary, weights dictionary matching shape of data to also fill
+
+    nan_fill : if not None, fill nans with nan_fill
+
+    inf_fill : if not None, fill infs with inf_fill
+
+    array : type=boolean, if True, data is a single ndarray to perform operation on
+    """
+    if array:
+        if nan_fill is not None:
+            nan_select = np.isnan(data)
+            data[nan_select] = nan_fill
+            if wgts is not None:
+                wgts[nan_select] = 0.0
+        if inf_fill is not None:
+            inf_select = np.isinf(data)
+            data[inf_select] = inf_fill
+            if wgts is not None:
+                wgts[inf_select] = 0.0
+
+    else:
+        for i, k in enumerate(data.keys()):
+            if nan_fill is not None:
+                # replace nan
+                nan_select = np.isnan(data[k])
+                data[k][nan_select] = nan_fill
+                if wgts is not None:
+                    wgts[k][nan_select] = 0.0
+
+            if inf_fill is not None:
+                # replace infs
+                inf_select = np.isinf(data[k])
+                data[k][inf_select] = inf_fill
+                if wgts is not None:
+                    wgts[k][inf_select] = 0.0
 
 
 def echo(message, type=0, verbose=True):
