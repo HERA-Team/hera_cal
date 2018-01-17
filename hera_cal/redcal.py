@@ -42,8 +42,8 @@ def sim_red_data(reds, gains=None, shape=(10,10), gain_scatter=.1):
 
 def get_pos_reds(antpos, bl_error_tol=1.0):
     """ Figure out and return list of lists of redundant baseline pairs. Ordered by length.
-        All baselines have the same orientation with a preference for positive b_y and,
-        when b_y==0, positive b_x where b((i,j)) = pos(i) - pos(j).
+        All baselines in a group have the same orientation with a preference for positive b_x and,
+        when b_x==0, positive b_y where b((i,j)) = pos(i) - pos(j).
 
         Args:
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
@@ -51,7 +51,7 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
                 (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
 
         Returns:
-            reds: list of lists of redundant tuples of antenna indices (no polarizations)
+            reds: list of lists of redundant tuples of antenna indices (no polarizations).
     """
 
     keys = antpos.keys()
