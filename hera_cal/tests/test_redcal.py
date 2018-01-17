@@ -116,13 +116,23 @@ class TestMethods(unittest.TestCase):
         self.assertEqual(om.parse_pol_mode(reds), 'unrecognized_pol_mode')
 
     def test_get_pos_red(self):
-        pos = build_hex_array(11,sep=1)
-        self.assertEqual(len(om.get_pos_reds(pos)),630)
         pos = build_hex_array(11,sep=14.7)
         self.assertEqual(len(om.get_pos_reds(pos)),630)
         pos = build_hex_array(3,sep=14.7)
         self.assertEqual(len(om.get_pos_reds(pos)),30)
 
+        pos = build_hex_array(11,sep=1)
+        self.assertLess(len(om.get_pos_reds(pos)),630)
+        self.assertEqual(len(om.get_pos_reds(pos,bl_error_tol=.1)),630)
+
+        pos = build_hex_array(11,sep=14.7)
+        blerror = 1.0-1e-12
+        error = blerror/4
+        for key,val in pos.items():
+            th = np.random.choice([0,np.pi/2,np.pi, 3*np.pi/2])
+            pos[key] = val + error * np.array([np.cos(th), np.sin(th), 0])
+        self.assertEqual(len(om.get_pos_reds(pos,bl_error_tol=1.0)),630)
+        self.assertGreater(len(om.get_pos_reds(pos,bl_error_tol=.99)),630)
 
     def test_add_pol_reds(self):
         reds = [[(1,2)]]
