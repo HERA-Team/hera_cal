@@ -141,9 +141,9 @@ class Test_AbsCal:
     def setUp(self):
         np.random.seed(0)
         # load into pyuvdata object
-        data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
-        self.AC = hc.abscal.AbsCal(data_fname, model_fname)
+        self.data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        self.model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
+        self.AC = hc.abscal.AbsCal(self.data_fname, self.model_fname)
 
     def test_init(self):
         # init with no meta
@@ -154,6 +154,9 @@ class Test_AbsCal:
         nt.assert_almost_equal(AC.bls[(24,25,'xx')][0], -14.607842046642745)
         # init with meta
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, pol_select=['xx'])
+        # test feeding file
+        AC = hc.abscal.AbsCal(self.model_fname, self.data_fname)
+
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
