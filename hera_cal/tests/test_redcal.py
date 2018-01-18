@@ -632,6 +632,21 @@ class TestRedundantCalibrator(unittest.TestCase):
             if len(key)==2: np.testing.assert_almost_equal(val,gains[key],10)
             if len(key)==3: np.testing.assert_almost_equal(val,true_vis[key],10)
 
+    def test_count_redcal_degeneracies(self):
+        pos = build_hex_array(3)
+        self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=1), 4)
+        pos[0] += [.5,0,0]
+        self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=.1), 6)
+        self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=1), 4)
+
+    def test_is_redundantly_calibratable(self):
+        pos = build_hex_array(3)
+        self.assertTrue(om.is_redundantly_calibratable(pos, bl_error_tol=1))
+        pos[0] += [.5,0,0]
+        self.assertFalse(om.is_redundantly_calibratable(pos, bl_error_tol=.1))
+        self.assertTrue(om.is_redundantly_calibratable(pos, bl_error_tol=1))
+
+
 
 if __name__ == '__main__':
     unittest.main()

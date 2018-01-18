@@ -436,7 +436,7 @@ class RedundantCalibrator:
                 help avoid phasewrapping issues.
         Returns:
             newSol: sol with degeneracy removal/replacement performed
-    """
+        """
 
         g, v = get_gains_and_vis_from_sol(sol)
         if degen_sol is None:
@@ -508,3 +508,45 @@ class RedundantCalibrator:
         newSol.update({bl_pair: visSol for bl_pair,visSol in zip(bl_pairs,visSols)})
 
         return newSol
+
+def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
+    """Figures out whether an array is redundantly calibratable. 
+    
+    Args:
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
+        bl_error_tol: the largest allowable difference between baselines in a redundant group 
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+
+    Returns:
+        int: the number of 1-pol redundant baseline calibration degeneracies (4 means redundantly calibratable)
+    """
+
+    try: # XXX Can this be done in the unittests instead? -ARP
+        import linsolve
+    except(ImportError):
+        import unittest
+        raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
+
+    reds = get_reds(antpos, bl_error_tol=bl_error_tol)
+    gains, true_vis, data = sim_red_data(reds, shape=(1,1))
+    cal = RedundantCalibrator(reds)
+    ls = cal._solver(linsolve.LogProductSolver, data, wgts={})
+    
+    A, B = ls.ls_amp.get_A()[:,:,0], ls.ls_phs.get_A()[:,:,0]
+    AtA, BtB = np.conj(A.T).dot(A), np.conj(B.T).dot(B)
+    return len(AtA) + len(BtB) - np.linalg.matrix_rank(AtA) - np.linalg.matrix_rank(BtB)
+
+
+def is_redundantly_calibratable(antpos, bl_error_tol=1.0, return_extra_degens=False):
+    """Figures out whether an array is redundantly calibratable. 
+    
+    Args:
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
+        bl_error_tol: the largest allowable difference between baselines in a redundant group 
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+
+    Returns:
+        boolean: true if the number of 1pol degeneracies is 4 and thus the array is redundantly calibratable
+    """
+    
+    return count_redcal_degeneracies(antpos, bl_error_tol=bl_error_tol) == 4
