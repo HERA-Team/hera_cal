@@ -26,6 +26,85 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 
+
+def abscal_arg_parser():
+    a = argparse.ArgumentParser()
+    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
+    a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
+    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
+    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
+    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
+    return a
+
+
+def abscal_run(data_files, model_files, verbose=True, overwrite=False,
+               save_calfits=True, calfits_fname=None, return_gains=False,
+               write_miriad=True, miriad_ext="S",
+               smooth=False, **kwargs):
+    """
+    run AbsCal on a set of time-contiguous data miriad files, using model
+    miriad files that span the data_files across LST
+
+    Parameters:
+    -----------
+    data_files : type=list or string, path(s) to data miriad file(s)
+                a list of paths to miriad file(s) containing complex
+                visibility data, or a path itself
+
+    model_files : type=list or sring, path(s) to model miriad files(s)
+                a list of paths to miriad file(s) containing complex
+                visibility data, or a path itself
+
+    verbose : type=boolean, if True print output to stdout
+
+    calfits_fname : type=str, filename of output calfits filename
+
+    output_gains : boolean, if True: return AbsCal gains
+    """
+    # load data
+    echo("loading data files", type=1, verbose=verbose)
+    for i, df in enumerate(data_files):
+        echo("loading {}".format(df), type=0, verbose=verbose)
+
+
+    # align model freq-time axes to data axes
+    model = interp_model(model, model_times, model_freqs, data_times, data_freqs,
+                        kind='cubic', fill_value=0, zero_tol=1e-6)
+
+    # check if model has only unique baseline data
+    # this is the case if, for example, the model Nbls in less than the data Nbls
+    if uvm.Nbls < uvd.Nbls:
+        # try to expand model data into redundant baseline groups
+        model = mirror_data_to_red_bls(model, bls, antpos, tol=2.0)
+
+        # ensure data keys match model keys
+        for i, k in enumerate(data):
+            if k not in model:
+                data.pop(k)
+
+    # run abscal
+    AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, times=data_times, pols=data_pols)
+    AC.run(unravel_pol=unravel_pol, unravel_freq=unravel_freq, unravel_time=unravel_time,
+           verbose=verbose, gains2dict=True, zero_psi=zero_psi, **kwargs)
+
+    # smooth gains
+    if smooth:
+        AC.smooth_params()
+
+    # make gains
+    AC.make_gains()
+
+    # write to file
+    if save:
+        if calfits_fname is None:
+            calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
+        AC.write_calfits(calfits_fname, overwrite=overwrite, verbose=verbose)
+
+    if output_gains:
+        return AC.gain_array
+
+
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
     """
     calculate absolute (array-wide) gain amplitude scalar
@@ -1020,6 +1099,7 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
         echo("saving {}".format(calfits_fname))
         uvc.write_calfits(calfits_fname, clobber=overwrite)
 
+
 def fill_dict_nans(data, wgts=None, nan_fill=None, inf_fill=None, array=False):
     """
     take a dictionary and re-fill nan and inf ndarray values.
@@ -1223,132 +1303,6 @@ def smooth_solutions(Xdata, Ydata, Xpred=None, gains=True, kind='gp', n_restart=
         model.fit(Xtrain, ytrain)
 
     ypred = model.Predict(X)
-
-
-def abscal_run(data_files, model_files, unravel_pol=False, unravel_freq=False, unravel_time=False, verbose=True,
-               save=False, calfits_fname=None, output_gains=False, overwrite=False, zero_psi=False,
-               smooth=False, **kwargs):
-    """
-    run AbsCal on a set of contiguous data files
-
-    Parameters:
-    -----------
-    data_files : path(s) to data miriad files, type=list
-        a list of one or more miriad file(s) containing complex
-        visibility data
-
-    model_files : path(s) to miriad files(s), type=list
-        a list of one or more miriad files containing complex visibility data
-        that *overlaps* the time and frequency range of data_files
-
-    output_gains : boolean, if True: return AbsCal gains
-    """
-    # load data
-    echo("loading data files", type=1, verbose=verbose)
-    for i, df in enumerate(data_files):
-        echo("loading {}".format(df), type=0, verbose=verbose)
-        uv = UVData()
-        try:
-            uv.read_miriad(df)
-        except:
-            uv.read_uvfits(df)
-            uv.unphase_to_drift()
-        if i == 0:
-            uvd = uv
-        else:
-            uvd += uv
-
-    data, flags, pols = UVData2AbsCalDict([uvd])
-    for i, k in enumerate(data.keys()):
-        if k[0] == k[1]:
-            data.pop(k)
-    for i, k in enumerate(flags.keys()):
-        if k[0] == k[1]:
-            flags.pop(k)
-
-    # get data params
-    data_times = np.unique(uvd.lst_array)
-    data_freqs = uvd.freq_array.squeeze()
-    data_pols = uvd.polarization_array
-
-    # load weights
-    wgts = copy.deepcopy(flags)
-    for k in wgts.keys():
-        wgts[k] = (~wgts[k]).astype(np.float)
-
-    # load antenna positions and make antpos and baseline dictionary
-    antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
-    antpos = odict(map(lambda x: (x, antpos[ants.tolist().index(x)]), ants))
-    bls = odict([((x[0], x[1]), antpos[x[1]] - antpos[x[0]]) for x in data.keys()])
-
-    # load models
-    for i, mf in enumerate(model_files):
-        echo("loading {}".format(mf), type=0, verbose=verbose)
-        uv = UVData()
-        try:
-            uv.read_miriad(mf)
-        except:
-            uv.read_uvfits(mf)
-            uv.unphase_to_drift()
-        if i == 0:
-            uvm = uv
-        else:
-            uvm += uv
-
-    model, mflags, mpols = UVData2AbsCalDict([uvm], pol_select=pols)
-    for i, k in enumerate(model.keys()):
-        if k[0] == k[1]:
-            model.pop(k)
-
-    # get model params
-    model_times = np.unique(uvm.lst_array)
-    model_freqs = uvm.freq_array.squeeze()
-
-    # align model freq-time axes to data axes
-    model = interp_model(model, model_times, model_freqs, data_times, data_freqs,
-                        kind='cubic', fill_value=0, zero_tol=1e-6)
-
-    # check if model has only unique baseline data
-    # this is the case if, for example, the model Nbls in less than the data Nbls
-    if uvm.Nbls < uvd.Nbls:
-        # try to expand model data into redundant baseline groups
-        model = mirror_data_to_red_bls(model, bls, antpos, tol=2.0)
-
-        # ensure data keys match model keys
-        for i, k in enumerate(data):
-            if k not in model:
-                data.pop(k)
-
-    # run abscal
-    AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, times=data_times, pols=data_pols)
-    AC.run(unravel_pol=unravel_pol, unravel_freq=unravel_freq, unravel_time=unravel_time,
-           verbose=verbose, gains2dict=True, zero_psi=zero_psi, **kwargs)
-
-    # smooth gains
-    if smooth:
-        AC.smooth_params()
-
-    # make gains
-    AC.make_gains()
-
-    # write to file
-    if save:
-        if calfits_fname is None:
-            calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
-        AC.write_calfits(calfits_fname, overwrite=overwrite, verbose=verbose)
-
-    if output_gains:
-        return AC.gain_array
-
-def abscal_arg_parser():
-    a = argparse.ArgumentParser()
-    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
-    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
-    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
-    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
-    return a
 
 
 def avg_data_across_red_bls(data, bls, antpos, flags=None, broadcast_flags=True, median=False, tol=0.5,
