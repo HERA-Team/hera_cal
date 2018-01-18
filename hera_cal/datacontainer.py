@@ -21,7 +21,7 @@ class DataContainer:
                     self._data[self.mk_key(bl, pol)] = data[bl][pol]
         else:
             assert(len(data.keys()[0]) == 3)
-            self._data = data
+            self._data = odict(map(lambda k: (k, data[k]), sorted(data.keys())))
         self._bls = set([k[:2] for k in self._data.keys()])
         self._pols = set([k[-1] for k in self._data.keys()])
 
