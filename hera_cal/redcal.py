@@ -40,15 +40,16 @@ def sim_red_data(reds, gains=None, shape=(10,10), gain_scatter=.1):
     return gains, true_vis, data
 
 
-def get_pos_reds(antpos, bl_error_tol=1.0):
-    """ Figure out and return list of lists of redundant baseline pairs. Ordered by length.
-        All baselines in a group have the same orientation with a preference for positive b_x and,
-        when b_x==0, positive b_y where b((i,j)) = pos(i) - pos(j).
+def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
+    """ Figure out and return list of lists of redundant baseline pairs. Ordered by length. All baselines 
+        in a group have the same orientation with a preference for positive b_y and, when b_y==0, positive 
+        b_x where b((i,j)) = pos(j) - pos(i). This yields HERA baselines in i < j order.
 
         Args:
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
             bl_error_tol: the largest allowable difference between baselines in a redundant group 
                 (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+            low_hi: For all returned baseline index tuples (i,j) to have i < j.
 
         Returns:
             reds: list of lists of redundant tuples of antenna indices (no polarizations).
@@ -56,10 +57,10 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
 
     keys = antpos.keys()
     reds = {}
-    array_is_2D = np.all(np.all(np.array(antpos.values())[:,2]==0))
+    array_is_flat = np.all(np.abs(np.array(antpos.values())[:,2] - np.mean(antpos.values(),axis=0)[2]) < bl_error_tol/4.0)
     for i,ant1 in enumerate(keys):
         for ant2 in keys[i+1:]:
-            delta = tuple(np.round(1.0*(np.array(antpos[ant1]) - np.array(antpos[ant2]))/bl_error_tol).astype(int))
+            delta = tuple(np.round(1.0*(np.array(antpos[ant2]) - np.array(antpos[ant1]))/bl_error_tol).astype(int))
             if delta[0] > 0 or (delta[0]==0 and delta[1] > 0) or (delta[0]==0 and delta[1]==0 and delta[2] > 0):
                 bl_pair = (ant1,ant2)
             else:
@@ -67,7 +68,7 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
                 bl_pair = (ant2,ant1)
             # Check to make sure reds doesn't have the key plus or minus rounding error
             p_or_m = (0,-1,1)
-            if array_is_2D:
+            if array_is_flat:
                 epsilons = [[dx,dy,0] for dx in p_or_m for dy in p_or_m]
             else:
                 epsilons = [[dx,dy,dz] for dx in p_or_m for dy in p_or_m for dz in p_or_m]
@@ -78,8 +79,12 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
                     break
             if not reds.has_key(newKey):
                 reds[delta] = [bl_pair]
+    
     orderedDeltas = [delta for (length,delta) in sorted(zip([np.linalg.norm(delta) for delta in reds.keys()],reds.keys()))]
-    return [reds[delta] for delta in orderedDeltas]
+    if low_hi:
+        return [[tuple(sorted(bl)) for bl in reds[delta]] for delta in orderedDeltas]
+    else:
+        return [reds[delta] for delta in orderedDeltas]
 
 
 def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
@@ -115,8 +120,8 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
     return redsWithPols
 
 
-def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0):
-    """ Combines redcal.get_pos_reds() and redcal.add_pol_reds().
+def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0, low_hi=False):
+    """ Combines redcal.get_pos_reds() and redcal.add_pol_reds(). See their documentation.
 
     Args:
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
@@ -129,12 +134,13 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0)
         ex_ants: list of antennas to exclude in the [(1,'x'),(10,'y')] format
         bl_error_tol: the largest allowable difference between baselines in a redundant group 
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+        low_hi: For all returned baseline index tuples (i,j) to have i < j
 
     Returns:
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
 
     """
-    pos_reds = get_pos_reds(antpos, bl_error_tol=bl_error_tol)
+    pos_reds = get_pos_reds(antpos, bl_error_tol=bl_error_tol, low_hi=low_hi)
     return add_pol_reds(pos_reds, pols=pols, pol_mode=pol_mode, ex_ants=ex_ants)
 
 
