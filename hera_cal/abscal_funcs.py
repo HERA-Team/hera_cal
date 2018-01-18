@@ -27,84 +27,6 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn import gaussian_process
 
 
-def abscal_arg_parser():
-    a = argparse.ArgumentParser()
-    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
-    a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
-    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
-    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
-    return a
-
-
-def abscal_run(data_files, model_files, verbose=True, overwrite=False,
-               save_calfits=True, calfits_fname=None, return_gains=False,
-               write_miriad=True, miriad_ext="S",
-               smooth=False, **kwargs):
-    """
-    run AbsCal on a set of time-contiguous data miriad files, using model
-    miriad files that span the data_files across LST
-
-    Parameters:
-    -----------
-    data_files : type=list or string, path(s) to data miriad file(s)
-                a list of paths to miriad file(s) containing complex
-                visibility data, or a path itself
-
-    model_files : type=list or sring, path(s) to model miriad files(s)
-                a list of paths to miriad file(s) containing complex
-                visibility data, or a path itself
-
-    verbose : type=boolean, if True print output to stdout
-
-    calfits_fname : type=str, filename of output calfits filename
-
-    output_gains : boolean, if True: return AbsCal gains
-    """
-    # load data
-    echo("loading data files", type=1, verbose=verbose)
-    for i, df in enumerate(data_files):
-        echo("loading {}".format(df), type=0, verbose=verbose)
-
-
-    # align model freq-time axes to data axes
-    model = interp_model(model, model_times, model_freqs, data_times, data_freqs,
-                        kind='cubic', fill_value=0, zero_tol=1e-6)
-
-    # check if model has only unique baseline data
-    # this is the case if, for example, the model Nbls in less than the data Nbls
-    if uvm.Nbls < uvd.Nbls:
-        # try to expand model data into redundant baseline groups
-        model = mirror_data_to_red_bls(model, bls, antpos, tol=2.0)
-
-        # ensure data keys match model keys
-        for i, k in enumerate(data):
-            if k not in model:
-                data.pop(k)
-
-    # run abscal
-    AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data_freqs, times=data_times, pols=data_pols)
-    AC.run(unravel_pol=unravel_pol, unravel_freq=unravel_freq, unravel_time=unravel_time,
-           verbose=verbose, gains2dict=True, zero_psi=zero_psi, **kwargs)
-
-    # smooth gains
-    if smooth:
-        AC.smooth_params()
-
-    # make gains
-    AC.make_gains()
-
-    # write to file
-    if save:
-        if calfits_fname is None:
-            calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
-        AC.write_calfits(calfits_fname, overwrite=overwrite, verbose=verbose)
-
-    if output_gains:
-        return AC.gain_array
-
-
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
     """
     calculate absolute (array-wide) gain amplitude scalar
@@ -1259,50 +1181,6 @@ def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0, verbose
                 new_data[model_keys[matches[0]]] = np.conj(data[data_keys[i]])
 
     return DataContainer(new_data)
-
-
-def smooth_solutions(Xdata, Ydata, Xpred=None, gains=True, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
-    """
-    Smooth gain (or calibration) solutions across time and/or frequency.
-
-    Parameters:
-    -----------
-    Xdata : ndarray containing flattened x-values for regression, type=ndarray, dtype=float
-            shape=(Ndata, Ndimensions)
-  
-    Ydata : type=dictionary, dict holding gain or calibration solutions with values as
-            ndarray containing complex gains or real calibration solution across
-            time and/or frequency (single pol) with shape=(Ndata, 1)
-  
-    Xpred : ndarray containing flattened x-values for prediction. if None will use Xdata.
-            type=ndarray, dtype=float, shape=(Ndata, Ndimensions)
-
-    gains : type=boolean, if True input Ydata is complex gains,
-            if False input Ydata is real calibration solutions
-
-
-    Output:
-    -------
-
-    """
-    # get number of dimensions
-    ndim = Xtrain.shape[1]
-
-    if kind == 'poly':
-        # robust linear regression via sklearn
-        model = make_pipeline(PolynomialFeatures(degree), linear_model.RANSACRegressor())
-        model.fit(Xtrain, ytrain)
-
-    elif kind == 'gp':
-        # construct GP kernel
-        ls = np.array([1e-1 for i in range(ndim)])
-        kernel = 1.0**2 * gaussian_process.kernels.RBF(ls, np.array([1e-2, 1e1])) + \
-                 gaussian_process.kernels.WhiteKernel(1e-4, (1e-8, 1e1))
-        model = gaussian_process.GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=n_restart)
-        # fit GP
-        model.fit(Xtrain, ytrain)
-
-    ypred = model.Predict(X)
 
 
 def avg_data_across_red_bls(data, bls, antpos, flags=None, broadcast_flags=True, median=False, tol=0.5,
