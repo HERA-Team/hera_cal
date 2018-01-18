@@ -1,6 +1,7 @@
 import numpy as np
 import aipy
 import astropy.constants as const
+from astropy.time import Time
 import pyuvdata.utils as uvutils
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -144,3 +145,60 @@ def get_aa_from_calfile(freqs, calfile, **kwargs):
 
     # generate aa
     return get_aa(freqs, **kwargs)
+
+
+def JD2LST(JD, longitude=21.42830):
+    """
+    Input:
+    ------
+    JD : type=float, julian date of observation
+
+    longitude : type=float, longitude of observer in degrees East, default=HERA Longitude
+
+    Output:
+    -------
+    Local Apparent Sidreal Time [Hour Angle]
+    """
+    t = Time(JD, format='jd')
+    return t.sidereal_time('apparent', longitude=longitude).value
+
+
+def LST2JD(LST, start_JD, longitude=21.42830):
+    """
+    calculate local sidereal time -> julian day quickly via a linear fit
+
+    Input:
+    ------
+    LST : type=float, local apparent sidereal time [hour angle]
+
+    start_JD : type=int, integer julian day to use as starting point for LST2JD conversion
+
+    longitude : type=float, degrees East of observer, default=HERA longitude
+
+    Output:
+    -------
+    JD : type=float, julian day when LST is directly overhead. accurate to ~1 milliseconds
+    """
+    base_JD = float(start_JD)
+    while True:
+        # calculate fit
+        jd1 = start_JD
+        jd2 = start_JD + 0.01
+        lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
+        slope = (lst2 - lst1) / 0.01
+        offset = lst1 - slope * jd1
+
+        # solve y = mx + b for x
+        JD = (LST - offset) / slope
+
+        # redo if JD isn't on starting JD
+        if JD - base_JD < 0:
+            start_JD += 1
+        elif JD - base_JD > 1:
+            start_JD -= 1
+        else:
+            break
+
+    return JD
+
+
