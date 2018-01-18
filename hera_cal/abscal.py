@@ -152,7 +152,7 @@ class AbsCal(object):
         if pols is None:
             pols = np.unique(map(lambda k: k[2], self.keys))
         elif type(pols) == np.ndarray or type(pols) == list:
-            if type(pols[0]) == np.int_ or type(pols[0]) == int:
+            if np.issubdtype(type(pols[0]), int):
                 pols = map(lambda p: self.pol2str[p], pols)
 
         # convert to integer format
