@@ -57,7 +57,7 @@ class AbsCal(object):
     generally precede a phs_logcal or a TT_phs_logcal bandpass routine.
     """
 
-    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, pol_select=None,
+    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, lsts=None, pol_select=None,
                  model_ftype='miriad', data_ftype='miriad', verbose=True,
                  match_red_bls=False, tol=1.0,
                  interp_model=False, interp_kwargs={}, reweight=False,
@@ -119,6 +119,12 @@ class AbsCal(object):
                 1d array containing visibility frequencies in Hz.
                 Needed for delay calibration.
     
+        lsts : ndarray of LST array [radians], type=ndarray, dtype=float
+                needed for interpolation
+
+        times : ndarray of Julian Date array, type=ndarray, dtype=float
+                needed for writing to calfits
+
         pol_select : list of polarizations you want to keep in data
                      type=list, dtype=str, Ex. ['xx', 'yy']
 
@@ -429,7 +435,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_eta'):
             return copy.deepcopy(self._ant_eta)
         else:
-            return None
+            return odict()
 
     @property
     def ant_eta_gain(self):
@@ -438,7 +444,7 @@ class AbsCal(object):
             ant_eta = self.ant_eta
             return odict(map(lambda k: (k, np.exp(ant_eta[k]).astype(np.complex)), self._flatten(self._gain_keys)))
         else:
-            return None
+            return odict()
 
     @property
     def ant_eta_arr(self):
@@ -446,7 +452,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_eta_arr'):
             return copy.copy(self._ant_eta_arr)
         else:
-            return None
+            return odict()
 
     @property
     def ant_eta_gain_arr(self):
@@ -454,7 +460,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_eta_arr'):
             return np.exp(self.ant_eta_arr).astype(np.complex)
         else:
-            return None
+            return odict()
 
     @property
     def ant_phi(self):
@@ -462,7 +468,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_phi'):
             return copy.deepcopy(self._ant_phi)
         else:
-            return None
+            return odict()
 
     @property
     def ant_phi_gain(self):
@@ -471,7 +477,7 @@ class AbsCal(object):
             ant_phi = self.ant_phi
             return odict(map(lambda k: (k, np.exp(1j*ant_phi[k])), self._flatten(self._gain_keys)))
         else:
-            return None
+            return odict()
 
     @property
     def ant_phi_arr(self):
@@ -479,7 +485,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_phi_arr'):
             return copy.copy(self._ant_phi_arr)
         else:
-            return None
+            return odict()
 
     @property
     def ant_phi_gain_arr(self):
@@ -487,7 +493,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_phi_arr'):
             return np.exp(1j*self.ant_phi_arr)
         else:
-            return None
+            return odict()
 
     @property
     def ant_dly(self):
@@ -495,7 +501,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_dly'):
             return copy.deepcopy(self._ant_dly)
         else:
-            return None
+            return odict()
 
     @property
     def ant_dly_gain(self):
@@ -504,7 +510,7 @@ class AbsCal(object):
             ant_dly = self.ant_dly
             return odict(map(lambda k: (k, np.exp(2j*np.pi*self.freqs.reshape(1, -1)*ant_dly[k])), self._flatten(self._gain_keys)))
         else:
-            return None
+            return odict()
 
     @property
     def ant_dly_arr(self):
@@ -512,7 +518,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_dly_arr'):
             return copy.copy(self._ant_dly_arr)
         else:
-            return None
+            return odict()
 
     @property
     def ant_dly_gain_arr(self):
@@ -520,7 +526,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_dly_arr'):
             return np.exp(2j*np.pi*self.freqs.reshape(-1, 1)*self.ant_dly_arr)
         else:
-            return None
+            return odict()
 
     @property
     def ant_dly_phi(self):
@@ -528,7 +534,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_dly_phi'):
             return copy.deepcopy(self._ant_dly_phi)
         else:
-            return None
+            return odict()
 
     @property
     def ant_dly_phi_gain(self):
@@ -537,7 +543,7 @@ class AbsCal(object):
             ant_dly_phi = self.ant_dly_phi
             return odict(map(lambda k: (k, np.exp(1j*np.repeat(ant_dly_phi[k], self.Nfreqs, 1))), self._flatten(self._gain_keys)))
         else:
-            return None
+            return odict()
 
     @property
     def ant_dly_phi_arr(self):
@@ -545,7 +551,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_dly_phi_arr'):
             return copy.copy(self._ant_dly_phi_arr)
         else:
-            return None
+            return odict()
 
     @property
     def ant_dly_phi_gain_arr(self):
@@ -553,7 +559,7 @@ class AbsCal(object):
         if hasattr(self, '_ant_dly_phi_arr'):
             return np.exp(1j*np.repeat(self.ant_dly_phi_arr, self.Nfreqs, 2))
         else:
-            return None
+            return odict()
 
     @property
     def abs_eta(self):
@@ -561,7 +567,7 @@ class AbsCal(object):
         if hasattr(self, '_abs_eta'):
             return copy.deepcopy(self._abs_eta)
         else:
-            return None
+            return odict()
 
     @property
     def abs_eta_gain(self):
@@ -570,7 +576,7 @@ class AbsCal(object):
             abs_eta = self.abs_eta
             return odict(map(lambda k: (k, np.exp(abs_eta[k]).astype(np.complex)), self._flatten(self._gain_keys)))
         else:
-            return None
+            return odict()
 
     @property
     def abs_eta_arr(self):
@@ -578,7 +584,7 @@ class AbsCal(object):
         if hasattr(self, '_abs_eta_arr'):
             return copy.copy(self._abs_eta_arr)
         else:
-            return None
+            return odict()
 
     @property
     def abs_eta_gain_arr(self):
@@ -586,7 +592,7 @@ class AbsCal(object):
         if hasattr(self, '_abs_eta_arr'):
             return np.exp(self._abs_eta_arr).astype(np.complex)
         else:
-            return None
+            return odict()
 
     @property
     def abs_psi(self):
@@ -594,7 +600,7 @@ class AbsCal(object):
         if hasattr(self, '_abs_psi'):
             return copy.deepcopy(self._abs_psi)
         else:
-            return None
+            return odict()
 
     @property
     def abs_psi_gain(self):
@@ -603,7 +609,7 @@ class AbsCal(object):
             abs_psi = self.abs_psi
             return odict(map(lambda k: (k, np.exp(1j*abs_psi[k])), self._flatten(self._gain_keys)))
         else:
-            return None
+            return odict()
 
     @property
     def abs_psi_arr(self):
@@ -611,7 +617,7 @@ class AbsCal(object):
         if hasattr(self, '_abs_psi_arr'):
             return copy.copy(self._abs_psi_arr)
         else:
-            return None
+            return odict()
 
     @property
     def abs_psi_gain_arr(self):
@@ -619,7 +625,7 @@ class AbsCal(object):
         if hasattr(self, '_abs_psi_arr'):
             return np.exp(1j*self._abs_psi_arr)
         else:
-            return None
+            return odict()
 
     @property
     def TT_Phi(self):
@@ -627,7 +633,7 @@ class AbsCal(object):
         if hasattr(self, '_TT_Phi'):
             return copy.deepcopy(self._TT_Phi)
         else:
-            return None
+            return odict()
 
     @property
     def TT_Phi_gain(self):
@@ -636,7 +642,7 @@ class AbsCal(object):
             TT_Phi = self.TT_Phi
             return odict(map(lambda k: (k, np.exp(1j*np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), self._flatten(self._gain_keys)))
         else:
-            return None
+            return odict()
 
     @property
     def TT_Phi_arr(self):
@@ -644,7 +650,7 @@ class AbsCal(object):
         if hasattr(self, '_TT_Phi_arr'):
             return copy.copy(self._TT_Phi_arr)
         else:
-            return None
+            return odict()
 
     @property
     def TT_Phi_gain_arr(self):
@@ -652,7 +658,7 @@ class AbsCal(object):
         if hasattr(self, '_TT_Phi_arr'):
             return np.exp(1j*np.einsum("hi...,hi->h...", self._TT_Phi_arr, self.antpos_arr[:, :2]))
         else:
-            return None
+            return odict()
 
 
 def abscal_arg_parser():
@@ -667,8 +673,7 @@ def abscal_arg_parser():
 
 
 def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite=False,
-               save_calfits=True, calfits_fname=None, return_gains=False,
-               write_miriad=True, miriad_ext="S",
+               write_calfits=True, calfits_fname=None, return_gains=False, outdir=None
                match_red_bls=False, reweight=False,
                delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True,
                gen_amp_cal=False, gen_phs_cal=False):
@@ -700,6 +705,20 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
     # iterate over data files
     echo("loading data files", type=1, verbose=verbose)
     for i, dfile in enumerate(data_files):
+
+        # check output filepath
+        if write_calfits:
+            # configure filename
+            if calfits_fname is None:
+                calfits_fname = os.path.basename(dfile) + '.abscal.calfits'
+            if outdir is None:
+                outdir = os.path.dirname(dfile)
+            calfits_fname = os.path.join(outdir, calfits_fname)
+            
+            # check path
+            if os.path.exists(calfits_fname) and overwrite == False:
+                raise IOError("{} exists, not overwriting")
+
         echo("loading {}".format(dfile), type=1, verbose=verbose)
         AC = AbsCal(model, dfile, pol_select=pol_select, model_antpos=model_antpos,
                     model_freqs=model_freqs, model_times=model_times, interp_model=True,
@@ -709,36 +728,43 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             AC.delay_lincal(verbose=verbose)
             AC.data = apply_gains(AC.data, (AC.ant_dly_gain, AC.ant_dly_phi_gain))
 
-
         if avg_phs_cal:
             if delay_cal == False:
                 echo("it is recommended to run a delay_cal before avg_phs_cal", verbose=verbose)
-            AC.phs_logcal(avg=True)
-
+            AC.phs_logcal(avg=True, verbose=verbose)
+            AC.data = apply_gains(AC.data, AC.ant_phi_gain)
+            ant_avg_phi_gain = copy.deepcopy(AC.ant_phi_gain)
+            AC.ant_phi_gain = odict()
+        else:
+            ant_avg_phi_gain = odict()
 
         if abs_amp_cal:
-            AC.abs_amp_logcal()
-
+            AC.abs_amp_logcal(verbose=verbose)
+            AC.data = apply_gains(AC.data, AC.abs_eta_gain)
 
         if TT_phs_cal:
             if delay_cal == False:
                 echo("it is recommended to run a delay_cal (and optionally avg_phs_cal) before TT_phs_cal", verbose=verbose)
-            AC.TT_phs_logcal()
+            AC.TT_phs_logcal(verbose=verbose)
+            AC.data = apply_gains(AC.data, AC.TT_Phi_gain)
 
         if gen_amp_cal:
-            AC.amp_logcal()
-
+            AC.amp_logcal(verbose=verbose)
+            AC.data = apply_gains(AC.data, AC.ant_eta_gain)
 
         if gen_phs_cal:
-            AC.phs_logcal()
+            AC.phs_logcal(verbose=verbose)
+            AC.data = apply_gains(AC.data, AC.ant_phi_gain)
 
+        # collate gains
+        gains = merge_gains((AC.ant_dly_gain, AC.ant_dly_phi_gain, ant_avg_phi_gain, AC.abs_eta_gain,
+                             AC.TT_Phi_gain, AC.ant_eta_gain, AC.ant_phi_gain))
 
-    # write to file
-    if save:
-        if calfits_fname is None:
-            calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
-        AC.write_calfits(calfits_fname, overwrite=overwrite, verbose=verbose)
+        # write to file
+        if write_calfits:
+            gains2calfits(calfits_fname, gains, AC.freqs, )
+            AC.write_calfits(calfits_fname, overwrite=overwrite, verbose=verbose)
 
-    if output_gains:
-        return AC.gain_array
+        if output_gains:
+            return AC.gain_array
 
