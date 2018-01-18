@@ -68,7 +68,7 @@ class DataContainer:
                 if key in self.keys():
                     self._data[key] = value
                 else:
-                    self._data[key] = np.conj(value)
+                    self._data[self._switch_bl(key)] = np.conj(value)
             else:
                 self._data[key] = value
                 self._bls.update({tuple(key[:2])})

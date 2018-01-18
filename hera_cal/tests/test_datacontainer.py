@@ -169,6 +169,8 @@ class TestDataContainer(unittest.TestCase):
         self.assertEqual(len(dc.keys()), 11)
         self.assertEqual((100, 101) in dc._bls, True)
         self.assertEqual('xy' in dc._pols, True)
+        # test error
+        self.assertRaises(ValueError, dc.__setitem__, *((100, 101), 100j))
 
 
 
