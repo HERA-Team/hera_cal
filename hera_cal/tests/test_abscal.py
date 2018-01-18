@@ -117,16 +117,6 @@ class Test_AbsCal_Funcs:
                                        self.time_array[::2], self.freq_array[::2])
         nt.assert_equal(m[(24, 25, 'xx')].shape, (30, 32))
 
-    def test_compute_reds(self):
-        reds = hc.abscal.compute_reds(self.antpos)
-        nt.assert_equal(len(reds), 9)
-        nt.assert_equal(reds[0][0], (24, 37))
-        reds = hc.abscal.compute_reds(self.antpos, ex_ants=[24, 37])
-        nt.assert_equal(len(reds), 6)
-        # check pols
-        reds = hc.abscal.compute_reds(self.antpos, pol='xx')
-        nt.assert_equal(reds[0][0], (24, 37, 'xx'))
-
     def test_gains2calfits(self):
         cfname = os.path.join(DATA_PATH, 'ex.calfits')
         abscal_gains = np.ones((len(self.ants), 60, 1024, 1), dtype=np.complex)
