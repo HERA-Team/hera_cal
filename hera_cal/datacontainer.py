@@ -1,5 +1,5 @@
 import numpy as np
-
+from collections import OrderedDict as odict
 
 class DataContainer:
     """Object that abstracts away the pol/ant pair ordering of data dict's."""
@@ -10,7 +10,7 @@ class DataContainer:
             data (dict): dictionary of visibilities with keywords of pol/ant pair
                 in any order.
         """
-        self._data = {}
+        self._data = odict()
         if type(data.keys()[0]) is str:  # Nested POL:{bls}
             for pol in data.keys():
                 for bl in data[pol]:
@@ -21,7 +21,7 @@ class DataContainer:
                     self._data[self.mk_key(bl, pol)] = data[bl][pol]
         else:
             assert(len(data.keys()[0]) == 3)
-            self._data = data
+            self._data = odict(map(lambda k: (k, data[k]), sorted(data.keys())))
         self._bls = set([k[:2] for k in self._data.keys()])
         self._pols = set([k[-1] for k in self._data.keys()])
 
@@ -59,6 +59,23 @@ class DataContainer:
                 return self._data[key]
             except(KeyError):
                 return np.conj(self._data[self._switch_bl(key)])
+
+    def __setitem__(self, key, value):
+        if len(key) == 3:
+            # check given bl ordering
+            if key in self.keys() or self._switch_bl(key) in self.keys():
+                # key already exists
+                if key in self.keys():
+                    self._data[key] = value
+                else:
+                    self._data[self._switch_bl(key)] = np.conj(value)
+            else:
+                self._data[key] = value
+                self._bls.update({tuple(key[:2])})
+                self._pols.update({key[2]})
+        else:
+            raise ValueError('only supports setting (ant1, ant2, pol) keys')
+
 
     def get_data(self, *args):
         if len(args) > 1:

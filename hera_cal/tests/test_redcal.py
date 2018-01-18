@@ -116,13 +116,33 @@ class TestMethods(unittest.TestCase):
         self.assertEqual(om.parse_pol_mode(reds), 'unrecognized_pol_mode')
 
     def test_get_pos_red(self):
-        pos = build_hex_array(11,sep=1)
-        self.assertEqual(len(om.get_pos_reds(pos)),630)
-        pos = build_hex_array(11,sep=14.7)
-        self.assertEqual(len(om.get_pos_reds(pos)),630)
+
         pos = build_hex_array(3,sep=14.7)
         self.assertEqual(len(om.get_pos_reds(pos)),30)
 
+        pos = build_hex_array(7,sep=14.7)
+        self.assertEqual(len(om.get_pos_reds(pos)),234)
+        for ant,r in pos.items():
+            pos[ant] += [0, 0, 1*r[0] - .5*r[1]]
+        self.assertEqual(len(om.get_pos_reds(pos)),234)
+
+        pos = build_hex_array(7,sep=1)
+        self.assertLess(len(om.get_pos_reds(pos)),234)
+        self.assertEqual(len(om.get_pos_reds(pos,bl_error_tol=.1)),234)
+
+        pos = build_hex_array(7,sep=14.7)
+        blerror = 1.0-1e-12
+        error = blerror/4
+        for key,val in pos.items():
+            th = np.random.choice([0, np.pi/2, np.pi])
+            phi = np.random.choice([0, np.pi/2, np.pi, 3*np.pi/2])
+            pos[key] = val + error * np.array([np.sin(th) * np.cos(phi), np.sin(th) * np.sin(phi), np.cos(th)])
+        self.assertEqual(len(om.get_pos_reds(pos,bl_error_tol=1.0)),234)
+        self.assertGreater(len(om.get_pos_reds(pos,bl_error_tol=.99)),234)
+
+        pos = {0: np.array([0,0,0]), 1: np.array([20,0,0]), 2: np.array([10,0,0])}
+        self.assertEqual(om.get_pos_reds(pos),[[(0, 2), (2, 1)], [(0, 1)]])
+        self.assertEqual(om.get_pos_reds(pos, low_hi=True),[[(0, 2), (1, 2)], [(0, 1)]])
 
     def test_add_pol_reds(self):
         reds = [[(1,2)]]
@@ -134,6 +154,14 @@ class TestMethods(unittest.TestCase):
         self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'xy')],[(1,2,'yx')],[(1,2,'yy')]])
         polReds = om.add_pol_reds(reds, pols=['xx','xy','yx','yy'], pol_mode='4pol_minV')
         self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'xy'),(1,2,'yx')],[(1,2,'yy')]])
+
+        polReds = om.add_pol_reds(reds, pols=['xx','yy'], pol_mode='2pol', ex_ants=[(2,'y')])
+        self.assertEqual(polReds, [[(1,2,'xx')],[]])
+        polReds = om.add_pol_reds(reds, pols=['xx','xy','yx','yy'], pol_mode='4pol', ex_ants=[(2,'y')])
+        self.assertEqual(polReds, [[(1,2,'xx')],[],[(1,2,'yx')],[]])
+        polReds = om.add_pol_reds(reds, pols=['xx','xy','yx','yy'], pol_mode='4pol_minV', ex_ants=[(2,'y')])
+        self.assertEqual(polReds, [[(1,2,'xx')],[(1,2,'yx')],[]])
+
 
     def test_multiply_by_gains(self):
         vis_in = {(1,2,'xx'):1.6+2.3j}
@@ -167,21 +195,21 @@ class TestRedundantCalibrator(unittest.TestCase):
         info = om.RedundantCalibrator(reds)
         eqs = info.build_eqs(data.keys())
         self.assertEqual(len(eqs), 3)
-        self.assertEqual(eqs['g1x * g0x_ * u0xx'], (1,0,'xx'))
-        self.assertEqual(eqs['g2x * g1x_ * u0xx'], (2,1,'xx'))
-        self.assertEqual(eqs['g2x * g0x_ * u1xx'], (2,0,'xx'))
+        self.assertEqual(eqs['g0x * g1x_ * u0xx'], (0,1,'xx'))
+        self.assertEqual(eqs['g1x * g2x_ * u0xx'], (1,2,'xx'))
+        self.assertEqual(eqs['g0x * g2x_ * u1xx'], (0,2,'xx'))
         
         reds = om.get_reds(antpos, pols=['xx','yy','xy','yx'], pol_mode='4pol')
         gains, true_vis, data = om.sim_red_data(reds)
         info = om.RedundantCalibrator(reds)
         eqs = info.build_eqs(data.keys())
         self.assertEqual(len(eqs), 3*4)
-        self.assertEqual(eqs['g1x * g0y_ * u4xy'], (1,0,'xy'))
-        self.assertEqual(eqs['g2x * g1y_ * u4xy'], (2,1,'xy'))
-        self.assertEqual(eqs['g2x * g0y_ * u5xy'], (2,0,'xy'))
-        self.assertEqual(eqs['g1y * g0x_ * u6yx'], (1,0,'yx'))
-        self.assertEqual(eqs['g2y * g1x_ * u6yx'], (2,1,'yx'))
-        self.assertEqual(eqs['g2y * g0x_ * u7yx'], (2,0,'yx'))
+        self.assertEqual(eqs['g0x * g1y_ * u4xy'], (0,1,'xy'))
+        self.assertEqual(eqs['g1x * g2y_ * u4xy'], (1,2,'xy'))
+        self.assertEqual(eqs['g0x * g2y_ * u5xy'], (0,2,'xy'))
+        self.assertEqual(eqs['g0y * g1x_ * u6yx'], (0,1,'yx'))
+        self.assertEqual(eqs['g1y * g2x_ * u6yx'], (1,2,'yx'))
+        self.assertEqual(eqs['g0y * g2x_ * u7yx'], (0,2,'yx'))
 
 
         reds = om.get_reds(antpos, pols=['xx','yy','xy','yx'], pol_mode='4pol_minV')
@@ -189,12 +217,12 @@ class TestRedundantCalibrator(unittest.TestCase):
         info = om.RedundantCalibrator(reds)
         eqs = info.build_eqs(data.keys())
         self.assertEqual(len(eqs), 3*4)
-        self.assertEqual(eqs['g1x * g0y_ * u4xy'], (1,0,'xy'))
-        self.assertEqual(eqs['g2x * g1y_ * u4xy'], (2,1,'xy'))
-        self.assertEqual(eqs['g2x * g0y_ * u5xy'], (2,0,'xy'))
-        self.assertEqual(eqs['g1y * g0x_ * u4xy'], (1,0,'yx'))
-        self.assertEqual(eqs['g2y * g1x_ * u4xy'], (2,1,'yx'))
-        self.assertEqual(eqs['g2y * g0x_ * u5xy'], (2,0,'yx'))
+        self.assertEqual(eqs['g0x * g1y_ * u4xy'], (0,1,'xy'))
+        self.assertEqual(eqs['g1x * g2y_ * u4xy'], (1,2,'xy'))
+        self.assertEqual(eqs['g0x * g2y_ * u5xy'], (0,2,'xy'))
+        self.assertEqual(eqs['g0y * g1x_ * u4xy'], (0,1,'yx'))
+        self.assertEqual(eqs['g1y * g2x_ * u4xy'], (1,2,'yx'))
+        self.assertEqual(eqs['g0y * g2x_ * u5xy'], (0,2,'yx'))
 
 
     def test_solver(self):
@@ -205,13 +233,13 @@ class TestRedundantCalibrator(unittest.TestCase):
         w = {}
         w = dict([(k,1.) for k in d.keys()])
         def solver(data, wgts, sparse, **kwargs):
-            np.testing.assert_equal(data['g1x * g0x_ * u0xx'], d[1,0,'xx'])
-            np.testing.assert_equal(data['g2x * g1x_ * u0xx'], d[2,1,'xx'])
-            np.testing.assert_equal(data['g2x * g0x_ * u1xx'], d[2,0,'xx'])
+            np.testing.assert_equal(data['g0x * g1x_ * u0xx'], d[0,1,'xx'])
+            np.testing.assert_equal(data['g1x * g2x_ * u0xx'], d[1,2,'xx'])
+            np.testing.assert_equal(data['g0x * g2x_ * u1xx'], d[0,2,'xx'])
             if len(wgts) == 0: return
-            np.testing.assert_equal(wgts['g1x * g0x_ * u0xx'], w[1,0,'xx'])
-            np.testing.assert_equal(wgts['g2x * g1x_ * u0xx'], w[2,1,'xx'])
-            np.testing.assert_equal(wgts['g2x * g0x_ * u1xx'], w[2,0,'xx'])
+            np.testing.assert_equal(wgts['g0x * g1x_ * u0xx'], w[0,1,'xx'])
+            np.testing.assert_equal(wgts['g1x * g2x_ * u0xx'], w[1,2,'xx'])
+            np.testing.assert_equal(wgts['g0x * g2x_ * u1xx'], w[0,2,'xx'])
             return
         info._solver(solver, d)
         info._solver(solver, d, w)
