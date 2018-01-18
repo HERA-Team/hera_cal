@@ -670,7 +670,7 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
     Output:
     -------
     if return_meta is True:
-        (data, flags, antpos, ants, freqs, times, pols)
+        (data, flags, antpos, ants, freqs, times, lsts, pols)
     else:
         (data, flags)
 
@@ -722,11 +722,12 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
     # get meta
     if return_meta:
         freqs = np.unique(uvd.freq_array)
-        times = np.unique(uvd.lst_array)
+        times = np.unique(uvd.time_array)
+        lsts = np.unique(uvd.lst_array)
         antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
         antpos = odict(zip(ants, antpos))
         pols = uvd.polarization_array
-        return data, flags, antpos, ants, freqs, times, pols
+        return data, flags, antpos, ants, freqs, times, lsts, pols
     else:
         return data, flags
 
@@ -1251,7 +1252,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         uvd.read_miriad(data_fname)
 
     # get data
-    data, flags, pols = UVData2AbsCalDict([uvd])
+    data, flags = UVData2AbsCalDict([uvd])
 
     # get antpos and baselines
     antpos, ants = uvd.get_ENU_antpos()
