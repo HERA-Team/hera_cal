@@ -14,7 +14,7 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal import omni, utils, firstcal, cal_formats
+from hera_cal import omni, utils, firstcal, cal_formats, redcal
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
@@ -649,7 +649,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
 def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad'):
     """
     turn pyuvdata.UVData objects or miriad filenames 
-    into the dictionary form that AbsCal requires. This format is
+    into the datacontainer dictionary form that AbsCal requires. This format is
     keys as antennas-pair + polarization format, Ex. (1, 2, 'xx')
     and values as 2D complex ndarrays with [0] axis indexing time and [1] axis frequency.
 
@@ -715,20 +715,8 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
                 d.pop(k)
                 f.pop(k)
 
-    # reconfigure polarization nesting
-    data = odict()
-    flags = odict()
-
-    # select pols
-    if pol_select is None:
-        pol_select = d[d.keys()[0]].keys()
-
-    # loop over data keys
-    for i, k in enumerate(sorted(d.keys())):
-        for j, p in enumerate(pol_select):
-            key = k + (p,)
-            data[key] = d[k][p]
-            flags[key] = f[k][p]
+    # turn into datacontainer
+    data, flags = DataContainer(d), DataContainer(f)
 
     # get meta
     if return_meta:
@@ -979,7 +967,7 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
         new_data[k] = interp_real + 1j*interp_imag
         flags[k] = f
 
-    return new_data, flags
+    return DataContainer(new_data), DataContainer(flags)
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
@@ -1190,7 +1178,7 @@ def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0, verbose
             elif comparison[matches[0]] == 'conjugated':
                 new_data[model_keys[matches[0]]] = np.conj(data[data_keys[i]])
 
-    return new_data
+    return DataContainer(new_data)
 
 
 def smooth_solutions(Xdata, Ydata, Xpred=None, gains=True, kind='gp', n_restart=3, degree=1, ls=10.0, return_model=False):
@@ -1475,7 +1463,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         return red_data, red_flags, red_keys
 
 
-def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=False):
+def mirror_data_to_red_bls(data, antpos, tol=2.0, pol=None, weights=False):
     """
     Given unique baseline data (like omnical model visibilities),
     copy the data over to all other baselines in the same redundant group.
@@ -1484,17 +1472,14 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=Fa
 
     Parameters:
     -----------
-    data : data dictionary in AbsCal form, see AbsCal docstring for details
-
-    bls : type=list, list of antenna-pair + pol tuples to use as total set of baselines.
-                If None, will use antpos to find all possible combinations.
+    data : data dictionary in hera_cal.DataContainer form
 
     antpos : type=dictionary, antenna positions dictionary
                 keys are antenna integers, values are ndarray baseline vectors.
 
     tol : type=float, redundant baseline distance tolerance in units of baseline vectors
 
-    pol : type=str, polarization in data.keys() to pass to compute_reds()
+    pol : type=str, polarization in data.keys()
 
     weights : type=bool, if True, treat data as a wgts dictionary and multiply by redundant weighting.
 
@@ -1508,8 +1493,11 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=Fa
     # get data keys
     keys = data.keys()
 
+    # get polarizations in data
+    pols = data.pols()
+
     # get redundant baselines
-    reds = compute_reds(antpos, bls=bls, tol=tol, pol=pol)
+    reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=pols)
 
     # make red_data dictionary
     red_data = odict()
@@ -1517,13 +1505,9 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=Fa
     # iterate over data keys
     for i, k in enumerate(keys):
 
-        # check for ant-pair + pol key mismatch
-        if len(k) != len(reds[0][0]):
-            raise ValueError("data key {} doesn't match shape of reds key {}. Try changing pol keyword-arugment.".format(k, reds[0][0]))
-
         # find which bl_group this key belongs to
         match = np.array(map(lambda r: k in r, reds))
-        conj_match = np.array(map(lambda r: k[:2][::-1]+k[2:] in r, reds))
+        conj_match = np.array(map(lambda r: data._switch_bl(k) in r, reds))
 
         # if no match, just copy data over to red_data
         if True not in match and True not in conj_match:
@@ -1533,19 +1517,19 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=Fa
             # iterate over matches
             for j, (m, cm) in enumerate(zip(match, conj_match)):
                 if weights:
-                    # if weight dictionary, add repeated baselines 
+                    # if weight dictionary, add repeated baselines in inverse quadrature
                     if m == True:
                         if (k in red_data) == False:
                             red_data[k] = copy.copy(data[k])
-                            red_data[k][red_data[k].astype(np.bool)] = np.sqrt(red_data[k][red_data[k].astype(np.bool)]) + np.sqrt(len(reds[j]) - 1)
+                            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j]) - 1
                         else:
-                            red_data[k][red_data[k].astype(np.bool)] += len(reds[j])
+                            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j])
                     elif cm == True:
                         if (k in red_data) == False:
                             red_data[k] = copy.copy(data[k])
-                            red_data[k][red_data[k].astype(np.bool)] += len(reds[j]) - 1
+                            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j]) - 1
                         else:
-                            red_data[k][red_data[k].astype(np.bool)] += len(reds[j])
+                            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j])
                 else:
                     # if match, insert all bls in bl_group into red_data
                     if m == True:
@@ -1555,10 +1539,14 @@ def mirror_data_to_red_bls(data, antpos, bls=None, tol=2.0, pol=None, weights=Fa
                         for bl in reds[j]:
                             red_data[bl] = np.conj(data[k])
 
-    # re-sort
-    red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
+    # re-sort, inverse quad if weights
+    if weights:
+        red_data = odict([(k, red_data[k]**(-2)) for k in sorted(red_data)])
+    else:
+        red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
 
-    return red_data
+
+    return DataContainer(red_data)
 
 '''
 def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None,
