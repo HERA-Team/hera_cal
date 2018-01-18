@@ -58,7 +58,9 @@ class AbsCal(object):
     """
 
     def __init__(self, model, data, wgts=None, antpos=None, freqs=None, pol_select=None,
-                 model_ftype='miriad', data_ftype='miriad'):
+                 model_ftype='miriad', data_ftype='miriad', verbose=True,
+                 match_red_bls=False, model_antpos=None, data_antpos=None, tol=1.0,
+                 interp_model=False, interp_kwargs={}, reweight=False):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -117,8 +119,14 @@ class AbsCal(object):
     
         pol_select : list of polarizations you want to keep in data
                      type=list, dtype=str, Ex. ['xx', 'yy']
+
+        match_red_bls : type=boolean, if True, attempt to match redundant baselines between
+            model and data if antenna keys don't necessarily match. If model and data are
+            dictionaries, than model_antpos and data_antpos must be fed (as dictionary type).
         """
+        # set pols to None
         pols = None
+
         # check format of model
         if type(model) == list or type(model) == np.ndarray or type(model) == str or type(model) == UVData:
             (model, model_flags, model_antpos, model_ants, model_freqs,
@@ -126,9 +134,21 @@ class AbsCal(object):
 
         # check format of data
         if type(data) == list or type(data) == np.ndarray or type(data) == str or type(data) == UVData:
-            (data, flags, antpos, ants, freqs,
-             times, pols) = UVData2AbsCalDict(data, pop_autos=True, return_meta=True, pol_select=pol_select)
-            wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
+            (data, data_flags, data_antpos, data_ants, data_freqs,
+             data_times, data_pols) = UVData2AbsCalDict(data, pop_autos=True, return_meta=True, pol_select=pol_select)
+            wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
+
+        # match redundant baselines
+        if match_red_bls:
+            data = match_red_baselines(data, data_antpos, model, model_antpos, tol=tol, verbose=verbose)
+
+        # interpolate model to match data
+        if interp_model:
+            model, interp_mflags = interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, **interp_kwargs)
+
+        # reweight according to redundancy
+        if reweight:
+            wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
 
         # get shared keys
         self.keys = sorted(set(model.keys()) & set(data.keys()))
