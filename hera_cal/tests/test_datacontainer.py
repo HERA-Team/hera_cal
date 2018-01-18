@@ -158,6 +158,20 @@ class TestDataContainer(unittest.TestCase):
         self.assertEqual(dc.get((1, 2), 'yy'), 1j)
         self.assertEqual(dc.get((2, 1), 'yy'), -1j)
 
+    def test_setter(self):
+        dc = datacontainer.DataContainer(self.blpol)
+        # test basic setting
+        dc[(100, 101, 'xy')] = np.arange(100) + np.arange(100)*1j
+        self.assertEqual(dc[(100, 101, 'xy')].shape, (100,))
+        self.assertEqual(dc[(100, 101, 'xy')].dtype, np.complex)
+        self.assertAlmostEqual(dc[(100, 101, 'xy')][1], (1 + 1j))
+        self.assertAlmostEqual(dc[(101, 100, 'xy')][1], (1 - 1j))
+        self.assertEqual(len(dc.keys()), 11)
+        self.assertEqual((100, 101) in dc._bls, True)
+        self.assertEqual('xy' in dc._pols, True)
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
