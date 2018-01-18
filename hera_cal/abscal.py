@@ -59,8 +59,10 @@ class AbsCal(object):
 
     def __init__(self, model, data, wgts=None, antpos=None, freqs=None, pol_select=None,
                  model_ftype='miriad', data_ftype='miriad', verbose=True,
-                 match_red_bls=False, model_antpos=None, data_antpos=None, tol=1.0,
-                 interp_model=False, interp_kwargs={}, reweight=False):
+                 match_red_bls=False, tol=1.0,
+                 interp_model=False, interp_kwargs={}, reweight=False,
+                 model_antpos=None, model_times=None, model_freqs=None,
+                 data_antpos=None, data_times=None, data_freqs=None):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -134,17 +136,18 @@ class AbsCal(object):
 
         # check format of data
         if type(data) == list or type(data) == np.ndarray or type(data) == str or type(data) == UVData:
-            (data, data_flags, data_antpos, data_ants, data_freqs,
-             data_times, data_pols) = UVData2AbsCalDict(data, pop_autos=True, return_meta=True, pol_select=pol_select)
-            wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
+            (data, flags, antpos, ants, freqs,
+             times, pols) = UVData2AbsCalDict(data, pop_autos=True, return_meta=True, pol_select=pol_select)
+            wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
 
         # match redundant baselines
         if match_red_bls:
-            data = match_red_baselines(data, data_antpos, model, model_antpos, tol=tol, verbose=verbose)
+            data = match_red_baselines(data, antpos, model, model_antpos, tol=tol, verbose=verbose)
+            antpos = model_antpos
 
         # interpolate model to match data
         if interp_model:
-            model, interp_mflags = interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, **interp_kwargs)
+            model, interp_mflags = interp2d_vis(model, model_times, model_freqs, times, freqs, **interp_kwargs)
 
         # reweight according to redundancy
         if reweight:
@@ -652,60 +655,90 @@ class AbsCal(object):
             return None
 
 
-''' TO DO
-    def smooth_data(self, data, flags=None, kind='linear'):
-        """
+def abscal_arg_parser():
+    a = argparse.ArgumentParser()
+    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
+    a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
+    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
+    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
+    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
+    return a
 
 
-        Parameters:
-        -----------
-        data : 
+def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite=False,
+               save_calfits=True, calfits_fname=None, return_gains=False,
+               write_miriad=True, miriad_ext="S",
+               match_red_bls=False, reweight=False,
+               delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True,
+               gen_amp_cal=False, gen_phs_cal=False):
+    """
+    run AbsCal on a set of time-contiguous data miriad files, using 
+    time-contiguos model miriad files that cover the data_files across LST
+
+    Parameters:
+    -----------
+    data_files : type=list or string, path(s) to data miriad file(s)
+                a list of paths to miriad file(s) containing complex
+                visibility data, or a path itself
+
+    model_files : type=list or sring, path(s) to model miriad files(s)
+                a list of paths to miriad file(s) containing complex
+                visibility data, or a path itself
+
+    verbose : type=boolean, if True print output to stdout
+
+    calfits_fname : type=str, filename of output calfits filename
+
+    output_gains : boolean, if True: return AbsCal gains
+    """
+    # load model files
+    echo ("loading model files", type=1, verbose=verbose)
+    (model, model_flags, model_antpos, model_ants, model_freqs, model_times,
+        model_pols) = UVData2AbsCalDict(model_files, pop_autos=True, return_meta=True, pol_select=pol_select)
+
+    # iterate over data files
+    echo("loading data files", type=1, verbose=verbose)
+    for i, dfile in enumerate(data_files):
+        echo("loading {}".format(dfile), type=1, verbose=verbose)
+        AC = AbsCal(model, dfile, pol_select=pol_select, model_antpos=model_antpos,
+                    model_freqs=model_freqs, model_times=model_times, interp_model=True,
+                    match_red_bls=match_red_bls, reweight=reweight)
+
+        if delay_cal:
+            AC.delay_lincal(verbose=verbose)
+            AC.data = apply_gains(AC.data, (AC.ant_dly_gain, AC.ant_dly_phi_gain))
 
 
-        flags : 
-    
-        """
-        # configure parameters
+        if avg_phs_cal:
+            if delay_cal == False:
+                echo("it is recommended to run a delay_cal before avg_phs_cal", verbose=verbose)
+            AC.phs_logcal(avg=True)
 
 
-
-        Ntimes
-        Nfreqs
-
-        # interpolate flagged data
+        if abs_amp_cal:
+            AC.abs_amp_logcal()
 
 
-        # sphere training data x-values
+        if TT_phs_cal:
+            if delay_cal == False:
+                echo("it is recommended to run a delay_cal (and optionally avg_phs_cal) before TT_phs_cal", verbose=verbose)
+            AC.TT_phs_logcal()
+
+        if gen_amp_cal:
+            AC.amp_logcal()
 
 
-        # ravel training data
+        if gen_phs_cal:
+            AC.phs_logcal()
 
 
-        if kind == 'poly':
-            # fit polynomial
-            data = smooth_data(Xtrain_raveled, ytrain_raveled, Xpred_raveled, kind=kind, degree=degree)
+    # write to file
+    if save:
+        if calfits_fname is None:
+            calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
+        AC.write_calfits(calfits_fname, overwrite=overwrite, verbose=verbose)
 
-        if kind == 'gp':
-            # construct GP mean function from a degree-order polynomial
-            MF = make_pipeline(PolynomialFeatures(degree), linear_model.RANSACRegressor())
-            MF.fit(Xtrain_raveled, ytrain_raveled)
-            y_mean = MF.predict(Xtrain_raveled)
+    if output_gains:
+        return AC.gain_array
 
-            # make residual and normalize by std
-            y_resid = (ytrain_raveled - y_mean).reshape(Ntimes, Nfreqs)
-            y_std = np.sqrt(astats.biweight_midvariance(y_resid.ravel()))
-            y_resid /= y_std
-
-            # average residual across time
-            ytrain = np.mean(y_resid, axis=0)
-
-            # ravel training data
-            Xtrain_raveled = Xtrain[0, :].reshape(-1, 1)
-            ytrain_raveled = ytrain
-            Xpred_raveled = Xpred[0, :]
-
-            # fit GP and predict MF
-            y_pred = smooth_data(Xtrain_raveled, ytrain_raveled, Xpred_raveled) * y_std
-            y_pred = np.repeat(y_pred, Ntimes)
-            data = (y_pred + y_mean).reshape(Ntimes, Nfreqs)
-'''
