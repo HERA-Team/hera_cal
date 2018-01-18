@@ -118,63 +118,17 @@ class AbsCal(object):
         pol_select : list of polarizations you want to keep in data
                      type=list, dtype=str, Ex. ['xx', 'yy']
         """
+        pols = None
         # check format of model
-        if type(model) == list or type(model) == np.ndarray:
-            if type(model[0]) == str:
-                # check uvfits
-                uvm = UVData()
-                if os.path.splitext(model[0])[1] == '.uvfits' or model_ftype == 'uvfits':
-                    uvm.read_uvfits(model)
-                    uvm.unphase_to_drift()
-                elif model_ftype == 'miriad':
-                    uvm.read_miriad(model)
-            elif type(model[0]) == UVData:
-                uvm = reduce(operator.add, model)
-            # get dictionary
-            model, mflags = UVData2AbsCalDict(uvm, pop_autos=True, pol_select=pol_select)
-        elif type(model) == str:
-            uvm = UVData()
-            if os.path.splitext(model)[1] == '.uvfits' or model_ftype == 'uvfits':
-                uvm.read_uvfits(model)
-                uvm.unphase_to_drift()
-            elif model_ftype == 'miriad':
-                uvm.read_miriad(model)
-            # get dictionary
-            model, mflags = UVData2AbsCalDict(uvm, pop_autos=True, pol_select=pol_select)
-        elif type(model) == UVData:
-            # get dictionary
-            model, mflags = UVData2AbsCalDict(model, pop_autos=True, pol_select=pol_select)
+        if type(model) == list or type(model) == np.ndarray or type(model) == str or type(model) == UVData:
+            (model, model_flags, model_antpos, model_ants, model_freqs,
+             model_times, model_pols) = UVData2AbsCalDict(model, pop_autos=True, return_meta=True, pol_select=pol_select)
 
         # check format of data
-        pols = None
-        if type(data) == list or type(data) == np.ndarray:
-            if type(data[0]) == str:
-                # check uvfits
-                uvd = UVData()
-                if os.path.splitext(data[0])[1] == '.uvfits' or data_ftype == 'uvfits':
-                    uvd.read_uvfits(data)
-                    uvd.unphase_to_drift()
-                elif data_ftype == 'miriad':
-                    uvd.read_miriad(data)
-            elif type(data[0]) == UVData:
-                uvd = reduce(operator.add, data)
-            # get dictionary
-            (data, flags, antpos, ants, freqs,
-             times, pols) = UVData2AbsCalDict(uvd, pop_autos=True, return_meta=True, pol_select=pol_select)
-        elif type(data) == str:
-            uvd = UVData()
-            if os.path.splitext(data)[1] == '.uvfits' or data_ftype == 'uvfits':
-                uvd.read_uvfits(data)
-                uvd.unphase_to_drift()
-            elif data_ftype == 'miriad':
-                uvd.read_miriad(data)
-            # get dictionary
-            (data, flags, antpos, ants, freqs,
-             times, pols) = UVData2AbsCalDict(uvd, pop_autos=True, return_meta=True, pol_select=pol_select)
-        elif type(data) == UVData:
-            # get dictionary
+        if type(data) == list or type(data) == np.ndarray or type(data) == str or type(data) == UVData:
             (data, flags, antpos, ants, freqs,
              times, pols) = UVData2AbsCalDict(data, pop_autos=True, return_meta=True, pol_select=pol_select)
+            wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
 
         # get shared keys
         self.keys = sorted(set(model.keys()) & set(data.keys()))

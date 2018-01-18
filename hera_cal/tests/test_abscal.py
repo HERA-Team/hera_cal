@@ -186,6 +186,10 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.abs_psi_gain[(24, 'x')].shape, (60, 64))
         nt.assert_equal(self.AC.TT_Phi[(24, 'x')].shape, (2, 60, 64))
         nt.assert_equal(self.AC.TT_Phi_gain[(24, 'x')].shape, (60, 64))
+        # test merge pols
+        self.AC.TT_phs_logcal(verbose=False, merge_pols=True)
+        nt.assert_equal(self.AC.TT_Phi_arr.shape, (7, 2, 60, 64, 1))
+        nt.assert_equal(self.AC.abs_psi_arr.shape, (7, 60, 64, 1))
         # test Nones
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_equal(AC.abs_psi_arr, None)

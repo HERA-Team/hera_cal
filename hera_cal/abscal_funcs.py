@@ -15,6 +15,7 @@ import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from hera_cal import omni, utils, firstcal, cal_formats
+from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
 import linsolve
