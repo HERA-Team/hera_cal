@@ -1335,7 +1335,7 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
     pols = np.unique(map(lambda k: k[2], data.keys()))
     ants = np.unique(np.concatenate(keys))
     if flags is None:
-        flags = copy.deepcopy(data)
+        flags = DataContainer(odict())
         for k in flags.keys(): flags[k] = np.zeros_like(flags[k]).astype(np.bool)
 
     # get redundant baselines
@@ -1363,18 +1363,22 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
         else:
             d = np.nanmean(map(lambda k: data[k], bl_group), axis=0)
 
-        # assign to red_data
+        # get flags
+        if broadcast_flags:
+            f = np.max(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
+        else:
+            f = np.min(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
+
+        # iterate over bl_group
         for j, key in enumerate(sorted(bl_group)):
-            red_data[key] = copy.copy(d)
+            # assign to red_data and flags
+            red_data[key] = d
+            red_flags[key] = f
+
+            # break if no mirror
             if mirror_red_data is False:
                 break
-
-        # assign flags
-        if broadcast_flags:
-            red_flags[key] = np.max(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
-        else:
-            red_flags[key] = np.min(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
-
+                
     # get red_data keys
     red_keys = red_data.keys()
 
