@@ -77,7 +77,7 @@ class DataContainer:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
     def __contains__(self, key):
-        return key in self.keys()
+        return key in self.keys() or self._switch_bl(key) in self.keys()
 
 
     def get_data(self, *args):
@@ -98,5 +98,7 @@ class DataContainer:
     def has_pol(self, pol):
         return pol in self._pols
 
-    def get(self, bl, pol):
+    def get(self, bl, pol, val):
         return self[self.mk_key(bl, pol)]
+
+
