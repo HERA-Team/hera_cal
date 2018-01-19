@@ -1296,7 +1296,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         return red_data, red_flags, red_keys
 
 
-def mirror_data_to_red_bls(data, antpos, tol=2.0, pol=None, weights=False):
+def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     """
     Given unique baseline data (like omnical model visibilities),
     copy the data over to all other baselines in the same redundant group.
@@ -1311,8 +1311,6 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, pol=None, weights=False):
                 keys are antenna integers, values are ndarray baseline vectors.
 
     tol : type=float, redundant baseline distance tolerance in units of baseline vectors
-
-    pol : type=str, polarization in data.keys()
 
     weights : type=bool, if True, treat data as a wgts dictionary and multiply by redundant weighting.
 
@@ -1374,7 +1372,8 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, pol=None, weights=False):
 
     # re-sort, inverse quad if weights
     if weights:
-        red_data = odict([(k, red_data[k]**(-2)) for k in sorted(red_data)])
+        for i, k in enumerate(red_data):
+            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)]**(-2.0)
     else:
         red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
 
