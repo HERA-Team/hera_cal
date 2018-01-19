@@ -515,7 +515,7 @@ def apply_gains(data, gains, gain_convention='multiply'):
         elif gain_convention == "divide":
             new_data[k] = data[k] / vis_gain
 
-    return new_data
+    return DataContainer(new_data)
 
 
 def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
@@ -979,10 +979,9 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
 
     Parameters:
     -----------
-    calfits_fname : string, path and filename to output calfits file
+    calfits_fname : type=string, path and filename to output calfits file
 
-    abscal_gains : dictionary, antenna integer as key, ndarray complex gain
-        as values with shape (Ntimes, Nfreqs, Npols)
+    abscal_gains : type=dictionary, (ant, pol) as key, (Ntimes, Nfreqs) complex ndarray as value
 
     freq_array : ndarray, frequency array of data in Hz
 
@@ -1002,9 +1001,10 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
     # reconfigure gain dictionary into HERACal gain dictionary
     heracal_gains = {}
     for i, p in enumerate(pol_array):
-        pol_dict = {}
+        pol_dict = odict()
         for j, k in enumerate(abscal_gains.keys()):
-            pol_dict[k] = abscal_gains[k][:, :, i]
+            if p in k:
+                pol_dict[k[0]] = abscal_gains[k]
         heracal_gains[p] = pol_dict
 
     # configure meta
