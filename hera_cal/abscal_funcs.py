@@ -96,7 +96,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
 
 
 def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
-                  merge_pols=False):
+                  four_pol=False):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
     with a linear solver applied to the logarithmically linearized equation:
@@ -109,7 +109,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
     and PHI^ew, PHI^ns are the gain phase slopes across the east-west and north-south axes
     of the array in units of [radians / meter], where x and y denote the pol of the i-th and j-th
     antenna respectively. The phase slopes are polarization independent by default (1pol & 2pol cal),
-    but can be merged with the merge_pols parameter (4pol cal). r_i is the antenna position vector
+    but can be merged with the four_pol parameter (4pol cal). r_i is the antenna position vector
     of the i^th antenna.
 
     Parameters:
@@ -135,7 +135,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
 
     zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
 
-    merge_pols : type=boolean, even if multiple polarizations are present in data, make free
+    four_pol : type=boolean, even if multiple polarizations are present in data, make free
                 variables polarization un-aware: i.e. one solution across all polarizations.
                 This is the same assumption as 4-polarization calibration in omnical.
 
@@ -171,7 +171,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
     r_ns = odict(map(lambda a: (a, "r_ns_{}".format(a)), ants))
 
     # setup linsolve equations
-    if merge_pols:
+    if four_pol:
         eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
                     "".format(k[2][0], k[2][1], r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
     else:
@@ -331,7 +331,7 @@ def phs_logcal(model, data, wgts=None, verbose=True):
 
 
 def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medfilt=True, kernel=(1, 5),
-                 verbose=True, time_ax=0, freq_ax=1):
+                 verbose=True, time_ax=0, freq_ax=1, fit_slope=False, antpos=None, four_pol=False):
     """
     Solve for per-antenna delay according to the equation
 
@@ -344,9 +344,8 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     model : visibility data of refence model, type=dictionary
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
-            these must be at least 2D arrays, with [0] axis indexing time
-            and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-            should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
+            these must 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
 
     data : visibility data of measurements, type=dictionary
            keys are antenna pair + pol tuples (must match model), values are
@@ -368,6 +367,12 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     time_ax : type=int, time axis of model and data
 
     freq_ax : type=int, freq axis of model and data
+
+    fit_slope : type=boolean, if True, use results to fit for delay slope across array
+
+    antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
+
+    four_pol : type=boolean, if True, fit multiple polarizations together 
 
     Output:
     -------
@@ -440,6 +445,114 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
         fit.update(offset_fit)
 
     return fit
+
+
+def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
+                         verbose=True, time_ax=0, freq_ax=1, four_pol=False):
+    """
+    Solve for delay slope according to the equation
+
+    delay(V_ij,xy^model / V_ij,xy^data) = dot(T_x, r_i) - dot(T_y, r_j)
+
+    Parameters:
+    -----------
+    model : visibility data of refence model, type=dictionary
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            values are complex ndarray visibilities.
+            these must 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
+
+    data : visibility data of measurements, type=dictionary
+           keys are antenna pair + pol tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
+
+    wgts : weights of data, type=dictionry, [default=None]
+           keys are antenna pair + pol tuples (must match model), values are real floats
+           matching shape of model and data
+
+    antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
+
+    df : type=float, frequency spacing between channels in Hz
+
+    medfilt : type=boolean, median filter visiblity ratio before taking fft
+
+    kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
+
+    time_ax : type=int, time axis of model and data
+
+    freq_ax : type=int, freq axis of model and data
+
+    four_pol : type=boolean, if True, fit multiple polarizations together 
+
+    Output:
+    -------
+    fit : dictionary containing delay slope (T_x) for each pol.
+    """
+    echo("...configuring linsolve data for delay_lincal", verbose=verbose)
+
+    # get shared keys
+    keys = sorted(set(model.keys()) & set(data.keys()))
+    ants = np.unique(antpos.keys())
+
+    # make wgts
+    if wgts is None:
+        wgts = odict()
+        for i, k in enumerate(keys): wgts[k] = np.ones_like(data[k], dtype=np.float)
+
+    # median filter and FFT to get delays
+    ratio_delays = []
+    ratio_offsets = []
+    for i, k in enumerate(keys):
+        ratio = model[k]/data[k]
+
+        # replace nans
+        nan_select = np.isnan(ratio)
+        ratio[nan_select] = 0.0
+        wgts[k][nan_select] = 0.0
+
+        # replace infs
+        inf_select = np.isinf(ratio)
+        ratio[inf_select] = 0.0
+        wgts[k][inf_select] = 0.0
+
+        # get delays
+        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        ratio_delays.append(dly)
+        ratio_offsets.append(offset)
+       
+    ratio_delays = np.array(ratio_delays)
+    ratio_offsets = np.array(ratio_offsets)
+
+    # form ydata
+    ydata = odict(zip(keys, ratio_delays))
+
+    # setup antenna position terms
+    r_ew = odict(map(lambda a: (a, "r_ew_{}".format(a)), ants))
+    r_ns = odict(map(lambda a: (a, "r_ns_{}".format(a)), ants))
+
+    # setup linsolve equations
+    if four_pol:
+        eqns = odict([(k, "T_ew*{} + T_ns*{} - T_ew*{} - T_ns*{}"
+                    "".format(r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
+    else:
+        eqns = odict([(k, "T_ew_{}*{} + T_ns_{}*{} - T_ew_{}*{} - T_ns_{}*{}"
+                    "".format(k[2][0], r_ew[k[0]], k[2][0], r_ns[k[0]], k[2][1], r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
+
+    # set design matrix entries
+    ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))
+    ls_design_matrix.update(odict(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants)))
+
+    # setup linsolve data dictionary
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+
+    # setup linsolve and run
+    sol = linsolve.LinearSolver(ls_data, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
+
+    return fit
+
 
 def merge_gains(gains):
     """
@@ -647,7 +760,8 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad'):
+def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
+                        pick_data_ants=True):
     """
     turn pyuvdata.UVData objects or miriad filenames 
     into the datacontainer dictionary form that AbsCal requires. This format is
@@ -666,6 +780,8 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
     return_meta : boolean, if True: also return antenna and unique frequency and LST arrays
 
     filetype : string, filetype of data if filenames is a string
+
+    pick_data_ants : boolean, if True and return_meta=True, return only antennas in data
 
     Output:
     -------
@@ -724,7 +840,7 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
         freqs = np.unique(uvd.freq_array)
         times = np.unique(uvd.time_array)
         lsts = np.unique(uvd.lst_array)
-        antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
+        antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
         antpos = odict(zip(ants, antpos))
         pols = uvd.polarization_array
         return data, flags, antpos, ants, freqs, times, lsts, pols
@@ -1067,7 +1183,6 @@ def fill_dict_nans(data, wgts=None, nan_fill=None, inf_fill=None, array=False):
                 if wgts is not None:
                     wgts[k][inf_select] = 0.0
 
-
 def echo(message, type=0, verbose=True):
     if verbose:
         if type == 0:
@@ -1077,6 +1192,9 @@ def echo(message, type=0, verbose=True):
             print(message)
             print("-"*40)
 
+def flatten(l):
+    """ flatten a nested list """
+    return [item for sublist in l for item in sublist]
 
 class Baseline(object):
     """
@@ -1125,10 +1243,9 @@ class Baseline(object):
         else:
             return False
 
-
-def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0, verbose=True):
+def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose=True):
     """
-    match data baseline keys to model baseline keys based on positional redundancy
+    match model baseline keys to data baseline keys based on positional redundancy
 
     Parameters:
     -----------
@@ -1160,48 +1277,79 @@ def match_red_baselines(data, data_antpos, model, model_antpos, tol=1.0, verbose
     data_bls = np.array(map(lambda k: Baseline(data_antpos[k[1]] - data_antpos[k[0]], tol=tol), data_keys))
 
     # iterate over data baselines
-    new_data = odict()
-    for i, bl in enumerate(data_bls):
+    new_model = odict()
+    for i, bl in enumerate(model_bls):
         # compre bl to all model_bls
-        comparison = np.array(map(lambda mbl: bl == mbl, model_bls), np.str)
+        comparison = np.array(map(lambda mbl: bl == mbl, data_bls), np.str)
 
         # get matches
         matches = np.where((comparison=='True')|(comparison=='conjugated'))[0]
 
         # check for matches
         if len(matches) == 0:
-            echo("found zero matches in model for data {}".format(data_keys[i]), verbose=verbose)
+            echo("found zero matches in data for model {}".format(model_keys[i]), verbose=verbose)
             continue
         else:
             if len(matches) > 1:
-                echo("found more than 1 match in model to data {}: {}".format(data_keys[i], map(lambda j: model_keys[j], matches)), verbose=verbose)
+                echo("found more than 1 match in data to model {}: {}".format(model_keys[i], map(lambda j: data_keys[j], matches)), verbose=verbose)
             # assign to new_data
             if comparison[matches[0]] == 'True':
-                new_data[model_keys[matches[0]]] = data[data_keys[i]]
+                new_model[data_keys[matches[0]]] = model[model_keys[i]]
             elif comparison[matches[0]] == 'conjugated':
-                new_data[model_keys[matches[0]]] = np.conj(data[data_keys[i]])
+                new_model[data_keys[matches[0]]] = np.conj(model[model_keys[i]])
 
-    return DataContainer(new_data)
+    return DataContainer(new_model)
 
 
-def avg_data_across_red_bls(data, bls, antpos, flags=None, broadcast_flags=True, median=False, tol=0.5,
+def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, median=False, tol=1.0,
                             mirror_red_data=False):
     """
     Given complex visibility data spanning one or more redundant
     baseline groups, average redundant visibilities and write to file
+
+    Parameters:
+    -----------
+    data : type=dictionary, data dictionary holding complex visibilities.
+        must conform to AbsCal dictionary format.
+
+    antpos : type=dictionary, antenna position dictionary
+
+    flags : type=dictionary, data flags
+
+    broadcast_flags : type=boolean, if True, broadcast all flags across red baselines
+
+    median : type=boolean, if True, take median of redundant baselines instead of mean
+
+    tol : type=float, redundant baseline tolerance threshold
+
+    mirror_red_data : type=boolean, if True, mirror average visibility across red bls
+
+    Output: (red_data, red_flags, red_keys)
+    -------
     """
     # get data keys
     keys = data.keys()
 
     # get data, flags and ants
     data = copy.deepcopy(data)
+    pols = np.unique(map(lambda k: k[2], data.keys()))
     ants = np.unique(np.concatenate(keys))
     if flags is None:
         flags = copy.deepcopy(data)
         for k in flags.keys(): flags[k] = np.zeros_like(flags[k]).astype(np.bool)
 
     # get redundant baselines
-    reds = compute_reds(bls, antpos, tol=tol)
+    _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=pols, low_hi=True)
+
+    # strip reds of keys not in data
+    reds = []
+    for i, bl_group in enumerate(_reds):
+        group = []
+        for k in bl_group:
+            if k in data:
+                group.append(k)
+        if len(group) > 0:
+            reds.append(group)
 
     # make red_data dictionary
     red_data = odict()
@@ -1230,13 +1378,34 @@ def avg_data_across_red_bls(data, bls, antpos, flags=None, broadcast_flags=True,
     # get red_data keys
     red_keys = red_data.keys()
 
-    return red_data, red_flags, red_keys
+    return DataContainer(red_data), DataContainer(red_flags), red_keys
 
 
 def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
                             write_miriad=True, output_data=False, overwrite=False, 
                             verbose=True, **kwargs):
     """
+    Open a file and run avg_data_across_red_bls on data, then write to file
+
+    Parameters:
+    -----------
+    data_fname : type=str, path to miriad file
+
+    outdir : type=str, output directory
+
+    output_fname : type=str, output filename
+
+    write_miriad : type=boolean, if True, write output miriad file
+
+    output_data : type=boolean, if True, return data dictionary
+
+    overwrite : type=boolean, if True, overwite output files
+
+    verbose : type=boolean, if True, print feedback to stdout
+
+    Output:
+    -------
+    if output_data: return (red_data, red_flags, red_keys)
     """
     # check output file
     if outdir is None:
@@ -1252,18 +1421,17 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         uvd.read_miriad(data_fname)
 
     # get data
-    data, flags = UVData2AbsCalDict([uvd])
+    data, flags = UVData2AbsCalDict(uvd)
 
     # get antpos and baselines
     antpos, ants = uvd.get_ENU_antpos()
     antpos = dict(zip(ants, antpos))
-    bls = data.keys()
 
     # avg data across reds
-    red_data, red_flags, red_keys = avg_data_across_red_bls(data, bls, antpos, **kwargs)
+    red_data, red_flags, red_keys = avg_data_across_red_bls(data, antpos, flags=flags, **kwargs)
     uvd_data = np.array(map(lambda k: red_data[k], red_keys))
     uvd_flags = np.array(map(lambda k: red_flags[k], red_keys))
-    uvd_bls = np.array(red_keys)
+    uvd_bls = np.array(map(lambda k: k[:2], red_keys))
     blts_select = np.array(map(lambda k: uvd.antpair2ind(*k), uvd_bls)).reshape(-1)
     Nbls = len(uvd_bls)
     Nblts = len(blts_select)
@@ -1275,7 +1443,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
 
     # write to file
     if write_miriad:
-        echo("saving {}".format(output_fname), verbose=verbose)
+        echo("saving {}".format(output_fname), type=1, verbose=verbose)
         uvd.data_array = uvd_data
         uvd.flag_array = uvd_flags
         uvd.time_array = uvd.time_array[blts_select]

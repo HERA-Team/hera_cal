@@ -1,6 +1,7 @@
 '''Tests for abscal.py'''
 import nose.tools as nt
 import os
+import shutil
 import json
 import numpy as np
 import aipy
@@ -20,8 +21,9 @@ class Test_AbsCal_Funcs:
         np.random.seed(0)
 
         # load into pyuvdata object
+        self.data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.uvd = UVData()
-        self.uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA"))
+        self.uvd.read_miriad(self.data_file)
         self.freq_array = np.unique(self.uvd.freq_array)
         self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
         self.antpos = odict(zip(self.ants, self.antpos))
@@ -92,6 +94,12 @@ class Test_AbsCal_Funcs:
         fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
         d, f = hc.abscal.UVData2AbsCalDict(fname, filetype='uvfits')
         nt.assert_equal(d[(0,1,'xx')].shape, (60,64))
+
+        # test w/ meta pick_data_ants
+        d, f, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(fname, return_meta=True, pick_data_ants=False)
+        nt.assert_equal(len(ap[24]), 3)
+        nt.assert_equal(len(a), 47)
+        nt.assert_equal(len(f), len(self.freq_array))
 
     def test_data_key_to_array_axis(self):
         m, pk = hc.abscal.data_key_to_array_axis(self.model, 2)
@@ -185,6 +193,30 @@ class Test_AbsCal_Funcs:
         hc.abscal.echo('hi', verbose=True)
         hc.abscal.echo('hi', type=1, verbose=True)
 
+    def test_flatten(self):
+        l = hc.abscal.flatten([['hi']])
+        nt.assert_equal(np.array(l).ndim, 1)
+
+    def test_avg_data_across_red_bls(self):
+        data, flags, antpos, ants, freqs, times, lsts, pols = hc.abscal.UVData2AbsCalDict(self.data_file, return_meta=True)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, flags=self.wgts, tol=2.0)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, median=True)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_flags=True)
+        nt.assert_equal(len(rd.keys()), 9)
+        nt.assert_equal(len(rf.keys()), 9)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, mirror_red_data=True)
+        nt.assert_equal(len(rd.keys()), 21)
+        nt.assert_equal(len(rf.keys()), 21)
+
+    def test_avg_file_across_red_bls(self):
+        rd, rf, rk = hc.abscal.avg_file_across_red_bls(self.data_file, write_miriad=False, output_data=True)
+        if os.path.exists('ex'):
+            shutil.rmtree('ex')
+        hc.abscal.avg_file_across_red_bls(self.data_file, outdir='.', output_fname='ex', write_miriad=True, output_data=False)
+        nt.assert_true(os.path.exists('ex'))
+        if os.path.exists('ex'):
+            shutil.rmtree('ex')
+
 
 class Test_AbsCal:
 
@@ -194,6 +226,12 @@ class Test_AbsCal:
         self.data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         self.AC = hc.abscal.AbsCal(self.data_fname, self.model_fname)
+
+        # make custom gain keys
+        d, f, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(self.data_fname, return_meta=True, pick_data_ants=False)
+        p = map(lambda p: self.AC.pol2str[p][0], p)
+        self.ap = ap
+        self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k,p), a), p))
 
     def test_init(self):
         # init with no meta
@@ -206,7 +244,6 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, pol_select=['xx'])
         # test feeding file
         AC = hc.abscal.AbsCal(self.model_fname, self.data_fname)
-
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
@@ -224,6 +261,9 @@ class Test_AbsCal:
         AC.abs_amp_logcal(verbose=False)
         AC._abs_eta_arr *= 0
         nt.assert_almost_equal(np.abs(AC.abs_eta_gain_arr[0,0,0,0]), 1.0)
+        # test custom gain
+        g = self.AC.custom_abs_eta_gain(self.gk)
+        nt.assert_equal(len(g), 47)
 
     def test_TT_phs_logcal(self):
         # test execution
@@ -237,7 +277,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.TT_Phi[(24, 'x')].shape, (2, 60, 64))
         nt.assert_equal(self.AC.TT_Phi_gain[(24, 'x')].shape, (60, 64))
         # test merge pols
-        self.AC.TT_phs_logcal(verbose=False, merge_pols=True)
+        self.AC.TT_phs_logcal(verbose=False, four_pol=True)
         nt.assert_equal(self.AC.TT_Phi_arr.shape, (7, 2, 60, 64, 1))
         nt.assert_equal(self.AC.abs_psi_arr.shape, (7, 60, 64, 1))
         # test Nones
@@ -250,6 +290,9 @@ class Test_AbsCal:
         nt.assert_equal(AC.abs_psi_gain, None)
         nt.assert_equal(AC.TT_Phi, None)
         nt.assert_equal(AC.TT_Phi_gain, None)
+        # test custom gain
+        g = self.AC.custom_TT_Phi_gain(self.gk, self.ap)
+        nt.assert_equal(len(g), 47)
 
     def test_amp_logcal(self):
         self.AC.amp_logcal(verbose=False)
@@ -314,6 +357,32 @@ class Test_AbsCal:
         # test medfilt
         self.AC.delay_lincal(verbose=False, medfilt=False)
         self.AC.delay_lincal(verbose=False, time_avg=True)
+
+    def test_delay_slope_lincal(self):
+        # test w/o offsets
+        self.AC.delay_slope_lincal(verbose=False, kernel=(1, 3), medfilt=False)
+        nt.assert_equal(self.AC.dly_slope[(24, 'x')].shape, (2, 60, 1))
+        nt.assert_equal(self.AC.dly_slope_gain[(24, 'x')].shape, (60, 64))
+        nt.assert_equal(self.AC.dly_slope_arr.shape, (7, 2, 60, 1, 1))
+        nt.assert_equal(self.AC.dly_slope_gain_arr.shape, (7, 60, 64, 1))
+        # test exception
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        nt.assert_raises(AttributeError, AC.delay_slope_lincal)
+        # test Nones
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        nt.assert_equal(AC.dly_slope, None)
+        nt.assert_equal(AC.dly_slope_gain, None)
+        nt.assert_equal(AC.dly_slope_arr, None)
+        nt.assert_equal(AC.dly_slope_gain_arr, None)
+        # test medfilt and time_avg
+        self.AC.delay_slope_lincal(verbose=False, medfilt=False)
+        self.AC.delay_slope_lincal(verbose=False, time_avg=True)
+        # test four pol
+        self.AC.delay_slope_lincal(verbose=False, four_pol=True)
+        nt.assert_equal(self.AC.dly_slope[(24, 'x')].shape, (2, 60, 1))
+        nt.assert_equal(self.AC.dly_slope_gain[(24, 'x')].shape, (60, 64))
+        nt.assert_equal(self.AC.dly_slope_arr.shape, (7, 2, 60, 1, 1))
+        nt.assert_equal(self.AC.dly_slope_gain_arr.shape, (7, 60, 64, 1))
 
     def test_merge_gains(self):
         self.AC.abs_amp_logcal(verbose=False)
