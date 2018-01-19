@@ -1335,8 +1335,7 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
     pols = np.unique(map(lambda k: k[2], data.keys()))
     ants = np.unique(np.concatenate(keys))
     if flags is None:
-        flags = DataContainer(odict())
-        for k in flags.keys(): flags[k] = np.zeros_like(flags[k]).astype(np.bool)
+        flags = DataContainer(odict(map(lambda k: (k, np.zeros_like(data[k]).astype(np.bool)), data.keys())))
 
     # get redundant baselines
     _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=pols, low_hi=True)
@@ -1378,7 +1377,7 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
             # break if no mirror
             if mirror_red_data is False:
                 break
-                
+
     # get red_data keys
     red_keys = red_data.keys()
 
