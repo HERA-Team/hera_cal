@@ -1544,7 +1544,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     # re-sort, inverse quad if weights
     if weights:
         for i, k in enumerate(red_data):
-            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)]**(-2.0)
+            red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)]**(2.0)
     else:
         red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
 
