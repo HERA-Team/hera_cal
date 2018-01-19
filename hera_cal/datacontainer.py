@@ -98,7 +98,7 @@ class DataContainer:
     def has_pol(self, pol):
         return pol in self._pols
 
-    def get(self, bl, pol, val):
+    def get(self, bl, pol):
         return self[self.mk_key(bl, pol)]
 
 
