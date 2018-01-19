@@ -657,7 +657,7 @@ def abscal_arg_parser():
 
 def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite=False,
                write_calfits=True, calfits_fname=None, return_gains=False, outdir=None,
-               match_red_bls=False, reweight=False, interp_model=True,
+               match_red_bls=False, tol=1.0, reweight=False, interp_model=True,
                delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True,
                gen_amp_cal=False, gen_phs_cal=False):
     """

@@ -12,6 +12,7 @@ import hera_cal as hc
 from hera_cal.data import DATA_PATH
 from collections import OrderedDict as odict
 import copy
+from hera_cal.datacontainer import DataContainer
 
 class Test_AbsCal_Funcs:
 
@@ -83,17 +84,14 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(flags[(24, 25, 'xx')].shape, (120, 64))
 
         # test w/ meta
-        d, f, ap, a, f, t, p = hc.abscal.UVData2AbsCalDict([fname, fname2], return_meta=True)
-        nt.assert_equal(len(ap[11]), 3)
+        d, f, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict([fname, fname2], return_meta=True)
+        nt.assert_equal(len(ap[24]), 3)
         nt.assert_equal(len(f), len(self.freq_array))
 
         # test uvfits
         fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
         d, f = hc.abscal.UVData2AbsCalDict(fname, filetype='uvfits')
         nt.assert_equal(d[(0,1,'xx')].shape, (60,64))
-
-        # test exception
-        nt.assert_raises(IOError, hc.abscal.UVData2AbsCalDict, fname)
 
     def test_data_key_to_array_axis(self):
         m, pk = hc.abscal.data_key_to_array_axis(self.model, 2)
@@ -127,8 +125,8 @@ class Test_AbsCal_Funcs:
 
     def test_gains2calfits(self):
         cfname = os.path.join(DATA_PATH, 'ex.calfits')
-        abscal_gains = np.ones((len(self.ants), 60, 1024, 1), dtype=np.complex)
-        abscal_gains = odict(zip(self.ants, abscal_gains))
+        abscal_gains = np.ones((len(self.ants), 60, 1024), dtype=np.complex)
+        abscal_gains = odict(map(lambda k: ((k, 'x'), abscal_gains[k]), np.arange(len(abscal_gains))))
         freq_array = np.linspace(100, 200, 1024)
         time_array = np.linspace(2450842.1, 2450842.4, 60)
         pol_array = np.array(['x'])
@@ -142,25 +140,22 @@ class Test_AbsCal_Funcs:
     def test_wiener(self):
         # test smoothing
         d = hc.abscal.wiener(self.data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1, 13))
-        nt.assert_equal(d[(11,12,'xx')].shape, (60, 64))
-        nt.assert_equal(d[(11,12,'xx')].dtype, np.complex)
-        nt.assert_almost_equal(d[(11,12,'xx')][0,0], (-0.11750913839828359+0.19702827915549379j))
+        nt.assert_equal(d[(24,37,'xx')].shape, (60, 64))
+        nt.assert_equal(d[(24,37,'xx')].dtype, np.complex)
         # test w/ noise
         d = hc.abscal.wiener(self.data, window=(5, 15), noise=0.1, medfilt=True, medfilt_kernel=(1, 13))
-        nt.assert_equal(d[(11,12,'xx')].shape, (60, 64))
+        nt.assert_equal(d[(24,37,'xx')].shape, (60, 64))
         # test w/o medfilt
         d = hc.abscal.wiener(self.data, window=(5, 15), medfilt=False)
-        nt.assert_equal(d[(11,12,'xx')].shape, (60, 64))
+        nt.assert_equal(d[(24,37,'xx')].shape, (60, 64))
         # test as array
-        d = hc.abscal.wiener(self.data[(11, 12, 'xx')], window=(5, 15), medfilt=False, array=True)
+        d = hc.abscal.wiener(self.data[(24,37, 'xx')], window=(5, 15), medfilt=False, array=True)
         nt.assert_equal(d.shape, (60, 64))
         nt.assert_equal(d.dtype, np.complex)
 
     def test_Baseline(self):
         bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), self.data.keys())
         bls_conj = map(lambda k: hc.abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), self.data.keys())
-        nt.assert_equal(bls[0].__repr__(), '0014.6:0000.1:-000.1')
-        nt.assert_equal(bls_conj[0].__repr__(), '-014.6:-000.1:0000.1')
         nt.assert_equal(bls[0], bls[0])
         nt.assert_false(bls[0] == bls[1])
         nt.assert_equal(bls[0] == bls_conj[0], 'conjugated')
@@ -171,23 +166,20 @@ class Test_AbsCal_Funcs:
         model_antpos = odict([(k+1, self.antpos[k]) for i,k in enumerate(self.antpos.keys())])
         data = hc.abscal.match_red_baselines(self.data, self.antpos, model, model_antpos, tol=2.0, verbose=False)
         nt.assert_equal(len(data.keys()), 9)
-        nt.assert_true((12, 13, 'xx') in data.keys())
+        nt.assert_true((25, 38, 'xx') in data)
 
     def test_mirror_data_to_red_bls(self):
         # make fake data
-        reds = hc.abscal.compute_reds(self.antpos, pol='xx')
-        data = odict(map(lambda k: (k[0], self.data[k[0]]), reds[:5]))
-        # test execuation
-        d = hc.abscal.mirror_data_to_red_bls(data, self.antpos, pol='xx')
-        nt.assert_equal(len(d), 16)
-        nt.assert_true((23, 24, 'xx') in d)
-        # test execution w/ no pol string
-        reds = hc.abscal.compute_reds(self.antpos)
-        data = odict(map(lambda k: (k[0], self.data[k[0]+('xx',)]), reds[:5]))
+        reds = hc.redcal.get_reds(self.antpos, pols=['xx'])
+        data = DataContainer(odict(map(lambda k: (k[0], self.data[k[0]]), reds[:5])))
         # test execuation
         d = hc.abscal.mirror_data_to_red_bls(data, self.antpos)
-        nt.assert_equal(len(d), 16)
-        nt.assert_true((23, 24) in d)
+        nt.assert_equal(len(d.keys()), 16)
+        nt.assert_true((24, 25, 'xx') in d)
+        # test reweighting
+        w = hc.abscal.mirror_data_to_red_bls(self.wgts, self.antpos, weights=True)
+        nt.assert_equal(w[(24, 25, 'xx')].dtype, np.float)
+        nt.assert_almost_equal(w[(24, 25, 'xx')].max(), 0.0625)
 
     def test_echo(self):
         hc.abscal.echo('hi', verbose=True)
@@ -374,7 +366,6 @@ class Test_AbsCal:
         nt.assert_almost_equal(wgts[(25, 38, 'xx')][15, 20], 0)
         nt.assert_almost_equal(wgts[(25, 38, 'xx')][20, 15], 0)
 
-
     def test_fft_dly(self):
         # test basic execution
         k = (24, 25, 'xx')
@@ -394,11 +385,35 @@ class Test_AbsCal:
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset.shape, (60, 1))
 
+    def test_abscal_arg_parser(self):
+        a = hc.abscal.abscal_arg_parser()
 
-
-
-
-
+    def test_abscal_run(self):
+        data_files = [os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")]
+        model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
+                       os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
+        # blank run
+        gains = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, return_gains=True, verbose=False)
+        nt.assert_equal(gains[0][(24,'x')].dtype, np.complex)
+        nt.assert_equal(gains[0][(24,'x')].shape, (60, 64))
+        # write calfits
+        outdir = "./"
+        cf_name = "ex.calfits"
+        if os.path.exists(os.path.join(outdir, cf_name)):
+            os.remove(os.path.join(outdir, cf_name))
+        gains = hc.abscal.abscal_run(data_files, model_files, write_calfits=True, calfits_fname=cf_name, outdir=outdir,
+                                    return_gains=True, verbose=False)
+        nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
+        if os.path.exists(os.path.join(outdir, cf_name)):
+            os.remove(os.path.join(outdir, cf_name))
+        # check match_red_bls and reweight
+        hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False,
+                                     match_red_bls=True, reweight=True)
+        # check all calibration routines
+        gains = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True,
+                            delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True,gen_amp_cal=False, gen_phs_cal=False)
+        nt.assert_equal(gains[0][(24,'x')].dtype, np.complex)
+        nt.assert_equal(gains[0][(24,'x')].shape, (60, 64))
 
 
 
