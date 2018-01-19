@@ -72,9 +72,8 @@ class AbsCal(object):
         model : visibility data of refence model, type=dictionary
                 keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
                 values are complex ndarray visibilities.
-                these must be at least 2D arrays, with [0] axis indexing time
-                and [1] axis indexing frequency. If the arrays are 3D arrays, the [2] axis
-                should index polarization, in which case the key loses its pol entry, Ex. (1, 2).
+                these must be 2D arrays, with [0] axis indexing time
+                and [1] axis indexing frequency.
  
                 Optionally, model can be a path to a miriad file, or a pyuvdata.UVData object
                 with a miriad file read-in, or a list of either ones.
@@ -1005,10 +1004,5 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
     # return gains if desired
     if return_gains:
         return gains
-
-
-
-
-
 
 
