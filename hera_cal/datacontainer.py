@@ -76,6 +76,9 @@ class DataContainer:
         else:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
+    def __contains__(self, key):
+        return key in self.keys()
+
 
     def get_data(self, *args):
         if len(args) > 1:
