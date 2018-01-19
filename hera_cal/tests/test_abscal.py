@@ -187,7 +187,7 @@ class Test_AbsCal_Funcs:
         # test reweighting
         w = hc.abscal.mirror_data_to_red_bls(self.wgts, self.antpos, weights=True)
         nt.assert_equal(w[(24, 25, 'xx')].dtype, np.float)
-        nt.assert_almost_equal(w[(24, 25, 'xx')].max(), 0.0625)
+        nt.assert_almost_equal(w[(24, 25, 'xx')].max(), 16.0)
 
     def test_echo(self):
         hc.abscal.echo('hi', verbose=True)
