@@ -204,7 +204,7 @@ class Test_AbsCal_Funcs:
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_flags=True)
         nt.assert_equal(len(rd.keys()), 9)
         nt.assert_equal(len(rf.keys()), 9)
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, mirror_red_data=True)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, flags=self.wgts, tol=2.0, mirror_red_data=True)
         nt.assert_equal(len(rd.keys()), 21)
         nt.assert_equal(len(rf.keys()), 21)
 
