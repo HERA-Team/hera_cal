@@ -18,13 +18,10 @@ from hera_cal import omni, utils, firstcal, cal_formats, redcal
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
+from scipy import spatial
 import linsolve
 import itertools
 import operator
-from sklearn import linear_model
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn import gaussian_process
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
@@ -950,7 +947,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     return dlys, phi
 
 
-def wiener(data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1,13), array=False):
+def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(1,13), array=False):
     """
     wiener filter complex visibility data. this might be used in constructing
     model reference. See scipy.signal.wiener for details on method.
@@ -995,26 +992,26 @@ def wiener(data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1,13)
         return new_data
 
 
-def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
+def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs,
                  kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
-                 presmooth=False, bounds_error=True, **wiener_kwargs):
+                 bounds_error=True, **wiener_kwargs):
     """
-    interpolate complex visibility data onto the time & frequency basis of
-    a model visibility.
+    interpolate complex visibility model onto the time & frequency basis of
+    a data visibility.
 
     Parameters:
     -----------
-    data : type=dictionary, holds complex visibility data
-        keys are antenna-pair + pol tuples, values are 2d complex visibility data
+    model : type=dictionary, holds complex visibility for model
+        keys are antenna-pair + pol tuples, values are 2d complex visibility
         with shape (Ntimes, Nfreqs)
-
-    data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
-
-    data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
     model_times : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
 
     model_freqs : 1D array of the model freq axis, dtype=float, shape=(Nfreqs,)
+
+    data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
+
+    data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
     kind : kind of interpolation method, type=str, options=['linear', 'cubic', ...]
         see scipy.interpolate.interp2d for details
@@ -1028,47 +1025,27 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
 
     flag_extrapolate : flag extrapolated data if True
 
-    presmooth : type=boolean, if True perform the following steps on real and imag separately:
-        smooth data, perform interpolation, find difference between original and interpolation
-        and add difference to original data.
-
-    Output: (data, flags)
+    Output: (new_model, new_flags)
     -------
-    data : interpolated data, type=dictionary
-    flags : flags associated with data, type=dictionary
+    new_model : interpolated model, type=dictionary
+    new_flags : flags associated with model, type=dictionary
     """
     # make flags
-    new_data = odict()
+    new_model = odict()
     flags = odict()
 
     # loop over keys
-    for i, k in enumerate(data.keys()):
+    for i, k in enumerate(model.keys()):
         # interpolate real and imag separately
-        d = data[k]
-        real = np.real(d)
-        imag = np.imag(d)
-
-        if presmooth:
-            # wiener smooth
-            _real = copy.copy(real)
-            _imag = copy.copy(imag)
-
-            d = wiener(d, array=True, **wiener_kwargs)
-            real = np.real(d)
-            imag = np.imag(d)
+        m = model[k]
+        real = np.real(m)
+        imag = np.imag(m)
 
         # interpolate
-        interp_real = interpolate.interp2d(data_freqs, data_times, real,
-                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(model_freqs, model_times)
-        interp_imag = interpolate.interp2d(data_freqs, data_times, imag,
-                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(model_freqs, model_times)
-        if presmooth:
-            # get differences and add
-            real_diff = interp_real - real
-            imag_diff = interp_imag - imag
-            interp_real = _real + real_diff
-            interp_imag = _imag + imag_diff
-
+        interp_real = interpolate.interp2d(model_freqs, model_times, real,
+                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
+        interp_imag = interpolate.interp2d(model_freqs, model_times, imag,
+                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
         # set flags
         f = np.zeros_like(interp_real, dtype=float)
         if flag_extrapolate:
@@ -1082,10 +1059,10 @@ def interp2d_vis(data, data_times, data_freqs, model_times, model_freqs,
         interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
 
         # rejoin
-        new_data[k] = interp_real + 1j*interp_imag
+        new_model[k] = interp_real + 1j*interp_imag
         flags[k] = f
 
-    return DataContainer(new_data), DataContainer(flags)
+    return DataContainer(new_model), DataContainer(flags)
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
