@@ -379,7 +379,7 @@ class Test_AbsCal:
         nt.assert_equal(AC.dly_slope_gain, None)
         nt.assert_equal(AC.dly_slope_arr, None)
         nt.assert_equal(AC.dly_slope_gain_arr, None)
-        nt.assert_equal(AC.dly_slope_ant_arr, None)
+        nt.assert_equal(AC.dly_slope_ant_dly_arr, None)
         # test medfilt and time_avg
         self.AC.delay_slope_lincal(verbose=False, medfilt=False)
         self.AC.delay_slope_lincal(verbose=False, time_avg=True)
