@@ -897,7 +897,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             
             # check path
             if os.path.exists(calfits_fname) and overwrite == False:
-                raise IOError("{} exists, not overwriting")
+                raise IOError("{} exists, not overwriting".format(calfits_fname))
 
         # load data and configure weights
         echo("loading {}".format(dfile), type=1, verbose=verbose)
@@ -959,7 +959,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             AC.abs_amp_logcal(verbose=verbose)
             AC.data = apply_gains(AC.data, AC.abs_eta_gain)
             if alt_gains:
-                gain_list.append(AC.custom_abs_eta_gain(total_gain_keys, total_data_antpos))
+                gain_list.append(AC.custom_abs_eta_gain(total_gain_keys))
             else:
                 gain_list.append(AC.abs_eta_gain)
 
@@ -970,7 +970,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             AC.data = apply_gains(AC.data, AC.TT_Phi_gain)
             if alt_gains:
                 gain_list.append(AC.custom_TT_Phi_gain(total_gain_keys, total_data_antpos))
-                gain_list.append(AC.custom_abs_psi_gain(total_gain_keys, total_data_antpos))
+                gain_list.append(AC.custom_abs_psi_gain(total_gain_keys))
             else:
                 gain_list.append(AC.abs_psi_gain)
                 gain_list.append(AC.TT_Phi_gain)

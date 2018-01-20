@@ -293,6 +293,8 @@ class Test_AbsCal:
         # test custom gain
         g = self.AC.custom_TT_Phi_gain(self.gk, self.ap)
         nt.assert_equal(len(g), 47)
+        g = self.AC.custom_abs_psi_gain(self.gk)
+        nt.assert_equal(g[(0,'x')].shape, (60, 64))
 
     def test_amp_logcal(self):
         self.AC.amp_logcal(verbose=False)
@@ -365,6 +367,9 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.dly_slope_gain[(24, 'x')].shape, (60, 64))
         nt.assert_equal(self.AC.dly_slope_arr.shape, (7, 2, 60, 1, 1))
         nt.assert_equal(self.AC.dly_slope_gain_arr.shape, (7, 60, 64, 1))
+        nt.assert_equal(self.AC.dly_slope_ant_dly_arr.shape, (7, 60, 1, 1))
+        g = self.AC.custom_dly_slope_gain(self.gk, self.ap)
+        nt.assert_equal(g[(0,'x')].shape, (60, 64))
         # test exception
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_raises(AttributeError, AC.delay_slope_lincal)
@@ -374,6 +379,7 @@ class Test_AbsCal:
         nt.assert_equal(AC.dly_slope_gain, None)
         nt.assert_equal(AC.dly_slope_arr, None)
         nt.assert_equal(AC.dly_slope_gain_arr, None)
+        nt.assert_equal(AC.dly_slope_ant_arr, None)
         # test medfilt and time_avg
         self.AC.delay_slope_lincal(verbose=False, medfilt=False)
         self.AC.delay_slope_lincal(verbose=False, time_avg=True)
@@ -483,6 +489,20 @@ class Test_AbsCal:
                             delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True,gen_amp_cal=False, gen_phs_cal=False)
         nt.assert_equal(gains[0][(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[0][(24,'x')].shape, (60, 64))
+        # check exceptions
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, alt_gains=True,
+                calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, delay_cal=True, verbose=False)
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, alt_gains=True,
+                calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_phs_cal=True, verbose=False)
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, alt_gains=True,
+                calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_amp_cal=True, verbose=False)
+        # check alt gains run
+        hc.abscal.abscal_run(data_files, model_files, alt_gains=True, write_calfits=False)
+        # test general bandpass solvers
+        hc.abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False)
+
+
+
 
 
 
