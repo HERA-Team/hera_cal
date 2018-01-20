@@ -3,6 +3,10 @@ import aipy
 import astropy.constants as const
 from astropy.time import Time
 import pyuvdata.utils as uvutils
+from pyuvdata import UVCal
+import os
+import hera_cal
+import copy
 
 class AntennaArray(aipy.pol.AntennaArray):
     def __init__(self, *args, **kwargs):
@@ -202,7 +206,7 @@ def LST2JD(LST, start_JD, longitude=21.42830):
     return JD
 
 
-def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True):
+def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
     """
     multiply together multiple calfits gain solutions (overlapping in time and frequency)
 
@@ -229,7 +233,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     # iterate over files
     for i, f in enumerate(files):
         if i == 0:
-            echo("...loading {}".format(f), verbose=True)
+            hera_cal.abscal_funcs.echo("...loading {}".format(f), verbose=verbose)
             uvc = UVCal()
             uvc.read_calfits(f)
             f1 = copy.copy(f)
@@ -243,19 +247,19 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
 
             # check matching specs
             if np.isclose(uvc.freq_array, uvc2.freq_array).min() is False:
-                print("skipping {} b/c it doesn't match freqs of {}".format(f, f1))
+                hera_cal.abscal_funcs.echo("skipping {} b/c it doesn't match freqs of {}".format(f, f1))
                 continue
             elif np.isclose(uvc.jones_array, uvc2.jones_array).min() is False:
-                print("skipping {} b/c it doesn't match jones of {}".format(f, f1))
+                hera_cal.abscal_funcs.echo("skipping {} b/c it doesn't match jones of {}".format(f, f1))
                 continue
             elif np.isclose(uvc.time_array, uvc2.time_array).min() is False:
-                print("skipping {} b/c it doesn't match times of {}".format(f, f1))
+                hera_cal.abscal_funcs.echo("skipping {} b/c it doesn't match times of {}".format(f, f1))
                 continue
             elif np.isclose(uvc.spw_array, uvc2.spw_array).min() is False:
-                print("skipping {} b/c it doesn't match spw of {}".format(f, f1))
+                hera_cal.abscal_funcs.echo("skipping {} b/c it doesn't match spw of {}".format(f, f1))
                 continue
             elif uvc2.cal_type != uvc.cal_type:
-                print("skipping {} b/c its cal_type doesnt match that of {}".format(f, f1))
+                hera_cal.abscal_funcs.echo("skipping {} b/c its cal_type doesnt match that of {}".format(f, f1))
 
             # set flagged data to unity
             gain_array = uvc2.gain_array
@@ -271,7 +275,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
                 uvc.flag_array = uvc.flag_array * uvc2.flag_array
 
     # write to file
-    echo("...saving {}".format(output_fname))
+    hera_cal.abscal_funcs.echo("...saving {}".format(output_fname), verbose=verbose)
     uvc.write_calfits(output_fname, clobber=True)
 
 
