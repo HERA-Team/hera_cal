@@ -2,10 +2,12 @@ import nose.tools as nt
 import numpy as np
 import sys
 import os
+import shutil
 from pyuvdata import UVData
 from hera_cal import utils
 from hera_cal.calibrations import CAL_PATH
 from hera_cal.data import DATA_PATH
+from pyuvdata import UVCal
 
 
 class TestAAFromCalfile(object):
@@ -69,4 +71,25 @@ class Test_JD2LST:
         nt.assert_almost_equal(utils.LST2JD(12.0, 2458042, 21.), 2458042.8720297855)
 
 
+class Test_combine_calfits:
+    def test_combine_calfits(self):
+        test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
+        test_file2 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.dly.calfits')
+        # test basic execution
+        if os.path.exists('ex.calfits'):
+            os.remove('ex.calfits')
+        utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=True)
+        nt.assert_true(os.path.exists('ex.calfits'))
+        uvc = UVCal()
+        uvc.read_calfits('ex.calfits')
+        nt.assert_equal(len(uvc.antenna_numbers), 7)
+        if os.path.exists('ex.calfits'):
+            os.remove('ex.calfits')
+        utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=False)
+        nt.assert_true(os.path.exists('ex.calfits'))
+        if os.path.exists('ex.calfits'):
+            os.remove('ex.calfits')
+
+
+            
 
