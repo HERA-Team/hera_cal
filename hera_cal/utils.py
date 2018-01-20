@@ -245,22 +245,6 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
             uvc2 = UVCal()
             uvc2.read_calfits(f)
 
-            # check matching specs
-            if np.isclose(uvc.freq_array, uvc2.freq_array).min() is False:
-                hera_cal.abscal_funcs.echo("skipping {} b/c it doesn't match freqs of {}".format(f, f1))
-                continue
-            elif np.isclose(uvc.jones_array, uvc2.jones_array).min() is False:
-                hera_cal.abscal_funcs.echo("skipping {} b/c it doesn't match jones of {}".format(f, f1))
-                continue
-            elif np.isclose(uvc.time_array, uvc2.time_array).min() is False:
-                hera_cal.abscal_funcs.echo("skipping {} b/c it doesn't match times of {}".format(f, f1))
-                continue
-            elif np.isclose(uvc.spw_array, uvc2.spw_array).min() is False:
-                hera_cal.abscal_funcs.echo("skipping {} b/c it doesn't match spw of {}".format(f, f1))
-                continue
-            elif uvc2.cal_type != uvc.cal_type:
-                hera_cal.abscal_funcs.echo("skipping {} b/c its cal_type doesnt match that of {}".format(f, f1))
-
             # set flagged data to unity
             gain_array = uvc2.gain_array
             gain_array[uvc2.flag_array] /= gain_array[uvc2.flag_array]
