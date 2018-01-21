@@ -483,7 +483,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
 
     Output:
     -------
-    fit : dictionary containing delay slope (T_x) for each pol.
+    fit : dictionary containing delay slope (T_x) for each pol [seconds / meter].
     """
     echo("...configuring linsolve data for delay_lincal", verbose=verbose)
 
