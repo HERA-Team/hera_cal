@@ -20,11 +20,15 @@ Full documentation available on [Read the Docs.](http://hera_cal.readthedocs.io/
     2. scaling omnicalibrated data to an absolute (visibility) reference
     3. scaling omnical unique-baseline visibility solutions to an absolute reference (still beta testing this capability)
 
+* hera_cal.lstbin: includes functions for LST-aligning visibility data, and LST binning files overlapping in LST. See scripts/notebooks/running_lstbin.ipynb for a brief tutorial.
+
 ## Scripts
 
 * firstcal\_run.py: runs firstcal on a per file basis.
 * omni\_run.py: runs omnical on a per file basis.
 * omni\_apply.py: apply calibration solutions to miriad files.
+* abscal\_run.py: run absolute calibration given a data file and model file(s)
+* lstbin\_run.py: run LST binning on series of files overlapping in LST.
 
 # Installation
 ## Dependencies
