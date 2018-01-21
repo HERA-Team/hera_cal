@@ -459,6 +459,13 @@ class Test_AbsCal:
         dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=True, solve_phase=True)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset.shape, (60, 1))
+        # test mock data
+        tau = np.array([1.5e-8]).reshape(1, -1) # 15 nanoseconds
+        f = np.linspace(0, 100e6, 1024)
+        df = np.median(np.diff(f))
+        r = np.exp(1j*2*np.pi*f*tau)
+        dly, offset = hc.abscal.fft_dly(r, df=df, medfilt=True, kernel=(1, 5))
+        nt.assert_almost_equal(float(dly), 1.5e-8, delta=1e-9)
 
     def test_abscal_arg_parser(self):
         a = hc.abscal.abscal_arg_parser()
@@ -501,8 +508,45 @@ class Test_AbsCal:
         # test general bandpass solvers
         hc.abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False)
 
-
-
+    def test_mock_data(self):
+        # load into pyuvdata object
+        data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        data, flags, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(data_file, return_meta=True)
+        wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
+        # make mock data
+        dly_slope = np.array([-1e-9, 2e-9, 0])
+        model = odict()
+        for i, k in enumerate(data.keys()):
+            bl = np.around(ap[k[0]] - ap[k[1]], 0)
+            model[k] = data[k] * np.exp(2j*np.pi*f*np.dot(dly_slope, bl))
+        model = DataContainer(model)
+        # setup AbsCal
+        AC = hc.abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
+        # run delay_slope_cal
+        AC.delay_slope_lincal(time_avg=True, verbose=False)
+        # test recovery
+        nt.assert_almost_equal(AC.dly_slope_arr[0,0,0,0,0], -1e-9, delta=1e-10)
+        nt.assert_almost_equal(AC.dly_slope_arr[0,1,0,0,0], 2e-9, delta=1e-10)
+        # make mock data
+        abs_gain = 0.02
+        TT_phi = np.array([1e-3, -1e-3, 0])
+        model = odict()
+        for i, k in enumerate(data.keys()):
+            bl = np.around(ap[k[0]] - ap[k[1]], 0)
+            model[k] = data[k] * np.exp(abs_gain + 1j*np.dot(TT_phi, bl))
+        model = DataContainer(model)
+        # setup AbsCal
+        AC = hc.abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
+        # run abs_amp cal
+        AC.abs_amp_logcal(verbose=False)
+        # run TT_phs_logcal
+        AC.TT_phs_logcal(verbose=False)
+        nt.assert_almost_equal(np.median(AC.abs_eta_arr[0,:,:,0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
+                                0.01, delta=1e-3)
+        nt.assert_almost_equal(np.median(AC.TT_Phi_arr[0,0,:,:,0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
+                                1e-3, delta=1e-4)
+        nt.assert_almost_equal(np.median(AC.TT_Phi_arr[0,1,:,:,0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
+                                -1e-3, delta=1e-4)
 
 
 
