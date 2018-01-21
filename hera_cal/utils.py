@@ -263,6 +263,45 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     uvc.write_calfits(output_fname, clobber=True)
 
 
+def get_miriad_times(filepaths):
+    """
+    Use aipy to get filetimes for filepaths
+
+    Parameters:
+    ------------
+    filepaths : type=list, list of filepaths
+
+    lst : type=boolean, if True return time in LST (radians)
+                        else return time in Julian Date
+
+    Output: (file_starts, file_stops)
+    -------
+
+    """
+    # check filepaths type
+    if type(filepaths) == str:
+        filepaths = [filepaths]
+
+    # form empty lists
+    file_starts = []
+    file_stops = []
+
+    # iterate over filepaths and extract time info
+    for i, f in enumerate(filepaths):
+        uv = aipy.miriad.UV(f)
+        start = uv['lst']
+        stop = start + uv['ntimes'] * uv['inttime'] * 2*np.pi / (23.9344699*3600.)
+        file_starts.append(start)
+        file_stops.append(stop)
+
+    file_starts = np.array(file_starts)
+    file_stops = np.array(file_stops)
+
+    return file_starts, file_stops
+
+
+
+
 
 
 
