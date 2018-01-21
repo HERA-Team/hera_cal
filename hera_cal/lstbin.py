@@ -23,7 +23,8 @@ import itertools
 import operator
 
 
-def lst_bin(data_list, lst_list, wgts_list=None, lst_init=np.pi, dlst=None, lst_low=None, lst_hi=None, wrap_point=2*np.pi):
+def lst_bin(data_list, lst_list, wgts_list=None, lst_init=np.pi, dlst=None,
+            lst_low=None, lst_hi=None, wrap_point=2*np.pi):
     """
     Bin data in Local Sidereal Time (LST)
 
@@ -272,22 +273,32 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
     # get file start and stop times
     data_times = np.array(map(lambda f: utils.get_miriad_times(f), data_files))
    
+    # unwrap times
+    data_times[np.where(data_times < lst_init)] += wrap_point
+
     # get start and end lst
     start_lst = np.min(data_times)
+    start_index = np.argmin(np.abs(lst_grid - start_lst))
     end_lst = np.max(data_times)
+    end_index = np.argmin(np.abs(lst_grid - start_lst))
+    nfiles = int(np.ceil(float((end_index - start_index)) / ntimes_per_file))
 
     # get outdir
     if outdir is None:
         outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
 
+    # create lst-grid of files
+    file_lsts = [lst_grid[start_index:end_index][ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
+ 
     # iterate over end-result LST files
-    for i, 
+    for i, f_lst in enumerate(file_lsts):
+
+        # locate all files that fall within this range of lsts
 
 
 
 
-
-    # write log-file
+        # write log-file
 
 
 
