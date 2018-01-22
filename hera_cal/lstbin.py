@@ -23,7 +23,7 @@ import itertools
 import operator
 
 
-def lst_bin(data_list, lst_list, wgts_list=None, lst_init=np.pi, dlst=None,
+def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, dlst=None,
             lst_low=None, lst_hi=None, wrap_point=2*np.pi):
     """
     Bin data in Local Sidereal Time (LST)
@@ -36,19 +36,21 @@ def lst_bin(data_list, lst_list, wgts_list=None, lst_init=np.pi, dlst=None,
     -------
 
     """
-
-    # get dlst
-    if dlst is None:
-        dlst = np.median(np.diff(lst_list[0]))
-
-    # construct lst_grid
-    lst_grid = np.arange(lst_init, lst_init + wrap_point, dlst) + dlst/2
+    # construct lst_grid if not provided
+    if lst_grid is None:
+        # get dlst if not provided
+        if dlst is None:
+            dlst = np.median(np.diff(lst_list[0]))
+        # construct lst_grid
+        lst_grid = np.arange(lst_init, lst_init + wrap_point, dlst) + dlst/2
+    else:
+        lst_init = lst_grid[0]
 
     # form new dictionaries
     data = odict()
     num_pix = odict()
-    real_std = odict()
-    imag_std = odict()
+    std = odict()
+    std = odict()
     all_indices = odict()
 
     # iterate over data_list
@@ -102,14 +104,13 @@ def lst_bin(data_list, lst_list, wgts_list=None, lst_init=np.pi, dlst=None,
         pixels = np.array(map(lambda ind: np.nansum(map(lambda r: r.real/r.real, data[key][ind]), axis=0), data[key].keys()))
 
         data[key] = real_mean + 1j*imag_mean
-        real_std[key] = real_stan_dev
-        imag_std[key] = imag_stan_dev
+        std[key] = real_stan_dev + 1j*imag_stan_dev
         num_pix[key] = pixels
 
-    return data, real_std, imag_std, all_lst, num_pix
+    return data, std, all_lst, num_pix
 
 
-def lst_align(data, data_lsts, lst_grid=None, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, match='nearest', verbose=True, **kwargs):
+def lst_align(data, data_lsts, wgts=None, lst_grid=None, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, match='nearest', verbose=True, **kwargs):
     """
     Interpolate complex visibilities to align time integrations with an LST grid.
 
@@ -118,6 +119,8 @@ def lst_align(data, data_lsts, lst_grid=None, lst_init=np.pi, dlst=None, wrap_po
     data : type=dictionary, 
 
     data_lsts : type=ndarray
+
+    wgts : type=dictionary, weight dictionary
 
     lst_grid : 
 
@@ -164,9 +167,9 @@ def lst_align(data, data_lsts, lst_grid=None, lst_init=np.pi, dlst=None, wrap_po
     model_lsts = lst_grid[indices]
 
     # interpolate data
-    interp_data, interp_flags = abscal.interp2d_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, **kwargs)
+    interp_data, interp_wgts = abscal.interp2d_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, wgts=wgts, **kwargs)
 
-    return interp_data, interp_flags, model_lsts
+    return interp_data, interp_wgts, model_lsts
 
 
 def lst_align_arg_parser():
@@ -254,10 +257,9 @@ def lst_bin_arg_parser():
 
 
 
-
 def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*np.pi,
                   ntimes_per_file=60, file_ext="{}LST.{}.uv" , outdir=None, overwrite=True,
-                  lst_align=False):
+                  lst_align=False, align_kwargs={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins.
@@ -271,16 +273,19 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
     lst_grid = np.arange(lst_init, lst_init + wrap_point, dlst) + dlst/2
 
     # get file start and stop times
-    data_times = np.array(map(lambda f: utils.get_miriad_times(f), data_files))
-   
+    data_times = np.array(map(lambda f: np.array(utils.get_miriad_times(f)).T, data_files))
+
     # unwrap times
     data_times[np.where(data_times < lst_init)] += wrap_point
+
+    # create data file status: None if not opened, data object if opened
+    data_status = map(lambda d: map(lambda f: None, d), data_files)
 
     # get start and end lst
     start_lst = np.min(data_times)
     start_index = np.argmin(np.abs(lst_grid - start_lst))
     end_lst = np.max(data_times)
-    end_index = np.argmin(np.abs(lst_grid - start_lst))
+    end_index = np.argmin(np.abs(lst_grid - end_lst))
     nfiles = int(np.ceil(float((end_index - start_index)) / ntimes_per_file))
 
     # get outdir
@@ -292,17 +297,92 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
  
     # iterate over end-result LST files
     for i, f_lst in enumerate(file_lsts):
+        # create empty data_list and lst_list
+        data_list = []
+        wgts_list = []
+        lst_list = []
 
         # locate all files that fall within this range of lsts
+        f_min = np.min(f_lst)
+        f_max = np.max(f_lst)
+        f_select = np.array(map(lambda d: map(lambda f: (f[1] > f_min)&(f[0] < f_max), d), data_times))
+
+        # open necessary files, close ones that are no longer needed
+        for j in range(len(data_files)):
+            for k in range(len(data_files[j])):
+                if f_select[j][k] == True and data_status[j][k] is None:
+                    # open file(s)
+                    d, w, ap, a, f, t, l, p = abscal.UVData2AbsCalDict(data_files[j][k], return_meta=True, return_wgts=True)
+
+                    # lst-align if desired
+                    if lst_align:
+                        d, w, all_lst = lst_align(d, l, wgts=w, lst_grid=f_lst, lst_init=lst_init, wrap_point=wrap_point, match='nearest', verbose=True, **align_kwargs)
+
+                    # pass reference to data_status
+                    data_status[j][k] = (d, w, ap, a, f, t, f_lst, p)
+
+                    # erase unnecessary references
+                    del(d,w,ap,ap,f,t,l,p)
+
+                elif f_select[j][k] == False and old_f_select[j][k] == True:
+                    # erase reference
+                    data_status[j][k] = None
+
+                # copy references to data_list
+                if f_select[j][k] == True:
+                    data_list.append(data_status[j][k][0])
+                    wgts_list.append(data_status[j][k][1])
+                    lst_list.append(data_status[j][k][6])
+
+        # pass through lst-bin function
+        (bin_data, std_data, all_lst,
+         num_data) = lst_bin(data_list, lst_list, wgts_list=wgts_list, lst_grid=f_lst,
+                             lst_init=lst_init, wrap_point=wrap_point, lst_low=f_min, lst_hi=f_max)
+
+        # wrap f_lst
+        f_lst = wrap(f_lst)
+
+        # configure filename
+        bin_file = ""
+        std_file = ""
+        num_file = ""
+
+        # configure history string
+        history = ""
+
+        # write to file
+        data_to_miriad(bin_file, bin_data, f_lst, freq_array, antpos, history=history)
+        data_to_miriad(std_file, bin_data, f_lst, freq_array, antpos)
+        data_to_miriad(num_file, bin_data, f_lst, freq_array, antpos)
+
+        # erase data references
+        del data_list
+        del wgts_list
+        del lst_list
+
+        # assign old f_select
+        old_f_select = copy.copy(f_select)
 
 
+def data_to_miriad(fname, data, lst_array, freq_array, antpos,
 
 
-        # write log-file
+                   outdir="./", overwrite=True, verbose=True,
+                   history=""):
+    """
+    take data dictionary, export to UVData object and write as a miriad file.
+
+    Parameters:
+    -----------
 
 
+    """
+    # check output
+    fname = os.path.join(outdir, fname)
+    if os.path.exists(fname) and overwrite is False:
+        abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
 
-
+    ## configure UVData parameters
 
 
 
