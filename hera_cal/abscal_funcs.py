@@ -757,8 +757,8 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
-                        pick_data_ants=True):
+def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
+                      pick_data_ants=True, return_wgts=True):
     """
     turn a list of pyuvdata.UVData objects or a list of miriad or uvfits file paths
     into the datacontainer dictionary form that AbsCal requires. This format is
@@ -781,6 +781,8 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
 
     pick_data_ants : boolean, if True and return_meta=True, return only antennas in data
 
+    return_wgts : boolean, if True, turn flags into a weights dictionary
+
     Output:
     -------
     if return_meta is True:
@@ -793,7 +795,9 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
     antpos : dictionary containing antennas numbers as keys and position vectors
     ants : ndarray containing unique antennas
     freqs : ndarray containing frequency channels (Hz)
-    times : ndarray containing LST bins of data (radians)
+    times : ndarray containing time stamps data in julian date
+    lst : ndarray containing time stamps in local sidereal time
+    pols : ndarray containing polarizations of data in string format ('xx', or 'yy')
     """
     # check datanames is not a list
     if type(datanames) is not list and type(datanames) is not np.ndarray:
@@ -834,6 +838,10 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
                 d.pop(k)
                 f.pop(k)
 
+    # turn into weights
+    if return_wgts:
+        f = odict(map(lambda k: (k, (~f[k]).astype(np.float)), f.keys()))
+        
     # turn into datacontainer
     data, flags = DataContainer(d), DataContainer(f)
 
@@ -997,7 +1005,7 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(1,13)
         return new_data
 
 
-def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs,
+def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=None,
                  kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
                  bounds_error=True, **wiener_kwargs):
     """
@@ -1030,14 +1038,15 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs,
 
     flag_extrapolate : flag extrapolated data if True
 
-    Output: (new_model, new_flags)
+    Output: (new_model, new_wgts)
     -------
     new_model : interpolated model, type=dictionary
-    new_flags : flags associated with model, type=dictionary
+    new_wgts : wgts associated with model, type=dictionary
     """
     # make flags
     new_model = odict()
-    flags = odict()
+    if wgts is None:
+        wgts = odict()
 
     # loop over keys
     for i, k in enumerate(model.keys()):
@@ -1052,9 +1061,9 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs,
         interp_imag = interpolate.interp2d(model_freqs, model_times, imag,
                                            kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
         # set flags
-        f = np.zeros_like(interp_real, dtype=float)
+        w = np.ones_like(interp_real, dtype=float)
         if flag_extrapolate:
-            f[np.isnan(interp_real) + np.isnan(interp_imag)] = 1.0
+            w[np.isnan(interp_real) + np.isnan(interp_imag)] = 0.0
         interp_real[np.isnan(interp_real)] = fill_value
         interp_imag[np.isnan(interp_imag)] = fill_value
 
@@ -1062,12 +1071,13 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs,
         zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
         interp_real[zero_select] *= 0.0 * interp_real[zero_select]
         interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
+        w[zero_select] = 0.0
 
         # rejoin
         new_model[k] = interp_real + 1j*interp_imag
-        flags[k] = f
+        wgts[k] = w
 
-    return DataContainer(new_model), DataContainer(flags)
+    return DataContainer(new_model), DataContainer(wgts)
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
