@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/HERA-Team/hera_cal.svg?branch=master)](https://travis-ci.org/HERA-Team/hera_cal)
 [![Coverage Status](https://coveralls.io/repos/github/HERA-Team/hera_cal/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/hera_cal?branch=master)
 
-The hera_cal package inlcudes modules and scripts that are required to run redundant calibration on HERA as part of the real time system.
+The hera_cal package includes modules and scripts that are required to run redundant calibration on HERA as part of the real time system.
 
 Full documentation available on [Read the Docs.](http://hera_cal.readthedocs.io/en/latest/)
 
