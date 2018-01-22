@@ -316,13 +316,13 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
 
                     # lst-align if desired
                     if lst_align:
-                        d, w, all_lst = lst_align(d, l, wgts=w, lst_grid=f_lst, lst_init=lst_init, wrap_point=wrap_point, match='nearest', verbose=True, **align_kwargs)
+                        d, w, all_lst = lst_align(d, l, wgts=w, lst_grid=f_lst, lst_init=lst_init, wrap_point=wrap_point, match='nearest', verbose=True, bounds_error=False, **align_kwargs)
 
                     # pass reference to data_status
                     data_status[j][k] = (d, w, ap, a, f, t, f_lst, p)
 
                     # erase unnecessary references
-                    del(d,w,ap,ap,f,t,l,p)
+                    del(d,w,ap,a,f,t,l,p)
 
                 elif f_select[j][k] == False and old_f_select[j][k] == True:
                     # erase reference
