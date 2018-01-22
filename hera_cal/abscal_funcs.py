@@ -328,13 +328,13 @@ def phs_logcal(model, data, wgts=None, verbose=True):
 
 
 def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medfilt=True, kernel=(1, 5),
-                 verbose=True, time_ax=0, freq_ax=1, fit_slope=False, antpos=None, four_pol=False):
+                 verbose=True, time_ax=0, freq_ax=1, antpos=None, four_pol=False):
     """
-    Solve for per-antenna delay according to the equation
+    Solve for per-antenna delays according to the equation
 
     delay(V_ij,xy^model / V_ij,xy^data) = delay(g_i_x) - delay(g_j_y)
 
-    Can also solve for the phase offset per antenna per polarization.
+    Can also solve for per-antenna phase offsets with the solve_offsets kwarg.
 
     Parameters:
     -----------
@@ -364,8 +364,6 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     time_ax : type=int, time axis of model and data
 
     freq_ax : type=int, freq axis of model and data
-
-    fit_slope : type=boolean, if True, use results to fit for delay slope across array
 
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
@@ -447,9 +445,11 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
 def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
                          verbose=True, time_ax=0, freq_ax=1, four_pol=False):
     """
-    Solve for delay slope according to the equation
+    Solve for an array-wide delay slope according to the equation
 
     delay(V_ij,xy^model / V_ij,xy^data) = dot(T_x, r_i) - dot(T_y, r_j)
+
+    This does not solve for per-antenna delays, but rather a delay slope across the array.
 
     Parameters:
     -----------
@@ -757,17 +757,17 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
+def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
                         pick_data_ants=True):
     """
-    turn pyuvdata.UVData objects or miriad filenames 
+    turn a list of pyuvdata.UVData objects or a list of miriad or uvfits file paths
     into the datacontainer dictionary form that AbsCal requires. This format is
     keys as antennas-pair + polarization format, Ex. (1, 2, 'xx')
     and values as 2D complex ndarrays with [0] axis indexing time and [1] axis frequency.
 
     Parameters:
     -----------
-    filenames : list of either strings to miriad filenames or list of UVData instances
+    datanames : list of either strings of data file paths or list of UVData instances
                 to concatenate into a single dictionary
 
     pol_select : list of polarization strings to keep
@@ -776,7 +776,8 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
 
     return_meta : boolean, if True: also return antenna and unique frequency and LST arrays
 
-    filetype : string, filetype of data if filenames is a string
+    filetype : string, filetype of data if datanames is a string, options=['miriad', 'uvfits']
+                can be ingored if datanames contains UVData objects.
 
     pick_data_ants : boolean, if True and return_meta=True, return only antennas in data
 
@@ -794,30 +795,30 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
     freqs : ndarray containing frequency channels (Hz)
     times : ndarray containing LST bins of data (radians)
     """
-    # check filenames is a list
-    if type(filenames) is not list and type(filenames) is not np.ndarray:
-        if type(filenames) is str:
+    # check datanames is a list
+    if type(datanames) is not list and type(datanames) is not np.ndarray:
+        if type(datanames) is str:
             uvd = UVData()
-            suffix = os.path.splitext(filenames)[1]
+            suffix = os.path.splitext(datanames)[1]
             if filetype == 'uvfits' or suffix == '.uvfits':
-                uvd.read_uvfits(filenames)
+                uvd.read_uvfits(datanames)
                 uvd.unphase_to_drift()
             elif filetype == 'miriad':
-                uvd.read_miriad(filenames)
+                uvd.read_miriad(datanames)
 
         else:
-            uvd = filenames
+            uvd = datanames
     else:
-        if type(filenames[0]) is str:
+        if type(datanames[0]) is str:
             uvd = UVData()
-            suffix = os.path.splitext(filenames[0])[1]
+            suffix = os.path.splitext(datanames[0])[1]
             if filetype == 'uvfits' or suffix == '.uvfits':
-                uvd.read_uvfits(filenames)
+                uvd.read_uvfits(datanames)
                 uvd.unphase_to_drift()
             elif filetype == 'miriad':
-                uvd.read_miriad(filenames)
+                uvd.read_miriad(datanames)
         else:
-            uvd = reduce(operator.add, filenames)
+            uvd = reduce(operator.add, datanames)
 
     # load data
     d, f = firstcal.UVData_to_dict([uvd])

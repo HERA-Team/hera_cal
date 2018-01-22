@@ -39,22 +39,27 @@ class AbsCal(object):
        where tau is the delay that can be turned
        into a complex gain via: g = exp(i * 2pi * tau * freqs).
 
-    4) Average amplitude linear calibration solves the equation:
+    4) delay slope linear calibration solves the equation:
+            delay(V_ij^model / V_ij) = dot(T_dly, B_ij)
+        where T_dly is a delay slope in [ns / meter]
+        and B_ij is the baseline vector between ant i and j.
+
+    5) Average amplitude linear calibration solves the equation:
             log|V_ij^model / V_ij^data| = log|g_avg_i| + log|g_avg_j|
  
-    5) Tip-Tilt phase logarithmic calibration solves the equation
+    6) Tip-Tilt phase logarithmic calibration solves the equation
             angle(V_ij^model /  V_ij^data) = psi + dot(TT_Phi, B_ij)
         where psi is an overall gain phase scalar, 
         TT_Phi is the gain phase slope vector [radians / meter]
         and B_ij is the baseline vector between antenna i and j.
 
     Methods (1), (2) and (3) can be thought of as general bandpass solvers, whereas
-    methods (3), (4) and (5) are methods that would be used for data that has already
+    methods (4), (5) and (6) are methods that would be used for data that has already
     been redundantly calibrated.
 
     Be warned that the linearizations of the phase solvers suffer from phase wrapping
-    pathologies, meaning that a delay calibration and then average phase calibration should
-    generally precede a phs_logcal or a TT_phs_logcal bandpass routine.
+    pathologies, meaning that a delay calibration should generally precede a
+    phs_logcal or a TT_phs_logcal bandpass routine.
     """
 
     def __init__(self, model, data, wgts=None, antpos=None, freqs=None, pol_select=None,
@@ -62,10 +67,9 @@ class AbsCal(object):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
-        The format of model, data and wgts is in the AbsCal dictionary format. This is a standard
-        python dictionary or OrderedDictionary, with the convention that keys contain
-        antennas-pairs + polarization, Ex. (1, 2, 'xx'),
-        and values contain 2D complex ndarrays with [0] axis indexing time and [1] axis frequency.
+        The format of model, data and wgts is in a dictionary format, with the convention that
+        keys contain antennas-pairs + polarization, Ex. (1, 2, 'xx'), and values contain 2D complex
+        ndarrays with [0] axis indexing time and [1] axis frequency.
 
         Parameters:
         -----------
@@ -75,8 +79,8 @@ class AbsCal(object):
                 these must be 2D arrays, with [0] axis indexing time
                 and [1] axis indexing frequency.
  
-                Optionally, model can be a path to a miriad file, or a pyuvdata.UVData object
-                with a miriad file read-in, or a list of either ones.
+                Optionally, model can be a path to a miriad or uvfits file, or a
+                pyuvdata.UVData object, or a list of either.
 
         model_ftype : type=str, if model is a path to a file, this is its filetype
                       options=['miriad', 'uvfits']
@@ -85,9 +89,9 @@ class AbsCal(object):
                keys are antenna pair + pol tuples (must match model), values are
                complex ndarray visibilities matching shape of model
 
-                Optionally, model can be a path to a miriad file, or a pyuvdata.UVData object
-                with a miriad file read-in, or a list of either ones. In this case, wgts, antpos, 
-                freqs, times and pols will be overwritten with equivalent information from data.
+                Optionally, model can be a path to a miriad or uvfits file, or a
+                pyuvdata.UVData object, or a list of either. In this case, wgts, antpos, 
+                freqs, times and pols are overwritten with equivalent information from data object.
 
         data_ftype : type=str, if data is a path to a file, this is its filetype
                      options=['miriad', 'uvfits']
@@ -120,12 +124,12 @@ class AbsCal(object):
         # set pols to None
         pols = None
 
-        # check format of model
+        # check format of model if model is not a dictionary
         if type(model) == list or type(model) == np.ndarray or type(model) == str or type(model) == UVData:
             (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
              model_times, model_pols) = UVData2AbsCalDict(model, pop_autos=True, return_meta=True, pol_select=pol_select)
 
-        # check format of data
+        # check format of data if data is not a dictionary
         if type(data) == list or type(data) == np.ndarray or type(data) == str or type(data) == UVData:
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
              data_times, data_pols) = UVData2AbsCalDict(data, pop_autos=True, return_meta=True, pol_select=pol_select)
@@ -340,7 +344,7 @@ class AbsCal(object):
 
         time_avg : boolean, if True, average resultant antenna delays across time 
 
-        four_pol : boolean, if True, form a join polarization solution
+        four_pol : boolean, if True, form a joint polarization solution
 
         Result:
         -------
@@ -472,7 +476,7 @@ class AbsCal(object):
 
     @property
     def ant_eta(self):
-        """ return _ant_eta dict """
+        """ return _ant_eta dict, containing per-antenna amplitude solution """
         if hasattr(self, '_ant_eta'):
             return copy.deepcopy(self._ant_eta)
         else:
@@ -489,7 +493,7 @@ class AbsCal(object):
 
     @property
     def ant_eta_arr(self):
-        """ return _ant_eta_arr array """
+        """ return _ant_eta in ndarray format """
         if hasattr(self, '_ant_eta_arr'):
             return copy.copy(self._ant_eta_arr)
         else:
@@ -497,7 +501,7 @@ class AbsCal(object):
 
     @property
     def ant_eta_gain_arr(self):
-        """ form complex gain from _ant_eta_arr """
+        """ return _ant_eta_gain in ndarray format """
         if hasattr(self, '_ant_eta_arr'):
             return np.exp(self.ant_eta_arr).astype(np.complex)
         else:
@@ -505,7 +509,7 @@ class AbsCal(object):
 
     @property
     def ant_phi(self):
-        """ return _ant_phi dict """
+        """ return _ant_phi dict, containing per-antenna phase solution """
         if hasattr(self, '_ant_phi'):
             return copy.deepcopy(self._ant_phi)
         else:
@@ -522,7 +526,7 @@ class AbsCal(object):
 
     @property
     def ant_phi_arr(self):
-        """ return _ant_phi_arr array """
+        """ return _ant_phi in ndarray format """
         if hasattr(self, '_ant_phi_arr'):
             return copy.copy(self._ant_phi_arr)
         else:
@@ -530,7 +534,7 @@ class AbsCal(object):
 
     @property
     def ant_phi_gain_arr(self):
-        """ form complex gain from _ant_phi_arr array """
+        """ return _ant_phi_gain in ndarray format """
         if hasattr(self, '_ant_phi_arr'):
             return np.exp(1j*self.ant_phi_arr)
         else:
@@ -538,7 +542,7 @@ class AbsCal(object):
 
     @property
     def ant_dly(self):
-        """ return _ant_dly dict """
+        """ return _ant_dly dict, containing per-antenna delay solution """
         if hasattr(self, '_ant_dly'):
             return copy.deepcopy(self._ant_dly)
         else:
@@ -555,7 +559,7 @@ class AbsCal(object):
 
     @property
     def ant_dly_arr(self):
-        """ return _ant_dly_arr array """
+        """ return _ant_dly in ndarray format """
         if hasattr(self, '_ant_dly_arr'):
             return copy.copy(self._ant_dly_arr)
         else:
@@ -563,7 +567,7 @@ class AbsCal(object):
 
     @property
     def ant_dly_gain_arr(self):
-        """ form complex gain from _ant_dly_arr array """
+        """ return ant_dly_gain in ndarray format """
         if hasattr(self, '_ant_dly_arr'):
             return np.exp(2j*np.pi*self.freqs.reshape(-1, 1)*self.ant_dly_arr)
         else:
@@ -571,7 +575,7 @@ class AbsCal(object):
 
     @property
     def ant_dly_phi(self):
-        """ return _ant_dly_phi dict """
+        """ return _ant_dly_phi dict, containing a single phase solution per antenna """
         if hasattr(self, '_ant_dly_phi'):
             return copy.deepcopy(self._ant_dly_phi)
         else:
@@ -588,7 +592,7 @@ class AbsCal(object):
 
     @property
     def ant_dly_phi_arr(self):
-        """ return _ant_dly_phi_arr array """
+        """ return _ant_dly_phi in ndarray format """
         if hasattr(self, '_ant_dly_phi_arr'):
             return copy.copy(self._ant_dly_phi_arr)
         else:
@@ -596,7 +600,7 @@ class AbsCal(object):
 
     @property
     def ant_dly_phi_gain_arr(self):
-        """ form complex gain from _ant_dly_phi_arr array """
+        """ return _ant_dly_phi_gain in ndarray format """
         if hasattr(self, '_ant_dly_phi_arr'):
             return np.exp(1j*np.repeat(self.ant_dly_phi_arr, self.Nfreqs, 2))
         else:
@@ -604,7 +608,7 @@ class AbsCal(object):
 
     @property
     def dly_slope(self):
-        """ return _dly_slope dict """
+        """ return _dly_slope dict, containing the delay slope across the array """
         if hasattr(self, '_dly_slope'):
             return copy.deepcopy(self._dly_slope)
         else:
@@ -612,22 +616,26 @@ class AbsCal(object):
 
     @property
     def dly_slope_gain(self):
-        """ form complex gain from _dly_slope dict """
+        """ form a per-antenna complex gain from _dly_slope dict and the antpos dictionary attached to the class"""
         if hasattr(self, '_dly_slope'):
+            # get dly_slope dictionary
             dly_slope = self.dly_slope
+            # turn delay slope into per-antenna complex gains, while iterating over self._gain_keys
             return odict(map(lambda k: (k, np.exp(2j*np.pi*self.freqs.reshape(1, -1)*np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
         else:
             return None
 
     def custom_dly_slope_gain(self, gain_keys, antpos):
         """
-        write dly_slope_gain with custom gain keys
+        return dly_slope_gain with custom gain keys and antenna positions
 
         gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
-        antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant positions
+        antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant position vectors
         """
         if hasattr(self, '_dly_slope'):
+            # get dly slope dictionary
             dly_slope = self.dly_slope[self._gain_keys[0][0]]
+            # turn delay slope into per-antenna complex gains, while iterating over gain_keys
             return odict(map(lambda k: (k, np.exp(2j*np.pi*self.freqs.reshape(1, -1)*np.einsum("i...,i->...", dly_slope, antpos[k[0]][:2]))), gain_keys))
         else:
             return None
@@ -675,7 +683,7 @@ class AbsCal(object):
 
     def custom_abs_eta_gain(self, gain_keys):
         """
-        write abs_eta_gain with custom gain keys
+        return abs_eta_gain with custom gain keys
 
         gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
         """
@@ -720,13 +728,13 @@ class AbsCal(object):
 
     def custom_abs_psi_gain(self, gain_keys):
         """
-        write abs_psi_gain with custom gain keys
+        return abs_psi_gain with custom gain keys
 
         gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
         """
         if hasattr(self, '_abs_psi'):
             abs_psi = self.abs_psi[self._gain_keys[0][0]]
-            return odict(map(lambda k: (k, np.exp(abs_psi).astype(np.complex)), gain_keys))
+            return odict(map(lambda k: (k, np.exp(1j*abs_psi)), gain_keys))
         else:
             return None
 
@@ -765,7 +773,7 @@ class AbsCal(object):
 
     def custom_TT_Phi_gain(self, gain_keys, antpos):
         """
-        write TT_Phi_gain with custom gain keys
+        return TT_Phi_gain with custom gain keys and antenna positions
 
         gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant positions
@@ -794,7 +802,7 @@ class AbsCal(object):
 
 
 def abscal_arg_parser():
-    a = argparse.ArgumentParser(description="")
+    a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
     a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
     a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
@@ -802,7 +810,7 @@ def abscal_arg_parser():
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
     a.add_argument("--omnifile", default=False, action='store_true', help='assume data file is omnical model visibility')
-    a.add_argument("--alt_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
+    a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
     a.add_argument("--delay_cal", default=False, action='store_true', help='perform antenna delay calibration')
     a.add_argument("--avg_phs_cal", default=False, action='store_true', help='perform antenna avg phase calibration')
     a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')    
@@ -813,14 +821,30 @@ def abscal_arg_parser():
     return a
 
 
-def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite=False,
-               write_calfits=True, calfits_fname=None, return_gains=False, outdir=None,
-               match_red_bls=False, tol=1.0, reweight=False, interp_model=True, alt_gains=False,
-               delay_slope_cal=True, abs_amp_cal=True, TT_phs_cal=True,
+def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite=False, write_calfits=True,
+               calfits_fname=None, return_gains=False, return_object=False, outdir=None,
+               match_red_bls=False, tol=1.0, reweight=False, interp_model=True, all_antenna_gains=False,
+               delay_slope_cal=False, abs_amp_cal=False, TT_phs_cal=False,
                delay_cal=False, avg_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False):
     """
-    run AbsCal on a set of time-contiguous data miriad files, using 
-    time-contiguos model miriad files that cover the data_files across LST
+    run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
+    the data_files across LST.
+
+    Parameters that control calibration steps are:
+
+    delay_cal -> avg_phs_cal -> delay_slope_cal -> abs_amp_cal -> TT_phs_cal - > gen_amp_cal -> gen_phs_cal
+
+    which are run in that order if any of these parameters are set to True. Calibration steps are
+    run and then directly applied to the data before proceeding to the next calibration step. To
+    learn more about these steps, see the docstring of the following functions in abscal_funcs.py:
+    
+    delay_cal : delay_lincal()
+    avg_phs_cal : phs_logcal(avg=True)
+    delay_slope_cal : delay_slope_lincal()
+    abs_amp_cal : abs_amp_logcal()
+    TT_phs_cal : TT_phs_logcal()
+    gen_amp_cal : amp_logcal()
+    gen_phs_cal : phs_logcal()
 
     Parameters:
     -----------
@@ -846,15 +870,17 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
 
     return_gains : type=boolean, if True, return AbsCal gain dictionary
 
+    return_object : type=boolean, if True, return AbsCal object
+
     match_red_bls : type=boolean, match unique data baselines to model baselines based on redundancy
 
     reweight : type=boolean, reweight unique baseline data based on redundancy
 
     interp_model : type=boolean, interpolate model freq and time onto data freq and time
 
-    alt_gains : type=boolean, if True, use full antenna list in data file to make gains,
-                rather than just antennas present in the raw data. It is not possible
-                to run delay_cal, avg_phs_cal, gen_phs_cal and gen_amp_cal when alt_gains is True.
+    all_antenna_gains : type=boolean, if True, use full antenna list in data file to make gains,
+                rather than just antennas present in the data. It is not possible
+                to run delay_cal, avg_phs_cal, gen_phs_cal and gen_amp_cal when all_antenna_gains is True.
 
     delay_slope_cal : type=boolean, if True, perform delay slope calibration
 
@@ -872,7 +898,8 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
 
     Result:
     -------
-    if return_gains: output gains dictionary
+    if return_gains: return gains dictionary
+    if return_object: return AbsCal instance
     if write_calfits: writes a calfits file with gains
     """
     # load model files
@@ -931,8 +958,8 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
         gain_list = []
 
         if delay_cal:
-            if alt_gains:
-                raise ValueError("can't run delay_cal when alt_gains is True")
+            if all_antenna_gains:
+                raise ValueError("can't run delay_cal when all_antenna_gains is True")
             AC.delay_lincal(verbose=verbose, time_avg=True)
             AC.data = apply_gains(AC.data, (AC.ant_dly_gain, AC.ant_dly_phi_gain))
             gain_list.append(AC.ant_dly_gain)
@@ -941,8 +968,8 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
         if avg_phs_cal:
             if delay_cal == False:
                 echo("it is recommended to run a delay_cal before avg_phs_cal", verbose=verbose)
-            if alt_gains:
-                raise ValueError("can't run avg_phs_cal when alt_gains is True")
+            if all_antenna_gains:
+                raise ValueError("can't run avg_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(avg=True, verbose=verbose)
             AC.data = apply_gains(AC.data, AC.ant_phi_gain)
             gain_list.append(AC.ant_phi_gain)
@@ -950,7 +977,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
         if delay_slope_cal:
             AC.delay_slope_lincal(verbose=verbose, time_avg=True)
             AC.data = apply_gains(AC.data, AC.dly_slope_gain)
-            if alt_gains:
+            if all_antenna_gains:
                 gain_list.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
             else:
                 gain_list.append(AC.dly_slope_gain)
@@ -958,7 +985,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
         if abs_amp_cal:
             AC.abs_amp_logcal(verbose=verbose)
             AC.data = apply_gains(AC.data, AC.abs_eta_gain)
-            if alt_gains:
+            if all_antenna_gains:
                 gain_list.append(AC.custom_abs_eta_gain(total_gain_keys))
             else:
                 gain_list.append(AC.abs_eta_gain)
@@ -968,7 +995,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
                 echo("it is recommended to run a delay_slope_cal before TT_phs_cal", verbose=verbose)
             AC.TT_phs_logcal(verbose=verbose)
             AC.data = apply_gains(AC.data, AC.TT_Phi_gain)
-            if alt_gains:
+            if all_antenna_gains:
                 gain_list.append(AC.custom_TT_Phi_gain(total_gain_keys, total_data_antpos))
                 gain_list.append(AC.custom_abs_psi_gain(total_gain_keys))
             else:
@@ -976,8 +1003,8 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
                 gain_list.append(AC.TT_Phi_gain)
 
         if gen_amp_cal:
-            if alt_gains:
-                raise ValueError("can't run gen_amp_cal when alt_gains is True")
+            if all_antenna_gains:
+                raise ValueError("can't run gen_amp_cal when all_antenna_gains is True")
             AC.amp_logcal(verbose=verbose)
             AC.data = apply_gains(AC.data, AC.ant_eta_gain)
             gain_list.append(AC.ant_eta_gain)
@@ -985,13 +1012,15 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
         if gen_phs_cal:
             if delay_cal == False and delay_slope_cal == False:
                 echo("it is recommended to run a delay_cal or delay_slope_cal before gen_phs_cal", verbose=verbose)
-            if alt_gains:
-                raise ValueError("can't run gen_phs_cal when alt_gains is True")
+            if all_antenna_gains:
+                raise ValueError("can't run gen_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(verbose=verbose)
             AC.data = apply_gains(AC.data, AC.ant_phi_gain)
             gain_list.append(AC.ant_phi_gain)
 
         # collate gains
+        if len(gain_list) == 0:
+            raise ValueError("abscal_run executed without any calibration flags set to True")
         gain_dict = merge_gains(gain_list)
 
         # write to file
@@ -1001,8 +1030,18 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
         # append gain dict to gains
         gains.append(gain_dict)
 
+    # form return object
+    return_obj = ()
+
     # return gains if desired
     if return_gains:
-        return gains
+        return_obj += (gains,)
+
+    if return_object:
+        return_obj += (AC,)
+
+    # return
+    if return_gains or return_object:
+        return return_obj
 
 

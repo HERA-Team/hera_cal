@@ -475,7 +475,7 @@ class Test_AbsCal:
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
-        gains = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, return_gains=True, verbose=False)
+        gains = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
         nt.assert_equal(gains[0][(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[0][(24,'x')].shape, (60, 64))
         # write calfits
@@ -483,30 +483,32 @@ class Test_AbsCal:
         cf_name = "ex.calfits"
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
-        gains = hc.abscal.abscal_run(data_files, model_files, write_calfits=True, calfits_fname=cf_name, outdir=outdir,
+        gains = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, calfits_fname=cf_name, outdir=outdir,
                                     return_gains=True, verbose=False)
         nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
         # check match_red_bls and reweight
-        hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False,
+        hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
                                      match_red_bls=True, reweight=True)
         # check all calibration routines
         gains = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True,
-                            delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True,gen_amp_cal=False, gen_phs_cal=False)
+                                     delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False)
         nt.assert_equal(gains[0][(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[0][(24,'x')].shape, (60, 64))
         # check exceptions
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, alt_gains=True,
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True,
                 calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, delay_cal=True, verbose=False)
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, alt_gains=True,
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True,
                 calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_phs_cal=True, verbose=False)
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, alt_gains=True,
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True,
                 calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_amp_cal=True, verbose=False)
-        # check alt gains run
-        hc.abscal.abscal_run(data_files, model_files, alt_gains=True, write_calfits=False)
+        # check all antenna gains run
+        hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, all_antenna_gains=True, write_calfits=False)
         # test general bandpass solvers
         hc.abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False)
+        # test exception
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
 
     def test_mock_data(self):
         # load into pyuvdata object
