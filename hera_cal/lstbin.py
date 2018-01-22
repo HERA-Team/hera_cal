@@ -24,7 +24,7 @@ import operator
 
 
 def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, dlst=None,
-            lst_low=None, lst_hi=None, wrap_point=2*np.pi):
+            lst_low=None, lst_hi=None, wrap_point=2*np.pi, atol=1e-8):
     """
     Bin data in Local Sidereal Time (LST)
 
@@ -69,11 +69,11 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
 
         # restrict lst array if desired
         if lst_low is not None:
-            indices = indices[np.where(l > lst_low)]
+            indices = indices[np.where(l >= lst_low - atol)]
         if lst_hi is not None:
             if lst_hi < l.min():
                 lst_hi += wrap_point
-            indices = indices[np.where(l < lst_hi)]
+            indices = indices[np.where(l <= lst_hi + atol)]
 
         # update all_indices
         all_indices.update(odict(map(lambda x: (x, None), indices)))
@@ -283,9 +283,9 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
 
     # get start and end lst
     start_lst = np.min(data_times)
-    start_index = np.argmin(np.abs(lst_grid - start_lst))
+    start_index = np.argmin(np.abs(lst_grid - start_lst)) + 1
     end_lst = np.max(data_times)
-    end_index = np.argmin(np.abs(lst_grid - end_lst))
+    end_index = np.argmin(np.abs(lst_grid - end_lst)) - 1
     nfiles = int(np.ceil(float((end_index - start_index)) / ntimes_per_file))
 
     # get outdir
@@ -321,10 +321,10 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
 
                     # lst-align if desired
                     if align:
-                        d, w, all_lst = lst_align(d, l, wgts=w, lst_grid=f_lst, lst_init=lst_init, wrap_point=wrap_point, match='nearest', verbose=True, bounds_error=False, **align_kwargs)
+                        d, w, l = lst_align(d, l, wgts=w, lst_grid=f_lst, lst_init=lst_init, wrap_point=wrap_point, match='nearest', verbose=True, bounds_error=False, **align_kwargs)
 
                     # pass reference to data_status
-                    data_status[j][k] = (d, w, ap, a, f, t, f_lst, p)
+                    data_status[j][k] = (d, w, ap, a, f, t, l, p)
 
                     # erase unnecessary references
                     del(d,w,ap,a,f,t,l,p)
@@ -344,8 +344,8 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
          num_data) = lst_bin(data_list, lst_list, wgts_list=wgts_list, lst_grid=f_lst,
                              lst_init=lst_init, wrap_point=wrap_point, lst_low=f_min, lst_hi=f_max)
 
-        # wrap f_lst
-        f_lst = wrap(f_lst)
+        # assign old f_select
+        old_f_select = copy.copy(f_select)
 
         # configure filename
         bin_file = ""
@@ -356,18 +356,16 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
         history = ""
 
         # write to file
-        data_to_miriad(bin_file, bin_data, f_lst, freq_array, antpos, history=history)
-        data_to_miriad(std_file, bin_data, f_lst, freq_array, antpos)
-        data_to_miriad(num_file, bin_data, f_lst, freq_array, antpos)
+        data_to_miriad(bin_file, bin_data, all_lst, freq_array, antpos, history=history)
+        data_to_miriad(std_file, bin_data, all_lst, freq_array, antpos)
+        data_to_miriad(num_file, bin_data, all_lst, freq_array, antpos)
 
         # erase data references
         del data_list
         del wgts_list
         del lst_list
 
-        # assign old f_select
-        old_f_select = copy.copy(f_select)
-
+        
 
 def data_to_miriad(fname, data, lst_array, freq_array, antpos,
 
