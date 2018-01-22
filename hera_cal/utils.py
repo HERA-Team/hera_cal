@@ -290,7 +290,7 @@ def get_miriad_times(filepaths):
     for i, f in enumerate(filepaths):
         uv = aipy.miriad.UV(f)
         start = uv['lst']
-        stop = start + uv['ntimes'] * uv['inttime'] * 2*np.pi / (23.9344699*3600.)
+        stop = start + (uv['ntimes']-1) * uv['inttime'] * 2*np.pi / (23.9344699*3600.)
         file_starts.append(start)
         file_stops.append(stop)
 

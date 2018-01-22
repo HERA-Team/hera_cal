@@ -259,7 +259,7 @@ def lst_bin_arg_parser():
 
 def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*np.pi,
                   ntimes_per_file=60, file_ext="{}LST.{}.uv" , outdir=None, overwrite=True,
-                  lst_align=False, align_kwargs={}):
+                  align=False, align_kwargs={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins.
@@ -306,6 +306,8 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
         f_min = np.min(f_lst)
         f_max = np.max(f_lst)
         f_select = np.array(map(lambda d: map(lambda f: (f[1] > f_min)&(f[0] < f_max), d), data_times))
+        if i == 0:
+            old_f_select = copy.copy(f_select)
 
         # open necessary files, close ones that are no longer needed
         for j in range(len(data_files)):
@@ -314,8 +316,11 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
                     # open file(s)
                     d, w, ap, a, f, t, l, p = abscal.UVData2AbsCalDict(data_files[j][k], return_meta=True, return_wgts=True)
 
+                    # unwrap l
+                    l[np.where(l < lst_init)] += wrap_point
+
                     # lst-align if desired
-                    if lst_align:
+                    if align:
                         d, w, all_lst = lst_align(d, l, wgts=w, lst_grid=f_lst, lst_init=lst_init, wrap_point=wrap_point, match='nearest', verbose=True, bounds_error=False, **align_kwargs)
 
                     # pass reference to data_status
