@@ -833,12 +833,12 @@ def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=Fa
                 d.pop(k)
                 f.pop(k)
 
-    # turn into weights
-    if return_wgts:
-        f = odict(map(lambda k: (k, (~f[k]).astype(np.float)), f.keys()))
-        
     # turn into datacontainer
     data, flags = DataContainer(d), DataContainer(f)
+
+    # turn into weights
+    if return_wgts:
+        flags = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
 
     # get meta
     if return_meta:
