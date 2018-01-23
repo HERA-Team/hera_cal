@@ -795,9 +795,10 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
     freqs : ndarray containing frequency channels (Hz)
     times : ndarray containing LST bins of data (radians)
     """
-    # check datanames is a list
+    # check datanames is not a list
     if type(datanames) is not list and type(datanames) is not np.ndarray:
         if type(datanames) is str:
+            # assume datanames is a file path
             uvd = UVData()
             suffix = os.path.splitext(datanames)[1]
             if filetype == 'uvfits' or suffix == '.uvfits':
@@ -805,11 +806,13 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
                 uvd.unphase_to_drift()
             elif filetype == 'miriad':
                 uvd.read_miriad(datanames)
-
         else:
+            # assume datanames is a UVData instance 
             uvd = datanames
     else:
+        # if datanames is a list, check data types of elements
         if type(datanames[0]) is str:
+            # assume datanames contains file paths
             uvd = UVData()
             suffix = os.path.splitext(datanames[0])[1]
             if filetype == 'uvfits' or suffix == '.uvfits':
@@ -818,6 +821,7 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
             elif filetype == 'miriad':
                 uvd.read_miriad(datanames)
         else:
+            # assume datanames contains UVData instances
             uvd = reduce(operator.add, datanames)
 
     # load data
