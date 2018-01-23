@@ -529,7 +529,7 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run delay_slope_cal
         AC.delay_slope_lincal(time_avg=True, verbose=False)
-        # test recovery
+        # test recovery: accuracy only checked at 10% level, nees
         nt.assert_almost_equal(AC.dly_slope_arr[0,0,0,0,0], -1e-9, delta=1e-10)
         nt.assert_almost_equal(AC.dly_slope_arr[0,1,0,0,0], 2e-9, delta=1e-10)
         # make mock data

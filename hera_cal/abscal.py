@@ -830,8 +830,8 @@ def abscal_arg_parser():
 
 def omni_abscal_arg_parser():
     """
-    argparser specifically for abscal on omnnicalibrated data. By default, delay_slope_cal, abs_amp_cal
-    and TT_phs_cal are run on the data. To learn more about these steps, read the doc-string of the
+    argparser specifically for abscal on omnni-calibrated data. The calibration steps exposed to the user
+    include: delay_slope_cal, abs_amp_cal and TT_phs_cal. To learn more about these steps, read the doc-string of the
     abscal_run() function in abscal.py, and the docstring of the AbsCal() class in abscal.py.
     """
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
@@ -843,18 +843,17 @@ def omni_abscal_arg_parser():
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
     a.add_argument("--omni_model", default=False, action='store_true', help='assume data file is omnical model visibility')
     a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
-    a.add_argument("--delay_cal", default=False, action='store_true', help='perform antenna delay calibration')
-    a.add_argument("--delay_slope_cal", default=True, action='store_true', help='perform delay slope calibration')    
-    a.add_argument("--abs_amp_cal", default=True, action='store_true', help='perform absolute amplitude calibration')
-    a.add_argument("--TT_phs_cal", default=True, action='store_true', help='perform Tip-Tilt phase slope calibration')
+    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')    
+    a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
+    a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
     return a
 
 
 def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite=False, write_calfits=True,
                calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, interp_model=True, all_antenna_gains=False,
-               delay_slope_cal=False, abs_amp_cal=False, TT_phs_cal=False,
-               delay_cal=False, avg_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False):
+               delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, abs_amp_cal=False,
+               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -911,15 +910,15 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
                 rather than just antennas present in the data. It is not possible
                 to run delay_cal, avg_phs_cal, gen_phs_cal and gen_amp_cal when all_antenna_gains is True.
 
+    delay_cal : type=boolean, if True, perform delay calibration
+
     delay_slope_cal : type=boolean, if True, perform delay slope calibration
+
+    avg_phs_cal : type=boolean, if True, perform average phase calibration
 
     abs_amp_cal : type=boolean, if True, perform absolute gain calibration
 
     TT_phs_cal : type=boolean, if True, perform Tip-Tilt phase calibration
-
-    delay_cal : type=boolean, if True, perform delay calibration
-
-    avg_phs_cal : type=boolean, if True, perform average phase calibration
 
     gen_amp_cal : type=boolean, if True, perform general amplitude bandpass calibration
 
@@ -927,9 +926,10 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
 
     Result:
     -------
-    if return_gains: return gains dictionary
-    if return_object: return AbsCal instance
-    if write_calfits: writes a calfits file with gains
+    if return_gains: return (gains dictionary)
+    if return_object: return (AbsCal instance)
+    if return_gains and return_objects: return (gains dictionary, AbsCal instance)
+    if write_calfits: writes a calfits file with gain solutions
     """
     # load model files
     echo ("loading model files", type=1, verbose=verbose)
@@ -1059,7 +1059,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
         # append gain dict to gains
         gains.append(gain_dict)
 
-    # form return object
+    # form return tuple
     return_obj = ()
 
     # return gains if desired
