@@ -21,11 +21,12 @@ from scipy import interpolate
 from scipy import spatial
 import itertools
 import operator
+from astropy import stats as astats
 
 
 def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, dlst=None,
             lst_low=None, lst_hi=None, wrap_point=2*np.pi, atol=1e-8, median=False,
-            sigma_clip=False, sigma=2.0):
+            sigma_clip=False, sigma=2.0, return_all=False):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -59,6 +60,8 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
         on the real and imag components separately. Warning: This considerably slows down the code.
 
     sigma : type=float, input standard deviation to use for sigma clipping algorithm.
+
+    return_all : type=boolean, if True, return binned but un-averaged data.
 
     Output: (data_avg, data_std, lst_bins, data_num)
     -------
@@ -148,6 +151,10 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
         data_avg[key] = real_avg + 1j*imag_avg
         data_std[key] = real_stan_dev + 1j*imag_stan_dev
         data_num[key] = num_pix
+
+    if return_all:
+        # return all binned data instead of just bin average
+        data_avg = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, data[k][k2]), sorted(data[k].keys()))).values())), data.keys()))
 
     return DataContainer(data_avg), DataContainer(data_std), all_lst, DataContainer(data_num)
 
@@ -413,11 +420,12 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
         data_to_miriad(num_file, bin_data, all_lst, freq_array, antpos, history=history)
 
 
-def data_to_miriad(fname, data, lst_array, freq_array, antpos,
+def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None,
 
 
-                   outdir="./", overwrite=True, verbose=True,
-                   history=""):
+                   outdir="./", overwrite=True, verbose=True, history="",
+                   longitude=21.42830, start_jd=None, instrument="HERA", telescope_name="HERA",
+                   object_name='EOR', phase_type='drift', vis_units='uncalib', dec=-30.72152):
     """
     take data dictionary, export to UVData object and write as a miriad file.
 
@@ -431,11 +439,92 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos,
     if os.path.exists(fname) and overwrite is False:
         abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
 
+    # configure flags if None
+    if flags is None:
+        flags = DataContainer(odict(map(lambda k: (k, np.zeros_like(data[k]).astype(np.bool)), data.keys())))
+
     ## configure UVData parameters
+    # get pols
+    pols = np.unique(map(lambda k: k[-1], data.keys()))
+    Npols = len(pols)
+    pol2int = {'xx':-5, 'yy':-6, 'xy':-7, 'yx':-8}
+    pol_ints = np.array(map(lambda p: pol2int[p], pols))
+
+    # get data keys
+    bls = np.array(sorted(data.bls()))
+
+    # get data array
+    data_array = np.moveaxis(map(lambda p: map(lambda bl: data[str(p)][bl], bls), pols), 0, -1)
+
+    # get ant_1_array, ant_2_array
+    ant_1_array = bls[:,0]
+    ant_2_array = bls[:,1]
+
+    # get baseline array
+    baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
+    Nbls = len(baseline_array)
+
+    # get times
+    if time_array is None:
+        if start_jd is None:
+            raise AttributeError("if time_array is not fed, start_jd must be fed")
+        time_array = utils.LST2JD(lst_array, start_jd, longitude=longitude)
+    Ntimes = len(time_array)
+    integration_time = np.median(np.diff(time_array)) * 24 * 3600.
+
+    # get antennas in data
+    data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
+    Nants_data = len(data_ants)
+
+    # get telescope ants
+    antenna_numbers = np.unique(antpos.keys())
+    Nants_tele = len(antenna_numbers)
+    antenna_names = map(lambda a: "HH{}".format(a), antenna_numbers)
+
+    # get freqs
+    Nfreqs = len(freq_array)
+    freq_array = freq_array.reshape(1, -1)
+
+    # get antpos and uvw
+    antenna_positions = np.array(map(lambda k: antpos[k], antenna_numbers))
+    uvw_array = np.array([antpos[k[0]] - antpos[k[1]] for k in zip(ant_1_array, ant_2_array)])
+
+    # get zenith location
+    zenith_dec = np.ones_like(baseline_array) * dec
+    zenith_ra = a
 
 
 
+def sigma_clip(array, sigma=4.0, axis=0):
+    """
+    one-iteration sigma clipping algorithm
 
+    Parameters:
+    -----------
+    array : ndarray of complex visibility data
+
+    sigma : float, sigma threshold to cut above
+
+    axis : int, axis of array to sigma clip
+
+    Output:
+    -------
+    array : same as input array, but clipped values have been set to np.nan
+    """
+    # ensure array is an array
+    array = np.array(array)
+
+    # get robust location
+    mean = np.nanmedian(array, axis=axis)
+
+    # get robust std
+    std = np.sqrt(astats.biweight_midvariance(array, axis=axis))
+
+    # set cut data to nans
+    cut = np.where((array-mean)/std > sigma)
+    array[cut] *= np.nan
+
+    return array
 
 
 

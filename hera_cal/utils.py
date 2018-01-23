@@ -7,6 +7,8 @@ from pyuvdata import UVCal
 import os
 import hera_cal
 import copy
+import ephem
+
 
 class AntennaArray(aipy.pol.AntennaArray):
     def __init__(self, *args, **kwargs):
@@ -204,6 +206,31 @@ def LST2JD(LST, start_JD, longitude=21.42830):
             break
 
     return JD
+
+
+def JD2RA(jd_array, lon):
+    """
+    convert from julian date to RA at zenith
+
+    jd_array : array of julian dates
+
+    lon  : longitude of observer in degrees east
+
+    return RA array in degrees
+    """
+    if type(jd_array) == np.float:
+        jd_array = [jd_array]
+
+    RA = []
+    for JD in jd_array:
+        # get observer
+        obs = ephem.Observer()
+        obs.lon = lon * np.pi / 180.0
+        obs.date = Time(JD, format='jd').datetime
+        ra = obs.radec_of(0, np.pi/2)[0] * 180 / np.pi
+        RA.append(ra)
+
+    return np.array(RA)
 
 
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
