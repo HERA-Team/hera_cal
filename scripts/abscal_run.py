@@ -1,4 +1,7 @@
 #! /usr/bin/env python
+"""
+general command-line drive script for abscal.AbsCal class.
+"""
 from hera_cal import abscal
 import sys
 import os
@@ -12,8 +15,8 @@ kwargs.pop('data_files')
 kwargs.pop('model_files')
 kwargs.pop('silence')
 verbose = args.silence is False
-kwargs.pop('omnifile')
-if args.omnifile:
+kwargs.pop('omni_model')
+if args.omni_model:
     kwargs['reweight'] = True
     kwargs['match_red_bls'] = True
 
