@@ -143,13 +143,13 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
             imag_avg = np.array(map(lambda ind: np.nanmean(map(lambda r: r.imag, data[key][ind]), axis=0), data[key].keys()))
         real_stan_dev = np.array(map(lambda ind: np.nanstd(map(lambda r: r.real, data[key][ind]), axis=0), data[key].keys()))
         imag_stan_dev = np.array(map(lambda ind: np.nanstd(map(lambda r: r.imag, data[key][ind]), axis=0), data[key].keys()))
-        num_pix = np.array(map(lambda ind: np.nansum(map(lambda r: r.real/r.real, data[key][ind]), axis=0), data[key].keys()))
+        num_pix = np.array(map(lambda ind: np.nansum(map(lambda r: r.real*0+1, data[key][ind]), axis=0), data[key].keys()))
 
         data_avg[key] = real_avg + 1j*imag_avg
         data_std[key] = real_stan_dev + 1j*imag_stan_dev
         data_num[key] = num_pix
 
-    return data_avg, data_std, all_lst, data_num
+    return DataContainer(data_avg), DataContainer(data_std), all_lst, DataContainer(data_num)
 
 
 def lst_align(data, data_lsts, wgts=None, lst_grid=None, lst_init=np.pi, dlst=None, wrap_point=2*np.pi,
@@ -386,6 +386,11 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
          num_data) = lst_bin(data_list, lst_list, wgts_list=wgts_list, lst_grid=f_lst,
                              lst_init=lst_init, wrap_point=wrap_point, lst_low=f_min, lst_hi=f_max)
 
+        # erase data references
+        del data_list
+        del wgts_list
+        del lst_list
+
         # assign old f_select
         old_f_select = copy.copy(f_select)
 
@@ -394,19 +399,19 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
         std_file = ""
         num_file = ""
 
+        # check for overwrite
+        if os.path.exists(bin_file) and overwrite is False:
+            abscal.echo("{} exists, not overwriting".format(bin_file), verbose=verbose)
+            continue
+
         # configure history string
         history = ""
 
         # write to file
         data_to_miriad(bin_file, bin_data, all_lst, freq_array, antpos, history=history)
-        data_to_miriad(std_file, bin_data, all_lst, freq_array, antpos)
-        data_to_miriad(num_file, bin_data, all_lst, freq_array, antpos)
+        data_to_miriad(std_file, bin_data, all_lst, freq_array, antpos, history=history)
+        data_to_miriad(num_file, bin_data, all_lst, freq_array, antpos, history=history)
 
-        # erase data references
-        del data_list
-        del wgts_list
-        del lst_list
-        
 
 def data_to_miriad(fname, data, lst_array, freq_array, antpos,
 
