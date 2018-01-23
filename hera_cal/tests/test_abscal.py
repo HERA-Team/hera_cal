@@ -470,6 +470,9 @@ class Test_AbsCal:
     def test_abscal_arg_parser(self):
         a = hc.abscal.abscal_arg_parser()
 
+    def test_omni_abscal_arg_parser(self):
+        a = hc.abscal.omni_abscal_arg_parser()
+
     def test_abscal_run(self):
         data_files = [os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")]
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),

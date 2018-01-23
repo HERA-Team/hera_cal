@@ -802,14 +802,21 @@ class AbsCal(object):
 
 
 def abscal_arg_parser():
+    """
+    argparser for general abscal run. By default no calibration is performed: the user
+    needs to specify which calibration steps they want via the delay_cal, avg_phs_cal,
+    delay_slope_cal, abs_amp_cal, TT_phs_cal, gen_amp_cal and gen_phs_cal flags. To learn
+    more about these calibration steps, read the doc-string of the abscal_run() function
+    in abscal.py, and the docstring of the AbsCal() class in abscal.py.
+    """
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
-    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
+    a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
     a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--omnifile", default=False, action='store_true', help='assume data file is omnical model visibility')
+    a.add_argument("--omni_model", default=False, action='store_true', help='assume data file is omnical model visibility')
     a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
     a.add_argument("--delay_cal", default=False, action='store_true', help='perform antenna delay calibration')
     a.add_argument("--avg_phs_cal", default=False, action='store_true', help='perform antenna avg phase calibration')
@@ -818,6 +825,28 @@ def abscal_arg_parser():
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
     a.add_argument("--gen_amp_cal", default=False, action='store_true', help='perform general antenna amplitude bandpass calibration')
     a.add_argument("--gen_phs_cal", default=False, action='store_true', help='perform general antenna phase bandpass calibration')
+    return a
+
+
+def omni_abscal_arg_parser():
+    """
+    argparser specifically for abscal on omnnicalibrated data. By default, delay_slope_cal, abs_amp_cal
+    and TT_phs_cal are run on the data. To learn more about these steps, read the doc-string of the
+    abscal_run() function in abscal.py, and the docstring of the AbsCal() class in abscal.py.
+    """
+    a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
+    a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
+    a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
+    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
+    a.add_argument("--outdir", type=str, default=None, help="output directory")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
+    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
+    a.add_argument("--omni_model", default=False, action='store_true', help='assume data file is omnical model visibility')
+    a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
+    a.add_argument("--delay_cal", default=False, action='store_true', help='perform antenna delay calibration')
+    a.add_argument("--delay_slope_cal", default=True, action='store_true', help='perform delay slope calibration')    
+    a.add_argument("--abs_amp_cal", default=True, action='store_true', help='perform absolute amplitude calibration')
+    a.add_argument("--TT_phs_cal", default=True, action='store_true', help='perform Tip-Tilt phase slope calibration')
     return a
 
 
