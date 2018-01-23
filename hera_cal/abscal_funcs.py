@@ -757,7 +757,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def UVData2AbsCalDict(filenames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
+def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
                       pick_data_ants=True, return_wgts=True):
     """
     turn a list of pyuvdata.UVData objects or a list of miriad or uvfits file paths
