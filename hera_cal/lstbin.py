@@ -24,17 +24,52 @@ import operator
 
 
 def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, dlst=None,
-            lst_low=None, lst_hi=None, wrap_point=2*np.pi, atol=1e-8):
+            lst_low=None, lst_hi=None, wrap_point=2*np.pi, atol=1e-8, median=False,
+            sigma_clip=False, sigma=2.0):
     """
-    Bin data in Local Sidereal Time (LST)
+    Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
+    is defined as an array of points increasing in Local Sidereal Time, with each point marking
+    the center of the LST bin.
 
     Parameters:
     -----------
+    data_list : type=list, list of DataContainer dictionaries holding complex visibility data
 
+    lst_list : type=list, list of ndarrays holding LST stamps of each data dictionary in data_list
+    
+    lst_grid : type=ndarray, 1D ndarray of LST grid to bin data into
 
-    Output: (data, real_std, imag_std, all_lst)
+    wgts_list : type=list, list of DataContainer dictionaries holding weights for each dict in data_list
+
+    lst_init : type=float, starting LST to create lst_grid from
+
+    dlst : type=float, delta-LST spacing for lst_grid
+
+    lst_low : type=float, lower bound in LST for binning
+
+    lst_hi : type=float, upper bound in LST for binning
+
+    wrap_point : type=float, end point of a single day in LST
+
+    atol : type=float, absolute tolerance for comparing floats in lst_list to floats in lst_grid
+
+    median : type=boolean, if True use median for LST binning, else use mean
+
+    sigma_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins
+        on the real and imag components separately. Warning: This considerably slows down the code.
+
+    sigma : type=float, input standard deviation to use for sigma clipping algorithm.
+
+    Output: (data_avg, data_std, lst_bins, data_num)
     -------
+    data_avg : dictionary of data having averaged the LST bins
 
+    data_std : dictionary of data with real component holding std along real axis
+        and imag component holding std along imag axis
+
+    lst_bins : ndarray containing final lst grid of data
+
+    data_num : dictionary containing the number of data points averaged in each LST bin.
     """
     # construct lst_grid if not provided
     if lst_grid is None:
@@ -48,9 +83,9 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
 
     # form new dictionaries
     data = odict()
-    num_pix = odict()
-    std = odict()
-    std = odict()
+    data_avg = odict()
+    data_num = odict()
+    data_std = odict()
     all_indices = odict()
 
     # iterate over data_list
@@ -97,22 +132,32 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
 
     # iterate over data and get statistics
     for i, key in enumerate(data.keys()):
-        real_mean = np.array(map(lambda ind: np.nanmean(map(lambda r: r.real, data[key][ind]), axis=0), data[key].keys()))
-        imag_mean = np.array(map(lambda ind: np.nanmean(map(lambda r: r.imag, data[key][ind]), axis=0), data[key].keys()))
+        if sigma_clip:
+            for j, ind in enumerate(data[key].keys()):
+                data[key][ind] = astats.sigma_clip(np.array(data[key][ind]).real, sigma=sigma) + 1j*astats.sigma_clip(np.array(data[key][ind]).imag, sigma=sigma)
+        if median:
+            real_avg = np.array(map(lambda ind: np.nanmedian(map(lambda r: r.real, data[key][ind]), axis=0), data[key].keys()))
+            imag_avg = np.array(map(lambda ind: np.nanmedian(map(lambda r: r.imag, data[key][ind]), axis=0), data[key].keys()))
+        else:
+            real_avg = np.array(map(lambda ind: np.nanmean(map(lambda r: r.real, data[key][ind]), axis=0), data[key].keys()))
+            imag_avg = np.array(map(lambda ind: np.nanmean(map(lambda r: r.imag, data[key][ind]), axis=0), data[key].keys()))
         real_stan_dev = np.array(map(lambda ind: np.nanstd(map(lambda r: r.real, data[key][ind]), axis=0), data[key].keys()))
         imag_stan_dev = np.array(map(lambda ind: np.nanstd(map(lambda r: r.imag, data[key][ind]), axis=0), data[key].keys()))
-        pixels = np.array(map(lambda ind: np.nansum(map(lambda r: r.real/r.real, data[key][ind]), axis=0), data[key].keys()))
+        num_pix = np.array(map(lambda ind: np.nansum(map(lambda r: r.real/r.real, data[key][ind]), axis=0), data[key].keys()))
 
-        data[key] = real_mean + 1j*imag_mean
-        std[key] = real_stan_dev + 1j*imag_stan_dev
-        num_pix[key] = pixels
+        data_avg[key] = real_avg + 1j*imag_avg
+        data_std[key] = real_stan_dev + 1j*imag_stan_dev
+        data_num[key] = num_pix
 
-    return data, std, all_lst, num_pix
+    return data_avg, data_std, all_lst, data_num
 
 
-def lst_align(data, data_lsts, wgts=None, lst_grid=None, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, match='nearest', verbose=True, **kwargs):
+def lst_align(data, data_lsts, wgts=None, lst_grid=None, lst_init=np.pi, dlst=None, wrap_point=2*np.pi,
+              match='nearest', verbose=True, **interp_kwargs):
     """
-    Interpolate complex visibilities to align time integrations with an LST grid.
+    Interpolate complex visibilities to align time integrations with an LST grid. An LST grid
+    is defined as an array of points increasing in Local Sidereal Time, with each point marking
+    the center of the LST bin.
 
     Parameters:
     -----------
@@ -122,28 +167,27 @@ def lst_align(data, data_lsts, wgts=None, lst_grid=None, lst_init=np.pi, dlst=No
 
     wgts : type=dictionary, weight dictionary
 
-    lst_grid : 
+    lst_grid : type=ndarray, 1D ndarray of LST grid to bin data into
 
-    lst_init : 
+    lst_init : type=float, starting LST to create lst_grid from
 
-    dlst : 
+    dlst : type=float, delta-LST spacing for lst_grid
 
-    wrap_point : type=float, total duration of LST day
-                 2*np.pi for radians and 23.9344699 for hours
+    wrap_point : type=float, end point of a single day in LST
 
     match : type=str, LST-bin matching method, options=['nearest','forward','backward']
 
-    verbose : 
+    verbose : type=boolean, if True, print feedback to stdout
 
-    kwargs : 
+    interp_kwargs : type=dictionary, keyword arguments to feed to abscal.interp2d_vis
 
     Output: (interp_data, interp_flags, interp_lsts)
     -------
-    interp_data : 
+    interp_data : dictionary containing lst-binned data
 
-    interp_flags : 
+    interp_flags : dictionary containing weights for lst-binned data
 
-    interp_lsts : 
+    interp_lsts : ndarray holding centers of LST bins.
     """
     # get lst if not fed grid
     if dlst is None:
@@ -167,7 +211,7 @@ def lst_align(data, data_lsts, wgts=None, lst_grid=None, lst_init=np.pi, dlst=No
     model_lsts = lst_grid[indices]
 
     # interpolate data
-    interp_data, interp_wgts = abscal.interp2d_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, wgts=wgts, **kwargs)
+    interp_data, interp_wgts = abscal.interp2d_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, wgts=wgts, **interp_kwargs)
 
     return interp_data, interp_wgts, model_lsts
 
@@ -253,8 +297,6 @@ def lst_bin_arg_parser():
 
 
     return a
-
-
 
 
 def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*np.pi,
@@ -364,7 +406,6 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
         del data_list
         del wgts_list
         del lst_list
-
         
 
 def data_to_miriad(fname, data, lst_array, freq_array, antpos,
