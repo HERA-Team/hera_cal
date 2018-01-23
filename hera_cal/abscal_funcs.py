@@ -960,10 +960,9 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     return dlys, phi
 
 
-def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(1,13), array=False):
+def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9), array=False):
     """
     wiener filter complex visibility data. this might be used in constructing
-    model reference. See scipy.signal.wiener for details on method.
 
     Parameters:
     -----------
@@ -1002,12 +1001,12 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(1,13)
     if array:
         return new_data['arr']
     else:
-        return new_data
+        return DataContainer(new_data)
 
 
 def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=None,
-                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
-                 bounds_error=True, **wiener_kwargs):
+                 kind='cubic', fill_value=None, zero_tol=1e-10, flag_extrapolate=True,
+                 smooth_and_slide=False, bounds_error=True, force_zero=False, **wiener_kwargs):
     """
     interpolate complex visibility model onto the time & frequency basis of
     a data visibility.
@@ -1034,9 +1033,16 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
 
     zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
 
+    smooth_and_slide : type=boolean, if True, interpolate smoothed data, compute difference between
+            interpolated point and nearest neighbor, and slide unsmoothed data by that difference.
+            Note: this only gives accurate results when data_times binning is equal to or bigger
+            than the model_times binning. Slows down interpolation considerably.
+
     bounds_error : type=boolean, if True, raise ValueError when extrapolating. If False, extrapolate.
 
     flag_extrapolate : flag extrapolated data if True
+
+    force_zero : type=boolean, force pixels near zero to be zero
 
     Output: (new_model, new_wgts)
     -------
@@ -1048,10 +1054,19 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
     if wgts is None:
         wgts = odict()
 
+    # smooth if desired
+    if smooth_and_slide:
+        smoothed = wiener(model, **wiener_kwargs)
+
     # loop over keys
     for i, k in enumerate(model.keys()):
-        # interpolate real and imag separately
-        m = model[k]
+        # get model array
+        if smooth_and_slide:
+            m = smoothed[k]
+        else:
+            m = model[k]
+
+        # get real and imag separately
         real = np.real(m)
         imag = np.imag(m)
 
@@ -1060,7 +1075,8 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
                                            kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
         interp_imag = interpolate.interp2d(model_freqs, model_times, imag,
                                            kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
-        # set flags
+
+        # set weights
         w = np.ones_like(interp_real, dtype=float)
         if flag_extrapolate:
             w[np.isnan(interp_real) + np.isnan(interp_imag)] = 0.0
@@ -1068,14 +1084,35 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
         interp_imag[np.isnan(interp_imag)] = fill_value
 
         # force things near amplitude of zero to (positive) zero
-        zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
-        interp_real[zero_select] *= 0.0 * interp_real[zero_select]
-        interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
-        w[zero_select] = 0.0
+        if force_zero:
+            zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
+            interp_real[zero_select] *= 0.0 * interp_real[zero_select]
+            interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
+            w[zero_select] = 0.0
 
-        # rejoin
+        # get nearest neighbor and add difference
+        if smooth_and_slide:
+            # get nearest neighbor points from data to model
+            freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs-x)), data_freqs))
+            time_nn = np.array(map(lambda x: np.argmin(np.abs(model_times-x)), data_times))
+            freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
+
+            # get interpolated difference
+            real_diff = interp_real - real[time_nn, freq_nn]
+            imag_diff = interp_imag - imag[time_nn, freq_nn]
+
+            # add difference to original unsmoothed model
+            interp_real = np.real(model[k][time_nn, freq_nn]) + real_diff
+            interp_imag = np.imag(model[k][time_nn, freq_nn]) + imag_diff
+
+        # rejoin to get complex data
         new_model[k] = interp_real + 1j*interp_imag
-        wgts[k] = w
+
+        # configure weights
+        if k in wgts:
+            wgts[k] *= w
+        else:
+            wgts[k] = w
 
     return DataContainer(new_model), DataContainer(wgts)
 
@@ -1522,7 +1559,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
             # iterate over matches
             for j, (m, cm) in enumerate(zip(match, conj_match)):
                 if weights:
-                    # if weight dictionary, add repeated baselines in inverse quadrature
+                    # if weight dictionary, add repeated baselines
                     if m == True:
                         if (k in red_data) == False:
                             red_data[k] = copy.copy(data[k])
@@ -1544,7 +1581,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
                         for bl in reds[j]:
                             red_data[bl] = np.conj(data[k])
 
-    # re-sort, inverse quad if weights
+    # re-sort, and square if weights to match linsolve weighting convention
     if weights:
         for i, k in enumerate(red_data):
             red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)]**(2.0)
