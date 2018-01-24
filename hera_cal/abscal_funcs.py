@@ -793,7 +793,9 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
     antpos : dictionary containing antennas numbers as keys and position vectors
     ants : ndarray containing unique antennas
     freqs : ndarray containing frequency channels (Hz)
-    times : ndarray containing LST bins of data (radians)
+    times : ndarray containing julian date bins of data
+    lsts : ndarray containing LST bins of data (radians)
+    pols : ndarray containing list of polarization index integers
     """
     # check datanames is not a list
     if type(datanames) is not list and type(datanames) is not np.ndarray:
@@ -997,7 +999,7 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(1,13)
         return new_data
 
 
-def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs,
+def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
                  kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
                  bounds_error=True, **wiener_kwargs):
     """
@@ -1010,11 +1012,11 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs,
         keys are antenna-pair + pol tuples, values are 2d complex visibility
         with shape (Ntimes, Nfreqs)
 
-    model_times : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
+    model_lsts : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
 
     model_freqs : 1D array of the model freq axis, dtype=float, shape=(Nfreqs,)
 
-    data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
+    data_lsts : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
 
     data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
@@ -1047,10 +1049,10 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs,
         imag = np.imag(m)
 
         # interpolate
-        interp_real = interpolate.interp2d(model_freqs, model_times, real,
-                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
-        interp_imag = interpolate.interp2d(model_freqs, model_times, imag,
-                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
+        interp_real = interpolate.interp2d(model_freqs, model_lsts, real,
+                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_lsts)
+        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag,
+                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_lsts)
         # set flags
         f = np.zeros_like(interp_real, dtype=float)
         if flag_extrapolate:
