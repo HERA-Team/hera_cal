@@ -1087,6 +1087,11 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
 
     pol_array : ndarray, polarization array of data, in 'x' or 'y' form. 
 
+    gain_convention : type=str, either multiply or divide in gain solutions
+                        options=['multiply', 'divide']
+
+    overwrite : type=boolean, if True overwrite output files if they already exist
+
     kwargs : additional kwargs for meta in cal_formats.HERACal(meta, gains)
     """
     # ensure pol is string
@@ -1193,14 +1198,11 @@ class Baseline(object):
         tol : tolerance for baseline length comparison in meters
         """
         self.label = "{:06.1f}:{:06.1f}:{:06.1f}".format(float(bl[0]), float(bl[1]), float(bl[2]))
+        self.bl = np.array(bl, dtype=np.float)
         self.tol = tol
 
     def __repr__(self):
         return self.label
-
-    @property
-    def bl(self):
-        return np.array(map(float, self.label.split(':')))
 
     @property
     def unit(self):
@@ -1231,28 +1233,33 @@ class Baseline(object):
 
 def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose=True):
     """
-    match model baseline keys to data baseline keys based on positional redundancy
+    Match unique model baseline keys to unique data baseline keys based on positional redundancy.
+    
+    Ideally, both model and data contain only unique baselines, in which case there is a
+    one-to-one mapping. If model contains extra redundant baselines, these are not propagated
+    to new_model. If data contains extra redundant baselines, the lowest ant1-ant2 pair is chosen
+    as the baseline key to insert into model.
 
     Parameters:
     -----------
     model : type=dictionary, model dictionary holding complex visibilities
-        must conform to AbsCal dictionary format.
+            must conform to DataContainer dictionary format.
 
     model_antpos : type=dictionary, dictionary holding antennas positions for model dictionary
-        same format as data_antpos
+            keys are antenna integers, values are ndarrays of position vectors in meters
 
     data : type=dictionary, data dictionary holding complex visibilities.
-        must conform to AbsCal dictionary format.
+            must conform to DataContainer dictionary format.
 
     data_antpos : type=dictionary, dictionary holding antennas positions for data dictionary
-        keys are antenna integers, values are ndarrays of position vectors in meters
+                same format as model_antpos
 
     tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
 
     Output: (data)
     -------
-    data : type=dictionary, dictionary holding complex visibilities from data that
-        had matching baselines to model
+    new_model : type=dictionary, dictionary holding complex visibilities from model that
+        had matching baselines to data
     """
     # create baseline keys for model
     model_keys = model.keys()
@@ -1291,7 +1298,7 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
                             mirror_red_data=False):
     """
     Given complex visibility data spanning one or more redundant
-    baseline groups, average redundant visibilities and write to file
+    baseline groups, average redundant visibilities and return
 
     Parameters:
     -----------
