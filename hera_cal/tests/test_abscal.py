@@ -177,7 +177,7 @@ class Test_AbsCal_Funcs:
     def test_match_red_baselines(self):
         model = copy.deepcopy(self.data)
         model = DataContainer(odict([((k[0]+1, k[1]+1, k[2]), model[k]) for i,k in enumerate(model.keys())]))
-        model.pop((25, 54, 'xx'))
+        del model[(25, 54, 'xx')]
         model_antpos = odict([(k+1, self.antpos[k]) for i,k in enumerate(self.antpos.keys())])
         new_model = hc.abscal.match_red_baselines(model, model_antpos, self.data, self.antpos, tol=2.0, verbose=False)
         nt.assert_equal(len(new_model.keys()), 8)
