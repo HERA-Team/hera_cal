@@ -420,12 +420,11 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=0.00078298496, wrap_point=2*n
         data_to_miriad(num_file, bin_data, all_lst, freq_array, antpos, history=history)
 
 
-def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None,
-
-
+def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, wgts=None,
                    outdir="./", overwrite=True, verbose=True, history="",
                    longitude=21.42830, start_jd=None, instrument="HERA", telescope_name="HERA",
-                   object_name='EOR', phase_type='drift', vis_units='uncalib', dec=-30.72152):
+                   object_name='EOR', phase_type='drift', vis_units='uncalib', dec=-30.72152,
+                   telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395])):
     """
     take data dictionary, export to UVData object and write as a miriad file.
 
@@ -444,14 +443,7 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     pols = np.unique(map(lambda k: k[-1], data.keys()))
     Npols = len(pols)
     pol2int = {'xx':-5, 'yy':-6, 'xy':-7, 'yx':-8}
-    pol_ints = np.array(map(lambda p: pol2int[p], pols))
-
-    # get data keys
-    bls = np.array(sorted(data.bls()))
-
-    # get ant_1_array, ant_2_array
-    ant_1_array = bls[:,0]
-    ant_2_array = bls[:,1]
+    polarization_array = np.array(map(lambda p: pol2int[p], pols))
 
     # get times
     if time_array is None:
@@ -461,20 +453,45 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     Ntimes = len(time_array)
     integration_time = np.median(np.diff(time_array)) * 24 * 3600.
 
+    # get freqs
+    Nfreqs = len(freq_array)
+    channel_width = np.median(np.diff(freq_array))
+    freq_array = freq_array.reshape(1, -1)
+    spw_array = np.array([0])
+    Nspws = 1
+
+    # get baselines keys
+    bls = sorted(data.bls())
+    Nbls = len(bls)
+    Nblts = Nbls * Ntimes
+
+    # reconfigure time_array and lst_array
+    time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
+    lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
 
     # get data array
     data_array = np.moveaxis(map(lambda p: map(lambda bl: data[str(p)][bl], bls), pols), 0, -1)
 
-    if flag_array is None:
-        flag_array = np.zeros_like(data_array).astype(np.bool)
-    else:
-        flag_array = 
+    # resort time and baseline axes
+    data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
+    nsample_array = np.ones_like(data_array, np.float)
 
+    # flags
+    if flag_array is None:
+        flag_array = np.zeros_like(data_array, np.float).astype(np.bool)
+    else:
+        flag_array = np.moveaxis(map(lambda p: map(lambda bl: ~wgts[str(p)][bl].astype(np.bool), bls), pols), 0, -1)
+        flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
+
+    # configure baselines
+    bls = np.repeat(np.array(bls), Ntimes, axis=0)
+
+    # get ant_1_array, ant_2_array
+    ant_1_array = bls[:,0]
+    ant_2_array = bls[:,1]
 
     # get baseline array
     baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
-    Nbls = len(baseline_array)
-
 
     # get antennas in data
     data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
@@ -484,12 +501,6 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     antenna_numbers = np.unique(antpos.keys())
     Nants_tele = len(antenna_numbers)
     antenna_names = map(lambda a: "HH{}".format(a), antenna_numbers)
-
-    # get freqs
-    Nfreqs = len(freq_array)
-    freq_array = freq_array.reshape(1, -1)
-    spw_array = np.array([0])
-    Nspws = 1
 
     # get antpos and uvw
     antenna_positions = np.array(map(lambda k: antpos[k], antenna_numbers))
