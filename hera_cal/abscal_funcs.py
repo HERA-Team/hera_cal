@@ -1235,17 +1235,17 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
 
     Parameters:
     -----------
-    data : type=dictionary, data dictionary holding complex visibilities.
-        must conform to AbsCal dictionary format.
-
-    data_antpos : type=dictionary, dictionary holding antennas positions for data dictionary
-        keys are antenna integers, values are ndarrays of position vectors in meters
-
     model : type=dictionary, model dictionary holding complex visibilities
         must conform to AbsCal dictionary format.
 
     model_antpos : type=dictionary, dictionary holding antennas positions for model dictionary
         same format as data_antpos
+
+    data : type=dictionary, data dictionary holding complex visibilities.
+        must conform to AbsCal dictionary format.
+
+    data_antpos : type=dictionary, dictionary holding antennas positions for data dictionary
+        keys are antenna integers, values are ndarrays of position vectors in meters
 
     tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
 
