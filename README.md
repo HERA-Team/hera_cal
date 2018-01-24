@@ -12,8 +12,13 @@ Full documentation available on [Read the Docs.](http://hera_cal.readthedocs.io/
 ## Modules
 
 * hera_cal.firstcal: module includes the FirstCalRedundantInfo class, FirstCal class that solves for delays, and other helper functions.
+
 * hera_cal.omni: includes functions and classes for interfacing with and running omnical.
-* hera_cal.abscal: includes AbsCal class for phasing and scaling visibility data to an absolute reference. See scripts/notebook/running_abscal.ipynb for a quick tutorial.
+
+* hera_cal.abscal: includes AbsCal class for phasing and scaling visibility data to an absolute reference. See scripts/notebook/running_abscal.ipynb for a quick tutorial. Functionalities include:
+    1. scaling raw data to an absolute (visibility) reference
+    2. scaling omnicalibrated data to an absolute (visibility) reference
+    3. scaling omnical unique-baseline visibility solutions to an absolute reference (still beta testing this capability)
 
 ## Scripts
 
