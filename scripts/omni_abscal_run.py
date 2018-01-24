@@ -15,8 +15,8 @@ kwargs.pop('data_files')
 kwargs.pop('model_files')
 kwargs.pop('silence')
 verbose = args.silence is False
-kwargs.pop('omni_model')
-if args.omni_model:
+kwargs.pop('data_is_omni_solution')
+if args.data_is_omni_solution:
     kwargs['reweight'] = True
     kwargs['match_red_bls'] = True
 

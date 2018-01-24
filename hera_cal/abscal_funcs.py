@@ -1165,6 +1165,7 @@ def fill_dict_nans(data, wgts=None, nan_fill=None, inf_fill=None, array=False):
                 if wgts is not None:
                     wgts[k][inf_select] = 0.0
 
+
 def echo(message, type=0, verbose=True):
     if verbose:
         if type == 0:
@@ -1174,9 +1175,11 @@ def echo(message, type=0, verbose=True):
             print(message)
             print("-"*40)
 
+
 def flatten(l):
     """ flatten a nested list """
     return [item for sublist in l for item in sublist]
+
 
 class Baseline(object):
     """
@@ -1224,6 +1227,7 @@ class Baseline(object):
                 return False
         else:
             return False
+
 
 def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose=True):
     """
