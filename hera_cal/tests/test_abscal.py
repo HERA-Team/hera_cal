@@ -180,7 +180,7 @@ class Test_AbsCal_Funcs:
         model.pop((25, 54, 'xx'))
         model_antpos = odict([(k+1, self.antpos[k]) for i,k in enumerate(self.antpos.keys())])
         new_model = hc.abscal.match_red_baselines(model, model_antpos, self.data, self.antpos, tol=2.0, verbose=False)
-        nt.assert_equal(len(new_model.keys()), 9)
+        nt.assert_equal(len(new_model.keys()), 8)
         nt.assert_true((24, 37, 'xx') in new_model)
         nt.assert_false((24, 53, 'xx') in new_model)
 
