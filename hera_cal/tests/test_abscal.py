@@ -162,19 +162,27 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(d.dtype, np.complex)
 
     def test_Baseline(self):
+        # test basic execution
         bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), self.data.keys())
         bls_conj = map(lambda k: hc.abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), self.data.keys())
         nt.assert_equal(bls[0], bls[0])
         nt.assert_false(bls[0] == bls[1])
         nt.assert_equal(bls[0] == bls_conj[0], 'conjugated')
+        # test different yet redundant baselines still agree
+        nt.assert_equal(bls[-1], bls[-3])
+        # test tolerance works as expected
+        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), self.data.keys())
+        nt.assert_not_equal(bls[-3], bls[-1])
 
     def test_match_red_baselines(self):
         model = copy.deepcopy(self.data)
-        model = odict([((k[0]+1, k[1]+1, k[2]), model[k]) for i,k in enumerate(model.keys())])
+        model = DataContainer(odict([((k[0]+1, k[1]+1, k[2]), model[k]) for i,k in enumerate(model.keys())]))
+        model.pop((25, 54, 'xx'))
         model_antpos = odict([(k+1, self.antpos[k]) for i,k in enumerate(self.antpos.keys())])
-        data = hc.abscal.match_red_baselines(self.data, self.antpos, model, model_antpos, tol=2.0, verbose=False)
-        nt.assert_equal(len(data.keys()), 9)
-        nt.assert_true((25, 38, 'xx') in data)
+        new_model = hc.abscal.match_red_baselines(model, model_antpos, self.data, self.antpos, tol=2.0, verbose=False)
+        nt.assert_equal(len(new_model.keys()), 9)
+        nt.assert_true((24, 37, 'xx') in new_model)
+        nt.assert_false((24, 53, 'xx') in new_model)
 
     def test_mirror_data_to_red_bls(self):
         # make fake data
@@ -184,6 +192,8 @@ class Test_AbsCal_Funcs:
         d = hc.abscal.mirror_data_to_red_bls(data, self.antpos)
         nt.assert_equal(len(d.keys()), 16)
         nt.assert_true((24, 25, 'xx') in d)
+        # test correct value is propagated
+        nt.assert_almost_equal(data[(24, 25, 'xx')][30, 30], d[(38, 39, 'xx')][30, 30])
         # test reweighting
         w = hc.abscal.mirror_data_to_red_bls(self.wgts, self.antpos, weights=True)
         nt.assert_equal(w[(24, 25, 'xx')].dtype, np.float)
@@ -198,12 +208,19 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(np.array(l).ndim, 1)
 
     def test_avg_data_across_red_bls(self):
+        # test basic execution 
         data, flags, antpos, ants, freqs, times, lsts, pols = hc.abscal.UVData2AbsCalDict(self.data_file, return_meta=True)
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, flags=self.wgts, tol=2.0)
+        # test various kwargs
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, median=True)
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_flags=True)
         nt.assert_equal(len(rd.keys()), 9)
         nt.assert_equal(len(rf.keys()), 9)
+        # test averaging worked
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, median=False)
+        v = np.mean([data[(52,53,'xx')],data[(37,38,'xx')],data[(24,25,'xx')],data[(38,39,'xx')]], axis=0)
+        nt.assert_true(np.isclose(rd[(24,25,'xx')], v).min())
+        # test mirror_red_data
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, flags=self.wgts, tol=2.0, mirror_red_data=True)
         nt.assert_equal(len(rd.keys()), 21)
         nt.assert_equal(len(rf.keys()), 21)
