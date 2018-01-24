@@ -439,10 +439,6 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     if os.path.exists(fname) and overwrite is False:
         abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
 
-    # configure flags if None
-    if flags is None:
-        flags = DataContainer(odict(map(lambda k: (k, np.zeros_like(data[k]).astype(np.bool)), data.keys())))
-
     ## configure UVData parameters
     # get pols
     pols = np.unique(map(lambda k: k[-1], data.keys()))
@@ -453,24 +449,32 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     # get data keys
     bls = np.array(sorted(data.bls()))
 
-    # get data array
-    data_array = np.moveaxis(map(lambda p: map(lambda bl: data[str(p)][bl], bls), pols), 0, -1)
-
     # get ant_1_array, ant_2_array
     ant_1_array = bls[:,0]
     ant_2_array = bls[:,1]
-
-    # get baseline array
-    baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
-    Nbls = len(baseline_array)
 
     # get times
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = utils.LST2JD(lst_array, start_jd, longitude=longitude)
+        time_array = np.array(map(lambda lst: utils.LST2JD(lst, start_jd, longitude=longitude), lst_array))
     Ntimes = len(time_array)
     integration_time = np.median(np.diff(time_array)) * 24 * 3600.
+
+
+    # get data array
+    data_array = np.moveaxis(map(lambda p: map(lambda bl: data[str(p)][bl], bls), pols), 0, -1)
+
+    if flag_array is None:
+        flag_array = np.zeros_like(data_array).astype(np.bool)
+    else:
+        flag_array = 
+
+
+    # get baseline array
+    baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
+    Nbls = len(baseline_array)
+
 
     # get antennas in data
     data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
@@ -484,14 +488,18 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     # get freqs
     Nfreqs = len(freq_array)
     freq_array = freq_array.reshape(1, -1)
+    spw_array = np.array([0])
+    Nspws = 1
 
     # get antpos and uvw
     antenna_positions = np.array(map(lambda k: antpos[k], antenna_numbers))
     uvw_array = np.array([antpos[k[0]] - antpos[k[1]] for k in zip(ant_1_array, ant_2_array)])
 
     # get zenith location
-    zenith_dec = np.ones_like(baseline_array) * dec
-    zenith_ra = a
+    zenith_dec_degrees = np.ones_like(baseline_array) * dec
+    zenith_ra_degrees = utils.JD2RA(time_array, longitude)
+    zenith_dec = zenith_dec_degrees * np.pi / 180
+    zenith_ra = zenith_ra_degrees * np.pi / 180
 
 
 

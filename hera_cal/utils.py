@@ -163,10 +163,10 @@ def JD2LST(JD, longitude=21.42830):
 
     Output:
     -------
-    Local Apparent Sidreal Time [Hour Angle]
+    Local Apparent Sidreal Time [radians]
     """
-    t = Time(JD, format='jd')
-    return t.sidereal_time('apparent', longitude=longitude).value
+    t = Time(JD, format='jd', scale='utc')
+    return t.sidereal_time('apparent', longitude=longitude).value * np.pi / 12.0
 
 
 def LST2JD(LST, start_JD, longitude=21.42830):
@@ -175,7 +175,7 @@ def LST2JD(LST, start_JD, longitude=21.42830):
 
     Input:
     ------
-    LST : type=float, local apparent sidereal time [hour angle]
+    LST : type=float, local apparent sidereal time [radians]
 
     start_JD : type=int, integer julian day to use as starting point for LST2JD conversion
 
@@ -221,12 +221,14 @@ def JD2RA(jd_array, lon):
     if type(jd_array) == np.float:
         jd_array = [jd_array]
 
+    # get observer
+    obs = ephem.Observer()
+    obs.epoch = ephem.J2000
+    obs.lon = lon * np.pi / 180.0
+
     RA = []
     for JD in jd_array:
-        # get observer
-        obs = ephem.Observer()
-        obs.lon = lon * np.pi / 180.0
-        obs.date = Time(JD, format='jd').datetime
+        obs.date = Time(JD, format='jd', scale='utc').datetime
         ra = obs.radec_of(0, np.pi/2)[0] * 180 / np.pi
         RA.append(ra)
 
