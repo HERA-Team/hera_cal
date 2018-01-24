@@ -81,8 +81,8 @@ class TestDataContainer(unittest.TestCase):
         dc = datacontainer.DataContainer(self.blpol)
         dc.pop((1, 2, 'xx'))
         self.assertFalse((1,2,'xx') in dc)
-        self.assertEqual('xx' in dc.pols())
-        self.assertEqual((1,2) in dc.bls())
+        self.assertTrue('xx' in dc.pols())
+        self.assertTrue((1,2) in dc.bls())
         dc.pop((1, 2, 'yy'))
         self.assertFalse((1,2) in dc.bls())
 
