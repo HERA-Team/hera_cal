@@ -157,7 +157,7 @@ def JD2LST(JD, longitude=21.42830):
     """
     Input:
     ------
-    JD : type=float, julian date of observation
+    JD : type=float or list of floats, julian date of observation
 
     longitude : type=float, longitude of observer in degrees East, default=HERA Longitude
 
@@ -165,9 +165,17 @@ def JD2LST(JD, longitude=21.42830):
     -------
     Local Apparent Sidreal Time [radians]
     """
-    t = Time(JD, format='jd', scale='utc')
-    return t.sidereal_time('apparent', longitude=longitude).value * np.pi / 12.0
+    if type(JD) is list or type(JD) is np.ndarray:
+        LST = []
+        for jd in JD:
+            t = Time(jd, format='jd', scale='utc')
+            LST.append(t.sidereal_time('apparent', longitude=longitude).value * np.pi / 12.0)
+        LST = np.array(LST)
+    else:
+        t = Time(JD, format='jd', scale='utc')
+        LST = t.sidereal_time('apparent', longitude=longitude).value * np.pi / 12.0
 
+    return LST
 
 def LST2JD(LST, start_JD, longitude=21.42830):
     """
@@ -185,54 +193,78 @@ def LST2JD(LST, start_JD, longitude=21.42830):
     -------
     JD : type=float, julian day when LST is directly overhead. accurate to ~1 milliseconds
     """
+    # get LST type
+    if type(LST) == list or type(LST) == np.ndarray:
+        _array = True
+    else:
+        LST = [LST]
+        _array = False  
+
+    # get start_JD
     base_JD = float(start_JD)
-    while True:
-        # calculate fit
-        jd1 = start_JD
-        jd2 = start_JD + 0.01
-        lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
-        slope = (lst2 - lst1) / 0.01
-        offset = lst1 - slope * jd1
 
-        # solve y = mx + b for x
-        JD = (LST - offset) / slope
+    # iterate over LST
+    jd_array = []
+    for lst in LST:
+        while True:
+            # calculate fit
+            jd1 = start_JD
+            jd2 = start_JD + 0.01
+            lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
+            slope = (lst2 - lst1) / 0.01
+            offset = lst1 - slope * jd1
 
-        # redo if JD isn't on starting JD
-        if JD - base_JD < 0:
-            start_JD += 1
-        elif JD - base_JD > 1:
-            start_JD -= 1
-        else:
-            break
+            # solve y = mx + b for x
+            JD = (lst - offset) / slope
 
-    return JD
+            # redo if JD isn't on starting JD
+            if JD - base_JD < 0:
+                start_JD += 1
+            elif JD - base_JD > 1:
+                start_JD -= 1
+            else:
+                break
+        jd_array.append(JD)
+
+    if _array:
+        return np.array(jd_array)
+
+    else:
+        return jd_array[0]
 
 
-def JD2RA(jd_array, lon):
+def JD2RA(jd_array, longitude=21.42830):
     """
     convert from julian date to RA at zenith
 
-    jd_array : array of julian dates
+    jd_array : float or list of julian dates
 
-    lon  : longitude of observer in degrees east
+    lon : longitude of observer in degrees east
 
-    return RA array in degrees
+    return RA float or array in degrees
     """
-    if type(jd_array) == np.float:
+    if type(jd_array) == list or type(jd_array) == np.ndarray:
+        _array = True
+    else:
+        _array = False
         jd_array = [jd_array]
 
     # get observer
     obs = ephem.Observer()
     obs.epoch = ephem.J2000
-    obs.lon = lon * np.pi / 180.0
+    obs.lon = longitude * np.pi / 180.0
 
+    # iterate over jd_array
     RA = []
     for JD in jd_array:
         obs.date = Time(JD, format='jd', scale='utc').datetime
         ra = obs.radec_of(0, np.pi/2)[0] * 180 / np.pi
         RA.append(ra)
 
-    return np.array(RA)
+    if _array:
+        return np.array(RA)
+    else:
+        return RA[0]
 
 
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):

@@ -66,10 +66,14 @@ class TestAA(object):
 
 class Test_JD2LST:
     def test_JD2LST(self):
-        nt.assert_almost_equal(utils.JD2LST(2458042., 21.), 15.013985862647784)
+        nt.assert_almost_equal(utils.JD2LST(2458042., 21.), 3.9306523072662745)
+        nt.assert_equal(len(utils.JD2LST(np.arange(2458042, 2458046), 21.)), 4)
     def test_LST2JD(self):
-        nt.assert_almost_equal(utils.LST2JD(12.0, 2458042, 21.), 2458042.8720297855)
-
+        nt.assert_almost_equal(utils.LST2JD(np.pi, 2458042, 21.), 2458042.8720297855)
+        nt.assert_almost_equal(len(utils.LST2JD(np.linspace(2, 4, 4), 2458042, 21.)), 4)
+    def test_JD2RA(self):
+        nt.assert_almost_equal(utils.JD2RA(2458042.0, 21.), 224.9887083968118)
+        nt.assert_almost_equal(len(utils.JD2RA(np.arange(2458042, 2458046), 21.)), 4)
 
 class Test_combine_calfits:
     def test_combine_calfits(self):
