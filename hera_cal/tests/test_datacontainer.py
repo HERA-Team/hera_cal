@@ -77,6 +77,15 @@ class TestDataContainer(unittest.TestCase):
         keys = dc.keys()
         self.assertEqual(len(keys), len(self.pols) * len(self.bls))
 
+    def test_pop(self):
+        dc = datacontainer.DataContainer(self.blpol)
+        dc.pop((1, 2, 'xx'))
+        self.assert_false((1,2,'xx') in dc)
+        self.assert_equal('xx' in dc.pols())
+        self.assert_equal((1,2) in dc.bls())
+        dc.pop((1, 2, 'yy'))
+        self.assert_false((1,2) in dc.bls())
+
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol)
         self.assertEqual(dc[(1, 2, 'xx')], 1j)
