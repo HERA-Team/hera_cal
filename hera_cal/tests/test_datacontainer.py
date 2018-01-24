@@ -77,13 +77,13 @@ class TestDataContainer(unittest.TestCase):
         keys = dc.keys()
         self.assertEqual(len(keys), len(self.pols) * len(self.bls))
 
-    def test_pop(self):
+    def test_del(self):
         dc = datacontainer.DataContainer(self.blpol)
-        dc.pop((1, 2, 'xx'))
+        del dc[(1, 2, 'xx')]
         self.assertFalse((1,2,'xx') in dc)
         self.assertTrue('xx' in dc.pols())
         self.assertTrue((1,2) in dc.bls())
-        dc.pop((1, 2, 'yy'))
+        del dc[(1, 2, 'yy')]
         self.assertFalse((1,2) in dc.bls())
 
     def test_getitem(self):
