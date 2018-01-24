@@ -49,6 +49,11 @@ class DataContainer:
     def keys(self):
         return self._data.keys()
 
+    def pop(self, key):
+        self._data.pop(key)
+        self._bls = set([k[:2] for k in self._data.keys()])
+        self._pols = set([k[-1] for k in self._data.keys()])
+
     def __getitem__(self, key):
         if type(key) is str:  # asking for a pol
             return dict(zip(self._bls, [self[self.mk_key(bl, key)] for bl in self._bls]))
