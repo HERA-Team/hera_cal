@@ -84,7 +84,7 @@ class TestDataContainer(unittest.TestCase):
         self.assert_equal('xx' in dc.pols())
         self.assert_equal((1,2) in dc.bls())
         dc.pop((1, 2, 'yy'))
-        self.assert_false((1,2) in dc.bls())
+        self.assertFalse((1,2) in dc.bls())
 
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol)
