@@ -235,7 +235,7 @@ def LST2JD(LST, start_JD, longitude=21.42830):
 
 def JD2RA(jd_array, longitude=21.42830):
     """
-    convert from julian date to RA at zenith
+    Convert from julian date to RA at zenith, assuing J2000 epoch
 
     jd_array : float or list of julian dates
 
@@ -324,7 +324,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     uvc.write_calfits(output_fname, clobber=True)
 
 
-def get_miriad_times(filepaths):
+def get_miriad_times(filepaths, add_stop_int=True):
     """
     Use aipy to get filetimes for filepaths
 
@@ -332,12 +332,13 @@ def get_miriad_times(filepaths):
     ------------
     filepaths : type=list, list of filepaths
 
-    lst : type=boolean, if True return time in LST (radians)
-                        else return time in Julian Date
+    add_stop_int : type=bool, if True, add a single integration duration to the file_stop time
 
-    Output: (file_starts, file_stops)
+    Output: (file_starts, file_stops, int_times)
     -------
-
+    file_starts : file starting point in LST [radians]
+    file_stops : file ending point in LST [radians]
+    int_times : integration duration in LST [radians]
     """
     # check filepaths type
     if type(filepaths) == str:
@@ -346,19 +347,26 @@ def get_miriad_times(filepaths):
     # form empty lists
     file_starts = []
     file_stops = []
+    int_times = []
 
     # iterate over filepaths and extract time info
     for i, f in enumerate(filepaths):
         uv = aipy.miriad.UV(f)
         start = uv['lst']
-        stop = start + (uv['ntimes']-1) * uv['inttime'] * 2*np.pi / (23.9344699*3600.)
+        int_time = uv['inttime'] * 2*np.pi / (23.9344699*3600.)
+        if add_stop_int:
+            stop = start + (uv['ntimes']) * int_time
+        else:
+            stop = start + (uv['ntimes']-1) * int_time
         file_starts.append(start)
         file_stops.append(stop)
+        int_times.append(int_time)
 
     file_starts = np.array(file_starts)
     file_stops = np.array(file_stops)
+    int_times = np.array(int_times)
 
-    return file_starts, file_stops
+    return file_starts, file_stops, int_times
 
 
 
