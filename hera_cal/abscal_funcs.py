@@ -1053,10 +1053,17 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
     new_model = odict()
     if wgts is None:
         wgts = odict()
+    else:
+        wgts = copy.deepcopy(wgts)
 
     # smooth if desired
     if smooth_and_slide:
         smoothed = wiener(model, **wiener_kwargs)
+
+    # get nearest neighbor points
+    freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs-x)), data_freqs))
+    time_nn = np.array(map(lambda x: np.argmin(np.abs(model_times-x)), data_times))
+    freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
 
     # loop over keys
     for i, k in enumerate(model.keys()):
@@ -1070,11 +1077,17 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
         real = np.real(m)
         imag = np.imag(m)
 
+        # set fill_value
+        if flag_extrapolate:
+            fill = np.nan
+        else:
+            fill = fill_value
+
         # interpolate
         interp_real = interpolate.interp2d(model_freqs, model_times, real,
-                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
+                                           kind=kind, fill_value=fill, bounds_error=bounds_error)(data_freqs, data_times)
         interp_imag = interpolate.interp2d(model_freqs, model_times, imag,
-                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_times)
+                                           kind=kind, fill_value=fill, bounds_error=bounds_error)(data_freqs, data_times)
 
         # set weights
         w = np.ones_like(interp_real, dtype=float)
@@ -1092,11 +1105,6 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
 
         # get nearest neighbor and add difference
         if smooth_and_slide:
-            # get nearest neighbor points from data to model
-            freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs-x)), data_freqs))
-            time_nn = np.array(map(lambda x: np.argmin(np.abs(model_times-x)), data_times))
-            freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
-
             # get interpolated difference
             real_diff = interp_real - real[time_nn, freq_nn]
             imag_diff = interp_imag - imag[time_nn, freq_nn]
@@ -1110,7 +1118,7 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
 
         # configure weights
         if k in wgts:
-            wgts[k] *= w
+            wgts[k] = wgts[k][time_nn, freq_nn] * w
         else:
             wgts[k] = w
 

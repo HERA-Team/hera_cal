@@ -324,15 +324,17 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     uvc.write_calfits(output_fname, clobber=True)
 
 
-def get_miriad_times(filepaths, add_stop_int=True):
+def get_miriad_times(filepaths, add_int_buffer=False):
     """
-    Use aipy to get filetimes for filepaths
+    Use aipy to get filetimes for Miriad file paths.
+    All times mark the center of an integration, which is not the standard Miriad format.
 
     Parameters:
     ------------
     filepaths : type=list, list of filepaths
 
-    add_stop_int : type=bool, if True, add a single integration duration to the file_stop time
+    add_int_buffer : type=bool, if True, extend start and stop times by a single integration duration 
+        except for start of first file, and stop of last file
 
     Output: (file_starts, file_stops, int_times)
     -------
@@ -340,8 +342,10 @@ def get_miriad_times(filepaths, add_stop_int=True):
     file_stops : file ending point in LST [radians]
     int_times : integration duration in LST [radians]
     """
+    _array = True
     # check filepaths type
     if type(filepaths) == str:
+        _array = False
         filepaths = [filepaths]
 
     # form empty lists
@@ -349,15 +353,26 @@ def get_miriad_times(filepaths, add_stop_int=True):
     file_stops = []
     int_times = []
 
+    # get Nfiles
+    Nfiles = len(filepaths)
+
     # iterate over filepaths and extract time info
     for i, f in enumerate(filepaths):
         uv = aipy.miriad.UV(f)
-        start = uv['lst']
+        # get integration time
         int_time = uv['inttime'] * 2*np.pi / (23.9344699*3600.)
-        if add_stop_int:
-            stop = start + (uv['ntimes']) * int_time
-        else:
-            stop = start + (uv['ntimes']-1) * int_time
+        # get start and stop
+        start = uv['lst']
+        stop = start + (uv['ntimes']-1) * int_time
+        # add integration buffer to beginning and end if desired
+        if add_int_buffer:
+            if i != 0:
+                start -= int_time
+            if i != (Nfiles-1):
+                stop += int_time
+        # add half an integration to get center of integration
+        start += int_time / 2
+        stop += int_time / 2
         file_starts.append(start)
         file_stops.append(stop)
         int_times.append(int_time)
@@ -365,6 +380,15 @@ def get_miriad_times(filepaths, add_stop_int=True):
     file_starts = np.array(file_starts)
     file_stops = np.array(file_stops)
     int_times = np.array(int_times)
+
+    # make sure times don't wrap
+    file_starts[np.where(file_starts < 0)] += 2*np.pi
+    file_stops[np.where(file_stops >= 2*np.pi)] -= 2*np.pi
+
+    if _array is False:
+        file_starts = file_starts[0]
+        file_stops = file_stops[0]
+        int_times = int_times[0]
 
     return file_starts, file_stops, int_times
 
