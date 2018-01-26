@@ -356,16 +356,43 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", lst_init=np.pi, wrap_poin
 
 
 def lst_bin_arg_parser():
-    a = argparse.ArgumentParser(description='')
+    """
+    arg parser for lst_bin_files() function. data_files argument must be quotation-bounded
+    glob-parsable search strings to nightly data. For example:
 
+    '2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv'
 
+    """
+    a = argparse.ArgumentParser(description="drive script for lstbin.lst_bin_files(). "
+        "data_files argument must be quotation-bounded "
+        "glob-parsable search strings to nightly data. For example: \n"
+        "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
+        "Consult lstbin.lst_bin_files() for further details on functionality.")
+    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files")
+    a.add_argument("--lst_init", type=float, default=np.pi, help="starting point for universal LST grid")
+    a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
+    a.add_argument("--wrap_point", type=float, default=2*np.pi, help="full day of LST")
+    a.add_argument("--lst_low", default=None, type=float, help="enact a lower bound on LST grid")
+    a.add_argument("--lst_hi", default=None, type=float, help="enact an upper bound on LST grid")
+    a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
+    a.add_argument("--file_ext", type=str, default="{}.{}.{:7.5f}.uv", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
+    a.add_argument("--pol_select", nargs='*', type=str, default=None, help="polarization strings to use in data_files")
+    a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
+    a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
+    a.add_argument('--align', default=False, action='store_true', help='perform LST align before binning')
+    a.add_argument("--align_kwargs", default={}, type=dict, help="dict w/ kwargs for lst_align if --align")
+    a.add_argument("--bin_kwargs", default={}, type=dict, help="dict w/ kwargs to pass to lst_bin function")
+    a.add_argument("--miriad_kwargs", default={}, type=dict, help="dict w/ kwargs to pass to miriad_to_data function")
+    a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
     return a
 
 
 def lst_bin_files(data_files, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, verbose=True,
                   ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv", pol_select=None,
                   outdir=None, overwrite=False, history=' ', lst_low=None, lst_hi=None,
-                  align=False, align_kwargs={}, bin_kwargs={}, atol=1e-6, **miriad_kwargs):
+                  align=False, align_kwargs={}, bin_kwargs={}, atol=1e-6, miriad_kwarg={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins. Miriad file meta data (frequency bins, antennas positions, time_array)
@@ -388,9 +415,9 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, ver
     
     ntimes_per_file : type=int, number of LST bins in a single file
 
-    file_ext : type=str, extension to "zen." for output miriad file. must have three
+    file_ext : type=str, extension to "zen." for output miriad files. must have three
             formatting placeholders, first for polarization(s), second for type of file
-            Ex. ["LST", "STD", "NUM"] and third for starting LST float.
+            Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
 
     pol_select : type=list, list of polarization strings Ex. ['xx'] to select in data_files
 
