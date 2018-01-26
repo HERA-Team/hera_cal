@@ -29,7 +29,7 @@ import datetime
 
 def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, dlst=None,
             lst_low=None, lst_hi=None, wrap_point=2*np.pi, atol=1e-8, median=False,
-            sigma_clip=False, sigma=2.0, return_no_avg=False):
+            sigma_clip=False, sigma=2.0, return_no_avg=False, verbose=True):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
