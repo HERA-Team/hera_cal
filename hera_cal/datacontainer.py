@@ -87,7 +87,7 @@ class DataContainer:
     def __add__(self, D):
         # check frequency structure matches
         if D[D.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
-            raise ValueError("[1] axis of data don't match")
+            raise ValueError("[1] axis of dictionary values don't match")
 
         # start new object
         newD = odict()
