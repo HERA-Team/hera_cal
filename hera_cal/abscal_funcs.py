@@ -963,6 +963,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
 def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9), array=False):
     """
     wiener filter complex visibility data. this might be used in constructing
+    model reference. See scipy.signal.wiener for details on method.
 
     Parameters:
     -----------
@@ -1001,12 +1002,12 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
     if array:
         return new_data['arr']
     else:
-        return DataContainer(new_data)
+        return new_data
 
 
-def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=None,
-                 kind='cubic', fill_value=None, zero_tol=1e-10, flag_extrapolate=True,
-                 smooth_and_slide=False, bounds_error=True, force_zero=False, **wiener_kwargs):
+def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
+                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
+                 bounds_error=True, **wiener_kwargs):
     """
     interpolate complex visibility model onto the time & frequency basis of
     a data visibility.
@@ -1017,11 +1018,11 @@ def interp2d_vis(model, model_times, model_freqs, data_times, data_freqs, wgts=N
         keys are antenna-pair + pol tuples, values are 2d complex visibility
         with shape (Ntimes, Nfreqs)
 
-    model_times : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
+    model_lsts : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
 
     model_freqs : 1D array of the model freq axis, dtype=float, shape=(Nfreqs,)
 
-    data_times : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
+    data_lsts : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
 
     data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
@@ -1595,7 +1596,6 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
             red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)]**(2.0)
     else:
         red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
-
 
     return DataContainer(red_data)
 
