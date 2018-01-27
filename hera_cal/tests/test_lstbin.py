@@ -65,6 +65,15 @@ class Test_lstbin:
         nt.assert_almost_equal(output[1][(24, 25, 'xx')][0, 32], 0.0)
         nt.assert_almost_equal(output[1][(24, 25, 'xx')][180, 32], 0.5)
         nt.assert_almost_equal(output[1][(24, 25, 'xx')][210, 32], 1.0)
+        # test return no avg
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, wgts_list=self.wgts_list, return_no_avg=True)
+        nt.assert_equal(len(output[0][output[0].keys()[0]][100]), 3)
+        nt.assert_equal(len(output[0][output[0].keys()[0]][100][0]), 64)
+        # test switch bl
+        conj_data3 = DataContainer(odict(map(lambda k: (hc.lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys())))
+        data_list = [self.data1, self.data2, conj_data3]
+        output = hc.lstbin.lst_bin(data_list, self.lst_list)
+        nt.assert_equal(output[0][(24,25,'xx')].shape, (224, 64))
 
     def test_lst_align(self):
         # test basic execution
@@ -101,18 +110,34 @@ class Test_lstbin:
         shutil.rmtree('./zen.xx.NUM.0.21702.uv')
         # test skip nightly data
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, lst_low=6.55, lst_hi=6.6)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.26713.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.26713.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.26713.uv'))
-        shutil.rmtree('./zen.xx.LST.0.26713.uv')
-        shutil.rmtree('./zen.xx.STD.0.26713.uv')
-        shutil.rmtree('./zen.xx.NUM.0.26713.uv')
+                                verbose=False, lst_low=6.62, lst_hi=6.65)
+        nt.assert_true(os.path.exists('./zen.xx.LST.0.33682.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.STD.0.33682.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.NUM.0.33682.uv'))
+        shutil.rmtree('./zen.xx.LST.0.33682.uv')
+        shutil.rmtree('./zen.xx.STD.0.33682.uv')
+        shutil.rmtree('./zen.xx.NUM.0.33682.uv')
+        # test data_list is empty
+        data_files = [[self.data_files[0][0]], [self.data_files[-1][-1]]]
+        hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
+                                verbose=False, lst_low=6.52, lst_hi=6.539)
         # test exception
         nt.assert_raises(ValueError, hc.lstbin.lst_bin_files, self.data_files, lst_low=0.21, lst_hi=0.19)
+        # test smaller ntimes file output, sweeping through f_select
+        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=120, outdir="./", overwrite=True,
+                                verbose=True)
+        output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
+                                       glob.glob("./zen.xx.STD*"),
+                                       glob.glob("./zen.xx.NUM*")])
+        for of in output_files:
+            if os.path.exists(of):
+                shutil.rmtree(of)
 
     def test_lst_bin_arg_parser(self):
         a = hc.lstbin.lst_bin_arg_parser()
+
+    def test_lst_align_arg_parser(self):
+        a = hc.lstbin.lst_align_arg_parser()
 
     def test_data_to_miriad(self):
         # test basic execution

@@ -142,7 +142,7 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
             if key in data:
                 pass
             elif switch_bl(key) in data:
-                key = switch_bl[key]
+                key = switch_bl(key)
                 d[key] = np.conj(d[switch_bl(key)])
                 if wgts_list is not None:
                     wgts_list[i][key] = wgts_list[i][switch_bl(key)]
