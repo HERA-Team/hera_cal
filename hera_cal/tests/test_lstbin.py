@@ -84,12 +84,12 @@ class Test_lstbin:
         # basic execution
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.21702.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.21702.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.21702.uv'))
-        shutil.rmtree('./zen.xx.LST.0.21702.uv')
-        shutil.rmtree('./zen.xx.STD.0.21702.uv')
-        shutil.rmtree('./zen.xx.NUM.0.21702.uv')
+        nt.assert_true(os.path.exists('./zen.xx.LST.0.18492.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.STD.0.18492.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.NUM.0.18492.uv'))
+        shutil.rmtree('./zen.xx.LST.0.18492.uv')
+        shutil.rmtree('./zen.xx.STD.0.18492.uv')
+        shutil.rmtree('./zen.xx.NUM.0.18492.uv')
         # tst lst_align
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False, lst_low=6.5, lst_hi=6.6, align=True)
@@ -101,7 +101,7 @@ class Test_lstbin:
         shutil.rmtree('./zen.xx.NUM.0.21702.uv')
         # test skip nightly data
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, lst_low=6.55, lst_hi=6.6)
+                                verbose=True, lst_low=6.55, lst_hi=6.6)
         nt.assert_true(os.path.exists('./zen.xx.LST.0.26713.uv'))
         nt.assert_true(os.path.exists('./zen.xx.STD.0.26713.uv'))
         nt.assert_true(os.path.exists('./zen.xx.NUM.0.26713.uv'))

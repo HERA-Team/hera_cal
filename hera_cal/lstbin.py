@@ -356,7 +356,8 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", lst_init=np.pi, wrap_poin
         if outdir is not None:
             miriad_kwargs['outdir'] = outdir
         miriad_kwargs['start_jd'] = np.floor(times[0])
-        data_to_miriad(output_fname, interp_data, interp_lsts, freqs, apos, wgts=interp_wgts, verbose=verbose, **miriad_kwargs)
+        interp_flags = DataContainer(odict(map(lambda k: (k, ~(interp_wgts[k].astype(np.bool))), interp_wgts.keys())))
+        data_to_miriad(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flags, verbose=verbose, **miriad_kwargs)
 
 
 def lst_bin_arg_parser():
@@ -625,9 +626,13 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, ver
             continue
 
         # write to file
-        data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, wgts=wgt_data, verbose=verbose, **miriad_kwargs)
+        flag_data = DataContainer(odict([(k, ~(wgt_data[k].astype(np.bool))) for k in wgt_data.keys()]))
+        data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, **miriad_kwargs)
         data_to_miriad(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
         data_to_miriad(num_file, num_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
+
+        del bin_file, std_file, num_file, bin_data, std_data, num_data, bin_lst, flag_data, wgt_data
+        garbage_collector.collect()
 
 
 def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None,
