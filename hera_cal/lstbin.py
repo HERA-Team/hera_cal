@@ -891,4 +891,3 @@ def switch_bl(key):
     """
     return key[:2][::-1] + (key[-1],)
 
-

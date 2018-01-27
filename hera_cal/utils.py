@@ -396,7 +396,3 @@ def get_miriad_times(filepaths, add_int_buffer=False):
 
 
 
-
-
-
-
