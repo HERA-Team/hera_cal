@@ -22,7 +22,6 @@ from scipy import spatial
 import itertools
 import operator
 from astropy import stats as astats
-from memory_profiler import memory_usage as memuse
 import gc as garbage_collector
 import datetime
 
