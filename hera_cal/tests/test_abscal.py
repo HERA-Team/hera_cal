@@ -30,7 +30,7 @@ class Test_AbsCal_Funcs:
         self.time_array = np.unique(self.uvd.time_array)
 
         # configure data into dictionaries
-        data, wgts = hc.abscal.UVData2AbsCalDict(self.uvd, pop_autos=True)
+        data, wgts = hc.abscal.UVData2AbsCalDict(self.uvd, pop_autos=True, return_wgts=True)
         
         # configure baselines
         bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in data.keys()])
@@ -528,8 +528,7 @@ class Test_AbsCal:
     def test_mock_data(self):
         # load into pyuvdata object
         data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        data, flags, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(data_file, return_meta=True)
-        wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
+        data, wgts, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(data_file, return_meta=True, return_wgts=True)
         # make mock data
         dly_slope = np.array([-1e-9, 2e-9, 0])
         model = odict()
