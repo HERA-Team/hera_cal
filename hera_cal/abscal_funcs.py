@@ -1006,8 +1006,8 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
 
 
 def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
-                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
-                 bounds_error=True, **wiener_kwargs):
+                 kind='cubic', fill_value=None, zero_tol=1e-10, flag_extrapolate=True,
+                 smooth_and_slide=False, bounds_error=True, wgts=None, **wiener_kwargs):
     """
     interpolate complex visibility model onto the time & frequency basis of
     a data visibility.
@@ -1025,6 +1025,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
     data_lsts : 1D array of the data time axis, dtype=float, shape=(Ntimes,)
 
     data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
+
+    wgts : type=DataContainer, dictionary containing model weights
 
     kind : kind of interpolation method, type=str, options=['linear', 'cubic', ...]
         see scipy.interpolate.interp2d for details
