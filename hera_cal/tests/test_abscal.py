@@ -30,13 +30,8 @@ class Test_AbsCal_Funcs:
         self.time_array = np.unique(self.uvd.time_array)
 
         # configure data into dictionaries
-        data, flags = hc.abscal.UVData2AbsCalDict(self.uvd, pop_autos=True)
-
-        # configure wgts
-        wgts = copy.deepcopy(flags)
-        for k in wgts.keys():
-            wgts[k] = (~wgts[k]).astype(np.float)
-
+        data, wgts = hc.abscal.UVData2AbsCalDict(self.uvd, pop_autos=True)
+        
         # configure baselines
         bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in data.keys()])
 
