@@ -53,7 +53,7 @@ class Test_lstbin:
         # check with large spacing lst_grid
         lst_grid = np.arange(np.pi, 3*np.pi, 0.01)
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, lst_grid=lst_grid)
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[10,30], 39)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[10,30], 37)
         # check wgts are propagated
         wgts1 = copy.deepcopy(self.wgts1)
         wgts1[(24, 25, 'xx')][:, 32] = 0.0
@@ -71,14 +71,14 @@ class Test_lstbin:
         output = hc.lstbin.lst_align(self.data1, self.lsts1, wgts=self.wgts1)
         nt.assert_equal(output[0][(24,25,'xx')].shape, (179, 64))
         nt.assert_equal(len(output[2]), 179)
-        nt.assert_almost_equal(output[2][0], 6.4681043387343315)
+        nt.assert_almost_equal(output[2][0], 6.4673213537662111)
 
     def test_lst_align_files(self):
         # basic execution
         hc.lstbin.lst_align_files(self.data_files[0][0], outdir="./", overwrite=True)
-        nt.assert_true(os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18492'))
-        if os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18492'):
-            shutil.rmtree('./zen.2458042.40141.xx.HH.uvA.L.0.18492')
+        nt.assert_true(os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18414'))
+        if os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18414'):
+            shutil.rmtree('./zen.2458042.40141.xx.HH.uvA.L.0.18414')
 
     def test_lst_bin_files(self):
         # basic execution
@@ -101,7 +101,7 @@ class Test_lstbin:
         shutil.rmtree('./zen.xx.NUM.0.21702.uv')
         # test skip nightly data
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=True, lst_low=6.55, lst_hi=6.6)
+                                verbose=False, lst_low=6.55, lst_hi=6.6)
         nt.assert_true(os.path.exists('./zen.xx.LST.0.26713.uv'))
         nt.assert_true(os.path.exists('./zen.xx.STD.0.26713.uv'))
         nt.assert_true(os.path.exists('./zen.xx.NUM.0.26713.uv'))
