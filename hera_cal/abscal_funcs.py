@@ -1007,7 +1007,8 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
 
 def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
                  kind='cubic', fill_value=None, zero_tol=1e-10, flag_extrapolate=True,
-                 smooth_and_slide=False, bounds_error=True, wgts=None, **wiener_kwargs):
+                 smooth_and_slide=False, bounds_error=True, wgts=None, force_zero=False,
+                 **wiener_kwargs):
     """
     interpolate complex visibility model onto the time & frequency basis of
     a data visibility.
@@ -1038,8 +1039,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
 
     smooth_and_slide : type=boolean, if True, interpolate smoothed data, compute difference between
             interpolated point and nearest neighbor, and slide unsmoothed data by that difference.
-            Note: this only gives accurate results when data_times binning is equal to or bigger
-            than the model_times binning. Slows down interpolation considerably.
+            Note: this only gives accurate results when data_lsts binning is equal to or bigger
+            than the model_lsts binning. Slows down interpolation considerably.
 
     bounds_error : type=boolean, if True, raise ValueError when extrapolating. If False, extrapolate.
 
@@ -1065,7 +1066,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
 
     # get nearest neighbor points
     freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs-x)), data_freqs))
-    time_nn = np.array(map(lambda x: np.argmin(np.abs(model_times-x)), data_times))
+    time_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts-x)), data_lsts))
     freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
 
     # loop over keys
@@ -1087,10 +1088,10 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
             fill = fill_value
 
         # interpolate
-        interp_real = interpolate.interp2d(model_freqs, model_times, real,
-                                           kind=kind, fill_value=fill, bounds_error=bounds_error)(data_freqs, data_times)
-        interp_imag = interpolate.interp2d(model_freqs, model_times, imag,
-                                           kind=kind, fill_value=fill, bounds_error=bounds_error)(data_freqs, data_times)
+        interp_real = interpolate.interp2d(model_freqs, model_lsts, real,
+                                           kind=kind, fill_value=fill, bounds_error=bounds_error)(data_freqs, data_lsts)
+        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag,
+                                           kind=kind, fill_value=fill, bounds_error=bounds_error)(data_freqs, data_lsts)
 
         # set weights
         w = np.ones_like(interp_real, dtype=float)
