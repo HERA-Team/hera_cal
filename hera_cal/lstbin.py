@@ -277,18 +277,23 @@ def lst_align(data, data_lsts, wgts=None, lst_grid=None, lst_init=np.pi, dlst=No
 
 
 def lst_align_arg_parser():
-    a = argparse.ArgumentParser(description='')
-    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
-    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
-    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
-    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
+    a = argparse.ArgumentParser(description='LST align files with a universal LST grid')
+    a.add_argument("data_files", nargs='*', type=str, help="miriad file paths to run LST align on.")
+    a.add_argument("--file_ext", default=".L.{:7.5f}", type=str, help="file extension for LST-aligned data. must have one placeholder for starting LST.")
+    a.add_argument("--lst_init", type=float, default=np.pi, help="start of LST grid (left-side of starting LST bin)")
+    a.add_argument("--wrap_point", type=float, default=2*np.pi, help="full day of LST")
+    a.add_argument("--dlst", type=float, default=None, help="LST grid interval spacing")
+    a.add_argument("--longitude", type=float, default=21.42830, help="longitude of observer in degrees east")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--miriad_kwargs", type=dict, default={}, help="kwargs to pass to miriad_to_data function")
+    a.add_argument("--align_kwargs", type=dict, default={}, help="kwargs to pass to lst_align function")
+    a.add_argument("--silence", default=False, action='store_true', help='silence output to stdout')
     return a
 
 
 def lst_align_files(data_files, file_ext=".L.{:7.5f}", lst_init=np.pi, wrap_point=2*np.pi, dlst=None,
-                    longitude=21.42830, overwrite=False, outdir=None, miriad_kwargs={}, **align_kwargs):
+                    longitude=21.42830, overwrite=None, outdir=None, miriad_kwargs={}, align_kwargs={},
+                    verbose=True):
     """
     Align a series of data files with a universal LST grid.
 
@@ -305,7 +310,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", lst_init=np.pi, wrap_poin
     dlst : type=float, LST grid bin interval, if None get it from first file in data_files
 
     longitude : type=float, longitude of observer in degrees east
-    
+
     overwrite : type=boolean, if True overwrite output files
 
     miriad_kwargs : type=dictionary, keyword arguments to feed to miriad_to_data()
@@ -343,16 +348,15 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", lst_init=np.pi, wrap_poin
         interp_lsts = wrap(interp_lsts)
 
         # check output
-        if outdir is None:
-            outdir = os.path.dirname(f)
         output_fname = os.path.basename(f) + file_ext.format(interp_lsts[0])
-        output_fname = os.path.join(outdir, output_fname)
 
         # write to miriad file
-        miriad_kwargs['overwrite'] = overwrite
-        miriad_kwargs['outdir'] = outdir
+        if overwrite is not None:
+            miriad_kwargs['overwrite'] = overwrite
+        if outdir is not None:
+            miriad_kwargs['outdir'] = outdir
         miriad_kwargs['start_jd'] = np.floor(times[0])
-        data_to_miriad(output_fname, interp_data, interp_lsts, freqs, apos, wgts=interp_wgts, **miriad_kwargs)
+        data_to_miriad(output_fname, interp_data, interp_lsts, freqs, apos, wgts=interp_wgts, verbose=verbose, **miriad_kwargs)
 
 
 def lst_bin_arg_parser():
@@ -392,7 +396,7 @@ def lst_bin_arg_parser():
 def lst_bin_files(data_files, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, verbose=True,
                   ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv", pol_select=None,
                   outdir=None, overwrite=False, history=' ', lst_low=None, lst_hi=None,
-                  align=False, align_kwargs={}, bin_kwargs={}, atol=1e-6, miriad_kwarg={}):
+                  align=False, align_kwargs={}, bin_kwargs={}, atol=1e-6, miriad_kwargs={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins. Miriad file meta data (frequency bins, antennas positions, time_array)
@@ -621,12 +625,12 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, ver
             continue
 
         # write to file
-        data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, wgts=wgt_data, **miriad_kwargs)
-        data_to_miriad(std_file, std_data, bin_lst, freq_array, antpos, **miriad_kwargs)
-        data_to_miriad(num_file, num_data, bin_lst, freq_array, antpos, **miriad_kwargs)
+        data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, wgts=wgt_data, verbose=verbose, **miriad_kwargs)
+        data_to_miriad(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
+        data_to_miriad(num_file, num_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
 
 
-def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flag_array=None, wgts=None,
+def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None,
                    outdir="./", write_miriad=True, overwrite=False, verbose=True, history=" ", return_uvdata=False,
                    longitude=21.42830, start_jd=None, instrument="HERA", telescope_name="HERA",
                    object_name='EOR', phase_type='drift', vis_units='uncalib', dec=-30.72152,
@@ -647,10 +651,7 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
 
     time_array : type=ndarray, array containing unique Julian Date time bins of data
 
-    flag_array : type=dictionary, DataContainer dictionary holding flags of data. if None will
-                use wgts and convert to flags
-
-    wgts : type=dictionary, DataContainer dictionary holding weights of data. only used if flag_array is None.
+    flags : type=dictionary, DataContainer dictionary matching data in shape, holding flags of data.
 
     outdir : type=str, output directory
 
@@ -725,10 +726,10 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     nsample_array = np.ones_like(data_array, np.float)
 
     # flags
-    if flag_array is None:
+    if flags is None:
         flag_array = np.zeros_like(data_array, np.float).astype(np.bool)
     else:
-        flag_array = np.moveaxis(map(lambda p: map(lambda bl: ~wgts[str(p)][bl].astype(np.bool), bls), pols), 0, -1)
+        flag_array = np.moveaxis(map(lambda p: map(lambda bl: flags[str(p)][bl].astype(np.bool), bls), pols), 0, -1)
         flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # configure baselines
@@ -813,7 +814,7 @@ def sigma_clip(array, sigma=4.0, axis=0):
     std = np.sqrt(astats.biweight_midvariance(array, axis=axis))
 
     # set cut data to nans
-    cut = np.where((array-mean)/std > sigma)
+    cut = np.where(np.abs(array-mean)/std > sigma)
     array[cut] *= np.nan
 
     return array
