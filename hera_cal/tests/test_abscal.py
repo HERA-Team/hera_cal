@@ -250,6 +250,8 @@ class Test_AbsCal:
 
         # make custom gain keys
         d, fl, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(self.data_fname, return_meta=True, pick_data_ants=False)
+        self.freq_array = f
+        self.antpos = ap
         p = map(lambda p: self.AC.pol2str[p][0], p)
         self.ap = ap
         self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k,p), a), p))
