@@ -53,4 +53,6 @@ if type(data_files[0]) is not list:
 kwargs['verbose'] = kwargs['silence'] is False
 del kwargs['silence']
 
+
 lstbin.lst_bin_files(data_files, **kwargs)
+
