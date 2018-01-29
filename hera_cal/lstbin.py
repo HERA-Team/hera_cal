@@ -24,6 +24,7 @@ import operator
 from astropy import stats as astats
 import gc as garbage_collector
 import datetime
+import aipy
 
 
 def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, dlst=None,
@@ -540,7 +541,7 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, ver
                     data_status[j][k] = [d, w, ap, a, f, t, l, p]
 
                     # erase unnecessary references
-                    del d, w, ap, a, f, t, l, p
+                    del d, w, ap, a, f, t, l, p, u
 
                 elif f_select[j][k] == False and old_f_select[j][k] == True:
                     # erase reference
@@ -632,6 +633,59 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, ver
 
         del bin_file, std_file, num_file, bin_data, std_data, num_data, bin_lst, flag_data, wgt_data
         garbage_collector.collect()
+
+
+def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
+    """
+    Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
+    This function directly edits the arrays in 'data' in memory, so as not to make a copy of data.
+
+    Parameters:
+    -----------
+    data : type=DataContainer, holding 2D visibility data, with [0] axis time and [1] axis frequency
+
+    bls : type=dictionary, same keys as data, values are 3D float arrays holding baseline vector
+                            in ENU frame in meters
+
+    freqs : type=ndarray, frequency array of data [Hz]
+
+    dlst : type=ndarray or float, delta-LST to rephase by [radians]. If a float, shift all integrations
+                by dlst, elif an ndarray, shift each integration by different amount w/ shape=(Ntimes)
+
+    lat : type=float, latitude of observer in degrees South
+    """
+    # get top2eq matrix
+    top2eq = uvutils.top2eq_m(0, lat*np.pi/180)
+
+    # check format of dlst
+    if type(dlst) == list or type(dlst) == np.ndarray:
+        lat = np.ones_like(dlst) * lat
+        zero = np.zeros_like(dlst)
+
+    else:
+        zero = 0
+
+    # get eq2top matrix
+    eq2top = uvutils.eq2top_m(dlst, lat*np.pi/180)
+
+    # get full rotation matrix
+    rot = eq2top.dot(top2eq)
+
+    # iterate over data keys
+    for i, k in data.keys():
+
+        # dot bls with new s-hat vector
+        u = bls[k].dot(rot.dot(np.array([0, 0, 1])).T)
+
+        # reshape u
+        if type(u) == float:
+            u = np.array([u])
+
+        # get phasor
+        phs = np.exp(-2j*np.pi*freqs[None, :]*u[:, None]/aipy.const.c*100)
+
+        # multiply into data
+        data[k] *= phs
 
 
 def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None,
