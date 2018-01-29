@@ -543,7 +543,7 @@ def lst_bin_files(data_files, lst_init=np.pi, dlst=None, wrap_point=2*np.pi, ver
                     data_status[j][k] = [d, w, ap, a, f, t, l, p]
 
                     # erase unnecessary references
-                    del d, w, ap, a, f, t, l, p, u
+                    del d, w, ap, a, f, t, l, p
 
                 elif f_select[j][k] == False and old_f_select[j][k] == True:
                     # erase reference
