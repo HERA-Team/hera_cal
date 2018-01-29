@@ -678,7 +678,9 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
         u = bls[k].dot(rot.dot(np.array([0, 0, 1])).T)
 
         # reshape u
-        if np.issubdtype(u, float):
+        if type(u) == np.ndarray:
+            pass
+        else:
             u = np.array([u])
 
         # get phasor
