@@ -672,13 +672,13 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
     rot = eq2top.dot(top2eq)
 
     # iterate over data keys
-    for i, k in data.keys():
+    for i, k in enumerate(data.keys()):
 
         # dot bls with new s-hat vector
         u = bls[k].dot(rot.dot(np.array([0, 0, 1])).T)
 
         # reshape u
-        if type(u) == float:
+        if np.issubdtype(u, float):
             u = np.array([u])
 
         # get phasor
