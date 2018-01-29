@@ -29,7 +29,7 @@ import aipy
 
 def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, dlst=None,
             lst_low=None, lst_hi=None, wrap_point=2*np.pi, atol=1e-8, median=False,
-            sigma_clip=False, sigma=2.0, return_no_avg=False, verbose=True):
+            sig_clip=False, sigma=2.0, min_N=4, return_no_avg=False, verbose=True):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -61,10 +61,12 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
 
     median : type=boolean, if True use median for LST binning, else use mean
 
-    sigma_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins
+    sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins
         on the real and imag components separately. Warning: This considerably slows down the code.
 
     sigma : type=float, input standard deviation to use for sigma clipping algorithm.
+
+    min_N : type=int, minimum number of points in LST bin to perform LST binning
 
     return_no_avg : type=boolean, if True, return binned but un-averaged data and wgts.
 
@@ -185,11 +187,11 @@ def lst_bin(data_list, lst_list, lst_grid=None, wgts_list=None, lst_init=np.pi, 
 
     # iterate over data and get statistics
     for i, key in enumerate(data.keys()):
-        if sigma_clip:
+        if sig_clip:
             for j, ind in enumerate(data[key].keys()):
-                data[key][ind] = astats.sigma_clip(np.array(data[key][ind]).real, sigma=sigma) + 1j*astats.sigma_clip(np.array(data[key][ind]).imag, sigma=sigma)
+                data[key][ind] = sigma_clip(np.array(data[key][ind]).real, sigma=sigma, min_N=min_N) + 1j*sigma_clip(np.array(data[key][ind]).imag, sigma=sigma, min_N=min_N)
                 wgts[key][ind] = np.array(wgts[key][ind])
-                wgts[key][ind][data[key][ind].mask] *= 0
+                wgts[key][ind][np.isnan(data[key][ind])] *= 0
         if median:
             real_avg = np.array(map(lambda ind: np.nanmedian(map(lambda r: r.real, data[key][ind]), axis=0), sorted(data[key].keys())))
             imag_avg = np.array(map(lambda ind: np.nanmedian(map(lambda r: r.imag, data[key][ind]), axis=0), sorted(data[key].keys())))
@@ -848,9 +850,9 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
         return uvd
 
 
-def sigma_clip(array, sigma=4.0, axis=0):
+def sigma_clip(array, sigma=4.0, axis=0, min_N=4):
     """
-    one-iteration sigma clipping algorithm
+    one-iteration sigma clipping algorithm. set clipped values to nan.
 
     Parameters:
     -----------
@@ -860,12 +862,19 @@ def sigma_clip(array, sigma=4.0, axis=0):
 
     axis : int, axis of array to sigma clip
 
+    min_N : int, minimum length of array to sigma clip, below which no sigma
+                clipping is performed.
+
     Output:
     -------
     array : same as input array, but clipped values have been set to np.nan
     """
     # ensure array is an array
     array = np.array(array)
+
+    # ensure array passes min_N criteria:
+    if len(array) < min_N:
+        return array
 
     # get robust location
     mean = np.nanmedian(array, axis=axis)
