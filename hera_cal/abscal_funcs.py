@@ -1101,6 +1101,9 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         # set flags
         if flags is not None:
             f = flags[k][time_nn, freq_nn]
+            # check f is boolean type
+            if np.issubdtype(f.dtype, np.float):
+                f = ~(f.astype(np.bool))
         else:
             f = np.zeros_like(real, bool)
          
