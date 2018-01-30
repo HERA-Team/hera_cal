@@ -1038,13 +1038,14 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
         return new_data
 
 
-def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
-                 kind='cubic', fill_value=None, zero_tol=1e-10, flag_extrapolate=True,
-                 smooth_and_slide=False, bounds_error=True, wgts=None, force_zero=False,
-                 **wiener_kwargs):
+def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=None, kx=3, ky=3, s=0,
+                 flag_extrapolate=True, medfilt_flagged=False, medfilt_window=(3, 7)):
     """
-    interpolate complex visibility model onto the time & frequency basis of
-    a data visibility.
+    Interpolate complex visibility model onto the time & frequency basis of
+    a data visibility. If model flags are provided, flags are propagated if a grid
+    point in data_lsts and data_freqs is a nearest neighbor with a flagged model pixel.
+
+    If model has flagged data, consider using the medfilt_flagged option.
 
     Parameters:
     -----------
@@ -1060,42 +1061,28 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
 
     data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
-    wgts : type=DataContainer, dictionary containing model weights
+    flags : type=DataContainer, dictionary containing model flags
 
-    kind : kind of interpolation method, type=str, options=['linear', 'cubic', ...]
-        see scipy.interpolate.interp2d for details
+    medfilt_flagged : type=bool, if True, run a median filter on flagged model pixels
 
-    fill_value : values to put for interpolation points outside training set
-        if None, values are extrapolated
+    medfilt_window : type=tuple, window for median filter across the (time, freq) axes.
 
-    zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
+    kx : type=int, type of spline to fit to freq axis of data. See scipy.interpolate.RectBivariateSpline
 
-    smooth_and_slide : type=boolean, if True, interpolate smoothed data, compute difference between
-             interpolated point and nearest neighbor, and slide unsmoothed data by that difference.
-             Note: this only gives accurate results when data_lsts binning is equal to or bigger
-             than the model_lsts binning. Slows down interpolation considerably.
- 
-    bounds_error : type=boolean, if True, raise ValueError when extrapolating. If False, extrapolate.
+    ky : type=int, type of spline to fit to time axis of data. See scipy.interpolate.RectBivariateSpline
 
-    flag_extrapolate : flag extrapolated data if True
+    s : type=int, smoothing factor for interpolation. Default is no smoothing. See scipy.interpolate.RectBivariateSpline
 
-    force_zero : type=boolean, force pixels near zero to be zero
+    flag_extrapolate : type=bool, flag extrapolated data if True
 
-    Output: (new_model, new_wgts)
+    Output: (new_model, new_flags)
     -------
     new_model : interpolated model, type=dictionary
-    new_wgts : wgts associated with model, type=dictionary
+    new_flags : flags associated with interpolated model, type=dictionary
     """
     # make flags
     new_model = odict()
-    if wgts is None:
-        wgts = odict()
-    else:
-        wgts = copy.deepcopy(wgts)
-
-    # smooth if desired
-    if smooth_and_slide:
-        smoothed = wiener(model, **wiener_kwargs)
+    new_flags = odict()
 
     # get nearest neighbor points
     freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs-x)), data_freqs))
@@ -1105,61 +1092,48 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
     # loop over keys
     for i, k in enumerate(model.keys()):
         # get model array
-        if smooth_and_slide:
-            m = smoothed[k]
-        else:
-            m = model[k]
+        m = model[k]
 
         # get real and imag separately
         real = np.real(m)
         imag = np.imag(m)
 
-        # set fill_value
-        if flag_extrapolate:
-            fill = np.nan
+        # set flags
+        if flags is not None:
+            f = flags[k][time_nn, freq_nn]
         else:
-            fill = fill_value
+            f = np.zeros_like(real, bool)
+         
+        # median filter flagged data if desired
+        if medfilt_flagged and flags is not None:
+            f_ext = int(medfilt_window[1]/2.)
+            t_ext = int(medfilt_window[0]/2.)
+            for find, tind in zip(freq_nn[f], time_nn[f]):
+                tlow, thi = tind-t_ext, tind+t_ext
+                flow, fhi = find-f_ext, find+f_ext
+                if tlow < 0: tlow = 0
+                if flow < 0: flow = 0
+                real[tind, find] = np.nanmedian(real[tlow:thi, flow:fhi])
+                imag[tind, find] = np.nanmedian(imag[tlow:thi, flow:fhi])
 
         # interpolate
-        interp_real = interpolate.interp2d(model_freqs, model_lsts, real,
-                                           kind=kind, fill_value=fill, bounds_error=bounds_error)(data_freqs, data_lsts)
-        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag,
-                                           kind=kind, fill_value=fill, bounds_error=bounds_error)(data_freqs, data_lsts)
+        real_spl = interpolate.RectBivariateSpline(model_lsts, model_freqs, real, kx=kx, ky=ky, s=s)
+        imag_spl = interpolate.RectBivariateSpline(model_lsts, model_freqs, imag, kx=kx, ky=ky, s=s)
+        interp_real = real_spl(data_lsts, data_freqs)
+        interp_imag = imag_spl(data_lsts, data_freqs)
 
-        # set weights
-        w = np.ones_like(interp_real, dtype=float)
+        # flag extrapolation if desired
         if flag_extrapolate:
-            w[np.isnan(interp_real) + np.isnan(interp_imag)] = 0.0
-        interp_real[np.isnan(interp_real)] = fill_value
-        interp_imag[np.isnan(interp_imag)] = fill_value
-
-        # force things near amplitude of zero to (positive) zero
-        if force_zero:
-            zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
-            interp_real[zero_select] *= 0.0 * interp_real[zero_select]
-            interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
-            w[zero_select] = 0.0
-
-        # get nearest neighbor and add difference
-        if smooth_and_slide:
-            # get interpolated difference
-            real_diff = interp_real - real[time_nn, freq_nn]
-            imag_diff = interp_imag - imag[time_nn, freq_nn]
-
-            # add difference to original unsmoothed model
-            interp_real = np.real(model[k][time_nn, freq_nn]) + real_diff
-            interp_imag = np.imag(model[k][time_nn, freq_nn]) + imag_diff
+            time_extrap = np.where((data_lsts > model_lsts.max() + 1e-6)|(data_lsts < model_lsts.min() - 1e-6))
+            freq_extrap = np.where((data_freqs > model_freqs.max() + 1e-6)|(data_freqs < model_freqs.min() - 1e-6))
+            f[time_extrap, :] = True
+            f[:, freq_extrap] = True
 
         # rejoin
         new_model[k] = interp_real + 1j*interp_imag
+        new_flags[k] = f
 
-        # configure weights
-        if k in wgts:
-            wgts[k] = wgts[k][time_nn, freq_nn] * w
-        else:
-            wgts[k] = w
-
-    return DataContainer(new_model), DataContainer(wgts)
+    return DataContainer(new_model), DataContainer(new_flags)
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
