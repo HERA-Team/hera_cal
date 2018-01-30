@@ -125,15 +125,14 @@ class Test_AbsCal_Funcs:
         m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                        self.time_array[::2], self.freq_array[::2])
         nt.assert_equal(m[(24, 25, 'xx')].shape, (30, 32))
-        # test smooth_and_slide
+        # test flag propagation
         m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
-                                       self.time_array, self.freq_array, smooth_and_slide=True)
-        nt.assert_equal(m[(24, 25, 'xx')].shape, (60, 64))
-
-        # test force_zero
+                                       self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=True)
+        nt.assert_true(mf[(24,25,'xx')][10, 0])
+        # test flag extrapolation
         m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
-                                       self.time_array, self.freq_array, force_zero=True)
-        nt.assert_equal(m[(24, 25, 'xx')].shape, (60, 64))
+                                       self.time_array+.0001, self.freq_array, flags=self.wgts, flag_extrapolate=True)
+        nt.assert_true(mf[(24,25,'xx')][-1].min())
 
     def test_gains2calfits(self):
         cfname = os.path.join(DATA_PATH, 'ex.calfits')
