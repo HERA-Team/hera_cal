@@ -12,7 +12,7 @@ class Test_HERACal(UVCal):
         meta, gains, vis, xtalk = omni.from_fits(fn)
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         optional = {'observer': 'heracal'} #because it's easier than changing the fits header
-        hc = cal_formats.HERACal(meta, gains, optional=optional)
+        hc = cal_formats.HERACal(meta, gains, **optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
@@ -27,6 +27,13 @@ class Test_HERACal(UVCal):
             else:
                 nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
 
+    def test_exception(self):
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
+        meta, gains, vis, xtalk = omni.from_fits(fn)
+        meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
+        optional = {'observer': 'heracal', 'cal_style':'sky'} #because it's easier than changing the fits header
+        nt.assert_raises(AttributeError, cal_formats.HERACal, meta, gains, **optional)
+
     def test_delayHC(self):
         # make test data
         meta, gains, vis, xtalk = omni.from_fits(os.path.join(
@@ -37,7 +44,7 @@ class Test_HERACal(UVCal):
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         meta.pop('chisq9x')
         optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
-        hc = cal_formats.HERACal(meta, gains, optional=optional, DELAY=True)
+        hc = cal_formats.HERACal(meta, gains, DELAY=True, **optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'))

@@ -9,7 +9,7 @@ class HERACal(UVCal):
        This can then be saved to a file, plotted, etc.
     '''
 
-    def __init__(self, meta, gains, flags=None, DELAY=False, ex_ants=[], appendhist='', optional={}):
+    def __init__(self, meta, gains, flags=None, DELAY=False, ex_ants=[], appendhist='', **optional):
         '''Initialize a UVCal object.
             Args:
                 meta: meta information dictionary. As returned by from_fits or from_npz.
@@ -86,9 +86,7 @@ class HERACal(UVCal):
         antarray = list(map(int, ants))
         numarray = list(map(int, allants))
 
-        # set the optional attributes to UVCal class.
-        for key in optional:
-            setattr(self, key, optional[key])
+        # set UVCal attributes
         self.telescope_name = 'HERA'
         self.Nfreqs = nfreqs
         self.Njones = len(pols)
@@ -112,10 +110,31 @@ class HERACal(UVCal):
         self.time_array = time
         self.integration_time = meta['inttime']
         self.gain_convention = 'divide'
+        self.set_redundant()
         self.x_orientation = 'east'
         self.time_range = [self.time_array[0], self.time_array[-1]]
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
         
+        # set the optional attributes to UVCal class, which may overwrite previous
+        # parameters set by default
+        for key in optional:
+            setattr(self, key, optional[key])
+
+        # look for cal_style in optional
+        if 'cal_style' in optional:
+            if optional['cal_style'] == 'redundant':
+                pass
+            elif optional['cal_style'] == 'sky':
+                # set cal style to sky, and set required parameters
+                self.set_sky()
+                reqs = ['ref_antenna_name', 'sky_catalog', 'sky_field']
+                for r in reqs:
+                    if r not in optional:
+                        raise AttributeError("if cal_style=='sky', then {} must be fed".format(r))
+                    setattr(self, r, optional[r])
+            else:
+                self.set_unknown_cal_type()
+
         # adding new axis for the spectral window axis. This is default to 1.
         # This needs to change when support for Nspws>1 in pyuvdata.
         self.quality_array = chisqarray[:, np.newaxis, :, :, :]
