@@ -90,7 +90,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
         dlst = np.median(np.diff(lst_list[0]))
 
     # construct lst_grid
-    lst_grid = make_lst_grid(dlst, lst_start=lst_start)
+    lst_grid = make_lst_grid(dlst, lst_start=lst_start, verbose=verbose)
 
     # test for special case of lst grid restriction
     if lst_low is not None and lst_hi is not None and lst_hi < lst_low:
@@ -101,6 +101,10 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
             lst_grid = lst_grid[lst_grid > (lst_low - atol)]
         if lst_hi is not None:
             lst_grid = lst_grid[lst_grid < (lst_hi + atol)]
+
+    # Raise Exception if lst_grid is empty
+    if len(lst_grid) == 0:
+        raise ValueError("len(lst_grid) == 0; consider changing lst_low and/or lst_hi.")
 
     # move lst_grid centers to the left
     lst_grid_left = lst_grid - dlst / 2
@@ -200,11 +204,11 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
         if median:
             real_avg = np.array(map(lambda ind: np.nanmedian(map(lambda r: r.real, data[key][ind]), axis=0), sorted(data[key].keys())))
             imag_avg = np.array(map(lambda ind: np.nanmedian(map(lambda r: r.imag, data[key][ind]), axis=0), sorted(data[key].keys())))
-            f_min = np.array(map(lambda ind: np.nanmin(flags[key][ind], axis=0), flags[key].keys()))
+            f_min = np.array(map(lambda ind: np.nanmin(flags[key][ind], axis=0), sorted(flags[key].keys())))
         else:
             real_avg = np.array(map(lambda ind: np.nanmean(map(lambda r: r.real, data[key][ind]), axis=0), sorted(data[key].keys())))
             imag_avg = np.array(map(lambda ind: np.nanmean(map(lambda r: r.imag, data[key][ind]), axis=0), sorted(data[key].keys())))
-            f_min = np.array(map(lambda ind: np.nanmin(flags[key][ind], axis=0), flags[key].keys()))
+            f_min = np.array(map(lambda ind: np.nanmin(flags[key][ind], axis=0), sorted(flags[key].keys())))
         real_stan_dev = np.array(map(lambda ind: np.nanstd(map(lambda r: r.real, data[key][ind]), axis=0), sorted(data[key].keys())))
         imag_stan_dev = np.array(map(lambda ind: np.nanstd(map(lambda r: r.imag, data[key][ind]), axis=0), sorted(data[key].keys())))
         num_pix = np.array(map(lambda ind: np.nansum(map(lambda r: r.real*0+1, data[key][ind]), axis=0), sorted(data[key].keys())))
@@ -223,7 +227,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
     return data_avg, flags_min, data_std, lst_bins, data_num
 
 
-def lst_align(data, data_lsts, flags=None, dlst=None, lst_start=0,
+def lst_align(data, data_lsts, flags=None, dlst=None,
               verbose=True, atol=1e-6, **interp_kwargs):
     """
     Interpolate complex visibilities to align time integrations with an LST grid. An LST grid
@@ -241,8 +245,6 @@ def lst_align(data, data_lsts, flags=None, dlst=None, lst_start=0,
                             convert appropriately.
 
     dlst : type=float, delta-LST spacing for lst_grid
-
-    lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
     
     atol : type=float, absolute tolerance in comparing LST bins
 
@@ -261,10 +263,14 @@ def lst_align(data, data_lsts, flags=None, dlst=None, lst_start=0,
     # get lst if not fed grid
     if dlst is None:
         dlst = np.median(np.diff(data_lsts))
-    lst_grid = make_lst_grid(dlst, lst_start=lst_start)
 
     # unwrap lsts
-    data_lsts[data_lsts < lst_start] += 2*np.pi
+    if data_lsts[-1] < data_lsts[0]:
+        data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
+
+    # make lst_grid
+    lst_start = np.max([data_lsts[0] - 1e-5, 0])
+    lst_grid = make_lst_grid(dlst, lst_start=lst_start, verbose=verbose)
 
     # get frequency info
     Nfreqs = data[data.keys()[0]].shape[1]
@@ -274,11 +280,7 @@ def lst_align(data, data_lsts, flags=None, dlst=None, lst_start=0,
     # restrict lst_grid based on interpolate-able points
     lst_start = data_lsts[0]
     lst_end = data_lsts[-1]
-    if lst_start > lst_end:
-        lst_grid = lst_grid[(lst_grid > lst_start - dlst/2 - atol) | (lst_grid < lst_end + dlst/2 + atol)]
-
-    else:
-        lst_grid = lst_grid[(lst_grid > lst_start - dlst/2 - atol) & (lst_grid < lst_end + dlst/2 + atol)]
+    lst_grid = lst_grid[(lst_grid > lst_start - dlst/2 - atol) & (lst_grid < lst_end + dlst/2 + atol)]
 
     # interpolate data
     interp_data, interp_flags = abscal.interp2d_vis(data, data_lsts, data_freqs, lst_grid, model_freqs, flags=flags, **interp_kwargs)
@@ -295,7 +297,6 @@ def lst_align_arg_parser():
     a.add_argument("--file_ext", default=".L.{:7.5f}", type=str, help="file extension for LST-aligned data. must have one placeholder for starting LST.")
     a.add_argument("--outdir", default=None, type=str, help='directory for output files')
     a.add_argument("--dlst", type=float, default=None, help="LST grid interval spacing")
-    a.add_argument("--lst_start", type=float, default=0, help="starting LST for binner as it sweeps across 2pi LST")
     a.add_argument("--longitude", type=float, default=21.42830, help="longitude of observer in degrees east")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
     a.add_argument("--miriad_kwargs", type=dict, default={}, help="kwargs to pass to miriad_to_data function")
@@ -304,7 +305,7 @@ def lst_align_arg_parser():
     return a
 
 
-def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, lst_start=0, longitude=21.42830,
+def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, longitude=21.42830,
                     overwrite=None, outdir=None, miriad_kwargs={}, align_kwargs={}, verbose=True):
     """
     Align a series of data files with a universal LST grid.
@@ -316,8 +317,6 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, lst_start=0, l
     file_ext : type=str, file_extension for each file in data_files when writing to disk
 
     dlst : type=float, LST grid bin interval, if None get it from first file in data_files
-
-    lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
 
     longitude : type=float, longitude of observer in degrees east
 
@@ -347,7 +346,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, lst_start=0, l
          pols) = abscal.UVData2AbsCalDict(f, return_meta=True, return_wgts=False)
 
         # lst align
-        interp_data, interp_flgs, interp_lsts = lst_align(data, lsts, flags=flgs, dlst=dlst, lst_start=lst_start, **align_kwargs)
+        interp_data, interp_flgs, interp_lsts = lst_align(data, lsts, flags=flgs, dlst=dlst, **align_kwargs)
 
         # check output
         output_fname = os.path.basename(f) + file_ext.format(interp_lsts[0])
@@ -397,7 +396,7 @@ def lst_bin_arg_parser():
 
 def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
                   pol_select=None, outdir=None, overwrite=False, history=' ', lst_start=0,
-                  lst_low=None, lst_hi=None, align=False, align_kwargs={}, bin_kwargs={},
+                  align=False, align_kwargs={}, bin_kwargs={},
                   atol=1e-6, miriad_kwargs={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
@@ -407,16 +406,13 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     Parameters:
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
-            paths to miriad files from a particular night
+            paths to miriad files from a particular night. Frequency axis of each file must 
+            be identical.
 
     dlst : type=float, LST grid bin spacing. If None will get this from the first file in data_files.
 
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
 
-    lst_low : type=float, lower bound in lst grid
-
-    lst_hi : type=float, upper bound in lst grid
-    
     ntimes_per_file : type=int, number of LST bins in a single file
 
     file_ext : type=str, extension to "zen." for output miriad files. must have three
@@ -453,27 +449,21 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         dlst = int_time
 
     # get file start and stop times
-    data_times = np.array(map(lambda f: np.array(utils.get_miriad_times(f, add_int_buffer=True)).T, data_files))[:, :, :2] % (2*np.pi)
+    data_times = map(lambda f: np.array(utils.get_miriad_times(f, add_int_buffer=True)).T[:, :2] % (2*np.pi), data_files)
 
-    # wrap data_times less than lst_start
-    data_times[data_times < lst_start] += 2*np.pi
+    # unwrap data_times less than lst_start, get starting and ending lst
+    start_lst = 100
+    end_lst = -1
+    for dt in data_times:
+        # unwrap starts below lst_start
+        dt[:, 0][dt[:, 0] < lst_start] += 2*np.pi
 
-    # get starting lst
-    try:
-        start_lst = np.min(data_times[:, :, 0][data_times[:, :, 0] >= lst_start]) - dlst/2
-    except ValueError:
-        raise ValueError("starting point for all files in data_list are < lst_start")
-
-    # get ending lst
-    try:
-        end_lst = np.max(data_times[:, :, 1][data_times[:, :, 1] > lst_start])
-        if end_lst < start_lst:
-            end_lst += 2*np.pi
-    except ValueError:
-        raise ValueError("ending point for all files in data_list are < lst_start")
+        # get start and end lst
+        start_lst = np.min(np.append(start_lst, dt[:, 0]))
+        end_lst = np.max(np.append(end_lst, dt.ravel()))
 
     # create lst_grid
-    lst_grid = make_lst_grid(dlst, lst_start=start_lst)
+    lst_grid = make_lst_grid(dlst, lst_start=start_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
     # get starting and stopping indices
@@ -566,14 +556,14 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             if align:
                 # concatenate data across night
                 night_data = reduce(operator.add, nightly_data_list)
-                night_flgs = reduce(operator.mul, nightly_flgs_list)
+                night_flgs = reduce(operator.add, nightly_flgs_list)
                 night_lsts = np.concatenate(nightly_lst_list)
 
                 del nightly_data_list, nightly_flgs_list, nightly_lst_list
 
                 # align data
                 night_data, night_flgs, night_lsts = lst_align(night_data, night_lsts, flags=night_flgs,
-                                                               lst_start=lst_start, dlst=dlst, atol=atol, **align_kwargs)
+                                                               dlst=dlst, atol=atol, **align_kwargs)
 
                 nightly_data_list = [night_data]
                 nightly_flgs_list = [night_flgs]
@@ -659,7 +649,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
     lst_grid : type=ndarray, dtype=float, uniform LST grid marking the center of each LST bin
     """
     # check 2pi is equally divisible by dlst
-    if (np.isclose((2*np.pi / dlst) % 1, 0.0, atol=1e-6) is False) and (np.isclose((2*np.pi / dlst) % 1, 1.0, atol=1e-6) is False):
+    if (np.isclose((2*np.pi / dlst) % 1, 0.0, atol=1e-5) is False) and (np.isclose((2*np.pi / dlst) % 1, 1.0, atol=1e-5) is False):
         # generate array of appropriate dlsts
         dlsts = 2*np.pi / np.arange(1, 1000000).astype(np.float)
 
@@ -667,8 +657,8 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         dlst_diff = dlsts - dlst
         dlst_diff[dlst_diff < 0] = 10
         new_dlst = dlsts[np.argmin(dlst_diff)]
-        abscal.echo("2pi is not equally divisible by input dlst ({:.6f}) at 1 part in 1e6. "
-                    "Using {:.10f} instead.".format(dlst, new_dlst), verbose=verbose)
+        abscal.echo("2pi is not equally divisible by input dlst ({:.16f}) at 1 part in 1e5.\n"
+                    "Using {:.16f} instead.".format(dlst, new_dlst), verbose=verbose)
         dlst = new_dlst
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
