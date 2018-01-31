@@ -816,6 +816,8 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
 
     pick_data_ants : boolean, if True and return_meta=True, return only antennas in data
 
+    return_wgts : boolean, if True, return data flags as data weights [dtype=float]
+
     Output:
     -------
     if return_meta is True:
@@ -824,12 +826,12 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
         (data, flags)
 
     data : dictionary containing baseline-pol complex visibility data
-    flags : dictionary containing data flags
+    flags : dictionary containing data flags, if return_wgts=True then this is a weight dict
     antpos : dictionary containing antennas numbers as keys and position vectors
     ants : ndarray containing unique antennas
     freqs : ndarray containing frequency channels (Hz)
     times : ndarray containing time stamps data in julian date
-    lst : ndarray containing time stamps in local sidereal time
+    lst : ndarray containing time stamps in local sidereal time [radians]
     pols : ndarray containing polarizations of data in string format ('xx', or 'yy')
     """
     # check datanames is not a list
