@@ -27,20 +27,23 @@ class Test_lstbin:
                            sorted(glob.glob(DATA_PATH+'/zen.2458043.4*uvA')),
                            sorted(glob.glob(DATA_PATH+'/zen.2458044.4*uvA'))]
 
-        (self.data1, self.wgts1, self.ap1, a, self.freqs1, t, self.lsts1,
-         p) = hc.abscal.UVData2AbsCalDict(self.data_files[0], return_meta=True, return_wgts=True)
-        (self.data2, self.wgts2, ap, a, self.freqs2, t, self.lsts2,
-         p) = hc.abscal.UVData2AbsCalDict(self.data_files[1], return_meta=True, return_wgts=True)
-        (self.data3, self.wgts3, ap, a, self.freqs3, t, self.lsts3,
-         p) = hc.abscal.UVData2AbsCalDict(self.data_files[2], return_meta=True, return_wgts=True)
+        (self.data1, self.flgs1, self.ap1, a, self.freqs1, t, self.lsts1,
+         p) = hc.abscal.UVData2AbsCalDict(self.data_files[0], return_meta=True)
+        (self.data2, self.flgs2, ap, a, self.freqs2, t, self.lsts2,
+         p) = hc.abscal.UVData2AbsCalDict(self.data_files[1], return_meta=True)
+        (self.data3, self.flgs3, ap, a, self.freqs3, t, self.lsts3,
+         p) = hc.abscal.UVData2AbsCalDict(self.data_files[2], return_meta=True)
         self.data_list = [self.data1, self.data2, self.data3]
-        self.wgts_list = [self.wgts1, self.wgts2, self.wgts3]
+        self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]
 
     def test_lstbin(self):
+        dlst = 0.0007830490163484
         # test basic execution
-        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, wgts_list=self.wgts_list, dlst=0.001, median=True, lst_low=np.pi, lst_hi=2*np.pi)
-        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, wgts_list=self.wgts_list)
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
+                                   median=True, lst_low=0, lst_hi=np.pi, verbose=False)
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
+                                   verbose=False)
         # check shape and dtype
         nt.assert_equal(output[0][(24,25,'xx')].dtype, np.complex)
         nt.assert_equal(output[0][(24,25,'xx')].shape, (224, 64))
@@ -51,81 +54,89 @@ class Test_lstbin:
         nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[190,30], 2)
         nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[220,30], 1)
         # check with large spacing lst_grid
-        lst_grid = np.arange(np.pi, 3*np.pi, 0.01)
-        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, lst_grid=lst_grid)
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[10,30], 37)
-        # check wgts are propagated
-        wgts1 = copy.deepcopy(self.wgts1)
-        wgts1[(24, 25, 'xx')][:, 32] = 0.0
-        wgts2 = copy.deepcopy(self.wgts2)
-        wgts2[(24, 25, 'xx')][:, 32] = 0.0
-        wgts3 = copy.deepcopy(self.wgts3)
-        wgts_list = [wgts1, wgts2, wgts3]
-        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, wgts_list=wgts_list)
-        nt.assert_almost_equal(output[1][(24, 25, 'xx')][0, 32], 0.0)
-        nt.assert_almost_equal(output[1][(24, 25, 'xx')][180, 32], 0.5)
-        nt.assert_almost_equal(output[1][(24, 25, 'xx')][210, 32], 1.0)
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=.01, verbose=False)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[10,30], 39)
+        # check flgs are propagated
+        flgs1 = copy.deepcopy(self.flgs1)
+        flgs1[(24, 25, 'xx')][:, 32] = True
+        flgs2 = copy.deepcopy(self.flgs2)
+        flgs2[(24, 25, 'xx')][:, 32] = True
+        flgs3 = copy.deepcopy(self.flgs3)
+        flgs_list = [flgs1, flgs2, flgs3]
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=flgs_list)
+        nt.assert_almost_equal(output[1][(24, 25, 'xx')][0, 32], True)
+        nt.assert_almost_equal(output[1][(24, 25, 'xx')][180, 32], False)
+        nt.assert_almost_equal(output[1][(24, 25, 'xx')][210, 32], False)
         # test return no avg
-        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, wgts_list=self.wgts_list, return_no_avg=True)
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=self.flgs_list, return_no_avg=True)
         nt.assert_equal(len(output[0][output[0].keys()[0]][100]), 3)
         nt.assert_equal(len(output[0][output[0].keys()[0]][100][0]), 64)
         # test switch bl
         conj_data3 = DataContainer(odict(map(lambda k: (hc.lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys())))
         data_list = [self.data1, self.data2, conj_data3]
-        output = hc.lstbin.lst_bin(data_list, self.lst_list)
+        output = hc.lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
         nt.assert_equal(output[0][(24,25,'xx')].shape, (224, 64))
 
     def test_lst_align(self):
         # test basic execution
-        output = hc.lstbin.lst_align(self.data1, self.lsts1, wgts=self.wgts1)
-        nt.assert_equal(output[0][(24,25,'xx')].shape, (179, 64))
-        nt.assert_equal(len(output[2]), 179)
-        nt.assert_almost_equal(output[2][0], 6.4673213537662111)
+        output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=dlst, flags=self.flgs1, flag_extrapolate=True, verbose=False)
+        nt.assert_equal(output[0][(24,25,'xx')].shape, (180, 64))
+        nt.assert_equal(len(output[2]), 180)
+        nt.assert_almost_equal(output[2][0], 0.1836249943336998)
+        # test flag extrapolate
+        nt.assert_true(output[1][(24,25,'xx')][0].min())
+        # test no dlst
+        output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
+        # test wrapped lsts
+        lsts = (self.lsts1 + 6) % (2*np.pi)
+        output = hc.lstbin.lst_align(self.data1, lsts, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
+        nt.assert_almost_equal(output[2][150], 0.018401651884187409)
 
     def test_lst_align_files(self):
         # basic execution
         hc.lstbin.lst_align_files(self.data_files[0][0], outdir="./", overwrite=True)
-        nt.assert_true(os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18414'))
-        if os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18414'):
-            shutil.rmtree('./zen.2458042.40141.xx.HH.uvA.L.0.18414')
+        nt.assert_true(os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18362'))
+        if os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18362'):
+            shutil.rmtree('./zen.2458042.40141.xx.HH.uvA.L.0.18362')
 
     def test_lst_bin_files(self):
         # basic execution
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.18492.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.18492.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.18492.uv'))
-        shutil.rmtree('./zen.xx.LST.0.18492.uv')
-        shutil.rmtree('./zen.xx.STD.0.18492.uv')
-        shutil.rmtree('./zen.xx.NUM.0.18492.uv')
+        nt.assert_true(os.path.exists('./zen.xx.LST.0.18441.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.STD.0.18441.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.NUM.0.18441.uv'))
+        shutil.rmtree('./zen.xx.LST.0.18441.uv')
+        shutil.rmtree('./zen.xx.STD.0.18441.uv')
+        shutil.rmtree('./zen.xx.NUM.0.18441.uv')
         # tst lst_align
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, lst_low=6.5, lst_hi=6.6, align=True)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.21702.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.21702.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.21702.uv'))
-        shutil.rmtree('./zen.xx.LST.0.21702.uv')
-        shutil.rmtree('./zen.xx.STD.0.21702.uv')
-        shutil.rmtree('./zen.xx.NUM.0.21702.uv')
-        # test skip nightly data
-        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, lst_low=6.62, lst_hi=6.65)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.33682.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.33682.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.33682.uv'))
-        shutil.rmtree('./zen.xx.LST.0.33682.uv')
-        shutil.rmtree('./zen.xx.STD.0.33682.uv')
-        shutil.rmtree('./zen.xx.NUM.0.33682.uv')
+                                verbose=False, align=True)
+        nt.assert_true(os.path.exists('./zen.xx.LST.0.18441.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.STD.0.18441.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.NUM.0.18441.uv'))
+        shutil.rmtree('./zen.xx.LST.0.18441.uv')
+        shutil.rmtree('./zen.xx.STD.0.18441.uv')
+        shutil.rmtree('./zen.xx.NUM.0.18441.uv')
+
+        data_files = [sorted(glob.glob(DATA_PATH+'/zen.2458042.*uvA')),
+                      sorted(glob.glob(DATA_PATH+'/zen.2458043.*uvA')),
+                      sorted(glob.glob(DATA_PATH+'/zen.2458044.*uvA'))]
         # test data_list is empty
-        data_files = [[self.data_files[0][0]], [self.data_files[-1][-1]]]
         hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
-                                verbose=False, lst_low=6.52, lst_hi=6.539)
-        # test exception
-        nt.assert_raises(ValueError, hc.lstbin.lst_bin_files, self.data_files, lst_low=0.21, lst_hi=0.19)
+                                verbose=False)
+        nt.assert_true(os.path.exists("./zen.xx.LST.0.18441.uv"))
+        nt.assert_true(os.path.exists("./zen.xx.LST.4.74175.uv"))
+        output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
+                                       glob.glob("./zen.xx.STD*"),
+                                       glob.glob("./zen.xx.NUM*")])
+        for of in output_files:
+            if os.path.exists(of):
+                shutil.rmtree(of)
+
         # test smaller ntimes file output, sweeping through f_select
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=120, outdir="./", overwrite=True,
-                                verbose=True)
+                                verbose=False)
         output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
                                        glob.glob("./zen.xx.STD*"),
                                        glob.glob("./zen.xx.NUM*")])
@@ -141,10 +152,8 @@ class Test_lstbin:
 
     def test_data_to_miriad(self):
         # test basic execution
-        flags1 = odict(map(lambda k: (k, ~(self.wgts1[k].astype(np.bool))), self.wgts1.keys()))
-        flags1 = hc.datacontainer.DataContainer(flags1)
         hc.lstbin.data_to_miriad("ex.uv", self.data1, self.lsts1, self.freqs1, self.ap1,
-                                 flags=flags1, outdir="./", start_jd=2458042)
+                                 flags=self.flgs1, outdir="./", start_jd=2458042)
         # test w/ no flags
         hc.lstbin.data_to_miriad("ex.uv", self.data1, self.lsts1, self.freqs1, self.ap1,
                                  outdir="./", start_jd=2458042, overwrite=True)
@@ -172,38 +181,40 @@ class Test_lstbin:
         arr = hc.lstbin.sigma_clip(x, sigma=2.0)
         nt.assert_equal(np.isnan(arr[10]), True)
         nt.assert_equal(np.isnan(arr[11]), True)
-
-    def test_wrap(self):
-        # basic execution
-        arr = np.arange(np.pi, 3*np.pi, 0.01)
-        arr_wrap = hc.lstbin.wrap(arr)
-        nt.assert_equal(arr_wrap[-1], 3.138407346410073)
-        # starting below zero
-        arr = np.arange(-np.pi, np.pi, 0.01)
-        arr_wrap = hc.lstbin.wrap(arr)
-        nt.assert_equal(arr_wrap[0], 3.141592653589793)
-        # starting above 2pi
-        arr = np.arange(3*np.pi, 5*np.pi, 0.01)
-        arr_wrap = hc.lstbin.wrap(arr)
-        nt.assert_equal(arr_wrap[0], 3.141592653589793)
-        
-    def test_unwrap(self):
-        # test basic execution
-        arr = np.arange(np.pi, 3*np.pi, 0.01)
-        arr_wrap = hc.lstbin.wrap(arr)
-        arr_unwrap = hc.lstbin.unwrap(arr_wrap)
-        nt.assert_almost_equal(np.abs(arr-arr_unwrap).max(), 0)
-        # start below zero
-        arr_unwrap = hc.lstbin.unwrap(arr_wrap - 2*np.pi)
-        nt.assert_almost_equal(np.abs(arr-arr_unwrap).max(), 0)
-        # start above 2pi
-        arr_unwrap = hc.lstbin.unwrap(arr_wrap + 2*np.pi)
-        nt.assert_almost_equal(np.abs(arr-arr_unwrap + 2*np.pi).max(), 0)
+        # test array performance
+        x = np.array(map(lambda s: stats.norm.rvs(0, s, 100), np.arange(1, 5.1, 1)))
+        x[0, 50] = 100
+        x[4, 50] = 5
+        arr = hc.lstbin.sigma_clip(x, sigma=2.0)
+        nt.assert_true(np.isnan(arr[0,50]))
+        nt.assert_false(np.isnan(arr[4,50]))
 
     def test_switch_bl(self):
         # test basic execution
         key = (1, 2, 'xx')
         sw_k = hc.lstbin.switch_bl(key)
         nt.assert_equal(sw_k, (2, 1, 'xx'))
+
+    def test_lst_rephase(self):
+        # test single dlst
+        data = copy.deepcopy(self.data1)
+        bls = odict(map(lambda k: (k, self.ap1[k[0]] - self.ap1[k[1]]), self.data1.keys()))
+        hc.lstbin.lst_rephase(data, bls, self.freqs1, dlst=.001)
+        r = data[(24, 25, 'xx')] / self.data1[(24,25,'xx')]
+        # ensure a single delay across time has been applied
+        diff = np.diff(np.angle(r[50,10:54]))
+        nt.assert_true(np.isclose(diff - np.nanmedian(diff), 0).min())
+        nt.assert_true(np.isclose(np.nanmax(np.abs(r)), 1))
+        nt.assert_true(np.isclose(np.nanmin(np.abs(r)), 1))
+        nt.assert_true(np.isclose(r[10,50], r[11,50]))
+        # test multiple dlst
+        dlst = np.linspace(.0005, .001, 180)
+        data = copy.deepcopy(self.data1)
+        hc.lstbin.lst_rephase(data, bls, self.freqs1, dlst=dlst)
+        r = data[(24,25,'xx')] / self.data1[(24,25,'xx')]
+        # ensure multiple delays across time have been applied
+        nt.assert_false(np.isclose(r[10, 50], r[11, 50]))
+
+
 
 
