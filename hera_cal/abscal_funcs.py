@@ -1061,7 +1061,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
-    flags : type=DataContainer, dictionary containing model flags
+    flags : type=DataContainer, dictionary containing model flags. Can also contain model wgts and
+                                will convert appropriately.
 
     medfilt_flagged : type=bool, if True, run a median filter on flagged model pixels
 
