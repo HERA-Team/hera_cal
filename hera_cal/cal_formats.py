@@ -19,6 +19,12 @@ class HERACal(UVCal):
                 ex_ants (optional): antennas that are excluded from gains.
                 appendhist (optional): string to append to history
                 optional (optional): dictionary of optional parameters to be passed to UVCal object.
+
+            Notes:
+                The UVCal parameter cal_style is by default set to 'redundant'. It can be changed
+                by feeding cal_style as a keyword argument to HERACal. If cal_style is set to 'sky',
+                then there are additional required parameters. See pyuvdata.UVCal doc for details.
+                If cal_style is neither redundant or sky, it is set to unknown.
         '''
 
         super(HERACal, self).__init__()
