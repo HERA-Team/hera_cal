@@ -79,7 +79,7 @@ class Test_lstbin:
 
     def test_lst_align(self):
         # test basic execution
-        output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=dlst, flags=self.flgs1, flag_extrapolate=True, verbose=False)
+        output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         nt.assert_equal(output[0][(24,25,'xx')].shape, (180, 64))
         nt.assert_equal(len(output[2]), 180)
         nt.assert_almost_equal(output[2][0], 0.1836249943336998)
