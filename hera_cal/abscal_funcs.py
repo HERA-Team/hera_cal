@@ -1073,9 +1073,10 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
-                  gain_convention='multiply', overwrite=False, **kwargs):
+                  overwrite=False, gain_convention='multiply', cal_style='redundant',
+                  ref_antenna_name="unkwn", sky_field="unkwn", sky_catalog="unkwn", **kwargs):
     """
-    write out gain_array in calfits file format.
+    Write out gain_array in calfits file format.
 
     Parameters:
     -----------
@@ -1089,12 +1090,14 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
 
     pol_array : ndarray, polarization array of data, in 'x' or 'y' form. 
 
+    overwrite : type=boolean, if True overwrite output files if they already exist
+
+    Optional Parameters: See pyuvdata.UVCal documentation for details on optional parameters
+    -------------------
     gain_convention : type=str, either multiply or divide in gain solutions
                         options=['multiply', 'divide']
 
-    overwrite : type=boolean, if True overwrite output files if they already exist
-
-    kwargs : additional kwargs for meta in cal_formats.HERACal(meta, gains)
+    kwargs : additional parameters fed to cal_formats.HERACal(meta, gains, **kwargs)
     """
     # ensure pol is string
     int2pol = {-5: 'x', -6: 'y'}
@@ -1114,11 +1117,10 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
 
     # configure meta
     inttime = np.median(np.diff(time_array)) * 24. * 3600.
-    meta = {'times':time_array, 'freqs':freq_array, 'inttime':inttime, 'gain_convention': gain_convention}
-    meta.update(**kwargs)
+    meta = {'times':time_array, 'freqs':freq_array, 'inttime':inttime}
 
     # convert to UVCal
-    uvc = cal_formats.HERACal(meta, heracal_gains)
+    uvc = cal_formats.HERACal(meta, heracal_gains, **kwargs)
 
     # write to file
     if os.path.exists(calfits_fname) is True and overwrite is False:
