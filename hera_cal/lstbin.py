@@ -64,8 +64,10 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
 
     return_no_avg : type=boolean, if True, return binned but un-averaged data and flags.
 
-    Output: (data_avg, flags_min, data_std, lst_bins, data_num)
+    Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
+    lst_bins : ndarray containing final lst grid of data
+
     data_avg : dictionary of data having averaged the LST bins
 
     flags_min : dictionary of minimum data flag in each LST bin
@@ -73,9 +75,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
     data_std : dictionary of data with real component holding std along real axis
         and imag component holding std along imag axis
 
-    lst_bins : ndarray containing final lst grid of data
-
-    data_num : dictionary containing the number of data points averaged in each LST bin.
+    data_count : dictionary containing the number count of data points in each LST bin.
 
     if return_no_avg:
         Output: (data_bin, flags_min)
@@ -126,7 +126,8 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
 
         # make data_in_bin boolean array, and set to False data that don't fall in any bin
         data_in_bin = np.ones_like(l, np.bool)
-        data_in_bin[(l<lst_grid_left.min()-atol)|(l>lst_grid_left.max()+dlst+atol)] = False
+        data_in_bin[(l<lst_grid_left.min()-atol)] = False
+        data_in_bin[(l>lst_grid_left.max()+dlst+atol)] = False
 
         # update all_lst_indices
         all_lst_indices.update(set(grid_indices[data_in_bin]))
@@ -181,7 +182,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
     # make final dictionaries
     flags_min = odict()
     data_avg = odict()
-    data_num = odict()
+    data_count = odict()
     data_std = odict()
 
     # return un-averaged data if desired
@@ -216,15 +217,15 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
         data_avg[key] = real_avg + 1j*imag_avg
         flags_min[key] = f_min
         data_std[key] = real_stan_dev + 1j*imag_stan_dev
-        data_num[key] = num_pix.astype(np.complex)
+        data_count[key] = num_pix.astype(np.complex)
 
     # turn into DataContainer
     data_avg = DataContainer(data_avg)
     flags_min = DataContainer(flags_min)
     data_std = DataContainer(data_std)
-    data_num = DataContainer(data_num)
+    data_count = DataContainer(data_count)
 
-    return data_avg, flags_min, data_std, lst_bins, data_num
+    return lst_bins, data_avg, flags_min, data_std, data_count
 
 
 def lst_align(data, data_lsts, flags=None, dlst=None,
