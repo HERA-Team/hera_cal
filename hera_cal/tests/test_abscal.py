@@ -245,10 +245,11 @@ class Test_AbsCal:
         self.AC = hc.abscal.AbsCal(self.data_fname, self.model_fname)
 
         # make custom gain keys
-        d, f, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(self.data_fname, return_meta=True, pick_data_ants=False)
+        d, fl, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(self.data_fname, return_meta=True, pick_data_ants=False)
         p = map(lambda p: self.AC.pol2str[p][0], p)
         self.ap = ap
         self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k,p), a), p))
+        self.freqs = f
 
     def test_init(self):
         # init with no meta
@@ -373,6 +374,10 @@ class Test_AbsCal:
         nt.assert_equal(AC.ant_dly_phi_gain, None)
         nt.assert_equal(AC.ant_dly_phi_arr, None)
         nt.assert_equal(AC.ant_dly_phi_gain_arr, None)
+        # test flags handling
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freqs)
+        AC.wgts[(24,25,'xx')] *= 0
+        AC.delay_lincal(verbose=False)
         # test medfilt
         self.AC.delay_lincal(verbose=False, medfilt=False)
         self.AC.delay_lincal(verbose=False, time_avg=True)
@@ -406,7 +411,11 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.dly_slope_gain[(24, 'x')].shape, (60, 64))
         nt.assert_equal(self.AC.dly_slope_arr.shape, (7, 2, 60, 1, 1))
         nt.assert_equal(self.AC.dly_slope_gain_arr.shape, (7, 60, 64, 1))
-
+        # test flags handling
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
+        AC.wgts[(24,25,'xx')] *= 0
+        AC.delay_slope_lincal(verbose=False)
+  
     def test_merge_gains(self):
         self.AC.abs_amp_logcal(verbose=False)
         self.AC.TT_phs_logcal(verbose=False)
