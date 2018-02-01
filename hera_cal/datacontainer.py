@@ -3,7 +3,14 @@ from collections import OrderedDict as odict
 
 
 class DataContainer:
-    """Object that abstracts away the pol/ant pair ordering of data dict's."""
+    """
+    Object that abstracts away the pol/ant pair ordering of data dict's.
+
+    adding two DataContainer adds their values: DC1 + DC2
+    multiplying two DataContainers multiplies their values: DC1 * DC2
+    xor two DataContainer concatenates their values along time axis: DC1 ^ DC2 
+    exp two DataContainer averages their values: DC1 ** DC2
+    """
 
     def __init__(self, data):
         """
@@ -85,7 +92,7 @@ class DataContainer:
         else:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
-    def __add__(self, D):
+    def __xor__(self, D):
         """ concatenates DataContainers across the time [0] axis """
         # check frequency structure matches
         if D[D.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
@@ -101,6 +108,44 @@ class DataContainer:
 
         return DataContainer(newD)
   
+    def __add__(self, D):
+        """ adds values of two DataContainers together """
+        # check time and frequency structure matches
+        if D[D.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
+            raise ValueError("[0] axis of dictionary values don't match")
+        if D[D.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
+            raise ValueError("[1] axis of dictionary values don't match")
+
+        # start new object
+        newD = odict()
+
+        # iterate over D keys
+        for i, k in enumerate(D.keys()):
+            if self.__contains__(k):
+                newD[k] = self.__getitem__(k) + D[k]
+
+        return DataContainer(newD)
+
+
+    def __pow__(self, D):
+        """ averages the values of two DataContainers together """
+        # check time and frequency structure matches
+        if D[D.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
+            raise ValueError("[0] axis of dictionary values don't match")
+        if D[D.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
+            raise ValueError("[1] axis of dictionary values don't match")
+
+        # start new object
+        newD = odict()
+
+        # iterate over D keys
+        for i, k in enumerate(D.keys()):
+            if self.__contains__(k):
+                newD[k] = (self.__getitem__(k) + D[k]) / 2.0
+
+        return DataContainer(newD)
+
+
     def __mul__(self, D):
         """ multiplies the values of two DataContainers together """
         # check time and frequency structure matches
