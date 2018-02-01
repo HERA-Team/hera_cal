@@ -350,7 +350,9 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
 
     wgts : weights of data, type=dictionry, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
-           matching shape of model and data
+           matching shape of model and data. These are only used to find delays from
+           itegrations that are unflagged for at least two frequency bins. In this case, 
+           the delays are assumed to have equal weight, otherwise the delays take zero weight.
 
     df : type=float, frequency spacing between channels in Hz
 
@@ -482,7 +484,9 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
 
     wgts : weights of data, type=dictionry, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
-           matching shape of model and data
+           matching shape of model and data. These are only used to find delays from
+           itegrations that are unflagged for at least two frequency bins. In this case, 
+           the delays are assumed to have equal weight, otherwise the delays take zero weight.
 
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
