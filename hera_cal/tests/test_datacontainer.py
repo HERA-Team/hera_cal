@@ -195,7 +195,7 @@ class TestDataContainer(unittest.TestCase):
         d, f = abscal.UVData2AbsCalDict(test_file)
         f[(24,25,'xx')][:,0] = False
         f2 = f * f
-        nt.assert_false(f2[(24,25,'xx')][0,0])
+        self.assertFalse(f2[(24,25,'xx')][0,0])
 
 if __name__ == '__main__':
     unittest.main()

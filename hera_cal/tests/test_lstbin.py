@@ -45,8 +45,8 @@ class Test_lstbin:
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
                                    verbose=False)
         # check shape and dtype
-        nt.assert_equal(output[0][(24,25,'xx')].dtype, np.complex)
-        nt.assert_equal(output[0][(24,25,'xx')].shape, (224, 64))
+        nt.assert_equal(output[1][(24,25,'xx')].dtype, np.complex)
+        nt.assert_equal(output[1][(24,25,'xx')].shape, (224, 64))
         # check number of points in each bin
         nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[0,30], 1)
         nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[30,30], 2)
@@ -64,18 +64,18 @@ class Test_lstbin:
         flgs3 = copy.deepcopy(self.flgs3)
         flgs_list = [flgs1, flgs2, flgs3]
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=flgs_list)
-        nt.assert_almost_equal(output[1][(24, 25, 'xx')][0, 32], True)
-        nt.assert_almost_equal(output[1][(24, 25, 'xx')][180, 32], False)
-        nt.assert_almost_equal(output[1][(24, 25, 'xx')][210, 32], False)
+        nt.assert_almost_equal(output[2][(24, 25, 'xx')][0, 32], True)
+        nt.assert_almost_equal(output[2][(24, 25, 'xx')][180, 32], False)
+        nt.assert_almost_equal(output[2][(24, 25, 'xx')][210, 32], False)
         # test return no avg
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=self.flgs_list, return_no_avg=True)
-        nt.assert_equal(len(output[0][output[0].keys()[0]][100]), 3)
-        nt.assert_equal(len(output[0][output[0].keys()[0]][100][0]), 64)
+        nt.assert_equal(len(output[1][output[1].keys()[0]][100]), 3)
+        nt.assert_equal(len(output[1][output[1].keys()[0]][100][0]), 64)
         # test switch bl
         conj_data3 = DataContainer(odict(map(lambda k: (hc.lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys())))
         data_list = [self.data1, self.data2, conj_data3]
         output = hc.lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
-        nt.assert_equal(output[0][(24,25,'xx')].shape, (224, 64))
+        nt.assert_equal(output[1][(24,25,'xx')].shape, (224, 64))
 
     def test_lst_align(self):
         # test basic execution
