@@ -387,6 +387,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     # median filter and FFT to get delays
     ratio_delays = []
     ratio_offsets = []
+    ratio_wgts = []
     for i, k in enumerate(keys):
         ratio = model[k]/data[k]
 
@@ -402,14 +403,28 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
 
         # get delays
         dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax, solve_phase=solve_offsets)
+
+        # set nans to zero
+        rwgts = np.ones_like(dly, np.float)
+        isnan = np.isnan(dly)
+        dly[isnan] = 0.0
+        rwgts[isnan] = 0.0
+        if solve_offsets:
+            offset[isnan] = 0.0
+
         ratio_delays.append(dly)
         ratio_offsets.append(offset)
+        ratio_wgts.append(rwgts)
        
     ratio_delays = np.array(ratio_delays)
     ratio_offsets = np.array(ratio_offsets)
+    ratio_wgts = np.array(ratio_wgts)
 
     # form ydata
     ydata = odict(zip(keys, ratio_delays))
+
+    # form wgts
+    ywgts = odict(zip(keys, ratio_wgts))
 
     # setup linsolve equation dictionary
     eqns = odict([(k, 'tau_{}_{} - tau_{}_{}'.format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
@@ -419,9 +434,10 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
 
     # setup linsolve data dictionary
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
 
     # setup linsolve and run
-    sol = linsolve.LinearSolver(ls_data, **ls_design_matrix)
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
     echo("...running linsolve", verbose=verbose)
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
@@ -433,7 +449,8 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
         eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
         ls_design_matrix = odict()
         ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
-        sol = linsolve.LinearSolver(ls_data, **ls_design_matrix)
+        ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
+        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
         echo("...running linsolve", verbose=verbose)
         offset_fit = sol.solve()
         echo("...finished linsolve", verbose=verbose)
@@ -499,6 +516,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     # median filter and FFT to get delays
     ratio_delays = []
     ratio_offsets = []
+    ratio_wgts = []
     for i, k in enumerate(keys):
         ratio = model[k]/data[k]
 
@@ -514,14 +532,26 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
 
         # get delays
         dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+
+        # set nans to zero
+        rwgts = np.ones_like(dly, np.float)
+        isnan = np.isnan(dly)
+        dly[isnan] = 0.0
+        rwgts[isnan] = 0.0
+
         ratio_delays.append(dly)
         ratio_offsets.append(offset)
-       
+        ratio_wgts.append(rwgts)
+
     ratio_delays = np.array(ratio_delays)
     ratio_offsets = np.array(ratio_offsets)
+    ratio_wgts = np.array(ratio_wgts)
 
     # form ydata
     ydata = odict(zip(keys, ratio_delays))
+
+    # form wgts
+    ywgts = odict(zip(keys, ratio_wgts))
 
     # setup antenna position terms
     r_ew = odict(map(lambda a: (a, "r_ew_{}".format(a)), ants))
@@ -541,9 +571,10 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
 
     # setup linsolve data dictionary
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
 
     # setup linsolve and run
-    sol = linsolve.LinearSolver(ls_data, **ls_design_matrix)
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
     echo("...running linsolve", verbose=verbose)
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
