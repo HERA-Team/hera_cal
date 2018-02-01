@@ -590,7 +590,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             continue
 
         # pass through lst-bin function
-        (bin_data, flag_data, std_data, bin_lst,
+        (bin_lst, bin_data, flag_data, std_data,
          num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, lst_start=start_lst,
                              lst_low=f_min, lst_hi=f_max, truncate_empty=False, **bin_kwargs)
 
