@@ -10,34 +10,65 @@ from scipy import constants
 class Delay_Filter():
 
     def __init__(self, data, flags=None, freqs=None, antpos=None):
-        '''TODO: Document.
-        Assumes antpos in meters and freqs in Hz'''
+        '''Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.'''
         self.writable = False
 
     def read_files(self, datafiles, filetype='miriad'):
-        '''TODO: Document.'''
+        '''Reads in and stores data in miriad or uvfits format for delay filtering. 
+
+        Arguments:
+            datafiles: string or list of strings indicating the path to data to load in
+            filetype: file format of data. Options: 'miriad' (default)  or 'uvfits'.
+        '''
         self.writable = True
         self.datafiles, self.filetype = datafiles, filetype
-        self.data, self.flags, self.antpos, _, self.freqs, _, _, _ = abscal.UVData2AbsCalDict(datafiles, pop_autos=False, return_meta=True, filetype=filetype)
+        self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = abscal.UVData2AbsCalDict(datafiles, pop_autos=False, return_meta=True, filetype=filetype)
 
-    def load_UVData(self, uvdata, hold_uvdata=False):
-        '''TODO: Document.'''
-        if hold_uvdata:
-            self.writable = True
-            self.uvdata = uvdata
-        self.data, self.flags, self.antpos, _, self.freqs, _, _, _ = abscal.UVData2AbsCalDict(uvdata, pop_autos=False, return_meta=True)
+
+    def load_UVData(self, uvdata):
+        '''Loads in UVData object(s) for performing delay filtering.
+
+        Arguments:
+            datafiles: UVData object or list of UVData objects
+        '''
+        self.writable = True
+        self.uvdata = uvdata
+        self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = abscal.UVData2AbsCalDict(uvdata, pop_autos=False, return_meta=True)
+
 
     def load_dicts(self, data, flags, freqs, antpos):
-        '''TODO: Document.'''
+        '''Loads in data manually as a dictionary, an ordered dictionary, or a DataContainer.
+
+        Arguments:
+            data: visibility data as a dictionary or DataContainer.
+            flags: flags with the same format and keys as data
+            freqs: array of frequencies in Hz
+            antpos: dictionary mapping antenna index to antenna position in m
+        '''
         self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
         
 
     def run_filter(self, to_filter=[], weight_dict=None, horizon=1., standoff=0., tol=1e-9, window='none', skip_wgt=0.1, maxiter=100):
-        '''TODO: Document.'''
+        '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
+        Uses stored flags unless explicitly overridden with weight_dict.
+    
+        Arguments:
+            to_filter: list of visibilities to filter in the (i,j,pol) format. 
+                If [] (the default), all visibilities are filtered.
+            weight_dict: dictionary or DataContainer with all the same keys as self.data. 
+                Multiplicative weights to use for the delay filter. Default, use logical not of self.flags
+            horizon: proportionality constant for bl_len where 1 is the horizon (full light travel time)
+            tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+            window: window function for filtering applied to the filtered axis. 
+                See aipy.dsp.gen_window for options.        
+            skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt) 
+                Only works properly when all weights are all between 0 and 1. 
+            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+        '''
         self.filtered_residuals = deepcopy(self.data)
         self.CLEAN_models = deepcopy(self.data)
         self.info = {}
-        if len(to_filter) == 0:
+        if to_filter == []:
             to_filter = self.data.keys()
         
         for k in to_filter:
@@ -53,7 +84,8 @@ class Delay_Filter():
             self.CLEAN_models[k] = d_mdl
             self.info[k] = info
 
-    def write_filtered_data(self, outfilenames, write_CLEAN_models=False):
+
+    def write_filtered_data(self, outfilenames, append_to_history = '', write_CLEAN_models=False):
         '''TODO: Document.'''
         if not self.writable:
             raise NotImplementedError('Writing functionality requires list of input files or a stored UVData object')
