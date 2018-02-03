@@ -122,6 +122,8 @@ def test_get_miriad_times():
     nt.assert_not_almost_equal(stops[0], _stops[0])
     nt.assert_almost_equal(_starts[1] + _ints[1], starts[1])
     nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
+    # test if str
+    starts, stops, ints = utils.get_miriad_times(filepaths[0])
 
 def test_data_to_miriad():
     # get test file
