@@ -105,15 +105,15 @@ def test_combine_calfits():
         os.remove('ex.calfits')
 
 def test_get_miriad_times():
-    filepaths = sorted(glob.glob(DATA_PATH+"/zen.245804?.4*uvA"))
+    filepaths = sorted(glob.glob(DATA_PATH+"/zen.2458042.*.xx.HH.uvXA"))
     # test execution
     starts, stops, ints = utils.get_miriad_times(filepaths, add_int_buffer=False)
-    nt.assert_almost_equal(starts[0], 0.18438445619743923)
-    nt.assert_almost_equal(stops[0], 0.23058056901986126)
-    nt.assert_almost_equal(ints[0], 0.00078298)
-    nt.assert_equal(len(starts), 9)
-    nt.assert_equal(len(stops), 9)
-    nt.assert_equal(len(ints), 9)
+    nt.assert_almost_equal(starts[0], 4.7293432458811866)
+    nt.assert_almost_equal(stops[0], 4.7755393587036084)
+    nt.assert_almost_equal(ints[0], 0.00078298496309189868)
+    nt.assert_equal(len(starts), 2)
+    nt.assert_equal(len(stops), 2)
+    nt.assert_equal(len(ints), 2)
     # test with integration buffer
     _starts, _stops, _ints = utils.get_miriad_times(filepaths, add_int_buffer=True)
     nt.assert_almost_equal(starts[0], _starts[0])
@@ -135,7 +135,7 @@ def test_data_to_miriad():
     uvd = UVData()
     uvd.read_miriad('ex.uv')
     nt.assert_equal(uvd.get_data(24,25,'xx').shape, (60, 64))
-    nt.assert_almost_equal(uvd.get_data(24,25,'xx')[90, 32], (1.3784008+0.87549305j))
+    nt.assert_almost_equal(uvd.get_data(24,25,'xx')[30, 32], (1.3784008+0.87549305j))
     shutil.rmtree('ex.uv')
     # test exception
     nt.assert_raises(AttributeError, utils.data_to_miriad, "ex.uv", d, l, f, ap, outdir="./")
