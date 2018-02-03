@@ -1,6 +1,9 @@
 import unittest
 from hera_cal import datacontainer
 import numpy as np
+from hera_cal.data import DATA_PATH
+import os
+from hera_cal import abscal
 
 class TestDataContainer(unittest.TestCase):
 
@@ -109,8 +112,6 @@ class TestDataContainer(unittest.TestCase):
         self.assertEqual(dc[(1, 2)], dc.get_data((1, 2)))
         self.assertEqual(dc[(1, 2)], dc.get_data(1, 2))
 
-
-
     def test_has_key(self):
         dc = datacontainer.DataContainer(self.blpol)
         self.assertTrue(dc.has_key((2, 3, 'yy')))
@@ -133,6 +134,9 @@ class TestDataContainer(unittest.TestCase):
         self.assertFalse(dc.has_key('xy'))
         self.assertFalse(dc.has_key((5, 6)))
         self.assertFalse(dc.has_key((1, 2, 'xy')))
+        # assert switch bl
+        dc[(1,2,'xy')] = 1j
+        self.assertTrue(dc.has_key((2,1,'yx')))
 
     def test_has_bl(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -181,8 +185,28 @@ class TestDataContainer(unittest.TestCase):
         # test error
         self.assertRaises(ValueError, dc.__setitem__, *((100, 101), 100j))
 
+    def test_adder(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = abscal.UVData2AbsCalDict(test_file)
+        d2 = d + d
+        self.assertAlmostEqual(d2[(24,25,'xx')][30, 30], d[(24,25,'xx')][30, 30]*2)
 
+    def test_mul(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = abscal.UVData2AbsCalDict(test_file)
+        f[(24,25,'xx')][:,0] = False
+        f2 = f * f
+        self.assertFalse(f2[(24,25,'xx')][0,0])
 
+    def test_concatenate(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = abscal.UVData2AbsCalDict(test_file)
+        d2 = d.concat(d)
+        self.assertEqual(d2[(24,25,'xx')].shape[0], d[(24,25,'xx')].shape[0]*2)
+        d2 = d.concat(d, axis=1)
+        self.assertEqual(d2[(24,25,'xx')].shape[1], d[(24,25,'xx')].shape[1]*2)
+        d2 = d.concat([d,d], axis=0)
+        self.assertEqual(d2[(24,25,'xx')].shape[0], d[(24,25,'xx')].shape[0]*3)
 
 if __name__ == '__main__':
     unittest.main()

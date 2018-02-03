@@ -1,8 +1,16 @@
 import numpy as np
 from collections import OrderedDict as odict
 
+
 class DataContainer:
-    """Object that abstracts away the pol/ant pair ordering of data dict's."""
+    """
+    Object that abstracts away the pol/ant pair ordering of data dict's.
+
+    adding two DataContainer adds their values: DC1 + DC2
+    multiplying two DataContainers multiplies their values: DC1 * DC2
+    xor two DataContainer concatenates their values along time axis: DC1 ^ DC2 
+    exp two DataContainer averages their values: DC1 ** DC2
+    """
 
     def __init__(self, data):
         """
@@ -30,7 +38,7 @@ class DataContainer:
 
     def _switch_bl(self, key):
         if len(key) == 3:
-            return (key[1], key[0], key[2])
+            return (key[1], key[0], key[2][::-1])
         else:
             return (key[1], key[0])
 
@@ -84,11 +92,79 @@ class DataContainer:
         else:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
+    def concat(self, D, axis=0):
+        """ concatenates DataContainers across an axis """
+        # check type of D
+        if isinstance(D, DataContainer):
+            # turn into list if not already a list
+            D = [D]
+        if axis == 0:
+            # check 1 axis is identical for all D
+            for d in D:
+                if d[d.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
+                    raise ValueError("[1] axis of dictionary values aren't identical in length")
+
+        if axis == 1:
+            # check 0 axis is identical for all D
+            for d in D:
+                if d[d.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
+                    raise ValueError("[0] axis of dictionary values aren't identical in length")
+
+        # start new object
+        newD = odict()
+
+        # get shared keys
+        keys = set()
+        for d in D: keys.update(d.keys())
+
+        # iterate over D keys
+        for i, k in enumerate(keys):
+            if self.__contains__(k):
+                if axis == 0:
+                    newD[k] = np.concatenate([self.__getitem__(k)] + map(lambda d: d[k], D), axis=0)
+                elif axis == 1:
+                    newD[k] = np.concatenate([self.__getitem__(k)] + map(lambda d: d[k], D), axis=1)
+
+        return DataContainer(newD)
   
-  
+    def __add__(self, D):
+        """ adds values of two DataContainers together """
+        # check time and frequency structure matches
+        if D[D.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
+            raise ValueError("[0] axis of dictionary values don't match")
+        if D[D.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
+            raise ValueError("[1] axis of dictionary values don't match")
+
+        # start new object
+        newD = odict()
+
+        # iterate over D keys
+        for i, k in enumerate(D.keys()):
+            if self.__contains__(k):
+                newD[k] = self.__getitem__(k) + D[k]
+
+        return DataContainer(newD)
+
+    def __mul__(self, D):
+        """ multiplies the values of two DataContainers together """
+        # check time and frequency structure matches
+        if D[D.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
+            raise ValueError("[0] axis of dictionary values don't match")
+        if D[D.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
+            raise ValueError("[1] axis of dictionary values don't match")
+
+        # start new object
+        newD = odict()
+
+        # iterate over D keys
+        for i, k in enumerate(D.keys()):
+            if self.__contains__(k):
+                newD[k] = self.__getitem__(k) * D[k]
+
+        return DataContainer(newD)
+
     def __contains__(self, key):
         return key in self.keys() or self._switch_bl(key) in self.keys()
-
 
     def get_data(self, *args):
         if len(args) > 1:
