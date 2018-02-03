@@ -7,6 +7,8 @@ from pyuvdata import UVCal
 import os
 import hera_cal
 import copy
+import ephem
+
 
 class AntennaArray(aipy.pol.AntennaArray):
     def __init__(self, *args, **kwargs):
@@ -155,16 +157,59 @@ def JD2LST(JD, longitude=21.42830):
     """
     Input:
     ------
-    JD : type=float, julian date of observation
+    JD : type=float or list of floats, julian date of observation
 
     longitude : type=float, longitude of observer in degrees East, default=HERA Longitude
 
     Output:
     -------
-    Local Apparent Sidreal Time [Hour Angle]
+    Local Apparent Sidreal Time [radians]
     """
-    t = Time(JD, format='jd')
-    return t.sidereal_time('apparent', longitude=longitude).value
+    if type(JD) is list or type(JD) is np.ndarray:
+        LST = []
+        for jd in JD:
+            t = Time(jd, format='jd', scale='utc')
+            LST.append(t.sidereal_time('apparent', longitude=longitude).value * np.pi / 12.0)
+        LST = np.array(LST)
+    else:
+        t = Time(JD, format='jd', scale='utc')
+        LST = t.sidereal_time('apparent', longitude=longitude).value * np.pi / 12.0
+
+    return LST
+
+
+def JD2RA(jd_array, longitude=21.42830):
+    """
+    Convert from julian date to RA at zenith, assuing J2000 epoch
+
+    jd_array : float or list of julian dates
+
+    lon : longitude of observer in degrees east
+    
+    return RA float or array in degrees
+    """
+    if type(jd_array) == list or type(jd_array) == np.ndarray:
+        _array = True
+    else:
+        _array = False
+        jd_array = [jd_array]
+
+    # get observer
+    obs = ephem.Observer()
+    obs.epoch = ephem.J2000
+    obs.lon = longitude * np.pi / 180.0
+
+    # iterate over jd_array
+    RA = []
+    for JD in jd_array:
+        obs.date = Time(JD, format='jd', scale='utc').datetime
+        ra = obs.radec_of(0, np.pi/2)[0] * 180 / np.pi
+        RA.append(ra)
+
+    if _array:
+        return np.array(RA)
+    else:
+        return RA[0]
 
 
 def LST2JD(LST, start_JD, longitude=21.42830):
@@ -173,7 +218,7 @@ def LST2JD(LST, start_JD, longitude=21.42830):
 
     Input:
     ------
-    LST : type=float, local apparent sidereal time [hour angle]
+    LST : type=float, local apparent sidereal time [radians]
 
     start_JD : type=int, integer julian day to use as starting point for LST2JD conversion
 
@@ -183,27 +228,45 @@ def LST2JD(LST, start_JD, longitude=21.42830):
     -------
     JD : type=float, julian day when LST is directly overhead. accurate to ~1 milliseconds
     """
+    # get LST type
+    if type(LST) == list or type(LST) == np.ndarray:
+        _array = True
+    else:
+        LST = [LST]
+        _array = False  
+
+    # get start_JD
     base_JD = float(start_JD)
-    while True:
-        # calculate fit
-        jd1 = start_JD
-        jd2 = start_JD + 0.01
-        lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
-        slope = (lst2 - lst1) / 0.01
-        offset = lst1 - slope * jd1
 
-        # solve y = mx + b for x
-        JD = (LST - offset) / slope
+    # iterate over LST
+    jd_array = []
+    for lst in LST:
+        while True:
+            # calculate fit
+            jd1 = start_JD
+            jd2 = start_JD + 0.01
+            lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
+            slope = (lst2 - lst1) / 0.01
+            offset = lst1 - slope * jd1
 
-        # redo if JD isn't on starting JD
-        if JD - base_JD < 0:
-            start_JD += 1
-        elif JD - base_JD > 1:
-            start_JD -= 1
-        else:
-            break
+            # solve y = mx + b for x
+            JD = (lst - offset) / slope
 
-    return JD
+            # redo if JD isn't on starting JD
+            if JD - base_JD < 0:
+                start_JD += 1
+            elif JD - base_JD > 1:
+                start_JD -= 1
+            else:
+                break
+        jd_array.append(JD)
+
+    if _array:
+        return np.array(jd_array)
+
+    else:
+        return jd_array[0]
+
 
 
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
@@ -262,6 +325,76 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     hera_cal.abscal_funcs.echo("...saving {}".format(output_fname), verbose=verbose)
     uvc.write_calfits(output_fname, clobber=True)
 
+
+def get_miriad_times(filepaths, add_int_buffer=False):
+    """
+    Use aipy to get filetimes for Miriad file paths.
+    All times mark the center of an integration, which is not the standard Miriad format.
+
+    Parameters:
+    ------------
+    filepaths : type=list, list of filepaths
+
+    add_int_buffer : type=bool, if True, extend start and stop times by a single integration duration 
+        except for start of first file, and stop of last file.
+
+    Output: (file_starts, file_stops, int_times)
+    -------
+    file_starts : file starting point in LST [radians]
+
+    file_stops : file ending point in LST [radians]
+
+    int_times : integration duration in LST [radians]
+    """
+    _array = True
+    # check filepaths type
+    if type(filepaths) == str:
+        _array = False
+        filepaths = [filepaths]
+
+    # form empty lists
+    file_starts = []
+    file_stops = []
+    int_times = []
+
+    # get Nfiles
+    Nfiles = len(filepaths)
+
+    # iterate over filepaths and extract time info
+    for i, f in enumerate(filepaths):
+        uv = aipy.miriad.UV(f)
+        # get integration time
+        int_time = uv['inttime'] * 2*np.pi / (23.9344699*3600.)
+        # get start and stop
+        start = uv['lst']
+        stop = start + (uv['ntimes']-1) * int_time
+        # add integration buffer to beginning and end if desired
+        if add_int_buffer:
+            if i != 0:
+                start -= int_time
+            if i != (Nfiles-1):
+                stop += int_time
+        # add half an integration to get center of integration
+        start += int_time / 2
+        stop += int_time / 2
+        file_starts.append(start)
+        file_stops.append(stop)
+        int_times.append(int_time)
+
+    file_starts = np.array(file_starts)
+    file_stops = np.array(file_stops)
+    int_times = np.array(int_times)
+
+    # make sure times don't wrap
+    file_starts[np.where(file_starts < 0)] += 2*np.pi
+    file_stops[np.where(file_stops >= 2*np.pi)] -= 2*np.pi
+
+    if _array is False:
+        file_starts = file_starts[0]
+        file_stops = file_stops[0]
+        int_times = int_times[0]
+
+    return file_starts, file_stops, int_times
 
 
 

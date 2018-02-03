@@ -1,6 +1,9 @@
 import unittest
 from hera_cal import datacontainer
 import numpy as np
+from hera_cal.data import DATA_PATH
+import os
+from hera_cal import abscal
 
 class TestDataContainer(unittest.TestCase):
 
@@ -181,8 +184,30 @@ class TestDataContainer(unittest.TestCase):
         # test error
         self.assertRaises(ValueError, dc.__setitem__, *((100, 101), 100j))
 
+    def test_adder(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = abscal.UVData2AbsCalDict(test_file)
+        d2 = d + d
+        self.assertAlmostEqual(d2[(24,25,'xx')][30, 30], d[(24,25,'xx')][30, 30]*2)
 
+    def test_mul(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = abscal.UVData2AbsCalDict(test_file)
+        f[(24,25,'xx')][:,0] = False
+        f2 = f * f
+        self.assertFalse(f2[(24,25,'xx')][0,0])
 
+    def test_avg(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = abscal.UVData2AbsCalDict(test_file)
+        d2 = d ** d
+        self.assertEqual(d2[(24,25,'xx')][30, 30], d[(24,25,'xx')][30, 30])
+
+    def test_concatenate(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = abscal.UVData2AbsCalDict(test_file)
+        d2 = d ^ d
+        self.assertEqual(d2[(24,25,'xx')].shape[0], d[(24,25,'xx')].shape[0]*2)
 
 if __name__ == '__main__':
     unittest.main()

@@ -30,12 +30,7 @@ class Test_AbsCal_Funcs:
         self.time_array = np.unique(self.uvd.time_array)
 
         # configure data into dictionaries
-        data, flags = hc.abscal.UVData2AbsCalDict(self.uvd, pop_autos=True)
-
-        # configure wgts
-        wgts = copy.deepcopy(flags)
-        for k in wgts.keys():
-            wgts[k] = (~wgts[k]).astype(np.float)
+        data, wgts = hc.abscal.UVData2AbsCalDict(self.uvd, pop_autos=True, return_wgts=True)
 
         # configure baselines
         bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in data.keys()])
@@ -130,6 +125,14 @@ class Test_AbsCal_Funcs:
         m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                        self.time_array[::2], self.freq_array[::2])
         nt.assert_equal(m[(24, 25, 'xx')].shape, (30, 32))
+        # test flag propagation
+        m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
+                                       self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=True)
+        nt.assert_true(mf[(24,25,'xx')][10, 0])
+        # test flag extrapolation
+        m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
+                                       self.time_array+.0001, self.freq_array, flags=self.wgts, flag_extrapolate=True)
+        nt.assert_true(mf[(24,25,'xx')][-1].min())
 
     def test_gains2calfits(self):
         cfname = os.path.join(DATA_PATH, 'ex.calfits')
@@ -246,6 +249,8 @@ class Test_AbsCal:
 
         # make custom gain keys
         d, fl, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(self.data_fname, return_meta=True, pick_data_ants=False)
+        self.freq_array = f
+        self.antpos = ap
         p = map(lambda p: self.AC.pol2str[p][0], p)
         self.ap = ap
         self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k,p), a), p))
@@ -270,6 +275,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.abs_eta_gain[(24, 'x')].shape, (60, 64))
         nt.assert_equal(self.AC.abs_eta_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.abs_eta_gain_arr.shape, (7, 60, 64, 1))
+        # test Nones
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_equal(AC.abs_eta, None)
         nt.assert_equal(AC.abs_eta_arr, None)
@@ -282,6 +288,9 @@ class Test_AbsCal:
         # test custom gain
         g = self.AC.custom_abs_eta_gain(self.gk)
         nt.assert_equal(len(g), 47)
+        # test w/ no wgts
+        AC.wgts = None
+        AC.abs_amp_logcal(verbose=False)
 
     def test_TT_phs_logcal(self):
         # test execution
@@ -299,7 +308,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.TT_Phi_arr.shape, (7, 2, 60, 64, 1))
         nt.assert_equal(self.AC.abs_psi_arr.shape, (7, 60, 64, 1))
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos)
         nt.assert_equal(AC.abs_psi_arr, None)
         nt.assert_equal(AC.abs_psi_gain_arr, None)
         nt.assert_equal(AC.TT_Phi_arr, None)
@@ -313,6 +322,9 @@ class Test_AbsCal:
         nt.assert_equal(len(g), 47)
         g = self.AC.custom_abs_psi_gain(self.gk)
         nt.assert_equal(g[(0,'x')].shape, (60, 64))
+        # test w/ no wgts
+        AC.wgts = None
+        AC.TT_phs_logcal(verbose=False)
 
     def test_amp_logcal(self):
         self.AC.amp_logcal(verbose=False)
@@ -328,6 +340,9 @@ class Test_AbsCal:
         nt.assert_equal(AC.ant_eta_gain, None)
         nt.assert_equal(AC.ant_eta_arr, None)
         nt.assert_equal(AC.ant_eta_gain_arr, None)
+        # test w/ no wgts
+        AC.wgts = None
+        AC.amp_logcal(verbose=False)
 
     def test_phs_logcal(self):
         self.AC.phs_logcal(verbose=False)
@@ -343,6 +358,9 @@ class Test_AbsCal:
         nt.assert_equal(AC.ant_phi_gain, None)
         nt.assert_equal(AC.ant_phi_arr, None)
         nt.assert_equal(AC.ant_phi_gain_arr, None)
+        # test w/ no wgts
+        AC.wgts = None
+        AC.phs_logcal(verbose=False)
 
     def test_delay_lincal(self):
         # test w/o offsets
@@ -365,7 +383,7 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_raises(AttributeError, AC.delay_lincal)
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freq_array)
         nt.assert_equal(AC.ant_dly, None)
         nt.assert_equal(AC.ant_dly_gain, None)
         nt.assert_equal(AC.ant_dly_arr, None)
@@ -381,6 +399,9 @@ class Test_AbsCal:
         # test medfilt
         self.AC.delay_lincal(verbose=False, medfilt=False)
         self.AC.delay_lincal(verbose=False, time_avg=True)
+        # test w/ no wgts
+        AC.wgts = None
+        AC.delay_lincal(verbose=False)
 
     def test_delay_slope_lincal(self):
         # test w/o offsets
@@ -396,7 +417,7 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_raises(AttributeError, AC.delay_slope_lincal)
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
         nt.assert_equal(AC.dly_slope, None)
         nt.assert_equal(AC.dly_slope_gain, None)
         nt.assert_equal(AC.dly_slope_arr, None)
@@ -415,7 +436,11 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
         AC.wgts[(24,25,'xx')] *= 0
         AC.delay_slope_lincal(verbose=False)
-  
+        # test w/ no wgts
+        AC.wgts = None
+        AC.delay_slope_lincal(verbose=False)
+
+
     def test_merge_gains(self):
         self.AC.abs_amp_logcal(verbose=False)
         self.AC.TT_phs_logcal(verbose=False)
@@ -542,8 +567,7 @@ class Test_AbsCal:
     def test_mock_data(self):
         # load into pyuvdata object
         data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        data, flags, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(data_file, return_meta=True)
-        wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
+        data, wgts, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(data_file, return_meta=True, return_wgts=True)
         # make mock data
         dly_slope = np.array([-1e-9, 2e-9, 0])
         model = odict()
