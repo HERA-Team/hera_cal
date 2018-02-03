@@ -190,6 +190,12 @@ class TestDataContainer(unittest.TestCase):
         d, f = abscal.UVData2AbsCalDict(test_file)
         d2 = d + d
         self.assertAlmostEqual(d2[(24,25,'xx')][30, 30], d[(24,25,'xx')][30, 30]*2)
+        # test exception
+        d2, f2 = abscal.UVData2AbsCalDict(test_file)
+        d2[d2.keys()[0]] = d2[d2.keys()[0]][:, :10]
+        self.assertRaises(ValueError, d.__add__, d2)
+        d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :]
+        self.assertRaises(ValueError, d.__add__, d2)
 
     def test_mul(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -197,6 +203,12 @@ class TestDataContainer(unittest.TestCase):
         f[(24,25,'xx')][:,0] = False
         f2 = f * f
         self.assertFalse(f2[(24,25,'xx')][0,0])
+        # test exception
+        d2, f2 = abscal.UVData2AbsCalDict(test_file)
+        d2[d2.keys()[0]] = d2[d2.keys()[0]][:, :10]
+        self.assertRaises(ValueError, d.__mul__, d2)
+        d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :]
+        self.assertRaises(ValueError, d.__mul__, d2)
 
     def test_concatenate(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -207,6 +219,12 @@ class TestDataContainer(unittest.TestCase):
         self.assertEqual(d2[(24,25,'xx')].shape[1], d[(24,25,'xx')].shape[1]*2)
         d2 = d.concat([d,d], axis=0)
         self.assertEqual(d2[(24,25,'xx')].shape[0], d[(24,25,'xx')].shape[0]*3)
+        # test exceptions
+        d2, f2 = abscal.UVData2AbsCalDict(test_file)
+        d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :10]
+        self.assertRaises(ValueError, d.concat, d2, axis=0)
+        self.assertRaises(ValueError, d.concat, d2, axis=1)
+
 
 if __name__ == '__main__':
     unittest.main()
