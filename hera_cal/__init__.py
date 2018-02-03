@@ -7,5 +7,6 @@ import version
 import abscal
 import io
 import delay_filter
+import lstbin
 
 __version__ = version.version
