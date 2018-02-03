@@ -119,9 +119,9 @@ def test_get_miriad_times():
     nt.assert_almost_equal(starts[0], _starts[0])
     nt.assert_almost_equal(stops[-1], _stops[-1])
     nt.assert_not_almost_equal(starts[1], _starts[1])
-    nt.assert_not_almost_equal(stops[1], _stops[1])
+    nt.assert_not_almost_equal(stops[0], _stops[0])
     nt.assert_almost_equal(_starts[1] + _ints[1], starts[1])
-    nt.assert_almost_equal(_stops[1] - _ints[1], stops[1])
+    nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
 
 def test_data_to_miriad():
     # get test file
