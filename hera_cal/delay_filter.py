@@ -9,7 +9,7 @@ from scipy import constants
 
 class Delay_Filter():
 
-    def __init__(self, data, flags=None, freqs=None, antpos=None):
+    def __init__(self):
         '''Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.'''
         self.writable = False
 
