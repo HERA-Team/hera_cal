@@ -23,9 +23,9 @@ class Test_lstbin:
     def setUp(self):
         # load data
         np.random.seed(0)
-        self.data_files = [sorted(glob.glob(DATA_PATH+'/zen.2458042.4*uvA')),
-                           sorted(glob.glob(DATA_PATH+'/zen.2458043.4*uvA')),
-                           sorted(glob.glob(DATA_PATH+'/zen.2458044.4*uvA'))]
+        self.data_files = [sorted(glob.glob(DATA_PATH+'/zen.2458043.4*uvXRAA')),
+                           sorted(glob.glob(DATA_PATH+'/zen.2458044.4*uvXRAA')),
+                           sorted(glob.glob(DATA_PATH+'/zen.2458045.4*uvXRAA'))]
 
         (self.data1, self.flgs1, self.ap1, a, self.freqs1, t, self.lsts1,
          p) = hc.abscal.UVData2AbsCalDict(self.data_files[0], return_meta=True)
@@ -119,9 +119,9 @@ class Test_lstbin:
         shutil.rmtree('./zen.xx.STD.0.18441.uv')
         shutil.rmtree('./zen.xx.NUM.0.18441.uv')
 
-        data_files = [sorted(glob.glob(DATA_PATH+'/zen.2458042.*uvA')),
-                      sorted(glob.glob(DATA_PATH+'/zen.2458043.*uvA')),
-                      sorted(glob.glob(DATA_PATH+'/zen.2458044.*uvA'))]
+        data_files = [sorted(glob.glob(DATA_PATH+'/zen.2458043.*uvXRAA')),
+                      sorted(glob.glob(DATA_PATH+'/zen.2458044.*uvXRAA')),
+                      sorted(glob.glob(DATA_PATH+'/zen.2458045.*uvXRAA'))]
         # test data_list is empty
         hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
                                 verbose=False)
@@ -149,28 +149,6 @@ class Test_lstbin:
 
     def test_lst_align_arg_parser(self):
         a = hc.lstbin.lst_align_arg_parser()
-
-    def test_data_to_miriad(self):
-        # test basic execution
-        hc.lstbin.data_to_miriad("ex.uv", self.data1, self.lsts1, self.freqs1, self.ap1,
-                                 flags=self.flgs1, outdir="./", start_jd=2458042)
-        # test w/ no flags
-        hc.lstbin.data_to_miriad("ex.uv", self.data1, self.lsts1, self.freqs1, self.ap1,
-                                 outdir="./", start_jd=2458042, overwrite=True)
-        nt.assert_true(os.path.exists('ex.uv'))
-        uvd = UVData()
-        uvd.read_miriad('ex.uv')
-        nt.assert_equal(uvd.get_data(24,25,'xx').shape, (180, 64))
-        nt.assert_almost_equal(uvd.get_data(24,25,'xx')[90, 32], (-0.010416029+0.0016994481j))
-        shutil.rmtree('ex.uv')
-        # test exception
-        nt.assert_raises(AttributeError, hc.lstbin.data_to_miriad, "ex.uv", self.data1, self.lsts1,
-                         self.freqs1, self.ap1, outdir="./")
-        # return uvd
-        uvd = hc.lstbin.data_to_miriad("ex.uv", self.data1, self.lsts1, self.freqs1, self.ap1,
-                                        outdir="./", start_jd=2458042, overwrite=True, return_uvdata=True)
-        nt.assert_equal(type(uvd), UVData)
-        shutil.rmtree('ex.uv')
 
     def test_sigma_clip(self):
         # test basic execution
