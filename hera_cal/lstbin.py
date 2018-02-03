@@ -358,7 +358,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, longitude=21.4
         if outdir is not None:
             miriad_kwargs['outdir'] = outdir
         miriad_kwargs['start_jd'] = np.floor(times[0])
-        data_to_miriad(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, **miriad_kwargs)
+        utils.data_to_miriad(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, **miriad_kwargs)
 
 
 def lst_bin_arg_parser():
@@ -622,9 +622,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             continue
 
         # write to file
-        data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, **miriad_kwargs)
-        data_to_miriad(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
-        data_to_miriad(num_file, num_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
+        utils.data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, **miriad_kwargs)
+        utils.data_to_miriad(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
+        utils.data_to_miriad(num_file, num_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
 
         del bin_file, std_file, num_file, bin_data, std_data, num_data, bin_lst, flag_data
         garbage_collector.collect()
@@ -728,164 +728,6 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
         data[k] *= phs
 
 
-def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None,
-                   outdir="./", write_miriad=True, overwrite=False, verbose=True, history=" ", return_uvdata=False,
-                   longitude=21.42830, start_jd=None, instrument="HERA", telescope_name="HERA",
-                   object_name='EOR', phase_type='drift', vis_units='uncalib', dec=-30.72152,
-                   telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395])):
-    """
-    Take data dictionary, export to UVData object and write as a miriad file. See pyuvdata.UVdata
-    documentation for more info on these attributes.
-
-    Parameters:
-    -----------
-    data : type=dictinary, DataContainer dictionary of complex visibility data
-
-    lst_array : type=ndarray, array containing unique LST time bins of data
-
-    freq_array : type=ndarray, array containing frequency bins of data (Hz)
-
-    antpos : type=dictionary, antenna position dictionary. keys are ant ints and values are position vectors
-
-    time_array : type=ndarray, array containing unique Julian Date time bins of data
-
-    flags : type=dictionary, DataContainer dictionary matching data in shape, holding flags of data.
-
-    outdir : type=str, output directory
-
-    write_miriad : type=boolean, if True, write data to miriad file
-
-    overwrite : type=boolean, if True, overwrite output files
-
-    verbose : type=boolean, if True, report feedback to stdout
-
-    history : type=str, history string for UVData object
-
-    return_uvdata : type=boolean, if True return UVData instance
-
-    longitude : type=float, longitude of observer in degrees East
-
-    dec : type=float, declination of observer in degrees South
-
-    start_jd : type=float, starting julian date of time_array if time_array is None
-
-    instrument : type=str, instrument name
-
-    telescope_name : type=str, telescope name
-
-    object_name : type=str, observing object name
-
-    phase_type : type=str, phasing type
-
-    vis_unit : type=str, visibility units
-
-    telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame)
-
-    Output:
-    -------
-    if return_uvdata: return UVData instance
-    """
-    ## configure UVData parameters
-    # get pols
-    pols = np.unique(map(lambda k: k[-1], data.keys()))
-    Npols = len(pols)
-    pol2int = {'xx':-5, 'yy':-6, 'xy':-7, 'yx':-8}
-    polarization_array = np.array(map(lambda p: pol2int[p], pols))
-
-    # get times
-    if time_array is None:
-        if start_jd is None:
-            raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = np.array(map(lambda lst: utils.LST2JD(lst, start_jd, longitude=longitude), lst_array))
-    Ntimes = len(time_array)
-    integration_time = np.median(np.diff(time_array)) * 24 * 3600.
-
-    # get freqs
-    Nfreqs = len(freq_array)
-    channel_width = np.median(np.diff(freq_array))
-    freq_array = freq_array.reshape(1, -1)
-    spw_array = np.array([0])
-    Nspws = 1
-
-    # get baselines keys
-    bls = sorted(data.bls())
-    Nbls = len(bls)
-    Nblts = Nbls * Ntimes
-
-    # reconfigure time_array and lst_array
-    time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
-    lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
-
-    # get data array
-    data_array = np.moveaxis(map(lambda p: map(lambda bl: data[str(p)][bl], bls), pols), 0, -1)
-
-    # resort time and baseline axes
-    data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
-    nsample_array = np.ones_like(data_array, np.float)
-
-    # flags
-    if flags is None:
-        flag_array = np.zeros_like(data_array, np.float).astype(np.bool)
-    else:
-        flag_array = np.moveaxis(map(lambda p: map(lambda bl: flags[str(p)][bl].astype(np.bool), bls), pols), 0, -1)
-        flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
-
-    # configure baselines
-    bls = np.repeat(np.array(bls), Ntimes, axis=0)
-
-    # get ant_1_array, ant_2_array
-    ant_1_array = bls[:,0]
-    ant_2_array = bls[:,1]
-
-    # get baseline array
-    baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
-
-    # get antennas in data
-    data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
-    Nants_data = len(data_ants)
-
-    # get telescope ants
-    antenna_numbers = np.unique(antpos.keys())
-    Nants_telescope = len(antenna_numbers)
-    antenna_names = map(lambda a: "HH{}".format(a), antenna_numbers)
-
-    # get antpos and uvw
-    antenna_positions = np.array(map(lambda k: antpos[k], antenna_numbers))
-    uvw_array = np.array([antpos[k[0]] - antpos[k[1]] for k in zip(ant_1_array, ant_2_array)])
-
-    # get zenith location
-    zenith_dec_degrees = np.ones_like(baseline_array) * dec
-    zenith_ra_degrees = utils.JD2RA(time_array, longitude)
-    zenith_dec = zenith_dec_degrees * np.pi / 180
-    zenith_ra = zenith_ra_degrees * np.pi / 180
-
-    # instantiate object
-    uvd = UVData()
-
-    # assign parameters
-    params = ['Nants_data', 'Nants_telescope', 'Nbls', 'Nblts', 'Nfreqs', 'Npols', 'Nspws', 'Ntimes',
-              'ant_1_array', 'ant_2_array', 'antenna_names', 'antenna_numbers', 'baseline_array',
-              'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'instrument',
-              'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
-              'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
-              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']              
-    for p in params:
-        uvd.__setattr__(p, locals()[p])
-
-    # write uvdata
-    if write_miriad:
-        # check output
-        fname = os.path.join(outdir, fname)
-        if os.path.exists(fname) and overwrite is False:
-            abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
-        else:
-            abscal.echo("saving {}".format(fname), type=0, verbose=verbose)
-            uvd.write_miriad(fname, clobber=True)
-
-    if return_uvdata:
-        return uvd
-
-
 def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     """
     one-iteration sigma clipping algorithm. set clipped values to nan.
@@ -938,6 +780,6 @@ def switch_bl(key):
     where ant1 and ant2 are ints and pol is a two-char str
     Ex. (1, 2, 'xx')
     """
-    return key[:2][::-1] + (key[-1],)
+    return (key[1], key[0], key[2][::-1])
 
 
