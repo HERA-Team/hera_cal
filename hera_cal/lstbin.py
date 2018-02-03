@@ -27,8 +27,8 @@ import datetime
 import aipy
 
 
-def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0, 
-            lst_low=None, lst_hi=None, atol=1e-6, median=False, truncate_empty=True,
+def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst_low=None,
+            lst_hi=None, flag_thresh=0.7, atol=1e-6, median=False, truncate_empty=True,
             sig_clip=False, sigma=2.0, min_N=4, return_no_avg=False, verbose=True):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
@@ -40,27 +40,37 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
     data_list : type=list, list of DataContainer dictionaries holding complex visibility data
 
     lst_list : type=list, list of ndarrays holding LST stamps of each data dictionary in data_list.
-                These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
+               These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
     
-    flags_list : type=list, list of DataContainer dictionaries holding flags for each dict in data_list
+    flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
+                 in data_list. Flagged data do not contribute to the average of an LST bin.
 
     dlst : type=float, delta-LST spacing for lst_grid. If None, will use the delta-LST of the first
-            array in lst_list.
+           array in lst_list.
 
-    lst_low : type=float, lower bound in lst_grid centers used for LST binning
+    lst_start : type=float, starting LST for making the lst_grid, extending from
+                [lst_start, lst_start+2pi). Default is lst_start = 0 radians.
 
-    lst_hi : type=float, upper bound in lst_grid centers used for LST binning
+    lst_low : type=float, lower bound on LST bin centers used for contructing LST grid
 
-    atol : type=float, absolute tolerance for comparing floats in lst_list to floats in lst_grid
+    lst_hi : type=float, upper bound on LST bin centers used for contructing LST grid
 
-    median : type=boolean, if True use median for LST binning, else use mean
+    flag_thresh : type=float, minimum fraction of flagged points in an LST bin needed to
+                  flag the entire bin.
 
-    sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins
-            on the real and imag components separately. Warning: This considerably slows down the code.
+    atol : type=float, absolute tolerance for comparing LST bin center floats
 
-    sigma : type=float, input standard deviation to use for sigma clipping algorithm.
+    median : type=boolean, if True use median for LST binning. Warning: this is slower.
 
-    min_N : type=int, minimum number of points in LST bin to perform LST binning
+    truncate_empty : type=boolean, if True, truncate output time integrations that have no data
+                     in them.
+
+    sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins on the
+               real and imag components separately. Warning: This is considerably slow.
+
+    sigma : type=float, input sigma threshold to use for sigma clipping algorithm.
+
+    min_N : type=int, minimum number of points in an LST bin to perform sigma clipping
 
     return_no_avg : type=boolean, if True, return binned but un-averaged data and flags.
 
@@ -68,19 +78,20 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
     -------
     lst_bins : ndarray containing final lst grid of data
 
-    data_avg : dictionary of data having averaged the LST bins
+    data_avg : dictionary of data having averaged in each LST bin
 
-    flags_min : dictionary of minimum data flag in each LST bin
+    flags_min : dictionary of minimum of data flags in each LST bin
     
-    data_std : dictionary of data with real component holding std along real axis
-        and imag component holding std along imag axis
+    data_std : dictionary of data with real component holding LST bin std along real axis
+               and imag component holding std along imag axis
 
-    data_count : dictionary containing the number count of data points in each LST bin.
+    data_count : dictionary containing the number count of data points averaged in each LST bin.
 
     if return_no_avg:
         Output: (data_bin, flags_min)
         data_bin : dictionary with (ant1,ant2,pol) as keys and ndarrays holding
             un-averaged complex visibilities in each LST bin as values. 
+        flags_min : dictionary with data flags
     """
     # get visibility shape
     Ntimes, Nfreqs = data_list[0][data_list[0].keys()[0]].shape
@@ -134,25 +145,37 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
 
         # iterate over keys in d
         for j, key in enumerate(d.keys()):
-            # conjugate d[key] if necessary
+
+            # data[key] will an odict. if data[key] doesn't exist
+            # create data[key] as an empty odict. if data[key] already
+            # exists, then pass
             if key in data:
                 pass
             elif switch_bl(key) in data:
+                # check to see if conj(key) exists in data
                 key = switch_bl(key)
                 d[key] = np.conj(d[switch_bl(key)])
                 if flags_list is not None:
                     flags_list[i][key] = flags_list[i][switch_bl(key)]
             else:
+                # if key or conj(key) not in data, insert key into data
                 data[key] = odict()
                 flags[key] = odict()
 
+            # data[key] is itself an odict, with keys as grid indices integers and 
+            # values as lists holding the LST bin data: ndarrays of shape (Nfreqs)
+
             # iterate over grid_indices, and append to data if data_in_bin is True
             for k, ind in enumerate(grid_indices):
+                # ensure data_in_bin is True for this grid index
                 if data_in_bin[k]:
+                    # if index not in data[key], insert it as empty list
                     if ind not in data[key]:
                         data[key][ind] = []
                         flags[key][ind] = []
+                    # append data ndarray to LST bin
                     data[key][ind].append(d[key][k])
+                    # also insert flags if fed
                     if flags_list is None:
                         flags[key][ind].append(np.zeros_like(d[key][k], np.bool))
                     else:
@@ -163,7 +186,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
         # use only lst_grid bins that have data in them
         lst_bins = lst_grid[sorted(all_lst_indices)]
     else:
-        # keep all lst_grid bins and fill data and flags appropriately
+        # keep all lst_grid bins and fill empty ones with unity data and mark as flagged
         for index in range(len(lst_grid)):
             if index in all_lst_indices:
                 # skip if index already in data
@@ -173,10 +196,10 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
                 data[key][index] = [np.ones(Nfreqs, np.complex)]
                 flags[key][index] = [np.ones(Nfreqs, np.bool)]
 
-        # use all LST bins                
+        # use all LST bins              
         lst_bins = lst_grid
 
-    # wrap lst_bins
+    # wrap lst_bins if needed
     lst_bins = lst_bins % (2*np.pi)
 
     # make final dictionaries
@@ -188,38 +211,71 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=0,
     # return un-averaged data if desired
     if return_no_avg:
         # return all binned data instead of just bin average 
-        data_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, data[k][k2]), sorted(data[k].keys()))).values())), data.keys()))
-        flags_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, flags[k][k2]), sorted(flags[k].keys()))).values())), flags.keys()))
+        data_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, data[k][k2]), sorted(data[k].keys()))).values())), sorted(data.keys())))
+        flags_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, flags[k][k2]), sorted(flags[k].keys()))).values())), sorted(flags.keys())))
 
         return data_bin, flags_bin
 
-    # iterate over data and get statistics
+    # iterate over data keys and get statistics
     for i, key in enumerate(data.keys()):
-        if sig_clip:
-            for j, ind in enumerate(data[key].keys()):
-                d = np.array(data[key][ind])
-                f = np.array(flags[key][ind])
-                f[np.isnan(f)] = True
-                data[key][ind] = sigma_clip(d.real, flags=f, sigma=sigma, min_N=min_N) + 1j*sigma_clip(d.imag, flags=f, sigma=sigma, min_N=min_N)
-                flags[key][ind] = f
-        if median:
-            real_avg = np.array(map(lambda ind: np.nanmedian(map(lambda r: r.real, data[key][ind]), axis=0), sorted(data[key].keys())))
-            imag_avg = np.array(map(lambda ind: np.nanmedian(map(lambda r: r.imag, data[key][ind]), axis=0), sorted(data[key].keys())))
-            f_min = np.array(map(lambda ind: np.nanmin(flags[key][ind], axis=0), sorted(flags[key].keys())))
-        else:
-            real_avg = np.array(map(lambda ind: np.nanmean(map(lambda r: r.real, data[key][ind]), axis=0), sorted(data[key].keys())))
-            imag_avg = np.array(map(lambda ind: np.nanmean(map(lambda r: r.imag, data[key][ind]), axis=0), sorted(data[key].keys())))
-            f_min = np.array(map(lambda ind: np.nanmin(flags[key][ind], axis=0), sorted(flags[key].keys())))
-        real_stan_dev = np.array(map(lambda ind: np.nanstd(map(lambda r: r.real, data[key][ind]), axis=0), sorted(data[key].keys())))
-        imag_stan_dev = np.array(map(lambda ind: np.nanstd(map(lambda r: r.imag, data[key][ind]), axis=0), sorted(data[key].keys())))
-        num_pix = np.array(map(lambda ind: np.nansum(map(lambda r: r.real*0+1, data[key][ind]), axis=0), sorted(data[key].keys())))
 
-        data_avg[key] = real_avg + 1j*imag_avg
-        flags_min[key] = f_min
-        data_std[key] = real_stan_dev + 1j*imag_stan_dev
-        data_count[key] = num_pix.astype(np.complex)
+        # create empty lists
+        real_avg = []
+        imag_avg = []
+        f_min = []
+        real_std = []
+        imag_std = []
+        bin_count = []
 
-    # turn into DataContainer
+        # iterate over sorted indices in data[key]
+        for j, ind in enumerate(sorted(data[key].keys())):
+
+            # make data and flag arrays from lists
+            d = np.array(data[key][ind])
+            f = np.array(flags[key][ind])
+            f[np.isnan(f)] = True
+
+            # replace flagged data with nan
+            d[f] *= np.nan
+
+            # sigma clip if desired
+            if sig_clip:
+                # clip real
+                real_f = sigma_clip(d.real, sigma=sigma, min_N=min_N, axis=0)
+                # clip imag
+                imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N, axis=0)
+
+                # merge clip flags
+                f += real_f + imag_f
+
+            # check flag thresholds
+            flag_bin = np.sum(f, axis=0).astype(np.float) / len(f) > flag_thresh
+            d[:, flag_bin] *= np.nan
+            f[:, flag_bin] = True
+
+            # take bin average
+            if median:
+                real_avg.append(np.nanmedian(d.real, axis=0))
+                imag_avg.append(np.nanmedian(d.imag, axis=0))
+            else:
+                real_avg.append(np.nanmean(d.real, axis=0))
+                imag_avg.append(np.nanmean(d.imag, axis=0))
+
+            # get minimum bin flag
+            f_min.append(np.nanmin(f, axis=0))
+
+            # get other stats
+            real_std.append(np.nanstd(d.real, axis=0))
+            imag_std.append(np.nanstd(d.imag, axis=0))
+            bin_count.append(np.nansum(~np.isnan(d), axis=0))
+
+        # insert statistics into final dictionaries
+        data_avg[key] = np.array(real_avg) + 1j*np.array(imag_avg)
+        flags_min[key] = np.array(f_min)
+        data_std[key] = np.array(real_std) + 1j*np.array(imag_std)
+        data_count[key] = np.array(bin_count).astype(np.complex)
+
+    # turn into DataContainer objects
     data_avg = DataContainer(data_avg)
     flags_min = DataContainer(flags_min)
     data_std = DataContainer(data_std)
@@ -439,10 +495,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     Result:
     -------
-    if write_miriad:
-        zen.pol.LST.*.*.uv : containing LST-binned data
-        zen.pol.STD.*.*.uv : containing stand dev of LST bin
-        zen.pol.NUM.*.*.uv : containing number of points in LST bin
+    zen.pol.LST.*.*.uv : containing LST-binned data
+    zen.pol.STD.*.*.uv : containing stand dev of LST bin
+    zen.pol.NUM.*.*.uv : containing number of points in LST bin
     """
     # get dlst from first data file if None
     if dlst is None:
@@ -642,7 +697,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
                 or .0864 seconds.
 
     lst_start : type=float, starting point for lst_grid, extending out 2pi from lst_start.
-                            lst_start must fall exactly on an LST bin given dlst. If not, it is
+                            lst_start must fall exactly on an LST bin given a dlst. If not, it is
                             replaced with the closest bin. Default is lst_start at zero radians.
 
     Output:
@@ -663,7 +718,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         dlst = new_dlst
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
-    lst_grid = np.arange(0, 2*np.pi-1e-6, dlst) + dlst / 2
+    lst_grid = np.arange(0, 2*np.pi-1e-7, dlst) + dlst / 2
 
     # shift grid by lst_start
     if lst_start is not None:
@@ -730,7 +785,9 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
 
 def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     """
-    one-iteration sigma clipping algorithm. set clipped values to nan.
+    one-iteration robust sigma clipping algorithm. returns clip_flags array.
+    Warning: this function will directly replace flagged and clipped data in array with
+    a np.nan, so as to not make a copy of array.
 
     Parameters:
     -----------
@@ -745,9 +802,13 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     min_N : int, minimum length of array to sigma clip, below which no sigma
                 clipping is performed.
 
-    Output:
+    return_arrs : type=boolean, if True, return array and flags
+    
+    Output: flags
     -------
-    array : same as input array, but clipped values have been set to np.nan
+    clip_flags : type=boolean ndarray, has same shape as input array, but has clipped
+                 values set to True. Also inherits any flagged data from flags array
+                 if passed.
     """
     # ensure array is an array
     if type(array) is not np.ndarray:
@@ -757,8 +818,12 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     if array.shape[axis] < min_N:
         return array
 
-    # apply flags
+    # create empty clip_flags array
+    clip_flags = np.zeros_like(array, np.bool)
+
+    # inherit flags if fed and apply flags to data
     if flags is not None:
+        clip_flags += flags
         array[flags] *= np.nan
 
     # get robust location
@@ -767,11 +832,14 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     # get MAD
     std = np.nanmedian(np.abs(array - mean), axis=axis) * 1.4
 
-    # set cut data to nans
-    cut = np.where(np.abs(array-mean)/std > sigma)
-    array[cut] *= np.nan
+    # get clipped data
+    clip = np.where(np.abs(array-mean)/std > sigma)
 
-    return array
+    # set clipped data to nan and set clipped flags to True
+    array[clip] *= np.nan
+    clip_flags[clip] = True
+
+    return clip_flags
 
 
 def switch_bl(key):
