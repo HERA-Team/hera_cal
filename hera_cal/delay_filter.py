@@ -48,7 +48,7 @@ class Delay_Filter():
         self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
         
 
-    def run_filter(self, to_filter=[], weight_dict=None, horizon=1., standoff=0., tol=1e-9, window='none', skip_wgt=0.1, maxiter=100):
+    def run_filter(self, to_filter=[], weight_dict=None, standoff=0., horizon=1.,tol=1e-9, window='none', skip_wgt=0.1, maxiter=100):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
     
@@ -57,6 +57,7 @@ class Delay_Filter():
                 If [] (the default), all visibilities are filtered.
             weight_dict: dictionary or DataContainer with all the same keys as self.data. 
                 Multiplicative weights to use for the delay filter. Default, use logical not of self.flags
+            standoff: fixed additional delay beyond the horizon (in ns)
             horizon: proportionality constant for bl_len where 1 is the horizon (full light travel time)
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
             window: window function for filtering applied to the filtered axis. 
