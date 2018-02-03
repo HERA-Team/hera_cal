@@ -440,6 +440,7 @@ class Test_AbsCal:
         AC.wgts = None
         AC.delay_slope_lincal(verbose=False)
 
+
     def test_merge_gains(self):
         self.AC.abs_amp_logcal(verbose=False)
         self.AC.TT_phs_logcal(verbose=False)
