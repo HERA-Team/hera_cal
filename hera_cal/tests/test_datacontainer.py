@@ -178,7 +178,7 @@ class TestDataContainer(unittest.TestCase):
         self.assertEqual(dc[(100, 101, 'xy')].shape, (100,))
         self.assertEqual(dc[(100, 101, 'xy')].dtype, np.complex)
         self.assertAlmostEqual(dc[(100, 101, 'xy')][1], (1 + 1j))
-        self.assertAlmostEqual(dc[(101, 100, 'xy')][1], (1 - 1j))
+        self.assertAlmostEqual(dc[(101, 100, 'yx')][1], (1 - 1j))
         self.assertEqual(len(dc.keys()), 11)
         self.assertEqual((100, 101) in dc._bls, True)
         self.assertEqual('xy' in dc._pols, True)
