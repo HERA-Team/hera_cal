@@ -134,14 +134,14 @@ def test_data_to_miriad():
     nt.assert_true(os.path.exists('ex.uv'))
     uvd = UVData()
     uvd.read_miriad('ex.uv')
-    nt.assert_equal(uvd.get_data(24,25,'xx').shape, (180, 64))
-    nt.assert_almost_equal(uvd.get_data(24,25,'xx')[90, 32], (-0.010416029+0.0016994481j))
+    nt.assert_equal(uvd.get_data(24,25,'xx').shape, (60, 64))
+    nt.assert_almost_equal(uvd.get_data(24,25,'xx')[90, 32], (1.3784008+0.87549305j))
     shutil.rmtree('ex.uv')
     # test exception
     nt.assert_raises(AttributeError, utils.data_to_miriad, "ex.uv", d, l, f, ap, outdir="./")
     # return uvd
     uvd = utils.data_to_miriad("ex.uv", d, l, f, ap, outdir="./", start_jd=2458042, overwrite=True, return_uvdata=True)
-    nt.assert_equal(type(uvd), UVData)
+    nt.assert_true(isinstance(uvd, UVData))
     shutil.rmtree('ex.uv')
 
 

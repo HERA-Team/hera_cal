@@ -3,7 +3,7 @@ import aipy
 import astropy.constants as const
 from astropy.time import Time
 import pyuvdata.utils as uvutils
-from pyuvdata import UVCal
+from pyuvdata import UVCal, UVData
 import os
 import hera_cal
 import copy
@@ -546,9 +546,9 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
         # check output
         fname = os.path.join(outdir, fname)
         if os.path.exists(fname) and overwrite is False:
-            abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
+            hera_cal.abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
         else:
-            abscal.echo("saving {}".format(fname), type=0, verbose=verbose)
+            hera_cal.abscal.echo("saving {}".format(fname), type=0, verbose=verbose)
             uvd.write_miriad(fname, clobber=True)
 
     if return_uvdata:
