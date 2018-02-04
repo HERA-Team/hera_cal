@@ -242,14 +242,24 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             if sig_clip:
                 # clip real
                 real_f = sigma_clip(d.real, sigma=sigma, min_N=min_N, axis=0)
+
                 # clip imag
                 imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N, axis=0)
 
+                # get real +  imag flags
+                clip_flags = real_f + imag_f
+
+                # flag data
+                d[clip_flags] *= np.nan
+
                 # merge clip flags
-                f += real_f + imag_f
+                f += (real_f + imag_f)
 
             # check flag thresholds
-            flag_bin = np.sum(f, axis=0).astype(np.float) / len(f) > flag_thresh
+            if len(f) == 1:
+                flag_bin = np.zeros(f.shape[1], np.bool)
+            else:
+                flag_bin = np.sum(f, axis=0).astype(np.float) / len(f) > flag_thresh
             d[:, flag_bin] *= np.nan
             f[:, flag_bin] = True
 
@@ -816,7 +826,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
 
     # ensure array passes min_N criteria:
     if array.shape[axis] < min_N:
-        return array
+        return np.zeros_like(array, np.bool)
 
     # create empty clip_flags array
     clip_flags = np.zeros_like(array, np.bool)
@@ -833,7 +843,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     std = np.nanmedian(np.abs(array - mean), axis=axis) * 1.4
 
     # get clipped data
-    clip = np.where(np.abs(array-mean)/std > sigma)
+    clip = np.abs(array-mean)/std > sigma
 
     # set clipped data to nan and set clipped flags to True
     array[clip] *= np.nan
