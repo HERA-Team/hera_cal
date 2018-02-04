@@ -6,10 +6,8 @@ class DataContainer:
     """
     Object that abstracts away the pol/ant pair ordering of data dict's.
 
-    adding two DataContainer adds their values: DC1 + DC2
+    adding two DataContainers adds their values: DC1 + DC2
     multiplying two DataContainers multiplies their values: DC1 * DC2
-    xor two DataContainer concatenates their values along time axis: DC1 ^ DC2 
-    exp two DataContainer averages their values: DC1 ** DC2
     """
 
     def __init__(self, data):
@@ -92,8 +90,10 @@ class DataContainer:
         else:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
-    def concat(self, D, axis=0):
-        """ concatenates DataContainers across an axis """
+    def concatenate(self, D, axis=0):
+        """
+        Concatenates D, a DataContainer or a list of DCs, with self along an axis
+        """
         # check type of D
         if isinstance(D, DataContainer):
             # turn into list if not already a list
@@ -120,10 +120,7 @@ class DataContainer:
         # iterate over D keys
         for i, k in enumerate(keys):
             if self.__contains__(k):
-                if axis == 0:
-                    newD[k] = np.concatenate([self.__getitem__(k)] + map(lambda d: d[k], D), axis=0)
-                elif axis == 1:
-                    newD[k] = np.concatenate([self.__getitem__(k)] + map(lambda d: d[k], D), axis=1)
+                newD[k] = np.concatenate([self.__getitem__(k)] + map(lambda d: d[k], D), axis=axis)
 
         return DataContainer(newD)
   

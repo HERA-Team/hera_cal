@@ -186,7 +186,7 @@ def JD2RA(jd_array, longitude=21.42830):
 
     lon : longitude of observer in degrees east
     
-    return RA float or array in degrees
+    return RA float (or array) in degrees
     """
     if type(jd_array) == list or type(jd_array) == np.ndarray:
         _array = True
