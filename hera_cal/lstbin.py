@@ -146,7 +146,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         # iterate over keys in d
         for j, key in enumerate(d.keys()):
 
-            # data[key] will an odict. if data[key] doesn't exist
+            # data[key] will be an odict. if data[key] doesn't exist
             # create data[key] as an empty odict. if data[key] already
             # exists, then pass
             if key in data:
@@ -162,7 +162,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 data[key] = odict()
                 flags[key] = odict()
 
-            # data[key] is itself an odict, with keys as grid indices integers and 
+            # data[key] is an odict, with keys as grid index integers and 
             # values as lists holding the LST bin data: ndarrays of shape (Nfreqs)
 
             # iterate over grid_indices, and append to data if data_in_bin is True
@@ -457,33 +457,33 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                   atol=1e-6, miriad_kwargs={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
-    time bins. Miriad file meta data (frequency bins, antennas positions, time_array)
+    time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
     are taken from the first file in data_files.
 
     Parameters:
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
-            paths to miriad files from a particular night. Frequency axis of each file must 
-            be identical.
+                 paths to miriad files from a particular night. These files should be sorted
+                 by ascending Julian Date. Frequency axis of each file must be identical.
 
-    dlst : type=float, LST grid bin spacing. If None will get this from the first file in data_files.
+    dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
 
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
 
-    ntimes_per_file : type=int, number of LST bins in a single file
+    ntimes_per_file : type=int, number of LST bins in a single output file
 
-    file_ext : type=str, extension to "zen." for output miriad files. must have three
-            formatting placeholders, first for polarization(s), second for type of file
-            Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
+    file_ext : type=str, extension to "zen." for output miriad files. This must have three
+               formatting placeholders, first for polarization(s), second for type of file
+               Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
 
     pol_select : type=list, list of polarization strings Ex. ['xx'] to select in data_files
 
     outdir : type=str, output directory
 
-    overwrite : type=bool, if True overwite output files
+    overwrite : type=bool, if True overwrite output files
 
     align : type=bool, if True, concatenate nightly data and LST align with the lst_grid.
-        Warning : slows down code somewhat
+            Warning : slows down code.
 
     align_kwargs : type=dictionary, keyword arugments for lst_align not included in above kwars.
 
@@ -495,9 +495,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     Result:
     -------
-    zen.pol.LST.*.*.uv : containing LST-binned data
-    zen.pol.STD.*.*.uv : containing stand dev of LST bin
-    zen.pol.NUM.*.*.uv : containing number of points in LST bin
+    zen.{pol}.LST.{file_lst}.uv : containing LST-binned data
+    zen.{pol}.STD.{file_lst}.uv : containing standard dev of LST bin
+    zen.{pol}.NUM.{file_lst}.uv : containing number of points in LST bin
     """
     # get dlst from first data file if None
     if dlst is None:
@@ -666,7 +666,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # get polarizations
         pols = bin_data.pols()
 
-        # configure filename
+        # configure filenames
         bin_file = "zen.{}".format(file_ext.format('.'.join(pols), "LST", bin_lst[0]))
         std_file = "zen.{}".format(file_ext.format('.'.join(pols), "STD", bin_lst[0]))
         num_file = "zen.{}".format(file_ext.format('.'.join(pols), "NUM", bin_lst[0]))
