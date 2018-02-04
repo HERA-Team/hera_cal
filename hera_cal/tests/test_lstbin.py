@@ -82,7 +82,7 @@ class Test_lstbin:
         output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         nt.assert_equal(output[0][(24,25,'xx')].shape, (180, 64))
         nt.assert_equal(len(output[2]), 180)
-        nt.assert_almost_equal(output[2][0], 0.1836249943336998)
+        nt.assert_almost_equal(output[2][0], 0.20085207269336539)
         # test flag extrapolate
         nt.assert_true(output[1][(24,25,'xx')][0].min())
         # test no dlst
@@ -90,43 +90,43 @@ class Test_lstbin:
         # test wrapped lsts
         lsts = (self.lsts1 + 6) % (2*np.pi)
         output = hc.lstbin.lst_align(self.data1, lsts, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
-        nt.assert_almost_equal(output[2][150], 0.018401651884187409)
+        nt.assert_almost_equal(output[2][150], 0.035628730243852047)
 
     def test_lst_align_files(self):
         # basic execution
-        hc.lstbin.lst_align_files(self.data_files[0][0], outdir="./", overwrite=True)
-        nt.assert_true(os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18362'))
-        if os.path.exists('./zen.2458042.40141.xx.HH.uvA.L.0.18362'):
-            shutil.rmtree('./zen.2458042.40141.xx.HH.uvA.L.0.18362')
+        hc.lstbin.lst_align_files(self.data_files[0][0], outdir="./", overwrite=True, verbose=False)
+        nt.assert_true(os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20085'))
+        if os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20085'):
+            shutil.rmtree('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20085')
 
     def test_lst_bin_files(self):
         # basic execution
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.18441.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.18441.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.18441.uv'))
-        shutil.rmtree('./zen.xx.LST.0.18441.uv')
-        shutil.rmtree('./zen.xx.STD.0.18441.uv')
-        shutil.rmtree('./zen.xx.NUM.0.18441.uv')
-        # tst lst_align
+        nt.assert_true(os.path.exists('./zen.xx.LST.0.20164.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.STD.0.20164.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.NUM.0.20164.uv'))
+        shutil.rmtree('./zen.xx.LST.0.20164.uv')
+        shutil.rmtree('./zen.xx.STD.0.20164.uv')
+        shutil.rmtree('./zen.xx.NUM.0.20164.uv')
+        # test lst_align
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False, align=True)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.18441.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.18441.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.18441.uv'))
-        shutil.rmtree('./zen.xx.LST.0.18441.uv')
-        shutil.rmtree('./zen.xx.STD.0.18441.uv')
-        shutil.rmtree('./zen.xx.NUM.0.18441.uv')
+        nt.assert_true(os.path.exists('./zen.xx.LST.0.20164.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.STD.0.20164.uv'))
+        nt.assert_true(os.path.exists('./zen.xx.NUM.0.20164.uv'))
+        shutil.rmtree('./zen.xx.LST.0.20164.uv')
+        shutil.rmtree('./zen.xx.STD.0.20164.uv')
+        shutil.rmtree('./zen.xx.NUM.0.20164.uv')
 
-        data_files = [sorted(glob.glob(DATA_PATH+'/zen.2458043.*uvXRAA')),
-                      sorted(glob.glob(DATA_PATH+'/zen.2458044.*uvXRAA')),
-                      sorted(glob.glob(DATA_PATH+'/zen.2458045.*uvXRAA'))]
+        data_files = [[glob.glob(DATA_PATH+'/zen.2458043.*uvXRAA')[0]],
+                      [glob.glob(DATA_PATH+'/zen.2458045.*uvXRAA')[-1]]]
         # test data_list is empty
         hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
                                 verbose=False)
-        nt.assert_true(os.path.exists("./zen.xx.LST.0.18441.uv"))
-        nt.assert_true(os.path.exists("./zen.xx.LST.4.74175.uv"))
+        nt.assert_true(os.path.exists("./zen.xx.LST.0.20164.uv"))
+        nt.assert_true(os.path.exists("./zen.xx.LST.0.31909.uv"))
+        nt.assert_true(os.path.exists("./zen.xx.LST.0.36608.uv"))
         output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
                                        glob.glob("./zen.xx.STD*"),
                                        glob.glob("./zen.xx.NUM*")])
@@ -135,7 +135,7 @@ class Test_lstbin:
                 shutil.rmtree(of)
 
         # test smaller ntimes file output, sweeping through f_select
-        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=120, outdir="./", overwrite=True,
+        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True,
                                 verbose=False)
         output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
                                        glob.glob("./zen.xx.STD*"),
@@ -154,8 +154,8 @@ class Test_lstbin:
         # test basic execution
         np.random.seed(0)
         x = stats.norm.rvs(0, 1, 1000)
-        x[10] = 3
-        x[11] = -3
+        x[10] = 4
+        x[11] = -4
         arr = hc.lstbin.sigma_clip(x, sigma=2.0)
         nt.assert_equal(np.isnan(arr[10]), True)
         nt.assert_equal(np.isnan(arr[11]), True)
@@ -164,8 +164,8 @@ class Test_lstbin:
         x[0, 50] = 100
         x[4, 50] = 5
         arr = hc.lstbin.sigma_clip(x, sigma=2.0)
-        nt.assert_true(np.isnan(arr[0,50]))
-        nt.assert_false(np.isnan(arr[4,50]))
+        nt.assert_true(arr[0,50])
+        nt.assert_false(arr[4,50])
 
     def test_switch_bl(self):
         # test basic execution
