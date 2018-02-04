@@ -213,17 +213,17 @@ class TestDataContainer(unittest.TestCase):
     def test_concatenate(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = abscal.UVData2AbsCalDict(test_file)
-        d2 = d.concat(d)
+        d2 = d.concatenate(d)
         self.assertEqual(d2[(24,25,'xx')].shape[0], d[(24,25,'xx')].shape[0]*2)
-        d2 = d.concat(d, axis=1)
+        d2 = d.concatenate(d, axis=1)
         self.assertEqual(d2[(24,25,'xx')].shape[1], d[(24,25,'xx')].shape[1]*2)
-        d2 = d.concat([d,d], axis=0)
+        d2 = d.concatenate([d,d], axis=0)
         self.assertEqual(d2[(24,25,'xx')].shape[0], d[(24,25,'xx')].shape[0]*3)
         # test exceptions
         d2, f2 = abscal.UVData2AbsCalDict(test_file)
         d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :10]
-        self.assertRaises(ValueError, d.concat, d2, axis=0)
-        self.assertRaises(ValueError, d.concat, d2, axis=1)
+        self.assertRaises(ValueError, d.concatenate, d2, axis=0)
+        self.assertRaises(ValueError, d.concatenate, d2, axis=1)
 
 
 if __name__ == '__main__':
