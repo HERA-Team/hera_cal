@@ -463,8 +463,7 @@ def lst_bin_arg_parser():
 
 def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
                   pol_select=None, outdir=None, overwrite=False, history=' ', lst_start=0,
-                  align=False, align_kwargs={}, bin_kwargs={},
-                  atol=1e-6, miriad_kwargs={}):
+                  align=False, align_kwargs={}, bin_kwargs={}, atol=1e-6, miriad_kwargs={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
@@ -540,13 +539,13 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     end_diff[end_diff > dlst/2 + atol] = -100
     end_index = np.argmax(end_diff)
 
-    # get number of files
+    # get number of output files
     nfiles = int(np.ceil(float(end_index - start_index) / ntimes_per_file))
 
-    # get file lsts
+    # get output file lsts
     file_lsts = [lst_grid[start_index:end_index][ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
 
-    # create data file status: None if not opened, data object if opened
+    # create data file status: None if not opened, data objects if opened
     data_status = map(lambda d: map(lambda f: None, d), data_files)
 
     # get outdir
@@ -557,7 +556,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     miriad_kwargs['outdir'] = outdir
     miriad_kwargs['overwrite'] = overwrite
  
-    # get frequency and antennas position information from the first data_files
+    # get frequency, time and antennas position information from the zeroth data file
     d, fl, ap, a, f, t, l, p = abscal.UVData2AbsCalDict(data_files[0][0], return_meta=True, pick_data_ants=False)
     freq_array = copy.copy(f)
     antpos = copy.deepcopy(ap)
@@ -566,16 +565,17 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     del d, fl, ap, a, f, t, l, p
     garbage_collector.collect()
 
-    # iterate over end-result LST files
+    # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         abscal.echo("LST file {} / {}: {}".format(i+1, nfiles, datetime.datetime.now()), type=1, verbose=verbose)
+
         # create empty data_list and lst_list
         data_list = []
         file_list = []
         flgs_list = []
         lst_list = []
 
-        # locate all files that fall within this range of lsts
+        # locate all data files that fall within the range of lst for this output file
         f_min = np.min(f_lst)
         f_max = np.max(f_lst)
         f_select = np.array(map(lambda d: map(lambda f: (f[1] >= f_min)&(f[0] <= f_max), d), data_times))
@@ -583,30 +583,31 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             old_f_select = copy.copy(f_select)
 
         # open necessary files, close ones that are no longer needed
+        # append necessary files to data_list
         for j in range(len(data_files)):
             nightly_data_list = []
             nightly_flgs_list = []
             nightly_lst_list = []
             for k in range(len(data_files[j])):
                 if f_select[j][k] == True and data_status[j][k] is None:
-                    # open file(s)
+                    # open file
                     d, fl, ap, a, f, t, l, p = abscal.UVData2AbsCalDict(data_files[j][k], return_meta=True, pol_select=pol_select)
 
                     # unwrap l
-                    l[np.where(l < start_lst)] += 2*np.pi
+                    l[l < start_lst] += 2*np.pi
 
-                    # pass reference to data_status
+                    # pass data references to data_status list
                     data_status[j][k] = [d, fl, ap, a, f, t, l, p]
 
-                    # erase unnecessary references
+                    # erase references from namespace
                     del d, fl, ap, a, f, t, l, p
 
                 elif f_select[j][k] == False and old_f_select[j][k] == True:
-                    # erase reference
+                    # close file
                     del data_status[j][k]
                     data_status[j].insert(k, None)
 
-                # copy references to data_list
+                # if file is needed, append data references to data_list
                 if f_select[j][k] == True:
                     file_list.append(data_files[j][k])
                     nightly_data_list.append(data_status[j][k][0])
@@ -621,9 +622,14 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             # and then interpolating it (another copy)
             if align:
                 # concatenate data across night
-                night_data = reduce(operator.add, nightly_data_list)
-                night_flgs = reduce(operator.add, nightly_flgs_list)
-                night_lsts = np.concatenate(nightly_lst_list)
+                if len(nightly_data_list) == 1:
+                    night_data = nightly_data_list[0]
+                    night_flgs = nightly_flgs_list[0]
+                    night_lsts = nightly_lst_list[0]
+                else:
+                    night_data = nightly_data_list[0].concatenate(nightly_data_list[1:], axis=0)
+                    night_flgs = nightly_flgs_list[0].concatenate(nightly_flgs_list[1:], axis=0)
+                    night_lsts = np.concatenate(nightly_lst_list, axis=0)
 
                 del nightly_data_list, nightly_flgs_list, nightly_lst_list
 
@@ -647,6 +653,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # skip if data_list is empty
         if len(data_list) == 0:
             abscal.echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
+
             # erase data references
             del file_list, data_list, flgs_list, lst_list
 
