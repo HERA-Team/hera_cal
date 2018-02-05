@@ -157,8 +157,8 @@ class Test_lstbin:
         x[10] = 4
         x[11] = -4
         arr = hc.lstbin.sigma_clip(x, sigma=2.0)
-        nt.assert_equal(np.isnan(arr[10]), True)
-        nt.assert_equal(np.isnan(arr[11]), True)
+        nt.assert_true(arr[10])
+        nt.assert_true(arr[11])
         # test array performance
         x = np.array(map(lambda s: stats.norm.rvs(0, s, 100), np.arange(1, 5.1, 1)))
         x[0, 50] = 100
