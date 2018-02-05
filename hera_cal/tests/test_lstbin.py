@@ -40,8 +40,10 @@ class Test_lstbin:
     def test_lstbin(self):
         dlst = 0.0007830490163484
         # test basic execution
-        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
                                    median=True, lst_low=0, lst_hi=np.pi, verbose=False)
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
+                                   verbose=False)
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
                                    verbose=False)
         # check shape and dtype
@@ -76,6 +78,9 @@ class Test_lstbin:
         data_list = [self.data1, self.data2, conj_data3]
         output = hc.lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
         nt.assert_equal(output[1][(24,25,'xx')].shape, (224, 64))
+        # test sigma clip
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
+                                   verbose=False, sig_clip=True, min_N=5, sigma=2)
 
     def test_lst_align(self):
         # test basic execution
@@ -166,6 +171,14 @@ class Test_lstbin:
         arr = hc.lstbin.sigma_clip(x, sigma=2.0)
         nt.assert_true(arr[0,50])
         nt.assert_false(arr[4,50])
+        # test flags
+        arr = stats.norm.rvs(0, 1, 10).reshape(2, 5)
+        flg = np.zeros_like(arr, np.bool)
+        flg[0,3] = True
+        out = hc.lstbin.sigma_clip(arr, flags=flg, min_N=5)
+        nt.assert_false(out[0,3])
+        out = hc.lstbin.sigma_clip(arr, flags=flg, min_N=1)
+        nt.assert_true(out[0,3])
 
     def test_switch_bl(self):
         # test basic execution
