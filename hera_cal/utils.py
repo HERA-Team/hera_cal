@@ -441,7 +441,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
 def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None,
                    outdir="./", write_miriad=True, overwrite=False, verbose=True, history=" ", return_uvdata=False,
                    longitude=21.42830, start_jd=None, instrument="HERA", telescope_name="HERA",
-                   object_name='EOR', phase_type='drift', vis_units='uncalib', dec=-30.72152,
+                   object_name='EOR', vis_units='uncalib', dec=-30.72152,
                    telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395])):
     """
     Take data dictionary, export to UVData object and write as a miriad file. See pyuvdata.UVdata
@@ -455,7 +455,8 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
 
     freq_array : type=ndarray, array containing frequency bins of data (Hz)
 
-    antpos : type=dictionary, antenna position dictionary. keys are ant ints and values are position vectors
+    antpos : type=dictionary, antenna position dictionary. keys are ant ints and values
+             are position vectors in meters in ENU frame.
 
     time_array : type=ndarray, array containing unique Julian Date time bins of data
 
@@ -484,8 +485,6 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     telescope_name : type=str, telescope name
 
     object_name : type=str, observing object name
-
-    phase_type : type=str, phasing type
 
     vis_unit : type=str, visibility units
 
@@ -559,11 +558,16 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     Nants_telescope = len(antenna_numbers)
     antenna_names = map(lambda a: "HH{}".format(a), antenna_numbers)
 
-    # get antpos and uvw
-    antenna_positions = np.array(map(lambda k: antpos[k], antenna_numbers))
+    # set uvw assuming drift phase i.e. phase center is zenith
     uvw_array = np.array([antpos[k[0]] - antpos[k[1]] for k in zip(ant_1_array, ant_2_array)])
 
-    # get zenith location
+    # get antenna positions in ITRF frame
+    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
+    antenna_positions = np.array(map(lambda k: antpos[k], antenna_numbers))
+    antenna_positions = uvutils.ECEF_from_ENU(antenna_positions.T, *tel_lat_lon_alt).T - telescope_location
+
+    # get zenith location: can only write drift phase
+    phase_type = 'drift'
     zenith_dec_degrees = np.ones_like(baseline_array) * dec
     zenith_ra_degrees = JD2RA(time_array, longitude)
     zenith_dec = zenith_dec_degrees * np.pi / 180
