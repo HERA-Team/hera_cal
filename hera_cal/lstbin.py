@@ -279,11 +279,24 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             imag_std.append(np.nanstd(d.imag, axis=0))
             bin_count.append(np.nansum(~np.isnan(d), axis=0))
 
-        # insert statistics into final dictionaries
-        data_avg[key] = np.array(real_avg) + 1j*np.array(imag_avg)
-        flags_min[key] = np.array(f_min)
-        data_std[key] = np.array(real_std) + 1j*np.array(imag_std)
-        data_count[key] = np.array(bin_count).astype(np.complex)
+        # get final statistics
+        d_avg = np.array(real_avg) + 1j*np.array(imag_avg)
+        f_min = np.array(f_min)
+        d_std = np.array(real_std) + 1j*np.array(imag_std)
+        d_num = np.array(bin_count).astype(np.complex)
+
+        # fill nans
+        d_nan = np.isnan(d_avg)
+        d_avg[d_nan] = 1.0
+        f_min[d_nan] = True
+        d_std[d_nan] = 1.0
+        d_num[d_nan] = 0.0
+
+        # insert into dictionaries
+        data_avg[key] = d_avg
+        flags_min[key] = f_min
+        data_std[key] = d_std
+        data_count[key] = d_num
 
     # turn into DataContainer objects
     data_avg = DataContainer(data_avg)
