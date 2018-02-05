@@ -119,8 +119,8 @@ class Test_lstbin:
         shutil.rmtree('./zen.xx.STD.0.20164.uv')
         shutil.rmtree('./zen.xx.NUM.0.20164.uv')
 
-        data_files = [[glob.glob(DATA_PATH+'/zen.2458043.*uvXRAA')[0]],
-                      [glob.glob(DATA_PATH+'/zen.2458045.*uvXRAA')[-1]]]
+        data_files = [[sorted(glob.glob(DATA_PATH+'/zen.2458043.*uvXRAA'))[0]],
+                      [sorted(glob.glob(DATA_PATH+'/zen.2458045.*uvXRAA'))[-1]]]
         # test data_list is empty
         hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
                                 verbose=False)
