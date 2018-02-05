@@ -559,7 +559,7 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     antenna_names = map(lambda a: "HH{}".format(a), antenna_numbers)
 
     # set uvw assuming drift phase i.e. phase center is zenith
-    uvw_array = np.array([antpos[k[0]] - antpos[k[1]] for k in zip(ant_1_array, ant_2_array)])
+    uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
 
     # get antenna positions in ITRF frame
     tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
