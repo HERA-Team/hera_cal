@@ -66,15 +66,38 @@ class TestAA(object):
 
 
 def test_JD2LST():
-    nt.assert_almost_equal(utils.JD2LST(2458042., 21.), 3.9306523072662745)
-    nt.assert_equal(len(utils.JD2LST(np.arange(2458042, 2458046), 21.)), 4)
-def test_LST2JD():
-    nt.assert_almost_equal(utils.LST2JD(np.pi, 2458042, 21.), 2458042.8720297855)
-    nt.assert_almost_equal(len(utils.LST2JD(np.linspace(2, 4, 4), 2458042, 21.)), 4)
-def test_JD2RA():
-    nt.assert_almost_equal(utils.JD2RA(2458042.0, 21.), 224.9887083968118)
-    nt.assert_almost_equal(len(utils.JD2RA(np.arange(2458042, 2458046), 21.)), 4)
+    # test float execution
+    jd = 2458042.
+    nt.assert_almost_equal(utils.JD2LST(jd, longitude=21.), 3.930652307266274)
+    # test array execution
+    jd = np.arange(2458042, 2458046.1, .5)
+    lst = utils.JD2LST(jd, longitude=21.)
+    nt.assert_equal(len(lst), 9)
+    nt.assert_equal(lst[3], 0.81486300218170715)
 
+def test_LST2JD():
+    # test basic execution
+    lst = np.pi
+    jd = utils.LST2JD(lst, start_jd=2458042)
+    nt.assert_almost_equal(jd, 2458042.8708433118)
+    # test array execution
+    lst = np.arange(np.pi, np.pi+1.1, 0.2)
+    jd = utils.LST2JD(lst, start_jd=2458042)
+    nt.assert_equal(len(jd), 6)
+    nt.assert_almost_equal(jd[3], 2458042.9660755517)
+
+def test_JD2RA():
+    # test basic execution
+    jd = 2458042.5
+    ra = utils.JD2RA(jd)
+    nt.assert_equal(ra, 46.130897831277629)
+    # test array
+    jd = np.arange(2458042, 2458043.01, .2)
+    ra = utils.JD2RA(jd)
+    nt.assert_equal(len(ra), 6)
+    nt.assert_equal(ra[3], 82.229459674026003)
+    # test exception
+    nt.assert_raises(ValueError, utils.JD2RA, jd, epoch='foo')
 
 def test_combine_calfits():
     test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
