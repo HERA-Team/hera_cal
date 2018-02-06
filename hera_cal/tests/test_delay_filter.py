@@ -30,7 +30,7 @@ class Test_Delay_Filter(unittest.TestCase):
         self.assertEqual(len(dfil.freqs), 64)
         self.assertTrue(dfil.writable)
 
-    def load_UVData(self):
+    def test_load_UVData(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         uvd = UVData()
         uvd.read_miriad(fname)
@@ -78,8 +78,6 @@ class Test_Delay_Filter(unittest.TestCase):
             self.assertEqual(dfil.CLEAN_models[k].shape, (60,64))
             self.assertTrue(dfil.info.has_key(k))
         
-
-
 
 
 if __name__ == '__main__':
