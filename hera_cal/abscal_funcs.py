@@ -1041,8 +1041,8 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
 
 
 def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=None,
-                 kx=3, ky=3, s=0, flag_extrapolate=True, medfilt_flagged=True, medfilt_window=(3, 7),
-                 aggressive_flagging=False):
+                 kind='cubic', flag_extrapolate=True, medfilt_flagged=True, medfilt_window=(3, 7),
+                 fill_value=None):
     """
     Interpolate complex visibility model onto the time & frequency basis of
     a data visibility. See below for notes on flag propagation if flags is provided.
@@ -1061,8 +1061,10 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
-    flags : type=DataContainer, dictionary containing model flags. Can also contain model wgts and
-                                will convert appropriately.
+    flags : type=DataContainer, dictionary containing model flags. Can also contain model wgts
+            as floats and will convert to booleans appropriately.
+
+    kind : type=str, kind of interpolation, options=['linear', 'cubic', 'quintic']
 
     medfilt_flagged : type=bool, if True, before interpolation, replace flagged pixels with output from 
                       a median filter centered on each flagged pixel.
@@ -1070,13 +1072,10 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     medfilt_window : type=tuple, extent of window for median filter across the (time, freq) axes.
                      Even numbers are rounded down to odd number.
 
-    kx : type=int, type of spline to fit to freq axis of data. See scipy.interpolate.RectBivariateSpline
-
-    ky : type=int, type of spline to fit to time axis of data. See scipy.interpolate.RectBivariateSpline
-
-    s : type=int, smoothing factor for interpolation. Default is no smoothing. See scipy.interpolate.RectBivariateSpline
-
     flag_extrapolate : type=bool, flag extrapolated data_lsts if True.
+
+    fill_value : type=float, if fill_value is None, extrapolated points are extrapolated
+                 else they are filled with fill_value.
 
     Output: (new_model, new_flags)
     -------
@@ -1086,9 +1085,12 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     Notes:
     ------
     If the data has flagged pixels, it is recommended to turn medfilt_flagged to True. This runs a median
-    filter on the flagged pixels and replaces their values with the results, however, they remain as flagged.
-    This happens *before* interpolation. This means that interpolation near these points on unflagged pixels
-    aren't significantly biased by the presence of flagged pixels.
+    filter on the flagged pixels and replaces their values with the results, but they remain flagged.
+    This happens *before* interpolation. This means that interpolation near flagged pixels
+    aren't significantly biased by their presence.
+
+    In general, if flags are fed, flags are propagated if a flagged pixel is a nearest neighbor
+    of an interpolated pixel.
     """
     # make flags
     new_model = odict()
@@ -1140,6 +1142,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
                 flow, fhi = find-f_ext, find+f_ext+1
                 ll = 0
                 while True:
+                    # iterate until window has non-flagged data in it
+                    # with a max of 10 iterations
                     if tlow < 0: tlow = 0
                     if flow < 0: flow = 0
                     r_med = np.nanmedian(real[tlow:thi, flow:fhi])
@@ -1177,11 +1181,9 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         else:
             f = np.zeros_like(real, bool)
         
-        # interpolate
-        real_spl = interpolate.RectBivariateSpline(model_lsts, model_freqs, real, kx=kx, ky=ky, s=s)
-        imag_spl = interpolate.RectBivariateSpline(model_lsts, model_freqs, imag, kx=kx, ky=ky, s=s)
-        interp_real = real_spl(data_lsts, data_freqs)
-        interp_imag = imag_spl(data_lsts, data_freqs)
+        # interpolate 
+        interp_real = interpolate.interp2d(model_freqs, model_lsts, real, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
+        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
 
         # flag extrapolation if desired
         if flag_extrapolate:
