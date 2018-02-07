@@ -1,11 +1,12 @@
 import numpy as np
 from pyuvdata import UVCal, UVData
 from collections import OrderedDict as odict
+from pyuvdata.utils import polstr2num, polnum2str
+from copy import deepcopy
 
-str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
-pol2str = {pol: string for string,pol in str2pol.items()}
 str2antpol = {'x': -5, 'y': -6}
 antpol2str = {antpol: string for string,antpol in str2antpol.items()}
+#TODO: update to use jones strings (e.g. 'jxx' and 'jyy'). Currently uses pyuvdata for visibility polarizations.
 
 def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning 
@@ -36,10 +37,73 @@ def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, po
         freqs: ndarray containing frequency channels (Hz)
         times: ndarray containing julian date bins of data
         lsts: ndarray containing LST bins of data (radians)
-        pol: ndarray containing list of polarization index integers #TODO: wouldn't it be better to return strings?
+        pol: ndarray containing list of polarization strings
     '''
-    #TODO: merge together firstcal.UVData_to_dict and abscal_funcs.UVData2AbsCalDict 
-    raise NotImplementedError('This function has not been implemented yet.')
+
+    uvd = UVData()
+    if isinstance(input_data, (tuple, list, np.ndarray)): #List loading
+        if np.all([isinstance(id, str) for id in input_data]): #List of visibility data paths
+            if format is 'miriad':
+                uvd.read_miriad(list(input_data))
+            elif format is 'uvfits':
+                 #TODO: implement this
+                raise NotImplementedError('This function has not been implemented yet.')
+            else:
+                raise NotImplementedError("Data format must be either 'miriad' or 'uvfits'.")
+        if np.all([isinstance(id, UVData) for id in input_data]): #List of uvdata objects
+            uvd = reduce(operator.add, input_data)
+        else:
+            raise TypeError('If input is a list, it must be only strings or only UVData objects.')
+    elif isinstance(input_data, str): #single visibility data path
+        if format is 'miriad':
+            uvd.read_miriad(input_data)
+        elif format is 'uvfits':
+             #TODO: implement this
+            raise NotImplementedError('This function has not been implemented yet.')
+        else:
+            raise NotImplementedError("Data format must be either 'miriad' or 'uvfits'.")
+    elif isinstance(input_data, UVData): #single UVData object
+        uvd = input_data
+    else:
+        raise TypeError('Input must be a UVData object, a string, or a list of either.')
+
+    data, flags = {}, {}
+    # create nested dictionaries of visibilities in the data[bl][pol] format
+    for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, np.unique(uv_in.baseline_array))):
+        if (i, j) not in data:
+            data[i, j] = {}
+            flags[i, j] = {}
+        for ip, pol in enumerate(uv_in.polarization_array):
+            pol = pol2str(pol)
+            new_data = deepcopy(uv_in.get_data((i, j, pol)))
+            new_flags = deepcopy(uv_in.get_flags((i, j, pol)))
+            if pol not in data[(i, j)]:
+                data[(i, j)][pol] = new_data
+                flags[(i, j)][pol] = new_flags
+            else:
+                data[(i, j)][pol] = np.concatenate([data[(i, j)][pol], new_data ])
+                flags[(i, j)][pol] = np.concatenate([flags[(i, j)][pol], new_flags ])
+    
+    if pop_autos:
+        for bl in data.keys():
+            if bl[0] == bl[1]:
+                del data[bl], flags[bl]
+
+    # If we don't want nested dicts, convert to DataContainer
+    if not nested_dict:
+        data, flags = DataContainer(data), DataContainer(flags)
+
+    # get meta
+    if return_meta:
+        freqs = np.unique(uvd.freq_array)
+        times = np.unique(uvd.time_array)
+        lsts = np.unique(uvd.lst_array)
+        antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
+        antpos = odict(zip(ants, antpos))
+        pols = np.array([polnum2str(polnum) for polnum in uvd.polarization_array])
+        return data, flags, antpos, ants, freqs, times, lsts, pols
+    else:
+        return data, flags
 
 
 def write_vis(outfilename, data, flags, format='miriad', history='', clobber=False, **kwargs):
