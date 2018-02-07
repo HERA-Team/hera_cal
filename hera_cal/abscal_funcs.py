@@ -1109,6 +1109,11 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         print("Warning: flags are fed, but medfilt_flagged=False. \n"
               "This may cause weird behavior of interpolated points near flagged data.")
 
+    # ensure flags are booleans
+    if flags is not None:
+        if np.issubdtype(flags[flags.keys()[0]].dtype, np.float):
+            flags = DataContainer(odict(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys())))
+
     # loop over keys
     for i, k in enumerate(model.keys()):
         # get model array
