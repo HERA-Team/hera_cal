@@ -80,6 +80,46 @@ class TestDataContainer(unittest.TestCase):
         keys = dc.keys()
         self.assertEqual(len(keys), len(self.pols) * len(self.bls))
 
+    def test_values(self):
+        dc = datacontainer.DataContainer(self.blpol)
+        values = dc.values()
+        self.assertEqual(len(values), len(self.pols) * len(self.bls))
+        self.assertEqual(values[0], 1j)
+        dc = datacontainer.DataContainer(self.polbl)
+        values = dc.values()
+        self.assertEqual(len(values), len(self.pols) * len(self.bls))
+        self.assertEqual(values[0], 1j)
+        dc = datacontainer.DataContainer(self.both)
+        values = dc.values()
+        self.assertEqual(len(values), len(self.pols) * len(self.bls))
+        self.assertEqual(values[0], 1j)
+
+    def test_items(self):
+        dc = datacontainer.DataContainer(self.blpol)
+        items = dc.items()
+        self.assertEqual(len(items), len(self.pols) * len(self.bls))
+        self.assertTrue(items[0][0][0:2] in self.bls)
+        self.assertTrue(items[0][0][2] in self.pols)
+        self.assertEqual(items[0][1], 1j)
+        dc = datacontainer.DataContainer(self.polbl)
+        items = dc.items()
+        self.assertTrue(items[0][0][0:2] in self.bls)
+        self.assertTrue(items[0][0][2] in self.pols)
+        self.assertEqual(items[0][1], 1j)
+        dc = datacontainer.DataContainer(self.both)
+        items = dc.items()
+        self.assertTrue(items[0][0][0:2] in self.bls)
+        self.assertTrue(items[0][0][2] in self.pols)
+        self.assertEqual(items[0][1], 1j)
+
+    def test_len(self):
+        dc = datacontainer.DataContainer(self.blpol)
+        self.assertEqual(len(dc), 10)
+        dc = datacontainer.DataContainer(self.polbl)
+        self.assertEqual(len(dc), 10)
+        dc = datacontainer.DataContainer(self.both)
+        self.assertEqual(len(dc), 10)
+
     def test_del(self):
         dc = datacontainer.DataContainer(self.blpol)
         del dc[(1, 2, 'xx')]

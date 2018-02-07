@@ -55,6 +55,15 @@ class DataContainer:
     def keys(self):
         return self._data.keys()
 
+    def values(self):
+        return self._data.values()
+
+    def items(self):
+        return self._data.items()
+
+    def __len__(self):
+        return len(self._data)
+
     def __getitem__(self, key):
         if type(key) is str:  # asking for a pol
             return dict(zip(self._bls, [self[self.mk_key(bl, key)] for bl in self._bls]))
