@@ -117,11 +117,11 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(cd[(24, 25, 'xx')].shape, (3,))
 
     def test_interp2d(self):
-        # test interpolation
+        # test interpolation w/ warning
         m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
-                                       self.time_array, self.freq_array)
+                                       self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=False)
         nt.assert_equal(m[(24, 25, 'xx')].shape, (60, 64))
-        # downsampling
+        # downsampling w/ no flags
         m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                        self.time_array[::2], self.freq_array[::2])
         nt.assert_equal(m[(24, 25, 'xx')].shape, (30, 32))
