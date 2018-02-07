@@ -885,7 +885,7 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
         freqs = np.unique(uvd.freq_array)
         times = np.unique(uvd.time_array)
         lsts = np.unique(uvd.lst_array)
-        antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
+        antpos, ants = uvd.get_ENU_antpos(center=False, pick_data_ants=pick_data_ants)
         antpos = odict(zip(ants, antpos))
         pols = uvd.polarization_array
         return data, flags, antpos, ants, freqs, times, lsts, pols
@@ -1040,14 +1040,12 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
         return new_data
 
 
-def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=None, kx=3, ky=3, s=0,
-                 flag_extrapolate=True, medfilt_flagged=False, medfilt_window=(3, 7)):
+def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=None,
+                 kx=3, ky=3, s=0, flag_extrapolate=True, medfilt_flagged=True, medfilt_window=(3, 7),
+                 aggressive_flagging=False):
     """
     Interpolate complex visibility model onto the time & frequency basis of
-    a data visibility. If model flags are provided, flags are propagated if a grid
-    point in data_lsts and data_freqs is a nearest neighbor with a flagged model pixel.
-
-    If model has flagged data, consider using the medfilt_flagged option.
+    a data visibility. See below for notes on flag propagation if flags is provided.
 
     Parameters:
     -----------
@@ -1066,9 +1064,11 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     flags : type=DataContainer, dictionary containing model flags. Can also contain model wgts and
                                 will convert appropriately.
 
-    medfilt_flagged : type=bool, if True, run a median filter on flagged model pixels
+    medfilt_flagged : type=bool, if True, before interpolation, replace flagged pixels with output from 
+                      a median filter centered on each flagged pixel.
 
-    medfilt_window : type=tuple, window for median filter across the (time, freq) axes.
+    medfilt_window : type=tuple, extent of window for median filter across the (time, freq) axes.
+                     Even numbers are rounded down to odd number.
 
     kx : type=int, type of spline to fit to freq axis of data. See scipy.interpolate.RectBivariateSpline
 
@@ -1076,12 +1076,19 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     s : type=int, smoothing factor for interpolation. Default is no smoothing. See scipy.interpolate.RectBivariateSpline
 
-    flag_extrapolate : type=bool, flag extrapolated data if True
+    flag_extrapolate : type=bool, flag extrapolated data_lsts if True.
 
     Output: (new_model, new_flags)
     -------
     new_model : interpolated model, type=dictionary
     new_flags : flags associated with interpolated model, type=dictionary
+
+    Notes:
+    ------
+    If the data has flagged pixels, it is recommended to turn medfilt_flagged to True. This runs a median
+    filter on the flagged pixels and replaces their values with the results, however, they remain as flagged.
+    This happens *before* interpolation. This means that interpolation near these points on unflagged pixels
+    aren't significantly biased by the presence of flagged pixels.
     """
     # make flags
     new_model = odict()
@@ -1092,6 +1099,14 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     time_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts-x)), data_lsts))
     freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
 
+    # get model indices meshgrid
+    mod_F, mod_L = np.meshgrid(np.arange(len(model_freqs)), np.arange(len(model_lsts)))
+
+    # raise warning on flags
+    if flags is not None and medfilt_flagged is False:
+        print("Warning: flags are fed, but medfilt_flagged=False. \n"
+              "This may cause weird behavior of interpolated points near flagged data.")
+
     # loop over keys
     for i, k in enumerate(model.keys()):
         # get model array
@@ -1101,7 +1116,59 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         real = np.real(m)
         imag = np.imag(m)
 
-        # set flags
+        # median filter flagged data if desired
+        if medfilt_flagged and flags is not None:
+            # get extent of window along freq and time
+            f_ext = int((medfilt_window[1]-1)/2.)
+            t_ext = int((medfilt_window[0]-1)/2.)
+
+            # set flagged data to nan
+            real[flags[k]] *= np.nan
+            imag[flags[k]] *= np.nan
+
+            # get flagged indices
+            f_indices = mod_F[flags[k]]
+            l_indices = mod_L[flags[k]]
+
+            # construct fill arrays
+            real_fill = np.empty(len(f_indices), np.float)
+            imag_fill = np.empty(len(f_indices), np.float)
+
+            # iterate over flagged data and replace w/ medfilt
+            for j, (find, tind) in enumerate(zip(f_indices, l_indices)):
+                tlow, thi = tind-t_ext, tind+t_ext+1
+                flow, fhi = find-f_ext, find+f_ext+1
+                ll = 0
+                while True:
+                    if tlow < 0: tlow = 0
+                    if flow < 0: flow = 0
+                    r_med = np.nanmedian(real[tlow:thi, flow:fhi])
+                    i_med = np.nanmedian(imag[tlow:thi, flow:fhi])
+                    tlow -= 2
+                    thi += 2
+                    flow -= 2
+                    fhi += 2
+                    ll += 1
+                    if np.isnan(r_med) == False and np.isnan(i_med) == False:
+                        break
+                    if ll > 10:
+                        break
+                real_fill[j] = r_med
+                imag_fill[j] = i_med
+
+            # fill real and imag
+            real[l_indices, f_indices] = real_fill
+            imag[l_indices, f_indices] = imag_fill
+
+            # flag residual nans
+            resid_nans = np.isnan(real) + np.isnan(imag)
+            flags[k] += resid_nans
+
+            # replace residual nans
+            real[resid_nans] = 0.0
+            imag[resid_nans] = 0.0
+
+        # propagate flags to nearest neighbor
         if flags is not None:
             f = flags[k][time_nn, freq_nn]
             # check f is boolean type
@@ -1109,19 +1176,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
                 f = ~(f.astype(np.bool))
         else:
             f = np.zeros_like(real, bool)
-         
-        # median filter flagged data if desired
-        if medfilt_flagged and flags is not None:
-            f_ext = int(medfilt_window[1]/2.)
-            t_ext = int(medfilt_window[0]/2.)
-            for find, tind in zip(freq_nn[f], time_nn[f]):
-                tlow, thi = tind-t_ext, tind+t_ext
-                flow, fhi = find-f_ext, find+f_ext
-                if tlow < 0: tlow = 0
-                if flow < 0: flow = 0
-                real[tind, find] = np.nanmedian(real[tlow:thi, flow:fhi])
-                imag[tind, find] = np.nanmedian(imag[tlow:thi, flow:fhi])
-
+        
         # interpolate
         real_spl = interpolate.RectBivariateSpline(model_lsts, model_freqs, real, kx=kx, ky=ky, s=s)
         imag_spl = interpolate.RectBivariateSpline(model_lsts, model_freqs, imag, kx=kx, ky=ky, s=s)
