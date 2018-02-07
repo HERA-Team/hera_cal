@@ -2,8 +2,8 @@ import numpy as np
 import aipy
 import astropy.constants as const
 from astropy.time import Time
-from astropy import units
 from astropy import coordinates as crd
+from astropy import units as unt
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 import os
@@ -183,7 +183,7 @@ def JD2LST(JD, longitude=21.42830):
         # construct astropy Time object
         t = Time(jd, format='jd', scale='utc')
         # get LST in radians at epoch of jd
-        LST.append(t.sidereal_time('apparent', longitude=longitude).radian)
+        LST.append(t.sidereal_time('apparent', longitude=longitude*unt.deg).radian)
     LST = np.array(LST)
 
     if _array:
