@@ -5,6 +5,8 @@ from collections import OrderedDict as odict
 class DataContainer:
     """
     Object that abstracts away the pol/ant pair ordering of data dict's.
+    Also abstracts away polarization case (i.e. 'xx' vs. 'XX') for 
+    __getitem__, __setitem__, __delitem__, and has_key()
 
     adding two DataContainers adds their values: DC1 + DC2
     multiplying two DataContainers multiplies their values: DC1 * DC2
@@ -40,6 +42,26 @@ class DataContainer:
         else:
             return (key[1], key[0])
 
+    def _convert_case(self, key):
+        if isinstance(key, str):
+            pol = key
+        elif len(key) == 3:
+            pol = key[-1]
+        else:
+            return key
+
+        #convert the key's pol to whatever matches the current set of pols
+        if pol.lower() in self._pols:
+            pol = pol.lower()
+        elif pol.upper() in self._pols:
+            pol = pol.upper()
+
+        if isinstance(key, str):
+            return pol
+        elif len(key) == 3:
+            return key[0:2] + (pol,)
+
+
     def bls(self, pol=None):
         if pol is None:
             return self._bls.copy()
@@ -65,6 +87,7 @@ class DataContainer:
         return len(self._data)
 
     def __getitem__(self, key):
+        key = self._convert_case(key)
         if type(key) is str:  # asking for a pol
             return dict(zip(self._bls, [self[self.mk_key(bl, key)] for bl in self._bls]))
         elif len(key) == 2:  # asking for a bl
@@ -76,6 +99,7 @@ class DataContainer:
                 return np.conj(self._data[self._switch_bl(key)])
 
     def __setitem__(self, key, value):
+        key = self._convert_case(key)
         if len(key) == 3:
             # check given bl ordering
             if key in self.keys() or self._switch_bl(key) in self.keys():
@@ -92,6 +116,7 @@ class DataContainer:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
     def __delitem__(self, key):
+        key = self._convert_case(key)
         if len(key) == 3:
             del self._data[key]
             self._bls = set([k[:2] for k in self._data.keys()])
@@ -180,9 +205,10 @@ class DataContainer:
 
     def has_key(self, *args):
         if len(args) == 1:
-            return self._data.has_key(args[0]) or self._data.has_key(self._switch_bl(args[0]))
+            return (self._data.has_key(self._convert_case(args[0])) or 
+                    self._data.has_key(self._convert_case(self._switch_bl(args[0]))))
         else:
-            return self.has_key(self.mk_key(args[0], args[1]))
+            return self.has_key(self._convert_case(self.mk_key(args[0], args[1])))
 
     def has_bl(self, bl):
         return bl in self._bls
