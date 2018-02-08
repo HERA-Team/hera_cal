@@ -148,8 +148,14 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
 
     # set data and/or flags
     if data is not None or flags is not None:
-        #TODO: implement this
-        raise NotImplementedError('This function has not been implemented yet.')
+        bls = map(uvd.baseline_to_antnums, np.unique(uvd.baseline_array))
+        for (i,j) in bls:
+            this_bl = (uvd.baseline_array == uvd.antnums_to_baseline(i,j))
+            for ip, pol in enumerate(uvd.polarization_array):
+                if data is not None:
+                    uvd.data_array[this_bl,0,:,ip] = data[(i,j,polnum2str(pol))]
+                if flags is not None:
+                    uvd.flag_array[this_bl,0,:,ip] = flags[(i,j,polnum2str(pol))]
 
     # set additional attributes
     uvd.history = add_to_history + uvd.history
