@@ -25,6 +25,8 @@ class Test_HERACal(UVCal):
             elif param == '_extra_keywords':
                 continue
             else:
+                if "_antenna_" in param:
+                    param = param[1:]
                 nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
 
     def test_exception(self):
@@ -49,8 +51,8 @@ class Test_HERACal(UVCal):
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
         for param in hc:
-            print param
-            print getattr(hc, param).value, getattr(uv, param).value
+           # print param
+           # print getattr(hc, param).value, getattr(uv, param).value
             if param == '_history':
                 continue
             elif param == '_git_hash_cal':
@@ -63,5 +65,8 @@ class Test_HERACal(UVCal):
             elif param == '_extra_keywords':
                 continue
             else:
+                if "_antenna_" in param:
+                    param = param[1:]
+                print param
                 nt.assert_true(
                     np.all(getattr(hc, param) == getattr(uv, param)))
