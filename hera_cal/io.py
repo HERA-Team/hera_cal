@@ -4,6 +4,7 @@ from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
+import operator
 
 str2antpol = {'x': -5, 'y': -6}
 antpol2str = {antpol: string for string,antpol in str2antpol.items()}
@@ -135,7 +136,7 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
 
     # Load infile
     if type(infilename) == UVData:
-        uvd = infilename
+        uvd = deepcopy(infilename)
     else:    
         uvd = UVData()
         if format_in is 'miriad':
@@ -260,10 +261,10 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     
     # Load infile
     if type(infilename) == UVCal:
-        cal = infilename
+        cal = deepcopy(infilename)
     else:    
         cal = UVCal()
-        UVCal.read_calfits(infilename)
+        cal.read_calfits(infilename)
 
     # Set gains, flags, and/or quals
     for i, ant in enumerate(cal.ant_array):
