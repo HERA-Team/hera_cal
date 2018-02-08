@@ -214,9 +214,9 @@ class DataContainer:
         return bl in self._bls
 
     def has_pol(self, pol):
-        return pol in self._pols
+        return self._convert_case(pol) in self._pols
 
     def get(self, bl, pol):
-        return self[self.mk_key(bl, pol)]
+        return self[self._convert_case(self.mk_key(bl, pol))]
 
 
