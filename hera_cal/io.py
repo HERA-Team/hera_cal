@@ -3,6 +3,7 @@ from pyuvdata import UVCal, UVData
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 from copy import deepcopy
+from hera_cal.datacontainer import DataContainer
 
 str2antpol = {'x': -5, 'y': -6}
 antpol2str = {antpol: string for string,antpol in str2antpol.items()}
@@ -50,7 +51,7 @@ def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, po
                 raise NotImplementedError('This function has not been implemented yet.')
             else:
                 raise NotImplementedError("Data format must be either 'miriad' or 'uvfits'.")
-        if np.all([isinstance(id, UVData) for id in input_data]): #List of uvdata objects
+        elif np.all([isinstance(id, UVData) for id in input_data]): #List of uvdata objects
             uvd = reduce(operator.add, input_data)
         else:
             raise TypeError('If input is a list, it must be only strings or only UVData objects.')
@@ -69,14 +70,14 @@ def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, po
 
     data, flags = {}, {}
     # create nested dictionaries of visibilities in the data[bl][pol] format
-    for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, np.unique(uv_in.baseline_array))):
+    for nbl, (i, j) in enumerate(map(uvd.baseline_to_antnums, np.unique(uvd.baseline_array))):
         if (i, j) not in data:
             data[i, j] = {}
             flags[i, j] = {}
-        for ip, pol in enumerate(uv_in.polarization_array):
-            pol = pol2str(pol)
-            new_data = deepcopy(uv_in.get_data((i, j, pol)))
-            new_flags = deepcopy(uv_in.get_flags((i, j, pol)))
+        for ip, pol in enumerate(uvd.polarization_array):
+            pol = polnum2str(pol)
+            new_data = deepcopy(uvd.get_data((i, j, pol)))
+            new_flags = deepcopy(uvd.get_flags((i, j, pol)))
             if pol not in data[(i, j)]:
                 data[(i, j)][pol] = new_data
                 flags[(i, j)][pol] = new_flags
@@ -114,7 +115,8 @@ def write_vis(outfilename, data, flags, format='miriad', history='', clobber=Fal
 def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad', 
                data=None, flags=None, add_to_history='', clobber=False, **kwargs):
     '''Loads an existing file with pyuvdata, modifies some subset of of its parameters, and 
-    then writes a new file to disk. Cannot modify the shape of data arrays.
+    then writes a new file to disk. Cannot modify the shape of data arrays. More than one 
+    spectral window is not supported.
 
     Arguments:
         infilename: filename of the base visibility file to be updated, or UVData object
