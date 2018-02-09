@@ -122,12 +122,19 @@ class TestDataContainer(unittest.TestCase):
 
     def test_del(self):
         dc = datacontainer.DataContainer(self.blpol)
+        self.assertTrue((1,2,'xx') in dc)
+        self.assertTrue((1,2,'XX') in dc)
         del dc[(1, 2, 'xx')]
         self.assertFalse((1,2,'xx') in dc)
         self.assertTrue('xx' in dc.pols())
         self.assertTrue((1,2) in dc.bls())
         del dc[(1, 2, 'yy')]
         self.assertFalse((1,2) in dc.bls())
+        del dc[(2,3,'XX')]
+        self.assertFalse((2,3,'xx') in dc)
+        self.assertTrue('xx' in dc.pols())
+        self.assertTrue((2,3) in dc.bls())
+
 
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -151,6 +158,11 @@ class TestDataContainer(unittest.TestCase):
         self.assertEqual(set(dc['xx'].keys()), set(self.bls))
         self.assertEqual(dc[(1, 2)], dc.get_data((1, 2)))
         self.assertEqual(dc[(1, 2)], dc.get_data(1, 2))
+        self.assertEqual(dc[(1, 2, 'XX')], 1j)
+        self.assertEqual(dc[(2, 1, 'XX')], -1j)
+        self.assertEqual(dc[(2, 1, 'XX')], dc.get_data(2, 1, 'XX'))
+        self.assertEqual(dc[(2, 1, 'XX')], dc.get_data(2, 1, 'xx'))
+
 
     def test_has_key(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -174,31 +186,49 @@ class TestDataContainer(unittest.TestCase):
         self.assertFalse(dc.has_key('xy'))
         self.assertFalse(dc.has_key((5, 6)))
         self.assertFalse(dc.has_key((1, 2, 'xy')))
+
+        self.assertTrue(dc.has_key((2, 3, 'YY')))
+        self.assertTrue(dc.has_key((2, 3), 'YY'))
+        self.assertTrue(dc.has_key((3, 2), 'YY'))
+        self.assertFalse(dc.has_key('XY'))
+        self.assertFalse(dc.has_key((5, 6)))
+        self.assertFalse(dc.has_key((1, 2, 'XY')))
+
         # assert switch bl
         dc[(1,2,'xy')] = 1j
         self.assertTrue(dc.has_key((2,1,'yx')))
 
+
     def test_has_bl(self):
         dc = datacontainer.DataContainer(self.blpol)
         self.assertTrue(dc.has_bl((2, 3)))
+        self.assertTrue(dc.has_bl((3, 2)))
         self.assertFalse(dc.has_bl((0, 3)))
         dc = datacontainer.DataContainer(self.polbl)
         self.assertTrue(dc.has_bl((2, 3)))
+        self.assertTrue(dc.has_bl((3, 2)))
         self.assertFalse(dc.has_bl((0, 3)))
         dc = datacontainer.DataContainer(self.both)
         self.assertTrue(dc.has_bl((2, 3)))
+        self.assertTrue(dc.has_bl((3, 2)))
         self.assertFalse(dc.has_bl((0, 3)))
 
     def test_has_pol(self):
         dc = datacontainer.DataContainer(self.blpol)
         self.assertTrue(dc.has_pol('xx'))
+        self.assertTrue(dc.has_pol('XX'))
         self.assertFalse(dc.has_pol('xy'))
+        self.assertFalse(dc.has_pol('XY'))
         dc = datacontainer.DataContainer(self.polbl)
         self.assertTrue(dc.has_pol('xx'))
+        self.assertTrue(dc.has_pol('XX'))
         self.assertFalse(dc.has_pol('xy'))
+        self.assertFalse(dc.has_pol('XY'))
         dc = datacontainer.DataContainer(self.both)
         self.assertTrue(dc.has_pol('xx'))
+        self.assertTrue(dc.has_pol('XX'))
         self.assertFalse(dc.has_pol('xy'))
+        self.assertFalse(dc.has_pol('XY'))
 
     def test_get(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -210,6 +240,9 @@ class TestDataContainer(unittest.TestCase):
         dc = datacontainer.DataContainer(self.both)
         self.assertEqual(dc.get((1, 2), 'yy'), 1j)
         self.assertEqual(dc.get((2, 1), 'yy'), -1j)
+        self.assertEqual(dc.get((1, 2), 'YY'), 1j)
+        self.assertEqual(dc.get((2, 1), 'YY'), -1j)
+
 
     def test_setter(self):
         dc = datacontainer.DataContainer(self.blpol)

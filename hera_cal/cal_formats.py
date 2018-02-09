@@ -41,11 +41,11 @@ class HERACal(UVCal):
         # if we provided an ex_ants those antennas will not have a key in gains. Need to provide ex_ants list
         # to HERACal object.
         # create set to get unique antennas from both pol
-        ants = list(set([ant for pol in gains.keys() for ant in gains[pol].keys()]))
-        allants = np.sort(ants + ex_ants)  # total number of antennas
+        ants = np.array(list(set([ant for pol in gains.keys() for ant in gains[pol].keys()])))
+        allants = np.sort(np.concatenate([ants, np.array(ex_ants)])).astype(np.int)  # total number of antennas
         ants = np.sort(ants)
         # antenna names for all antennas
-        antnames = ['ant' + str(ant) for ant in allants]
+        antnames = np.array(['ant' + str(int(ant)) for ant in allants])
         time = meta['times']
         freq = meta['freqs']  # this is in Hz (should be anyways)
         pols = [str2pol[p] for p in gains.keys()]  # all of the polarizations
@@ -89,8 +89,8 @@ class HERACal(UVCal):
         
         pols = np.array(pols)
         freq = np.array(freq)
-        antarray = list(map(int, ants))
-        numarray = list(map(int, allants))
+        antarray = np.array(list(map(int, ants)))
+        numarray = np.array(list(map(int, allants)))
 
         # set UVCal attributes
         self.telescope_name = 'HERA'

@@ -2,12 +2,13 @@ import numpy as np
 import aipy
 import astropy.constants as const
 from astropy.time import Time
+from astropy import coordinates as crd
+from astropy import units as unt
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 import os
 import hera_cal
 import copy
-import ephem
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -157,94 +158,74 @@ def JD2LST(JD, longitude=21.42830):
     """
     Input:
     ------
-    JD : type=float or list of floats, julian date of observation
+    JD : type=float or list of floats containing Julian Date(s) of an observation
 
-    longitude : type=float, longitude of observer in degrees East, default=HERA Longitude
+    longitude : type=float, longitude of observer in degrees East, default=HERA longitude
 
     Output:
     -------
     Local Apparent Sidreal Time [radians]
+
+    Notes:
+    ------
+    The Local Apparent Sidereal Time is *defined* as the right ascension in the current epoch.
     """
-    if type(JD) is list or type(JD) is np.ndarray:
-        LST = []
-        for jd in JD:
-            t = Time(jd, format='jd', scale='utc')
-            LST.append(t.sidereal_time('apparent', longitude=longitude).value * np.pi / 12.0)
-        LST = np.array(LST)
-    else:
-        t = Time(JD, format='jd', scale='utc')
-        LST = t.sidereal_time('apparent', longitude=longitude).value * np.pi / 12.0
-
-    return LST
-
-
-def JD2RA(jd_array, longitude=21.42830):
-    """
-    Convert from julian date to RA at zenith, assuing J2000 epoch
-
-    jd_array : float or list of julian dates
-
-    lon : longitude of observer in degrees east
-    
-    return RA float (or array) in degrees
-    """
-    if type(jd_array) == list or type(jd_array) == np.ndarray:
+    # get JD type
+    if isinstance(JD, list) or isinstance(JD, np.ndarray):
         _array = True
     else:
         _array = False
-        jd_array = [jd_array]
+        JD = [JD]
 
-    # get observer
-    obs = ephem.Observer()
-    obs.epoch = ephem.J2000
-    obs.lon = longitude * np.pi / 180.0
-
-    # iterate over jd_array
-    RA = []
-    for JD in jd_array:
-        obs.date = Time(JD, format='jd', scale='utc').datetime
-        ra = obs.radec_of(0, np.pi/2)[0] * 180 / np.pi
-        RA.append(ra)
+    # iterate over JD
+    LST = []
+    for jd in JD:
+        # construct astropy Time object
+        t = Time(jd, format='jd', scale='utc')
+        # get LST in radians at epoch of jd
+        LST.append(t.sidereal_time('apparent', longitude=longitude*unt.deg).radian)
+    LST = np.array(LST)
 
     if _array:
-        return np.array(RA)
+        return LST
     else:
-        return RA[0]
+        return LST[0]
 
 
-def LST2JD(LST, start_JD, longitude=21.42830):
+def LST2JD(LST, start_jd, longitude=21.42830):
     """
-    calculate local sidereal time -> julian day quickly via a linear fit
+    Convert Local Apparent Sidereal Time -> Julian Date via a linear fit
+    at the 'start_JD' anchor point.
 
     Input:
     ------
     LST : type=float, local apparent sidereal time [radians]
 
-    start_JD : type=int, integer julian day to use as starting point for LST2JD conversion
+    start_jd : type=int, integer julian day to use as starting point for LST2JD conversion
 
     longitude : type=float, degrees East of observer, default=HERA longitude
 
     Output:
     -------
-    JD : type=float, julian day when LST is directly overhead. accurate to ~1 milliseconds
+    JD : type=float, Julian Date(s). accurate to ~1 milliseconds
     """
     # get LST type
-    if type(LST) == list or type(LST) == np.ndarray:
+    if isinstance(LST, list) or isinstance(LST, np.ndarray):
         _array = True
     else:
         LST = [LST]
         _array = False  
 
     # get start_JD
-    base_JD = float(start_JD)
+    base_jd = float(start_jd)
 
     # iterate over LST
     jd_array = []
     for lst in LST:
         while True:
             # calculate fit
-            jd1 = start_JD
-            jd2 = start_JD + 0.01
+            jd1 = start_jd
+            jd2 = start_jd + 0.01
             lst1, lst2 = JD2LST(jd1, longitude=longitude), JD2LST(jd2, longitude=longitude)
             slope = (lst2 - lst1) / 0.01
             offset = lst1 - slope * jd1
@@ -253,20 +234,70 @@ def LST2JD(LST, start_JD, longitude=21.42830):
             JD = (lst - offset) / slope
 
             # redo if JD isn't on starting JD
-            if JD - base_JD < 0:
-                start_JD += 1
-            elif JD - base_JD > 1:
-                start_JD -= 1
+            if JD - base_jd < 0:
+                start_jd += 1
+            elif JD - base_jd > 1:
+                start_jd -= 1
             else:
                 break
         jd_array.append(JD)
 
-    if _array:
-        return np.array(jd_array)
+    jd_array = np.array(jd_array)
 
+    if _array:
+        return jd_array
     else:
         return jd_array[0]
 
+
+def JD2RA(JD, longitude=21.42830, epoch='current'):
+    """
+    Convert from Julian date to Equatorial Right Ascension at zenith
+    during a specified epoch.
+
+    Parameters:
+    -----------
+    JD : type=float, a float or an array of Julian Dates
+
+    longitude : type=float, longitude of observer in degrees east, default=HERA long
+    
+    epoch : type=str, epoch for RA calculation. options=['current'].
+            The 'current' epoch is the epoch at JD. Note that
+            LST is *defined* as the zenith RA in the current epoch. 
+
+    ## TODO : add a "J2000" option to return RA in J2000 epoch.
+
+    Output:
+    -------
+    RA : type=float, right ascension [degrees] at zenith at JD times
+         in the specified epoch.
+    """
+    # get JD type
+    if isinstance(JD, list) or isinstance(JD, np.ndarray):
+        _array = True
+    else:
+        _array = False
+        JD = [JD]
+
+    # setup RA list
+    RA = []
+
+    # iterate over jd
+    for jd in JD:
+
+        # use current epoch calculation
+        if epoch == 'current':
+            ra = JD2LST(jd, longitude=longitude) * 180 / np.pi
+            RA.append(ra)
+        else:
+            raise ValueError("didn't recognize {} epoch".format(epoch))
+
+    RA = np.array(RA)
+
+    if _array:
+        return RA
+    else:
+        return RA[0]
 
 
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
@@ -465,7 +496,7 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = np.array(map(lambda lst: LST2JD(lst, start_jd, longitude=longitude), lst_array))
+        time_array = LST2JD(lst_array, start_jd, longitude=longitude)
     Ntimes = len(time_array)
     integration_time = np.median(np.diff(time_array)) * 24 * 3600.
 

@@ -793,7 +793,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
 
 
 def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
-                        pick_data_ants=True):
+                      pick_data_ants=True, return_wgts=False):
     """
     turn a list of pyuvdata.UVData objects or a list of miriad or uvfits file paths
     into the datacontainer dictionary form that AbsCal requires. This format is
@@ -816,6 +816,8 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
 
     pick_data_ants : boolean, if True and return_meta=True, return only antennas in data
 
+    return_wgts : boolean, if True, return data flags as data weights [dtype=float]
+
     Output:
     -------
     if return_meta is True:
@@ -824,13 +826,13 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
         (data, flags)
 
     data : dictionary containing baseline-pol complex visibility data
-    flags : dictionary containing data flags
+    flags : dictionary containing data flags, if return_wgts=True then this is a weight dict
     antpos : dictionary containing antennas numbers as keys and position vectors
     ants : ndarray containing unique antennas
     freqs : ndarray containing frequency channels (Hz)
-    times : ndarray containing julian date bins of data
-    lsts : ndarray containing LST bins of data (radians)
-    pols : ndarray containing list of polarization index integers
+    times : ndarray containing time stamps data in julian date
+    lst : ndarray containing time stamps in local sidereal time [radians]
+    pols : ndarray containing polarizations of data in string format ('xx', or 'yy')
     """
     # check datanames is not a list
     if type(datanames) is not list and type(datanames) is not np.ndarray:
@@ -874,12 +876,16 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
     # turn into datacontainer
     data, flags = DataContainer(d), DataContainer(f)
 
+    # turn into weights
+    if return_wgts:
+       flags = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
+
     # get meta
     if return_meta:
         freqs = np.unique(uvd.freq_array)
         times = np.unique(uvd.time_array)
         lsts = np.unique(uvd.lst_array)
-        antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
+        antpos, ants = uvd.get_ENU_antpos(center=False, pick_data_ants=pick_data_ants)
         antpos = odict(zip(ants, antpos))
         pols = uvd.polarization_array
         return data, flags, antpos, ants, freqs, times, lsts, pols
@@ -989,7 +995,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     return dlys, phi
 
 
-def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(1,13), array=False):
+def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9), array=False):
     """
     wiener filter complex visibility data. this might be used in constructing
     model reference. See scipy.signal.wiener for details on method.
@@ -1034,12 +1040,12 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(1,13)
         return new_data
 
 
-def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
-                 kind='cubic', fill_value=0, zero_tol=1e-10, flag_extrapolate=True,
-                 bounds_error=True, **wiener_kwargs):
+def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=None,
+                 kind='cubic', flag_extrapolate=True, medfilt_flagged=True, medfilt_window=(3, 7),
+                 fill_value=None):
     """
-    interpolate complex visibility model onto the time & frequency basis of
-    a data visibility.
+    Interpolate complex visibility model onto the time & frequency basis of
+    a data visibility. See below for notes on flag propagation if flags is provided.
 
     Parameters:
     -----------
@@ -1055,56 +1061,147 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs,
 
     data_freqs : 1D array of the data freq axis, dtype=float, shape=(Nfreqs,)
 
-    kind : kind of interpolation method, type=str, options=['linear', 'cubic', ...]
-        see scipy.interpolate.interp2d for details
+    flags : type=DataContainer, dictionary containing model flags. Can also contain model wgts
+            as floats and will convert to booleans appropriately.
 
-    fill_value : values to put for interpolation points outside training set
-        if None, values are extrapolated
+    kind : type=str, kind of interpolation, options=['linear', 'cubic', 'quintic']
 
-    zero_tol : for amplitudes lower than this tolerance, set real and imag components to zero
+    medfilt_flagged : type=bool, if True, before interpolation, replace flagged pixels with output from 
+                      a median filter centered on each flagged pixel.
 
-    bounds_error : type=boolean, if True, raise ValueError when extrapolating. If False, extrapolate.
+    medfilt_window : type=tuple, extent of window for median filter across the (time, freq) axes.
+                     Even numbers are rounded down to odd number.
 
-    flag_extrapolate : flag extrapolated data if True
+    flag_extrapolate : type=bool, flag extrapolated data_lsts if True.
+
+    fill_value : type=float, if fill_value is None, extrapolated points are extrapolated
+                 else they are filled with fill_value.
 
     Output: (new_model, new_flags)
     -------
     new_model : interpolated model, type=dictionary
-    new_flags : flags associated with model, type=dictionary
+    new_flags : flags associated with interpolated model, type=dictionary
+
+    Notes:
+    ------
+    If the data has flagged pixels, it is recommended to turn medfilt_flagged to True. This runs a median
+    filter on the flagged pixels and replaces their values with the results, but they remain flagged.
+    This happens *before* interpolation. This means that interpolation near flagged pixels
+    aren't significantly biased by their presence.
+
+    In general, if flags are fed, flags are propagated if a flagged pixel is a nearest neighbor
+    of an interpolated pixel.
     """
     # make flags
     new_model = odict()
-    flags = odict()
+    new_flags = odict()
+
+    # get nearest neighbor points
+    freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs-x)), data_freqs))
+    time_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts-x)), data_lsts))
+    freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
+
+    # get model indices meshgrid
+    mod_F, mod_L = np.meshgrid(np.arange(len(model_freqs)), np.arange(len(model_lsts)))
+
+    # raise warning on flags
+    if flags is not None and medfilt_flagged is False:
+        print("Warning: flags are fed, but medfilt_flagged=False. \n"
+              "This may cause weird behavior of interpolated points near flagged data.")
+
+    # ensure flags are booleans
+    if flags is not None:
+        if np.issubdtype(flags[flags.keys()[0]].dtype, np.float):
+            flags = DataContainer(odict(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys())))
 
     # loop over keys
     for i, k in enumerate(model.keys()):
-        # interpolate real and imag separately
+        # get model array
         m = model[k]
+
+        # get real and imag separately
         real = np.real(m)
         imag = np.imag(m)
 
-        # interpolate
-        interp_real = interpolate.interp2d(model_freqs, model_lsts, real,
-                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_lsts)
-        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag,
-                                           kind=kind, fill_value=np.nan, bounds_error=bounds_error)(data_freqs, data_lsts)
-        # set flags
-        f = np.zeros_like(interp_real, dtype=float)
-        if flag_extrapolate:
-            f[np.isnan(interp_real) + np.isnan(interp_imag)] = 1.0
-        interp_real[np.isnan(interp_real)] = fill_value
-        interp_imag[np.isnan(interp_imag)] = fill_value
+        # median filter flagged data if desired
+        if medfilt_flagged and flags is not None:
+            # get extent of window along freq and time
+            f_ext = int((medfilt_window[1]-1)/2.)
+            t_ext = int((medfilt_window[0]-1)/2.)
 
-        # force things near amplitude of zero to (positive) zero
-        zero_select = np.isclose(np.sqrt(interp_real**2 + interp_imag**2), 0.0, atol=zero_tol)
-        interp_real[zero_select] *= 0.0 * interp_real[zero_select]
-        interp_imag[zero_select] *= 0.0 * interp_imag[zero_select]
+            # set flagged data to nan
+            real[flags[k]] *= np.nan
+            imag[flags[k]] *= np.nan
+
+            # get flagged indices
+            f_indices = mod_F[flags[k]]
+            l_indices = mod_L[flags[k]]
+
+            # construct fill arrays
+            real_fill = np.empty(len(f_indices), np.float)
+            imag_fill = np.empty(len(f_indices), np.float)
+
+            # iterate over flagged data and replace w/ medfilt
+            for j, (find, tind) in enumerate(zip(f_indices, l_indices)):
+                tlow, thi = tind-t_ext, tind+t_ext+1
+                flow, fhi = find-f_ext, find+f_ext+1
+                ll = 0
+                while True:
+                    # iterate until window has non-flagged data in it
+                    # with a max of 10 iterations
+                    if tlow < 0: tlow = 0
+                    if flow < 0: flow = 0
+                    r_med = np.nanmedian(real[tlow:thi, flow:fhi])
+                    i_med = np.nanmedian(imag[tlow:thi, flow:fhi])
+                    tlow -= 2
+                    thi += 2
+                    flow -= 2
+                    fhi += 2
+                    ll += 1
+                    if np.isnan(r_med) == False and np.isnan(i_med) == False:
+                        break
+                    if ll > 10:
+                        break
+                real_fill[j] = r_med
+                imag_fill[j] = i_med
+
+            # fill real and imag
+            real[l_indices, f_indices] = real_fill
+            imag[l_indices, f_indices] = imag_fill
+
+            # flag residual nans
+            resid_nans = np.isnan(real) + np.isnan(imag)
+            flags[k] += resid_nans
+
+            # replace residual nans
+            real[resid_nans] = 0.0
+            imag[resid_nans] = 0.0
+
+        # propagate flags to nearest neighbor
+        if flags is not None:
+            f = flags[k][time_nn, freq_nn]
+            # check f is boolean type
+            if np.issubdtype(f.dtype, np.float):
+                f = ~(f.astype(np.bool))
+        else:
+            f = np.zeros_like(real, bool)
+        
+        # interpolate 
+        interp_real = interpolate.interp2d(model_freqs, model_lsts, real, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
+        interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
+
+        # flag extrapolation if desired
+        if flag_extrapolate:
+            time_extrap = np.where((data_lsts > model_lsts.max() + 1e-6)|(data_lsts < model_lsts.min() - 1e-6))
+            freq_extrap = np.where((data_freqs > model_freqs.max() + 1e-6)|(data_freqs < model_freqs.min() - 1e-6))
+            f[time_extrap, :] = True
+            f[:, freq_extrap] = True
 
         # rejoin
         new_model[k] = interp_real + 1j*interp_imag
-        flags[k] = f
+        new_flags[k] = f
 
-    return DataContainer(new_model), DataContainer(flags)
+    return DataContainer(new_model), DataContainer(new_flags)
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
@@ -1551,7 +1648,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
             # iterate over matches
             for j, (m, cm) in enumerate(zip(match, conj_match)):
                 if weights:
-                    # if weight dictionary, add repeated baselines in inverse quadrature
+                    # if weight dictionary, add repeated baselines
                     if m == True:
                         if (k in red_data) == False:
                             red_data[k] = copy.copy(data[k])
@@ -1573,7 +1670,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
                         for bl in reds[j]:
                             red_data[bl] = np.conj(data[k])
 
-    # re-sort, inverse quad if weights
+    # re-sort, square if weights to match linsolve
     if weights:
         for i, k in enumerate(red_data):
             red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)]**(2.0)
@@ -1583,135 +1680,4 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
 
     return DataContainer(red_data)
 
-'''
-def lst_align(data_fname, model_fnames=None, dLST=0.00299078, output_fname=None, outdir=None,
-              overwrite=False, verbose=True, write_miriad=True, output_data=False,
-              match='nearest', filetype='miriad', **interp2d_kwargs):
-    """
-    Interpolate complex visibilities to align time integrations with an LST grid.
-    If output_fname is not provided, write interpolated data as
-    input filename + "L.hour.decimal" miriad file. The LST grid can be created from
-    scratch using the dLST parameter, or an LST grid can be imported from a model file.
 
-    Parameters:
-    -----------
-
-
-    match : type=str, LST-bin matching method, options=['nearest','forward','backward']
-
-    """
-    # try to load model
-    echo("loading models", verbose=verbose)
-    if model_fnames is not None:
-        uvm = UVData()
-        # parse suffix
-        if type(model_fnames) == np.str:
-            suffix = os.path.splitext(model_fnames)[1]
-        elif type(model_fnames) == list or type(model_fnames) == np.ndarray:
-            suffix = os.path.splitext(model_fnames[0])[1]
-        else:
-            raise IOError("couldn't parse type of {}".format(model_fnames))
-        if filetype == 'uvfits' or suffix == '.uvfits':
-            uvm.read_uvfits(model_fnames)
-            uvm.unphase_to_drift()
-        elif filetype == 'miriad':
-            uvm.read_miriad(model_fnames)
-        # get meta data
-        model_lsts = np.unique(uvm.lst_array) * 12 / np.pi
-        model_freqs = np.unique(uvm.freq_array)
-    else:
-        # generate LST array
-        model_lsts = np.arange(0, 24, dLST)
-        model_freqs = None
-
-    # load file
-    echo("loading {}".format(data_fname), verbose=verbose)
-    uvd = UVData()
-    uvd.read_miriad(data_fname)
-
-    # get data and metadata
-    (data, flags, antpos, ants, data_freqs, data_lsts) = UVData2AbsCalDict(uvd, pop_autos=False, return_meta=True)
-    data_lsts *= 12 / np.pi
-    Ntimes = len(data_lsts)
-
-    # get closest lsts
-    sort = np.argsort(np.abs(model_lsts - data_lsts[0]))[:2]
-    if match == 'nearest':
-        start = sort[0]
-    elif match == 'forward':
-        start = np.max(sort)
-    elif match == 'backward':
-        start = np.min(sort)
-
-    # create lst grid
-    lst_indices = np.arange(start, start+Ntimes)
-    model_lsts = model_lsts[lst_indices]
-
-    # specify freqs
-    if model_freqs is None:
-        model_freqs = data_freqs
-    Nfreqs = len(model_freqs)
-
-    # interpolate data
-    echo("interpolating data", verbose=verbose)
-    interp_data, interp_flags = interp2d_vis(data, data_lsts, data_freqs, model_lsts, model_freqs, **interp2d_kwargs)
-    Nbls = len(interp_data)
-
-    # reorder into arrays
-    uvd_data = np.array(interp_data.values())
-    uvd_data = uvd_data.reshape(-1, 1, Nfreqs, 1)
-    uvd_flags = np.array(map(lambda k: interp_flags[k], flags.keys())).astype(np.bool) + \
-                np.array(map(lambda k: flags[k], flags.keys())).astype(np.bool) 
-    uvd_flags = uvd_flags.reshape(-1, 1, Nfreqs, 1)
-    uvd_keys = np.repeat(np.array(interp_data.keys()).reshape(-1, 1, 2), Ntimes, axis=1).reshape(-1, 2)
-    uvd_bls = np.array(map(lambda k: uvd.antnums_to_baseline(k[0], k[1]), uvd_keys))
-    uvd_times = np.array(map(lambda x: utils.JD2LST.LST2JD(x, np.median(np.floor(uvd.time_array)), uvd.telescope_location_lat_lon_alt_degrees[1]), model_lsts))
-    uvd_times = np.repeat(uvd_times[np.newaxis], Nbls, axis=0).reshape(-1)
-    uvd_lsts = np.repeat(model_lsts[np.newaxis], Nbls, axis=0).reshape(-1)
-    uvd_freqs = model_freqs.reshape(1, -1)
-
-    # assign to uvdata object
-    uvd.data_array = uvd_data
-    uvd.flag_array = uvd_flags
-    uvd.baseline_array = uvd_bls
-    uvd.ant_1_array = uvd_keys[:, 0]
-    uvd.ant_2_array = uvd_keys[:, 1]
-    uvd.time_array = uvd_times
-    uvd.lst_array = uvd_lsts * np.pi / 12
-    uvd.freq_array = uvd_freqs
-    uvd.Nfreqs = Nfreqs
-
-    # write miriad
-    if write_miriad:
-        # check output
-        if outdir is None:
-            outdir = os.path.dirname(data_fname)
-        if output_fname is None:
-            output_fname = os.path.basename(data_fname) + 'L.{:07.4f}'.format(model_lsts[0])
-        output_fname = os.path.join(outdir, output_fname)
-        if os.path.exists(output_fname) and overwrite is False:
-            raise IOError("{} exists, not overwriting".format(output_fname))
-
-        # write to file
-        echo("saving {}".format(output_fname), verbose=verbose)
-        uvd.write_miriad(output_fname, clobber=True)
-
-    # output data and flags
-    if output_data:
-        return interp_data, interp_flags, model_lsts, model_freqs
-
-
-def lstbin_arg_parser():
-    a = argparse.ArgumentParser()
-    a.add_argument("--data_files", type=str, nargs='*', help="list of miriad files of data to-be-calibrated.", required=True)
-    a.add_argument("--model_files", type=str, nargs='*', default=[], help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_fname", type=str, default=None, help="name of output calfits file.")
-    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
-    a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
-    a.add_argument("--zero_psi", default=False, action='store_true', help="set overall gain phase 'psi' to zero in linsolve equations.")
-    return a
-
-
-
-
-'''
