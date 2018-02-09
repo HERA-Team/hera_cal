@@ -122,6 +122,8 @@ class TestDataContainer(unittest.TestCase):
 
     def test_del(self):
         dc = datacontainer.DataContainer(self.blpol)
+        self.assertTrue((1,2,'xx') in dc)
+        self.assertTrue((1,2,'XX') in dc)
         del dc[(1, 2, 'xx')]
         self.assertFalse((1,2,'xx') in dc)
         self.assertTrue('xx' in dc.pols())
@@ -200,24 +202,33 @@ class TestDataContainer(unittest.TestCase):
     def test_has_bl(self):
         dc = datacontainer.DataContainer(self.blpol)
         self.assertTrue(dc.has_bl((2, 3)))
+        self.assertTrue(dc.has_bl((3, 2)))
         self.assertFalse(dc.has_bl((0, 3)))
         dc = datacontainer.DataContainer(self.polbl)
         self.assertTrue(dc.has_bl((2, 3)))
+        self.assertTrue(dc.has_bl((3, 2)))
         self.assertFalse(dc.has_bl((0, 3)))
         dc = datacontainer.DataContainer(self.both)
         self.assertTrue(dc.has_bl((2, 3)))
+        self.assertTrue(dc.has_bl((3, 2)))
         self.assertFalse(dc.has_bl((0, 3)))
 
     def test_has_pol(self):
         dc = datacontainer.DataContainer(self.blpol)
         self.assertTrue(dc.has_pol('xx'))
+        self.assertTrue(dc.has_pol('XX'))
         self.assertFalse(dc.has_pol('xy'))
+        self.assertFalse(dc.has_pol('XY'))
         dc = datacontainer.DataContainer(self.polbl)
         self.assertTrue(dc.has_pol('xx'))
+        self.assertTrue(dc.has_pol('XX'))
         self.assertFalse(dc.has_pol('xy'))
+        self.assertFalse(dc.has_pol('XY'))
         dc = datacontainer.DataContainer(self.both)
         self.assertTrue(dc.has_pol('xx'))
+        self.assertTrue(dc.has_pol('XX'))
         self.assertFalse(dc.has_pol('xy'))
+        self.assertFalse(dc.has_pol('XY'))
 
     def test_get(self):
         dc = datacontainer.DataContainer(self.blpol)

@@ -3,20 +3,35 @@ from collections import OrderedDict as odict
 
 
 class DataContainer:
-    """
-    Object that abstracts away the pol/ant pair ordering of data dict's.
-    Also abstracts away polarization case (i.e. 'xx' vs. 'XX') for 
-    __getitem__, __setitem__, __delitem__, and has_key()
+    """Dictionary-like object that abstracts away the pol/ant pair ordering of data 
+    dictionaries and the the polarization case (i.e. 'xx' vs. 'XX'). Keys are in
+    the form (0,1,'xx').
 
-    adding two DataContainers adds their values: DC1 + DC2
-    multiplying two DataContainers multiplies their values: DC1 * DC2
-    """
+    Supports much of the same functionality as dictionaries, including:
+        * __getitem__
+        * __setitem__
+        * __delitem__
+        * __len__
+        * .has_key()
+        * .keys()
+        * .items()
+        * .values()
+    
+    DataContainer knows to return a complex-conjugated visibility if asked for 
+    an antenna-reversed baseline. It also makes sure that a given polarization is
+    maintained internally in a consistent way so that the user can ask for either.
+    Data container keeps track a set of unique baselines and polarizations and
+    supports adding or multiplying two data containers with identical keys and 
+    data shapes via the overloaded + and * operators."""
 
     def __init__(self, data):
-        """
-        Args:
-            data (dict): dictionary of visibilities with keywords of pol/ant pair
-                in any order.
+        """Create a DataContainer object from a dictionary of data. Assumes that all 
+        keys have the same format and that polarization case is internally consistent.
+
+        Arguements:
+            data: dictionary of visibilities with keywords of pol/ant pair
+                in any order. Supports both three element keys, e.g. data[(i,j,pol)],
+                or nested dictions, e.g. data[(i,j)][pol] or data[pol][(i,j)].
         """
         self._data = odict()
         if type(data.keys()[0]) is str:  # Nested POL:{bls}
@@ -34,15 +49,20 @@ class DataContainer:
         self._pols = set([k[-1] for k in self._data.keys()])
 
     def mk_key(self, bl, pol):
+        '''Combine a baseline pair tuple and a polarization into a 3-tuple key.'''
         return bl + (pol,)
 
     def _switch_bl(self, key):
+        '''Switch the order of baselines in the key. Supports both 3-tuples 
+        (correctly reversing polarization) and baseline pair 2-tuples.'''
         if len(key) == 3:
             return (key[1], key[0], key[2][::-1])
         else:
             return (key[1], key[0])
 
     def _convert_case(self, key):
+        '''Convert the case of the polarization string in the key to match existing 
+        to match existing polarizations in the DataContainer (e.g. 'xx' vs. 'XX').'''
         if isinstance(key, str):
             pol = key
         elif len(key) == 3:
@@ -59,34 +79,45 @@ class DataContainer:
         if isinstance(key, str):
             return pol
         elif len(key) == 3:
-            return key[0:2] + (pol,)
+            return self.mk_key(key[0:2], pol)
 
 
     def bls(self, pol=None):
+        '''Return a set of baselines pairs (with a specific pol or more generally).'''
         if pol is None:
             return self._bls.copy()
         else:
             return set([bl for bl in self._bls if self.has_key(bl, pol)])
 
     def pols(self, bl=None):
+        '''Return a set of polarizations (with a specific bl or more generally).'''
         if bl is None:
             return self._pols.copy()
         else:
             return set([pol for pol in self._pols if self.has_key(bl, pol)])
 
     def keys(self):
+        '''Returns the keys of the data as a list.'''
         return self._data.keys()
 
     def values(self):
+        '''Returns the values of the data as a list.'''
         return self._data.values()
 
     def items(self):
+        '''Returns the keys and values of the data as a list of tuples.'''
         return self._data.items()
 
     def __len__(self):
+        '''Returns the number of keys in the data.'''
         return len(self._data)
 
     def __getitem__(self, key):
+        '''Returns the data corresponding to the key. If the key is just a polarization,
+        returns all baselines for that polarization. If the key is just a baseline, 
+        returns all polarizations for that baseline. If the key is of the form (0,1,'xx'),
+        returns the associated entry. Abstracts away both baseline ordering (applying the
+        complex conjugate when appropriate) and polarization capitalization.'''
         key = self._convert_case(key)
         if type(key) is str:  # asking for a pol
             return dict(zip(self._bls, [self[self.mk_key(bl, key)] for bl in self._bls]))
@@ -99,6 +130,9 @@ class DataContainer:
                 return np.conj(self._data[self._switch_bl(key)])
 
     def __setitem__(self, key, value):
+        '''Sets the data corresponding to the key. Only supports the form (0,1,'xx').
+        Abstracts away both baseline ordering (applying the complex conjugate when 
+        appropriate) and polarization capitalization.'''
         key = self._convert_case(key)
         if len(key) == 3:
             # check given bl ordering
@@ -116,6 +150,8 @@ class DataContainer:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
     def __delitem__(self, key):
+        '''Deletes the input key and corresponding data. Only supports the form (0,1,'xx'). 
+        Abstracts away both baseline ordering and polarization capitalization.'''
         key = self._convert_case(key)
         if len(key) == 3:
             del self._data[key]
@@ -125,9 +161,7 @@ class DataContainer:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
     def concatenate(self, D, axis=0):
-        """
-        Concatenates D, a DataContainer or a list of DCs, with self along an axis
-        """
+        '''Concatenates D, a DataContainer or a list of DCs, with self along an axis'''
         # check type of D
         if isinstance(D, DataContainer):
             # turn into list if not already a list
@@ -159,7 +193,7 @@ class DataContainer:
         return DataContainer(newD)
   
     def __add__(self, D):
-        """ adds values of two DataContainers together """
+        '''Adds values of two DataContainers together.'''
         # check time and frequency structure matches
         if D[D.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
             raise ValueError("[0] axis of dictionary values don't match")
@@ -177,7 +211,7 @@ class DataContainer:
         return DataContainer(newD)
 
     def __mul__(self, D):
-        """ multiplies the values of two DataContainers together """
+        '''Multiplies the values of two DataContainers together.'''
         # check time and frequency structure matches
         if D[D.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
             raise ValueError("[0] axis of dictionary values don't match")
@@ -195,15 +229,18 @@ class DataContainer:
         return DataContainer(newD)
 
     def __contains__(self, key):
-        return key in self.keys() or self._switch_bl(key) in self.keys()
+        '''Returns True if the key is in the data, abstracting away case and baseline order.'''
+        return self._convert_case(key) in self.keys() or self._switch_bl(self._convert_case(key)) in self.keys()
 
     def get_data(self, *args):
+        '''Interface to DataContainer.__getitem__(key).'''
         if len(args) > 1:
             return self.__getitem__(tuple(args))
         else:
             return self.__getitem__(*args)
 
     def has_key(self, *args):
+        '''Interface to DataContainer.__contains__(key).'''
         if len(args) == 1:
             return (self._data.has_key(self._convert_case(args[0])) or 
                     self._data.has_key(self._convert_case(self._switch_bl(args[0]))))
@@ -211,12 +248,15 @@ class DataContainer:
             return self.has_key(self._convert_case(self.mk_key(args[0], args[1])))
 
     def has_bl(self, bl):
-        return bl in self._bls
+        '''Returns True if baseline or its complex conjugate is in the data.'''
+        return bl in self._bls or self._switch_bl(bl) in self._bls
 
     def has_pol(self, pol):
+        '''Returns True if polarization (with some capitalization) is in the data.'''
         return self._convert_case(pol) in self._pols
 
     def get(self, bl, pol):
+        '''Interface to DataContainer.__getitem__(bl + (pol,)).'''
         return self[self._convert_case(self.mk_key(bl, pol))]
 
 
