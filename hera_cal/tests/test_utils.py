@@ -98,6 +98,9 @@ def test_JD2RA():
     nt.assert_equal(ra[3], 82.229459674026003)
     # test exception
     nt.assert_raises(ValueError, utils.JD2RA, jd, epoch='foo')
+    # test J2000 epoch
+    ra = utils.JD2RA(jd, epoch='J2000')
+    nt.assert_almost_equal(ra[0], 225.37671446615548)
 
 def test_combine_calfits():
     test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
