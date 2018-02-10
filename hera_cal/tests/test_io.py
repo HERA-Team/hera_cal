@@ -57,10 +57,10 @@ class Test_Visibility_IO(unittest.TestCase):
         self.assertEqual(len(f), len(self.freq_array))
 
         # test uvfits
-        fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
-        with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis(fname, format='uvfits')
-            #self.assertEqual(d[(0,1,'xx')].shape, (60,64))
+        # fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
+        # with self.assertRaises(NotImplementedError):
+        #     d, f = io.load_vis(fname, format='uvfits')
+        # self.assertEqual(d[(0,1,'xx')].shape, (60,64))
 
         # test w/ meta pick_data_ants
         d, f, ap, a, f, t, l, p = io.load_vis(fname, return_meta=True, pick_data_ants=False)
