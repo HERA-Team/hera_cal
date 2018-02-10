@@ -181,7 +181,7 @@ def JD2LST(JD, longitude=21.42830):
     LST = []
     for jd in JD:
         # construct astropy Time object
-        t = Time(jd, format='jd', scale='utc')
+        t = Time(jd, format='jd')
         # get LST in radians at epoch of jd
         LST.append(t.sidereal_time('apparent', longitude=longitude*unt.deg).radian)
     LST = np.array(LST)
@@ -250,7 +250,7 @@ def LST2JD(LST, start_jd, longitude=21.42830):
         return jd_array[0]
 
 
-def JD2RA(JD, longitude=21.42830, epoch='current'):
+def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
     """
     Convert from Julian date to Equatorial Right Ascension at zenith
     during a specified epoch.
@@ -259,17 +259,18 @@ def JD2RA(JD, longitude=21.42830, epoch='current'):
     -----------
     JD : type=float, a float or an array of Julian Dates
 
-    longitude : type=float, longitude of observer in degrees east, default=HERA long
-    
-    epoch : type=str, epoch for RA calculation. options=['current'].
-            The 'current' epoch is the epoch at JD. Note that
-            LST is *defined* as the zenith RA in the current epoch. 
+    longitude : type=float, longitude of observer in degrees east, default=HERA longitude
 
-    ## TODO : add a "J2000" option to return RA in J2000 epoch.
+    latitude : type=float, latitude of observer in degrees north, default=HERA latitutde
+               This only matters when using epoch="J2000"
+    
+    epoch : type=str, epoch for RA calculation. options=['current', 'J2000'].
+            The 'current' epoch is the epoch at JD. Note that
+            LST is defined as the zenith RA in the current epoch. 
 
     Output:
     -------
-    RA : type=float, right ascension [degrees] at zenith at JD times
+    RA : type=float, right ascension [degrees] at zenith JD times
          in the specified epoch.
     """
     # get JD type
@@ -289,6 +290,14 @@ def JD2RA(JD, longitude=21.42830, epoch='current'):
         if epoch == 'current':
             ra = JD2LST(jd, longitude=longitude) * 180 / np.pi
             RA.append(ra)
+
+        # use J2000 epoch
+        elif epoch == 'J2000':
+            loc = crd.EarthLocation(lat=latitude*unt.deg, lon=longitude*unt.deg)
+            t = Time(jd, format='jd')
+            zen = crd.SkyCoord(frame='altaz', alt=90*unt.deg, az=0*unt.deg, obstime=t, location=loc)
+            RA.append(zen.icrs.ra.degree)
+
         else:
             raise ValueError("didn't recognize {} epoch".format(epoch))
 
