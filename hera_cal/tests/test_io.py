@@ -1,4 +1,4 @@
-'''Tests for abscal.py'''
+'''Tests for io.py'''
 import unittest
 import numpy as np
 from pyuvdata import UVCal, UVData
@@ -7,6 +7,7 @@ from collections import OrderedDict as odict
 from hera_cal.datacontainer import DataContainer
 import hera_cal.io as io
 import os
+import shutil
 
 class Test_Visibility_IO(unittest.TestCase):
 
@@ -119,7 +120,42 @@ class Test_Visibility_IO(unittest.TestCase):
 
     
     def test_update_vis(self):
-        self.assertEqual(1,1)
+        # load in cal
+        fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        outname = os.path.join(DATA_PATH, "test_output/zen.2458043.12552.xx.HH.modified.uvORA")
+        uvd = UVData()
+        uvd.read_miriad(fname)
+        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
+
+        #make some modifications
+        new_data = {key: (2.+1.j)*val for key,val in data.items()}
+        new_flags = {key: np.logical_not(val) for key,val in flags.items()}
+        io.update_vis(fname, outname, data=new_data, flags=new_flags,
+                      add_to_history='hello world', clobber=True, telescope_name='PAPER')
+        
+        #test modifications
+        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(outname, return_meta=True)
+        for k in data.keys():
+            self.assertTrue(np.all(new_data[k] == data[k]))
+            self.assertTrue(np.all(new_flags[k] == flags[k]))
+        uvd2 = UVData()
+        uvd2.read_miriad(outname)
+        self.assertEqual(uvd2.history.replace('\n',''), ('hello world' + uvd.history).replace('\n',''))
+        self.assertEqual(uvd2.telescope_name,'PAPER')
+        shutil.rmtree(outname)
+
+        # #now try the same thing but with a UVData object instead of path
+        io.update_vis(uvd, outname, data=new_data, flags=new_flags,
+                      add_to_history='hello world', clobber=True, telescope_name='PAPER')
+        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(outname, return_meta=True)
+        for k in data.keys():
+            self.assertTrue(np.all(new_data[k] == data[k]))
+            self.assertTrue(np.all(new_flags[k] == flags[k]))
+        uvd2 = UVData()
+        uvd2.read_miriad(outname)
+        self.assertEqual(uvd2.history.replace('\n',''), ('hello world' + uvd.history).replace('\n',''))
+        self.assertEqual(uvd2.telescope_name,'PAPER')
+        shutil.rmtree(outname)
 
 
 
@@ -178,7 +214,7 @@ class Test_Calibration_IO(unittest.TestCase):
         new_flags = {key: np.logical_not(val) for key,val in flags.items()}
         new_quals = {key: 2.*val for key,val in quals.items()}
         io.update_cal(fname, outname, gains=new_gains, flags=new_flags, quals=new_quals,
-                      add_to_history='hello world', clobber=True, telescope_name='Super HERA')
+                      add_to_history='hello world', clobber=True, telescope_name='MWA')
         
         #test modifications
         gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(outname, return_meta=True)
@@ -189,12 +225,12 @@ class Test_Calibration_IO(unittest.TestCase):
         cal2 = UVCal()
         cal2.read_calfits(outname)
         self.assertEqual(cal2.history.replace('\n',''), ('hello world' + cal.history).replace('\n',''))
-        self.assertEqual(cal2.telescope_name,'Super HERA')
+        self.assertEqual(cal2.telescope_name,'MWA')
         os.remove(outname)
 
         #now try the same thing but with a UVCal object instead of path
         io.update_cal(cal, outname, gains=new_gains, flags=new_flags, quals=new_quals,
-                      add_to_history='hello world', clobber=True, telescope_name='Super HERA')
+                      add_to_history='hello world', clobber=True, telescope_name='MWA')
         gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(outname, return_meta=True)
         for k in gains.keys():
             self.assertTrue(np.all(new_gains[k] == gains[k]))
@@ -203,7 +239,7 @@ class Test_Calibration_IO(unittest.TestCase):
         cal2 = UVCal()
         cal2.read_calfits(outname)
         self.assertEqual(cal2.history.replace('\n',''), ('hello world' + cal.history).replace('\n',''))
-        self.assertEqual(cal2.telescope_name,'Super HERA')
+        self.assertEqual(cal2.telescope_name,'MWA')
         os.remove(outname)
 
 
