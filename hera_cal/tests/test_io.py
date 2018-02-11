@@ -68,6 +68,8 @@ class Test_Visibility_IO(unittest.TestCase):
 
         with self.assertRaises(NotImplementedError):
             d, f = io.load_vis(fname, format='not_a_real_format')
+        with self.assertRaises(NotImplementedError):
+            d, f = io.load_vis(['str1','str2'], format='not_a_real_format')
         with self.assertRaises(TypeError):
             d, f = io.load_vis([1,2], format='uvfits')
 
