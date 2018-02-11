@@ -13,6 +13,7 @@ class Test_Visibility_IO(unittest.TestCase):
 
     def test_load_vis(self):
         #duplicated testing from abscal_funcs.UVData2AbsCalDict
+        
         # load into pyuvdata object
         self.data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.uvd = UVData()
@@ -57,17 +58,28 @@ class Test_Visibility_IO(unittest.TestCase):
         self.assertEqual(len(ap[24]), 3)
         self.assertEqual(len(f), len(self.freq_array))
 
-        # test uvfits
-        # fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
-        # with self.assertRaises(NotImplementedError):
-        #     d, f = io.load_vis(fname, format='uvfits')
-        # self.assertEqual(d[(0,1,'xx')].shape, (60,64))
+        #test uvfits
+        fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
+        with self.assertRaises(NotImplementedError):
+            d, f = io.load_vis(fname, format='uvfits')
+        with self.assertRaises(NotImplementedError):
+            d, f = io.load_vis([fname,fname], format='uvfits')
+        #self.assertEqual(d[(0,1,'xx')].shape, (60,64))
+
+        with self.assertRaises(NotImplementedError):
+            d, f = io.load_vis(fname, format='not_a_real_format')
+        with self.assertRaises(TypeError):
+            d, f = io.load_vis([1,2], format='uvfits')
 
         # test w/ meta pick_data_ants
+        fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f, ap, a, f, t, l, p = io.load_vis(fname, return_meta=True, pick_data_ants=False)
         self.assertEqual(len(ap[24]), 3)
         self.assertEqual(len(a), 47)
         self.assertEqual(len(f), len(self.freq_array))
+
+        with self.assertRaises(TypeError):
+            d, f = io.load_vis(1.0)
 
     def test_load_vis_nested(self):
         #duplicated testing from firstcal.UVData_to_dict
@@ -144,6 +156,20 @@ class Test_Visibility_IO(unittest.TestCase):
         self.assertEqual(uvd2.telescope_name,'PAPER')
         shutil.rmtree(outname)
 
+        # Coverage for assertion errors
+        with self.assertRaises(NotImplementedError):
+            io.update_vis(uvd, outname, data=new_data, flags=new_flags, format_out='uvfits',
+                          add_to_history='hello world', clobber=True, telescope_name='PAPER')
+        with self.assertRaises(NotImplementedError):
+            io.update_vis(fname, outname, data=new_data, flags=new_flags, format_in='uvfits',
+                          add_to_history='hello world', clobber=True, telescope_name='PAPER')
+        with self.assertRaises(TypeError):
+            io.update_vis(uvd, outname, data=new_data, flags=new_flags, format_out='not_a_real_format',
+                          add_to_history='hello world', clobber=True, telescope_name='PAPER')
+        with self.assertRaises(TypeError):
+            io.update_vis(fname, outname, data=new_data, flags=new_flags, format_in='not_a_real_format',
+                          add_to_history='hello world', clobber=True, telescope_name='PAPER')
+
         # #now try the same thing but with a UVData object instead of path
         io.update_vis(uvd, outname, data=new_data, flags=new_flags,
                       add_to_history='hello world', clobber=True, telescope_name='PAPER')
@@ -162,6 +188,10 @@ class Test_Visibility_IO(unittest.TestCase):
 class Test_Calibration_IO(unittest.TestCase):
 
     def test_load_cal(self):
+
+        with self.assertRaises(TypeError):
+            io.load_cal(1.0)
+
         fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         gains, flags = io.load_cal(fname)
         self.assertEqual(len(gains.keys()),18)
@@ -172,6 +202,9 @@ class Test_Calibration_IO(unittest.TestCase):
         gains, flags = io.load_cal(cal)
         self.assertEqual(len(gains.keys()),18)
         self.assertEqual(len(flags.keys()),18)
+
+        with self.assertRaises(TypeError):
+            io.load_cal([fname,cal])
 
         fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
