@@ -1,6 +1,7 @@
 '''Tests for io.py'''
 import unittest
 import numpy as np
+import pyuvdata
 from pyuvdata import UVCal, UVData
 from hera_cal.data import DATA_PATH
 from collections import OrderedDict as odict
@@ -34,10 +35,6 @@ class Test_Visibility_IO(unittest.TestCase):
         # test pop autos
         data, flags = io.load_vis(fname, pop_autos=True)
         self.assertEqual((24, 24, 'xx') in data, False)
-
-        # test pol select
-        data, flags = io.load_vis(fname, pop_autos=False, pol_select=['xx'])
-        self.assertEqual(data[(24, 25, 'xx')].shape, (60, 64))
 
         # test uvd object
         uvd = UVData()
@@ -154,7 +151,7 @@ class Test_Visibility_IO(unittest.TestCase):
             self.assertTrue(np.all(new_flags[k] == flags[k]))
         uvd2 = UVData()
         uvd2.read_miriad(outname)
-        self.assertEqual(uvd2.history.replace('\n',''), ('hello world' + uvd.history).replace('\n',''))
+        self.assertTrue(pyuvdata.utils.check_histories(uvd2.history, 'hello world' + uvd.history))
         self.assertEqual(uvd2.telescope_name,'PAPER')
         shutil.rmtree(outname)
 
@@ -181,7 +178,7 @@ class Test_Visibility_IO(unittest.TestCase):
             self.assertTrue(np.all(new_flags[k] == flags[k]))
         uvd2 = UVData()
         uvd2.read_miriad(outname)
-        self.assertEqual(uvd2.history.replace('\n',''), ('hello world' + uvd.history).replace('\n',''))
+        self.assertTrue(pyuvdata.utils.check_histories(uvd2.history, 'hello world' + uvd.history))
         self.assertEqual(uvd2.telescope_name,'PAPER')
         shutil.rmtree(outname)
 
@@ -214,7 +211,7 @@ class Test_Calibration_IO(unittest.TestCase):
         self.assertEqual(len(gains.keys()),36)
         self.assertEqual(len(flags.keys()),36)
         self.assertEqual(len(quals.keys()),36)
-        self.assertEqual(freqs.shape, (1, 1024))
+        self.assertEqual(freqs.shape, (1024,))
         self.assertEqual(times.shape, (3,))
         self.assertEqual(sorted(pols), ['x','y'])
 
@@ -225,7 +222,7 @@ class Test_Calibration_IO(unittest.TestCase):
         self.assertEqual(len(gains.keys()),36)
         self.assertEqual(len(flags.keys()),36)
         self.assertEqual(len(quals.keys()),36)
-        self.assertEqual(freqs.shape, (1, 1024))
+        self.assertEqual(freqs.shape, (1024,))
         self.assertEqual(times.shape, (3,))
         self.assertEqual(sorted(pols), ['x','y'])
 
@@ -259,7 +256,7 @@ class Test_Calibration_IO(unittest.TestCase):
             self.assertTrue(np.all(new_quals[k] == quals[k]))
         cal2 = UVCal()
         cal2.read_calfits(outname)
-        self.assertEqual(cal2.history.replace('\n',''), ('hello world' + cal.history).replace('\n',''))
+        self.assertTrue(pyuvdata.utils.check_histories(cal2.history, 'hello world' + cal.history))
         self.assertEqual(cal2.telescope_name,'MWA')
         os.remove(outname)
 
@@ -273,7 +270,7 @@ class Test_Calibration_IO(unittest.TestCase):
             self.assertTrue(np.all(new_quals[k] == quals[k]))
         cal2 = UVCal()
         cal2.read_calfits(outname)
-        self.assertEqual(cal2.history.replace('\n',''), ('hello world' + cal.history).replace('\n',''))
+        self.assertTrue(pyuvdata.utils.check_histories(cal2.history, 'hello world' + cal.history))
         self.assertEqual(cal2.telescope_name,'MWA')
         os.remove(outname)
 
