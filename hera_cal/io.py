@@ -10,7 +10,7 @@ str2antpol = {'x': -5, 'y': -6}
 antpol2str = {antpol: string for string,antpol in str2antpol.items()}
 #TODO: update to use jones strings (e.g. 'jxx' and 'jyy'). Currently uses pyuvdata for visibility polarizations.
 
-def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, pop_autos=False, pick_data_ants=True, nested_dict=False):
+def load_vis(input_data, return_meta=False, format='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning 
     the most useful metadata. More than one spectral window is not supported.
 
@@ -19,7 +19,6 @@ def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, po
             or list of UVData instances to concatenate into a single dictionary
         return_meta:  boolean, if True: also return antpos, ants, freqs, times, lsts, and pols
         format: either 'miriad' or 'uvfits', can be ignored if input_data is UVData objects
-        pol_select: list of polarization strings to keep
         pop_autos: boolean, if True: remove autocorrelations
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary format
@@ -45,9 +44,9 @@ def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, po
     uvd = UVData()
     if isinstance(input_data, (tuple, list, np.ndarray)): #List loading
         if np.all([isinstance(id, str) for id in input_data]): #List of visibility data paths
-            if format is 'miriad':
+            if format == 'miriad':
                 uvd.read_miriad(list(input_data))
-            elif format is 'uvfits':
+            elif format == 'uvfits':
                  #TODO: implement this
                 raise NotImplementedError('This function has not been implemented yet.')
             else:
@@ -57,9 +56,9 @@ def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, po
         else:
             raise TypeError('If input is a list, it must be only strings or only UVData objects.')
     elif isinstance(input_data, str): #single visibility data path
-        if format is 'miriad':
+        if format == 'miriad':
             uvd.read_miriad(input_data)
-        elif format is 'uvfits':
+        elif format == 'uvfits':
              #TODO: implement this
             raise NotImplementedError('This function has not been implemented yet.')
         else:
@@ -70,26 +69,16 @@ def load_vis(input_data, return_meta=False, format='miriad', pol_select=None, po
         raise TypeError('Input must be a UVData object, a string, or a list of either.')
 
     data, flags = {}, {}
-    # create nested dictionaries of visibilities in the data[bl][pol] format
-    for nbl, (i, j) in enumerate(map(uvd.baseline_to_antnums, np.unique(uvd.baseline_array))):
-        if (i, j) not in data:
-            data[i, j] = {}
-            flags[i, j] = {}
-        for ip, pol in enumerate(uvd.polarization_array):
-            pol = polnum2str(pol)
-            new_data = deepcopy(uvd.get_data((i, j, pol)))
-            new_flags = deepcopy(uvd.get_flags((i, j, pol)))
-            if pol not in data[(i, j)]:
-                data[(i, j)][pol] = new_data
-                flags[(i, j)][pol] = new_flags
-            else:
-                data[(i, j)][pol] = np.concatenate([data[(i, j)][pol], new_data ])
-                flags[(i, j)][pol] = np.concatenate([flags[(i, j)][pol], new_flags ])
-    
-    if pop_autos:
-        for bl in data.keys():
-            if bl[0] == bl[1]:
-                del data[bl], flags[bl]
+    # create nested dictionaries of visibilities in the data[bl][pol] format, removing autos if desired
+    for nbl, (i, j) in enumerate(uvd.get_antpairs()):
+        if (not pop_autos) or (i != j): 
+            if (i, j) not in data:
+                data[i, j] = {}
+                flags[i, j] = {}
+            for ip, pol in enumerate(uvd.polarization_array):
+                pol = polnum2str(pol)
+                data[(i, j)][pol] = deepcopy(uvd.get_data((i, j, pol)))
+                flags[(i, j)][pol] = deepcopy(uvd.get_flags((i, j, pol)))
 
     # If we don't want nested dicts, convert to DataContainer
     if not nested_dict:
@@ -139,9 +128,9 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
         uvd = deepcopy(infilename)
     else:    
         uvd = UVData()
-        if format_in is 'miriad':
+        if format_in == 'miriad':
             uvd.read_miriad(infilename)
-        elif format_in is 'uvfits':
+        elif format_in == 'uvfits':
             #TODO: implement this
             raise NotImplementedError('This function has not been implemented yet.')
         else:
@@ -149,8 +138,7 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
 
     # set data and/or flags
     if data is not None or flags is not None:
-        bls = map(uvd.baseline_to_antnums, np.unique(uvd.baseline_array))
-        for (i,j) in bls:
+        for (i,j) in uvd.get_antpairs():
             this_bl = (uvd.baseline_array == uvd.antnums_to_baseline(i,j))
             for ip, pol in enumerate(uvd.polarization_array):
                 if data is not None:
@@ -165,9 +153,9 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
     uvd.check()
 
     # write out results
-    if format_out is 'miriad':
+    if format_out == 'miriad':
         uvd.write_miriad(outfilename, clobber=clobber)
-    elif format_out is 'uvfits':
+    elif format_out == 'uvfits':
         #TODO: implement this
         raise NotImplementedError('This function has not been implemented yet.')
     else:
@@ -228,8 +216,8 @@ def load_cal(input_cal, return_meta=False):
     if return_meta:
         total_qual = cal.total_quality_array
         ants = cal.ant_array
-        freqs = cal.freq_array
-        times = cal.time_array
+        freqs = np.unique(cal.freq_array)
+        times = np.unique(cal.time_array)
         pols = [antpol2str[j] for j in cal.jones_array]
         return gains, flags, quals, total_qual, ants, freqs, times, pols
     else:
