@@ -28,8 +28,8 @@ import aipy
 
 
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst_low=None,
-            lst_hi=None, flag_thresh=0.7, atol=1e-6, median=False, truncate_empty=True,
-            sig_clip=False, sigma=2.0, min_N=4, return_no_avg=False, verbose=True):
+            lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
+            sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, verbose=True):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -308,7 +308,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
 
 def lst_align(data, data_lsts, flags=None, dlst=None,
-              verbose=True, atol=1e-6, **interp_kwargs):
+              verbose=True, atol=1e-10, **interp_kwargs):
     """
     Interpolate complex visibilities to align time integrations with an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -377,7 +377,6 @@ def lst_align_arg_parser():
     a.add_argument("--file_ext", default=".L.{:7.5f}", type=str, help="file extension for LST-aligned data. must have one placeholder for starting LST.")
     a.add_argument("--outdir", default=None, type=str, help='directory for output files')
     a.add_argument("--dlst", type=float, default=None, help="LST grid interval spacing")
-    a.add_argument("--longitude", type=float, default=21.42830, help="longitude of observer in degrees east")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
     a.add_argument("--miriad_kwargs", type=dict, default={}, help="kwargs to pass to miriad_to_data function")
     a.add_argument("--align_kwargs", type=dict, default={}, help="kwargs to pass to lst_align function")
@@ -385,7 +384,7 @@ def lst_align_arg_parser():
     return a
 
 
-def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, longitude=21.42830,
+def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
                     overwrite=None, outdir=None, miriad_kwargs={}, align_kwargs={}, verbose=True):
     """
     Align a series of data files with a universal LST grid.
@@ -397,8 +396,6 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, longitude=21.4
     file_ext : type=str, file_extension for each file in data_files when writing to disk
 
     dlst : type=float, LST grid bin interval, if None get it from first file in data_files
-
-    longitude : type=float, longitude of observer in degrees east
 
     overwrite : type=boolean, if True overwrite output files
 
@@ -623,9 +620,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                 # if file is needed, append data references to data_list
                 if f_select[j][k] == True:
                     file_list.append(data_files[j][k])
-                    nightly_data_list.append(data_status[j][k][0])
-                    nightly_flgs_list.append(data_status[j][k][1])
-                    nightly_lst_list.append(data_status[j][k][6])
+                    nightly_data_list.append(data_status[j][k][0])  # this is data
+                    nightly_flgs_list.append(data_status[j][k][1])  # this is flgs
+                    nightly_lst_list.append(data_status[j][k][6])  # this is lsts
 
             # skip if nothing accumulated in nightly files
             if len(nightly_data_list) == 0:
@@ -857,13 +854,13 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
         array[flags] *= np.nan
 
     # get robust location
-    mean = np.nanmedian(array, axis=axis)
+    location = np.nanmedian(array, axis=axis)
 
-    # get MAD
-    std = np.nanmedian(np.abs(array - mean), axis=axis) * 1.4
+    # get MAD! * 1.482579
+    scale = np.nanmedian(np.abs(array - location), axis=axis) * 1.482579
 
     # get clipped data
-    clip = np.abs(array-mean)/std > sigma
+    clip = np.abs(array-location)/scale > sigma
 
     # set clipped data to nan and set clipped flags to True
     array[clip] *= np.nan
