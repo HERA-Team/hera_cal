@@ -68,13 +68,12 @@ def load_vis(input_data, return_meta=False, format='miriad', pop_autos=False, pi
     else:
         raise TypeError('Input must be a UVData object, a string, or a list of either.')
 
-    data, flags = {}, {}
+    data, flags = odict(), odict()
     # create nested dictionaries of visibilities in the data[bl][pol] format, removing autos if desired
     for nbl, (i, j) in enumerate(uvd.get_antpairs()):
         if (not pop_autos) or (i != j): 
             if (i, j) not in data:
-                data[i, j] = {}
-                flags[i, j] = {}
+                data[i, j], flags[i, j] = odict(), odict()
             for ip, pol in enumerate(uvd.polarization_array):
                 pol = polnum2str(pol)
                 data[(i, j)][pol] = deepcopy(uvd.get_data((i, j, pol)))
