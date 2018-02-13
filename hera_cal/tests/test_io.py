@@ -151,11 +151,11 @@ class Test_Visibility_IO(unittest.TestCase):
             self.assertTrue(np.all(new_flags[k] == flags[k]))
         uvd2 = UVData()
         uvd2.read_miriad(outname)
-        self.assertTrue(pyuvdata.utils.check_histories(uvd2.history, 'hello world' + uvd.history))
+        self.assertTrue(pyuvdata.utils.check_histories(uvd2.history, uvd.history + 'hello world'))
         self.assertEqual(uvd2.telescope_name,'PAPER')
         shutil.rmtree(outname)
 
-        # Coverage for assertion errors
+        # Coverage for errors
         with self.assertRaises(NotImplementedError):
             io.update_vis(uvd, outname, data=new_data, flags=new_flags, format_out='uvfits',
                           add_to_history='hello world', clobber=True, telescope_name='PAPER')
@@ -178,7 +178,7 @@ class Test_Visibility_IO(unittest.TestCase):
             self.assertTrue(np.all(new_flags[k] == flags[k]))
         uvd2 = UVData()
         uvd2.read_miriad(outname)
-        self.assertTrue(pyuvdata.utils.check_histories(uvd2.history, 'hello world' + uvd.history))
+        self.assertTrue(pyuvdata.utils.check_histories(uvd2.history, uvd.history + 'hello world'))
         self.assertEqual(uvd2.telescope_name,'PAPER')
         shutil.rmtree(outname)
 
@@ -256,7 +256,7 @@ class Test_Calibration_IO(unittest.TestCase):
             self.assertTrue(np.all(new_quals[k] == quals[k]))
         cal2 = UVCal()
         cal2.read_calfits(outname)
-        self.assertTrue(pyuvdata.utils.check_histories(cal2.history, 'hello world' + cal.history))
+        self.assertTrue(pyuvdata.utils.check_histories(cal2.history, cal.history + 'hello world' ))
         self.assertEqual(cal2.telescope_name,'MWA')
         os.remove(outname)
 
@@ -270,7 +270,7 @@ class Test_Calibration_IO(unittest.TestCase):
             self.assertTrue(np.all(new_quals[k] == quals[k]))
         cal2 = UVCal()
         cal2.read_calfits(outname)
-        self.assertTrue(pyuvdata.utils.check_histories(cal2.history, 'hello world' + cal.history))
+        self.assertTrue(pyuvdata.utils.check_histories(cal2.history, cal.history + 'hello world'))
         self.assertEqual(cal2.telescope_name,'MWA')
         os.remove(outname)
 
