@@ -37,7 +37,7 @@ for filename in args.files:
         raise ValueError('Unrecognized file type ' + str(args.filetype))
     st_type_str = uv.extra_keywords.pop('st_type').replace('\x00', '')
     st_type_list = st_type_str[1:-1].split(', ')
-    ind = [i for i, x in enumerate(st_type_list) if x == 'herahex']
+    ind = [i for i, x in enumerate(st_type_list) if x == 'herahex' or x == 'heraringa' or x == 'heraringb']
     uv.select(antenna_nums=uv.antenna_numbers[ind])
     st_type_list = list(np.array(st_type_list)[np.array(ind, dtype=int)])
     uv.extra_keywords['st_type'] = '[' + ', '.join(st_type_list) + ']'
