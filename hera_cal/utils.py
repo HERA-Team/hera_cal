@@ -181,7 +181,7 @@ def JD2LST(JD, longitude=21.42830):
     LST = []
     for jd in JD:
         # construct astropy Time object
-        t = Time(jd, format='jd')
+        t = Time(jd, format='jd', scale='utc')
         # get LST in radians at epoch of jd
         LST.append(t.sidereal_time('apparent', longitude=longitude*unt.deg).radian)
     LST = np.array(LST)
@@ -266,7 +266,8 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
     
     epoch : type=str, epoch for RA calculation. options=['current', 'J2000'].
             The 'current' epoch is the epoch at JD. Note that
-            LST is defined as the zenith RA in the current epoch. 
+            LST is defined as the zenith RA in the current epoch. Note that
+            epoch='J2000' corresponds to the ICRS standard.
 
     Output:
     -------
@@ -294,7 +295,7 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
         # use J2000 epoch
         elif epoch == 'J2000':
             loc = crd.EarthLocation(lat=latitude*unt.deg, lon=longitude*unt.deg)
-            t = Time(jd, format='jd')
+            t = Time(jd, format='jd', scale='utc')
             zen = crd.SkyCoord(frame='altaz', alt=90*unt.deg, az=0*unt.deg, obstime=t, location=loc)
             RA.append(zen.icrs.ra.degree)
 
