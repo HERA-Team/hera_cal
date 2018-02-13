@@ -12,7 +12,8 @@ antpol2str = {antpol: string for string,antpol in str2antpol.items()}
 
 def load_vis(input_data, return_meta=False, format='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning 
-    the most useful metadata. More than one spectral window is not supported.
+    the most useful metadata. More than one spectral window is not supported. Assumes every baseline
+    has the same times present and that the times are in order.
 
     Arguments:
         input_data: data file path, or UVData instance, or list of either strings of data file paths 
@@ -105,7 +106,8 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
                data=None, flags=None, add_to_history='', clobber=False, **kwargs):
     '''Loads an existing file with pyuvdata, modifies some subset of of its parameters, and 
     then writes a new file to disk. Cannot modify the shape of data arrays. More than one 
-    spectral window is not supported.
+    spectral window is not supported. Assumes every baseline has the same times present 
+    and that the times are in order.
 
     Arguments:
         infilename: filename of the base visibility file to be updated, or UVData object
