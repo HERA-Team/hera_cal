@@ -116,7 +116,7 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
             like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update. 
         flags: dictionary or DataContainer of data flags to update. 
             Default (None) does not update.
-        add_to_history: prepends a string to the history of the output file
+        add_to_history: appends a string to the history of the output file
         clobber: if True, overwrites existing file at outfilename
         kwargs: dictionary mapping updated attributs to their new values. 
             See pyuvdata.UVData documentation for more info.
@@ -146,7 +146,7 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
                     uvd.flag_array[this_bl,0,:,ip] = flags[(i,j,polnum2str(pol))]
 
     # set additional attributes
-    uvd.history = add_to_history + uvd.history
+    uvd.history += add_to_history
     for attribute, value in kwargs.items():
         uvd.__setattr__(attribute,value)
     uvd.check()
@@ -240,7 +240,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
             with keys in the (1,'x') format. Default (None) leaves unchanged.
         flags: Dictionary like gains but of flags. Default (None) leaves unchanged.
         quals: Dictionary like gains but of per-antenna quality. Default (None) leaves unchanged.
-        add_to_history: prepends a string to the history of the output file
+        add_to_history: appends a string to the history of the output file
         clobber: if True, overwrites existing file at outfilename
         kwargs: dictionary mapping updated attributs to their new values. 
             See pyuvdata.UVCal documentation for more info.
@@ -264,7 +264,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
                 cal.quality_array[i, 0, :, :, ip] = quals[(ant, antpol2str[pol])].T
 
     # Set additional attributes
-    cal.history = add_to_history + cal.history
+    cal.history += add_to_history
     for attribute, value in kwargs.items():
         cal.__setattr__(attribute,value)
     cal.check()
