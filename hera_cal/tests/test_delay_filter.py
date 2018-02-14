@@ -50,9 +50,9 @@ class Test_Delay_Filter(unittest.TestCase):
         self.assertFalse(dfil.writable)
 
 
-    def test_load_dicts(self):
+    def test_load_data_as_dicts(self):
         dfil = df.Delay_Filter()
-        dfil.load_dicts(None,None,None,None)
+        dfil.load_data_as_dicts(None,None,None,None)
         self.assertTrue(hasattr(dfil,'data'))
         self.assertTrue(hasattr(dfil,'flags'))
         self.assertTrue(hasattr(dfil,'freqs'))
