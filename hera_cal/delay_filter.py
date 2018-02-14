@@ -1,5 +1,5 @@
 import numpy as np
-import hera_cal.abscal as abscal
+from hera_cal import io
 from pyuvdata import UVData
 from hera_cal.datacontainer import DataContainer
 from collections import OrderedDict as odict
@@ -10,30 +10,25 @@ from scipy import constants
 class Delay_Filter():
 
     def __init__(self):
-        '''Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.'''
+        '''Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.
+        To use, run either self.load_data() or self.load_dicts(), then self.run_filter(). If data is loaded with a single 
+        string path or a single UVData object, it can be written to a new file using self.write_filtered_data().
+        '''
         self.writable = False
 
-    def read_files(self, datafiles, filetype='miriad'):
-        '''Reads in and stores data in miriad or uvfits format for delay filtering. 
+
+    def load_data(self, input_data, format='miriad'):
+        '''Loads in and stores data for delay filtering. 
 
         Arguments:
-            datafiles: string or list of strings indicating the path to data to load in
-            filetype: file format of data. Options: 'miriad' (default)  or 'uvfits'.
+            input_data: data file path, or UVData instance, or list of either strings of data file paths 
+                or list of UVData instances to concatenate into a single internal DataContainer
+            format: file format of data. Default 'miriad.' Ignored if input_data is UVData object(s).
         '''
-        self.writable = True
-        self.datafiles, self.filetype = datafiles, filetype
-        self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = abscal.UVData2AbsCalDict(datafiles, pop_autos=False, return_meta=True, filetype=filetype)
-
-
-    def load_UVData(self, uvdata):
-        '''Loads in UVData object(s) for performing delay filtering.
-
-        Arguments:
-            datafiles: UVData object or list of UVData objects
-        '''
-        self.writable = True
-        self.uvdata = uvdata
-        self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = abscal.UVData2AbsCalDict(uvdata, pop_autos=False, return_meta=True)
+        if isinstance(input_data, (str,UVData)):
+            self.writable = True
+            self.input_data, self.format = input_data, format
+        self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = io.load_vis(input_data, return_meta=True, format=format)
 
 
     def load_dicts(self, data, flags, freqs, antpos):
@@ -65,10 +60,15 @@ class Delay_Filter():
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt) 
                 Only works properly when all weights are all between 0 and 1. 
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+
+        Results are stored in:
+            self.filtered_residuals: DataContainer formatted like self.data with only high-delay components
+            self.CLEAN_models: DataContainer formatted like self.data with only low-delay components 
+            self.info: Dictionary of info from uvtools.dspec.delay_filter with the same keys as self.data
         '''
         self.filtered_residuals = deepcopy(self.data)
-        self.CLEAN_models = deepcopy(self.data)
-        self.info = {}
+        self.CLEAN_models = DataContainer({k: np.zeros_like(self.data.values()[0]) for k in self.data.keys()})
+        self.info = odict()
         if to_filter == []:
             to_filter = self.data.keys()
         
@@ -80,19 +80,34 @@ class Delay_Filter():
             else:
                 wgts = np.logical_not(self.flags[k])
             
-            d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon, tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
+            d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon, 
+                                              tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
             self.filtered_residuals[k] = d_res
             self.CLEAN_models[k] = d_mdl
             self.info[k] = info
 
 
-    def write_filtered_data(self, outfilenames, append_to_history = '', write_CLEAN_models=False):
-        '''TODO: Document.'''
+    def write_filtered_data(self, outfilename, format_out='miriad', add_to_history = '', 
+                            clobber = False, write_CLEAN_models=False, **kwargs):
+        '''Writes high-pass filtered data to disk, using input (which must be either 
+        a single path or a single UVData object) as a template.
+        
+        Arguments:
+            outfilename: filename of the filtered visibility file to be written to disk
+            format_out: file format of output result. Default 'miriad.'
+            append_to_history: string appended to the history of the output file
+            clobber: if True, overwrites existing file at outfilename
+            write_CLEAN_models: if True, save the low-pass filtered CLEAN model rather 
+                than the high-pass filtered residual
+            kwargs: addtional keyword arguments update the UVData object before saving. 
+                Must be valid UVData object attributes.
+        '''
         if not self.writable:
-            raise NotImplementedError('Writing functionality requires list of input files or a stored UVData object')
-        if hasattr(self, 'uvdata'):
-            raise NotImplementedError('blah')
+            raise NotImplementedError('Writing functionality requires that the input be a single file path string or a single UVData object.')
         else:
-            raise NotImplementedError('blah')
-
-
+            if write_CLEAN_models:
+                data_out = self.CLEAN_models
+            else:
+                data_out = self.filtered_residuals
+            io.update_vis(self.input_data, outfilename, format_in=self.format, format_out=format_out, data=data_out, 
+                          add_to_history=add_to_history, clobber=clobber, **kwargs)
