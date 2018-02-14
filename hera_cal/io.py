@@ -10,7 +10,7 @@ str2antpol = {'x': -5, 'y': -6}
 antpol2str = {antpol: string for string,antpol in str2antpol.items()}
 #TODO: update to use jones strings (e.g. 'jxx' and 'jyy'). Currently uses pyuvdata for visibility polarizations.
 
-def load_vis(input_data, return_meta=False, format='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
+def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning 
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
@@ -19,10 +19,10 @@ def load_vis(input_data, return_meta=False, format='miriad', pop_autos=False, pi
         input_data: data file path, or UVData instance, or list of either strings of data file paths 
             or list of UVData instances to concatenate into a single dictionary
         return_meta:  boolean, if True: also return antpos, ants, freqs, times, lsts, and pols
-        format: either 'miriad' or 'uvfits', can be ignored if input_data is UVData objects
+        filetype: either 'miriad' or 'uvfits', can be ignored if input_data is UVData objects
         pop_autos: boolean, if True: remove autocorrelations
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
-        nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary format
+        nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
             where visibilities and flags are accessed as data[(0,1)]['xx']
 
     Returns:
@@ -45,32 +45,32 @@ def load_vis(input_data, return_meta=False, format='miriad', pop_autos=False, pi
     uvd = UVData()
     if isinstance(input_data, (tuple, list, np.ndarray)): #List loading
         if np.all([isinstance(id, str) for id in input_data]): #List of visibility data paths
-            if format == 'miriad':
+            if filetype == 'miriad':
                 uvd.read_miriad(list(input_data))
-            elif format == 'uvfits':
+            elif filetype == 'uvfits':
                  #TODO: implement this
                 raise NotImplementedError('This function has not been implemented yet.')
             else:
-                raise NotImplementedError("Data format must be either 'miriad' or 'uvfits'.")
+                raise NotImplementedError("Data filetype must be either 'miriad' or 'uvfits'.")
         elif np.all([isinstance(id, UVData) for id in input_data]): #List of uvdata objects
             uvd = reduce(operator.add, input_data)
         else:
             raise TypeError('If input is a list, it must be only strings or only UVData objects.')
     elif isinstance(input_data, str): #single visibility data path
-        if format == 'miriad':
+        if filetype == 'miriad':
             uvd.read_miriad(input_data)
-        elif format == 'uvfits':
+        elif filetype == 'uvfits':
              #TODO: implement this
             raise NotImplementedError('This function has not been implemented yet.')
         else:
-            raise NotImplementedError("Data format must be either 'miriad' or 'uvfits'.")
+            raise NotImplementedError("Data filetype must be either 'miriad' or 'uvfits'.")
     elif isinstance(input_data, UVData): #single UVData object
         uvd = input_data
     else:
         raise TypeError('Input must be a UVData object, a string, or a list of either.')
 
     data, flags = odict(), odict()
-    # create nested dictionaries of visibilities in the data[bl][pol] format, removing autos if desired
+    # create nested dictionaries of visibilities in the data[bl][pol] filetype, removing autos if desired
     for nbl, (i, j) in enumerate(uvd.get_antpairs()):
         if (not pop_autos) or (i != j): 
             if (i, j) not in data:
@@ -97,12 +97,12 @@ def load_vis(input_data, return_meta=False, format='miriad', pop_autos=False, pi
         return data, flags
 
 
-def write_vis(outfilename, data, flags, format='miriad', history='', clobber=False, **kwargs):
+def write_vis(outfilename, data, flags, filetype='miriad', history='', clobber=False, **kwargs):
     '''TODO: migrate in hera_cal.utils.data_to_miriad and generalize to also write uvfits.'''
     raise NotImplementedError('This function has not been implemented yet.')
 
 
-def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad', 
+def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miriad', 
                data=None, flags=None, add_to_history='', clobber=False, **kwargs):
     '''Loads an existing file with pyuvdata, modifies some subset of of its parameters, and 
     then writes a new file to disk. Cannot modify the shape of data arrays. More than one 
@@ -112,8 +112,8 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
     Arguments:
         infilename: filename of the base visibility file to be updated, or UVData object
         outfilename: filename of the new visibility file
-        format_in: either 'miriad' or 'uvfits' (ignored if infile is a UVData object)
-        format_out: either 'miriad' or 'uvfits'
+        filetype_in: either 'miriad' or 'uvfits' (ignored if infile is a UVData object)
+        filetype_out: either 'miriad' or 'uvfits'
         data: dictionary or DataContainer of complex visibility data to update. Keys
             like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update. 
         flags: dictionary or DataContainer of data flags to update. 
@@ -129,13 +129,13 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
         uvd = deepcopy(infilename)
     else:    
         uvd = UVData()
-        if format_in == 'miriad':
+        if filetype_in == 'miriad':
             uvd.read_miriad(infilename)
-        elif format_in == 'uvfits':
+        elif filetype_in == 'uvfits':
             #TODO: implement this
             raise NotImplementedError('This function has not been implemented yet.')
         else:
-            raise TypeError("Input format must be either 'miriad' or 'uvfits'.")
+            raise TypeError("Input filetype must be either 'miriad' or 'uvfits'.")
 
     # set data and/or flags
     if data is not None or flags is not None:
@@ -154,13 +154,13 @@ def update_vis(infilename, outfilename, format_in='miriad', format_out='miriad',
     uvd.check()
 
     # write out results
-    if format_out == 'miriad':
+    if filetype_out == 'miriad':
         uvd.write_miriad(outfilename, clobber=clobber)
-    elif format_out == 'uvfits':
+    elif filetype_out == 'uvfits':
         #TODO: implement this
         raise NotImplementedError('This function has not been implemented yet.')
     else:
-        raise TypeError("Input format must be either 'miriad' or 'uvfits'.")
+        raise TypeError("Input filetype must be either 'miriad' or 'uvfits'.")
 
 
 def load_cal(input_cal, return_meta=False):

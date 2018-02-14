@@ -58,17 +58,17 @@ class Test_Visibility_IO(unittest.TestCase):
         #test uvfits
         fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
         with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis(fname, format='uvfits')
+            d, f = io.load_vis(fname, filetype='uvfits')
         with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis([fname,fname], format='uvfits')
+            d, f = io.load_vis([fname,fname], filetype='uvfits')
         #self.assertEqual(d[(0,1,'xx')].shape, (60,64))
 
         with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis(fname, format='not_a_real_format')
+            d, f = io.load_vis(fname, filetype='not_a_real_filetype')
         with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis(['str1','str2'], format='not_a_real_format')
+            d, f = io.load_vis(['str1','str2'], filetype='not_a_real_filetype')
         with self.assertRaises(TypeError):
-            d, f = io.load_vis([1,2], format='uvfits')
+            d, f = io.load_vis([1,2], filetype='uvfits')
 
         # test w/ meta pick_data_ants
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -157,16 +157,16 @@ class Test_Visibility_IO(unittest.TestCase):
 
         # Coverage for errors
         with self.assertRaises(NotImplementedError):
-            io.update_vis(uvd, outname, data=new_data, flags=new_flags, format_out='uvfits',
+            io.update_vis(uvd, outname, data=new_data, flags=new_flags, filetype_out='uvfits',
                           add_to_history='hello world', clobber=True, telescope_name='PAPER')
         with self.assertRaises(NotImplementedError):
-            io.update_vis(fname, outname, data=new_data, flags=new_flags, format_in='uvfits',
+            io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_in='uvfits',
                           add_to_history='hello world', clobber=True, telescope_name='PAPER')
         with self.assertRaises(TypeError):
-            io.update_vis(uvd, outname, data=new_data, flags=new_flags, format_out='not_a_real_format',
+            io.update_vis(uvd, outname, data=new_data, flags=new_flags, filetype_out='not_a_real_filetype',
                           add_to_history='hello world', clobber=True, telescope_name='PAPER')
         with self.assertRaises(TypeError):
-            io.update_vis(fname, outname, data=new_data, flags=new_flags, format_in='not_a_real_format',
+            io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_in='not_a_real_filetype',
                           add_to_history='hello world', clobber=True, telescope_name='PAPER')
 
         # #now try the same thing but with a UVData object instead of path

@@ -17,21 +17,21 @@ class Delay_Filter():
         self.writable = False
 
 
-    def load_data(self, input_data, format='miriad'):
+    def load_data(self, input_data, filetype='miriad'):
         '''Loads in and stores data for delay filtering. 
 
         Arguments:
             input_data: data file path, or UVData instance, or list of either strings of data file paths 
                 or list of UVData instances to concatenate into a single internal DataContainer
-            format: file format of data. Default 'miriad.' Ignored if input_data is UVData object(s).
+            filetype: file format of data. Default 'miriad.' Ignored if input_data is UVData object(s).
         '''
         if isinstance(input_data, (str,UVData)):
             self.writable = True
-            self.input_data, self.format = input_data, format
-        self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = io.load_vis(input_data, return_meta=True, format=format)
+            self.input_data, self.filetype = input_data, filetype
+        self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = io.load_vis(input_data, return_meta=True, filetype=filetype)
 
 
-    def load_dicts(self, data, flags, freqs, antpos):
+    def load_data_as_dicts(self, data, flags, freqs, antpos):
         '''Loads in data manually as a dictionary, an ordered dictionary, or a DataContainer.
 
         Arguments:
@@ -87,14 +87,14 @@ class Delay_Filter():
             self.info[k] = info
 
 
-    def write_filtered_data(self, outfilename, format_out='miriad', add_to_history = '', 
+    def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history = '', 
                             clobber = False, write_CLEAN_models=False, **kwargs):
         '''Writes high-pass filtered data to disk, using input (which must be either 
         a single path or a single UVData object) as a template.
         
         Arguments:
             outfilename: filename of the filtered visibility file to be written to disk
-            format_out: file format of output result. Default 'miriad.'
+            filetype_out: file format of output result. Default 'miriad.'
             append_to_history: string appended to the history of the output file
             clobber: if True, overwrites existing file at outfilename
             write_CLEAN_models: if True, save the low-pass filtered CLEAN model rather 
@@ -109,5 +109,5 @@ class Delay_Filter():
                 data_out = self.CLEAN_models
             else:
                 data_out = self.filtered_residuals
-            io.update_vis(self.input_data, outfilename, format_in=self.format, format_out=format_out, data=data_out, 
+            io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out, data=data_out, 
                           add_to_history=add_to_history, clobber=clobber, **kwargs)
