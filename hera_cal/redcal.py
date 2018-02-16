@@ -1,4 +1,5 @@
 import numpy as np
+import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 
@@ -375,12 +376,6 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
 
-        try: # XXX Can this be done in the unittests instead? -ARP
-            import linsolve
-        except(ImportError):
-            import unittest
-            raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
-
         fc_data = divide_by_gains(data, sol0, target_type='vis')
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve()
@@ -408,12 +403,6 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-
-        try: # XXX Can this be done in the unittests instead? -ARP
-            import linsolve
-        except(ImportError):
-            import unittest
-            raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
 
         sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
@@ -520,12 +509,6 @@ def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
     Returns:
         int: the number of 1-pol redundant baseline calibration degeneracies (4 means redundantly calibratable)
     """
-
-    try: # XXX Can this be done in the unittests instead? -ARP
-        import linsolve
-    except(ImportError):
-        import unittest
-        raise unittest.SkipTest('linsolve not detected. linsolve must be installed for this functionality')
 
     reds = get_reds(antpos, bl_error_tol=bl_error_tol)
     gains, true_vis, data = sim_red_data(reds, shape=(1,1))
