@@ -193,8 +193,8 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 continue
             for key in data.keys():
                 # fill data with blank data
-                data[key][index] = [np.ones(Nfreqs, np.complex)]
-                flags[key][index] = [np.ones(Nfreqs, np.bool)]
+                data[key][index] = [np.zeros(Nfreqs, np.complex)]
+                flags[key][index] = [np.zeros(Nfreqs, np.bool)]
 
         # use all LST bins              
         lst_bins = lst_grid
@@ -283,7 +283,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         d_avg = np.array(real_avg) + 1j*np.array(imag_avg)
         f_min = np.array(f_min)
         d_std = np.array(real_std) + 1j*np.array(imag_std)
-        d_num = np.array(bin_count).astype(np.complex)
+        d_num = np.array(bin_count).astype(np.float)
 
         # fill nans
         d_nan = np.isnan(d_avg)
@@ -515,8 +515,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     Result:
     -------
     zen.{pol}.LST.{file_lst}.uv : containing LST-binned data
-    zen.{pol}.STD.{file_lst}.uv : containing standard dev of LST bin
-    zen.{pol}.NUM.{file_lst}.uv : containing number of points in LST bin
+    zen.{pol}.STD.{file_lst}.uv : containing standard deviation of LST bin
     """
     # get dlst from first data file if None
     if dlst is None:
@@ -680,7 +679,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         bin_lst = bin_lst % (2*np.pi)
 
         # update history
-        file_history = history + "input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
+        file_history = history + " Input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
         miriad_kwargs['history'] = file_history
 
         # erase data references
@@ -696,7 +695,6 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # configure filenames
         bin_file = "zen.{}".format(file_ext.format('.'.join(pols), "LST", bin_lst[0]))
         std_file = "zen.{}".format(file_ext.format('.'.join(pols), "STD", bin_lst[0]))
-        num_file = "zen.{}".format(file_ext.format('.'.join(pols), "NUM", bin_lst[0]))
 
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
@@ -704,11 +702,10 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             continue
 
         # write to file
-        utils.data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, **miriad_kwargs)
+        utils.data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, **miriad_kwargs)
         utils.data_to_miriad(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
-        utils.data_to_miriad(num_file, num_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
 
-        del bin_file, std_file, num_file, bin_data, std_data, num_data, bin_lst, flag_data
+        del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
         garbage_collector.collect()
 
 
