@@ -438,10 +438,10 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     return file_starts, file_stops, int_times
 
 
-def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None,
-                   outdir="./", write_miriad=True, overwrite=False, verbose=True, history=" ", return_uvdata=False,
-                   longitude=21.42830, start_jd=None, instrument="HERA", telescope_name="HERA",
-                   object_name='EOR', vis_units='uncalib', dec=-30.72152,
+def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
+                   write_file=True, outdir="./", write_miriad=True, overwrite=False, verbose=True, history=" ",
+                   return_uvdata=False, longitude=21.42830, start_jd=None, instrument="HERA", 
+                   telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
                    telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395])):
     """
     Take data dictionary, export to UVData object and write as a miriad file. See pyuvdata.UVdata
@@ -461,6 +461,10 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     time_array : type=ndarray, array containing unique Julian Date time bins of data
 
     flags : type=dictionary, DataContainer dictionary matching data in shape, holding flags of data.
+
+    nsamples : type=dictionary, number of points averaged into each pixel in data (e.g. from an LST bin)
+
+    write_file : type=boolean, write miriad file if True.
 
     outdir : type=str, output directory
 
@@ -530,7 +534,11 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
 
     # resort time and baseline axes
     data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
-    nsample_array = np.ones_like(data_array, np.float)
+    if nsamples is None:
+        nsample_array = np.ones_like(data_array, np.float)
+    else:
+        nsample_array = np.moveaxis(map(lambda p: map(lambda bl: nsamples[str(p)][bl], bls), pols), 0, -1)
+        nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # flags
     if flags is None:
@@ -586,15 +594,16 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
     for p in params:
         uvd.__setattr__(p, locals()[p])
 
-    # write uvdata
-    if write_miriad:
-        # check output
-        fname = os.path.join(outdir, fname)
-        if os.path.exists(fname) and overwrite is False:
-            hera_cal.abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
-        else:
-            hera_cal.abscal.echo("saving {}".format(fname), type=0, verbose=verbose)
-            uvd.write_miriad(fname, clobber=True)
+    # write to file
+    if write_file:
+        if write_miriad:
+            # check output
+            fname = os.path.join(outdir, fname)
+            if os.path.exists(fname) and overwrite is False:
+                hera_cal.abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
+            else:
+                hera_cal.abscal.echo("saving {}".format(fname), type=0, verbose=verbose)
+                uvd.write_miriad(fname, clobber=True)
 
     if return_uvdata:
         return uvd

@@ -4,11 +4,12 @@ import sys
 import os
 import shutil
 from pyuvdata import UVData
-from hera_cal import utils, abscal
+from hera_cal import utils, abscal, datacontainer
 from hera_cal.calibrations import CAL_PATH
 from hera_cal.data import DATA_PATH
 from pyuvdata import UVCal
 import glob
+from collections import OrderedDict as odict
 
 
 class TestAAFromCalfile(object):
@@ -177,8 +178,12 @@ def test_data_to_miriad():
     uvd = utils.data_to_miriad("ex.uv", d, l, f, ap, outdir="./", start_jd=2458042, overwrite=True, return_uvdata=True)
     nt.assert_true(isinstance(uvd, UVData))
     shutil.rmtree('ex.uv')
-
-
+    # test nsample array
+    nsamples = datacontainer.DataContainer(odict(map(lambda k: (k, np.ones(d[k].shape, np.float)*5), d.keys())))
+    uvd = utils.data_to_miriad("ex.uv", d, l, f, ap, nsamples=nsamples, write_file=False, start_jd=2458042, return_uvdata=True)
+    nt.assert_true(np.issubdtype(uvd.nsample_array.dtype, np.float))
+    nt.assert_almost_equal(uvd.nsample_array[0,0,0,0], 5.0)
+    nt.assert_equal(uvd.data_array.shape, uvd.nsample_array.shape)
 
 
 

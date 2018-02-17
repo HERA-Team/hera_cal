@@ -110,19 +110,15 @@ class Test_lstbin:
                                 verbose=False)
         nt.assert_true(os.path.exists('./zen.xx.LST.0.20164.uv'))
         nt.assert_true(os.path.exists('./zen.xx.STD.0.20164.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.20164.uv'))
         shutil.rmtree('./zen.xx.LST.0.20164.uv')
         shutil.rmtree('./zen.xx.STD.0.20164.uv')
-        shutil.rmtree('./zen.xx.NUM.0.20164.uv')
         # test lst_align
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False, align=True)
         nt.assert_true(os.path.exists('./zen.xx.LST.0.20164.uv'))
         nt.assert_true(os.path.exists('./zen.xx.STD.0.20164.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.NUM.0.20164.uv'))
         shutil.rmtree('./zen.xx.LST.0.20164.uv')
         shutil.rmtree('./zen.xx.STD.0.20164.uv')
-        shutil.rmtree('./zen.xx.NUM.0.20164.uv')
 
         data_files = [[sorted(glob.glob(DATA_PATH+'/zen.2458043.*uvXRAA'))[0]],
                       [sorted(glob.glob(DATA_PATH+'/zen.2458045.*uvXRAA'))[-1]]]
@@ -133,8 +129,7 @@ class Test_lstbin:
         nt.assert_true(os.path.exists("./zen.xx.LST.0.31909.uv"))
         nt.assert_true(os.path.exists("./zen.xx.LST.0.36608.uv"))
         output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
-                                       glob.glob("./zen.xx.STD*"),
-                                       glob.glob("./zen.xx.NUM*")])
+                                       glob.glob("./zen.xx.STD*")])
         for of in output_files:
             if os.path.exists(of):
                 shutil.rmtree(of)
@@ -143,8 +138,7 @@ class Test_lstbin:
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True,
                                 verbose=False)
         output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
-                                       glob.glob("./zen.xx.STD*"),
-                                       glob.glob("./zen.xx.NUM*")])
+                                       glob.glob("./zen.xx.STD*")])
         for of in output_files:
             if os.path.exists(of):
                 shutil.rmtree(of)
