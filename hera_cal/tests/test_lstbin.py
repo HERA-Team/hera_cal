@@ -71,8 +71,8 @@ class Test_lstbin:
         nt.assert_almost_equal(output[2][(24, 25, 'xx')][210, 32], False)
         # test return no avg
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=self.flgs_list, return_no_avg=True)
-        nt.assert_equal(len(output[1][output[1].keys()[0]][100]), 3)
-        nt.assert_equal(len(output[1][output[1].keys()[0]][100][0]), 64)
+        nt.assert_equal(len(output[2][output[2].keys()[0]][100]), 3)
+        nt.assert_equal(len(output[2][output[2].keys()[0]][100][0]), 64)
         # test switch bl
         conj_data3 = DataContainer(odict(map(lambda k: (hc.lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys())))
         data_list = [self.data1, self.data2, conj_data3]

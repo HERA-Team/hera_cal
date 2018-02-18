@@ -214,7 +214,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         data_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, data[k][k2]), sorted(data[k].keys()))).values())), sorted(data.keys())))
         flags_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, flags[k][k2]), sorted(flags[k].keys()))).values())), sorted(flags.keys())))
 
-        return data_bin, flags_bin
+        return lst_bins, data_bin, flags_bin
 
     # iterate over data keys and get statistics
     for i, key in enumerate(data.keys()):
