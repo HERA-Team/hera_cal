@@ -29,24 +29,24 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     calculate absolute (array-wide) gain amplitude scalar
     with a linear solver using the logarithmically linearized equation:
 
-    ln|V_ij,xy^model / V_ij,xy^data| = eta_x + eta_y
+    ln|V_ij,xy^data / V_ij,xy^model| = eta_x + eta_y
 
     where {i,j} index antenna numbers and {x,y} index polarizations
     of the i-th and j-th antennas respectively.
 
     Parameters:
     -----------
-    model : visibility data of refence model, type=dictionary
+    model : visibility data of refence model, type=DataContainer
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
             these must be 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
 
-    data : visibility data of measurements, type=dictionary
+    data : visibility data of measurements, type=DataContainer
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
-    wgts : weights of data, type=dictionry, [default=None]
+    wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
@@ -63,7 +63,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # abs of amplitude ratio is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(model[k]/data[k]))) for k in keys])
+    ydata = odict([(k, np.log(np.abs(data[k]/model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -98,7 +98,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
     with a linear solver applied to the logarithmically linearized equation:
 
-    angle(V_ij,xy^model / V_ij,xy^data) = angle(g_i_x) * angle(conj(g_j_y))
+    angle(V_ij,xy^data / V_ij,xy^model) = angle(g_i_x) * angle(conj(g_j_y))
                                         = psi_x - psi_y + PHI^ew_x*r_i^ew + PHI^ns_x*r_i^ns
                                           - PHI^ew_y*r_j^ew - PHI^ns_y*r_j^ns
 
@@ -111,17 +111,17 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
 
     Parameters:
     -----------
-    model : visibility data of refence model, type=dictionary
+    model : visibility data of refence model, type=DataContainer
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
 
-    data : visibility data of measurements, type=dictionary
+    data : visibility data of measurements, type=DataContainer
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
-    wgts : weights of data, type=dictionry, [default=None]
+    wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
@@ -152,7 +152,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
-    ydata = odict([(k, np.angle(model[k]/data[k])) for k in keys])
+    ydata = odict([(k, np.angle(data[k]/model[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -203,7 +203,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     calculate per-antenna gain amplitude via the
     logarithmically linearized equation
 
-    ln|V_ij,xy^model / V_ij,xy^data| = ln|g_i_x| + ln|g_j_y|
+    ln|V_ij,xy^data / V_ij,xy^model| = ln|g_i_x| + ln|g_j_y|
                                      = eta_i_x + eta_j_y
 
     where {x,y} represent the polarization of the i-th and j-th antenna
@@ -211,17 +211,17 @@ def amp_logcal(model, data, wgts=None, verbose=True):
 
     Parameters:
     -----------
-    model : visibility data of refence model, type=dictionary
+    model : visibility data of refence model, type=DataContainer
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
 
-    data : visibility data of measurements, type=dictionary
+    data : visibility data of measurements, type=DataContainer
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
-    wgts : weights of data, type=dictionry, [default=None]
+    wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
@@ -235,7 +235,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # difference of log-amplitudes is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(model[k]/data[k]))) for k in keys])
+    ydata = odict([(k, np.log(np.abs(data[k]/model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -268,24 +268,24 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     calculate per-antenna gain phase via the 
     logarithmically linearized equation
 
-    angle(V_ij,xy^model / V_ij,xy^data) = angle(g_i_x) - angle(g_j_y)
+    angle(V_ij,xy^data / V_ij,xy^model) = angle(g_i_x) - angle(g_j_y)
                                         = phi_i_x - phi_j_y
 
     where {x,y} represent the pol of the i-th and j-th antenna respectively.
 
     Parameters:
     -----------
-    model : visibility data of refence model, type=dictionary
+    model : visibility data of refence model, type=DataContainer
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
 
-    data : visibility data of measurements, type=dictionary
+    data : visibility data of measurements, type=DataContainer
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
-    wgts : weights of data, type=dictionry, [default=None]
+    wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
@@ -299,7 +299,7 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # angle of visibility ratio is ydata independent variable
-    ydata = odict([(k, np.angle(model[k]/data[k])) for k in keys])
+    ydata = odict([(k, np.angle(data[k]/model[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -332,23 +332,23 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     """
     Solve for per-antenna delays according to the equation
 
-    delay(V_ij,xy^model / V_ij,xy^data) = delay(g_i_x) - delay(g_j_y)
+    delay(V_ij,xy^data / V_ij,xy^model) = delay(g_i_x) - delay(g_j_y)
 
     Can also solve for per-antenna phase offsets with the solve_offsets kwarg.
 
     Parameters:
     -----------
-    model : visibility data of refence model, type=dictionary
+    model : visibility data of refence model, type=DataContainer
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
 
-    data : visibility data of measurements, type=dictionary
+    data : visibility data of measurements, type=DataContainer
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
-    wgts : weights of data, type=dictionry, [default=None]
+    wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data. These are only used to find delays from
            itegrations that are unflagged for at least two frequency bins. In this case, 
@@ -391,7 +391,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     ratio_offsets = []
     ratio_wgts = []
     for i, k in enumerate(keys):
-        ratio = model[k]/data[k]
+        ratio = data[k]/model[k]
 
         # replace nans
         nan_select = np.isnan(ratio)
@@ -466,23 +466,23 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     """
     Solve for an array-wide delay slope according to the equation
 
-    delay(V_ij,xy^model / V_ij,xy^data) = dot(T_x, r_i) - dot(T_y, r_j)
+    delay(V_ij,xy^data / V_ij,xy^model) = dot(T_x, r_i) - dot(T_y, r_j)
 
     This does not solve for per-antenna delays, but rather a delay slope across the array.
 
     Parameters:
     -----------
-    model : visibility data of refence model, type=dictionary
+    model : visibility data of refence model, type=DataContainer
             keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
 
-    data : visibility data of measurements, type=dictionary
+    data : visibility data of measurements, type=DataContainer
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
-    wgts : weights of data, type=dictionry, [default=None]
+    wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data. These are only used to find delays from
            itegrations that are unflagged for at least two frequency bins. In this case, 
@@ -522,7 +522,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     ratio_offsets = []
     ratio_wgts = []
     for i, k in enumerate(keys):
-        ratio = model[k]/data[k]
+        ratio = data[k]/model[k]
 
         # replace nans
         nan_select = np.isnan(ratio)
@@ -612,13 +612,13 @@ def merge_gains(gains):
 
     return merged_gains
 
-def apply_gains(data, gains, gain_convention='multiply'):
+def apply_gains(data, gains, gain_convention='divide'):
     """
     apply gain solutions to data
 
     Parameters:
     -----------
-    data : type=dictionary, holds complex visibility data.
+    data : type=DataContainer, holds complex visibility data.
         keys are antenna-pair tuples + pol tuples.
         values are ndarray complex visibility data.
 
@@ -627,12 +627,15 @@ def apply_gains(data, gains, gain_convention='multiply'):
             values are complex ndarrays
             with shape matching data's visibility ndarrays
 
-        Optionally, can be a tuple holding multiple gains dictionaries
-        that will all be multiplied together.
+            Optionally, can be a tuple holding multiple gains dictionaries
+            that will all be multiplied together.
+
+    gain_convention : type=str, options=['multiply', 'divide']
+                      option to multiply in or divide in gain solutions to data.
 
     Output:
     -------
-    new_data : type=dictionary, data with gains applied
+    new_data : type=DataContainer, data with gains applied
     """
     # form new dictionary
     new_data = odict()
@@ -669,19 +672,19 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
 
     Parameters:
     -----------
-    data : type=dictionary, complex visibility data with
-        antenna-pair + pol tuples for keys, in AbsCal dictionary format.
+    data : type=DataContainer, complex visibility data with
+        antenna-pair + pol tuples for keys, in DataContainer dictionary format.
     
     key_index : integer, index of keys to consolidate into data arrays
 
     array_index : integer, which axes of data arrays to append to
 
-    avg_dict : dictionary, a dictionary with same keys as data
+    avg_dict : DataContainer, a dictionary with same keys as data
         that will have its data arrays averaged along key_index
 
     Result:
     -------
-    new_data : dictionary, complex visibility data
+    new_data : DataContainer, complex visibility data
         with key_index of keys moved into the data arrays
 
     new_avg_dict : copy of avg_dict. Only returned if avg_dict is not None.
@@ -741,7 +744,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
 
     Parameters:
     -----------
-    data : dictionary, complex visibility data with
+    data : DataContainer, complex visibility data with
         antenna-pair (+ pol + other) tuples for keys
     
     array_index : integer, which axes of data arrays
@@ -752,16 +755,16 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
 
     key_index : integer, index within the new set of keys to insert array_keys
 
-    copy_dict : dictionary, a dictionary with same keys as data
+    copy_dict : DataContainer, a dictionary with same keys as data
         that will have its data arrays copied along array_keys
 
     Output:
     -------
-    new_data : dictionary, complex visibility data
+    new_data : DataContainer, complex visibility data
         with array_index of data arrays extracted and moved
         into a unique set of keys
 
-    new_copy : dictionary, copy of copy_dict
+    new_copy : DataContainer, copy of copy_dict
         with array_index of data arrays copied to unique keys
     """
     # instantiate new object
@@ -825,8 +828,8 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
     else:
         (data, flags)
 
-    data : dictionary containing baseline-pol complex visibility data
-    flags : dictionary containing data flags, if return_wgts=True then this is a weight dict
+    data : DataContainer containing baseline-pol complex visibility data
+    flags : DataContainer containing data flags, if return_wgts=True then this is a weight dict
     antpos : dictionary containing antennas numbers as keys and position vectors
     ants : ndarray containing unique antennas
     freqs : ndarray containing frequency channels (Hz)
@@ -1002,8 +1005,8 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
 
     Parameters:
     -----------
-    data : type=dictionary, AbsCal-format dictionary holding complex visibility data
-        unelss array is True
+    data : type=DataContainer, ADataContainer dictionary holding complex visibility data
+           unelss array is True
 
     window : type=tuple, wiener-filter window along each axis of data
 
@@ -1017,7 +1020,7 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
 
     Output: (new_data)
     -------
-    new_data type=dictionary, AbsCal-format dictionary holding new visibility data
+    new_data type=DataContainer, DataContainer dictionary holding new visibility data
     """
     # check if data is an array
     if array:
@@ -1049,7 +1052,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     Parameters:
     -----------
-    model : type=dictionary, holds complex visibility for model
+    model : type=DataContainer, holds complex visibility for model
         keys are antenna-pair + pol tuples, values are 2d complex visibility
         with shape (Ntimes, Nfreqs)
 
@@ -1079,8 +1082,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     Output: (new_model, new_flags)
     -------
-    new_model : interpolated model, type=dictionary
-    new_flags : flags associated with interpolated model, type=dictionary
+    new_model : interpolated model, type=DataContainer
+    new_flags : flags associated with interpolated model, type=DataContainer
 
     Notes:
     ------
@@ -1205,7 +1208,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
-                  overwrite=False, gain_convention='multiply', cal_style='redundant',
+                  overwrite=False, gain_convention='divide', cal_style='redundant',
                   ref_antenna_name="unkwn", sky_field="unkwn", sky_catalog="unkwn", **kwargs):
     """
     Write out gain_array in calfits file format.
@@ -1268,9 +1271,9 @@ def fill_dict_nans(data, wgts=None, nan_fill=None, inf_fill=None, array=False):
 
     Parameters:
     -----------
-    data : type=dictionary, visibility dictionary in AbsCal dictionary format
+    data : type=DataContainer, visibility dictionary in AbsCal dictionary format
 
-    wgts : type=dictionary, weights dictionary matching shape of data to also fill
+    wgts : type=DataContainer, weights dictionary matching shape of data to also fill
 
     nan_fill : if not None, fill nans with nan_fill
 
@@ -1378,13 +1381,13 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
 
     Parameters:
     -----------
-    model : type=dictionary, model dictionary holding complex visibilities
+    model : type=DataContainer, model dictionary holding complex visibilities
             must conform to DataContainer dictionary format.
 
     model_antpos : type=dictionary, dictionary holding antennas positions for model dictionary
             keys are antenna integers, values are ndarrays of position vectors in meters
 
-    data : type=dictionary, data dictionary holding complex visibilities.
+    data : type=DataContainer, data dictionary holding complex visibilities.
             must conform to DataContainer dictionary format.
 
     data_antpos : type=dictionary, dictionary holding antennas positions for data dictionary
@@ -1394,7 +1397,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
 
     Output: (data)
     -------
-    new_model : type=dictionary, dictionary holding complex visibilities from model that
+    new_model : type=DataContainer, dictionary holding complex visibilities from model that
         had matching baselines to data
     """
     # create baseline keys for model
@@ -1438,12 +1441,12 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
 
     Parameters:
     -----------
-    data : type=dictionary, data dictionary holding complex visibilities.
+    data : type=DataContainer, data dictionary holding complex visibilities.
         must conform to AbsCal dictionary format.
 
     antpos : type=dictionary, antenna position dictionary
 
-    flags : type=dictionary, data flags
+    flags : type=DataContainer, data flags
 
     broadcast_flags : type=boolean, if True, broadcast all flags across red baselines
 
@@ -1605,7 +1608,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
 
     Parameters:
     -----------
-    data : data dictionary in hera_cal.DataContainer form
+    data : data DataContainer in hera_cal.DataContainer form
 
     antpos : type=dictionary, antenna positions dictionary
                 keys are antenna integers, values are ndarray baseline vectors.
@@ -1616,7 +1619,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
 
     Output: (red_data)
     -------
-    red_data : type=dictionary, data dictionary in AbsCal form, with unique baseline data
+    red_data : type=DataContainer, data dictionary in AbsCal form, with unique baseline data
                 distributed to redundant baseline groups.
     if weights == True:
         red_data is a real-valued wgts dictionary with redundant baseline weighting muliplied in.

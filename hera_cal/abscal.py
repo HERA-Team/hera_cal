@@ -7,7 +7,7 @@ data to a visibility model using
 linearizations of the (complex)
 antenna-based calibration equation:
 
-V_ij,xy^model = g_i_x * conj(g_j_y) * V_ij,xy^data.
+V_ij,xy^data = g_i_x * conj(g_j_y) * V_ij,xy^model.
 
 Complex-valued parameters are broken into amplitudes and phases as:
 
@@ -28,27 +28,27 @@ class AbsCal(object):
     A few different calibration methods exist. These include:
 
     1) per-antenna amplitude logarithmic calibration solves the equation:
-            ln[abs(V_ij^model / V_ij^data)] = eta_i + eta_j
+            ln[abs(V_ij^data / V_ij^model)] = eta_i + eta_j
 
     2) per-antenna phase logarithmic calibration solves the equation:
-           angle(V_ij^model / V_ij^data) = phi_i - phi_j
+           angle(V_ij^data / V_ij^model) = phi_i - phi_j
 
     3) delay linear calibration solves the equation:
-           delay(V_ij^model / V_ij^data) = delay(g_i) - delay(g_j)
+           delay(V_ij^data / V_ij^model) = delay(g_i) - delay(g_j)
                                          = tau_i - tau_j
        where tau is the delay that can be turned
        into a complex gain via: g = exp(i * 2pi * tau * freqs).
 
     4) delay slope linear calibration solves the equation:
-            delay(V_ij^model / V_ij) = dot(T_dly, B_ij)
+            delay(V_ij^data / V_ij^model) = dot(T_dly, B_ij)
         where T_dly is a delay slope in [ns / meter]
         and B_ij is the baseline vector between ant i and j.
 
     5) Average amplitude linear calibration solves the equation:
-            log|V_ij^model / V_ij^data| = log|g_avg_i| + log|g_avg_j|
+            log|V_ij^data / V_ij^model| = log|g_avg_i| + log|g_avg_j|
  
     6) Tip-Tilt phase logarithmic calibration solves the equation
-            angle(V_ij^model /  V_ij^data) = psi + dot(TT_Phi, B_ij)
+            angle(V_ij^data /  V_ij^model) = psi + dot(TT_Phi, B_ij)
         where psi is an overall gain phase scalar, 
         TT_Phi is the gain phase slope vector [radians / meter]
         and B_ij is the baseline vector between antenna i and j.
@@ -73,7 +73,7 @@ class AbsCal(object):
 
         Parameters:
         -----------
-        model : visibility data of refence model, type=dictionary
+        model : visibility data of refence model, type=DataContainer
                 keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
                 values are complex ndarray visibilities.
                 these must be 2D arrays, with [0] axis indexing time
@@ -85,7 +85,7 @@ class AbsCal(object):
         model_ftype : type=str, if model is a path to a file, this is its filetype
                       options=['miriad', 'uvfits']
 
-        data : visibility data of measurements, type=dictionary
+        data : visibility data of measurements, type=DataContainer
                keys are antenna pair + pol tuples (must match model), values are
                complex ndarray visibilities matching shape of model
 
@@ -96,7 +96,7 @@ class AbsCal(object):
         data_ftype : type=str, if data is a path to a file, this is its filetype
                      options=['miriad', 'uvfits']
 
-        wgts : weights of data, type=dictionry, [default=None]
+        wgts : weights of data, type=DataContainer, [default=None]
                keys are antenna pair + pol tuples (must match model), values are real floats
                matching shape of model and data
 
@@ -1044,7 +1044,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             if all_antenna_gains:
                 raise ValueError("can't run gen_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(verbose=verbose)
-            AC.data = apply_gains(AC.data, AC.ant_phi_gain)
+            AC.data = apply_gains(AC.data, AC.ant_phi_gain, gain_convention='divide')
             gain_list.append(AC.ant_phi_gain)
 
         # collate gains
