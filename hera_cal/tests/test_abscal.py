@@ -439,7 +439,6 @@ class Test_AbsCal:
         # test w/ no wgts
         AC.wgts = None
         AC.delay_slope_lincal(verbose=False)
-
   
     def test_merge_gains(self):
         self.AC.abs_amp_logcal(verbose=False)
@@ -458,6 +457,7 @@ class Test_AbsCal:
                                 self.AC.ant_dly_gain[k]*self.AC.ant_phi_gain[k])[0,0])
 
     def test_apply_gains(self):
+        # test basic execution
         self.AC.abs_amp_logcal(verbose=False)
         self.AC.TT_phs_logcal(verbose=False)
         self.AC.delay_lincal(verbose=False)
@@ -468,10 +468,16 @@ class Test_AbsCal:
         corr_data = hc.abscal.apply_gains(self.AC.data, gains, gain_convention='multiply')
         nt.assert_equal(corr_data[(24, 25, 'xx')].shape, (60, 64))
         nt.assert_equal(corr_data[(24, 25, 'xx')].dtype, np.complex)
+        nt.assert_almost_equal(corr_data[(24, 25, 'xx')][0,0], (self.AC.data[(24,25,'xx')]*\
+            self.AC.abs_eta_gain[(24,'x')]*self.AC.abs_eta_gain[(25,'x')]*self.AC.ant_eta_gain[(24,'x')]*\
+            self.AC.ant_eta_gain[(25,'x')])[0,0])
         corr_data = hc.abscal.apply_gains(self.AC.data, gains, gain_convention='divide')
         nt.assert_equal(corr_data[(24, 25, 'xx')].shape, (60, 64))
         nt.assert_equal(corr_data[(24, 25, 'xx')].dtype, np.complex)
-
+        nt.assert_almost_equal(corr_data[(24, 25, 'xx')][0,0], (self.AC.data[(24,25,'xx')]/\
+            self.AC.abs_eta_gain[(24,'x')]/self.AC.abs_eta_gain[(25,'x')]/self.AC.ant_eta_gain[(24,'x')]/\
+            self.AC.ant_eta_gain[(25,'x')])[0,0])
+ 
     def test_fill_dict_nans(self):
         data = copy.deepcopy(self.AC.data)
         wgts = copy.deepcopy(self.AC.wgts)
