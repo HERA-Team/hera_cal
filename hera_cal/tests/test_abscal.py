@@ -585,9 +585,9 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run delay_slope_cal
         AC.delay_slope_lincal(time_avg=True, verbose=False)
-        # test recovery: accuracy only checked at 10% level, nees
-        nt.assert_almost_equal(AC.dly_slope_arr[0,0,0,0,0], -1e-9, delta=1e-10)
-        nt.assert_almost_equal(AC.dly_slope_arr[0,1,0,0,0], 2e-9, delta=1e-10)
+        # test recovery: accuracy only checked at 10% level
+        nt.assert_almost_equal(AC.dly_slope_arr[0,0,0,0,0], 1e-9, delta=1e-10)
+        nt.assert_almost_equal(AC.dly_slope_arr[0,1,0,0,0], -2e-9, delta=1e-10)
         # make mock data
         abs_gain = 0.02
         TT_phi = np.array([1e-3, -1e-3, 0])
@@ -603,11 +603,11 @@ class Test_AbsCal:
         # run TT_phs_logcal
         AC.TT_phs_logcal(verbose=False)
         nt.assert_almost_equal(np.median(AC.abs_eta_arr[0,:,:,0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
-                                0.01, delta=1e-3)
+                                -0.01, delta=1e-3)
         nt.assert_almost_equal(np.median(AC.TT_Phi_arr[0,0,:,:,0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
-                                1e-3, delta=1e-4)
-        nt.assert_almost_equal(np.median(AC.TT_Phi_arr[0,1,:,:,0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
                                 -1e-3, delta=1e-4)
+        nt.assert_almost_equal(np.median(AC.TT_Phi_arr[0,1,:,:,0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
+                                1e-3, delta=1e-4)
 
 
 
