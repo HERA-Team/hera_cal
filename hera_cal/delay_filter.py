@@ -96,7 +96,7 @@ class Delay_Filter():
         Arguments:
             outfilename: filename of the filtered visibility file to be written to disk
             filetype_out: file format of output result. Default 'miriad.'
-            append_to_history: string appended to the history of the output file
+            add_to_history: string appended to the history of the output file
             clobber: if True, overwrites existing file at outfilename
             write_CLEAN_models: if True, save the low-pass filtered CLEAN model rather 
                 than the high-pass filtered residual
