@@ -990,7 +990,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             if all_antenna_gains:
                 raise ValueError("can't run delay_cal when all_antenna_gains is True")
             AC.delay_lincal(verbose=verbose, time_avg=True)
-            AC.data = apply_gains(AC.data, (AC.ant_dly_gain, AC.ant_dly_phi_gain))
+            AC.data = apply_gains(AC.data, (AC.ant_dly_gain, AC.ant_dly_phi_gain), gain_convention='divide')
             gain_list.append(AC.ant_dly_gain)
             gain_list.append(AC.ant_dly_phi_gain)
 
@@ -1000,12 +1000,12 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             if all_antenna_gains:
                 raise ValueError("can't run avg_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(avg=True, verbose=verbose)
-            AC.data = apply_gains(AC.data, AC.ant_phi_gain)
+            AC.data = apply_gains(AC.data, AC.ant_phi_gain, gain_convention='divide')
             gain_list.append(AC.ant_phi_gain)
 
         if delay_slope_cal:
             AC.delay_slope_lincal(verbose=verbose, time_avg=True)
-            AC.data = apply_gains(AC.data, AC.dly_slope_gain)
+            AC.data = apply_gains(AC.data, AC.dly_slope_gain, gain_convention='divide')
             if all_antenna_gains:
                 gain_list.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
             else:
@@ -1013,7 +1013,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
 
         if abs_amp_cal:
             AC.abs_amp_logcal(verbose=verbose)
-            AC.data = apply_gains(AC.data, AC.abs_eta_gain)
+            AC.data = apply_gains(AC.data, AC.abs_eta_gain, gain_convention='divide')
             if all_antenna_gains:
                 gain_list.append(AC.custom_abs_eta_gain(total_gain_keys))
             else:
@@ -1035,7 +1035,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             if all_antenna_gains:
                 raise ValueError("can't run gen_amp_cal when all_antenna_gains is True")
             AC.amp_logcal(verbose=verbose)
-            AC.data = apply_gains(AC.data, AC.ant_eta_gain)
+            AC.data = apply_gains(AC.data, AC.ant_eta_gain, gain_convention='divide')
             gain_list.append(AC.ant_eta_gain)
 
         if gen_phs_cal:
