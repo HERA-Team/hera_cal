@@ -636,6 +636,13 @@ def apply_gains(data, gains, gain_convention='divide'):
     Output:
     -------
     new_data : type=DataContainer, data with gains applied
+
+    Notes:
+    ------
+    gain convention == 'divide' means that the gains need to be divided out of the observation
+    to get the model/truth, i.e. that V_obs = gi gj* V_true. 'multiply' means that the gains need
+    to be multiplied into the observation to get the model/truth, i.e. that V_true = gi gj* V_obs.
+    In Abscal (as on omnical and redcal), the standard gain convention is 'divide'.
     """
     # form new dictionary
     new_data = odict()
