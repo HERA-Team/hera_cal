@@ -788,17 +788,20 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
     # iterate over data keys
     for i, k in enumerate(data.keys()):
 
-        # dot bls with new s-hat vector
-        u = bls[k].dot(rot.dot(np.array([0, 0, 1])).T)
+        # get new s-hat vector
+        sprime = rot.dot(np.array([0, 0, 1])).T
 
-        # reshape u
-        if type(u) == np.ndarray:
+        # dot bls with difference vector: Zhang, Y. et al. 2018 (Eqn. 22)
+        tau = bls[k].dot(sprime - np.array([0., 0., 1.0])) / (aipy.const.c / 100.0)
+
+        # reshape tau
+        if type(tau) == np.ndarray:
             pass
         else:
-            u = np.array([u])
+            tau = np.array([tau])
 
         # get phasor
-        phs = np.exp(-2j*np.pi*freqs[None, :]*u[:, None]/aipy.const.c*100)
+        phs = np.exp(-2j*np.pi*freqs[None, :]*tau[:, None])
 
         # multiply into data
         data[k] *= phs
