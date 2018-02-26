@@ -131,6 +131,7 @@ def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
     uvd.history += add_to_history
     for attribute, value in kwargs.items():
         uvd.__setattr__(attribute, value)
+    uvd.check()
 
 
 def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miriad',
@@ -169,7 +170,6 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
             raise TypeError("Input filetype must be either 'miriad' or 'uvfits'.")
 
     update_uvdata(uvd, data=data, flags=flags, add_to_history=add_to_history, **kwargs)
-    uvd.check()
 
     # write out results
     if filetype_out == 'miriad':
@@ -276,6 +276,7 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
     cal.history += add_to_history
     for attribute, value in kwargs.items():
         cal.__setattr__(attribute, value)
+    cal.check()
 
 
 def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', clobber=False, **kwargs):
@@ -305,7 +306,6 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     update_uvcal(cal, gains=gains, flags=flags, quals=quals,
                  add_to_history=add_to_history, **kwargs)
-    cal.check()
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
