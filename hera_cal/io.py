@@ -11,12 +11,12 @@ antpol2str = {antpol: string for string,antpol in str2antpol.items()}
 #TODO: update to use jones strings (e.g. 'jxx' and 'jyy'). Currently uses pyuvdata for visibility polarizations.
 
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
-    '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning 
+    '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
 
     Arguments:
-        input_data: data file path, or UVData instance, or list of either strings of data file paths 
+        input_data: data file path, or UVData instance, or list of either strings of data file paths
             or list of UVData instances to concatenate into a single dictionary
         return_meta:  boolean, if True: also return antpos, ants, freqs, times, lsts, and pols
         filetype: either 'miriad' or 'uvfits', can be ignored if input_data is UVData objects
@@ -32,7 +32,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
             (data, flags)
 
         data: DataContainer containing baseline-pol complex visibility data with keys
-            like (0,1,'xx') and with shape=(Ntimes,Nfreqs) 
+            like (0,1,'xx') and with shape=(Ntimes,Nfreqs)
         flags: DataContainer containing data flags
         antpos: dictionary containing antennas numbers as keys and position vectors
         ants: ndarray containing unique antenna indices
@@ -72,7 +72,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
     data, flags = odict(), odict()
     # create nested dictionaries of visibilities in the data[bl][pol] filetype, removing autos if desired
     for nbl, (i, j) in enumerate(uvd.get_antpairs()):
-        if (not pop_autos) or (i != j): 
+        if (not pop_autos) or (i != j):
             if (i, j) not in data:
                 data[i, j], flags[i, j] = odict(), odict()
             for ip, pol in enumerate(uvd.polarization_array):
@@ -102,11 +102,42 @@ def write_vis(outfilename, data, flags, filetype='miriad', history='', clobber=F
     raise NotImplementedError('This function has not been implemented yet.')
 
 
-def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miriad', 
+def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
+    '''Updates a UVData object with data or parameters. Cannot modify the shape of
+    data arrays. More than one spectral window is not supported. Assumes every baseline
+    has the same times present and that the times are in order.
+
+    Arguments:
+        uv: UVData object to be updated
+        data: dictionary or DataContainer of complex visibility data to update. Keys
+            like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update.
+        flags: dictionary or DataContainer of data flags to update.
+            Default (None) does not update.
+        add_to_history: appends a string to the history of the UVData object
+        kwargs: dictionary mapping updated attributs to their new values.
+            See pyuvdata.UVData documentation for more info.
+    '''
+    # set data and/or flags
+    if data is not None or flags is not None:
+        for (i, j) in uvd.get_antpairs():
+            this_bl = (uvd.baseline_array == uvd.antnums_to_baseline(i, j))
+            for ip, pol in enumerate(uvd.polarization_array):
+                if data is not None:
+                    uvd.data_array[this_bl, 0, :, ip] = data[(i, j, polnum2str(pol))]
+                if flags is not None:
+                    uvd.flag_array[this_bl, 0, :, ip] = flags[(i, j, polnum2str(pol))]
+
+    # set additional attributes
+    uvd.history += add_to_history
+    for attribute, value in kwargs.items():
+        uvd.__setattr__(attribute, value)
+
+
+def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miriad',
                data=None, flags=None, add_to_history='', clobber=False, **kwargs):
-    '''Loads an existing file with pyuvdata, modifies some subset of of its parameters, and 
-    then writes a new file to disk. Cannot modify the shape of data arrays. More than one 
-    spectral window is not supported. Assumes every baseline has the same times present 
+    '''Loads an existing file with pyuvdata, modifies some subset of of its parameters, and
+    then writes a new file to disk. Cannot modify the shape of data arrays. More than one
+    spectral window is not supported. Assumes every baseline has the same times present
     and that the times are in order.
 
     Arguments:
@@ -115,58 +146,45 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         filetype_in: either 'miriad' or 'uvfits' (ignored if infile is a UVData object)
         filetype_out: either 'miriad' or 'uvfits'
         data: dictionary or DataContainer of complex visibility data to update. Keys
-            like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update. 
-        flags: dictionary or DataContainer of data flags to update. 
+            like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update.
+        flags: dictionary or DataContainer of data flags to update.
             Default (None) does not update.
         add_to_history: appends a string to the history of the output file
         clobber: if True, overwrites existing file at outfilename
-        kwargs: dictionary mapping updated attributs to their new values. 
+        kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
 
     # Load infile
     if type(infilename) == UVData:
         uvd = deepcopy(infilename)
-    else:    
+    else:
         uvd = UVData()
         if filetype_in == 'miriad':
             uvd.read_miriad(infilename)
         elif filetype_in == 'uvfits':
-            #TODO: implement this
+            # TODO: implement this
             raise NotImplementedError('This function has not been implemented yet.')
         else:
             raise TypeError("Input filetype must be either 'miriad' or 'uvfits'.")
 
-    # set data and/or flags
-    if data is not None or flags is not None:
-        for (i,j) in uvd.get_antpairs():
-            this_bl = (uvd.baseline_array == uvd.antnums_to_baseline(i,j))
-            for ip, pol in enumerate(uvd.polarization_array):
-                if data is not None:
-                    uvd.data_array[this_bl,0,:,ip] = data[(i,j,polnum2str(pol))]
-                if flags is not None:
-                    uvd.flag_array[this_bl,0,:,ip] = flags[(i,j,polnum2str(pol))]
-
-    # set additional attributes
-    uvd.history += add_to_history
-    for attribute, value in kwargs.items():
-        uvd.__setattr__(attribute,value)
+    update_uvdata(uvd, data=data, flags=flags, add_to_history=add_to_history, **kwargs)
     uvd.check()
 
     # write out results
     if filetype_out == 'miriad':
         uvd.write_miriad(outfilename, clobber=clobber)
     elif filetype_out == 'uvfits':
-        #TODO: implement this
+        # TODO: implement this
         raise NotImplementedError('This function has not been implemented yet.')
     else:
         raise TypeError("Input filetype must be either 'miriad' or 'uvfits'.")
 
 
 def load_cal(input_cal, return_meta=False):
-    '''Load calfits files or UVCal objects into dictionaries, optionally returning 
+    '''Load calfits files or UVCal objects into dictionaries, optionally returning
     the most useful metadata. More than one spectral window is not supported.
-    
+
     Arguments:
         input_cal: path to calfits file, UVCal object, or a list of either
         return_meta: if True, returns additional information (see below)
@@ -177,12 +195,12 @@ def load_cal(input_cal, return_meta=False):
         else:
             (gains, flags)
 
-        gains: Dictionary of complex calibration gains as a function of time 
+        gains: Dictionary of complex calibration gains as a function of time
             and frequency with keys in the (1,'x') format
         flags: Dictionary of flags in the same format as the gains
-        quals: Dictionary of of qualities of calibration solutions in the same 
+        quals: Dictionary of of qualities of calibration solutions in the same
             format as the gains (e.g. omnical chi^2 per antenna)
-        total_qual: ndarray of toal calibration quality for the whole array 
+        total_qual: ndarray of toal calibration quality for the whole array
             (e.g. omnical overall chi^2)
         ants: ndarray containing unique antenna indices
         freqs: ndarray containing frequency channels (Hz)
@@ -230,31 +248,20 @@ def write_cal():
     raise NotImplementedError('This function has not been implemented yet.')
 
 
-def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', clobber=False, **kwargs):
-    '''Loads an existing calfits file with pyuvdata, modifies some subset of of its parameters, 
-    and then writes a new calfits file to disk. Cannot modify the shape of gain arrays. 
-    More than one spectral window is not supported.
+def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **kwargs):
+    '''Update UVCal object with gains, flags, quals, history, and/or other parameters
+    Cannot modify the shape of gain arrays. More than one spectral window is not supported.
 
     Arguments:
-        infilename: filename of the base calfits file to be updated, or UVCal object
-        outfilename: filename of the new calfits file
-        gains: Dictionary of complex calibration gains with shape=(Ntimes,Nfreqs) 
+        cal: UVCal object to be updated
+        gains: Dictionary of complex calibration gains with shape=(Ntimes,Nfreqs)
             with keys in the (1,'x') format. Default (None) leaves unchanged.
         flags: Dictionary like gains but of flags. Default (None) leaves unchanged.
         quals: Dictionary like gains but of per-antenna quality. Default (None) leaves unchanged.
-        add_to_history: appends a string to the history of the output file
-        clobber: if True, overwrites existing file at outfilename
-        kwargs: dictionary mapping updated attributs to their new values. 
+        add_to_history: appends a string to the history of the UVCal object
+        kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVCal documentation for more info.
     '''
-    
-    # Load infile
-    if type(infilename) == UVCal:
-        cal = deepcopy(infilename)
-    else:    
-        cal = UVCal()
-        cal.read_calfits(infilename)
-
     # Set gains, flags, and/or quals
     for i, ant in enumerate(cal.ant_array):
         for ip, pol in enumerate(cal.jones_array):
@@ -268,8 +275,37 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     # Set additional attributes
     cal.history += add_to_history
     for attribute, value in kwargs.items():
-        cal.__setattr__(attribute,value)
+        cal.__setattr__(attribute, value)
+
+
+def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', clobber=False, **kwargs):
+    '''Loads an existing calfits file with pyuvdata, modifies some subset of of its parameters,
+    and then writes a new calfits file to disk. Cannot modify the shape of gain arrays.
+    More than one spectral window is not supported.
+
+    Arguments:
+        infilename: filename of the base calfits file to be updated, or UVCal object
+        outfilename: filename of the new calfits file
+        gains: Dictionary of complex calibration gains with shape=(Ntimes,Nfreqs)
+            with keys in the (1,'x') format. Default (None) leaves unchanged.
+        flags: Dictionary like gains but of flags. Default (None) leaves unchanged.
+        quals: Dictionary like gains but of per-antenna quality. Default (None) leaves unchanged.
+        add_to_history: appends a string to the history of the output file
+        clobber: if True, overwrites existing file at outfilename
+        kwargs: dictionary mapping updated attributs to their new values.
+            See pyuvdata.UVCal documentation for more info.
+    '''
+
+    # Load infile
+    if type(infilename) == UVCal:
+        cal = deepcopy(infilename)
+    else:
+        cal = UVCal()
+        cal.read_calfits(infilename)
+
+    update_uvcal(cal, gains=gains, flags=flags, quals=quals,
+                 add_to_history=add_to_history, **kwargs)
     cal.check()
 
     # Write to calfits file
-    cal.write_calfits(outfilename, clobber=clobber) 
+    cal.write_calfits(outfilename, clobber=clobber)
