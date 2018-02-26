@@ -14,7 +14,7 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal import omni, utils, firstcal, cal_formats, redcal
+from hera_cal import omni, utils, firstcal, cal_formats, redcal, io
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
@@ -874,14 +874,7 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
             uvd = reduce(operator.add, datanames)
 
     # load data
-    d, f = firstcal.UVData_to_dict([uvd])
-
-    # pop autos
-    if pop_autos:
-        for i, k in enumerate(d.keys()):
-            if k[0] == k[1]:
-                d.pop(k)
-                f.pop(k)
+    d, f = io.load_vis([uvd], nested_dict=True, pop_autos=True)
 
     # turn into datacontainer
     data, flags = DataContainer(d), DataContainer(f)

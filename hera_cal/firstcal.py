@@ -11,7 +11,7 @@ import scipy.sparse as sps
 import aipy
 from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
-from hera_cal import omni, utils, cal_formats
+from hera_cal import omni, utils, cal_formats, io
 import omnical
 from pyuvdata import UVData
 
@@ -507,7 +507,7 @@ def firstcal_run(files, opts, history):
         niters = 0
 
         while niters == 0 or len(switched) > 0:
-            datapack, flagpack = UVData_to_dict([uv])
+            datapack, flagpack = io.load_vis([uv], nested_dict=True)
             datapack = _apply_pi_shift(datapack, switched)
             wgtpack = {k: {p: np.logical_not(flagpack[k][p]) for p in flagpack[k]} for k in flagpack} 
 
