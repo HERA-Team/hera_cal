@@ -9,6 +9,7 @@ from pyuvdata import UVCal, UVData
 import os
 import hera_cal
 import copy
+import argparse
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -214,7 +215,7 @@ def LST2JD(LST, start_jd, longitude=21.42830):
         _array = True
     else:
         LST = [LST]
-        _array = False  
+        _array = False
 
     # get start_JD
     base_jd = float(start_jd)
@@ -263,7 +264,7 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
 
     latitude : type=float, latitude of observer in degrees north, default=HERA latitutde
                This only matters when using epoch="J2000"
-    
+
     epoch : type=str, epoch for RA calculation. options=['current', 'J2000'].
             The 'current' epoch is the epoch at JD. Note that
             LST is defined as the zenith RA in the current epoch. Note that
@@ -376,7 +377,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     ------------
     filepaths : type=list, list of filepaths
 
-    add_int_buffer : type=bool, if True, extend start and stop times by a single integration duration 
+    add_int_buffer : type=bool, if True, extend start and stop times by a single integration duration
         except for start of first file, and stop of last file.
 
     Output: (file_starts, file_stops, int_times)
@@ -440,7 +441,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
 
 def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
                    write_file=True, outdir="./", write_miriad=True, overwrite=False, verbose=True, history=" ",
-                   return_uvdata=False, longitude=21.42830, start_jd=None, instrument="HERA", 
+                   return_uvdata=False, longitude=21.42830, start_jd=None, instrument="HERA",
                    telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
                    telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395])):
     """
@@ -590,7 +591,7 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
               'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'instrument',
               'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
               'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
-              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']              
+              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']
     for p in params:
         uvd.__setattr__(p, locals()[p])
 
@@ -609,5 +610,37 @@ def data_to_miriad(fname, data, lst_array, freq_array, antpos, time_array=None, 
         return uvd
 
 
+def get_cal_ArgumentParser(method_name):
+    """
+    Function to get an ArgumentParser instance for working with hera_cal functions.
 
+    Args:
+        method_name -- target wrapper, must be "delay_filter" for now.
+    Returns:
+        a -- an argparse.ArgumentParser instance with the relevant options for the selected method
+    """
+    methods = ["delay_filter"]
+    if method_name not in methods:
+        raise AssertionError('method_name must be one of {}'.format(','.join(methods)))
 
+    a = argparse.ArgumentParser()
+
+    if method_name == 'delay_filter':
+        a.prog = 'delay_filter'
+        a.add_argument('--standoff', default=0., type=float,
+                       help='fixed additional delay beyond the horizon (in ns)')
+        a.add_argument('--horizon', default=1., type=float,
+                       help='proportionality constant for bl_len where 1 is the '
+                            'horizon (full light travel time)')
+        a.add_argument('--tol', default=1e-9, type=float,
+                       help='CLEAN algorithm convergence tolerance (see aipy.deconv.clean)')
+        a.add_argument('--window', default='none', type=str,
+                       help='window function for filtering applied to the filtered axis. '
+                            'See aipy.dsp.gen_window for options.')
+        a.add_argument('--skip_wgt', default=0.1, type=float,
+                       help='skips filtering rows with very low total weight '
+                            '(unflagged fraction ~< skip_wgt). Only works properly '
+                            'when all weights are all between 0 and 1.')
+        a.add_argument('--maxiter', default=100, type=int,
+                       help='Maximum number of iterations for aipy.deconv.clean to converge.')
+    return a
