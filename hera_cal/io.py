@@ -245,9 +245,124 @@ def load_cal(input_cal, return_meta=False):
         return gains, flags
 
 
-def write_cal():
-    '''TODO: copy over code from hera_cal.cal_formats.HERACal'''
-    raise NotImplementedError('This function has not been implemented yet.')
+def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_file=True,
+              return_uvc=True, outdir='./', overwrite=False, gain_convention='divide', 
+              history=' ', x_orientation="east", telescope_name='HERA', **kwargs):
+    '''Format gain solution dictionary into pyuvdata.UVCal and/or write to file
+
+    Arguments:
+        fname : type=str, output file basename
+        gains : type=dictionary, holds complex gain solutions. keys are antenna + pol
+                tuple pairs, e.g. (2, 'x'), and keys are 2D complex ndarrays with time
+                along [0] axis and freq along [1] axis.
+        freqs : type=ndarray, holds unique frequencies channels in Hz
+        times : type=ndarray, holds unique times of integration centers in Julian Date
+        pols : type=ndarray, holds unique polarization of gains in 'x' and/or 'y' form
+        flags : type=dictionary, holds boolean flags (True if flagged) for gains.
+                Must match shape of gains.
+        quality : type=dictionary, holds "quality" of calibration solution. Must match
+                  shape of gains. See pyuvdata.UVCal doc for more details.
+        write_file : type=bool, if True, write UVCal to calfits file
+        return_uvc : type=bool, if True, return UVCal object
+        outdir : type=str, output file directory
+        overwrite : type=bool, if True overwrite output files
+        gain_convention : type=str, gain solutions formatted such that they 'multiply' into data
+                          to get model, or 'divide' into data to get model
+                          options=['multiply', 'divide']
+        cal_style : type=str, specify style of calibration solution as either redundancy-based
+                    or sky-based. options=['redundant', 'sky', 'unknown']. if cal_style=='sky',
+                    additional parameters (fed via kwargs) are required. See pyuvdata.UVCal doc.
+        history : type=str, history string for UVCal object.
+        x_orientation : type=str, orientation of X dipole, options=['east', 'north']
+        telescope_name : type=str, name of telescope
+        kwargs : additional atrributes to set in pyuvdata.UVCal
+    Returns:
+        if return_uvc: returns UVCal object
+        else: retuns None
+    '''
+    # helpful dictionaries for antenna polarization of gains
+    str2pol = {'x': -5, 'y': -6}
+    pol2str = {-5: 'x', -6: 'y'}
+
+    # get antenna info
+    ant_numbers = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    antenna_names = np.array(map(lambda a: "ant{}".format(a), ant_array))
+    Nants_data = len(ants)
+    Nants_telescope = len(ants)
+    ant_array = np.arange(Nants_data)
+
+    # get polarization info
+    jones_array = np.array(map(lambda p: str2pol[p], pols), np.int)
+    pol_array = np.array(map(lambda j: pol2str[j], jones_array))
+    Njones = len(jones_array)
+
+    # get time info
+    time_array = np.array(times, np.float)
+    Ntimes = len(time_array)
+    time_range = np.array([time_array.min(), time_array.max()], np.float)
+    integration_time = np.median(np.diff(time_array)) * 24. * 3600.
+
+    # get frequency info
+    freq_array = np.array(freqs, np.float)
+    Nfreqs = len(freq_array)
+    Nspws = 1
+    freq_array = freq_array[None, :]
+    spw_array = np.arange(Nspws)
+    channel_width = np.median(np.diff(freq_array))
+
+    # form gain, flags and qualities
+    gain_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.complex)
+    flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.bool)
+    quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.float)
+    for i, p in enumerate(pol_array):
+        for j, a in enumerate(ant_array):
+            gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]
+            if flags is not None:
+                flag_array[j, :, :, :, i] = flags[(a, p)].T[None, :, :]
+            else:
+                flag_array[j, :, :, :, i] = np.zeros((Nspws, Ntimes, Nfreqs), np.bool)
+
+            if quality is not None:
+                quality_array[j, :, :, :, i] = quality[(a, p)].T[None, :, :]
+            else:
+                quality_array[j, :, :, :, i] = np.ones((Nspws, Ntimes, Nfreqs), np.float)
+
+    # instantiate UVCal
+    uvc = UVCal()
+
+    # create parameter list
+    params = ["Nants_data", "Nants_telescope", "Nfreqs", "Ntimes", "Nspws", "Njones",
+              "ant_array", "antenna_numbers", "antenna_names", "cal_style",
+              "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
+              "time_array", "spw_array", "freq_array", "history", "integration_time",
+              "time_range", "x_orientation", "telescope_name"]
+
+    # create local parameter dict
+    local_params = locals()
+
+    # overwrite with kwarg parameters
+    local_params.update(kwargs)
+
+    # set parameters
+    for p in params:
+        uvc.__setattr__(p, local_params[p])
+
+    # run check
+    uvc.check()
+
+    # write to file
+    if write_file:
+        # check output
+        fname = os.path.join(outdir, fname)
+        if os.path.exists(fname) and overwrite is False:
+            raise IOError("{} exists, not overwriting...".format(fname))
+        
+        print "saving {}".format(fname)
+        uvc.write_file(fname, clobber=True)
+
+    # return object
+    if return_uvc:
+        return uvc
 
 
 def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **kwargs):
