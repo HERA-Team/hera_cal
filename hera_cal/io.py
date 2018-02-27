@@ -4,6 +4,7 @@ from collections import OrderedDict as odict
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 import operator
+import os
 
 
 polnum2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
@@ -247,8 +248,9 @@ def load_cal(input_cal, return_meta=False):
 
 def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_file=True,
               return_uvc=True, outdir='./', overwrite=False, gain_convention='divide', 
-              history=' ', x_orientation="east", telescope_name='HERA', **kwargs):
-    '''Format gain solution dictionary into pyuvdata.UVCal and/or write to file
+              history=' ', x_orientation="east", telescope_name='HERA', cal_style='redundant',
+              **kwargs):
+    '''Format gain solution dictionary into pyuvdata.UVCal and write to file
 
     Arguments:
         fname : type=str, output file basename
@@ -269,26 +271,25 @@ def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_
         gain_convention : type=str, gain solutions formatted such that they 'multiply' into data
                           to get model, or 'divide' into data to get model
                           options=['multiply', 'divide']
-        cal_style : type=str, specify style of calibration solution as either redundancy-based
-                    or sky-based. options=['redundant', 'sky', 'unknown']. if cal_style=='sky',
-                    additional parameters (fed via kwargs) are required. See pyuvdata.UVCal doc.
         history : type=str, history string for UVCal object.
         x_orientation : type=str, orientation of X dipole, options=['east', 'north']
         telescope_name : type=str, name of telescope
+        cal_style : type=str, style of calibration solutions, options=['redundant', 'sky']. If
+                    cal_style == sky, additional params are required. See pyuvdata.UVCal doc.
         kwargs : additional atrributes to set in pyuvdata.UVCal
     Returns:
         if return_uvc: returns UVCal object
-        else: retuns None
+        else: returns None
     '''
     # helpful dictionaries for antenna polarization of gains
     str2pol = {'x': -5, 'y': -6}
     pol2str = {-5: 'x', -6: 'y'}
 
     # get antenna info
-    ant_numbers = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
-    antenna_names = np.array(map(lambda a: "ant{}".format(a), ant_array))
-    Nants_data = len(ants)
-    Nants_telescope = len(ants)
+    antenna_numbers = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    antenna_names = np.array(map(lambda a: "ant{}".format(a), antenna_numbers))
+    Nants_data = len(antenna_numbers)
+    Nants_telescope = len(antenna_numbers)
     ant_array = np.arange(Nants_data)
 
     # get polarization info
@@ -315,27 +316,29 @@ def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_
     flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.bool)
     quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.float)
     for i, p in enumerate(pol_array):
-        for j, a in enumerate(ant_array):
+        for j, a in enumerate(antenna_numbers):
             gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]
             if flags is not None:
                 flag_array[j, :, :, :, i] = flags[(a, p)].T[None, :, :]
             else:
-                flag_array[j, :, :, :, i] = np.zeros((Nspws, Ntimes, Nfreqs), np.bool)
-
+                flag_array[j, :, :, :, i] = np.zeros((Nspws, Nfreqs, Ntimes), np.bool)
             if quality is not None:
                 quality_array[j, :, :, :, i] = quality[(a, p)].T[None, :, :]
             else:
-                quality_array[j, :, :, :, i] = np.ones((Nspws, Ntimes, Nfreqs), np.float)
+                quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
 
     # instantiate UVCal
     uvc = UVCal()
 
+    # enforce 'gain' cal_type
+    uvc.cal_type = "gain"
+
     # create parameter list
     params = ["Nants_data", "Nants_telescope", "Nfreqs", "Ntimes", "Nspws", "Njones",
-              "ant_array", "antenna_numbers", "antenna_names", "cal_style",
+              "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
               "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
               "time_array", "spw_array", "freq_array", "history", "integration_time",
-              "time_range", "x_orientation", "telescope_name"]
+              "time_range", "x_orientation", "telescope_name", "gain_convention"]
 
     # create local parameter dict
     local_params = locals()
@@ -358,16 +361,17 @@ def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_
             raise IOError("{} exists, not overwriting...".format(fname))
         
         print "saving {}".format(fname)
-        uvc.write_file(fname, clobber=True)
+        uvc.write_calfits(fname, clobber=True)
 
     # return object
     if return_uvc:
         return uvc
 
 
-def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **kwargs):
-    '''Update UVCal object with gains, flags, quals, history, and/or other parameters
-    Cannot modify the shape of gain arrays. More than one spectral window is not supported.
+def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', overwrite=False, **kwargs):
+    '''Loads an existing calfits file with pyuvdata, modifies some subset of of its parameters, 
+    and then writes a new calfits file to disk. Cannot modify the shape of gain arrays. 
+    More than one spectral window is not supported.
 
     Arguments:
         cal: UVCal object to be updated
@@ -375,8 +379,9 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
             with keys in the (1,'x') format. Default (None) leaves unchanged.
         flags: Dictionary like gains but of flags. Default (None) leaves unchanged.
         quals: Dictionary like gains but of per-antenna quality. Default (None) leaves unchanged.
-        add_to_history: appends a string to the history of the UVCal object
-        kwargs: dictionary mapping updated attributs to their new values.
+        add_to_history: appends a string to the history of the output file
+        overwrite: if True, overwrites existing file at outfilename
+        kwargs: dictionary mapping updated attributs to their new values. 
             See pyuvdata.UVCal documentation for more info.
     '''
     # Set gains, flags, and/or quals
@@ -425,4 +430,6 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
                  add_to_history=add_to_history, **kwargs)
 
     # Write to calfits file
-    cal.write_calfits(outfilename, clobber=clobber)
+    cal.write_calfits(outfilename, clobber=overwrite) 
+
+
