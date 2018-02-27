@@ -100,9 +100,14 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         return data, flags
 
 
-def write_vis(outfilename, data, flags, filetype='miriad', history='', clobber=False, **kwargs):
-    '''TODO: migrate in hera_cal.utils.data_to_miriad and generalize to also write uvfits.'''
-    raise NotImplementedError('This function has not been implemented yet.')
+def write_vis(fname, data, flags, filetype='miriad', history=' ', overwrite=False, **kwargs):
+    """
+
+    """
+    
+
+    
+
 
 
 def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
@@ -368,7 +373,7 @@ def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_
         return uvc
 
 
-def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', overwrite=False, **kwargs):
+def update_uvcal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', overwrite=False, **kwargs):
     '''Loads an existing calfits file with pyuvdata, modifies some subset of of its parameters, 
     and then writes a new calfits file to disk. Cannot modify the shape of gain arrays. 
     More than one spectral window is not supported.
