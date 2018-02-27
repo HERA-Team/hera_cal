@@ -1,14 +1,16 @@
 import numpy as np
 from pyuvdata import UVCal, UVData
 from collections import OrderedDict as odict
-from pyuvdata.utils import polstr2num, polnum2str
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 import operator
 
-str2antpol = {'x': -5, 'y': -6}
-antpol2str = {antpol: string for string,antpol in str2antpol.items()}
-#TODO: update to use jones strings (e.g. 'jxx' and 'jyy'). Currently uses pyuvdata for visibility polarizations.
+
+polnum2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
+polstr2num = {"xx": -5, "yy": -6 ,"xy": -7, "yx": -8}
+
+jonesnum2str = {-5: 'x', -6: 'y'}
+jonesstr2num = {'x': -5, 'y': -6}
 
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning
@@ -76,7 +78,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
             if (i, j) not in data:
                 data[i, j], flags[i, j] = odict(), odict()
             for ip, pol in enumerate(uvd.polarization_array):
-                pol = polnum2str(pol)
+                pol = polnum2str[pol]
                 data[(i, j)][pol] = deepcopy(uvd.get_data((i, j, pol)))
                 flags[(i, j)][pol] = deepcopy(uvd.get_flags((i, j, pol)))
 
@@ -91,7 +93,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         lsts = np.unique(uvd.lst_array)
         antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
         antpos = odict(zip(ants, antpos))
-        pols = np.array([polnum2str(polnum) for polnum in uvd.polarization_array])
+        pols = np.array([polnum2str[polnum] for polnum in uvd.polarization_array])
         return data, flags, antpos, ants, freqs, times, lsts, pols
     else:
         return data, flags
@@ -123,9 +125,9 @@ def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
             this_bl = (uvd.baseline_array == uvd.antnums_to_baseline(i, j))
             for ip, pol in enumerate(uvd.polarization_array):
                 if data is not None:
-                    uvd.data_array[this_bl, 0, :, ip] = data[(i, j, polnum2str(pol))]
+                    uvd.data_array[this_bl, 0, :, ip] = data[(i, j, polnum2str[pol])]
                 if flags is not None:
-                    uvd.flag_array[this_bl, 0, :, ip] = flags[(i, j, polnum2str(pol))]
+                    uvd.flag_array[this_bl, 0, :, ip] = flags[(i, j, polnum2str[pol])]
 
     # set additional attributes
     uvd.history += add_to_history
@@ -227,9 +229,9 @@ def load_cal(input_cal, return_meta=False):
     gains, quals, flags = odict(), odict(), odict()
     for i, ant in enumerate(cal.ant_array):
         for ip, pol in enumerate(cal.jones_array):
-            gains[(ant, antpol2str[pol])] = cal.gain_array[i, 0, :, :, ip].T
-            flags[(ant, antpol2str[pol])] = cal.flag_array[i, 0, :, :, ip].T
-            quals[(ant, antpol2str[pol])] = cal.quality_array[i, 0, :, :, ip].T
+            gains[(ant, jonesnum2str[pol])] = cal.gain_array[i, 0, :, :, ip].T
+            flags[(ant, jonesnum2str[pol])] = cal.flag_array[i, 0, :, :, ip].T
+            quals[(ant, jonesnum2str[pol])] = cal.quality_array[i, 0, :, :, ip].T
 
     #return quantities
     if return_meta:
@@ -237,7 +239,7 @@ def load_cal(input_cal, return_meta=False):
         ants = cal.ant_array
         freqs = np.unique(cal.freq_array)
         times = np.unique(cal.time_array)
-        pols = [antpol2str[j] for j in cal.jones_array]
+        pols = [jonesnum2str[j] for j in cal.jones_array]
         return gains, flags, quals, total_qual, ants, freqs, times, pols
     else:
         return gains, flags
@@ -266,11 +268,11 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
     for i, ant in enumerate(cal.ant_array):
         for ip, pol in enumerate(cal.jones_array):
             if gains is not None:
-                cal.gain_array[i, 0, :, :, ip] = gains[(ant, antpol2str[pol])].T
+                cal.gain_array[i, 0, :, :, ip] = gains[(ant, jonesnum2str[pol])].T
             if flags is not None:
-                cal.flag_array[i, 0, :, :, ip] = flags[(ant, antpol2str[pol])].T
+                cal.flag_array[i, 0, :, :, ip] = flags[(ant, jonesnum2str[pol])].T
             if quals is not None:
-                cal.quality_array[i, 0, :, :, ip] = quals[(ant, antpol2str[pol])].T
+                cal.quality_array[i, 0, :, :, ip] = quals[(ant, jonesnum2str[pol])].T
 
     # Set additional attributes
     cal.history += add_to_history

@@ -82,7 +82,7 @@ class Test_Visibility_IO(unittest.TestCase):
 
     def test_load_vis_nested(self):
         #duplicated testing from firstcal.UVData_to_dict
-        str2pol = {'XX': -5, 'YY': -6, 'XY': -7, 'YY': -8}
+        str2pol = io.polstr2num
         filename1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
         filename2 = os.path.join(DATA_PATH, 'zen.2458043.13298.xx.HH.uvORA')
         uvd1 = UVData()
