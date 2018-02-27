@@ -124,10 +124,12 @@ class Test_Visibility_IO(unittest.TestCase):
         uvd.baseline_array = uvd.baseline_array[np.argsort(uvd.baseline_array)]
         self.assertEqual(len(io.load_vis(filename1,nested_dict=True)[0]), uvd.Nbls)
 
-    #TODO: implement this test
     def test_write_vis(self):
-        with self.assertRaises(NotImplementedError):
-            io.write_vis(None, None, None)
+        # get data
+        uvd = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458044.41632.xx.HH.uvXRAA"))
+        data, flgs, ap, a, f, t, l, p = io.load_vis(uvd, return_meta=True)
+        
 
     
     def test_update_vis(self):
