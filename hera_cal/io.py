@@ -3,6 +3,7 @@ from pyuvdata import UVCal, UVData
 from collections import OrderedDict as odict
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
+import hera_cal as hc
 import operator
 import os
 
@@ -104,7 +105,8 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
               return_uvd=False, longitude=21.42830, start_jd=None, instrument="HERA", 
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
-              telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395])):
+              telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395]),
+              **kwargs):
     """
     Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
     documentation for more info on these attributes.
@@ -156,9 +158,11 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
 
+    kwargs : type=dictionary, additional parameters to set in UVData object.
+    
     Output:
     -------
-    if return_uvdata: return UVData instance
+    if return_uvd: return UVData instance
     """
     ## configure UVData parameters
     # get pols
@@ -171,7 +175,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = LST2JD(lst_array, start_jd, longitude=longitude)
+        time_array = hc.utils.LST2JD(lst_array, start_jd, longitude=longitude)
     Ntimes = len(time_array)
     integration_time = np.median(np.diff(time_array)) * 24 * 3600.
 
@@ -252,25 +256,31 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'instrument',
               'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
               'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
-              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']              
+              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']   
+    local_params = locals()           
+
+    # overwrite paramters by kwargs
+    local_params.update(kwargs)
+
+    # set parameters in uvd
     for p in params:
-        uvd.__setattr__(p, locals()[p])
+        uvd.__setattr__(p, local_params[p])
 
     # write to file
     if write_file:
-        if write_miriad:
+        if filetype == 'miriad':
             # check output
             fname = os.path.join(outdir, fname)
             if os.path.exists(fname) and overwrite is False:
-                hera_cal.abscal.echo("{} exists, not overwriting".format(fname), verbose=verbose)
+                if verbose:
+                    print("{} exists, not overwriting".format(fname))
             else:
-                hera_cal.abscal.echo("saving {}".format(fname), type=0, verbose=verbose)
+                if verbose:
+                    print("saving {}".format(fname))
                 uvd.write_miriad(fname, clobber=True)
 
-    if return_uvdata:
+    if return_uvd:
         return uvd
-
-
 
 
 def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
