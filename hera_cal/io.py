@@ -379,14 +379,16 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
 def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **kwargs):
     '''Update UVCal object with gains, flags, quals, history, and/or other parameters
     Cannot modify the shape of gain arrays. More than one spectral window is not supported.
+
     Arguments:
         cal: UVCal object to be updated
         gains: Dictionary of complex calibration gains with shape=(Ntimes,Nfreqs)
             with keys in the (1,'x') format. Default (None) leaves unchanged.
         flags: Dictionary like gains but of flags. Default (None) leaves unchanged.
         quals: Dictionary like gains but of per-antenna quality. Default (None) leaves unchanged.
-        add_to_history: appends a string to the history of the UVCal object
-        kwargs: dictionary mapping updated attributs to their new values.
+        add_to_history: appends a string to the history of the output file
+        overwrite: if True, overwrites existing file at outfilename
+        kwargs: dictionary mapping updated attributs to their new values. 
             See pyuvdata.UVCal documentation for more info.
     '''
     # Set gains, flags, and/or quals
@@ -435,5 +437,6 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
+
 
 
