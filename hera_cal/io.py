@@ -401,7 +401,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     cal.check()
 
 
-def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', clobber=False, **kwargs):
+def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', overwrite=False, **kwargs):
     '''Loads an existing calfits file with pyuvdata, modifies some subset of of its parameters,
     and then writes a new calfits file to disk. Cannot modify the shape of gain arrays.
     More than one spectral window is not supported.
@@ -414,7 +414,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
         flags: Dictionary like gains but of flags. Default (None) leaves unchanged.
         quals: Dictionary like gains but of per-antenna quality. Default (None) leaves unchanged.
         add_to_history: appends a string to the history of the output file
-        clobber: if True, overwrites existing file at outfilename
+        overwrite: if True, overwrites existing file at outfilename
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVCal documentation for more info.
     '''
