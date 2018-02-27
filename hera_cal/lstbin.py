@@ -789,10 +789,13 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
     for i, k in enumerate(data.keys()):
 
         # get new s-hat vector
-        sprime = rot.dot(np.array([0, 0, 1])).T
+        s_prime = rot.dot(np.array([0.0, 0.0, 1.0]))
+
+        # get new baseline vector
+        bl_prime = rot.dot(bls[k])[:2]
 
         # dot bls with difference vector: Zhang, Y. et al. 2018 (Eqn. 22)
-        tau = bls[k].dot(sprime - np.array([0., 0., 1.0])) / (aipy.const.c / 100.0)
+        tau = bl_prime.dot((s_prime - np.array([0., 0., 1.0]))[:2]) / (aipy.const.c / 100.0)
 
         # reshape tau
         if type(tau) == np.ndarray:
