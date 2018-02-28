@@ -91,7 +91,7 @@ def test_JD2RA():
     # test basic execution
     jd = 2458042.5
     ra = utils.JD2RA(jd)
-    nt.assert_equal(ra, 46.130897831277629)
+    nt.assert_almost_equal(ra, 46.130897831277629)
     # test array
     jd = np.arange(2458042, 2458043.01, .2)
     ra = utils.JD2RA(jd)
