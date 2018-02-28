@@ -249,7 +249,7 @@ def load_cal(input_cal, return_meta=False):
         return gains, flags
 
 
-def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_file=True,
+def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=True,
               return_uvc=True, outdir='./', overwrite=False, gain_convention='divide', 
               history=' ', x_orientation="east", telescope_name='HERA', cal_style='redundant',
               **kwargs):
@@ -262,7 +262,6 @@ def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_
                 along [0] axis and freq along [1] axis.
         freqs : type=ndarray, holds unique frequencies channels in Hz
         times : type=ndarray, holds unique times of integration centers in Julian Date
-        pols : type=ndarray, holds unique polarization of gains in 'x' and/or 'y' form
         flags : type=dictionary, holds boolean flags (True if flagged) for gains.
                 Must match shape of gains.
         quality : type=dictionary, holds "quality" of calibration solution. Must match
@@ -296,8 +295,8 @@ def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_
     ant_array = np.arange(Nants_data)
 
     # get polarization info
-    jones_array = np.array(map(lambda p: str2pol[p], pols), np.int)
-    pol_array = np.array(map(lambda j: pol2str[j], jones_array))
+    pol_array = np.array(sorted(map(lambda k: k[1].lower(), gains.keys())))
+    jones_array = np.array(map(lambda p: str2pol[p], pol_array), np.int)
     Njones = len(jones_array)
 
     # get time info
@@ -320,14 +319,20 @@ def write_cal(fname, gains, freqs, times, pols, flags=None, quality=None, write_
     quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.float)
     for i, p in enumerate(pol_array):
         for j, a in enumerate(antenna_numbers):
-            gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]
-            if flags is not None:
-                flag_array[j, :, :, :, i] = flags[(a, p)].T[None, :, :]
+            # ensure (a, p) is in gains
+            if (a, p) in gains:
+                gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]
+                if flags is not None:
+                    flag_array[j, :, :, :, i] = flags[(a, p)].T[None, :, :]
+                else:
+                    flag_array[j, :, :, :, i] = np.zeros((Nspws, Nfreqs, Ntimes), np.bool)
+                if quality is not None:
+                    quality_array[j, :, :, :, i] = quality[(a, p)].T[None, :, :]
+                else:
+                    quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
             else:
-                flag_array[j, :, :, :, i] = np.zeros((Nspws, Nfreqs, Ntimes), np.bool)
-            if quality is not None:
-                quality_array[j, :, :, :, i] = quality[(a, p)].T[None, :, :]
-            else:
+                gain_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.complex)
+                flag_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.bool)
                 quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
 
     # instantiate UVCal

@@ -244,7 +244,7 @@ class Test_Calibration_IO(unittest.TestCase):
                 flags[(a, p)] = np.zeros((Ntimes, Nfreqs), np.bool)
 
         # test basic execution
-        uvc = io.write_cal("ex.calfits", gains, freqs, times, pols, flags=flags, quality=quality,
+        uvc = io.write_cal("ex.calfits", gains, freqs, times, flags=flags, quality=quality,
                            overwrite=True, return_uvc=True, write_file=True)
         self.assertTrue(os.path.exists("ex.calfits"))
         self.assertAlmostEqual(uvc.gain_array[0,0,0,0,0], (1+0j))
@@ -254,9 +254,9 @@ class Test_Calibration_IO(unittest.TestCase):
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
         # test execution with different parameters
-        uvc = io.write_cal("ex.calfits", gains, freqs, times, pols, overwrite=True)
+        uvc = io.write_cal("ex.calfits", gains, freqs, times, overwrite=True)
         # test exception
-        self.assertRaises(IOError, io.write_cal, "ex.calfits", gains, freqs, times, pols)
+        self.assertRaises(IOError, io.write_cal, "ex.calfits", gains, freqs, times)
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
 
