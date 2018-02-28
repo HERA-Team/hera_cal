@@ -295,7 +295,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
     ant_array = np.arange(Nants_data)
 
     # get polarization info
-    pol_array = np.array(sorted(map(lambda k: k[1].lower(), gains.keys())))
+    pol_array = np.array(sorted(set(map(lambda k: k[1].lower(), gains.keys()))))
     jones_array = np.array(map(lambda p: str2pol[p], pol_array), np.int)
     Njones = len(jones_array)
 
