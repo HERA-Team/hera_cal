@@ -28,11 +28,11 @@ class Test_lstbin:
                            sorted(glob.glob(DATA_PATH+'/zen.2458045.4*uvXRAA'))]
 
         (self.data1, self.flgs1, self.ap1, a, self.freqs1, t, self.lsts1,
-         p) = hc.abscal.UVData2AbsCalDict(self.data_files[0], return_meta=True)
+         p) = hc.io.load_vis(self.data_files[0], return_meta=True)
         (self.data2, self.flgs2, ap, a, self.freqs2, t, self.lsts2,
-         p) = hc.abscal.UVData2AbsCalDict(self.data_files[1], return_meta=True)
+         p) = hc.io.load_vis(self.data_files[1], return_meta=True)
         (self.data3, self.flgs3, ap, a, self.freqs3, t, self.lsts3,
-         p) = hc.abscal.UVData2AbsCalDict(self.data_files[2], return_meta=True)
+         p) = hc.io.load_vis(self.data_files[2], return_meta=True)
         self.data_list = [self.data1, self.data2, self.data3]
         self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]

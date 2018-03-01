@@ -62,7 +62,7 @@ class AbsCal(object):
     phs_logcal or a TT_phs_logcal bandpass routine.
     """
 
-    def __init__(self, model, data, wgts=None, antpos=None, freqs=None, pol_select=None,
+    def __init__(self, model, data, wgts=None, antpos=None, freqs=None,
                  model_ftype='miriad', data_ftype='miriad', verbose=True):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
@@ -117,9 +117,6 @@ class AbsCal(object):
         freqs : ndarray of frequency array, type=ndarray, dtype=float
                 1d array containing visibility frequencies in Hz.
                 Needed for delay calibration.
-    
-        pol_select : list of polarizations you want to keep in data
-                     type=list, dtype=str, Ex. ['xx', 'yy']
         """
         # set pols to None
         pols = None
@@ -127,12 +124,12 @@ class AbsCal(object):
         # check format of model if model is not a dictionary
         if type(model) == list or type(model) == np.ndarray or type(model) == str or type(model) == UVData:
             (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
-             model_times, model_pols) = UVData2AbsCalDict(model, pop_autos=True, return_meta=True, pol_select=pol_select)
+             model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True)
 
         # check format of data if data is not a dictionary
         if type(data) == list or type(data) == np.ndarray or type(data) == str or type(data) == UVData:
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
-             data_times, data_pols) = UVData2AbsCalDict(data, pop_autos=True, return_meta=True, pol_select=pol_select)
+             data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True)
             wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
             pols = data_pols
             freqs = data_freqs
@@ -849,7 +846,7 @@ def omni_abscal_arg_parser():
     return a
 
 
-def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite=False, write_calfits=True,
+def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_calfits=True,
                calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, interp_model=True, all_antenna_gains=False,
                delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, abs_amp_cal=False,
@@ -885,8 +882,6 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
                 visibility data, or a path itself
 
     verbose : type=boolean, if True print output to stdout
-
-    pol_select : type=list, list of polarization strings to use. Ex ['xx']
 
     overwrite : type=boolean, if True, overwite output files
 
@@ -934,7 +929,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
     # load model files
     echo ("loading model files", type=1, verbose=verbose)
     (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
-        model_pols) = UVData2AbsCalDict(model_files, pop_autos=True, return_meta=True, pol_select=pol_select)
+        model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
     antpos = model_antpos
 
     # iterate over data files
@@ -958,7 +953,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
         # load data and configure weights
         echo("loading {}".format(dfile), type=1, verbose=verbose)
         (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
-            data_pols) = UVData2AbsCalDict(dfile, pop_autos=True, return_meta=True, pol_select=pol_select, pick_data_ants=False)
+            data_pols) = io.load_vis(dfile, pop_autos=True, return_meta=True, pick_data_ants=False)
         # get data ants
         total_data_antpos = copy.deepcopy(data_antpos)
         data_ants = np.unique(map(lambda k: k[:2], data.keys()))
@@ -981,7 +976,7 @@ def abscal_run(data_files, model_files, pol_select=None, verbose=True, overwrite
             wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
 
         # instantiate class
-        AC = AbsCal(interp_model, data, pol_select=pol_select, antpos=antpos, freqs=data_freqs)
+        AC = AbsCal(interp_model, data, antpos=antpos, freqs=data_freqs)
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
 
         gain_list = []
