@@ -166,16 +166,23 @@ class Test_AbsCal_Funcs:
 
     def test_Baseline(self):
         # test basic execution
-        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), self.data.keys())
-        bls_conj = map(lambda k: hc.abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), self.data.keys())
-        nt.assert_equal(bls[0], bls[0])
-        nt.assert_false(bls[0] == bls[1])
-        nt.assert_equal(bls[0] == bls_conj[0], 'conjugated')
+        keys = self.data.keys()
+        k1 = (24, 25, 'xx')    # 14.6 m E-W
+        i1 = keys.index(k1)
+        k2 = (24, 37 ,'xx')    # different
+        i2 = keys.index(k2)
+        k3 = (52, 53, 'xx')   # 14.6 m E-W
+        i3 = keys.index(k3)
+        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), keys)
+        bls_conj = map(lambda k: hc.abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), keys)
+        nt.assert_equal(bls[i1], bls[i1])
+        nt.assert_false(bls[i1] == bls[i2])
+        nt.assert_equal(bls[i1] == bls_conj[i1], 'conjugated')
         # test different yet redundant baselines still agree
-        nt.assert_equal(bls[-1], bls[0])
+        nt.assert_equal(bls[i1], bls[i3])
         # test tolerance works as expected
-        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), self.data.keys())
-        nt.assert_not_equal(bls[-3], bls[-1])
+        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), keys)
+        nt.assert_not_equal(bls[i1], bls[i3])
 
     def test_match_red_baselines(self):
         model = copy.deepcopy(self.data)
