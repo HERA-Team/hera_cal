@@ -152,39 +152,6 @@ def test_get_miriad_times():
     # test if str
     starts, stops, ints = utils.get_miriad_times(filepaths[0])
 
-def test_data_to_miriad():
-    # get test file
-    fp = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-    d, fl, ap, a, f, t, l, p = abscal.UVData2AbsCalDict(fp, return_meta=True)
-    # test basic execution
-    utils.data_to_miriad("ex.uv", d, l, f, ap, flags=fl, outdir="./", start_jd=2458042)
-    # ensure antenna positions are correct
-    uvd = UVData()
-    uvd.read_miriad('ex.uv')
-    ap, a = uvd.get_ENU_antpos(center=False)
-    ap = dict(zip(a, ap))
-    nt.assert_almost_equal(sum(np.abs(np.array([1.46078420e+01,5.57881090e-02,-9.77543007e-03]) - (ap[25] - ap[24]))), 0, delta=1e-6)
-    # test w/ no flags
-    utils.data_to_miriad("ex.uv", d, l, f, ap, outdir="./", start_jd=2458042, overwrite=True)
-    nt.assert_true(os.path.exists('ex.uv'))
-    uvd = UVData()
-    uvd.read_miriad('ex.uv')
-    nt.assert_equal(uvd.get_data(24,25,'xx').shape, (60, 64))
-    nt.assert_almost_equal(uvd.get_data(24,25,'xx')[30, 32], (1.3784008+0.87549305j))
-    shutil.rmtree('ex.uv')
-    # test exception
-    nt.assert_raises(AttributeError, utils.data_to_miriad, "ex.uv", d, l, f, ap, outdir="./")
-    # return uvd
-    uvd = utils.data_to_miriad("ex.uv", d, l, f, ap, outdir="./", start_jd=2458042, overwrite=True, return_uvdata=True)
-    nt.assert_true(isinstance(uvd, UVData))
-    shutil.rmtree('ex.uv')
-    # test nsample array
-    nsamples = datacontainer.DataContainer(odict(map(lambda k: (k, np.ones(d[k].shape, np.float)*5), d.keys())))
-    uvd = utils.data_to_miriad("ex.uv", d, l, f, ap, nsamples=nsamples, write_file=False, start_jd=2458042, return_uvdata=True)
-    nt.assert_true(np.issubdtype(uvd.nsample_array.dtype, np.float))
-    nt.assert_almost_equal(uvd.nsample_array[0,0,0,0], 5.0)
-    nt.assert_equal(uvd.data_array.shape, uvd.nsample_array.shape)
-
 
 
 

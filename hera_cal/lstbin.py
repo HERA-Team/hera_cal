@@ -14,7 +14,7 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal import omni, utils, firstcal, cal_formats, redcal, abscal
+from hera_cal import omni, utils, firstcal, cal_formats, redcal, abscal, io
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
@@ -434,7 +434,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
         if outdir is not None:
             miriad_kwargs['outdir'] = outdir
         miriad_kwargs['start_jd'] = np.floor(times[0])
-        utils.data_to_miriad(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, **miriad_kwargs)
+        io.write_vis(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, filetype='miriad', **miriad_kwargs)
 
 
 def lst_bin_arg_parser():
@@ -510,7 +510,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     atol : type=float, absolute tolerance for LST bin float comparison
 
-    miriad_kwargs : type=dictionary, keyword arguments to pass to data_to_miriad()
+    miriad_kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
     -------
@@ -702,8 +702,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             continue
 
         # write to file
-        utils.data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, **miriad_kwargs)
-        utils.data_to_miriad(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
+        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **miriad_kwargs)
+        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, filetype='miriad', **miriad_kwargs)
 
         del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
         garbage_collector.collect()
