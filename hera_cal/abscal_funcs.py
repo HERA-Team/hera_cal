@@ -874,7 +874,7 @@ def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=Fa
             uvd = reduce(operator.add, datanames)
 
     # load data
-    d, f = io.load_vis([uvd], nested_dict=True, pop_autos=True)
+    d, f = io.load_vis([uvd], nested_dict=True, pop_autos=pop_autos)
 
     # turn into datacontainer
     data, flags = DataContainer(d), DataContainer(f)
