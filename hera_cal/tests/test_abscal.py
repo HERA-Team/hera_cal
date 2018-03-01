@@ -172,7 +172,7 @@ class Test_AbsCal_Funcs:
         nt.assert_false(bls[0] == bls[1])
         nt.assert_equal(bls[0] == bls_conj[0], 'conjugated')
         # test different yet redundant baselines still agree
-        nt.assert_equal(bls[-1], bls[-3])
+        nt.assert_equal(bls[-1], bls[0])
         # test tolerance works as expected
         bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), self.data.keys())
         nt.assert_not_equal(bls[-3], bls[-1])
