@@ -74,7 +74,7 @@ def test_JD2LST():
     jd = np.arange(2458042, 2458046.1, .5)
     lst = utils.JD2LST(jd, longitude=21.)
     nt.assert_equal(len(lst), 9)
-    nt.assert_equal(lst[3], 0.81486300218170715)
+    nt.assert_almost_equal(lst[3], 0.81486300218170715)
 
 def test_LST2JD():
     # test basic execution
@@ -96,7 +96,7 @@ def test_JD2RA():
     jd = np.arange(2458042, 2458043.01, .2)
     ra = utils.JD2RA(jd)
     nt.assert_equal(len(ra), 6)
-    nt.assert_equal(ra[3], 82.229459674026003)
+    nt.assert_almost_equal(ra[3], 82.229459674026003)
     # test exception
     nt.assert_raises(ValueError, utils.JD2RA, jd, epoch='foo')
     # test J2000 epoch

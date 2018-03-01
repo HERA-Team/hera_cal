@@ -82,7 +82,7 @@ class Test_Visibility_IO(unittest.TestCase):
 
     def test_load_vis_nested(self):
         #duplicated testing from firstcal.UVData_to_dict
-        str2pol = {'XX': -5, 'YY': -6, 'XY': -7, 'YY': -8}
+        str2pol = io.polstr2num
         filename1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
         filename2 = os.path.join(DATA_PATH, 'zen.2458043.13298.xx.HH.uvORA')
         uvd1 = UVData()
@@ -226,12 +226,44 @@ class Test_Calibration_IO(unittest.TestCase):
         self.assertEqual(times.shape, (3,))
         self.assertEqual(sorted(pols), ['x','y'])
 
-
-    #TODO: implement this test
     def test_write_cal(self):
-        with self.assertRaises(NotImplementedError):
-            io.write_cal()
+        # create fake data
+        ants = np.arange(10)
+        pols = np.array(['x'])
+        freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
+        Nfreqs = len(freqs)
+        times = np.linspace(2458043.1, 2458043.6, 100)
+        Ntimes = len(times)
+        gains = {}
+        quality = {}
+        flags = {}
+        for i, p in enumerate(pols):
+            for j, a in enumerate(ants):
+                gains[(a, p)] = np.ones((Ntimes, Nfreqs), np.complex)
+                quality[(a, p)] = np.ones((Ntimes, Nfreqs), np.float) * 2
+                flags[(a, p)] = np.zeros((Ntimes, Nfreqs), np.bool)
 
+        # test basic execution
+        uvc = io.write_cal("ex.calfits", gains, freqs, times, flags=flags, quality=quality,
+                           overwrite=True, return_uvc=True, write_file=True)
+        self.assertTrue(os.path.exists("ex.calfits"))
+        self.assertEqual(uvc.gain_array.shape, (10, 1, 64, 100, 1))
+
+        self.assertAlmostEqual(uvc.gain_array[0,0,0,0,0], (1+0j))
+        self.assertAlmostEqual(np.sum(uvc.gain_array), (64000+0j))
+        self.assertEqual(uvc.flag_array[0,0,0,0,0], False)
+        self.assertEqual(np.sum(uvc.flag_array), 0)
+        self.assertAlmostEqual(uvc.quality_array[0,0,0,0,0], 2)
+        self.assertAlmostEqual(np.sum(uvc.quality_array), 128000.0)
+        self.assertEqual(len(uvc.antenna_numbers), 10)
+        if os.path.exists('ex.calfits'):
+            os.remove('ex.calfits')
+        # test execution with different parameters
+        uvc = io.write_cal("ex.calfits", gains, freqs, times, overwrite=True)
+        # test exception
+        self.assertRaises(IOError, io.write_cal, "ex.calfits", gains, freqs, times)
+        if os.path.exists('ex.calfits'):
+            os.remove('ex.calfits')
 
     def test_update_cal(self):
         # load in cal
