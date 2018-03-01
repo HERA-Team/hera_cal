@@ -214,9 +214,9 @@ class Test_AbsCal:
         d, fl, ap, a, f, t, l, p = hc.io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
         self.freq_array = f
         self.antpos = ap
-        p = map(lambda p: self.AC.pol2str[p][0], p)
+        gain_pols = map(lambda p: p[0], p)
         self.ap = ap
-        self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k,p), a), p))
+        self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k,p), a), gain_pols))
         self.freqs = f
 
     def test_init(self):

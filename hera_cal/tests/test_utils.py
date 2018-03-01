@@ -7,6 +7,7 @@ from pyuvdata import UVData
 from hera_cal import utils, abscal, datacontainer
 from hera_cal.calibrations import CAL_PATH
 from hera_cal.data import DATA_PATH
+from hera_cal import io
 from pyuvdata import UVCal
 import glob
 from collections import OrderedDict as odict
@@ -151,7 +152,4 @@ def test_get_miriad_times():
     nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
     # test if str
     starts, stops, ints = utils.get_miriad_times(filepaths[0])
-
-
-
 
