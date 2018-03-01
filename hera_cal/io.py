@@ -1,5 +1,6 @@
 import numpy as np
 from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
 from collections import OrderedDict as odict
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
@@ -13,6 +14,7 @@ polstr2num = {"xx": -5, "yy": -6 ,"xy": -7, "yx": -8}
 
 jonesnum2str = {-5: 'x', -6: 'y'}
 jonesstr2num = {'x': -5, 'y': -6}
+
 
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning
@@ -168,8 +170,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # get pols
     pols = np.unique(map(lambda k: k[-1], data.keys()))
     Npols = len(pols)
-    pol2int = {'xx':-5, 'yy':-6, 'xy':-7, 'yx':-8}
-    polarization_array = np.array(map(lambda p: pol2int[p], pols))
+    polarization_array = np.array(map(lambda p: polstr2num[p], pols))
 
     # get times
     if time_array is None:
@@ -243,7 +244,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # get zenith location: can only write drift phase
     phase_type = 'drift'
     zenith_dec_degrees = np.ones_like(baseline_array) * dec
-    zenith_ra_degrees = JD2RA(time_array, longitude)
+    zenith_ra_degrees = hc.utils.JD2RA(time_array, longitude)
     zenith_dec = zenith_dec_degrees * np.pi / 180
     zenith_ra = zenith_ra_degrees * np.pi / 180
 
@@ -278,6 +279,9 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
                 if verbose:
                     print("saving {}".format(fname))
                 uvd.write_miriad(fname, clobber=True)
+
+        else:
+            raise AttributeError("didn't recognize filetype: {}".format(filetype))
 
     if return_uvd:
         return uvd
@@ -541,10 +545,10 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
         # check output
         fname = os.path.join(outdir, fname)
         if os.path.exists(fname) and overwrite is False:
-            raise IOError("{} exists, not overwriting...".format(fname))
-        
-        print "saving {}".format(fname)
-        uvc.write_calfits(fname, clobber=True)
+            print("{} exists, not overwriting...".format(fname))
+        else:
+            print "saving {}".format(fname)
+            uvc.write_calfits(fname, clobber=True)
 
     # return object
     if return_uvc:

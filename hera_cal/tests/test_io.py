@@ -9,6 +9,7 @@ from hera_cal.datacontainer import DataContainer
 import hera_cal.io as io
 import os
 import shutil
+import copy
 
 class Test_Visibility_IO(unittest.TestCase):
 
@@ -129,9 +130,34 @@ class Test_Visibility_IO(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458044.41632.xx.HH.uvXRAA"))
         data, flgs, ap, a, f, t, l, p = io.load_vis(uvd, return_meta=True)
-        
+        nsample = copy.deepcopy(data)
+        for k in nsample.keys():
+            nsample[k] = np.ones_like(nsample[k], np.float)
 
-    
+        # test basic execution
+        uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True)
+        uvd2 = UVData()
+        uvd2.read_miriad('ex.uv')
+        self.assertTrue(os.path.exists('ex.uv'))
+        self.assertEqual(uvd.data_array.shape, (1680, 1, 64, 1))
+        self.assertEqual(uvd2.data_array.shape, (1680, 1, 64, 1))
+        self.assertAlmostEqual(data[(24, 25, 'xx')][30, 32], uvd.get_data(24 ,25, 'xx')[30, 32])
+        self.assertAlmostEqual(data[(24, 25, 'xx')][30, 32], uvd2.get_data(24 ,25, 'xx')[30, 32])
+
+        # test with nsample and flags
+        uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, return_uvd=True, overwrite=True, verbose=True)
+        self.assertEqual(uvd.nsample_array.shape, (1680, 1, 64, 1))
+        self.assertEqual(uvd.flag_array.shape, (1680, 1, 64, 1))
+        self.assertAlmostEqual(nsample[(24, 25, 'xx')][30, 32], uvd.get_nsamples(24 ,25, 'xx')[30, 32])
+        self.assertAlmostEqual(flgs[(24, 25, 'xx')][30, 32], uvd.get_flags(24 ,25, 'xx')[30, 32])
+
+        # test exceptions
+        self.assertRaises(AttributeError, io.write_vis, "ex.uv", data, l, f, ap)
+        self.assertRaises(AttributeError, io.write_vis, "ex.uv", data, l, f, ap, start_jd=2458044, filetype='foo')
+        if os.path.exists('ex.uv'):
+            shutil.rmtree('ex.uv')
+
+
     def test_update_vis(self):
         # load in cal
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -262,8 +288,6 @@ class Test_Calibration_IO(unittest.TestCase):
             os.remove('ex.calfits')
         # test execution with different parameters
         uvc = io.write_cal("ex.calfits", gains, freqs, times, overwrite=True)
-        # test exception
-        self.assertRaises(IOError, io.write_cal, "ex.calfits", gains, freqs, times)
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
 
