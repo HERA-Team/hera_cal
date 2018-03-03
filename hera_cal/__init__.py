@@ -8,5 +8,6 @@ import abscal
 import io
 import delay_filter
 import lstbin
+import smooth_cal
 
 __version__ = version.version

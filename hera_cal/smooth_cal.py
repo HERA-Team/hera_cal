@@ -131,11 +131,12 @@ def time_filter(gains, wgts, times, filter_scale = 2.0, nMirrors = 0):
     '''
     
     padded_gains, padded_wgts = deepcopy(gains), deepcopy(wgts)
-    for n in range(nMirrors):
+    for n in range(nMirrors+1):
         nInt, nFreq = padded_gains.shape
         kernel = time_kernel(nInt, np.median(np.diff(times))*24*60*60, filter_scale=filter_scale)
-        padded_gains = np.vstack((np.flipud(padded_gains),gains,np.flipud(padded_gains)))
-        padded_wgts = np.vstack((np.flipud(padded_wgts),gains,np.flipud(padded_wgts)))
+        if n < nMirrors:
+            padded_gains = np.vstack((np.flipud(padded_gains),gains,np.flipud(padded_gains)))
+            padded_wgts = np.vstack((np.flipud(padded_wgts),gains,np.flipud(padded_wgts)))
 
     conv_gains = padded_gains * padded_wgts**2
     conv_weights = padded_wgts**2
@@ -181,7 +182,8 @@ class Calibration_Smoother():
             assert(self.has_prev_cal and self.has_prev_data) #should have both or it doesn't make sense
             assert(np.all(self.prev_freqs == self.freqs))
             assert(np.all(self.prev_data_freqs == self.freqs))
-            assert(np.all(self.prev_times == self.prev_data_times))
+            assert(len(self.prev_times) == len(self.prev_data_times))
+            #assert(np.all(self.prev_times == self.prev_data_times)) #TODO: revisit this
             for (ant,pol) in self.gains.keys():
                 assert((ant,pol) in self.prev_gains.keys()) #assert prev_gains has all the same keys
                 assert((ant, ant, pol+pol) in self.prev_data) #assert data has autocorrelations
@@ -190,7 +192,8 @@ class Calibration_Smoother():
             assert(self.has_next_cal and self.has_next_data) #should have both or it doesn't make sense
             assert(np.all(self.next_freqs == self.freqs))
             assert(np.all(self.next_data_freqs == self.freqs))
-            assert(np.all(self.next_times == self.next_data_times))
+            assert(len(self.next_times) == len(self.next_data_times))
+            #assert(np.all(self.next_times == self.next_data_times)) #TODO: revisit this
             for (ant,pol) in self.gains.keys():
                 assert((ant,pol) in self.next_gains.keys()) #assert next_gains has all the same keys
                 assert((ant, ant, pol+pol) in self.next_data) #assert data has autocorrelations
@@ -207,7 +210,7 @@ class Calibration_Smoother():
                 self.prev_wgts[antpol] = build_weights(self.prev_quals[antpol], self.prev_data[auto_key], 
                                                        np.logical_or(self.prev_flags[antpol], self.prev_data_ant_flags[antpol]))
             if self.has_next_cal:
-                self.prev_wgts[antpol] = build_weights(self.next_quals[antpol], self.next_data[auto_key], 
+                self.next_wgts[antpol] = build_weights(self.next_quals[antpol], self.next_data[auto_key], 
                                                        np.logical_or(self.next_flags[antpol], self.next_data_ant_flags[antpol]))
         self.cal_flags = {antpol: wgts == 0.0 for antpol, wgts in self.wgts.items()}
 
@@ -262,10 +265,10 @@ class Calibration_Smoother():
         '''
         assert(isinstance(data, (str, UVData)))
         self.data_filetype = filetype
-        self.data, self.data_flags, _, _, self.data_freqs, self.data_times, _, self.data_pols = io.load_vis(data, return_meta=True, filetype=filetype)
+        self.data, data_flags, _, _, self.data_freqs, self.data_times, _, self.data_pols = io.load_vis(data, return_meta=True, filetype=filetype)
         #TODO: speed this up by only loading the autocorrelations and the flags
         self.data = drop_cross_vis(self.data)
-        self.data_ant_flags = synthesize_ant_flags(self.data_flags)
+        self.data_ant_flags = synthesize_ant_flags(data_flags)
         self.has_data = True
 
         if prev_data is not None:
