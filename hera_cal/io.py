@@ -4,16 +4,19 @@ from pyuvdata import utils as uvutils
 from collections import OrderedDict as odict
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
-import hera_cal as hc
+from hera_cal import utils
 import operator
 import os
+from hera_cal.abscal import echo
+import argparse
 
 
 polnum2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
 polstr2num = {"xx": -5, "yy": -6 ,"xy": -7, "yx": -8}
 
-jonesnum2str = {-5: 'x', -6: 'y'}
-jonesstr2num = {'x': -5, 'y': -6}
+
+jonesnum2str = {-5: 'jxx', -6: 'jyy', -7: 'jxy', -8: 'jyx'}
+jonesstr2num = {'jxx': -5, 'jyy': -6, 'jxy': -7, 'jyx': -8}
 
 
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
@@ -176,7 +179,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = hc.utils.LST2JD(lst_array, start_jd, longitude=longitude)
+        time_array = utils.LST2JD(lst_array, start_jd, longitude=longitude)
     Ntimes = len(time_array)
     integration_time = np.median(np.diff(time_array)) * 24 * 3600.
 
@@ -244,7 +247,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # get zenith location: can only write drift phase
     phase_type = 'drift'
     zenith_dec_degrees = np.ones_like(baseline_array) * dec
-    zenith_ra_degrees = hc.utils.JD2RA(time_array, longitude)
+    zenith_ra_degrees = utils.JD2RA(time_array, longitude)
     zenith_dec = zenith_dec_degrees * np.pi / 180
     zenith_ra = zenith_ra_degrees * np.pi / 180
 
@@ -408,7 +411,7 @@ def load_cal(input_cal, return_meta=False):
     else:
         raise TypeError('Input must be a UVCal object, a string, or a list of either.')
 
-    #load gains, flags, and quals into dictionaries
+    # load gains, flags, and quals into dictionaries
     gains, quals, flags = odict(), odict(), odict()
     for i, ant in enumerate(cal.ant_array):
         for ip, pol in enumerate(cal.jones_array):
@@ -462,10 +465,6 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
         if return_uvc: returns UVCal object
         else: returns None
     '''
-    # helpful dictionaries for antenna polarization of gains
-    str2pol = {'x': -5, 'y': -6}
-    pol2str = {-5: 'x', -6: 'y'}
-
     # get antenna info
     antenna_numbers = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
     antenna_names = np.array(map(lambda a: "ant{}".format(a), antenna_numbers))
@@ -475,7 +474,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
 
     # get polarization info
     pol_array = np.array(sorted(set(map(lambda k: k[1].lower(), gains.keys()))))
-    jones_array = np.array(map(lambda p: str2pol[p], pol_array), np.int)
+    jones_array = np.array(map(lambda p: jonesstr2num[p], pol_array), np.int)
     Njones = len(jones_array)
 
     # get time info
@@ -618,4 +617,236 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     cal.write_calfits(outfilename, clobber=clobber)
 
 
+def apply_cal(uvfiles, apply_gain_files=None, unapply_gain_files=None, ext='C', filetype='miriad', outdir=None, 
+              overwrite=False, flag_missing=True, history=None, verbose=True):
+    """
+    Apply calibration gain solutions in *.calfits file to complex visibility data in uvfiles, and write
+    to file with extension.
+
+    Parameters:
+    -----------
+    uvfiles : type=list, path to visibility file, or list of paths to files
+
+    apply_gain_files : type=str, path to calibration gain solution *.calfits file(s) to apply to uvfile(s)
+
+    ext : type=str, file extension to input uvfile when writing to disk
+
+    filetype : type=str, uvfile filetype. options=['miriad']
+
+    outdir : type=str, output directory when writing outputfile, default is path to input file
+
+    overwrite : type=bool, if True, overwrite output files
+
+    flag_missing : type=bool, if True, flag antennas in uvfile if missing in *.calfits file
+
+    unapply_gain_files : type=list, path to gain solution file(s) to un-apply to uvfiles(s)
+    
+    history : type=str, history string to append to data history. If None, will append names of calfits files.
+
+    verbose : type=bool, if True, report feedback to stdout
+
+    Notes:
+    ------
+    The gain convention is taken from the first file in apply_gain_files, which if None, is then taken from
+    the first file in unapply_gain_files.
+    """
+    # check type of lists
+    if isinstance(uvfiles, str):
+        uvfiles = [uvfiles]
+    if apply_gain_files is not None and isinstance(apply_gain_files, str):
+        apply_gain_files = [apply_gain_files]
+    if unapply_gain_files is not None and isinstance(unapply_gain_files, str):
+        unapply_gain_files = [unapply_gain_files]
+
+    # check both apply_gain_files and unapply_gain_files
+    if apply_gain_files is None and unapply_gain_files is None:
+        raise ValueError("apply_gain_files and unapply_gain_files can't both be None")
+
+    # load apply_gain calfits file(s) and merge gains appropriately
+    if apply_gain_files is not None:
+        for i, gf in enumerate(apply_gain_files):
+            # load UVCal object
+            echo("reading {}".format(gf), type=1, verbose=verbose)
+            uvc = UVCal()
+            uvc.read_calfits(gf)
+            if i == 0:
+                gain_convention = uvc.gain_convention
+                gains, flags = load_cal(uvc)
+            else:
+                gc = 'multiply'
+                if uvc.gain_convention != gain_convention: gc = 'divide'
+                g, f = load_cal(uvc)
+                gains, flags = utils.merge_gains([gains, g], flags=[flags, f], gain_convention=gc)
+
+    # load unapply_gain calfits file(s) and merge gains appropriately
+    if unapply_gain_files is not None:
+        for i, gf in enumerate(unapply_gain_files):
+            # load UVCal object
+            echo("reading {}".format(gf), type=1, verbose=verbose)
+            uvc = UVCal()
+            uvc.read_calfits(gf)
+            if i == 0:
+                if uvc.gain_convention is 'multiply': unapply_gain_convention = 'divide'
+                elif uvc.gain_convention is 'divide': unapply_gain_convention = 'multiply'
+                unapply_gains, unapply_flags = load_cal(uvc)
+            else:
+                gc = 'multiply'
+                if uvc.gain_convention != unapply_gain_convention: gc = 'divide'
+                ug, uf = load_cal(uvc)
+                unapply_gains, unapply_flags = utils.merge_gains([unapply_gains, ug], flags=[unapply_flags, uf], gain_convention=gc)
+
+        # merge with gains if necessary
+        if apply_gain_files is not None:
+            gains, flags = utils.merge_gains([gains, unapply_gains], flags=[flags, unapply_flags], gain_convention='divide')
+        else:
+            gains = unapply_gains
+            flags = unapply_flags
+            gain_convention = unapply_gain_convention
+
+    # iterate over data files
+    for i, uvf in enumerate(uvfiles):
+        # get outdir
+        if outdir is None:
+            outpath = os.path.dirname(uvf)
+        else:
+            outpath = outdir
+
+        # construct fname and check output
+        fname = os.path.join(outpath, os.path.basename(uvf)) + ext
+        if os.path.exists(fname) and overwrite is False:
+            echo("{} exists, not overwriting...".format(fname), type=1, verbose=verbose)
+            continue
+
+        # load data
+        echo("reading {}".format(uvf), type=1, verbose=verbose)
+        uvd = UVData()
+
+        # read uvfile
+        if filetype == 'miriad':
+            uvd.read_miriad(uvf)
+        else:
+            raise AttributeError("didn't recognize filetype {}".format(filetype))
+
+        # ensure drift-scan
+        if uvd.phase_type != 'drift':
+            uvd.unphase_to_drift()
+
+        # load data into dictionary
+        data, data_flags = load_vis(uvd)
+        data_pols = map(lambda p: polnum2str[p], uvd.polarization_array)
+
+        # apply gains
+        new_data, new_data_flags = utils.apply_gains(gains, data, gain_flags=flags, data_flags=data_flags,
+                                                     flag_missing=flag_missing, gain_convention=gain_convention)
+
+        # insert into uvdata object
+        for k in new_data.keys():
+            indices = uvd.antpair2ind(*k[:2])
+            p = data_pols.index(k[2])
+            uvd.data_array[indices, 0, :, p] = new_data[k]
+            uvd.flag_array[indices, 0, :, p] = new_data_flags[k]
+
+        # append history
+        if history is None:
+            history = ''
+            if apply_gain_files is not None:
+                for gf in apply_gain_files:
+                    history += " : applied {} :".format(os.path.basename(gf))
+            if unapply_gain_files is not None:
+                for gf in unapply_gain_files:
+                    history += " : un-applied {} :".format(os.path.basename(gf))
+
+        uvd.history += history
+
+        # write to file
+        if filetype == 'miriad':
+            echo("writing {}".format(fname), type=0, verbose=verbose)
+            uvd.write_miriad(fname, clobber=True)
+
+
+def apply_cal_arg_parser():
+    """
+    argparser for apply_cal() function.
+    """
+    a = argparse.ArgumentParser(description="Apply (or un-apply) *.calfits file(s) to visibility file(s).")
+    a.add_argument("--uvfiles", type=str, nargs='*', help="space-delimited paths to visibility file(s).")
+    a.add_argument("--apply_gains", default=None, type=str, nargs='*', help="space-delimited path to *.calfits file(s) to apply on uvfiles.")
+    a.add_argument("--unapply_gains", default=None, type=str, nargs='*', help="space-delimited path to *.calfits file(s) to unapply on uvfiles.")
+    a.add_argument("--ext", type=str, default="C", help="filename extension to uvfile when writing out data.")
+    a.add_argument("--outdir", type=str, default=None, help="output directory to write data, default is path to uvfile")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--noflag_missing", default=False, action='store_true', help="don't flag antennas in uvfile that are missing in *.calfits solution.")
+    a.add_argument("--silence", default=False, action='store_true', help="silence output to stdout")
+    return a
+
+
+def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
+    """
+    multiply together multiple calfits gain solutions (overlapping in time and frequency)
+
+    Parameters:
+    -----------
+    files : type=list, dtype=str, list of files to multiply together
+
+    fname : type=str, output filename
+
+    outdir : type=str, path to output directory
+
+    overwrite : type=bool, overwrite output file
+
+    broadcast_flags : type=bool, if True, take logical AND of flags across all calfits, else
+        take logical OR of flags across all calfits
+    """
+    # get io params
+    if outdir is None:
+        outdir = "./"
+
+    output_fname = os.path.join(outdir, fname)
+    if os.path.exists(fname) and overwrite is False:
+        raise IOError("{} exists, not overwriting".format(output_fname))
+
+    # iterate over files
+    for i, f in enumerate(files):
+        if i == 0:
+            echo("...loading {}".format(f), verbose=verbose)
+            uvc = UVCal()
+            uvc.read_calfits(f)
+
+            # set flagged data to unity
+            uvc.gain_array[uvc.flag_array] /= uvc.gain_array[uvc.flag_array]
+
+        else:
+            uvc2 = UVCal()
+            uvc2.read_calfits(f)
+
+            # set flagged data to unity
+            gain_array = uvc2.gain_array
+            gain_array[uvc2.flag_array] /= gain_array[uvc2.flag_array]
+
+            # multiply gain solutions in
+            uvc.gain_array *= uvc2.gain_array
+
+            # pass flags
+            if broadcast_flags:
+                uvc.flag_array += uvc2.flag_array
+            else:
+                uvc.flag_array *= uvc2.flag_array
+
+    # write to file
+    echo("...saving {}".format(output_fname), verbose=verbose)
+    uvc.write_calfits(output_fname, clobber=True)
+
+
+def combine_calfits_arg_parser():
+    """
+    argparser for combine_calfits() function.
+    """
+    a = argparse.ArgumentParser(description="Multiply together gains from multiple *.calfits files.")
+    a.add_argument("files", type=str, nargs='*', help="list of calfits files to combine.")
+    a.add_argument("--fname", type=str, help="output calfits filename.", required=True)
+    a.add_argument("--outdir", default=None, type=str, help="path to output directory")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--no_broadcast", default=False, action='store_true', help="don't broadcast flags from each input calfits file")
+    a.add_argument("--silence", action='store_true', default=False, help="stop feedback to stdout.")
+    return a
 

@@ -10,6 +10,8 @@ import hera_cal.io as io
 import os
 import shutil
 import copy
+import glob
+
 
 class Test_Visibility_IO(unittest.TestCase):
 
@@ -157,7 +159,6 @@ class Test_Visibility_IO(unittest.TestCase):
         if os.path.exists('ex.uv'):
             shutil.rmtree('ex.uv')
 
-
     def test_update_vis(self):
         # load in cal
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -210,6 +211,38 @@ class Test_Visibility_IO(unittest.TestCase):
         self.assertEqual(uvd2.telescope_name,'PAPER')
         shutil.rmtree(outname)
 
+    def test_apply_cal(self):
+        calfile = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits")
+        uvfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458043.*.xx.HH.uvXRAA")))
+
+        # read in files
+        uvc = UVCal()
+        uvc.read_calfits(calfile)
+        ants = uvc.antenna_numbers.tolist()
+        uvd = UVData()
+        uvd.read_miriad(uvfiles[0])
+
+        # basic execution
+        io.apply_cal(uvfiles[0], calfile, outdir='./', ext='C', overwrite=True, verbose=False)
+        # test file wrote
+        self.assertTrue(os.path.exists(os.path.basename(uvfiles[0])+'C'))
+        # test value
+        uvd2 = UVData()
+        uvd2.read_miriad(os.path.basename(uvfiles[0])+'C')
+        d1 = uvd.get_data(52,53,'xx')[0,32]
+        d2 = uvd2.get_data(52,53,'xx')[0,32]
+        g1 = uvc.gain_array[ants.index(52), 0, 32, 0, 0]
+        g2 = uvc.gain_array[ants.index(53), 0, 32, 0, 0]
+        self.assertAlmostEqual(d1/d2, g1*np.conj(g2))
+        # test flag propagation
+        self.assertTrue(uvd2.get_flags(52,53,'xx')[0,33])
+
+        # test with multiple uvfiles
+        io.apply_cal(uvfiles[:2], calfile, outdir='./', ext='C', overwrite=True, verbose=False)
+
+        # test with missing flags and only one time integration (i.e. cal transfer operation)
+        calfile = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORAA.abs.calfits")
+        io.apply_cal(uvfiles[0], calfile, outdir='./', ext='C', overwrite=True, verbose=False)
 
 
 class Test_Calibration_IO(unittest.TestCase):
@@ -331,6 +364,34 @@ class Test_Calibration_IO(unittest.TestCase):
         self.assertTrue(pyuvdata.utils.check_histories(cal2.history, cal.history + 'hello world'))
         self.assertEqual(cal2.telescope_name,'MWA')
         os.remove(outname)
+
+    def test_combine_calfits():
+        test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
+        test_file2 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.dly.calfits')
+        # test basic execution
+        if os.path.exists('ex.calfits'):
+            os.remove('ex.calfits')
+        io.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=True)
+        # test it exists
+        nt.assert_true(os.path.exists('ex.calfits'))
+        # test antenna number
+        uvc = UVCal()
+        uvc.read_calfits('ex.calfits')
+        nt.assert_equal(len(uvc.antenna_numbers), 7)
+        # test time number
+        nt.assert_equal(uvc.Ntimes, 60)
+        # test gain value got properly multiplied
+        uvc_dly = UVCal()
+        uvc_dly.read_calfits(test_file1)
+        uvc_abs = UVCal()
+        uvc_abs.read_calfits(test_file2)
+        nt.assert_almost_equal(uvc_dly.gain_array[0,0,10,10,0] * uvc_abs.gain_array[0,0,10,10,0], uvc.gain_array[0,0,10,10,0])
+        if os.path.exists('ex.calfits'):
+            os.remove('ex.calfits')
+        io.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=False)
+        nt.assert_true(os.path.exists('ex.calfits'))
+        if os.path.exists('ex.calfits'):
+            os.remove('ex.calfits')
 
 
 
