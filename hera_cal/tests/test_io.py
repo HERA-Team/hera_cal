@@ -233,7 +233,7 @@ class Test_Visibility_IO(unittest.TestCase):
         d2 = uvd2.get_data(52,53,'xx')[0,32]
         g1 = uvc.gain_array[ants.index(52), 0, 32, 0, 0]
         g2 = uvc.gain_array[ants.index(53), 0, 32, 0, 0]
-        self.assertAlmostEqual(np.abs(d1/d2/(g1*np.conj(g2))), 1.0)
+        self.assertAlmostEqual(np.abs(d1/d2/(g1*np.conj(g2))), 1.0, delta=1e-5)
         # test flag propagation
         self.assertTrue(uvd2.get_flags(52,53,'xx')[0,33])
         shutil.rmtree(os.path.basename(uvfiles[0])+'C')
