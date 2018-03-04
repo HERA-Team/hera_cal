@@ -22,6 +22,7 @@ from scipy import spatial
 import linsolve
 import itertools
 import operator
+from hera_cal.utils import flatten
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
@@ -29,7 +30,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     calculate absolute (array-wide) gain amplitude scalar
     with a linear solver using the logarithmically linearized equation:
 
-    ln|V_ij,xy^data / V_ij,xy^model| = eta_x + eta_y
+    ln|V_ij,xy^data / V_ij,xy^model| = eta_jxx + eta_jyy
 
     where {i,j} index antenna numbers and {x,y} index polarizations
     of the i-th and j-th antennas respectively.
@@ -1224,11 +1225,6 @@ def echo(message, type=0, verbose=True):
             print('')
             print(message)
             print("-"*40)
-
-
-def flatten(l):
-    """ flatten a nested list """
-    return [item for sublist in l for item in sublist]
 
 
 class Baseline(object):

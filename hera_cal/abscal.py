@@ -7,7 +7,27 @@ data to a visibility model using
 linearizations of the (complex)
 antenna-based calibration equation:
 
-V_ij,xy^data = g_i_x * conj(g_j_y) * V_ij,xy^model.
+V_ij_data = G_i * V_ij_model * G_j^H
+
+for antenna i and j, where G_i is the 2x2 Jones gain matrix, and
+V_ij are 2x2 visibility matrices.
+
+A Jones gain matrix assumes the form
+
+      ( G_i_jxx    G_i_jxy )   ( -5     -7 )
+G_i = |                    | = |           |
+      ( G_i_jyx    G_i_jyy )   ( -8     -6 )
+
+where x and y represent the orthogonal linear polarizations of a cross-dipole feed, and 
+the second matrix is represented as Jones integers.
+
+A visibility matrix takes the form
+
+       ( V_xx   V_xy )   ( -5   -7 )
+V_ij = |             | = |         |
+       ( V_yx   V_yy )   ( -8   -6 )
+
+where xy are defined similarly as before.
 
 Complex-valued parameters are broken into amplitudes and phases as:
 
