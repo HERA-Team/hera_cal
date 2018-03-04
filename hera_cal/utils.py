@@ -9,6 +9,221 @@ from pyuvdata import UVCal, UVData
 import os
 import hera_cal
 import copy
+import operator
+from collections import OrderedDict as odict
+from hera_cal.datacontainer import DataContainer
+
+
+def merge_gains(gains, flags=None, gain_convention='multiply'):
+    """
+    Merge multiple gain dictionaries together. Will merge only shared keys.
+
+    Parameters:
+    -----------
+    gains : type=list, series of gain dictionaries with (ant, pol) keys
+            and complex ndarrays as values, conforming to hera_cal.io.load_cal() format.
+
+    flags : type=list, series of flag dictionary following gain dictionary format.
+
+    gain_convention : type=str, operation to perform on gains[0] dictionary by
+        all subsequent dictionaries in gains. options=['multiply', 'divide'].
+        For example, if gains = [g1, g2, g3], then:
+            if gain_convention == 'multiply': final_gain = g1 * g2 * g3
+            elif gain_convention == 'divide': final_gain = g1 / g2 / g3
+        For more complicated structures, consider tying together multiple merge_gains() calls.
+
+    Output: (meged_gains, merged_flags)
+    -------
+    merged_gains : type=dictionary, holds merged gain with same key-value
+                   structure as input gain dictionaries.
+
+    merged_flags : type=dictionary, holds merged flags with logical OR of all input flag dictionaries.
+    """
+    # get shared keys
+    keys = sorted(reduce(operator.and_, map(lambda g: set(g.keys()), gains)))
+
+    # get flags
+    if flags is None:
+        flags = []
+        for i, g in enumerate(gains):
+            f = copy.deepcopy(g)
+            for k in f.keys():
+                f[k] = np.zeros_like(f[k], np.bool)
+            flags.append(f)
+
+    # form output dicts
+    merged_gains = odict()
+    merged_flags = odict()
+
+    # iterate over keys
+    for i, k in enumerate(keys):
+        # merge gains
+        if gain_convention == 'multiply':
+            merged_gains[k] = gains[0][k] * reduce(operator.mul, map(lambda g: g[k], gains[1:]))
+        elif gain_convention == 'divide':
+            merged_gains[k] = gains[0][k] / reduce(operator.mul, map(lambda g: g[k], gains[1:]))
+        else:
+            raise ValueError("didnt recognize gain_convention = {}".format(gain_convention))
+
+        # merge flags
+        merged_flags[k] = reduce(operator.add, map(lambda g: g.get(k, True), flags))
+
+    return merged_gains, merged_flags
+
+
+def apply_gains(gains, data, gain_flags=None, data_flags=None, flag_missing=True, gain_convention='divide'):
+    """
+    Apply gain solution dictionary to data dictionary.
+
+    Parameters:
+    -----------
+    gains : type=dictionary, holds per-antenna complex gain solutions as 2D ndarrays
+        with [0] time axis and [1] frequency axis. keys are (ant, antpol) pair, with ant an integer value
+        and antpol a string in 'jxx' form, conforming to hera_cal.io.jonesnum2str standard. Time and freq
+        axes must match data in shape, unless the time axis has length 1, in which case it is broadcasted across
+        the data time axis. See hera_cal.io.load_cal()
+
+    data : type=DataContainer, holds complex visibility data as 2D ndarrays with [0] axis indexing time and
+        [1] axis indexing frequency. See hera_cal.io.load_vis()
+
+    gain_flags : type=dictionary, holds gain flags, with same key format as gains, but values are boolean
+        arrays with flagged data marked as True.
+
+    data_flags : type=DataContainer, holds data flags.
+
+    flag_missing : type=bool, if True, flag data if antenna pair is not found in gains.
+
+    Returns: (new_data, new_flags)
+    --------
+    new_data : type=DataContainer, holds updated visibility data after applying gains
+
+    new_flags : type=DataContainer, holds logical OR of input gains and data
+
+    Notes:
+    ------
+    Apply calibration solutions using the per-antenna calibration equation
+
+    V_ij_data = G_i * V_ij_model * G_j^H
+
+    where G_i and G_j are the 2x2 Jones gain matrices for antenna i and j, and ^H represents a conjugate-transpose.
+    Note if the gain_convention is 'multiply', one switches model with data in the above eqn.
+
+    A Jones gain matrix assumes the form
+
+          ( G_i_jxx    G_i_jxy )   ( -5     -7 )
+    G_i = |                    | = |           |
+          ( G_i_jyx    G_i_jyy )   ( -8     -6 )
+
+    where x and y represent the orthogonal linear polarizations of a cross-dipole feed, and 
+    the second matrix is represented as Jones integers.
+
+    A visibility matrix takes the form
+
+           ( V_xx   V_xy )   ( -5   -7 )
+    V_ij = |             | = |         |
+           ( V_yx   V_yy )   ( -8   -6 )
+    
+    where xy are defined similarly as before.
+    """
+    # get metadata
+    gain_ants = sorted(map(lambda k: k[0], gains.keys()))
+    Nants = len(gain_ants)
+    gain_pols = sorted(map(lambda k: k[1], gains.keys()))
+    data_bls = sorted(map(lambda k: k[:2], data.keys()))
+    data_pols = sorted(map(lambda k: k[2], data.keys()))
+    data_bls = sorted(data.bls())
+
+    gain_Ntimes = gains[gains.keys()[0]].shape[0]
+    gain_Nfreqs = gains[gains.keys()[0]].shape[1]
+    data_Ntimes = data[data.keys()[0]].shape[0]
+    data_Nfreqs = data[data.keys()[0]].shape[1]
+
+    # ensure Ntimes and Nfreqs match
+    if (gain_Ntimes != data_Ntimes) and gain_Ntimes != 1:
+        raise ValueError("gain_Ntimes != data_Ntimes")
+    if (gain_Nfreqs != data_Nfreqs):
+        raise ValueError("gain_Nfreqs != data_Nfreqs")
+
+    # create flags if not passed
+    if gain_flags is None:
+        gain_flags = odict(map(lambda k: (k, np.zeros_like(gains[k], np.bool)), gains.keys()))
+
+    # create diagonal Jones gain matrix for all antennas
+    G = np.repeat(np.eye(2, dtype=np.complex)[None], Nants * gain_Ntimes * gain_Nfreqs, axis=0)
+    G.resize(Nants, gain_Ntimes, gain_Nfreqs, 2, 2)
+
+    # create flag matrix, nans are flagged data
+    F = np.zeros_like(G, np.float)  
+
+    # define mapping between pol string and Jones matrix indices
+    jonesstr2indices = {'jxx':(0,0), 'jxy':(0,1), 'jyx':(1,0), 'jyy':(1,1)}
+    polstr2indices = {'xx':(0,0), 'xy':(0,1), 'yx':(1,0), 'yy':(1,1)}
+
+    # fill G with Jones terms
+    for k in gains.keys():
+        # get array indices
+        i = gain_ants.index(k[0])
+        l, m = jonesstr2indices[k[1]]
+
+        # fill gain and flag matrices
+        G[i, :, :, l, m] = gains[k]
+        F[i, :, :, l, m][gain_flags[k]] *= np.nan
+
+        # ensure flagged gains are 1.0
+        G[i, :, :, l, m][gain_flags[k]] = 1.0
+
+    if gain_convention == 'divide':
+        # invert
+        Ginv = np.linalg.inv(G)
+
+    elif gain_convention == 'multiply':
+        Ginv = G
+
+    # create new dictionaries
+    new_data = copy.deepcopy(data)
+    if data_flags is not None:
+        new_flags = copy.deepcopy(data_flags)
+    else:
+        new_flags = DataContainer(odict(map(lambda k: (k, np.zeros_like(data[k], np.bool)), data.keys())))
+
+    # iterate over baselines
+    for i, bl in enumerate(data_bls):
+        # check if antennas exist in calibration solution
+        if bl[0] not in gain_ants or bl[1] not in gain_ants:
+            if flag_missing:
+                # flag visibilities
+                for p in new_flags[bl].keys():
+                    new_flags[bl][p] += True
+            continue
+
+        # construct empty data visibility matrix
+        V = np.repeat(np.eye(2, dtype=np.complex), data_Ntimes * data_Nfreqs)
+        V.resize(data_Ntimes, data_Nfreqs, 2, 2)
+
+        # construct data flag matrix
+        VF = np.repeat(np.zeros((2,2), dtype=np.float), data_Ntimes * data_Nfreqs)
+        VF.resize(data_Ntimes, data_Nfreqs, 2, 2)
+
+        # Fill visibility and flag matrix. recall new_flags and new_data are copies of data and flags
+        for p in new_data[bl].keys():
+            l, m = polstr2indices[p]
+            V[:, :, l, m] = new_data[bl][p]
+            VF[:, :, l, m][new_flags[bl][p]] *= np.nan
+
+        # compute new visibility matrix & propagate flags
+        x = gain_ants.index(bl[0])
+        y = gain_ants.index(bl[1])
+        V_new = np.einsum("ijkl,ijlm,mnji->ijkn", Ginv[x], V, np.conj(Ginv[y]).T)
+        VF_new = np.einsum("ijkl,ijlm,mnji->ijkn", F[x], VF, F[y].T)
+        VF_new = np.isnan(VF_new)
+
+        # assign to new_data and new_flags
+        for p in new_data[bl].keys():
+            l, m = polstr2indices[p]
+            new_data[new_data.mk_key(bl, p)] = V_new[:, :, l, m].copy()
+            new_flags[new_flags.mk_key(bl, p)] = VF_new[:, :, l, m].copy()
+
+    return new_data, new_flags
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -308,64 +523,7 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
         return RA
     else:
         return RA[0]
-
-
-def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
-    """
-    multiply together multiple calfits gain solutions (overlapping in time and frequency)
-
-    Parameters:
-    -----------
-    files : type=list, dtype=str, list of files to multiply together
-
-    fname : type=str, path to output filename
-
-    outdir : type=str, path to output directory
-
-    overwrite : type=bool, overwrite output file
-
-    broadcast_flags : type=bool, if True, broadcast flags from each calfits to final solution
-    """
-    # get io params
-    if outdir is None:
-        outdir = "./"
-
-    output_fname = os.path.join(outdir, fname)
-    if os.path.exists(fname) and overwrite is False:
-        raise IOError("{} exists, not overwriting".format(output_fname))
-
-    # iterate over files
-    for i, f in enumerate(files):
-        if i == 0:
-            hera_cal.abscal_funcs.echo("...loading {}".format(f), verbose=verbose)
-            uvc = UVCal()
-            uvc.read_calfits(f)
-            f1 = copy.copy(f)
-
-            # set flagged data to unity
-            uvc.gain_array[uvc.flag_array] /= uvc.gain_array[uvc.flag_array]
-
-        else:
-            uvc2 = UVCal()
-            uvc2.read_calfits(f)
-
-            # set flagged data to unity
-            gain_array = uvc2.gain_array
-            gain_array[uvc2.flag_array] /= gain_array[uvc2.flag_array]
-
-            # multiply gain solutions in
-            uvc.gain_array *= uvc2.gain_array
-
-            # pass flags
-            if broadcast_flags:
-                uvc.flag_array += uvc2.flag_array
-            else:
-                uvc.flag_array = uvc.flag_array * uvc2.flag_array
-
-    # write to file
-    hera_cal.abscal_funcs.echo("...saving {}".format(output_fname), verbose=verbose)
-    uvc.write_calfits(output_fname, clobber=True)
-
+        
 
 def get_miriad_times(filepaths, add_int_buffer=False):
     """
@@ -437,5 +595,9 @@ def get_miriad_times(filepaths, add_int_buffer=False):
 
     return file_starts, file_stops, int_times
 
+
+def flatten(l):
+    """ flatten a nested list """
+    return [item for sublist in l for item in sublist]
 
 

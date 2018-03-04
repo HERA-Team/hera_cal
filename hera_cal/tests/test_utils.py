@@ -4,13 +4,14 @@ import sys
 import os
 import shutil
 from pyuvdata import UVData
-from hera_cal import utils, abscal, datacontainer
+from hera_cal import utils, abscal, datacontainer, io
 from hera_cal.calibrations import CAL_PATH
 from hera_cal.data import DATA_PATH
 from hera_cal import io
 from pyuvdata import UVCal
 import glob
 from collections import OrderedDict as odict
+import copy
 
 
 class TestAAFromCalfile(object):
@@ -104,34 +105,6 @@ def test_JD2RA():
     ra = utils.JD2RA(jd, epoch='J2000')
     nt.assert_almost_equal(ra[0], 225.37671446615548)
 
-def test_combine_calfits():
-    test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
-    test_file2 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.dly.calfits')
-    # test basic execution
-    if os.path.exists('ex.calfits'):
-        os.remove('ex.calfits')
-    utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=True)
-    # test it exists
-    nt.assert_true(os.path.exists('ex.calfits'))
-    # test antenna number
-    uvc = UVCal()
-    uvc.read_calfits('ex.calfits')
-    nt.assert_equal(len(uvc.antenna_numbers), 7)
-    # test time number
-    nt.assert_equal(uvc.Ntimes, 60)
-    # test gain value got properly multiplied
-    uvc_dly = UVCal()
-    uvc_dly.read_calfits(test_file1)
-    uvc_abs = UVCal()
-    uvc_abs.read_calfits(test_file2)
-    nt.assert_almost_equal(uvc_dly.gain_array[0,0,10,10,0] * uvc_abs.gain_array[0,0,10,10,0], uvc.gain_array[0,0,10,10,0])
-    if os.path.exists('ex.calfits'):
-        os.remove('ex.calfits')
-    utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=False)
-    nt.assert_true(os.path.exists('ex.calfits'))
-    if os.path.exists('ex.calfits'):
-        os.remove('ex.calfits')
-
 def test_get_miriad_times():
     filepaths = sorted(glob.glob(DATA_PATH+"/zen.2458042.*.xx.HH.uvXA"))
     # test execution
@@ -152,4 +125,53 @@ def test_get_miriad_times():
     nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
     # test if str
     starts, stops, ints = utils.get_miriad_times(filepaths[0])
+
+class Test_Gain(object):
+    def setUp(self):
+        calfile1 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits")
+        calfile2 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.dly.calfits")
+        calfile3 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORAA.abs.calfits")
+        uvfile1 = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.uvXRAA")
+        uvfile2 = os.path.join(DATA_PATH, "zen.2458043.40887.xx.HH.uvXRAA")
+
+        self.g1, self.f1 = io.load_cal(calfile1)
+        self.g2, self.f2 = io.load_cal(calfile2)
+        self.g3, self.f3 = io.load_cal(calfile3)
+        self.d1, self.df1 = io.load_vis(uvfile1)
+        self.d2, self.df2 = io.load_vis(uvfile2)
+
+    def test_merge_gains(self):
+        # test basic execution
+        outg, outf = utils.merge_gains([self.g1, self.g2], flags=[self.f1, self.f2], gain_convention='multiply')
+        nt.assert_almost_equal(outg[(24, 'jxx')][0,0], self.g1[(24,'jxx')][0,0]*self.g2[(24,'jxx')][0,0])
+        nt.assert_false(outf[(24, 'jxx')][0,32])
+        nt.assert_true(outf[(53, 'jxx')][0,33])
+
+        # test other gain convention
+        outg, outf = utils.merge_gains([self.g1, self.g2], gain_convention='divide')
+        nt.assert_almost_equal(outg[(24, 'jxx')][0,0], self.g1[(24,'jxx')][0,0]/self.g2[(24,'jxx')][0,0])
+
+        # test exceptions
+        nt.assert_raises(ValueError, utils.merge_gains, [self.g1, self.g2], gain_convention='foo')
+
+
+    def test_apply_gains(self):
+        # test basic execution
+        newd, newf = utils.apply_gains(self.g1, self.d1, gain_flags=self.f1, data_flags=self.df1)
+        nt.assert_almost_equal(newd[(24, 25, 'xx')][0,0], (self.d1[(24, 25, 'xx')] / (self.g1[(24, 'jxx')]*np.conj(self.g2[(25, 'jxx')])))[0,0])
+        nt.assert_false(newf[(52, 53, 'xx')][0, 32])
+        nt.assert_true(newf[(52, 53, 'xx')][0, 33])
+
+        # test flag missing and broadcasting across times
+        newd, newf = utils.apply_gains(self.g3, self.d1, gain_convention='multiply')
+        nt.assert_true(newf[(24,53,'xx')].min())
+
+        # test exceptions
+        g = copy.deepcopy(self.g1)
+        g[g.keys()[0]] = g[g.keys()[0]][:5, :]
+        nt.assert_raises(ValueError, utils.apply_gains, g, self.d1)
+        g = copy.deepcopy(self.g1)
+        g[g.keys()[0]] = g[g.keys()[0]][:, :5]
+        nt.assert_raises(ValueError, utils.apply_gains, g, self.d1)
+
 
