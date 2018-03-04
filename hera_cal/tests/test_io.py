@@ -223,7 +223,7 @@ class Test_Visibility_IO(unittest.TestCase):
         uvd.read_miriad(uvfiles[0])
 
         # basic execution
-        io.apply_cal(uvfiles[0], calfile, outdir='./', ext='C', overwrite=True, verbose=False)
+        io.apply_cal(uvfiles[0], apply_gain_files=calfile, outdir='./', ext='C', overwrite=True, verbose=False)
         # test file wrote
         self.assertTrue(os.path.exists(os.path.basename(uvfiles[0])+'C'))
         # test value
@@ -239,11 +239,25 @@ class Test_Visibility_IO(unittest.TestCase):
         shutil.rmtree(os.path.basename(uvfiles[0])+'C')
 
         # test with multiple uvfiles
-        io.apply_cal(uvfiles[:2], calfile, outdir='./', ext='C', overwrite=True, verbose=False)
+        io.apply_cal(uvfiles[:2], apply_gain_files=calfile, outdir='./', ext='C', overwrite=True, verbose=False)
         self.assertTrue(os.path.exists(os.path.basename(uvfiles[0])+'C'))
         self.assertTrue(os.path.exists(os.path.basename(uvfiles[1])+'C'))
         shutil.rmtree(os.path.basename(uvfiles[0])+'C')
         shutil.rmtree(os.path.basename(uvfiles[1])+'C')
+
+        # test unapply
+        io.apply_cal(uvfiles[:2], unapply_gain_files=calfile, outdir='./', ext='C', overwrite=True, verbose=False)
+        # test value
+        uvd2 = UVData()
+        uvd2.read_miriad(os.path.basename(uvfiles[0])+'C')
+        d1 = uvd.get_data(52,53,'xx')[0,32]
+        d2 = uvd2.get_data(52,53,'xx')[0,32]
+        g1 = uvc.gain_array[ants.index(52), 0, 32, 0, 0]
+        g2 = uvc.gain_array[ants.index(53), 0, 32, 0, 0]
+        self.assertAlmostEqual(np.abs(d1/d2*(g1*np.conj(g2))), 1.0, delta=1e-5)
+        # test flag propagation
+        self.assertTrue(uvd2.get_flags(52,53,'xx')[0,33])
+        shutil.rmtree(os.path.basename(uvfiles[0])+'C')
 
 
 class Test_Calibration_IO(unittest.TestCase):

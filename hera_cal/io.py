@@ -686,8 +686,10 @@ def apply_cal(uvfiles, apply_gain_files=None, unapply_gain_files=None, ext='C', 
             uvc = UVCal()
             uvc.read_calfits(gf)
             if i == 0:
-                if uvc.gain_convention is 'multiply': unapply_gain_convention = 'divide'
-                elif uvc.gain_convention is 'divide': unapply_gain_convention = 'multiply'
+                if uvc.gain_convention == 'multiply':
+                    unapply_gain_convention = 'divide'
+                elif uvc.gain_convention == 'divide':
+                    unapply_gain_convention = 'multiply'
                 unapply_gains, unapply_flags = load_cal(uvc)
             else:
                 gc = 'multiply'
