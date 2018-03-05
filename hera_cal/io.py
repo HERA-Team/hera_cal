@@ -423,7 +423,7 @@ def load_cal(input_cal, return_meta=False):
     #return quantities
     if return_meta:
         total_qual = cal.total_quality_array
-        ants = cal.antenna_numbers
+        ants = cal.ant_array
         freqs = np.unique(cal.freq_array)
         times = np.unique(cal.time_array)
         pols = [jonesnum2str[j] for j in cal.jones_array]
@@ -630,6 +630,8 @@ def apply_cal(uvfiles, apply_gain_files=None, unapply_gain_files=None, ext='C', 
 
     apply_gain_files : type=str, path to calibration gain solution *.calfits file(s) to apply to uvfile(s)
 
+    unapply_gain_files : type=list, path to gain solution file(s) to un-apply to uvfiles(s)
+
     ext : type=str, file extension to input uvfile when writing to disk
 
     filetype : type=str, uvfile filetype. options=['miriad']
@@ -640,16 +642,14 @@ def apply_cal(uvfiles, apply_gain_files=None, unapply_gain_files=None, ext='C', 
 
     flag_missing : type=bool, if True, flag antennas in uvfile if missing in *.calfits file
 
-    unapply_gain_files : type=list, path to gain solution file(s) to un-apply to uvfiles(s)
-    
     history : type=str, history string to append to data history. If None, will append names of calfits files.
 
     verbose : type=bool, if True, report feedback to stdout
 
     Notes:
     ------
-    The gain convention is taken from the first file in apply_gain_files, which if None, is then taken from
-    the first file in unapply_gain_files.
+    The gain convention of the final merged gains before application to data is taken from the first file 
+    in apply_gain_files which, if None, is then taken from the first file in unapply_gain_files.
     """
     # check type of lists
     if isinstance(uvfiles, str):
