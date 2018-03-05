@@ -601,3 +601,13 @@ def flatten(l):
     return [item for sublist in l for item in sublist]
 
 
+def echo(message, type=0, verbose=True):
+    if verbose:
+        if type == 0:
+            print(message)
+        elif type == 1:
+            print('')
+            print(message)
+            print("-"*40)
+
+

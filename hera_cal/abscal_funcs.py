@@ -22,7 +22,7 @@ from scipy import spatial
 import linsolve
 import itertools
 import operator
-from hera_cal.utils import flatten
+from hera_cal.utils import flatten, echo
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):

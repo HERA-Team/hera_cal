@@ -14,7 +14,8 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal import omni, utils, firstcal, cal_formats, redcal, abscal, io
+from hera_cal import omni, utils, firstcal, cal_formats, redcal, io, abscal
+from hera_cal.utils import echo
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
@@ -573,7 +574,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
-        abscal.echo("LST file {} / {}: {}".format(i+1, nfiles, datetime.datetime.now()), type=1, verbose=verbose)
+        echo("LST file {} / {}: {}".format(i+1, nfiles, datetime.datetime.now()), type=1, verbose=verbose)
 
         # create empty data_list and lst_list
         data_list = []
@@ -658,7 +659,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # skip if data_list is empty
         if len(data_list) == 0:
-            abscal.echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
+            echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
 
             # erase data references
             del file_list, data_list, flgs_list, lst_list
@@ -695,7 +696,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
-            abscal.echo("{} exists, not overwriting".format(bin_file), verbose=verbose)
+            echo("{} exists, not overwriting".format(bin_file), verbose=verbose)
             continue
 
         # write to file
@@ -734,7 +735,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         dlst_diff = dlsts - dlst
         dlst_diff[dlst_diff < 0] = 10
         new_dlst = dlsts[np.argmin(dlst_diff)]
-        abscal.echo("2pi is not equally divisible by input dlst ({:.16f}) at 1 part in 1e5.\n"
+        echo("2pi is not equally divisible by input dlst ({:.16f}) at 1 part in 1e5.\n"
                     "Using {:.16f} instead.".format(dlst, new_dlst), verbose=verbose)
         dlst = new_dlst
 

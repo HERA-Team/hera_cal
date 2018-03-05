@@ -7,7 +7,7 @@ from hera_cal.datacontainer import DataContainer
 from hera_cal import utils
 import operator
 import os
-from hera_cal.abscal import echo
+from hera_cal.utils import echo
 import argparse
 import copy
 
