@@ -9,6 +9,7 @@ import operator
 import os
 from hera_cal.abscal import echo
 import argparse
+import copy
 
 
 polnum2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
@@ -422,7 +423,7 @@ def load_cal(input_cal, return_meta=False):
     #return quantities
     if return_meta:
         total_qual = cal.total_quality_array
-        ants = cal.ant_array
+        ants = cal.antenna_numbers
         freqs = np.unique(cal.freq_array)
         times = np.unique(cal.time_array)
         pols = [jonesnum2str[j] for j in cal.jones_array]
@@ -466,11 +467,11 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
         else: returns None
     '''
     # get antenna info
-    antenna_numbers = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    ant_array = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    antenna_numbers = copy.copy(ant_array)
     antenna_names = np.array(map(lambda a: "ant{}".format(a), antenna_numbers))
-    Nants_data = len(antenna_numbers)
+    Nants_data = len(ant_array)
     Nants_telescope = len(antenna_numbers)
-    ant_array = np.arange(Nants_data)
 
     # get polarization info
     pol_array = np.array(sorted(set(map(lambda k: k[1].lower(), gains.keys()))))
@@ -496,7 +497,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
     flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.bool)
     quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.float)
     for i, p in enumerate(pol_array):
-        for j, a in enumerate(antenna_numbers):
+        for j, a in enumerate(ant_array):
             # ensure (a, p) is in gains
             if (a, p) in gains:
                 gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]

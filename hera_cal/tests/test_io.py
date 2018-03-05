@@ -13,6 +13,19 @@ import copy
 import glob
 
 
+class example(unittest.TestCase):
+    """
+    when running tests below by-hand in an interactive interpreter, 
+    instantiate this example class as
+
+    self = example()
+
+    and you can copy-paste self.assertion* calls interactively.
+    """
+    def runTest(self):
+        pass
+
+
 class Test_Visibility_IO(unittest.TestCase):
 
     def test_load_vis(self):
@@ -107,6 +120,7 @@ class Test_Visibility_IO(unittest.TestCase):
                     uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
                 np.testing.assert_equal(f[i, j][pol], np.resize(
                     uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
+
 
         d, f = io.load_vis([filename1, filename2],nested_dict=True)
         for i, j in d:
