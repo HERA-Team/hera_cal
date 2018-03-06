@@ -106,9 +106,9 @@ class Test_Delay_Filter(unittest.TestCase):
         dfil.write_filtered_data(outfilename, write_CLEAN_models=True, clobber=True)
         CLEAN_models, flags = io.load_vis(outfilename)
         for k in data.keys():
-            np.testing.assert_almost_equal(dfil.CLEAN_models[k], CLEAN_models[k])
-            np.testing.assert_almost_equal(dfil.filtered_residuals[k], filtered_residuals[k])
-            np.testing.assert_almost_equal(data[k], CLEAN_models[k] * np.logical_not(flags[k]) + filtered_residuals[k], 5)
+            np.testing.assert_array_almost_equal(dfil.CLEAN_models[k], CLEAN_models[k])
+            np.testing.assert_array_almost_equal(dfil.filtered_residuals[k], filtered_residuals[k])
+            np.testing.assert_array_almost_equal(data[k][~flags[k]], (CLEAN_models[k] + filtered_residuals[k])[~flags[k]], 5)
         shutil.rmtree(outfilename)
 
 
