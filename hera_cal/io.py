@@ -1,8 +1,10 @@
 import numpy as np
 from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
 from collections import OrderedDict as odict
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
+import hera_cal as hc
 import operator
 import os
 
@@ -12,6 +14,7 @@ polstr2num = {"xx": -5, "yy": -6 ,"xy": -7, "yx": -8}
 
 jonesnum2str = {-5: 'x', -6: 'y'}
 jonesstr2num = {'x': -5, 'y': -6}
+
 
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning
@@ -100,12 +103,188 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         return data, flags
 
 
-def write_vis(fname, data, flags, filetype='miriad', history=' ', overwrite=False, **kwargs):
-    '''TODO: migrate in hera_cal.utils.data_to_miriad and generalize to also write uvfits.'''
-    raise NotImplementedError('This function has not been implemented yet.')
+def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
+              filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
+              return_uvd=False, longitude=21.42830, start_jd=None, instrument="HERA", 
+              telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
+              telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395]),
+              **kwargs):
+    """
+    Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
+    documentation for more info on these attributes.
 
+    Parameters:
+    -----------
+    data : type=DataContainer, holds complex visibility data.
 
+    lst_array : type=float ndarray, contains unique LST time bins [radians] of data (center of integration).
 
+    freq_array : type=ndarray, contains frequency bins of data [Hz]. 
+
+    antpos : type=dictionary, antenna position dictionary. keys are antenna integers and values
+             are position vectors in meters in ENU (TOPO) frame.
+
+    time_array : type=ndarray, contains unique Julian Date time bins of data (center of integration).
+
+    flags : type=DataContainer, holds data flags, matching data in shape.
+
+    nsamples : type=DataContainer, holds number of points averaged into each bin in data (if applicable).
+
+    filetype : type=str, filetype to write-out, options=['miriad'].
+
+    write_file : type=boolean, write UVData to file if True.
+
+    outdir : type=str, output directory for output file.
+
+    overwrite : type=boolean, if True, overwrite output files.
+
+    verbose : type=boolean, if True, report feedback to stdout.
+
+    history : type=str, history string for UVData object
+
+    return_uvd : type=boolean, if True return UVData instance.
+
+    longitude : type=float, longitude of observer in degrees East
+
+    start_jd : type=float, starting integer Julian Date of time_array if time_array is None.
+
+    instrument : type=str, instrument name.
+
+    telescope_name : type=str, telescope name.
+
+    object_name : type=str, observing object name.
+
+    vis_unit : type=str, visibility units.
+
+    dec : type=float, declination of observer in degrees North.
+
+    telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
+
+    kwargs : type=dictionary, additional parameters to set in UVData object.
+    
+    Output:
+    -------
+    if return_uvd: return UVData instance
+    """
+    ## configure UVData parameters
+    # get pols
+    pols = np.unique(map(lambda k: k[-1], data.keys()))
+    Npols = len(pols)
+    polarization_array = np.array(map(lambda p: polstr2num[p], pols))
+
+    # get times
+    if time_array is None:
+        if start_jd is None:
+            raise AttributeError("if time_array is not fed, start_jd must be fed")
+        time_array = hc.utils.LST2JD(lst_array, start_jd, longitude=longitude)
+    Ntimes = len(time_array)
+    integration_time = np.median(np.diff(time_array)) * 24 * 3600.
+
+    # get freqs
+    Nfreqs = len(freq_array)
+    channel_width = np.median(np.diff(freq_array))
+    freq_array = freq_array.reshape(1, -1)
+    spw_array = np.array([0])
+    Nspws = 1
+
+    # get baselines keys
+    bls = sorted(data.bls())
+    Nbls = len(bls)
+    Nblts = Nbls * Ntimes
+
+    # reconfigure time_array and lst_array
+    time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
+    lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
+
+    # get data array
+    data_array = np.moveaxis(map(lambda p: map(lambda bl: data[str(p)][bl], bls), pols), 0, -1)
+
+    # resort time and baseline axes
+    data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
+    if nsamples is None:
+        nsample_array = np.ones_like(data_array, np.float)
+    else:
+        nsample_array = np.moveaxis(map(lambda p: map(lambda bl: nsamples[str(p)][bl], bls), pols), 0, -1)
+        nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
+
+    # flags
+    if flags is None:
+        flag_array = np.zeros_like(data_array, np.float).astype(np.bool)
+    else:
+        flag_array = np.moveaxis(map(lambda p: map(lambda bl: flags[str(p)][bl].astype(np.bool), bls), pols), 0, -1)
+        flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
+
+    # configure baselines
+    bls = np.repeat(np.array(bls), Ntimes, axis=0)
+
+    # get ant_1_array, ant_2_array
+    ant_1_array = bls[:,0]
+    ant_2_array = bls[:,1]
+
+    # get baseline array
+    baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
+
+    # get antennas in data
+    data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
+    Nants_data = len(data_ants)
+
+    # get telescope ants
+    antenna_numbers = np.unique(antpos.keys())
+    Nants_telescope = len(antenna_numbers)
+    antenna_names = map(lambda a: "HH{}".format(a), antenna_numbers)
+
+    # set uvw assuming drift phase i.e. phase center is zenith
+    uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
+
+    # get antenna positions in ITRF frame
+    tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
+    antenna_positions = np.array(map(lambda k: antpos[k], antenna_numbers))
+    antenna_positions = uvutils.ECEF_from_ENU(antenna_positions.T, *tel_lat_lon_alt).T - telescope_location
+
+    # get zenith location: can only write drift phase
+    phase_type = 'drift'
+    zenith_dec_degrees = np.ones_like(baseline_array) * dec
+    zenith_ra_degrees = hc.utils.JD2RA(time_array, longitude)
+    zenith_dec = zenith_dec_degrees * np.pi / 180
+    zenith_ra = zenith_ra_degrees * np.pi / 180
+
+    # instantiate object
+    uvd = UVData()
+
+    # assign parameters
+    params = ['Nants_data', 'Nants_telescope', 'Nbls', 'Nblts', 'Nfreqs', 'Npols', 'Nspws', 'Ntimes',
+              'ant_1_array', 'ant_2_array', 'antenna_names', 'antenna_numbers', 'baseline_array',
+              'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'instrument',
+              'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
+              'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
+              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']   
+    local_params = locals()           
+
+    # overwrite paramters by kwargs
+    local_params.update(kwargs)
+
+    # set parameters in uvd
+    for p in params:
+        uvd.__setattr__(p, local_params[p])
+
+    # write to file
+    if write_file:
+        if filetype == 'miriad':
+            # check output
+            fname = os.path.join(outdir, fname)
+            if os.path.exists(fname) and overwrite is False:
+                if verbose:
+                    print("{} exists, not overwriting".format(fname))
+            else:
+                if verbose:
+                    print("saving {}".format(fname))
+                uvd.write_miriad(fname, clobber=True)
+
+        else:
+            raise AttributeError("didn't recognize filetype: {}".format(filetype))
+
+    if return_uvd:
+        return uvd
 
 
 def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
@@ -366,10 +545,10 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
         # check output
         fname = os.path.join(outdir, fname)
         if os.path.exists(fname) and overwrite is False:
-            raise IOError("{} exists, not overwriting...".format(fname))
-        
-        print "saving {}".format(fname)
-        uvc.write_calfits(fname, clobber=True)
+            print("{} exists, not overwriting...".format(fname))
+        else:
+            print "saving {}".format(fname)
+            uvc.write_calfits(fname, clobber=True)
 
     # return object
     if return_uvc:
@@ -379,14 +558,16 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
 def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **kwargs):
     '''Update UVCal object with gains, flags, quals, history, and/or other parameters
     Cannot modify the shape of gain arrays. More than one spectral window is not supported.
+
     Arguments:
         cal: UVCal object to be updated
         gains: Dictionary of complex calibration gains with shape=(Ntimes,Nfreqs)
             with keys in the (1,'x') format. Default (None) leaves unchanged.
         flags: Dictionary like gains but of flags. Default (None) leaves unchanged.
         quals: Dictionary like gains but of per-antenna quality. Default (None) leaves unchanged.
-        add_to_history: appends a string to the history of the UVCal object
-        kwargs: dictionary mapping updated attributs to their new values.
+        add_to_history: appends a string to the history of the output file
+        overwrite: if True, overwrites existing file at outfilename
+        kwargs: dictionary mapping updated attributs to their new values. 
             See pyuvdata.UVCal documentation for more info.
     '''
     # Set gains, flags, and/or quals
@@ -435,5 +616,6 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
+
 
 

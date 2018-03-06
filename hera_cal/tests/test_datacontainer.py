@@ -1,5 +1,5 @@
 import unittest
-from hera_cal import datacontainer
+from hera_cal import datacontainer, io
 import numpy as np
 from hera_cal.data import DATA_PATH
 import os
@@ -260,11 +260,11 @@ class TestDataContainer(unittest.TestCase):
 
     def test_adder(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        d, f = abscal.UVData2AbsCalDict(test_file)
+        d, f = io.load_vis(test_file, pop_autos=True)
         d2 = d + d
         self.assertAlmostEqual(d2[(24,25,'xx')][30, 30], d[(24,25,'xx')][30, 30]*2)
         # test exception
-        d2, f2 = abscal.UVData2AbsCalDict(test_file)
+        d2, f2 = io.load_vis(test_file, pop_autos=True)
         d2[d2.keys()[0]] = d2[d2.keys()[0]][:, :10]
         self.assertRaises(ValueError, d.__add__, d2)
         d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :]
@@ -272,12 +272,12 @@ class TestDataContainer(unittest.TestCase):
 
     def test_mul(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        d, f = abscal.UVData2AbsCalDict(test_file)
+        d, f = io.load_vis(test_file, pop_autos=True)
         f[(24,25,'xx')][:,0] = False
         f2 = f * f
         self.assertFalse(f2[(24,25,'xx')][0,0])
         # test exception
-        d2, f2 = abscal.UVData2AbsCalDict(test_file)
+        d2, f2 = io.load_vis(test_file, pop_autos=True)
         d2[d2.keys()[0]] = d2[d2.keys()[0]][:, :10]
         self.assertRaises(ValueError, d.__mul__, d2)
         d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :]
@@ -285,7 +285,7 @@ class TestDataContainer(unittest.TestCase):
 
     def test_concatenate(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        d, f = abscal.UVData2AbsCalDict(test_file)
+        d, f = io.load_vis(test_file, pop_autos=True)
         d2 = d.concatenate(d)
         self.assertEqual(d2[(24,25,'xx')].shape[0], d[(24,25,'xx')].shape[0]*2)
         d2 = d.concatenate(d, axis=1)
@@ -293,7 +293,7 @@ class TestDataContainer(unittest.TestCase):
         d2 = d.concatenate([d,d], axis=0)
         self.assertEqual(d2[(24,25,'xx')].shape[0], d[(24,25,'xx')].shape[0]*3)
         # test exceptions
-        d2, f2 = abscal.UVData2AbsCalDict(test_file)
+        d2, f2 = io.load_vis(test_file, pop_autos=True)
         d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :10]
         self.assertRaises(ValueError, d.concatenate, d2, axis=0)
         self.assertRaises(ValueError, d.concatenate, d2, axis=1)

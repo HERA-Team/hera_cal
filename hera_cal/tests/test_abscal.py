@@ -30,7 +30,11 @@ class Test_AbsCal_Funcs:
         self.time_array = np.unique(self.uvd.time_array)
 
         # configure data into dictionaries
-        data, wgts = hc.abscal.UVData2AbsCalDict(self.uvd, pop_autos=True, return_wgts=True)
+        data, flgs = hc.io.load_vis(self.uvd, pop_autos=True)
+        wgts = odict()
+        for k in flgs.keys():
+            wgts[k] = (~flgs[k]).astype(np.float)
+        wgts = hc.datacontainer.DataContainer(wgts)
 
         # configure baselines
         bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in data.keys()])
@@ -47,54 +51,6 @@ class Test_AbsCal_Funcs:
         self.bls = bls
         self.model = model
         self.wgts = wgts
-
-    def test_UVData2AbsCalDict(self):
-        # test filename
-        fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        data, flags = hc.abscal.UVData2AbsCalDict(fname, pop_autos=False)
-        nt.assert_equal(data[(24, 25, 'xx')].shape, (60, 64))
-        nt.assert_equal(flags[(24, 25, 'xx')].shape, (60, 64))
-        nt.assert_equal((24, 24, 'xx') in data, True)
-        data, flags = hc.abscal.UVData2AbsCalDict([fname])
-        nt.assert_equal(data[(24, 25, 'xx')].shape, (60, 64))
-
-        # test pop autos
-        data, flags = hc.abscal.UVData2AbsCalDict(fname, pop_autos=True)
-        nt.assert_equal((24, 24, 'xx') in data, False)
-
-        # test pol select
-        data, flags = hc.abscal.UVData2AbsCalDict(fname, pop_autos=False, pol_select=['xx'])
-        nt.assert_equal(data[(24, 25, 'xx')].shape, (60, 64))
-
-        # test uvd object
-        uvd = UVData()
-        uvd.read_miriad(fname)
-        data, flags = hc.abscal.UVData2AbsCalDict(uvd)
-        nt.assert_equal(data[(24, 25, 'xx')].shape, (60, 64))
-        data, flags = hc.abscal.UVData2AbsCalDict([uvd])
-        nt.assert_equal(data[(24, 25, 'xx')].shape, (60, 64))
-
-        # test multiple
-        fname2 = os.path.join(DATA_PATH, "zen.2458043.13298.xx.HH.uvORA")
-        data, flags = hc.abscal.UVData2AbsCalDict([fname, fname2])
-        nt.assert_equal(data[(24, 25, 'xx')].shape, (120, 64))
-        nt.assert_equal(flags[(24, 25, 'xx')].shape, (120, 64))
-
-        # test w/ meta
-        d, f, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict([fname, fname2], return_meta=True)
-        nt.assert_equal(len(ap[24]), 3)
-        nt.assert_equal(len(f), len(self.freq_array))
-
-        # test uvfits
-        fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
-        d, f = hc.abscal.UVData2AbsCalDict(fname, filetype='uvfits')
-        nt.assert_equal(d[(0,1,'xx')].shape, (60,64))
-
-        # test w/ meta pick_data_ants
-        d, f, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(fname, return_meta=True, pick_data_ants=False)
-        nt.assert_equal(len(ap[24]), 3)
-        nt.assert_equal(len(a), 47)
-        nt.assert_equal(len(f), len(self.freq_array))
 
     def test_data_key_to_array_axis(self):
         m, pk = hc.abscal.data_key_to_array_axis(self.model, 2)
@@ -166,16 +122,23 @@ class Test_AbsCal_Funcs:
 
     def test_Baseline(self):
         # test basic execution
-        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), self.data.keys())
-        bls_conj = map(lambda k: hc.abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), self.data.keys())
-        nt.assert_equal(bls[0], bls[0])
-        nt.assert_false(bls[0] == bls[1])
-        nt.assert_equal(bls[0] == bls_conj[0], 'conjugated')
+        keys = self.data.keys()
+        k1 = (24, 25, 'xx')    # 14.6 m E-W
+        i1 = keys.index(k1)
+        k2 = (24, 37 ,'xx')    # different
+        i2 = keys.index(k2)
+        k3 = (52, 53, 'xx')   # 14.6 m E-W
+        i3 = keys.index(k3)
+        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), keys)
+        bls_conj = map(lambda k: hc.abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), keys)
+        nt.assert_equal(bls[i1], bls[i1])
+        nt.assert_false(bls[i1] == bls[i2])
+        nt.assert_equal(bls[i1] == bls_conj[i1], 'conjugated')
         # test different yet redundant baselines still agree
-        nt.assert_equal(bls[-1], bls[-3])
+        nt.assert_equal(bls[i1], bls[i3])
         # test tolerance works as expected
-        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), self.data.keys())
-        nt.assert_not_equal(bls[-3], bls[-1])
+        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), keys)
+        nt.assert_not_equal(bls[i1], bls[i3])
 
     def test_match_red_baselines(self):
         model = copy.deepcopy(self.data)
@@ -212,7 +175,7 @@ class Test_AbsCal_Funcs:
 
     def test_avg_data_across_red_bls(self):
         # test basic execution 
-        data, flags, antpos, ants, freqs, times, lsts, pols = hc.abscal.UVData2AbsCalDict(self.data_file, return_meta=True)
+        data, flags, antpos, ants, freqs, times, lsts, pols = hc.io.load_vis(self.data_file, return_meta=True)
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, flags=self.wgts, tol=2.0)
         # test various kwargs
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, median=True)
@@ -248,12 +211,12 @@ class Test_AbsCal:
         self.AC = hc.abscal.AbsCal(self.data_fname, self.model_fname)
 
         # make custom gain keys
-        d, fl, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(self.data_fname, return_meta=True, pick_data_ants=False)
+        d, fl, ap, a, f, t, l, p = hc.io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
         self.freq_array = f
         self.antpos = ap
-        p = map(lambda p: self.AC.pol2str[p][0], p)
+        gain_pols = map(lambda p: p[0], p)
         self.ap = ap
-        self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k,p), a), p))
+        self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k,p), a), gain_pols))
         self.freqs = f
 
     def test_init(self):
@@ -264,7 +227,7 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.AC.antpos, freqs=self.AC.freqs)
         nt.assert_almost_equal(AC.bls[(24,25,'xx')][0], -14.607842046642745)
         # init with meta
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, pol_select=['xx'])
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         # test feeding file
         AC = hc.abscal.AbsCal(self.model_fname, self.data_fname)
 
@@ -573,7 +536,11 @@ class Test_AbsCal:
     def test_mock_data(self):
         # load into pyuvdata object
         data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        data, wgts, ap, a, f, t, l, p = hc.abscal.UVData2AbsCalDict(data_file, return_meta=True, return_wgts=True)
+        data, flgs, ap, a, f, t, l, p = hc.io.load_vis(data_file, return_meta=True)
+        wgts = odict()
+        for k in flgs.keys():
+            wgts[k] = (~flgs[k]).astype(np.float)
+        wgts = hc.datacontainer.DataContainer(wgts)
         # make mock data
         dly_slope = np.array([-1e-9, 2e-9, 0])
         model = odict()

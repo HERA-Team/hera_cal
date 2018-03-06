@@ -14,7 +14,7 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal import omni, utils, firstcal, cal_formats, redcal, abscal
+from hera_cal import omni, utils, firstcal, cal_formats, redcal, abscal, io
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
@@ -420,7 +420,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
     for i, f in enumerate(data_files):
         # load data
         (data, flgs, apos, ants, freqs, times, lsts,
-         pols) = abscal.UVData2AbsCalDict(f, return_meta=True, return_wgts=False)
+         pols) = io.load_vis(f, return_meta=True)
 
         # lst align
         interp_data, interp_flgs, interp_lsts = lst_align(data, lsts, flags=flgs, dlst=dlst, **align_kwargs)
@@ -434,7 +434,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
         if outdir is not None:
             miriad_kwargs['outdir'] = outdir
         miriad_kwargs['start_jd'] = np.floor(times[0])
-        utils.data_to_miriad(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, **miriad_kwargs)
+        io.write_vis(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, filetype='miriad', **miriad_kwargs)
 
 
 def lst_bin_arg_parser():
@@ -458,7 +458,6 @@ def lst_bin_arg_parser():
     a.add_argument("--lst_hi", default=None, type=float, help="enact an upper bound on LST grid")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{}.{}.{:7.5f}.uv", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
-    a.add_argument("--pol_select", nargs='*', type=str, default=None, help="polarization strings to use in data_files")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
     a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
@@ -472,7 +471,7 @@ def lst_bin_arg_parser():
 
 
 def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
-                  pol_select=None, outdir=None, overwrite=False, history=' ', lst_start=0,
+                  outdir=None, overwrite=False, history=' ', lst_start=0,
                   align=False, align_kwargs={}, bin_kwargs={}, atol=1e-6, miriad_kwargs={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
@@ -495,8 +494,6 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                formatting placeholders, first for polarization(s), second for type of file
                Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
 
-    pol_select : type=list, list of polarization strings Ex. ['xx'] to select in data_files
-
     outdir : type=str, output directory
 
     overwrite : type=bool, if True overwrite output files
@@ -510,7 +507,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     atol : type=float, absolute tolerance for LST bin float comparison
 
-    miriad_kwargs : type=dictionary, keyword arguments to pass to data_to_miriad()
+    miriad_kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
     -------
@@ -566,7 +563,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     miriad_kwargs['overwrite'] = overwrite
  
     # get frequency, time and antennas position information from the zeroth data file
-    d, fl, ap, a, f, t, l, p = abscal.UVData2AbsCalDict(data_files[0][0], return_meta=True, pick_data_ants=False)
+    d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
     freq_array = copy.copy(f)
     antpos = copy.deepcopy(ap)
     start_jd = np.floor(t)[0]
@@ -600,7 +597,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             for k in range(len(data_files[j])):
                 if f_select[j][k] == True and data_status[j][k] is None:
                     # open file
-                    d, fl, ap, a, f, t, l, p = abscal.UVData2AbsCalDict(data_files[j][k], return_meta=True, pol_select=pol_select)
+                    d, fl, ap, a, f, t, l, p = io.load_vis(data_files[j][k], return_meta=True)
 
                     # unwrap l
                     l[l < start_lst] += 2*np.pi
@@ -702,8 +699,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             continue
 
         # write to file
-        utils.data_to_miriad(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, **miriad_kwargs)
-        utils.data_to_miriad(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, **miriad_kwargs)
+        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **miriad_kwargs)
+        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, filetype='miriad', **miriad_kwargs)
 
         del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
         garbage_collector.collect()

@@ -14,7 +14,7 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal import omni, utils, firstcal, cal_formats, redcal
+from hera_cal import omni, utils, firstcal, cal_formats, redcal, io
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
@@ -802,107 +802,6 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def UVData2AbsCalDict(datanames, pol_select=None, pop_autos=True, return_meta=False, filetype='miriad',
-                      pick_data_ants=True, return_wgts=False):
-    """
-    turn a list of pyuvdata.UVData objects or a list of miriad or uvfits file paths
-    into the datacontainer dictionary form that AbsCal requires. This format is
-    keys as antennas-pair + polarization format, Ex. (1, 2, 'xx')
-    and values as 2D complex ndarrays with [0] axis indexing time and [1] axis frequency.
-
-    Parameters:
-    -----------
-    datanames : list of either strings of data file paths or list of UVData instances
-                to concatenate into a single dictionary
-
-    pol_select : list of polarization strings to keep
-
-    pop_autos : boolean, if True: remove autocorrelations
-
-    return_meta : boolean, if True: also return antenna and unique frequency and LST arrays
-
-    filetype : string, filetype of data if datanames is a string, options=['miriad', 'uvfits']
-                can be ingored if datanames contains UVData objects.
-
-    pick_data_ants : boolean, if True and return_meta=True, return only antennas in data
-
-    return_wgts : boolean, if True, return data flags as data weights [dtype=float]
-
-    Output:
-    -------
-    if return_meta is True:
-        (data, flags, antpos, ants, freqs, times, lsts, pols)
-    else:
-        (data, flags)
-
-    data : DataContainer containing baseline-pol complex visibility data
-    flags : DataContainer containing data flags, if return_wgts=True then this is a weight dict
-    antpos : dictionary containing antennas numbers as keys and position vectors
-    ants : ndarray containing unique antennas
-    freqs : ndarray containing frequency channels (Hz)
-    times : ndarray containing time stamps data in julian date
-    lst : ndarray containing time stamps in local sidereal time [radians]
-    pols : ndarray containing polarizations of data in string format ('xx', or 'yy')
-    """
-    # check datanames is not a list
-    if type(datanames) is not list and type(datanames) is not np.ndarray:
-        if type(datanames) is str:
-            # assume datanames is a file path
-            uvd = UVData()
-            suffix = os.path.splitext(datanames)[1]
-            if filetype == 'uvfits' or suffix == '.uvfits':
-                uvd.read_uvfits(datanames)
-                uvd.unphase_to_drift()
-            elif filetype == 'miriad':
-                uvd.read_miriad(datanames)
-        else:
-            # assume datanames is a UVData instance 
-            uvd = datanames
-    else:
-        # if datanames is a list, check data types of elements
-        if type(datanames[0]) is str:
-            # assume datanames contains file paths
-            uvd = UVData()
-            suffix = os.path.splitext(datanames[0])[1]
-            if filetype == 'uvfits' or suffix == '.uvfits':
-                uvd.read_uvfits(datanames)
-                uvd.unphase_to_drift()
-            elif filetype == 'miriad':
-                uvd.read_miriad(datanames)
-        else:
-            # assume datanames contains UVData instances
-            uvd = reduce(operator.add, datanames)
-
-    # load data
-    d, f = firstcal.UVData_to_dict([uvd])
-
-    # pop autos
-    if pop_autos:
-        for i, k in enumerate(d.keys()):
-            if k[0] == k[1]:
-                d.pop(k)
-                f.pop(k)
-
-    # turn into datacontainer
-    data, flags = DataContainer(d), DataContainer(f)
-
-    # turn into weights
-    if return_wgts:
-       flags = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
-
-    # get meta
-    if return_meta:
-        freqs = np.unique(uvd.freq_array)
-        times = np.unique(uvd.time_array)
-        lsts = np.unique(uvd.lst_array)
-        antpos, ants = uvd.get_ENU_antpos(center=False, pick_data_ants=pick_data_ants)
-        antpos = odict(zip(ants, antpos))
-        pols = uvd.polarization_array
-        return data, flags, antpos, ants, freqs, times, lsts, pols
-    else:
-        return data, flags
-
-
 def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1,
             solve_phase=True):
     """
@@ -1563,7 +1462,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         uvd.read_miriad(data_fname)
 
     # get data
-    data, flags = UVData2AbsCalDict(uvd)
+    data, flags = io.load_vis(uvd, pop_autos=True, return_meta=False, pick_data_ants=True)
 
     # get antpos and baselines
     antpos, ants = uvd.get_ENU_antpos()
