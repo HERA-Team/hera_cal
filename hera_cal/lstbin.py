@@ -766,7 +766,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
     dlst : type=ndarray or float, delta-LST to rephase by [radians]. If a float, shift all integrations
                 by dlst, elif an ndarray, shift each integration by different amount w/ shape=(Ntimes)
 
-    lat : type=float, latitude of observer in degrees South
+    lat : type=float, latitude of observer in degrees North
     """
     # get top2eq matrix
     top2eq = uvutils.top2eq_m(0, lat*np.pi/180)
@@ -780,7 +780,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
         zero = 0
 
     # get eq2top matrix
-    eq2top = uvutils.eq2top_m(dlst, lat*np.pi/180)
+    eq2top = uvutils.eq2top_m(-dlst, lat*np.pi/180)
 
     # get full rotation matrix
     rot = eq2top.dot(top2eq)
@@ -791,11 +791,11 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
         # get new s-hat vector
         s_prime = rot.dot(np.array([0.0, 0.0, 1.0]))
 
-        # get new baseline vector
-        bl_prime = rot.dot(bls[k])[:2]
+        # get baseline vector
+        bl = bls[k][:2]
 
-        # dot bls with difference vector: Zhang, Y. et al. 2018 (Eqn. 22)
-        tau = bl_prime.dot((s_prime - np.array([0., 0., 1.0]))[:2]) / (aipy.const.c / 100.0)
+        # dot bl with difference of pointing vectors to get delay: Zhang, Y. et al. 2018 (Eqn. 22)
+        tau = bl.dot((s_prime - np.array([0., 0., 1.0]))[:2]) / (aipy.const.c / 100.0)
 
         # reshape tau
         if type(tau) == np.ndarray:
