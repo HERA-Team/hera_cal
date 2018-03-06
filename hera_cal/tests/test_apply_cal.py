@@ -83,21 +83,29 @@ class Test_Update_Cal(unittest.TestCase):
         outname = os.path.join(DATA_PATH, "test_output/zen.2457698.40355.xx.HH.applied.uvcA")
         old_cal = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
+        flags_npz = os.path.join(DATA_PATH, "zen.2457698.40355.xx.HH.uvcA.fake_flags.npz")
         
-        data, data_flags = io.load_vis(fname)
+        uvd = UVData()
+        uvd.read_miriad(fname)
+        uvd.flag_array = np.logical_or(uvd.flag_array, np.load(flags_npz)['flag_array'])
+        data, data_flags = io.load_vis(uvd)
         new_gains, new_flags = io.load_cal(new_cal)
         uvc_old = UVCal()
         uvc_old.read_calfits(old_cal)
         uvc_old.gain_array *= (3.0 + 4.0j)
 
         ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention = 'divide', 
-                     filetype = 'miriad', clobber = True)
+                     flags_npz = flags_npz, filetype = 'miriad', clobber = True)
         new_data, new_flags = io.load_vis(outname)
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):
                 for j in range(new_data[k].shape[1]):
                     if not new_flags[k][i,j]:
                         self.assertAlmostEqual(new_data[k][i,j] / 25.0, data[k][i,j],4)
+                    if j < 300 or j > 923:
+                        self.assertTrue(new_flags[k][i,j])
+                    
+
         shutil.rmtree(outname)
 
 if __name__ == '__main__':
