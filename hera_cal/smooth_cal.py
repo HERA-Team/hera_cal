@@ -138,13 +138,13 @@ def time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 0):
     padded_gains, padded_wgts = deepcopy(gains), deepcopy(wgts)
     for n in range(nMirrors+1):
         nInt, nFreq = padded_gains.shape
-        kernel = time_kernel(nInt, np.median(np.diff(times))*24*60*60, filter_scale=filter_scale)
         if n < nMirrors:
             padded_gains = np.vstack((np.flipud(padded_gains),gains,np.flipud(padded_gains)))
             padded_wgts = np.vstack((np.flipud(padded_wgts),gains,np.flipud(padded_wgts)))
 
     conv_gains = padded_gains * padded_wgts
     conv_weights = padded_wgts
+    kernel = time_kernel(nInt, np.median(np.diff(times))*24*60*60, filter_scale=filter_scale)
     for i in range(nFreq):
         conv_gains[:,i] = scipy.signal.convolve(conv_gains[:,i], kernel, mode='same')
         conv_weights[:,i] = scipy.signal.convolve(conv_weights[:,i], kernel, mode='same')
@@ -188,6 +188,9 @@ class Calibration_Smoother():
             assert(np.all(self.prev_freqs == self.freqs))
             assert(np.all(self.prev_data_freqs == self.freqs))
             assert(len(self.prev_times) == len(self.prev_data_times))
+            #test time contiguity
+            assert(np.abs(np.median(np.diff(self.times)) - self.times[0] + self.prev_times[-1]) < 1e-6)
+            assert(np.abs(np.median(np.diff(self.times)) - np.median(np.diff(self.prev_times))) < 1e-6)
             #assert(np.all(self.prev_times == self.prev_data_times)) #TODO: revisit this
             for (ant,pol) in self.gains.keys():
                 assert((ant,pol) in self.prev_gains.keys()) #assert prev_gains has all the same keys
@@ -198,6 +201,9 @@ class Calibration_Smoother():
             assert(np.all(self.next_freqs == self.freqs))
             assert(np.all(self.next_data_freqs == self.freqs))
             assert(len(self.next_times) == len(self.next_data_times))
+            #test time contiguity
+            assert(np.abs(np.median(np.diff(self.times)) + self.times[-1] - self.next_times[0]) < 1e-6)
+            assert(np.abs(np.median(np.diff(self.times)) - np.median(np.diff(self.next_times))) < 1e-6)
             #assert(np.all(self.next_times == self.next_data_times)) #TODO: revisit this
             for (ant,pol) in self.gains.keys():
                 assert((ant,pol) in self.next_gains.keys()) #assert next_gains has all the same keys
@@ -234,6 +240,9 @@ class Calibration_Smoother():
         assert(isinstance(cal, (str, UVCal)))
         self.input_cal = cal
         self.gains, self.flags, self.quals, _, _, self.freqs, self.times, self.pols =  io.load_cal(cal, return_meta=True)
+        self.nFreq = len(self.freqs)
+        self.nInt =len(self.times)
+        self.tInt = np.median(np.diff(self.times))*24.0*60.0*60.0
         self.has_cal = True
         
         if prev_cal is not None:
@@ -343,7 +352,6 @@ class Calibration_Smoother():
             if self.has_next_cal:
                 g = np.vstack((g, self.next_gains[antpol]))
                 w = np.vstack((w, self.next_wgts[antpol]))
-            kernel = time_kernel(len(times), np.median(np.diff(times))*24*60*60, filter_scale=filter_scale)
             time_filtered = time_filter(g, w, times, filter_scale = filter_scale, nMirrors = nMirrors)
             # keep only the part corresponding to the gain of interest
             self.filtered_gains[antpol] = time_filtered[start_time_index:start_time_index + len(self.times), :]
