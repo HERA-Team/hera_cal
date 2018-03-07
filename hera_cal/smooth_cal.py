@@ -49,7 +49,11 @@ def synthesize_ant_flags(flags):
 
 
 def build_weights(unnorm_chisq_per_ant, autocorr, flags):
-    '''Builds waterfall of weights to use in smoothing using. 
+    '''Builds waterfall of linear multiplicative weights to use in smoothing. 
+    Our model treats flagged visibilities get 0 weight. The idea is that (chi^2)**-1 is a reasonable
+    proxy for an inverse variance weight, but our omnical chisq are unnormalized by the visibility noise
+    variance. To get around this, we use autocorreations as a noise proxy, which gets us weights that
+    are proportional to (chi^2)**-1.
 
     Arguments:
         unnorm_chisq_per_ant: numpy array of Omnical's chi^2 per antenna. Units of visibility^2.
@@ -59,7 +63,8 @@ def build_weights(unnorm_chisq_per_ant, autocorr, flags):
     Returns:
         wgts: numpy array weights normalized so that the non-zero entries average to 1.
     '''
-    wgts = (unnorm_chisq_per_ant/np.abs(autocorr)**2)**-.5
+    # weights ~ (unnorm_chi^2 / sigma^2)**-1
+    wgts = np.abs(autocorr)**2 / unnorm_chisq_per_ant
     # Anywhere with chisq == 0 or autocorr == 0 is also treated as flagged
     wgts[np.logical_not(np.isfinite(wgts))] = 0
     wgts[flags] = 0.0
@@ -74,7 +79,7 @@ def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none
     
     Arguments:
         gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter 
-        wgts: ndarray of shape=(Ntimes,Nfreqs) of real multiplicative weights
+        wgts: ndarray of shape=(Ntimes,Nfreqs) of real linear multiplicative weights
         freqs: ndarray of frequency channels in Hz
         filter_scale: frequency scale in MHz to use for the low-pass filter. filter_scale^-1 corresponds 
             to the half-width (i.e. the width of the positive part) of the region in fourier 
@@ -121,7 +126,7 @@ def time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 0):
     
     Arguments:
         gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter
-        wgts: ndarray of shape=(Ntimes,Nfreqs) of real multiplicative weights
+        wgts: ndarray of shape=(Ntimes,Nfreqs) of real linear multiplicative weights
         times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
         filter_scale: float in seconds of FWHM of Gaussian smoothing kernel in time
         nMirrors: Number of times to reflect gains and wgts (each one increases nTimes by 3)
@@ -138,8 +143,8 @@ def time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 0):
             padded_gains = np.vstack((np.flipud(padded_gains),gains,np.flipud(padded_gains)))
             padded_wgts = np.vstack((np.flipud(padded_wgts),gains,np.flipud(padded_wgts)))
 
-    conv_gains = padded_gains * padded_wgts**2
-    conv_weights = padded_wgts**2
+    conv_gains = padded_gains * padded_wgts
+    conv_weights = padded_wgts
     for i in range(nFreq):
         conv_gains[:,i] = scipy.signal.convolve(conv_gains[:,i], kernel, mode='same')
         conv_weights[:,i] = scipy.signal.convolve(conv_weights[:,i], kernel, mode='same')
@@ -357,7 +362,7 @@ class Calibration_Smoother():
             window: window function for filtering applied to the filtered axis. 
                 See aipy.dsp.gen_window for options.        
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt) 
-                Only works properly when all weights are all between 0 and 1. 
+                Only works properly when weights are normalized to be 1 on average.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
         '''
         if not self.time_filtered:
