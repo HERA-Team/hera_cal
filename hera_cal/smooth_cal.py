@@ -49,7 +49,7 @@ def synthesize_ant_flags(flags):
 
 
 def build_weights(unnorm_chisq_per_ant, autocorr, flags):
-    '''Builds waterfall of weights to use in smoothing using.
+    '''Builds waterfall of weights to use in smoothing using. 
 
     Arguments:
         unnorm_chisq_per_ant: numpy array of Omnical's chi^2 per antenna. Units of visibility^2.
@@ -96,25 +96,25 @@ def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none
     return filtered
 
 
-def time_kernel(nInt, tInt, filter_scale = 2.0):
+def time_kernel(nInt, tInt, filter_scale = 120.0):
     '''Build time averaging gaussian kernel.
     
     Arguments:
         nInt: number of integrations to be filtered
         tInt: length of integrations (seconds)
-        filter_scale: float in minutes of FWHM of Gaussian smoothing kernel in time
+        filter_scale: float in seconds of FWHM of Gaussian smoothing kernel in time
 
     Returns:
         kernel: numpy array of length 2 * nInt + 1
     '''
     kernel_times = np.append(-np.arange(0,nInt*tInt+tInt/2,tInt)[-1:0:-1], np.arange(0,nInt*tInt+tInt/2,tInt))
-    filter_std = filter_scale * 60.0 / (2*(2*np.log(2))**.5) # now in seconds
+    filter_std = filter_scale / (2*(2*np.log(2))**.5) # now in seconds
     kernel = np.exp(-kernel_times**2/2/(filter_std)**2)
     return kernel / np.sum(kernel)
 
 
 
-def time_filter(gains, wgts, times, filter_scale = 2.0, nMirrors = 0):
+def time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 0):
     '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
     the mirroring of gains and wgts and appending the mirrored gains and wgts to both ends, 
     ensuring temporal smoothness of the rolling average.
@@ -123,7 +123,7 @@ def time_filter(gains, wgts, times, filter_scale = 2.0, nMirrors = 0):
         gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter
         wgts: ndarray of shape=(Ntimes,Nfreqs) of real multiplicative weights
         times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
-        filter_scale: float in minutes of FWHM of Gaussian smoothing kernel in time
+        filter_scale: float in seconds of FWHM of Gaussian smoothing kernel in time
         nMirrors: Number of times to reflect gains and wgts (each one increases nTimes by 3)
 
     Returns:
@@ -151,7 +151,7 @@ def time_filter(gains, wgts, times, filter_scale = 2.0, nMirrors = 0):
 
 class Calibration_Smoother():
 
-    def __init__(self):
+    def __init__(self, binary_wgts = False):
         '''TODO: EDIT THIS Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.
         To use, run either self.load_data() or self.load_dicts(), then self.run_filter(). If data is loaded with a single 
         string path or a single UVData object, it can be written to a new file using self.write_filtered_data().
@@ -229,9 +229,6 @@ class Calibration_Smoother():
         assert(isinstance(cal, (str, UVCal)))
         self.input_cal = cal
         self.gains, self.flags, self.quals, _, _, self.freqs, self.times, self.pols =  io.load_cal(cal, return_meta=True)
-        self.nFreq = len(self.freqs)
-        self.nInt =len(self.times)
-        self.tInt = np.median(np.diff(self.times))*24.0*60.0*60.0
         self.has_cal = True
         
         if prev_cal is not None:
@@ -292,14 +289,14 @@ class Calibration_Smoother():
             self.build_weights()
 
 
-    def time_filter(self, filter_scale = 2.0, mirror_kernel_min_sigmas = 5):
+    def time_filter(self, filter_scale = 120.0, mirror_kernel_min_sigmas = 5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Uses both 
         prev_cal and next_cal calibration solutions to help avoid edge effects. Also allows
         the mirroring of gains and wgts and appending the mirrored gains and wgts to both ends, 
         ensuring temporal smoothness of the rolling average.
     
         Arguments:
-            filter_scale: float in minutes of FWHM of Gaussian smoothing kernel in time
+            filter_scale: float in seconds of FWHM of Gaussian smoothing kernel in time
             mirror_kernel_min_sigmas: Number of stdev into the Gaussian kernel one must go before edge
                 effects can be ignored. If after adding prev_gains and next_gains on to the end, we still
                 have edge effects, then the calibration solutions are iteratively mirrored in time.
@@ -325,7 +322,7 @@ class Calibration_Smoother():
             next_duration = 0
         total_duration = duration + prev_duration + next_duration
         # This is how much duration we need before the main gain and after to ensure no edge effects
-        needed_buffer = filter_scale * 60 / (2*(2*np.log(2))**.5) * mirror_kernel_min_sigmas #i n seconds
+        needed_buffer = filter_scale / (2*(2*np.log(2))**.5) * mirror_kernel_min_sigmas #i n seconds
         # Make sure that the gain array will be sufficiently padded on each eash 
         nMirrors = 0
         while (next_duration + nMirrors*total_duration < needed_buffer) and (prev_duration + nMirrors*total_duration < needed_buffer):
