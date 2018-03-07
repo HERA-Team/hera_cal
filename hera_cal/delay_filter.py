@@ -52,7 +52,7 @@ class Delay_Filter():
                 If [] (the default), all visibilities are filtered.
             weight_dict: dictionary or DataContainer with all the same keys as self.data. 
                 Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
-                of self.flags. uvtools.dspec.Delay_Filter will renormalize to compensate
+                of self.flags. uvtools.dspec.delay_filter will renormalize to compensate
             standoff: fixed additional delay beyond the horizon (in ns)
             horizon: proportionality constant for bl_len where 1 is the horizon (full light travel time)
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
