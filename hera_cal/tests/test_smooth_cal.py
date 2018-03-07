@@ -127,6 +127,7 @@ class Test_Calibration_Smoother(unittest.TestCase):
         g2 = deepcopy(self.sc.filtered_gains[36,'x'])
         self.assertFalse(np.all(g == g2))
         self.assertTrue(self.sc.freq_filtered)
+        self.assertEqual(g2.shape, g.shape)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -135,6 +136,7 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.assertFalse(np.all(g == g3))
         self.sc.has_next_cal, self.sc.has_prev_cal = False, False
         self.assertTrue(self.sc.time_filtered)
+        self.assertEqual(g3.shape, g.shape)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -143,6 +145,7 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.assertFalse(np.all(g3 == g4))
         self.sc.has_next_cal, self.sc.has_prev_cal = True, True
         self.assertTrue(self.sc.time_filtered)
+        self.assertEqual(g4.shape, g.shape)
 
         self.sc.filtered_gains[36,'x'] = g
         self.sc.time_filtered, self.sc.freq_filtered = False, False

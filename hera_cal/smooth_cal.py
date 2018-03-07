@@ -138,12 +138,13 @@ def time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 0):
     '''
     
     padded_gains, padded_wgts = deepcopy(gains), deepcopy(wgts)
-    for n in range(nMirrors+1):
-        nInt, nFreq = padded_gains.shape
-        if n < nMirrors:
-            padded_gains = np.vstack((np.flipud(padded_gains),gains,np.flipud(padded_gains)))
-            padded_wgts = np.vstack((np.flipud(padded_wgts),gains,np.flipud(padded_wgts)))
+    nBefore = 0
+    for n in range(nMirrors):
+        nBefore += (padded_gains[1:,:]).shape[0]
+        padded_gains = np.vstack((np.flipud(padded_gains[1:,:]),gains,np.flipud(padded_gains[:-1,:])))
+        padded_wgts = np.vstack((np.flipud(padded_wgts[1:,:]),gains,np.flipud(padded_wgts[:-1,:])))
 
+    nInt, nFreq = padded_gains.shape
     conv_gains = padded_gains * padded_wgts
     conv_weights = padded_wgts
     kernel = time_kernel(nInt, np.median(np.diff(times))*24*60*60, filter_scale=filter_scale)
@@ -152,7 +153,7 @@ def time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 0):
         conv_weights[:,i] = scipy.signal.convolve(conv_weights[:,i], kernel, mode='same')
     conv_gains /= conv_weights
     conv_gains[np.logical_not(np.isfinite(conv_gains))] = 0
-    return conv_gains[nMirrors*len(times):(nMirrors+1)*len(times), :]
+    return conv_gains[nBefore: nBefore+len(times), :]
 
 
 
@@ -339,18 +340,18 @@ class Calibration_Smoother():
         if self.has_prev_cal:
             start_time_index += len(self.prev_times)
             times = np.append(self.prev_times, times)
-            prev_duration = np.median(self.prev_times)*24*60*60 * len(self.prev_times)
+            prev_duration = np.median(self.prev_times)*24*60*60 * (len(self.prev_times) - 1) # -1 is for mirroring
         else:
             prev_duration = 0
         if self.has_next_cal:
             times = np.append(times, self.next_times)
-            next_duration = np.median(self.next_times)*24*60*60 * len(self.next_times)
+            next_duration = np.median(self.next_times)*24*60*60 * (len(self.next_times) - 1) # -1 is for mirroring
         else:
             next_duration = 0
         total_duration = duration + prev_duration + next_duration
         # This is how much duration we need before the main gain and after to ensure no edge effects
-        needed_buffer = filter_scale / (2*(2*np.log(2))**.5) * mirror_kernel_min_sigmas #i n seconds
-        # Make sure that the gain array will be sufficiently padded on each eash 
+        needed_buffer = filter_scale / (2*(2*np.log(2))**.5) * mirror_kernel_min_sigmas 
+        # Make sure that the gain array will be sufficiently padded on each side 
         nMirrors = 0
         while (next_duration + nMirrors*total_duration < needed_buffer) and (prev_duration + nMirrors*total_duration < needed_buffer):
             nMirrors += 1
@@ -394,7 +395,6 @@ class Calibration_Smoother():
             w = self.wgts[antpol]
             self.filtered_gains[antpol] = freq_filter(gains, w, self.freqs, filter_scale=filter_scale,
                                                       tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
-
         self.freq_filtered = True
 
 
