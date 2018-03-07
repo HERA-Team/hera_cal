@@ -112,9 +112,9 @@ class Test_lstbin:
         nt.assert_true(os.path.exists('./zen.xx.STD.0.20164.uv'))
         shutil.rmtree('./zen.xx.LST.0.20164.uv')
         shutil.rmtree('./zen.xx.STD.0.20164.uv')
-        # test lst_align
+        # test rephase
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, align=True)
+                                verbose=False, rephase=True)
         nt.assert_true(os.path.exists('./zen.xx.LST.0.20164.uv'))
         nt.assert_true(os.path.exists('./zen.xx.STD.0.20164.uv'))
         shutil.rmtree('./zen.xx.LST.0.20164.uv')
