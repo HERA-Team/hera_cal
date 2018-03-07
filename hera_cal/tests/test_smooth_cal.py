@@ -45,6 +45,10 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         np.testing.assert_array_equal(wgts[flags], 0.0)
         self.assertEqual(wgts[0,0], 0)
         self.assertAlmostEqual(np.mean(wgts[wgts > 0]), 1.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore") # intentionally ignore divide by zero error, since we put it in
+            wgts = sc.build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts=True)
+        np.testing.assert_array_equal(wgts[wgts > 0], 1.0)
         
     def test_time_kernel(self):
         kernel = sc.time_kernel(100, 10.0, filter_scale=1.0)

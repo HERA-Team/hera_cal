@@ -48,7 +48,7 @@ def synthesize_ant_flags(flags):
     return ant_flags
 
 
-def build_weights(unnorm_chisq_per_ant, autocorr, flags):
+def build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts = False):
     '''Builds waterfall of linear multiplicative weights to use in smoothing. 
     Our model treats flagged visibilities get 0 weight. The idea is that (chi^2)**-1 is a reasonable
     proxy for an inverse variance weight, but our omnical chisq are unnormalized by the visibility noise
@@ -59,6 +59,7 @@ def build_weights(unnorm_chisq_per_ant, autocorr, flags):
         unnorm_chisq_per_ant: numpy array of Omnical's chi^2 per antenna. Units of visibility^2.
         autocorr: numpy array of autocorrelations, taken as a noise level as a function of time and freq
         flags: numpy array of booleans. True means flagged and thus 0 weight.
+        binary_wgts: if True, set all weights that are not zero to 1.
     
     Returns:
         wgts: numpy array weights normalized so that the non-zero entries average to 1.
@@ -70,8 +71,9 @@ def build_weights(unnorm_chisq_per_ant, autocorr, flags):
     wgts[flags] = 0.0
     # Renormalize weights to make skip_wgt work properly
     wgts /= np.mean(wgts[wgts > 0])
+    if binary_wgts:
+        wgts[wgts > 0] = 1.0
     return wgts
-
 
 
 def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none', skip_wgt=0.1, maxiter=100):
@@ -157,12 +159,17 @@ def time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 0):
 class Calibration_Smoother():
 
     def __init__(self, binary_wgts = False):
-        '''TODO: EDIT THIS Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.
-        To use, run either self.load_data() or self.load_dicts(), then self.run_filter(). If data is loaded with a single 
-        string path or a single UVData object, it can be written to a new file using self.write_filtered_data().
+        '''Class for smoothing calibration solutions in time and frequency. Contains functions for 
+        loading calfits files and assocaited data (for flags and autocorrelations), performing the
+        smoothing, and then writing the results to disk.
+
+        Arguments:
+            binary_wgts: if True, set all weights that are not zero to 1. Otherwise, use renormalized
+                omnical chi^2 per antenna as a proxy for variance and perform inverse variance weighting.
         '''
         self.has_cal, self.has_prev_cal, self.has_next_cal = False, False, False
         self.has_data, self.has_prev_data, self.has_next_data = False, False, False
+        self.binary_wgts = binary_wgts
 
 
     def reset_filtering(self):
@@ -210,19 +217,25 @@ class Calibration_Smoother():
                 assert((ant, ant, pol+pol) in self.next_data) #assert data has autocorrelations
 
 
-    def build_weights(self):
-        '''Builds weights and stores then internally. Runs automatically after loading data and cals.'''
+    def build_weights(self, binary_wgts = False):
+        '''Builds weights and stores then internally. Runs automatically after loading data and cals.
+
+        Arguments:
+            binary_wgts: if True, set all weights that are not zero to 1.
+        '''
         self.wgts, self.prev_wgts, self.next_wgts = {}, {}, {}
         for antpol in self.gains.keys():
             auto_key = (antpol[0], antpol[0], antpol[1]+antpol[1])
-            self.wgts[antpol] = build_weights(self.quals[antpol], self.data[auto_key], 
-                                              np.logical_or(self.flags[antpol], self.data_ant_flags[antpol]))
+            self.wgts[antpol] = build_weights(self.quals[antpol], self.data[auto_key], np.logical_or(self.flags[antpol], 
+                                              self.data_ant_flags[antpol]), binary_wgts= self.binary_wgts)
             if self.has_prev_cal:
                 self.prev_wgts[antpol] = build_weights(self.prev_quals[antpol], self.prev_data[auto_key], 
-                                                       np.logical_or(self.prev_flags[antpol], self.prev_data_ant_flags[antpol]))
+                                                       np.logical_or(self.prev_flags[antpol], self.prev_data_ant_flags[antpol]), 
+                                                       binary_wgts= self.binary_wgts)
             if self.has_next_cal:
                 self.next_wgts[antpol] = build_weights(self.next_quals[antpol], self.next_data[auto_key], 
-                                                       np.logical_or(self.next_flags[antpol], self.next_data_ant_flags[antpol]))
+                                                       np.logical_or(self.next_flags[antpol], self.next_data_ant_flags[antpol]), 
+                                                       binary_wgts= self.binary_wgts)
         self.cal_flags = {antpol: wgts == 0.0 for antpol, wgts in self.wgts.items()}
 
 
@@ -257,7 +270,7 @@ class Calibration_Smoother():
 
         if self.has_data:
             self.check_consistency()
-            self.build_weights()
+            self.build_weights(binary_wgts = self.binary_wgts)
         self.reset_filtering()
 
 
@@ -352,6 +365,7 @@ class Calibration_Smoother():
             if self.has_next_cal:
                 g = np.vstack((g, self.next_gains[antpol]))
                 w = np.vstack((w, self.next_wgts[antpol]))
+            assert(g.shape[0] > 1) #time filtering doesn't make sense if nInt < 2
             time_filtered = time_filter(g, w, times, filter_scale = filter_scale, nMirrors = nMirrors)
             # keep only the part corresponding to the gain of interest
             self.filtered_gains[antpol] = time_filtered[start_time_index:start_time_index + len(self.times), :]
