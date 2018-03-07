@@ -29,7 +29,8 @@ import aipy
 
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
-            sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, verbose=True):
+            sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
+            freq_array=None, lat=-30.72152, verbose=True):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -40,39 +41,50 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     data_list : type=list, list of DataContainer dictionaries holding complex visibility data
 
     lst_list : type=list, list of ndarrays holding LST stamps of each data dictionary in data_list.
-               These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
+        These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
     
     flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
-                 in data_list. Flagged data do not contribute to the average of an LST bin.
+        in data_list. Flagged data do not contribute to the average of an LST bin.
 
     dlst : type=float, delta-LST spacing for lst_grid. If None, will use the delta-LST of the first
-           array in lst_list.
+        array in lst_list.
 
     lst_start : type=float, starting LST for making the lst_grid, extending from
-                [lst_start, lst_start+2pi). Default is lst_start = 0 radians.
+        [lst_start, lst_start+2pi). Default is lst_start = 0 radians.
 
     lst_low : type=float, lower bound on LST bin centers used for contructing LST grid
 
     lst_hi : type=float, upper bound on LST bin centers used for contructing LST grid
 
     flag_thresh : type=float, minimum fraction of flagged points in an LST bin needed to
-                  flag the entire bin.
+        flag the entire bin.
 
     atol : type=float, absolute tolerance for comparing LST bin center floats
 
     median : type=boolean, if True use median for LST binning. Warning: this is slower.
 
     truncate_empty : type=boolean, if True, truncate output time integrations that have no data
-                     in them.
+        in them.
 
     sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins on the
-               real and imag components separately. Warning: This is considerably slow.
+        real and imag components separately. Warning: This is considerably slow.
 
     sigma : type=float, input sigma threshold to use for sigma clipping algorithm.
 
     min_N : type=int, minimum number of points in an LST bin to perform sigma clipping
 
     return_no_avg : type=boolean, if True, return binned but un-averaged data and flags.
+
+    rephase : type=bool, if True, phase data to center of LST bin before binning.
+
+    antpos : type=dictionary, holds antenna position vectors in ENU frame in meters with 
+        antenna integers as keys and 3D ndarrays as values. See io.load_vis(). Needed for rephase.
+
+    freq_array : type=ndarray, 1D array of unique data frequencies channels in Hz. Needed for rephase.
+
+    lat : type=float, latitude of array in degrees North. Needed for rephase.
+
+    verbose : type=bool, if True report feedback to stdout
 
     Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
@@ -88,7 +100,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     data_count : dictionary containing the number count of data points averaged in each LST bin.
 
     if return_no_avg:
-        Output: (data_bin, flags_min)
+        Output: (lst_bins, data_bin, flags_min)
         data_bin : dictionary with (ant1,ant2,pol) as keys and ndarrays holding
             un-averaged complex visibilities in each LST bin as values. 
         flags_min : dictionary with data flags
@@ -142,6 +154,14 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
         # update all_lst_indices
         all_lst_indices.update(set(grid_indices[data_in_bin]))
+
+        # rephase each integration in d to nearest LST bin
+        if rephase:
+            if freq_array is None or antpos is None:
+                raise ValueError("freq_array and antpos is needed for rephase")
+            bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys()))
+            lst_shift = lst_grid[grid_indices] - l
+            lst_rephase(d, bls, freq_array, lst_shift, lat=lat)
 
         # iterate over keys in d
         for j, key in enumerate(d.keys()):
@@ -767,35 +787,51 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
                 by dlst, elif an ndarray, shift each integration by different amount w/ shape=(Ntimes)
 
     lat : type=float, latitude of observer in degrees North
-    """
-    # get top2eq matrix
-    top2eq = uvutils.top2eq_m(0, lat*np.pi/180)
 
+    Notes:
+    ------
+    The rephasing uses aipy.coord.top2eq_m and aipy.coord.eq2top_m matrices to convert from
+    array TOPO frame to Equatorial frame, induces time rotation, converts back to TOPO frame,
+    calculates new pointing vector s_prime and inserts a delay plane into the data for rephasing.
+
+    This method of rephasing follows Eqn. 21 & 22 of Zhang, Y. et al. 2018 10.3847/1538-4357/aaa029
+    """
     # check format of dlst
-    if type(dlst) == list or type(dlst) == np.ndarray:
+    if isinstance(dlst, list):
+        lat = np.ones_like(dlst) * lat
+        dlst = np.array(dlst)
+        zero = np.zeros_like(dlst)
+    elif isinstance(dlst, np.ndarray):
         lat = np.ones_like(dlst) * lat
         zero = np.zeros_like(dlst)
 
     else:
         zero = 0
 
+    # get top2eq matrix
+    top2eq = uvutils.top2eq_m(zero, lat*np.pi/180)
+
     # get eq2top matrix
     eq2top = uvutils.eq2top_m(-dlst, lat*np.pi/180)
 
     # get full rotation matrix
-    rot = eq2top.dot(top2eq)
+    rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
 
     # iterate over data keys
     for i, k in enumerate(data.keys()):
 
         # get new s-hat vector
-        s_prime = rot.dot(np.array([0.0, 0.0, 1.0]))
+        s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
+        s_diff = s_prime - np.array([0., 0., 1.0])
 
         # get baseline vector
-        bl = bls[k][:2]
+        bl = bls[k]
 
-        # dot bl with difference of pointing vectors to get delay: Zhang, Y. et al. 2018 (Eqn. 22)
-        tau = bl.dot((s_prime - np.array([0., 0., 1.0]))[:2]) / (aipy.const.c / 100.0)
+        # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
+        u = np.einsum("...i,i->...", s_diff, bl)
+
+        # get delay
+        tau = u / (aipy.const.c / 100.0)
 
         # reshape tau
         if type(tau) == np.ndarray:
