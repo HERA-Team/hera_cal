@@ -665,31 +665,6 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             if len(nightly_data_list) == 0:
                 continue
 
-            # align nightly data if desired, this involves making a copy of the raw data,
-            # and then interpolating it (another copy)
-            if align:
-                # concatenate data across night
-                if len(nightly_data_list) == 1:
-                    night_data = nightly_data_list[0]
-                    night_flgs = nightly_flgs_list[0]
-                    night_lsts = nightly_lst_list[0]
-                else:
-                    night_data = nightly_data_list[0].concatenate(nightly_data_list[1:], axis=0)
-                    night_flgs = nightly_flgs_list[0].concatenate(nightly_flgs_list[1:], axis=0)
-                    night_lsts = np.concatenate(nightly_lst_list, axis=0)
-
-                del nightly_data_list, nightly_flgs_list, nightly_lst_list
-
-                # align data
-                night_data, night_flgs, night_lsts = lst_align(night_data, night_lsts, flags=night_flgs,
-                                                               dlst=dlst, atol=atol, **align_kwargs)
-
-                nightly_data_list = [night_data]
-                nightly_flgs_list = [night_flgs]
-                nightly_lst_list = [night_lsts]
-
-                del night_data, night_flgs, night_lsts
-
             # extend to data lists
             data_list.extend(nightly_data_list)
             flgs_list.extend(nightly_flgs_list)
