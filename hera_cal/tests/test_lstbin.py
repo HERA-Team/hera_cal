@@ -16,7 +16,7 @@ import copy
 from hera_cal.datacontainer import DataContainer
 import glob
 import scipy.stats as stats
-
+from hera_cal import io
 
 class Test_lstbin:
 
@@ -181,24 +181,48 @@ class Test_lstbin:
         nt.assert_equal(sw_k, (2, 1, 'xx'))
 
     def test_lst_rephase(self):
-        # test single dlst
-        data = copy.deepcopy(self.data1)
-        bls = odict(map(lambda k: (k, self.ap1[k[0]] - self.ap1[k[1]]), self.data1.keys()))
-        hc.lstbin.lst_rephase(data, bls, self.freqs1, dlst=.001)
-        r = data[(24, 25, 'xx')] / self.data1[(24,25,'xx')]
-        # ensure a single delay across time has been applied
-        diff = np.diff(np.angle(r[50,10:54]))
-        nt.assert_true(np.isclose(diff - np.nanmedian(diff), 0).min())
-        nt.assert_true(np.isclose(np.nanmax(np.abs(r)), 1))
-        nt.assert_true(np.isclose(np.nanmin(np.abs(r)), 1))
-        nt.assert_true(np.isclose(r[10,50], r[11,50]))
-        # test multiple dlst
-        dlst = np.linspace(.0005, .001, 180)
-        data = copy.deepcopy(self.data1)
-        hc.lstbin.lst_rephase(data, bls, self.freqs1, dlst=dlst)
-        r = data[(24,25,'xx')] / self.data1[(24,25,'xx')]
-        # ensure multiple delays across time have been applied
-        nt.assert_false(np.isclose(r[10, 50], r[11, 50]))
+        # load point source sim w/ array at latitude = 0
+        fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
+        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
+        data_drift = copy.deepcopy(data)
+        transit_integration = 50
+
+        # get integration time in LST, baseline dict
+        dlst = np.median(np.diff(lsts))
+        bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
+
+        # basic test: single dlst for all integrations
+        hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+        # get phase error on shortest EW baseline
+        k = (0, 1, 'xx')
+        # check error at transit
+        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
+        nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
+        # check error across file
+        phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
+        nt.assert_true(np.abs(phs_err).max() < 1e-4)
+
+        # multiple phase term test: dlst per integration
+        dlst = np.array([np.median(np.diff(lsts))] * data[k].shape[0])
+        data = copy.deepcopy(data_drift)
+        hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+        # check error at transit
+        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
+        nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
+        # check err across file
+        phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
+        nt.assert_true(np.abs(phs_err).max() < 1e-4)
+
+        # phase all integrations to a single integration
+        dlst = lsts[50] - lsts
+        data = copy.deepcopy(data_drift)
+        hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+        # check error at transit
+        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration, 4])
+        nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
+        # check error across file
+        phs_err = np.angle(data[k][:, 4] / data_drift[k][50, 4])
+        nt.assert_true(np.abs(phs_err).max() < 1e-4)
 
 
 
