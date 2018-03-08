@@ -113,7 +113,8 @@ class Test_Delay_Filter(unittest.TestCase):
 
     def test_delay_filter_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b']
-        a = df.delay_filter_argparser()
+        parser = df.delay_filter_argparser()
+        a = parser.parse_args()
         self.assertEqual(a.infile, 'a')
         self.assertEqual(a.outfile, 'b')
 

@@ -135,4 +135,4 @@ def delay_filter_argparser():
     filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering rows with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
 
-    return a.parse_args()
+    return a

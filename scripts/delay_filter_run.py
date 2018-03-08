@@ -3,7 +3,8 @@
 from hera_cal.delay_filter import Delay_Filter, delay_filter_argparser
 import sys
 
-a = delay_filter_argparser()
+parser = delay_filter_argparser()
+a = parser.parse_args()
 
 # Run Delay Filter
 df = Delay_Filter()
