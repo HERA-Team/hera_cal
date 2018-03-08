@@ -8,6 +8,7 @@ from pyuvdata.utils import check_histories
 from pyuvdata import UVCal, UVData
 from hera_cal.data import DATA_PATH
 import os
+import sys
 import shutil
 from scipy import constants
 import warnings
@@ -107,6 +108,14 @@ class Test_Update_Cal(unittest.TestCase):
                     
 
         shutil.rmtree(outname)
+
+    def test_apply_cal_argparser(self):
+        sys.argv = [sys.argv[0], 'a', 'b', 'c']
+        args = ac.apply_cal_argparser()
+        self.assertEqual(args.infile, 'a')
+        self.assertEqual(args.outfile, 'b')
+        self.assertEqual(args.new_cal, 'c')
+
 
 if __name__ == '__main__':
     unittest.main()
