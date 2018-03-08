@@ -6,9 +6,11 @@ from copy import deepcopy
 from pyuvdata import UVCal, UVData
 from hera_cal.data import DATA_PATH
 import os
+import sys
 import shutil
 from scipy import constants
 from uvtools.dspec import delay_filter
+
 
 class Test_Delay_Filter(unittest.TestCase):
 
@@ -49,7 +51,6 @@ class Test_Delay_Filter(unittest.TestCase):
         dfil.load_data([filename1,filename2])
         self.assertFalse(dfil.writable)
 
-
     def test_load_data_as_dicts(self):
         dfil = df.Delay_Filter()
         dfil.load_data_as_dicts(None,None,None,None)
@@ -83,7 +84,6 @@ class Test_Delay_Filter(unittest.TestCase):
             self.assertEqual(dfil.CLEAN_models[k].shape, (60,64))
             self.assertTrue(dfil.info.has_key(k))
         
-
     def test_write_filtered_data(self):
         dfil = df.Delay_Filter()
         with self.assertRaises(NotImplementedError):
@@ -110,6 +110,13 @@ class Test_Delay_Filter(unittest.TestCase):
             np.testing.assert_array_almost_equal(dfil.filtered_residuals[k], filtered_residuals[k])
             np.testing.assert_array_almost_equal(data[k][~flags[k]], (CLEAN_models[k] + filtered_residuals[k])[~flags[k]], 5)
         shutil.rmtree(outfilename)
+
+    def test_delay_filter_argparser(self):
+        sys.argv = [sys.argv[0], 'a', 'b']
+        parser = df.delay_filter_argparser()
+        a = parser.parse_args()
+        self.assertEqual(a.infile, 'a')
+        self.assertEqual(a.outfile, 'b')
 
 
 if __name__ == '__main__':
