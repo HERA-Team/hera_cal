@@ -8,6 +8,7 @@ from pyuvdata.utils import check_histories
 from pyuvdata import UVCal, UVData
 from hera_cal.data import DATA_PATH
 import os
+import sys
 import shutil
 from scipy import constants
 import warnings
@@ -56,6 +57,12 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         self.assertEqual(np.max(kernel), kernel[100])
         self.assertEqual(len(kernel), 201)
 
+    def test_smooth_cal_argparser(self):
+        sys.argv = [sys.argv[0], 'a', 'b', 'c']
+        a = sc.smooth_cal_argparser()
+        self.assertEqual(a.cal_infile, 'a')
+        self.assertEqual(a.data, 'b')
+        self.assertEqual(a.cal_outfile, 'c')
 
 class Test_Calibration_Smoother(unittest.TestCase):
 

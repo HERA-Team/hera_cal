@@ -7,6 +7,7 @@ from collections import OrderedDict as odict
 from copy import deepcopy
 import warnings
 import uvtools
+import argparse
 
 def drop_cross_vis(data):
     '''Delete all entries from a DataContiner that not autocorrelations in order to save memory.'''
@@ -412,3 +413,41 @@ class Calibration_Smoother():
                       add_to_history = add_to_history, clobber = clobber, **kwargs)
 
 
+def smooth_cal_argparser():
+    '''Arg parser for commandline operation of '''
+    a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
+    a.add_argument("cal_infile", type=str, help="path to calfits file to smooth")
+    a.add_argument("data", type=str, help="path to associated visibility data file (used only for flags and autocorrelations)")
+    a.add_argument("cal_outfile", type=str, help="path to smoothed calibration calfits file")
+    a.add_argument("--filetype", type=str, default='miriad', help='filetype of input data files (default "miriad")')
+    a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at cal_outfile (default False)')
+    a.add_argument("--binary_wgts", default=False, action="store_true", help='give all non-flagged times and frequencies equal weights (default False)')
+
+    # Optional neightboring data and calibration solutions
+    neighbors = a.add_argument_group(title='Optional neighboring data and calibrations', description='Additional calibration and data files used\
+                                     to ensure temporal smoothness of the smoothed solution, but unaffected by this script. Must be\
+                                     contiguous with cal_infile and data and in chronological order.')
+    neighbors.add_argument("--prev_cal", default=None, nargs='+', help='path to previous calibration file (or files)')
+    neighbors.add_argument("--prev_data", default=None, nargs='+', help='path to previous data file (or files)')
+    neighbors.add_argument("--next_cal", default=None, nargs='+', help='path to subsequent calibration file (or files)')
+    neighbors.add_argument("--next_data", default=None, nargs='+', help='path to subsequent data file (or files)')
+
+    # Options relating to smoothing in time
+    time_options = a.add_argument_group(title='Time smoothing options')
+    time_options.add_argument("--disable_time", default=False, action="store_true", help="turn off time smoothing")
+    time_options.add_argument("--time_scale", type=float, default=120.0, help="FWHM in seconds of time smoothing Gaussian kernel (default 120 sec)")
+    time_options.add_argument("--mirror_sigmas", type=float, default=5.0, help="number of stdev into the Gaussian kernel\
+                              one must go before edge effects can be ignored (default 5)")
+
+    # Options relating to smoothing in frequency
+    freq_options = a.add_argument_group(title='Frequency smoothing options')
+    freq_options.add_argument("--disable_freq", default=False, action="store_true", help="turn off frequency smoothing")
+    freq_options.add_argument("--freq_scale", type=float, default=10.0, help="frequency scale in MHz for the low-pass filter\
+                              (default 10.0 MHz, i.e. a 100 ns delay filter)")
+    freq_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
+    freq_options.add_argument("--window", type=str, default="none", help='window function for frequency filtering (default "none",\
+                              see aipy.dsp.gen_window for options')
+    freq_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering rows with unflagged fraction ~< skip_wgt (default 0.1)')
+    freq_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    args = a.parse_args()
+    return args
