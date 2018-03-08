@@ -926,6 +926,14 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
     if return_gains and return_objects: return (gains dictionary, AbsCal instance)
     if write_calfits: writes a calfits file with gain solutions
     """
+    # only load model files needed to create LST overlap w/ data files
+    # and reject data files that have no LST overlap w/ any of model files
+    all_model_files = []
+    for df in data_files:
+        all_model_files.extend(match_times(df, modelfiles))
+
+    model_files = sorted(set(all_model_files))
+
     # load model files
     echo ("loading model files", type=1, verbose=verbose)
     (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
