@@ -8,7 +8,7 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
     '''Update data and data_flags in place, taking out old calibration solutions, putting in
     new calibration solutions, and updating flags from those calibration solutions. Previously 
     flagged data is left unmodified. Missing antennas from either the new gains or (if it's not None),
-    the old gains are automatically flagged in the data.
+    the old gains are automatically flagged in the data's visibilities that involves those antennas.
     
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
@@ -19,11 +19,11 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
         old_gains: Dictionary of complex calibration gains to take out with keys like (1,'x').
             Default of None implies that the data is raw (i.e. uncalibrated).
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
-            'multiply' means V_true = gi gj* V_obs.
+            'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
     '''
     for (i,j,pol) in data.keys():
         if not np.all(data_flags[(i,j,pol)]):
-            # if any antenna is missing from the gains, the data is flagged
+            # Check to see that all necessary antennas are present in the gains
             if new_gains.has_key((i,pol[0])) and new_gains.has_key((j,pol[1])) and (old_gains == None
                 or (old_gains.has_key((i,pol[0])) and old_gains.has_key((j,pol[1])))):
                     gigj_new = new_gains[(i,pol[0])] * np.conj(new_gains[(j,pol[1])])
@@ -42,7 +42,8 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
                     data_flags[(i,j,pol)][cal_flags[(i, pol[0])]] = True
                     data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = True
             else:
-                data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)]) #all flagged
+                # If any antenna is missing from the gains, the data is flagged
+                data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)]) 
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration = None, flags_npz = None, 
@@ -60,7 +61,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         flag_npz: optional path to npz file containing just flags to be ORed with flags in input data
         filetype: filename for the new file, either 'miriad' or 'uvfits'
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
-            'multiply' means V_true = gi gj* V_obs.
+            'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flags_npz (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
@@ -76,13 +77,13 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     if flags_npz is not None:
         npz_flags = np.load(flags_npz)
         uvd.flag_array = np.logical_or(npz_flags['flag_array'], uvd.flag_array)
-        add_to_history += ' FLAGS_NPZ_HISTORY: ' + str(npz_flags['history'])
+        add_to_history += ' FLAGS_NPZ_HISTORY: ' + str(npz_flags['history']) + '\n'
     data, data_flags = io.load_vis(uvd)
     
     # load new calibration solution
     uvc = UVCal()
     uvc.read_calfits(new_calibration)
-    add_to_history += ' NEW_CALFITS_HISTORY: ' + uvc.history
+    add_to_history += ' NEW_CALFITS_HISTORY: ' + uvc.history + '\n'
     new_gains, new_flags = io.load_cal(uvc)
 
     # load old calibration solution
@@ -92,7 +93,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         else:        
             old_uvc = UVCal()
             old_uvc.read_calfits(old_calibration)
-        add_to_history += ' OLD_CALFITS_HISTORY: ' + old_uvc.history
+        add_to_history += ' OLD_CALFITS_HISTORY: ' + old_uvc.history + '\n'
         old_calibration, _ = io.load_cal(old_uvc)
 
     recalibrate_in_place(data, data_flags, new_gains, new_flags, old_gains=old_calibration, gain_convention=gain_convention)
