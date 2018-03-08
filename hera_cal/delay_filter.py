@@ -6,6 +6,7 @@ from collections import OrderedDict as odict
 from uvtools.dspec import delay_filter
 from copy import deepcopy
 from scipy import constants
+import argparse
 
 class Delay_Filter():
 
@@ -43,7 +44,7 @@ class Delay_Filter():
         self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
         
 
-    def run_filter(self, to_filter=[], weight_dict=None, standoff=0., horizon=1.,tol=1e-9, window='none', skip_wgt=0.1, maxiter=100):
+    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1.,tol=1e-9, window='none', skip_wgt=0.1, maxiter=100):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
     
@@ -112,3 +113,26 @@ class Delay_Filter():
                 data_out = self.filtered_residuals
             io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out, data=data_out, 
                           add_to_history=add_to_history, clobber=clobber, **kwargs)
+
+
+def delay_filter_argparser():
+    '''Arg parser for commandline operation of hera_cal.delay_filter.'''
+    a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
+    a.add_argument("infile", type=str, help="path to visibility data file to delay filter")
+    a.add_argument("outfile", type=str, help="path to new visibility results file")
+    a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files (default "miriad")')
+    a.add_argument("--write_model", default=False, action="store_true", help="write the low-pass filtered CLEAN model rather\
+                   than the high-pass filtered residual")
+    a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+
+    filt_options = a.add_argument_group(title='Options for the delay filter')
+    filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (in ns)')
+    filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1 is the horizon\
+                              (full light travel time)')
+    filt_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
+    filt_options.add_argument("--window", type=str, default="none", help='window function for frequency filtering (default "none",\
+                              see aipy.dsp.gen_window for options')
+    filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering rows with unflagged fraction ~< skip_wgt (default 0.1)')
+    filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+
+    return a.parse_args()
