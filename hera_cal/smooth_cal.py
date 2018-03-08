@@ -414,7 +414,7 @@ class Calibration_Smoother():
 
 
 def smooth_cal_argparser():
-    '''Arg parser for commandline operation of '''
+    '''Arg parser for commandline operation of calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
     a.add_argument("cal_infile", type=str, help="path to calfits file to smooth")
     a.add_argument("data", type=str, help="path to associated visibility data file (used only for flags and autocorrelations)")
