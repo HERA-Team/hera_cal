@@ -1,6 +1,8 @@
 import numpy as np
 import hera_cal.io as io
 from pyuvdata import UVCal, UVData
+import argparse
+
 
 def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None, gain_convention = 'divide'):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in
@@ -41,7 +43,6 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
                     data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = True
             else:
                 data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)]) #all flagged
-
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration = None, flags_npz = None, 
@@ -97,3 +98,18 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     recalibrate_in_place(data, data_flags, new_gains, new_flags, old_gains=old_calibration, gain_convention=gain_convention)
     io.update_vis(data_infilename, data_outfilename, filetype_in=filetype, filetype_out=filetype, data=data, 
                   flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
+
+
+def apply_cal_argparser():
+    '''Arg parser for commandline operation of apply_cal.'''
+    a = argparse.ArgumentParser(description="Apply (and optionally, also unapply) a calfits file to visibility file.")
+    a.add_argument("infile", type=str, help="path to visibility data file to calibrate")
+    a.add_argument("outfile", type=str, help="path to new visibility results file")
+    a.add_argument("new_cal", type=str, help="path to new calibration calfits file")
+    a.add_argument("--old_cal", default=None, help="path to old calibration calfits file (to unapply)")
+    a.add_argument("--flags_npz", default=None, help="path to npz file of flags to OR with data flags")
+    a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files')
+    a.add_argument("--gain_convention", type=str, default='divide', 
+                  help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
+    a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    return a.parse_args()
