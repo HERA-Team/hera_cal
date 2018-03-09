@@ -29,7 +29,8 @@ import aipy
 
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
-            sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, verbose=True):
+            sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
+            copy_rephase=True, freq_array=None, lat=-30.72152, verbose=True):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -40,39 +41,53 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     data_list : type=list, list of DataContainer dictionaries holding complex visibility data
 
     lst_list : type=list, list of ndarrays holding LST stamps of each data dictionary in data_list.
-               These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
+        These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
     
     flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
-                 in data_list. Flagged data do not contribute to the average of an LST bin.
+        in data_list. Flagged data do not contribute to the average of an LST bin.
 
     dlst : type=float, delta-LST spacing for lst_grid. If None, will use the delta-LST of the first
-           array in lst_list.
+        array in lst_list.
 
     lst_start : type=float, starting LST for making the lst_grid, extending from
-                [lst_start, lst_start+2pi). Default is lst_start = 0 radians.
+        [lst_start, lst_start+2pi). Default is lst_start = 0 radians.
 
     lst_low : type=float, lower bound on LST bin centers used for contructing LST grid
 
     lst_hi : type=float, upper bound on LST bin centers used for contructing LST grid
 
     flag_thresh : type=float, minimum fraction of flagged points in an LST bin needed to
-                  flag the entire bin.
+        flag the entire bin.
 
     atol : type=float, absolute tolerance for comparing LST bin center floats
 
     median : type=boolean, if True use median for LST binning. Warning: this is slower.
 
     truncate_empty : type=boolean, if True, truncate output time integrations that have no data
-                     in them.
+        in them.
 
     sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins on the
-               real and imag components separately. Warning: This is considerably slow.
+        real and imag components separately. Warning: This is considerably slow.
 
     sigma : type=float, input sigma threshold to use for sigma clipping algorithm.
 
     min_N : type=int, minimum number of points in an LST bin to perform sigma clipping
 
     return_no_avg : type=boolean, if True, return binned but un-averaged data and flags.
+
+    rephase : type=bool, if True, phase data to center of LST bin before binning.
+
+    copy_rephase : type=bool, if True, copy data before rephasing such that input data in
+        data_list isn't overwritten
+
+    antpos : type=dictionary, holds antenna position vectors in ENU frame in meters with 
+        antenna integers as keys and 3D ndarrays as values. See io.load_vis(). Needed for rephase.
+
+    freq_array : type=ndarray, 1D array of unique data frequencies channels in Hz. Needed for rephase.
+
+    lat : type=float, latitude of array in degrees North. Needed for rephase.
+
+    verbose : type=bool, if True report feedback to stdout
 
     Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
@@ -88,7 +103,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     data_count : dictionary containing the number count of data points averaged in each LST bin.
 
     if return_no_avg:
-        Output: (data_bin, flags_min)
+        Output: (lst_bins, data_bin, flags_min)
         data_bin : dictionary with (ant1,ant2,pol) as keys and ndarrays holding
             un-averaged complex visibilities in each LST bin as values. 
         flags_min : dictionary with data flags
@@ -143,6 +158,32 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         # update all_lst_indices
         all_lst_indices.update(set(grid_indices[data_in_bin]))
 
+        if rephase:
+            # rephase each integration in d to nearest LST bin
+            if freq_array is None or antpos is None:
+                raise ValueError("freq_array and antpos is needed for rephase")
+
+            # check if d has already been phased (used for lst_bin_files)
+            try:
+                if hasattr(d, 'phase_type'):
+                    if d.phase_type == "drift":
+                        pass
+                    else:
+                        raise LSTBINPHASED
+
+                # copy rephased data if desired
+                if copy_rephase:
+                    d = copy.deepcopy(d)
+
+                # form baseline dictionary and lst_rephase
+                bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys()))
+                lst_shift = lst_grid[grid_indices] - l
+                lst_rephase(d, bls, freq_array, lst_shift, lat=lat)
+                d.phase_type = "LSTBIN"
+
+            except LSTBINPHASED:
+                pass
+
         # iterate over keys in d
         for j, key in enumerate(d.keys()):
 
@@ -152,6 +193,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             if key in data:
                 pass
             elif switch_bl(key) in data:
+                print 'conjugating??'
                 # check to see if conj(key) exists in data
                 key = switch_bl(key)
                 d[key] = np.conj(d[switch_bl(key)])
@@ -460,19 +502,20 @@ def lst_bin_arg_parser():
     a.add_argument("--file_ext", type=str, default="{}.{}.{:7.5f}.uv", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--sig_clip", default=False, action='store_true', help="perform robust sigma clipping before binning")
+    a.add_argument("--sigma", type=float, default=4.0, help="sigma threshold for sigma clipping")
+    a.add_argument("--min_N", type=int, default=4, help="minimum number of points in bin needed to proceed with sigma clipping")
+    a.add_argument("--rephase", default=False, action='store_true', help="rephase data to center of LST bin before binning")
     a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
-    a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
-    a.add_argument('--align', default=False, action='store_true', help='perform LST align before binning')
-    a.add_argument("--align_kwargs", default={}, type=dict, help="dict w/ kwargs for lst_align if --align")
-    a.add_argument("--bin_kwargs", default={}, type=dict, help="dict w/ kwargs to pass to lst_bin function")
     a.add_argument("--miriad_kwargs", default={}, type=dict, help="dict w/ kwargs to pass to miriad_to_data function")
+    a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
     a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
     return a
 
 
 def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
-                  outdir=None, overwrite=False, history=' ', lst_start=0,
-                  align=False, align_kwargs={}, bin_kwargs={}, atol=1e-6, miriad_kwargs={}):
+                  outdir=None, overwrite=False, history=' ', lst_start=0, atol=1e-6, sig_clip=True,
+                  sigma=5.0, min_N=5, rephase=False, miriad_kwargs={}):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
@@ -498,10 +541,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     overwrite : type=bool, if True overwrite output files
 
-    align : type=bool, if True, concatenate nightly data and LST align with the lst_grid.
-            Warning : slows down code.
-
-    align_kwargs : type=dictionary, keyword arugments for lst_align not included in above kwars.
+    rephase : type=bool, if True, rephase data points in LST bin to center of bin
 
     bin_kwargs : type=dictionary, keyword arguments for lst_bin.
 
@@ -598,6 +638,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                 if f_select[j][k] == True and data_status[j][k] is None:
                     # open file
                     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[j][k], return_meta=True)
+                    d.phase_type = 'drift'
 
                     # unwrap l
                     l[l < start_lst] += 2*np.pi
@@ -624,31 +665,6 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             if len(nightly_data_list) == 0:
                 continue
 
-            # align nightly data if desired, this involves making a copy of the raw data,
-            # and then interpolating it (another copy)
-            if align:
-                # concatenate data across night
-                if len(nightly_data_list) == 1:
-                    night_data = nightly_data_list[0]
-                    night_flgs = nightly_flgs_list[0]
-                    night_lsts = nightly_lst_list[0]
-                else:
-                    night_data = nightly_data_list[0].concatenate(nightly_data_list[1:], axis=0)
-                    night_flgs = nightly_flgs_list[0].concatenate(nightly_flgs_list[1:], axis=0)
-                    night_lsts = np.concatenate(nightly_lst_list, axis=0)
-
-                del nightly_data_list, nightly_flgs_list, nightly_lst_list
-
-                # align data
-                night_data, night_flgs, night_lsts = lst_align(night_data, night_lsts, flags=night_flgs,
-                                                               dlst=dlst, atol=atol, **align_kwargs)
-
-                nightly_data_list = [night_data]
-                nightly_flgs_list = [night_flgs]
-                nightly_lst_list = [night_lsts]
-
-                del night_data, night_flgs, night_lsts
-
             # extend to data lists
             data_list.extend(nightly_data_list)
             flgs_list.extend(nightly_flgs_list)
@@ -670,7 +686,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # pass through lst-bin function
         (bin_lst, bin_data, flag_data, std_data,
          num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, lst_start=start_lst,
-                             lst_low=f_min, lst_hi=f_max, truncate_empty=False, **bin_kwargs)
+                             lst_low=f_min, lst_hi=f_max, truncate_empty=False, sig_clip=sig_clip, 
+                             sigma=sigma, min_N=min_N, rephase=rephase, copy_rephase=False, 
+                             freq_array=freq_array, antpos=antpos)
 
         # make sure bin_lst is wrapped
         bin_lst = bin_lst % (2*np.pi)
@@ -766,39 +784,61 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
     dlst : type=ndarray or float, delta-LST to rephase by [radians]. If a float, shift all integrations
                 by dlst, elif an ndarray, shift each integration by different amount w/ shape=(Ntimes)
 
-    lat : type=float, latitude of observer in degrees South
-    """
-    # get top2eq matrix
-    top2eq = uvutils.top2eq_m(0, lat*np.pi/180)
+    lat : type=float, latitude of observer in degrees North
 
+    Notes:
+    ------
+    The rephasing uses aipy.coord.top2eq_m and aipy.coord.eq2top_m matrices to convert from
+    array TOPO frame to Equatorial frame, induces time rotation, converts back to TOPO frame,
+    calculates new pointing vector s_prime and inserts a delay plane into the data for rephasing.
+
+    This method of rephasing follows Eqn. 21 & 22 of Zhang, Y. et al. 2018 10.3847/1538-4357/aaa029
+    """
     # check format of dlst
-    if type(dlst) == list or type(dlst) == np.ndarray:
+    if isinstance(dlst, list):
+        lat = np.ones_like(dlst) * lat
+        dlst = np.array(dlst)
+        zero = np.zeros_like(dlst)
+    elif isinstance(dlst, np.ndarray):
         lat = np.ones_like(dlst) * lat
         zero = np.zeros_like(dlst)
 
     else:
         zero = 0
 
+    # get top2eq matrix
+    top2eq = uvutils.top2eq_m(zero, lat*np.pi/180)
+
     # get eq2top matrix
-    eq2top = uvutils.eq2top_m(dlst, lat*np.pi/180)
+    eq2top = uvutils.eq2top_m(-dlst, lat*np.pi/180)
 
     # get full rotation matrix
-    rot = eq2top.dot(top2eq)
+    rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
 
     # iterate over data keys
     for i, k in enumerate(data.keys()):
 
-        # dot bls with new s-hat vector
-        u = bls[k].dot(rot.dot(np.array([0, 0, 1])).T)
+        # get new s-hat vector
+        s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
+        s_diff = s_prime - np.array([0., 0., 1.0])
 
-        # reshape u
-        if type(u) == np.ndarray:
+        # get baseline vector
+        bl = bls[k]
+
+        # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
+        u = np.einsum("...i,i->...", s_diff, bl)
+
+        # get delay
+        tau = u / (aipy.const.c / 100.0)
+
+        # reshape tau
+        if type(tau) == np.ndarray:
             pass
         else:
-            u = np.array([u])
+            tau = np.array([tau])
 
         # get phasor
-        phs = np.exp(-2j*np.pi*freqs[None, :]*u[:, None]/aipy.const.c*100)
+        phs = np.exp(-2j*np.pi*freqs[None, :]*tau[:, None])
 
         # multiply into data
         data[k] *= phs
@@ -871,4 +911,8 @@ def switch_bl(key):
     """
     return (key[1], key[0], key[2][::-1])
 
+
+class LSTBINPHASED(Exception):
+    """ custom exception for lst_bin() """
+    pass
 
