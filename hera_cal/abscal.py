@@ -177,6 +177,8 @@ class AbsCal(object):
                 wgts[k] = np.ones_like(data[k], dtype=np.float)
         self.wgts = wgts
 
+        # setup gain flags
+
         # setup ants
         self.ants = np.unique(np.concatenate(map(lambda k: k[:2], self.keys)))
         self.Nants = len(self.ants)
@@ -943,6 +945,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
     (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
         model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
     antpos = model_antpos
+    model_lsts[model_lsts < model_lsts[0]] += 2*np.pi
 
     # iterate over data files
     gains = []
@@ -957,7 +960,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
             if outdir is None:
                 outdir = os.path.dirname(dfile)
             calfits_fname = os.path.join(outdir, calfits_fname)
-            
+
             # check path
             if os.path.exists(calfits_fname) and overwrite == False:
                 raise IOError("{} exists, not overwriting".format(calfits_fname))
@@ -966,6 +969,8 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
         echo("loading {}".format(dfile), type=1, verbose=verbose)
         (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
             data_pols) = io.load_vis(dfile, pop_autos=True, return_meta=True, pick_data_ants=False)
+        data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
+
         # get data ants
         total_data_antpos = copy.deepcopy(data_antpos)
         data_ants = np.unique(map(lambda k: k[:2], data.keys()))
@@ -981,14 +986,16 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
         # interpolate model to match data
         if interp_model:
             interp_model, interp_mflags = interp2d_vis(model, model_lsts, model_freqs,
-                                                       data_lsts, data_freqs)
+                                                       data_lsts, data_freqs, flags=model_flags)
+            for k in interp_mflags.keys():
+                wgts[k][interp_mflags[k]] *= 0
 
         # reweight according to redundancy
         if reweight:
             wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
 
         # instantiate class
-        AC = AbsCal(interp_model, data, antpos=antpos, freqs=data_freqs)
+        AC = AbsCal(interp_model, data, wgts=wgts, antpos=antpos, freqs=data_freqs)
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
 
         gain_list = []
@@ -1061,7 +1068,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
 
         # write to file
         if write_calfits:
-            gains2calfits(calfits_fname, gain_dict, data_freqs, data_lsts, AC.gain_pols, overwrite=overwrite)
+            io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, return_uvc=False, overwrite=overwrite)
 
         # append gain dict to gains
         gains.append(gain_dict)
