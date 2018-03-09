@@ -2,11 +2,11 @@ import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from collections import OrderedDict as odict
-from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 import hera_cal as hc
 import operator
 import os
+import copy
 
 
 polnum2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
@@ -83,8 +83,8 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
                 data[i, j], flags[i, j] = odict(), odict()
             for ip, pol in enumerate(uvd.polarization_array):
                 pol = polnum2str[pol]
-                data[(i, j)][pol] = deepcopy(uvd.get_data((i, j, pol)))
-                flags[(i, j)][pol] = deepcopy(uvd.get_flags((i, j, pol)))
+                data[(i, j)][pol] = copy.deepcopy(uvd.get_data((i, j, pol)))
+                flags[(i, j)][pol] = copy.deepcopy(uvd.get_flags((i, j, pol)))
 
     # If we don't want nested dicts, convert to DataContainer
     if not nested_dict:
@@ -343,7 +343,7 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
 
     # Load infile
     if type(infilename) == UVData:
-        uvd = deepcopy(infilename)
+        uvd = copy.deepcopy(infilename)
     else:
         uvd = UVData()
         if filetype_in == 'miriad':
@@ -467,11 +467,11 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
     pol2str = {-5: 'x', -6: 'y'}
 
     # get antenna info
-    antenna_numbers = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    ant_array = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    antenna_numbers = copy.copy(ant_array)
     antenna_names = np.array(map(lambda a: "ant{}".format(a), antenna_numbers))
-    Nants_data = len(antenna_numbers)
+    Nants_data = len(ant_array)
     Nants_telescope = len(antenna_numbers)
-    ant_array = np.arange(Nants_data)
 
     # get polarization info
     pol_array = np.array(sorted(set(map(lambda k: k[1].lower(), gains.keys()))))
@@ -497,7 +497,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
     flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.bool)
     quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.float)
     for i, p in enumerate(pol_array):
-        for j, a in enumerate(antenna_numbers):
+        for j, a in enumerate(ant_array):
             # ensure (a, p) is in gains
             if (a, p) in gains:
                 gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]
@@ -606,7 +606,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Load infile
     if type(infilename) == UVCal:
-        cal = deepcopy(infilename)
+        cal = copy.deepcopy(infilename)
     else:
         cal = UVCal()
         cal.read_calfits(infilename)
