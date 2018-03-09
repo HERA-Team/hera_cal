@@ -930,9 +930,13 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
     # and reject data files that have no LST overlap w/ any of model files
     all_model_files = []
     for df in data_files:
-        all_model_files.extend(match_times(df, modelfiles))
+        all_model_files.extend(match_times(df, model_files))
 
     model_files = sorted(set(all_model_files))
+
+    # check length of model files
+    if len(model_files) == 0:
+        raise ValueError("no model files overlap with data files in LST")
 
     # load model files
     echo ("loading model files", type=1, verbose=verbose)
