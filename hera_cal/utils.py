@@ -9,7 +9,6 @@ from pyuvdata import UVCal, UVData
 import os
 import hera_cal
 import copy
-import argparse
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -437,41 +436,3 @@ def get_miriad_times(filepaths, add_int_buffer=False):
         int_times = int_times[0]
 
     return file_starts, file_stops, int_times
-
-
-
-
-def get_cal_ArgumentParser(method_name):
-    """
-    Function to get an ArgumentParser instance for working with hera_cal functions.
-
-    Args:
-        method_name -- target wrapper, must be "delay_filter" for now.
-    Returns:
-        a -- an argparse.ArgumentParser instance with the relevant options for the selected method
-    """
-    methods = ["delay_filter"]
-    if method_name not in methods:
-        raise AssertionError('method_name must be one of {}'.format(','.join(methods)))
-
-    a = argparse.ArgumentParser()
-
-    if method_name == 'delay_filter':
-        a.prog = 'delay_filter'
-        a.add_argument('--standoff', default=0., type=float,
-                       help='fixed additional delay beyond the horizon (in ns)')
-        a.add_argument('--horizon', default=1., type=float,
-                       help='proportionality constant for bl_len where 1 is the '
-                            'horizon (full light travel time)')
-        a.add_argument('--tol', default=1e-9, type=float,
-                       help='CLEAN algorithm convergence tolerance (see aipy.deconv.clean)')
-        a.add_argument('--window', default='none', type=str,
-                       help='window function for filtering applied to the filtered axis. '
-                            'See aipy.dsp.gen_window for options.')
-        a.add_argument('--skip_wgt', default=0.1, type=float,
-                       help='skips filtering rows with very low total weight '
-                            '(unflagged fraction ~< skip_wgt). Only works properly '
-                            'when all weights are all between 0 and 1.')
-        a.add_argument('--maxiter', default=100, type=int,
-                       help='Maximum number of iterations for aipy.deconv.clean to converge.')
-    return a
