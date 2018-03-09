@@ -177,8 +177,6 @@ class AbsCal(object):
                 wgts[k] = np.ones_like(data[k], dtype=np.float)
         self.wgts = wgts
 
-        # setup gain flags
-
         # setup ants
         self.ants = np.unique(np.concatenate(map(lambda k: k[:2], self.keys)))
         self.Nants = len(self.ants)
