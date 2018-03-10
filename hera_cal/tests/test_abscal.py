@@ -14,6 +14,7 @@ from hera_cal.data import DATA_PATH
 from collections import OrderedDict as odict
 import copy
 from hera_cal.datacontainer import DataContainer
+import glob
 
 class Test_AbsCal_Funcs:
 
@@ -199,6 +200,22 @@ class Test_AbsCal_Funcs:
         nt.assert_true(os.path.exists('ex'))
         if os.path.exists('ex'):
             shutil.rmtree('ex')
+
+    def test_match_times(self):
+        dfiles = map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458043.12552.xx.HH.uvORA',
+                                                            'zen.2458043.13298.xx.HH.uvORA'])
+        mfiles = map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458042.12552.xx.HH.uvXA',
+                                                            'zen.2458042.13298.xx.HH.uvXA'])
+        # test basic execution
+        relevant_mfiles = hc.abscal.match_times(dfiles[0], mfiles)
+        nt.assert_equal(len(relevant_mfiles), 2)
+        # test basic execution
+        relevant_mfiles = hc.abscal.match_times(dfiles[1], mfiles)
+        nt.assert_equal(len(relevant_mfiles), 1)
+        # test exception
+        mfiles = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2458045.*.xx.HH.uvXRAA')))
+        relevant_mfiles = hc.abscal.match_times(dfiles[0], mfiles)
+        nt.assert_equal(len(relevant_mfiles), 0)
 
 
 class Test_AbsCal:
@@ -532,6 +549,9 @@ class Test_AbsCal:
         hc.abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False)
         # test exception
         nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
+        model_files = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2458045.*.xx.HH.uvXRAA')))
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
+
 
     def test_mock_data(self):
         # load into pyuvdata object
