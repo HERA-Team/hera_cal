@@ -94,7 +94,11 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
     if return_meta:
         freqs = np.unique(uvd.freq_array)
         times = np.unique(uvd.time_array)
-        lsts = np.unique(uvd.lst_array)
+        lsts = []
+        for l in uvd.lst_array.ravel():
+            if l not in lsts:
+                lsts.append(l)
+        lsts = np.array(lsts)
         antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
         antpos = odict(zip(ants, antpos))
         pols = np.array([polnum2str[polnum] for polnum in uvd.polarization_array])
