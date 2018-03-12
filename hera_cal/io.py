@@ -515,9 +515,11 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
                 quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
 
     # Check gain_array for values close to zero, if so, set to 1
-    zero_check = np.isclose(gain_array, 0)
+    zero_check = np.isclose(gain_array, 0, rtol=1e-10, atol=1e-10)
     gain_array[zero_check] = 1.0 + 0j
     flag_array[zero_check] += True
+    if zero_check.max() is True:
+        print("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
     # instantiate UVCal
     uvc = UVCal()
@@ -584,6 +586,14 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
                 cal.flag_array[i, 0, :, :, ip] = flags[(ant, jonesnum2str[pol])].T
             if quals is not None:
                 cal.quality_array[i, 0, :, :, ip] = quals[(ant, jonesnum2str[pol])].T
+
+    # Check gain_array for values close to zero, if so, set to 1
+    zero_check = np.isclose(cal.gain_array, 0, rtol=1e-10, atol=1e-10)
+    cal.gain_array[zero_check] = 1.0 + 0j
+    cal.flag_array[zero_check] += True
+    if zero_check.max() is True:
+        print("Some of values in self.gain_array were zero and are flagged and set to 1.")
+
 
     # Set additional attributes
     cal.history += add_to_history
