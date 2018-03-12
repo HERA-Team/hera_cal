@@ -126,8 +126,8 @@ def delay_filter_argparser():
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
 
     filt_options = a.add_argument_group(title='Options for the delay filter')
-    filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (in ns)')
-    filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1 is the horizon\
+    filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
+    filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
                               (full light travel time)')
     filt_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
     filt_options.add_argument("--window", type=str, default="none", help='window function for frequency filtering (default "none",\
