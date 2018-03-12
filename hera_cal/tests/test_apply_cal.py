@@ -110,11 +110,11 @@ class Test_Update_Cal(unittest.TestCase):
         shutil.rmtree(outname)
 
     def test_apply_cal_argparser(self):
-        sys.argv = [sys.argv[0], 'a', 'b', 'c']
+        sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd']
         args = ac.apply_cal_argparser()
         self.assertEqual(args.infile, 'a')
         self.assertEqual(args.outfile, 'b')
-        self.assertEqual(args.new_cal, 'c')
+        self.assertEqual(args.new_cal, ['c', 'd'])
 
 
 if __name__ == '__main__':
