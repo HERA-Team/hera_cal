@@ -58,7 +58,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             to be applied, along with its new flags (if any).
         old_calibration: filename of the calfits file (or a list of filenames) or UVCal object for the calibration 
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
-        flag_npz: optional path to npz file containing just flags to be ORed with flags in input data
+        flags_npz: optional path to npz file containing just flags to be ORed with flags in input data
         filetype: filename for the new file, either 'miriad' or 'uvfits'
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
@@ -81,6 +81,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     data, data_flags = io.load_vis(uvd)
     
     # load new calibration solution
+    if new_calibration is None:
+        raise ValueError('Must provide a calibration solution to apply.')
     if isinstance(new_calibration, UVCal):
         uvc = new_calibration
     else:
@@ -109,9 +111,9 @@ def apply_cal_argparser():
     a = argparse.ArgumentParser(description="Apply (and optionally, also unapply) a calfits file to visibility file.")
     a.add_argument("infile", type=str, help="path to visibility data file to calibrate")
     a.add_argument("outfile", type=str, help="path to new visibility results file")
-    a.add_argument("new_cal", type=str, nargs="+", help="path to new calibration calfits file (or files for cross-pol)")
-    a.add_argument("--old_cal", default=None, nargs="+", help="path to old calibration calfits file to unapply (or files for cross-pol)")
-    a.add_argument("--flags_npz", default=None, help="path to npz file of flags to OR with data flags")
+    a.add_argument("--new_cal", type=str, default=None, nargs="+", help="path to new calibration calfits file (or files for cross-pol)")
+    a.add_argument("--old_cal", type=str, default=None, nargs="+", help="path to old calibration calfits file to unapply (or files for cross-pol)")
+    a.add_argument("--flags_npz", type=str, default=None, help="path to npz file of flags to OR with data flags")
     a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files')
     a.add_argument("--gain_convention", type=str, default='divide', 
                   help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
