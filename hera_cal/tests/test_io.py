@@ -270,13 +270,16 @@ class Test_Calibration_IO(unittest.TestCase):
                 gains[(a, p)] = np.ones((Ntimes, Nfreqs), np.complex)
                 quality[(a, p)] = np.ones((Ntimes, Nfreqs), np.float) * 2
                 flags[(a, p)] = np.zeros((Ntimes, Nfreqs), np.bool)
+                
+        # set some terms to zero
+        gains[(5, 'x')][20:30] *= 0
 
         # test basic execution
         uvc = io.write_cal("ex.calfits", gains, freqs, times, flags=flags, quality=quality,
                            overwrite=True, return_uvc=True, write_file=True)
         self.assertTrue(os.path.exists("ex.calfits"))
         self.assertEqual(uvc.gain_array.shape, (10, 1, 64, 100, 1))
-
+        self.assertAlmostEqual(uvc.gain_array[5].min(), 1.0)
         self.assertAlmostEqual(uvc.gain_array[0,0,0,0,0], (1+0j))
         self.assertAlmostEqual(np.sum(uvc.gain_array), (64000+0j))
         self.assertEqual(uvc.flag_array[0,0,0,0,0], False)
