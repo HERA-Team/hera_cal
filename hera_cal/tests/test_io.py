@@ -283,7 +283,7 @@ class Test_Calibration_IO(unittest.TestCase):
         self.assertAlmostEqual(uvc.gain_array[0,0,0,0,0], (1+0j))
         self.assertAlmostEqual(np.sum(uvc.gain_array), (64000+0j))
         self.assertEqual(uvc.flag_array[0,0,0,0,0], False)
-        self.assertEqual(np.sum(uvc.flag_array), 0)
+        self.assertEqual(np.sum(uvc.flag_array), 640)
         self.assertAlmostEqual(uvc.quality_array[0,0,0,0,0], 2)
         self.assertAlmostEqual(np.sum(uvc.quality_array), 128000.0)
         self.assertEqual(len(uvc.antenna_numbers), 10)
