@@ -519,7 +519,9 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
                 quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
 
     # Check gain_array for values close to zero, if so, set to 1
-    gain_array[np.isclose(gain_array, 0)] = 1.0 + 0j
+    zero_check = np.isclose(gain_array, 0)
+    gain_array[zero_check] = 1.0 + 0j
+    flag_array[zero_check] += True
 
     # instantiate UVCal
     uvc = UVCal()
