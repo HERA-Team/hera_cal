@@ -551,6 +551,14 @@ class Test_AbsCal:
         nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
         model_files = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2458045.*.xx.HH.uvXRAA')))
         nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
+        # check blank & flagged calfits file written if no LST overlap
+        model_files = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458044.*.xx.HH.uvXRAA")))
+        hc.abscal.abscal_run(data_files, model_files, write_calfits=True, overwrite=True, outdir='./', calfits_fname='ex.calfits')
+        uvc = UVCal()
+        uvc.read_calfits('./ex.calfits')
+        nt.assert_true(uvc.flag_array.min())
+        nt.assert_almost_equal(uvc.gain_array.max(), 1.0)
+        os.remove('./ex.calfits')
 
 
     def test_mock_data(self):

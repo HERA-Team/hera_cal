@@ -935,15 +935,18 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
     model_files = sorted(set(all_model_files))
 
     # check length of model files
+    nomodelfiles = False
     if len(model_files) == 0:
-        raise ValueError("no model files overlap with data files in LST")
+        echo("no model files overlap with data files in LST", verbose=verbose)
+        nomodelfiles = True
 
     # load model files
-    echo ("loading model files", type=1, verbose=verbose)
-    (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
-        model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
-    antpos = model_antpos
-    model_lsts[model_lsts < model_lsts[0]] += 2*np.pi
+    if nomodelfiles == False:
+        echo ("loading model files", type=1, verbose=verbose)
+        (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
+            model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
+        antpos = model_antpos
+        model_lsts[model_lsts < model_lsts[0]] += 2*np.pi
 
     # iterate over data files
     gains = []
@@ -967,14 +970,31 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
         echo("loading {}".format(dfile), type=1, verbose=verbose)
         (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
             data_pols) = io.load_vis(dfile, pop_autos=True, return_meta=True, pick_data_ants=False)
+        Ntimes = len(data_times)
+        Nfreqs = len(data_freqs)
         data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
 
         # get data ants
         total_data_antpos = copy.deepcopy(data_antpos)
         data_ants = np.unique(map(lambda k: k[:2], data.keys()))
         data_antpos = odict(map(lambda k: (k, data_antpos[k]), data_ants))
+
         # get wgts
         wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
+
+        # write blank calfits file if nomodelfiles
+        if nomodelfiles:
+            gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
+            gain_dict = map(lambda p: map(lambda a: ((a,p), np.ones((Ntimes, Nfreqs), np.complex)), data_ants), gain_pols)
+            gain_dict = odict(flatten(gain_dict))
+            flag_dict = odict(map(lambda k: (k, np.ones(gain_dict[k].shape, np.bool)), gain_dict.keys()))
+            # write to file
+            if write_calfits:
+                io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict, return_uvc=False, overwrite=overwrite)
+
+            # append gain dict to gains
+            gains.append(gain_dict)
+            continue
 
         # match redundant baselines
         if match_red_bls:
@@ -1061,7 +1081,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
 
         # collate gains
         if len(gain_list) == 0:
-            raise ValueError("abscal_run executed without any calibration flags set to True")
+            raise ValueError("abscal_run executed without any calibration arguments set to True")
         gain_dict = merge_gains(gain_list)
 
         # write to file
