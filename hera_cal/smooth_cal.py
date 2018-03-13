@@ -359,18 +359,19 @@ class Calibration_Smoother():
 
         # Now loop through and apply running Gaussian averages
         for antpol, gains in self.filtered_gains.items():
-            g = deepcopy(gains)
-            w = deepcopy(self.wgts[antpol])
-            if self.has_prev_cal:
-                g = np.vstack((self.prev_gains[antpol], g))
-                w = np.vstack((self.prev_wgts[antpol], w))
-            if self.has_next_cal:
-                g = np.vstack((g, self.next_gains[antpol]))
-                w = np.vstack((w, self.next_wgts[antpol]))
-            assert(g.shape[0] > 1) #time filtering doesn't make sense if nInt < 2
-            time_filtered = time_filter(g, w, times, filter_scale = filter_scale, nMirrors = nMirrors)
-            # keep only the part corresponding to the gain of interest
-            self.filtered_gains[antpol] = time_filtered[start_time_index:start_time_index + len(self.times), :]
+            if not np.all(self.cal_flags[antpol]):
+                g = deepcopy(gains)
+                w = deepcopy(self.wgts[antpol])
+                if self.has_prev_cal:
+                    g = np.vstack((self.prev_gains[antpol], g))
+                    w = np.vstack((self.prev_wgts[antpol], w))
+                if self.has_next_cal:
+                    g = np.vstack((g, self.next_gains[antpol]))
+                    w = np.vstack((w, self.next_wgts[antpol]))
+                assert(g.shape[0] > 1) #time filtering doesn't make sense if nInt < 2
+                time_filtered = time_filter(g, w, times, filter_scale = filter_scale, nMirrors = nMirrors)
+                # keep only the part corresponding to the gain of interest
+                self.filtered_gains[antpol] = time_filtered[start_time_index:start_time_index + len(self.times), :]
 
         self.time_filtered = True
 
@@ -393,9 +394,10 @@ class Calibration_Smoother():
             warnings.warn('It is usually better to time-filter first, then frequency-filter.')
 
         for antpol, gains in self.filtered_gains.items():
-            w = self.wgts[antpol]
-            self.filtered_gains[antpol] = freq_filter(gains, w, self.freqs, filter_scale=filter_scale,
-                                                      tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
+            if not np.all(self.cal_flags[antpol]):
+                w = self.wgts[antpol]
+                self.filtered_gains[antpol] = freq_filter(gains, w, self.freqs, filter_scale=filter_scale,
+                                                          tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
         self.freq_filtered = True
 
 
@@ -411,6 +413,7 @@ class Calibration_Smoother():
         '''
         io.update_cal(self.input_cal, outfilename, gains = self.filtered_gains, flags = self.cal_flags, 
                       add_to_history = add_to_history, clobber = clobber, **kwargs)
+
 
 
 def smooth_cal_argparser():
