@@ -71,7 +71,7 @@ def build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts = False):
     wgts[np.logical_not(np.isfinite(wgts))] = 0
     wgts[flags] = 0.0
     # Renormalize weights to make skip_wgt work properly
-    wgts /= np.mean(wgts[wgts > 0])
+    wgts[wgts > 0] /= np.mean(wgts[wgts > 0])
     if binary_wgts:
         wgts[wgts > 0] = 1.0
     return wgts
