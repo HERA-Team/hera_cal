@@ -20,5 +20,5 @@ if args.data_is_omni_solution:
     kwargs['reweight'] = True
     kwargs['match_red_bls'] = True
 
-abscal.abscal_run(args.data_files, args.model_files, verbose=verbose, **kwargs)
+abscal.abscal_run(args.data_files, args.model_files, verbose=verbose, history=history, **kwargs)
 

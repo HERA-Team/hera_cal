@@ -850,7 +850,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
                calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, interp_model=True, all_antenna_gains=False,
                delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, abs_amp_cal=False,
-               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False):
+               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -990,7 +990,8 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
             flag_dict = odict(map(lambda k: (k, np.ones(gain_dict[k].shape, np.bool)), gain_dict.keys()))
             # write to file
             if write_calfits:
-                io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict, return_uvc=False, overwrite=overwrite)
+                io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict, 
+                             return_uvc=False, overwrite=overwrite, history=history)
 
             # append gain dict to gains
             gains.append(gain_dict)
@@ -1086,7 +1087,8 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
 
         # write to file
         if write_calfits:
-            io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, return_uvc=False, overwrite=overwrite)
+            io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, return_uvc=False, 
+                         overwrite=overwrite, history=history)
 
         # append gain dict to gains
         gains.append(gain_dict)
