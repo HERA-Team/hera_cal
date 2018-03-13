@@ -549,8 +549,6 @@ class Test_AbsCal:
         hc.abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False)
         # test exception
         nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
-        model_files = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2458045.*.xx.HH.uvXRAA')))
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
         # check blank & flagged calfits file written if no LST overlap
         model_files = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458044.*.xx.HH.uvXRAA")))
         hc.abscal.abscal_run(data_files, model_files, write_calfits=True, overwrite=True, outdir='./', calfits_fname='ex.calfits')
