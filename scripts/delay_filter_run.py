@@ -7,6 +7,7 @@ parser = delay_filter_argparser()
 a = parser.parse_args()
 
 if a.outfile is None:
+    # If outfile is not supplied, append 'D' to infile.
     a.outfile = a.infile + 'D'
 
 # Run Delay Filter

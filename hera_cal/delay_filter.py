@@ -119,7 +119,9 @@ def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
     a.add_argument("infile", type=str, help="path to visibility data file to delay filter")
-    a.add_argument("outfile", nargs='?', default=None, type=str, help="path to new visibility results file")
+    a.add_argument("outfile", nargs='?', default=None, type=str, help="path to new visibility results file. "
+                   "Note that if outfile is not supplied, the parser defaults to None, but delay_filter_run.py "
+                   "will override this default, and instead sets outfile to infile + 'D'.")
     a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files (default "miriad")')
     a.add_argument("--write_model", default=False, action="store_true", help="write the low-pass filtered CLEAN model rather\
                    than the high-pass filtered residual")
