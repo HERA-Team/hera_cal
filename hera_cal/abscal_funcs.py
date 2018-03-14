@@ -1590,3 +1590,48 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     return DataContainer(red_data)
 
 
+def match_times(datafile, modelfiles, atol=1e-5):
+    """
+    Match start and end LST of datafile to modelfiles. Each file in modelfiles needs
+    to have the same integration time.
+
+    Parameters:
+    -----------
+    datafile : type=str, path to miriad data file
+    modelfiles : type=str, list of paths to miriad model files ordered according to file start time
+
+    Return: (matched_modelfiles)
+    -------
+    matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
+    """
+    # get times
+    data_time = np.array(utils.get_miriad_times(datafile))[:2]
+    model_times = np.array(utils.get_miriad_times(modelfiles))
+    model_inttime = model_times[2][0]
+    model_times = model_times[:2]
+    model_times[1] += model_inttime
+
+    # unwrap LST
+    if data_time[1] < data_time[0]: data_time[1] += 2*np.pi
+    model_start = model_times[0][0]
+    model_times[model_times < model_start] += 2*np.pi
+
+    # select model files
+    matched_modelfiles = np.array(modelfiles)[(model_times[0] < data_time[1] + atol) & \
+                                              (model_times[1] > data_time[0] - atol)]
+
+    return matched_modelfiles
+
+
+
+
+
+
+
+
+
+
+
+
+
+

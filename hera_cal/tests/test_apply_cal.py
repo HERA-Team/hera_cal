@@ -106,15 +106,16 @@ class Test_Update_Cal(unittest.TestCase):
                     if j < 300 or j > 923:
                         self.assertTrue(new_flags[k][i,j])
                     
-
+        with self.assertRaises(ValueError):
+            ac.apply_cal(fname, outname, None)
         shutil.rmtree(outname)
 
     def test_apply_cal_argparser(self):
-        sys.argv = [sys.argv[0], 'a', 'b', 'c']
+        sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
         args = ac.apply_cal_argparser()
         self.assertEqual(args.infile, 'a')
         self.assertEqual(args.outfile, 'b')
-        self.assertEqual(args.new_cal, 'c')
+        self.assertEqual(args.new_cal, ['d'])
 
 
 if __name__ == '__main__':

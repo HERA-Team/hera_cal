@@ -850,7 +850,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
                calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, interp_model=True, all_antenna_gains=False,
                delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, abs_amp_cal=False,
-               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False):
+               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -926,11 +926,27 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
     if return_gains and return_objects: return (gains dictionary, AbsCal instance)
     if write_calfits: writes a calfits file with gain solutions
     """
+    # only load model files needed to create LST overlap w/ data files
+    # and reject data files that have no LST overlap w/ any of model files
+    all_model_files = []
+    for df in data_files:
+        all_model_files.extend(match_times(df, model_files))
+
+    model_files = sorted(set(all_model_files))
+
+    # check length of model files
+    nomodelfiles = False
+    if len(model_files) == 0:
+        echo("no model files overlap with data files in LST", verbose=verbose)
+        nomodelfiles = True
+
     # load model files
-    echo ("loading model files", type=1, verbose=verbose)
-    (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
-        model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
-    antpos = model_antpos
+    if nomodelfiles == False:
+        echo ("loading model files", type=1, verbose=verbose)
+        (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
+            model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
+        antpos = model_antpos
+        model_lsts[model_lsts < model_lsts[0]] += 2*np.pi
 
     # iterate over data files
     gains = []
@@ -945,7 +961,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
             if outdir is None:
                 outdir = os.path.dirname(dfile)
             calfits_fname = os.path.join(outdir, calfits_fname)
-            
+
             # check path
             if os.path.exists(calfits_fname) and overwrite == False:
                 raise IOError("{} exists, not overwriting".format(calfits_fname))
@@ -954,12 +970,32 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
         echo("loading {}".format(dfile), type=1, verbose=verbose)
         (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
             data_pols) = io.load_vis(dfile, pop_autos=True, return_meta=True, pick_data_ants=False)
+        Ntimes = len(data_times)
+        Nfreqs = len(data_freqs)
+        data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
+
         # get data ants
         total_data_antpos = copy.deepcopy(data_antpos)
         data_ants = np.unique(map(lambda k: k[:2], data.keys()))
         data_antpos = odict(map(lambda k: (k, data_antpos[k]), data_ants))
+
         # get wgts
         wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
+
+        # write blank calfits file if nomodelfiles
+        if nomodelfiles:
+            gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
+            gain_dict = map(lambda p: map(lambda a: ((a,p), np.ones((Ntimes, Nfreqs), np.complex)), data_ants), gain_pols)
+            gain_dict = odict(flatten(gain_dict))
+            flag_dict = odict(map(lambda k: (k, np.ones(gain_dict[k].shape, np.bool)), gain_dict.keys()))
+            # write to file
+            if write_calfits:
+                io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict, 
+                             return_uvc=False, overwrite=overwrite, history=history)
+
+            # append gain dict to gains
+            gains.append(gain_dict)
+            continue
 
         # match redundant baselines
         if match_red_bls:
@@ -969,14 +1005,16 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
         # interpolate model to match data
         if interp_model:
             interp_model, interp_mflags = interp2d_vis(model, model_lsts, model_freqs,
-                                                       data_lsts, data_freqs)
+                                                       data_lsts, data_freqs, flags=model_flags)
+            for k in interp_mflags.keys():
+                wgts[k][interp_mflags[k]] *= 0
 
         # reweight according to redundancy
         if reweight:
             wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
 
         # instantiate class
-        AC = AbsCal(interp_model, data, antpos=antpos, freqs=data_freqs)
+        AC = AbsCal(interp_model, data, wgts=wgts, antpos=antpos, freqs=data_freqs)
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
 
         gain_list = []
@@ -1044,12 +1082,13 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
 
         # collate gains
         if len(gain_list) == 0:
-            raise ValueError("abscal_run executed without any calibration flags set to True")
+            raise ValueError("abscal_run executed without any calibration arguments set to True")
         gain_dict = merge_gains(gain_list)
 
         # write to file
         if write_calfits:
-            gains2calfits(calfits_fname, gain_dict, data_freqs, data_lsts, AC.gain_pols, overwrite=overwrite)
+            io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, return_uvc=False, 
+                         overwrite=overwrite, history=history)
 
         # append gain dict to gains
         gains.append(gain_dict)

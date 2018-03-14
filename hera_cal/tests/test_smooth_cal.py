@@ -154,6 +154,17 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.assertTrue(self.sc.time_filtered)
         self.assertEqual(g4.shape, g.shape)
 
+        self.sc.reset_filtering()
+        self.sc.cal_flags[(36,'x')] = np.ones_like(self.sc.cal_flags[(36,'x')])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.sc.time_filter()
+            np.testing.assert_array_equal(self.sc.filtered_gains[(36,'x')], g)
+            self.sc.freq_filter()
+            np.testing.assert_array_equal(self.sc.filtered_gains[(36,'x')], g)
+        self.sc.reset_filtering()
+        self.sc.build_weights()
+
         self.sc.filtered_gains[36,'x'] = g
         self.sc.time_filtered, self.sc.freq_filtered = False, False
 

@@ -2,11 +2,11 @@ import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from collections import OrderedDict as odict
-from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 import hera_cal as hc
 import operator
 import os
+import copy
 
 
 polnum2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
@@ -83,8 +83,8 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
                 data[i, j], flags[i, j] = odict(), odict()
             for ip, pol in enumerate(uvd.polarization_array):
                 pol = polnum2str[pol]
-                data[(i, j)][pol] = deepcopy(uvd.get_data((i, j, pol)))
-                flags[(i, j)][pol] = deepcopy(uvd.get_flags((i, j, pol)))
+                data[(i, j)][pol] = copy.deepcopy(uvd.get_data((i, j, pol)))
+                flags[(i, j)][pol] = copy.deepcopy(uvd.get_flags((i, j, pol)))
 
     # If we don't want nested dicts, convert to DataContainer
     if not nested_dict:
@@ -94,7 +94,11 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
     if return_meta:
         freqs = np.unique(uvd.freq_array)
         times = np.unique(uvd.time_array)
-        lsts = np.unique(uvd.lst_array)
+        lsts = []
+        for l in uvd.lst_array.ravel():
+            if l not in lsts:
+                lsts.append(l)
+        lsts = np.array(lsts)
         antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
         antpos = odict(zip(ants, antpos))
         pols = np.array([polnum2str[polnum] for polnum in uvd.polarization_array])
@@ -343,7 +347,7 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
 
     # Load infile
     if type(infilename) == UVData:
-        uvd = deepcopy(infilename)
+        uvd = copy.deepcopy(infilename)
     else:
         uvd = UVData()
         if filetype_in == 'miriad':
@@ -467,11 +471,11 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
     pol2str = {-5: 'x', -6: 'y'}
 
     # get antenna info
-    antenna_numbers = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    ant_array = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    antenna_numbers = copy.copy(ant_array)
     antenna_names = np.array(map(lambda a: "ant{}".format(a), antenna_numbers))
-    Nants_data = len(antenna_numbers)
+    Nants_data = len(ant_array)
     Nants_telescope = len(antenna_numbers)
-    ant_array = np.arange(Nants_data)
 
     # get polarization info
     pol_array = np.array(sorted(set(map(lambda k: k[1].lower(), gains.keys()))))
@@ -497,7 +501,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
     flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.bool)
     quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.float)
     for i, p in enumerate(pol_array):
-        for j, a in enumerate(antenna_numbers):
+        for j, a in enumerate(ant_array):
             # ensure (a, p) is in gains
             if (a, p) in gains:
                 gain_array[j, :, :, :, i] = gains[(a, p)].T[None, :, :]
@@ -513,6 +517,13 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
                 gain_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.complex)
                 flag_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.bool)
                 quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
+
+    # Check gain_array for values close to zero, if so, set to 1
+    zero_check = np.isclose(gain_array, 0, rtol=1e-10, atol=1e-10)
+    gain_array[zero_check] = 1.0 + 0j
+    flag_array[zero_check] += True
+    if zero_check.max() is True:
+        print("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
     # instantiate UVCal
     uvc = UVCal()
@@ -580,6 +591,14 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
             if quals is not None:
                 cal.quality_array[i, 0, :, :, ip] = quals[(ant, jonesnum2str[pol])].T
 
+    # Check gain_array for values close to zero, if so, set to 1
+    zero_check = np.isclose(cal.gain_array, 0, rtol=1e-10, atol=1e-10)
+    cal.gain_array[zero_check] = 1.0 + 0j
+    cal.flag_array[zero_check] += True
+    if zero_check.max() is True:
+        print("Some of values in self.gain_array were zero and are flagged and set to 1.")
+
+
     # Set additional attributes
     cal.history += add_to_history
     for attribute, value in kwargs.items():
@@ -606,7 +625,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Load infile
     if type(infilename) == UVCal:
-        cal = deepcopy(infilename)
+        cal = copy.deepcopy(infilename)
     else:
         cal = UVCal()
         cal.read_calfits(infilename)
