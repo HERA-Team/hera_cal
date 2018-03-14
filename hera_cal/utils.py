@@ -214,7 +214,7 @@ def LST2JD(LST, start_jd, longitude=21.42830):
         _array = True
     else:
         LST = [LST]
-        _array = False  
+        _array = False
 
     # get start_JD
     base_jd = float(start_jd)
@@ -263,7 +263,7 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
 
     latitude : type=float, latitude of observer in degrees north, default=HERA latitutde
                This only matters when using epoch="J2000"
-    
+
     epoch : type=str, epoch for RA calculation. options=['current', 'J2000'].
             The 'current' epoch is the epoch at JD. Note that
             LST is defined as the zenith RA in the current epoch. Note that
@@ -376,7 +376,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     ------------
     filepaths : type=list, list of filepaths
 
-    add_int_buffer : type=bool, if True, extend start and stop times by a single integration duration 
+    add_int_buffer : type=bool, if True, extend start and stop times by a single integration duration
         except for start of first file, and stop of last file.
 
     Output: (file_starts, file_stops, int_times)
@@ -436,6 +436,3 @@ def get_miriad_times(filepaths, add_int_buffer=False):
         int_times = int_times[0]
 
     return file_starts, file_stops, int_times
-
-
-
