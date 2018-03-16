@@ -6,6 +6,7 @@ from StringIO import StringIO
 import subprocess
 import hera_cal
 
+
 def test_construct_version_info():
     # this test is a bit silly because it uses the nearly the same code as the original,
     # but it will detect accidental changes that could cause problems.
@@ -25,6 +26,7 @@ def test_construct_version_info():
                          'git_branch': git_branch}
 
     nt.assert_equal(hera_cal.version.construct_version_info(), test_version_info)
+
 
 def test_main():
     version_info = hera_cal.version.construct_version_info()

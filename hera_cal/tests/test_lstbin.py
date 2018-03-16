@@ -18,14 +18,15 @@ import glob
 import scipy.stats as stats
 from hera_cal import io
 
+
 class Test_lstbin:
 
     def setUp(self):
         # load data
         np.random.seed(0)
-        self.data_files = [sorted(glob.glob(DATA_PATH+'/zen.2458043.4*uvXRAA')),
-                           sorted(glob.glob(DATA_PATH+'/zen.2458044.4*uvXRAA')),
-                           sorted(glob.glob(DATA_PATH+'/zen.2458045.4*uvXRAA'))]
+        self.data_files = [sorted(glob.glob(DATA_PATH + '/zen.2458043.4*uvXRAA')),
+                           sorted(glob.glob(DATA_PATH + '/zen.2458044.4*uvXRAA')),
+                           sorted(glob.glob(DATA_PATH + '/zen.2458045.4*uvXRAA'))]
 
         (self.data1, self.flgs1, self.ap1, a, self.freqs1, t, self.lsts1,
          p) = hc.io.load_vis(self.data_files[0], return_meta=True)
@@ -47,17 +48,17 @@ class Test_lstbin:
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
                                    verbose=False)
         # check shape and dtype
-        nt.assert_equal(output[1][(24,25,'xx')].dtype, np.complex)
-        nt.assert_equal(output[1][(24,25,'xx')].shape, (224, 64))
+        nt.assert_equal(output[1][(24, 25, 'xx')].dtype, np.complex)
+        nt.assert_equal(output[1][(24, 25, 'xx')].shape, (224, 64))
         # check number of points in each bin
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[0,30], 1)
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[30,30], 2)
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[100,30], 3)
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[190,30], 2)
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[220,30], 1)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[0, 30], 1)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[30, 30], 2)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[100, 30], 3)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[190, 30], 2)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[220, 30], 1)
         # check with large spacing lst_grid
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=.01, verbose=False)
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[10,30], 39)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[10, 30], 39)
         # check flgs are propagated
         flgs1 = copy.deepcopy(self.flgs1)
         flgs1[(24, 25, 'xx')][:, 32] = True
@@ -77,7 +78,7 @@ class Test_lstbin:
         conj_data3 = DataContainer(odict(map(lambda k: (hc.lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys())))
         data_list = [self.data1, self.data2, conj_data3]
         output = hc.lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
-        nt.assert_equal(output[1][(24,25,'xx')].shape, (224, 64))
+        nt.assert_equal(output[1][(24, 25, 'xx')].shape, (224, 64))
         # test sigma clip
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                    verbose=False, sig_clip=True, min_N=5, sigma=2)
@@ -85,15 +86,15 @@ class Test_lstbin:
     def test_lst_align(self):
         # test basic execution
         output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
-        nt.assert_equal(output[0][(24,25,'xx')].shape, (180, 64))
+        nt.assert_equal(output[0][(24, 25, 'xx')].shape, (180, 64))
         nt.assert_equal(len(output[2]), 180)
         nt.assert_almost_equal(output[2][0], 0.20085207269336539)
         # test flag extrapolate
-        nt.assert_true(output[1][(24,25,'xx')][0].min())
+        nt.assert_true(output[1][(24, 25, 'xx')][0].min())
         # test no dlst
         output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         # test wrapped lsts
-        lsts = (self.lsts1 + 6) % (2*np.pi)
+        lsts = (self.lsts1 + 6) % (2 * np.pi)
         output = hc.lstbin.lst_align(self.data1, lsts, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         nt.assert_almost_equal(output[2][150], 0.035628730243852047)
 
@@ -120,8 +121,8 @@ class Test_lstbin:
         shutil.rmtree('./zen.xx.LST.0.20164.uv')
         shutil.rmtree('./zen.xx.STD.0.20164.uv')
 
-        data_files = [[sorted(glob.glob(DATA_PATH+'/zen.2458043.*uvXRAA'))[0]],
-                      [sorted(glob.glob(DATA_PATH+'/zen.2458045.*uvXRAA'))[-1]]]
+        data_files = [[sorted(glob.glob(DATA_PATH + '/zen.2458043.*uvXRAA'))[0]],
+                      [sorted(glob.glob(DATA_PATH + '/zen.2458045.*uvXRAA'))[-1]]]
         # test data_list is empty
         hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
                                 verbose=False)
@@ -163,16 +164,16 @@ class Test_lstbin:
         x[0, 50] = 100
         x[4, 50] = 5
         arr = hc.lstbin.sigma_clip(x, sigma=2.0)
-        nt.assert_true(arr[0,50])
-        nt.assert_false(arr[4,50])
+        nt.assert_true(arr[0, 50])
+        nt.assert_false(arr[4, 50])
         # test flags
         arr = stats.norm.rvs(0, 1, 10).reshape(2, 5)
         flg = np.zeros_like(arr, np.bool)
-        flg[0,3] = True
+        flg[0, 3] = True
         out = hc.lstbin.sigma_clip(arr, flags=flg, min_N=5)
-        nt.assert_false(out[0,3])
+        nt.assert_false(out[0, 3])
         out = hc.lstbin.sigma_clip(arr, flags=flg, min_N=1)
-        nt.assert_true(out[0,3])
+        nt.assert_true(out[0, 3])
 
     def test_switch_bl(self):
         # test basic execution
@@ -196,7 +197,7 @@ class Test_lstbin:
         # get phase error on shortest EW baseline
         k = (0, 1, 'xx')
         # check error at transit
-        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
+        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4])
         nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
         # check error across file
         phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
@@ -207,7 +208,7 @@ class Test_lstbin:
         data = copy.deepcopy(data_drift)
         hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
         # check error at transit
-        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
+        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4])
         nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
         # check err across file
         phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
@@ -223,7 +224,3 @@ class Test_lstbin:
         # check error across file
         phs_err = np.angle(data[k][:, 4] / data_drift[k][50, 4])
         nt.assert_true(np.abs(phs_err).max() < 1e-4)
-
-
-
-

@@ -14,6 +14,7 @@ from collections import OrderedDict as odict
 
 
 class TestAAFromCalfile(object):
+
     def setUp(self):
         # define frequencies
         self.freqs = np.array([0.15])
@@ -27,7 +28,9 @@ class TestAAFromCalfile(object):
         aa = utils.get_aa_from_calfile(self.freqs, self.calfile)
         nt.assert_equal(len(aa), 128)
 
+
 class TestAAFromUV(object):
+
     def setUp(self):
         # define test file that is compatible with get_aa_from_uv
         self.test_file = "zen.2457999.76839.xx.HH.uvA"
@@ -41,7 +44,9 @@ class TestAAFromUV(object):
         #   because there is no concept of antenna names
         nt.assert_equal(len(aa), 88)
 
+
 class TestAA(object):
+
     def setUp(self):
         # define test file that is compatible with get_aa_from_uv
         self.test_file = "zen.2457999.76839.xx.HH.uvA"
@@ -77,16 +82,18 @@ def test_JD2LST():
     nt.assert_equal(len(lst), 9)
     nt.assert_almost_equal(lst[3], 0.81486300218170715)
 
+
 def test_LST2JD():
     # test basic execution
     lst = np.pi
     jd = utils.LST2JD(lst, start_jd=2458042)
     nt.assert_almost_equal(jd, 2458042.8708433118)
     # test array execution
-    lst = np.arange(np.pi, np.pi+1.1, 0.2)
+    lst = np.arange(np.pi, np.pi + 1.1, 0.2)
     jd = utils.LST2JD(lst, start_jd=2458042)
     nt.assert_equal(len(jd), 6)
     nt.assert_almost_equal(jd[3], 2458042.9660755517)
+
 
 def test_JD2RA():
     # test basic execution
@@ -103,6 +110,7 @@ def test_JD2RA():
     # test J2000 epoch
     ra = utils.JD2RA(jd, epoch='J2000')
     nt.assert_almost_equal(ra[0], 225.37671446615548)
+
 
 def test_combine_calfits():
     test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
@@ -124,7 +132,7 @@ def test_combine_calfits():
     uvc_dly.read_calfits(test_file1)
     uvc_abs = UVCal()
     uvc_abs.read_calfits(test_file2)
-    nt.assert_almost_equal(uvc_dly.gain_array[0,0,10,10,0] * uvc_abs.gain_array[0,0,10,10,0], uvc.gain_array[0,0,10,10,0])
+    nt.assert_almost_equal(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
     utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=False)
@@ -132,8 +140,9 @@ def test_combine_calfits():
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
 
+
 def test_get_miriad_times():
-    filepaths = sorted(glob.glob(DATA_PATH+"/zen.2458042.*.xx.HH.uvXA"))
+    filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
     # test execution
     starts, stops, ints = utils.get_miriad_times(filepaths, add_int_buffer=False)
     nt.assert_almost_equal(starts[0], 4.7293432458811866)
@@ -152,4 +161,3 @@ def test_get_miriad_times():
     nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
     # test if str
     starts, stops, ints = utils.get_miriad_times(filepaths[0])
-

@@ -6,7 +6,7 @@
 3) performs a frequency smoothing by delay-filtering the solutions (default 10 MHz scale e.g. 100 ns delay filter).
 4) writes the smoothed calibrations solutions to disk.
 Frequency smoothing is generally more important and the two smoothing operations do not commute as currently written,
-so frequency smoothing is performed second to ensure frequency smoothness of calibration solutions. To ensure that 
+so frequency smoothing is performed second to ensure frequency smoothness of calibration solutions. To ensure that
 time smoothing does not introduce file boundary discontinuities, one can provide previous and subsequent calibration
 and data files that are used when time smoothing but are not themselves modified by this code. See help for a more
 detailed explanation of the parameters.
@@ -25,4 +25,4 @@ if not a.disable_time:
     sc.time_filter(filter_scale=a.time_scale, mirror_kernel_min_sigmas=a.mirror_sigmas)
 if not a.disable_freq:
     sc.freq_filter(filter_scale=a.freq_scale, tol=a.tol, window=a.window, skip_wgt=a.skip_wgt, maxiter=a.maxiter)
-sc.write_smoothed_cal(a.cal_outfile, add_to_history = ' '.join(sys.argv), clobber=a.clobber)
+sc.write_smoothed_cal(a.cal_outfile, add_to_history=' '.join(sys.argv), clobber=a.clobber)
