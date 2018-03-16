@@ -12,6 +12,7 @@ import copy
 
 
 class AntennaArray(aipy.pol.AntennaArray):
+
     def __init__(self, *args, **kwargs):
         aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
         self.antpos_ideal = kwargs.pop('antpos_ideal')
@@ -49,7 +50,7 @@ class AntennaArray(aipy.pol.AntennaArray):
             except(KeyError):
                 pass
             if ant_changed:
-                #rotate from zenith to equatorial, convert from meters to ns
+                # rotate from zenith to equatorial, convert from meters to ns
                 ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * self.cm_p_m
             changed |= ant_changed
         if changed:
@@ -123,7 +124,7 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
         bp_i = {'x': bp_i, 'y': bp_i}
         twist = 0.
         antennas.append(aipy.pol.Antenna(0., 0., 0., beam, phsoff=phsoff,
-                        amp=amp, bp_r=bp_r, bp_i=bp_i, pointing=(0., np.pi / 2, twist)))
+                                         amp=amp, bp_r=bp_r, bp_i=bp_i, pointing=(0., np.pi / 2, twist)))
 
     # Make the AntennaArray and set position parameters
     aa = AntennaArray(location, antennas, antpos_ideal=antpos_ideal)
@@ -183,7 +184,7 @@ def JD2LST(JD, longitude=21.42830):
         # construct astropy Time object
         t = Time(jd, format='jd', scale='utc')
         # get LST in radians at epoch of jd
-        LST.append(t.sidereal_time('apparent', longitude=longitude*unt.deg).radian)
+        LST.append(t.sidereal_time('apparent', longitude=longitude * unt.deg).radian)
     LST = np.array(LST)
 
     if _array:
@@ -294,9 +295,9 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
 
         # use J2000 epoch
         elif epoch == 'J2000':
-            loc = crd.EarthLocation(lat=latitude*unt.deg, lon=longitude*unt.deg)
+            loc = crd.EarthLocation(lat=latitude * unt.deg, lon=longitude * unt.deg)
             t = Time(jd, format='jd', scale='utc')
-            zen = crd.SkyCoord(frame='altaz', alt=90*unt.deg, az=0*unt.deg, obstime=t, location=loc)
+            zen = crd.SkyCoord(frame='altaz', alt=90 * unt.deg, az=0 * unt.deg, obstime=t, location=loc)
             RA.append(zen.icrs.ra.degree)
 
         else:
@@ -389,7 +390,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     """
     _array = True
     # check filepaths type
-    if type(filepaths) == str:
+    if isinstance(filepaths, str):
         _array = False
         filepaths = [filepaths]
 
@@ -405,15 +406,15 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     for i, f in enumerate(filepaths):
         uv = aipy.miriad.UV(f)
         # get integration time
-        int_time = uv['inttime'] * 2*np.pi / (23.9344699*3600.)
+        int_time = uv['inttime'] * 2 * np.pi / (23.9344699 * 3600.)
         # get start and stop
         start = uv['lst']
-        stop = start + (uv['ntimes']-1) * int_time
+        stop = start + (uv['ntimes'] - 1) * int_time
         # add integration buffer to beginning and end if desired
         if add_int_buffer:
             if i != 0:
                 start -= int_time
-            if i != (Nfiles-1):
+            if i != (Nfiles - 1):
                 stop += int_time
         # add half an integration to get center of integration
         start += int_time / 2
@@ -427,8 +428,8 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     int_times = np.array(int_times)
 
     # make sure times don't wrap
-    file_starts[np.where(file_starts < 0)] += 2*np.pi
-    file_stops[np.where(file_stops >= 2*np.pi)] -= 2*np.pi
+    file_starts[np.where(file_starts < 0)] += 2 * np.pi
+    file_stops[np.where(file_stops >= 2 * np.pi)] -= 2 * np.pi
 
     if _array is False:
         file_starts = file_starts[0]

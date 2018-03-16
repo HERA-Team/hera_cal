@@ -192,7 +192,7 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
         '''
         try:
             return self._blpair2ind[blpair]
-        except:
+        except (AttributeError):
             self._blpair2ind = {}
             for x, bp in enumerate(self.bl_pairs):
                 self._blpair2ind[bp] = x
@@ -210,7 +210,7 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
 
         try:
             return self._blpair2antind[blpair]
-        except:
+        except (AttributeError):
             self._blpair2antind = {}
             for bp in self.bl_pairs:
                 self._blpair2antind[bp] = map(self.ant_index, np.array(bp).flatten())
@@ -240,11 +240,11 @@ class FirstCalRedundantInfo(omnical.info.RedundantInfo):
         # populate matrix with coefficients. The equation for blpair ((a1,a2), (a3,a4))
         # the delay difference is d1 - d2 - d3 + d4
         for n, bp in enumerate(self.bl_pairs):
-            i, j, k, l = self.blpair2antind(bp)
+            i, j, k, m = self.blpair2antind(bp)
             A[n, i] += 1
             A[n, j] += -1
             A[n, k] += -1
-            A[n, l] += 1
+            A[n, m] += 1
         self.A = A
         # Don't really need to have these.
         self.antloc = antpos.take(self.subsetant, axis=0).astype(np.float32)
@@ -392,7 +392,7 @@ def UVData_to_dict(uvdata_list, filetype='miriad'):
 
     d, f = {}, {}
     for uv_in in uvdata_list:
-        if type(uv_in) == str:
+        if isinstance(uv_in, str):
             fname = uv_in
             uv_in = UVData()
             # read in file without multiple if statements
@@ -413,9 +413,9 @@ def UVData_to_dict(uvdata_list, filetype='miriad'):
                     f[(i, j)][pol] = new_flags
                 else:
                     d[(i, j)][pol] = np.concatenate(
-                        [d[(i, j)][pol], new_data ])
+                        [d[(i, j)][pol], new_data])
                     f[(i, j)][pol] = np.concatenate(
-                        [f[(i, j)][pol], new_flags ])
+                        [f[(i, j)][pol], new_flags])
     return d, f
 
 
@@ -455,12 +455,12 @@ def firstcal_run(files, opts, history):
 
     def _apply_first_cal(data_dict, sols, fqs, info):
         """Apply delay calibration solutions.
-        
+
         Args:
             data_dict (dict): Dictionary of visibilities indexed by bl and pol.
             sols (dict): Dictionary of delay solutions (output of Firstcal.run)
             fqs (array): frequencies associated with visibilities in Hz
-        
+
         Returns:
             dict : calibrated visibilities in dictionary format (see data_dict)
         """
@@ -483,10 +483,10 @@ def firstcal_run(files, opts, history):
         for ai, aj in data_dict.keys():
             for pol in data_dict[ai, aj].keys():
                 if ((ai, pol[0]) in invert_these) ^ ((aj, pol[1]) in invert_these):
-                    data_dict[ai,aj][pol] *= -1 
+                    data_dict[ai, aj][pol] *= -1
 
         return data_dict
-    
+
     def _search_and_iterate_firstcal(uv, info, option_parser):
         '''Searches and iterates over firstcal
 
@@ -509,7 +509,7 @@ def firstcal_run(files, opts, history):
         while niters == 0 or len(switched) > 0:
             datapack, flagpack = io.load_vis([uv], nested_dict=True)
             datapack = _apply_pi_shift(datapack, switched)
-            wgtpack = {k: {p: np.logical_not(flagpack[k][p]) for p in flagpack[k]} for k in flagpack} 
+            wgtpack = {k: {p: np.logical_not(flagpack[k][p]) for p in flagpack[k]} for k in flagpack}
 
             fqs = uv.freq_array[0, :] / 1e9
 
@@ -517,13 +517,13 @@ def firstcal_run(files, opts, history):
             fc = FirstCal(datapack, wgtpack, fqs, info)
             sols = fc.run(finetune=option_parser.finetune,
                           verbose=option_parser.verbose,
-                          average=option_parser.average, 
+                          average=option_parser.average,
                           window='none')
 
             # Now we need to check if antennas are flipped
             medians = {}
             cal_data = copy.deepcopy(datapack)
-            cal_data = _apply_first_cal(cal_data, sols, fqs*1e9, info)
+            cal_data = _apply_first_cal(cal_data, sols, fqs * 1e9, info)
             pol = cal_data.values()[0].keys()[0][0]
 
             ratio_bls = [(bl1, bl2) for bls in info.get_reds() for b1, bl1 in enumerate(bls) for bl2 in bls[b1 + 1:] if bl1 != bl2]
@@ -542,18 +542,17 @@ def firstcal_run(files, opts, history):
                 for ai in [a1, a2, a3, a4]:
                     antpol = (ai, pol)
                     if antpol in medians:
-                       medians[antpol] = np.append(medians[antpol], median_over_freqs)
+                        medians[antpol] = np.append(medians[antpol], median_over_freqs)
                     else:
                         medians[antpol] = median_over_freqs
             median_over_ant_time = {k: np.median(np.abs(m)) for k, m in medians.items()}
             # if the ratio is greater than np.pi/2, it is a switched antenna.
-            switched = [k for k, m in median_over_ant_time.items() if m > np.pi / 2] 
+            switched = [k for k, m in median_over_ant_time.items() if m > np.pi / 2]
             switched_history += switched
-            niters += 1 
+            niters += 1
             if niters >= option_parser.maxiter:
                 break
         return sols, switched_history
-
 
     # check that we got files to process
     if len(files) == 0:
@@ -580,7 +579,7 @@ def firstcal_run(files, opts, history):
     ubls = process_ubls(opts.ubls)
 
     print('Excluding Antennas:', ex_ants)
-    if len(ubls) != None:
+    if len(ubls) is not None:
         print('Using Unique Baselines:', ubls)
     info = omni.aa_to_info(aa, pols=[opts.pol[0]],
                            fcal=True, ubls=ubls, ex_ants=ex_ants, tol=opts.reds_tolerance)
@@ -593,12 +592,12 @@ def firstcal_run(files, opts, history):
     # Firstcal loop per file.
     for filename in files:
         # make output filename and check for existence
-        if not opts.outpath is None:
+        if opts.outpath is not None:
             outname = '%s/%s' % (opts.outpath, filename.split('/')
                                  [-1] + '.first.calfits')
         else:
             outname = '%s' % filename + '.first.calfits'
-        if os.path.exists(outname) == True and opts.overwrite == False:
+        if os.path.exists(outname) and not opts.overwrite:
             raise IOError("File {0} already exists".format(outname))
 
         # read in data and run firstcal
@@ -608,7 +607,7 @@ def firstcal_run(files, opts, history):
         if uv_in.phase_type != 'drift':
             print("Setting phase type to drift")
             uv_in.unphase_to_drift()
-        
+
         sols, rotated_antennas = _search_and_iterate_firstcal(uv_in, info, opts)
         rotated_antennas = [str(ai) for (ai, pol) in rotated_antennas]
         # convert delays to a gain solution
@@ -616,7 +615,6 @@ def firstcal_run(files, opts, history):
         # fix 180 phase offset in gain solutions
         for antpol in rotated_antennas:
             gain_solutions[int(antpol)] *= -1
-             
 
         meta = {}
         meta['lsts'] = uv_in.lst_array.reshape(uv_in.Ntimes, uv_in.Nbls)[:, 0]
@@ -643,7 +641,7 @@ def firstcal_run(files, opts, history):
         # Save solutions
         optional = {'observer': opts.observer,
                     'git_origin_cal': opts.git_origin_cal,
-                    'git_hash_cal':  opts.git_hash_cal}
+                    'git_hash_cal': opts.git_hash_cal}
 
         hc = cal_formats.HERACal(meta, gains, flags=antflags, ex_ants=ex_ants,
                                  appendhist=history, optional=optional)
@@ -651,6 +649,7 @@ def firstcal_run(files, opts, history):
         hc.write_calfits(outname, clobber=opts.overwrite)
 
     return
+
 
 def firstcal_option_parser():
     """

@@ -22,6 +22,7 @@ from scipy import spatial
 import linsolve
 import itertools
 import operator
+from functools import reduce
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
@@ -63,7 +64,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # abs of amplitude ratio is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(data[k]/model[k]))) for k in keys])
+    ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -75,7 +76,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
-    # a{} is a dummy variable to prevent linsolve from overwriting repeated measurements 
+    # a{} is a dummy variable to prevent linsolve from overwriting repeated measurements
     eqns = odict([(k, "a{}*eta_{}+a{}*eta_{}".format(i, k[-1][0], i, k[-1][1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict([("a{}".format(i), 1.0) for i, k in enumerate(keys)])
 
@@ -152,7 +153,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
-    ydata = odict([(k, np.angle(data[k]/model[k])) for k in keys])
+    ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -170,20 +171,20 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
     # setup linsolve equations
     if four_pol:
         eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
-                    "".format(k[2][0], k[2][1], r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
+                       "".format(k[2][0], k[2][1], r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
     else:
         eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
-                    "".format(k[2][0], k[2][1], k[2][0], r_ew[k[0]], k[2][0], r_ns[k[0]], k[2][1],
-                              r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
+                       "".format(k[2][0], k[2][1], k[2][0], r_ew[k[0]], k[2][0], r_ns[k[0]], k[2][1],
+                                 r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
     # set design matrix entries
     ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))
     ls_design_matrix.update(odict(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants)))
 
     if zero_psi:
-        ls_design_matrix.update({"a1":0.0, "a2":0.0})
+        ls_design_matrix.update({"a1": 0.0, "a2": 0.0})
     else:
-        ls_design_matrix.update({"a1":1.0, "a2":1.0})
+        ls_design_matrix.update({"a1": 1.0, "a2": 1.0})
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -195,7 +196,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    return fit 
+    return fit
 
 
 def amp_logcal(model, data, wgts=None, verbose=True):
@@ -235,7 +236,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # difference of log-amplitudes is ydata independent variable
-    ydata = odict([(k, np.log(np.abs(data[k]/model[k]))) for k in keys])
+    ydata = odict([(k, np.log(np.abs(data[k] / model[k]))) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -265,7 +266,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
 
 def phs_logcal(model, data, wgts=None, verbose=True):
     """
-    calculate per-antenna gain phase via the 
+    calculate per-antenna gain phase via the
     logarithmically linearized equation
 
     angle(V_ij,xy^data / V_ij,xy^model) = angle(g_i_x) - angle(g_j_y)
@@ -299,7 +300,7 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     keys = sorted(set(model.keys()) & set(data.keys()))
 
     # angle of visibility ratio is ydata independent variable
-    ydata = odict([(k, np.angle(data[k]/model[k])) for k in keys])
+    ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -351,7 +352,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data. These are only used to find delays from
-           itegrations that are unflagged for at least two frequency bins. In this case, 
+           itegrations that are unflagged for at least two frequency bins. In this case,
            the delays are assumed to have equal weight, otherwise the delays take zero weight.
 
     df : type=float, frequency spacing between channels in Hz
@@ -369,7 +370,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
 
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
-    four_pol : type=boolean, if True, fit multiple polarizations together 
+    four_pol : type=boolean, if True, fit multiple polarizations together
 
     Output:
     -------
@@ -384,14 +385,15 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     # make wgts
     if wgts is None:
         wgts = odict()
-        for i, k in enumerate(keys): wgts[k] = np.ones_like(data[k], dtype=np.float)
+        for i, k in enumerate(keys):
+            wgts[k] = np.ones_like(data[k], dtype=np.float)
 
     # median filter and FFT to get delays
     ratio_delays = []
     ratio_offsets = []
     ratio_wgts = []
     for i, k in enumerate(keys):
-        ratio = data[k]/model[k]
+        ratio = data[k] / model[k]
 
         # replace nans
         nan_select = np.isnan(ratio)
@@ -417,7 +419,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
         ratio_delays.append(dly)
         ratio_offsets.append(offset)
         ratio_wgts.append(rwgts)
-       
+
     ratio_delays = np.array(ratio_delays)
     ratio_offsets = np.array(ratio_offsets)
     ratio_wgts = np.array(ratio_wgts)
@@ -462,7 +464,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
-                         verbose=True, time_ax=0, freq_ax=1, four_pol=False):
+                       verbose=True, time_ax=0, freq_ax=1, four_pol=False):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -485,7 +487,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data. These are only used to find delays from
-           itegrations that are unflagged for at least two frequency bins. In this case, 
+           itegrations that are unflagged for at least two frequency bins. In this case,
            the delays are assumed to have equal weight, otherwise the delays take zero weight.
 
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
@@ -500,7 +502,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
 
     freq_ax : type=int, freq axis of model and data
 
-    four_pol : type=boolean, if True, fit multiple polarizations together 
+    four_pol : type=boolean, if True, fit multiple polarizations together
 
     Output:
     -------
@@ -515,14 +517,15 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     # make wgts
     if wgts is None:
         wgts = odict()
-        for i, k in enumerate(keys): wgts[k] = np.ones_like(data[k], dtype=np.float)
+        for i, k in enumerate(keys):
+            wgts[k] = np.ones_like(data[k], dtype=np.float)
 
     # median filter and FFT to get delays
     ratio_delays = []
     ratio_offsets = []
     ratio_wgts = []
     for i, k in enumerate(keys):
-        ratio = data[k]/model[k]
+        ratio = data[k] / model[k]
 
         # replace nans
         nan_select = np.isnan(ratio)
@@ -564,10 +567,10 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     # setup linsolve equations
     if four_pol:
         eqns = odict([(k, "T_ew*{} + T_ns*{} - T_ew*{} - T_ns*{}"
-                    "".format(r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
+                       "".format(r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
     else:
         eqns = odict([(k, "T_ew_{}*{} + T_ns_{}*{} - T_ew_{}*{} - T_ns_{}*{}"
-                    "".format(k[2][0], r_ew[k[0]], k[2][0], r_ns[k[0]], k[2][1], r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
+                       "".format(k[2][0], r_ew[k[0]], k[2][0], r_ns[k[0]], k[2][1], r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
     # set design matrix entries
     ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))
@@ -612,6 +615,7 @@ def merge_gains(gains):
 
     return merged_gains
 
+
 def apply_gains(data, gains, gain_convention='divide'):
     """
     apply gain solutions to data
@@ -651,7 +655,7 @@ def apply_gains(data, gains, gain_convention='divide'):
     keys = data.keys()
 
     # merge gains if multiple gain dictionaries fed
-    if type(gains) == list or type(gains) == tuple or type(gains) == np.ndarray:
+    if isinstance(gains, list) or isinstance(gains, tuple) or isinstance(gains, np.ndarray):
         gains = merge_gains(gains)
 
     # iterate over keys:
@@ -681,7 +685,7 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
     -----------
     data : type=DataContainer, complex visibility data with
         antenna-pair + pol tuples for keys, in DataContainer dictionary format.
-    
+
     key_index : integer, index of keys to consolidate into data arrays
 
     array_index : integer, which axes of data arrays to append to
@@ -711,7 +715,7 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
     popped_keys = np.unique(np.array(keys, dtype=np.object)[:, key_index])
 
     # get new keys
-    new_keys = map(lambda k: k[:key_index] + k[key_index+1:], keys)
+    new_keys = map(lambda k: k[:key_index] + k[key_index + 1:], keys)
     new_unique_keys = []
 
     # iterate over new_keys
@@ -753,7 +757,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
     -----------
     data : DataContainer, complex visibility data with
         antenna-pair (+ pol + other) tuples for keys
-    
+
     array_index : integer, which axes of data arrays
         to extract from arrays and move into keys
 
@@ -839,7 +843,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     # smooth via median filter
     kernel += tuple(np.ones((vis.ndim - len(kernel)), np.int))
     if medfilt:
-        vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j*signal.medfilt(np.imag(vis), kernel_size=kernel)
+        vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j * signal.medfilt(np.imag(vis), kernel_size=kernel)
     else:
         vis_smooth = vis
 
@@ -861,12 +865,12 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     # get peak shifts, and add to dlys
     def get_peak(amp, max_ind):
         Nchan = len(amp)
-        y = np.concatenate([amp,amp,amp])
+        y = np.concatenate([amp, amp, amp])
         max_ind += Nchan
-        y = y[max_ind-1:max_ind+2]
+        y = y[max_ind - 1:max_ind + 2]
         r = np.abs(np.diff(y))
         r = r[0] / r[1]
-        peak = 0.5 * (r-1) / (r+1)
+        peak = 0.5 * (r - 1) / (r + 1)
         return peak
 
     peak_shifts = np.array([get_peak(np.take(amp, i, axis=time_ax), np.take(argmax, i, axis=time_ax)[0]) for i in range(Ntimes)])
@@ -888,8 +892,8 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
             a += Nfreqs
 
             # add interpolation component
-            rl = interpolate.interp1d(np.arange(Nfreqs*3), real)(a + peak_shifts[i])
-            im = interpolate.interp1d(np.arange(Nfreqs*3), imag)(a + peak_shifts[i])
+            rl = interpolate.interp1d(np.arange(Nfreqs * 3), real)(a + peak_shifts[i])
+            im = interpolate.interp1d(np.arange(Nfreqs * 3), imag)(a + peak_shifts[i])
 
             # insert into arrays
             vfft_real.append(rl)
@@ -897,14 +901,14 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
 
         vfft_real = np.moveaxis(np.array(vfft_real), 0, time_ax)
         vfft_imag = np.moveaxis(np.array(vfft_imag), 0, time_ax)
-        vfft_interp = vfft_real + 1j*vfft_imag
+        vfft_interp = vfft_real + 1j * vfft_imag
         phi = np.angle(vfft_interp)
         dlys /= df
 
     return dlys, phi
 
 
-def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9), array=False):
+def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3, 9), array=False):
     """
     wiener filter complex visibility data. this might be used in constructing
     model reference. See scipy.signal.wiener for details on method.
@@ -941,7 +945,7 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
             imag = signal.medfilt(imag, kernel_size=medfilt_kernel)
 
         new_data[k] = signal.wiener(real, mysize=window, noise=noise) + \
-                      1j*signal.wiener(imag, mysize=window, noise=noise)
+            1j * signal.wiener(imag, mysize=window, noise=noise)
 
     if array:
         return new_data['arr']
@@ -975,7 +979,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     kind : type=str, kind of interpolation, options=['linear', 'cubic', 'quintic']
 
-    medfilt_flagged : type=bool, if True, before interpolation, replace flagged pixels with output from 
+    medfilt_flagged : type=bool, if True, before interpolation, replace flagged pixels with output from
                       a median filter centered on each flagged pixel.
 
     medfilt_window : type=tuple, extent of window for median filter across the (time, freq) axes.
@@ -1006,8 +1010,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     new_flags = odict()
 
     # get nearest neighbor points
-    freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs-x)), data_freqs))
-    time_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts-x)), data_lsts))
+    freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs - x)), data_freqs))
+    time_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts - x)), data_lsts))
     freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
 
     # get model indices meshgrid
@@ -1035,8 +1039,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         # median filter flagged data if desired
         if medfilt_flagged and flags is not None:
             # get extent of window along freq and time
-            f_ext = int((medfilt_window[1]-1)/2.)
-            t_ext = int((medfilt_window[0]-1)/2.)
+            f_ext = int((medfilt_window[1] - 1) / 2.)
+            t_ext = int((medfilt_window[0] - 1) / 2.)
 
             # set flagged data to nan
             real[flags[k]] *= np.nan
@@ -1052,14 +1056,16 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
             # iterate over flagged data and replace w/ medfilt
             for j, (find, tind) in enumerate(zip(f_indices, l_indices)):
-                tlow, thi = tind-t_ext, tind+t_ext+1
-                flow, fhi = find-f_ext, find+f_ext+1
+                tlow, thi = tind - t_ext, tind + t_ext + 1
+                flow, fhi = find - f_ext, find + f_ext + 1
                 ll = 0
                 while True:
                     # iterate until window has non-flagged data in it
                     # with a max of 10 iterations
-                    if tlow < 0: tlow = 0
-                    if flow < 0: flow = 0
+                    if tlow < 0:
+                        tlow = 0
+                    if flow < 0:
+                        flow = 0
                     r_med = np.nanmedian(real[tlow:thi, flow:fhi])
                     i_med = np.nanmedian(imag[tlow:thi, flow:fhi])
                     tlow -= 2
@@ -1067,7 +1073,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
                     flow -= 2
                     fhi += 2
                     ll += 1
-                    if np.isnan(r_med) == False and np.isnan(i_med) == False:
+                    if not np.isnan(r_med) and not np.isnan(i_med):
                         break
                     if ll > 10:
                         break
@@ -1094,20 +1100,20 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
                 f = ~(f.astype(np.bool))
         else:
             f = np.zeros_like(real, bool)
-        
-        # interpolate 
+
+        # interpolate
         interp_real = interpolate.interp2d(model_freqs, model_lsts, real, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
         interp_imag = interpolate.interp2d(model_freqs, model_lsts, imag, kind=kind, copy=False, bounds_error=False, fill_value=fill_value)(data_freqs, data_lsts)
 
         # flag extrapolation if desired
         if flag_extrapolate:
-            time_extrap = np.where((data_lsts > model_lsts.max() + 1e-6)|(data_lsts < model_lsts.min() - 1e-6))
-            freq_extrap = np.where((data_freqs > model_freqs.max() + 1e-6)|(data_freqs < model_freqs.min() - 1e-6))
+            time_extrap = np.where((data_lsts > model_lsts.max() + 1e-6) | (data_lsts < model_lsts.min() - 1e-6))
+            freq_extrap = np.where((data_freqs > model_freqs.max() + 1e-6) | (data_freqs < model_freqs.min() - 1e-6))
             f[time_extrap, :] = True
             f[:, freq_extrap] = True
 
         # rejoin
-        new_model[k] = interp_real + 1j*interp_imag
+        new_model[k] = interp_real + 1j * interp_imag
         new_flags[k] = f
 
     return DataContainer(new_model), DataContainer(new_flags)
@@ -1129,7 +1135,7 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
 
     time_array : ndarray, time array of data in Julian Date
 
-    pol_array : ndarray, polarization array of data, in 'x' or 'y' form. 
+    pol_array : ndarray, polarization array of data, in 'x' or 'y' form.
 
     overwrite : type=boolean, if True overwrite output files if they already exist
 
@@ -1158,7 +1164,7 @@ def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array
 
     # configure meta
     inttime = np.median(np.diff(time_array)) * 24. * 3600.
-    meta = {'times':time_array, 'freqs':freq_array, 'inttime':inttime}
+    meta = {'times': time_array, 'freqs': freq_array, 'inttime': inttime}
 
     # convert to UVCal
     uvc = cal_formats.HERACal(meta, heracal_gains, **kwargs)
@@ -1223,7 +1229,7 @@ def echo(message, type=0, verbose=True):
         elif type == 1:
             print('')
             print(message)
-            print("-"*40)
+            print("-" * 40)
 
 
 def flatten(l):
@@ -1237,6 +1243,7 @@ class Baseline(object):
     for baselines up to 1km in length to an absolute precison of 10 cm.
     Only __eq__ operator is overloaded.
     """
+
     def __init__(self, bl, tol=2.0):
         """
         bl : list containing [dx, dy, dz] float separation in meters
@@ -1267,7 +1274,7 @@ class Baseline(object):
             if equiv:
                 return True
             # check conjugation
-            elif np.isclose(np.arccos(dot), np.pi, atol=tol/self.len) or (dot < -1.0):
+            elif np.isclose(np.arccos(dot), np.pi, atol=tol / self.len) or (dot < -1.0):
                 return 'conjugated'
             # else return False
             else:
@@ -1279,7 +1286,7 @@ class Baseline(object):
 def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose=True):
     """
     Match unique model baseline keys to unique data baseline keys based on positional redundancy.
-    
+
     Ideally, both model and data contain only unique baselines, in which case there is a
     one-to-one mapping. If model contains extra redundant baselines, these are not propagated
     to new_model. If data contains extra redundant baselines, the lowest ant1-ant2 pair is chosen
@@ -1321,7 +1328,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
         comparison = np.array(map(lambda mbl: bl == mbl, data_bls), np.str)
 
         # get matches
-        matches = np.where((comparison=='True')|(comparison=='conjugated'))[0]
+        matches = np.where((comparison == 'True') | (comparison == 'conjugated'))[0]
 
         # check for matches
         if len(matches) == 0:
@@ -1423,7 +1430,7 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
 
 
 def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
-                            write_miriad=True, output_data=False, overwrite=False, 
+                            write_miriad=True, output_data=False, overwrite=False,
                             verbose=True, **kwargs):
     """
     Open a file and run avg_data_across_red_bls on data, then write to file
@@ -1457,7 +1464,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
     if os.path.exists(output_fname) is True and overwrite is False:
         raise IOError("{} exists, not overwriting".format(output_fname))
 
-    if type(data_fname) == str:
+    if isinstance(data_fname, str):
         uvd = UVData()
         uvd.read_miriad(data_fname)
 
@@ -1558,24 +1565,24 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
             for j, (m, cm) in enumerate(zip(match, conj_match)):
                 if weights:
                     # if weight dictionary, add repeated baselines
-                    if m == True:
-                        if (k in red_data) == False:
+                    if m:
+                        if not (k in red_data):
                             red_data[k] = copy.copy(data[k])
                             red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j]) - 1
                         else:
                             red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j])
-                    elif cm == True:
-                        if (k in red_data) == False:
+                    elif cm:
+                        if not (k in red_data):
                             red_data[k] = copy.copy(data[k])
                             red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j]) - 1
                         else:
                             red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)] + len(reds[j])
                 else:
                     # if match, insert all bls in bl_group into red_data
-                    if m == True:
+                    if m:
                         for bl in reds[j]:
                             red_data[bl] = copy.copy(data[k])
-                    elif cm == True:
+                    elif cm:
                         for bl in reds[j]:
                             red_data[bl] = np.conj(data[k])
 
@@ -1585,7 +1592,6 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
             red_data[k][red_data[k].astype(np.bool)] = red_data[k][red_data[k].astype(np.bool)]**(2.0)
     else:
         red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
-
 
     return DataContainer(red_data)
 
@@ -1612,27 +1618,15 @@ def match_times(datafile, modelfiles, atol=1e-5):
     model_times[1] += model_inttime
 
     # unwrap LST
-    if data_time[1] < data_time[0]: data_time[1] += 2*np.pi
+    if data_time[1] < data_time[0]:
+        data_time[1] += 2 * np.pi
     model_start = model_times[0][0]
-    model_times[model_times < model_start] += 2*np.pi
-    if data_time[0] < model_start: data_time += 2*np.pi
+    model_times[model_times < model_start] += 2 * np.pi
+    if data_time[0] < model_start:
+        data_time += 2 * np.pi
 
     # select model files
-    matched_modelfiles = np.array(modelfiles)[(model_times[0] < data_time[1] + atol) & \
+    matched_modelfiles = np.array(modelfiles)[(model_times[0] < data_time[1] + atol) &
                                               (model_times[1] > data_time[0] - atol)]
 
     return matched_modelfiles
-
-
-
-
-
-
-
-
-
-
-
-
-
-

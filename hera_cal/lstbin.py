@@ -42,7 +42,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
     lst_list : type=list, list of ndarrays holding LST stamps of each data dictionary in data_list.
         These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
-    
+
     flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
         in data_list. Flagged data do not contribute to the average of an LST bin.
 
@@ -80,7 +80,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     copy_rephase : type=bool, if True, copy data before rephasing such that input data in
         data_list isn't overwritten
 
-    antpos : type=dictionary, holds antenna position vectors in ENU frame in meters with 
+    antpos : type=dictionary, holds antenna position vectors in ENU frame in meters with
         antenna integers as keys and 3D ndarrays as values. See io.load_vis(). Needed for rephase.
 
     freq_array : type=ndarray, 1D array of unique data frequencies channels in Hz. Needed for rephase.
@@ -96,7 +96,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     data_avg : dictionary of data having averaged in each LST bin
 
     flags_min : dictionary of minimum of data flags in each LST bin
-    
+
     data_std : dictionary of data with real component holding LST bin std along real axis
                and imag component holding std along imag axis
 
@@ -105,7 +105,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     if return_no_avg:
         Output: (lst_bins, data_bin, flags_min)
         data_bin : dictionary with (ant1,ant2,pol) as keys and ndarrays holding
-            un-averaged complex visibilities in each LST bin as values. 
+            un-averaged complex visibilities in each LST bin as values.
         flags_min : dictionary with data flags
     """
     # get visibility shape
@@ -145,15 +145,15 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     # iterate over data_list
     for i, d in enumerate(data_list):
         # get lst array
-        l = lst_list[i]
+        ll = lst_list[i]
 
         # digitize data lst array "l"
-        grid_indices = np.digitize(l, lst_grid_left[1:], right=True)
+        grid_indices = np.digitize(ll, lst_grid_left[1:], right=True)
 
         # make data_in_bin boolean array, and set to False data that don't fall in any bin
-        data_in_bin = np.ones_like(l, np.bool)
-        data_in_bin[(l<lst_grid_left.min()-atol)] = False
-        data_in_bin[(l>lst_grid_left.max()+dlst+atol)] = False
+        data_in_bin = np.ones_like(ll, np.bool)
+        data_in_bin[(ll < lst_grid_left.min() - atol)] = False
+        data_in_bin[(ll > lst_grid_left.max() + dlst + atol)] = False
 
         # update all_lst_indices
         all_lst_indices.update(set(grid_indices[data_in_bin]))
@@ -177,7 +177,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
                 # form baseline dictionary and lst_rephase
                 bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys()))
-                lst_shift = lst_grid[grid_indices] - l
+                lst_shift = lst_grid[grid_indices] - ll
                 lst_rephase(d, bls, freq_array, lst_shift, lat=lat)
                 d.phase_type = "LSTBIN"
 
@@ -204,7 +204,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 data[key] = odict()
                 flags[key] = odict()
 
-            # data[key] is an odict, with keys as grid index integers and 
+            # data[key] is an odict, with keys as grid index integers and
             # values as lists holding the LST bin data: ndarrays of shape (Nfreqs)
 
             # iterate over grid_indices, and append to data if data_in_bin is True
@@ -238,11 +238,11 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 data[key][index] = [np.zeros(Nfreqs, np.complex)]
                 flags[key][index] = [np.zeros(Nfreqs, np.bool)]
 
-        # use all LST bins              
+        # use all LST bins
         lst_bins = lst_grid
 
     # wrap lst_bins if needed
-    lst_bins = lst_bins % (2*np.pi)
+    lst_bins = lst_bins % (2 * np.pi)
 
     # make final dictionaries
     flags_min = odict()
@@ -252,7 +252,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
     # return un-averaged data if desired
     if return_no_avg:
-        # return all binned data instead of just bin average 
+        # return all binned data instead of just bin average
         data_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, data[k][k2]), sorted(data[k].keys()))).values())), sorted(data.keys())))
         flags_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, flags[k][k2]), sorted(flags[k].keys()))).values())), sorted(flags.keys())))
 
@@ -322,9 +322,9 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             bin_count.append(np.nansum(~np.isnan(d), axis=0))
 
         # get final statistics
-        d_avg = np.array(real_avg) + 1j*np.array(imag_avg)
+        d_avg = np.array(real_avg) + 1j * np.array(imag_avg)
         f_min = np.array(f_min)
-        d_std = np.array(real_std) + 1j*np.array(imag_std)
+        d_std = np.array(real_std) + 1j * np.array(imag_std)
         d_num = np.array(bin_count).astype(np.float)
 
         # fill nans
@@ -367,7 +367,7 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
                             convert appropriately.
 
     dlst : type=float, delta-LST spacing for lst_grid
-    
+
     atol : type=float, absolute tolerance in comparing LST bins
 
     verbose : type=boolean, if True, print feedback to stdout
@@ -388,7 +388,7 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
 
     # unwrap lsts
     if data_lsts[-1] < data_lsts[0]:
-        data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
+        data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
 
     # make lst_grid
     lst_start = np.max([data_lsts[0] - 1e-5, 0])
@@ -402,13 +402,13 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
     # restrict lst_grid based on interpolate-able points
     lst_start = data_lsts[0]
     lst_end = data_lsts[-1]
-    lst_grid = lst_grid[(lst_grid > lst_start - dlst/2 - atol) & (lst_grid < lst_end + dlst/2 + atol)]
+    lst_grid = lst_grid[(lst_grid > lst_start - dlst / 2 - atol) & (lst_grid < lst_end + dlst / 2 + atol)]
 
     # interpolate data
     interp_data, interp_flags = abscal.interp2d_vis(data, data_lsts, data_freqs, lst_grid, model_freqs, flags=flags, **interp_kwargs)
 
     # wrap lst_grid
-    lst_grid = lst_grid % (2*np.pi)
+    lst_grid = lst_grid % (2 * np.pi)
 
     return interp_data, interp_flags, lst_grid
 
@@ -450,7 +450,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
     A series of "data_files + file_ext" miriad files written to disk.
     """
     # check type of data_files
-    if type(data_files) == str:
+    if isinstance(data_files, str):
         data_files = [data_files]
 
     # get dlst if None
@@ -488,10 +488,10 @@ def lst_bin_arg_parser():
 
     """
     a = argparse.ArgumentParser(description="drive script for lstbin.lst_bin_files(). "
-        "data_files argument must be quotation-bounded "
-        "glob-parsable search strings to nightly data. For example: \n"
-        "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
-        "Consult lstbin.lst_bin_files() for further details on functionality.")
+                                "data_files argument must be quotation-bounded "
+                                "glob-parsable search strings to nightly data. For example: \n"
+                                "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
+                                "Consult lstbin.lst_bin_files() for further details on functionality.")
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files")
     a.add_argument("--lst_init", type=float, default=np.pi, help="starting point for universal LST grid")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
@@ -560,14 +560,14 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         dlst = int_time
 
     # get file start and stop times
-    data_times = map(lambda f: np.array(utils.get_miriad_times(f, add_int_buffer=True)).T[:, :2] % (2*np.pi), data_files)
+    data_times = map(lambda f: np.array(utils.get_miriad_times(f, add_int_buffer=True)).T[:, :2] % (2 * np.pi), data_files)
 
     # unwrap data_times less than lst_start, get starting and ending lst
     start_lst = 100
     end_lst = -1
     for dt in data_times:
         # unwrap starts below lst_start
-        dt[:, 0][dt[:, 0] < lst_start] += 2*np.pi
+        dt[:, 0][dt[:, 0] < lst_start] += 2 * np.pi
 
         # get start and end lst
         start_lst = np.min(np.append(start_lst, dt[:, 0]))
@@ -579,17 +579,17 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     # get starting and stopping indices
     start_diff = lst_grid - start_lst
-    start_diff[start_diff < -dlst/2 - atol] = 100
+    start_diff[start_diff < -dlst / 2 - atol] = 100
     start_index = np.argmin(start_diff)
     end_diff = lst_grid - end_lst
-    end_diff[end_diff > dlst/2 + atol] = -100
+    end_diff[end_diff > dlst / 2 + atol] = -100
     end_index = np.argmax(end_diff)
 
     # get number of output files
     nfiles = int(np.ceil(float(end_index - start_index) / ntimes_per_file))
 
     # get output file lsts
-    file_lsts = [lst_grid[start_index:end_index][ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
+    file_lsts = [lst_grid[start_index:end_index][ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
 
     # create data file status: None if not opened, data objects if opened
     data_status = map(lambda d: map(lambda f: None, d), data_files)
@@ -601,7 +601,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     # update miriad_kwrgs
     miriad_kwargs['outdir'] = outdir
     miriad_kwargs['overwrite'] = overwrite
- 
+
     # get frequency, time and antennas position information from the zeroth data file
     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
     freq_array = copy.copy(f)
@@ -613,7 +613,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
-        abscal.echo("LST file {} / {}: {}".format(i+1, nfiles, datetime.datetime.now()), type=1, verbose=verbose)
+        abscal.echo("LST file {} / {}: {}".format(i + 1, nfiles, datetime.datetime.now()), type=1, verbose=verbose)
 
         # create empty data_list and lst_list
         data_list = []
@@ -624,7 +624,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # locate all data files that fall within the range of lst for this output file
         f_min = np.min(f_lst)
         f_max = np.max(f_lst)
-        f_select = np.array(map(lambda d: map(lambda f: (f[1] >= f_min)&(f[0] <= f_max), d), data_times))
+        f_select = np.array(map(lambda d: map(lambda f: (f[1] >= f_min) & (f[0] <= f_max), d), data_times))
         if i == 0:
             old_f_select = copy.copy(f_select)
 
@@ -635,13 +635,13 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             nightly_flgs_list = []
             nightly_lst_list = []
             for k in range(len(data_files[j])):
-                if f_select[j][k] == True and data_status[j][k] is None:
+                if f_select[j][k] and data_status[j][k] is None:
                     # open file
                     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[j][k], return_meta=True)
                     d.phase_type = 'drift'
 
                     # unwrap l
-                    l[l < start_lst] += 2*np.pi
+                    l[l < start_lst] += 2 * np.pi
 
                     # pass data references to data_status list
                     data_status[j][k] = [d, fl, ap, a, f, t, l, p]
@@ -649,13 +649,13 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                     # erase references from namespace
                     del d, fl, ap, a, f, t, l, p
 
-                elif f_select[j][k] == False and old_f_select[j][k] == True:
+                elif not f_select[j][k] and old_f_select[j][k]:
                     # close file
                     del data_status[j][k]
                     data_status[j].insert(k, None)
 
                 # if file is needed, append data references to data_list
-                if f_select[j][k] == True:
+                if f_select[j][k]:
                     file_list.append(data_files[j][k])
                     nightly_data_list.append(data_status[j][k][0])  # this is data
                     nightly_flgs_list.append(data_status[j][k][1])  # this is flgs
@@ -686,12 +686,12 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # pass through lst-bin function
         (bin_lst, bin_data, flag_data, std_data,
          num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, lst_start=start_lst,
-                             lst_low=f_min, lst_hi=f_max, truncate_empty=False, sig_clip=sig_clip, 
-                             sigma=sigma, min_N=min_N, rephase=rephase, copy_rephase=False, 
+                             lst_low=f_min, lst_hi=f_max, truncate_empty=False, sig_clip=sig_clip,
+                             sigma=sigma, min_N=min_N, rephase=rephase, copy_rephase=False,
                              freq_array=freq_array, antpos=antpos)
 
         # make sure bin_lst is wrapped
-        bin_lst = bin_lst % (2*np.pi)
+        bin_lst = bin_lst % (2 * np.pi)
 
         # update history
         file_history = history + " Input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
@@ -730,7 +730,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
 
     Parameters:
     -----------
-    dlst : type=float, delta-LST: width of a single LST bin in radians. 2pi must be equally divisible 
+    dlst : type=float, delta-LST: width of a single LST bin in radians. 2pi must be equally divisible
                 by dlst. If not, will default to the closest dlst that satisfies this criterion that
                 is also greater than the input dlst. There is a minimum allowed dlst of 6.283e-6 radians,
                 or .0864 seconds.
@@ -744,9 +744,9 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
     lst_grid : type=ndarray, dtype=float, uniform LST grid marking the center of each LST bin
     """
     # check 2pi is equally divisible by dlst
-    if (np.isclose((2*np.pi / dlst) % 1, 0.0, atol=1e-5) is False) and (np.isclose((2*np.pi / dlst) % 1, 1.0, atol=1e-5) is False):
+    if (np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) is False) and (np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5) is False):
         # generate array of appropriate dlsts
-        dlsts = 2*np.pi / np.arange(1, 1000000).astype(np.float)
+        dlsts = 2 * np.pi / np.arange(1, 1000000).astype(np.float)
 
         # get dlsts closest to dlst, but also greater than dlst
         dlst_diff = dlsts - dlst
@@ -757,11 +757,11 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         dlst = new_dlst
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
-    lst_grid = np.arange(0, 2*np.pi-1e-7, dlst) + dlst / 2
+    lst_grid = np.arange(0, 2 * np.pi - 1e-7, dlst) + dlst / 2
 
     # shift grid by lst_start
     if lst_start is not None:
-        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] - dlst/2
+        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] - dlst / 2
         lst_grid += lst_start
 
     return lst_grid
@@ -807,10 +807,10 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
         zero = 0
 
     # get top2eq matrix
-    top2eq = uvutils.top2eq_m(zero, lat*np.pi/180)
+    top2eq = uvutils.top2eq_m(zero, lat * np.pi / 180)
 
     # get eq2top matrix
-    eq2top = uvutils.eq2top_m(-dlst, lat*np.pi/180)
+    eq2top = uvutils.eq2top_m(-dlst, lat * np.pi / 180)
 
     # get full rotation matrix
     rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
@@ -832,13 +832,13 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
         tau = u / (aipy.const.c / 100.0)
 
         # reshape tau
-        if type(tau) == np.ndarray:
+        if isinstance(tau, np.ndarray):
             pass
         else:
             tau = np.array([tau])
 
         # get phasor
-        phs = np.exp(-2j*np.pi*freqs[None, :]*tau[:, None])
+        phs = np.exp(-2j * np.pi * freqs[None, :] * tau[:, None])
 
         # multiply into data
         data[k] *= phs
@@ -864,7 +864,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
                 clipping is performed.
 
     return_arrs : type=boolean, if True, return array and flags
-    
+
     Output: flags
     -------
     clip_flags : type=boolean ndarray, has same shape as input array, but has clipped
@@ -872,7 +872,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
                  if passed.
     """
     # ensure array is an array
-    if type(array) is not np.ndarray:
+    if not isinstance(array, np.ndarray):
         array = np.array(array)
 
     # ensure array passes min_N criteria:
@@ -894,7 +894,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     scale = np.nanmedian(np.abs(array - location), axis=axis) * 1.482579
 
     # get clipped data
-    clip = np.abs(array-location)/scale > sigma
+    clip = np.abs(array - location) / scale > sigma
 
     # set clipped data to nan and set clipped flags to True
     array[clip] *= np.nan
@@ -915,4 +915,3 @@ def switch_bl(key):
 class LSTBINPHASED(Exception):
     """ custom exception for lst_bin() """
     pass
-

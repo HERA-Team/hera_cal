@@ -24,7 +24,7 @@ from abscal_funcs import *
 
 class AbsCal(object):
     """
-    AbsCal object used to for phasing and scaling visibility data to an absolute reference model. 
+    AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
     A few different calibration methods exist. These include:
 
     1) per-antenna amplitude logarithmic calibration solves the equation:
@@ -46,10 +46,10 @@ class AbsCal(object):
 
     5) Average amplitude linear calibration solves the equation:
             log|V_ij^data / V_ij^model| = log|g_avg_i| + log|g_avg_j|
- 
+
     6) Tip-Tilt phase logarithmic calibration solves the equation
             angle(V_ij^data /  V_ij^model) = psi + dot(TT_Phi, B_ij)
-        where psi is an overall gain phase scalar, 
+        where psi is an overall gain phase scalar,
         TT_Phi is the gain phase slope vector [radians / meter]
         and B_ij is the baseline vector between antenna i and j.
 
@@ -78,7 +78,7 @@ class AbsCal(object):
                 values are complex ndarray visibilities.
                 these must be 2D arrays, with [0] axis indexing time
                 and [1] axis indexing frequency.
- 
+
                 Optionally, model can be a path to a miriad or uvfits file, or a
                 pyuvdata.UVData object, or a list of either.
 
@@ -90,7 +90,7 @@ class AbsCal(object):
                complex ndarray visibilities matching shape of model
 
                 Optionally, model can be a path to a miriad or uvfits file, or a
-                pyuvdata.UVData object, or a list of either. In this case, wgts, antpos, 
+                pyuvdata.UVData object, or a list of either. In this case, wgts, antpos,
                 freqs, times and pols are overwritten with equivalent information from data object.
 
         data_ftype : type=str, if data is a path to a file, this is its filetype
@@ -122,12 +122,12 @@ class AbsCal(object):
         pols = None
 
         # check format of model if model is not a dictionary
-        if type(model) == list or type(model) == np.ndarray or type(model) == str or type(model) == UVData:
+        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or isinstance(model, UVData):
             (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
              model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True)
 
         # check format of data if data is not a dictionary
-        if type(data) == list or type(data) == np.ndarray or type(data) == str or type(data) == UVData:
+        if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or isinstance(data, UVData):
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
              data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True)
             wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
@@ -151,12 +151,12 @@ class AbsCal(object):
 
         # setup polarization
         self.str2pol = {"xx": -5, "yy": -6, "xy": -7, "yx": -8}
-        self.pol2str = {-5:"xx", -6:"yy", -7:"xy", -8:"yx"}
+        self.pol2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
 
         # get pols is not defined, if so, make sure they are string format
         if pols is None:
             pols = np.unique(map(lambda k: k[2], self.keys))
-        elif type(pols) == np.ndarray or type(pols) == list:
+        elif isinstance(pols, np.ndarray) or isinstance(pols, list):
             if np.issubdtype(type(pols[0]), int):
                 pols = map(lambda p: self.pol2str[p], pols)
 
@@ -255,7 +255,7 @@ class AbsCal(object):
 
         # take time and freq average
         if avg:
-            self._ant_phi = odict(map(lambda k: (k, np.ones_like(self._ant_phi[k])*np.angle(np.median(np.real(np.exp(1j*self._ant_phi[k])))+1j*np.median(np.imag(np.exp(1j*self._ant_phi[k]))))), flatten(self._gain_keys)))
+            self._ant_phi = odict(map(lambda k: (k, np.ones_like(self._ant_phi[k]) * np.angle(np.median(np.real(np.exp(1j * self._ant_phi[k]))) + 1j * np.median(np.imag(np.exp(1j * self._ant_phi[k]))))), flatten(self._gain_keys)))
             self._ant_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys), 0, -1)
 
     def delay_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
@@ -271,7 +271,7 @@ class AbsCal(object):
 
         kernel : size of median filter across (time, freq) axes, type=(int, int)
 
-        time_avg : boolean, if True, average resultant antenna delays across time 
+        time_avg : boolean, if True, average resultant antenna delays across time
 
         Result:
         -------
@@ -312,10 +312,10 @@ class AbsCal(object):
                 fit[tau_key] = np.repeat(tau_avg, Ntimes, axis=time_ax)
                 if solve_offsets:
                     phi_key = "phi_{}_{}".format(k[0], k[1])
-                    gain = np.exp(1j*fit[phi_key])
+                    gain = np.exp(1j * fit[phi_key])
                     real_avg = np.median(np.real(gain), axis=time_ax)
                     imag_avg = np.median(np.imag(gain), axis=time_ax)
-                    phi_avg = np.moveaxis(np.angle(real_avg + 1j*imag_avg)[np.newaxis], 0, time_ax)
+                    phi_avg = np.moveaxis(np.angle(real_avg + 1j * imag_avg)[np.newaxis], 0, time_ax)
                     fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=time_ax)
 
         # form result
@@ -323,11 +323,11 @@ class AbsCal(object):
         self._ant_dly_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_dly[k], pk), self._gain_keys), 0, -1)
 
         if solve_offsets:
-            self._ant_dly_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0],k[1])])), flatten(self._gain_keys)))
+            self._ant_dly_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
             self._ant_dly_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_dly_phi[k], pk), self._gain_keys), 0, -1)
 
     def delay_slope_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
-                            four_pol=False):
+                           four_pol=False):
         """
         Solve for per-antenna delay according to the equation
         by calling abscal_funcs.delay_lincal method.
@@ -339,7 +339,7 @@ class AbsCal(object):
 
         kernel : size of median filter across (time, freq) axes, type=(int, int)
 
-        time_avg : boolean, if True, average resultant antenna delays across time 
+        time_avg : boolean, if True, average resultant antenna delays across time
 
         four_pol : boolean, if True, form a joint polarization solution
 
@@ -367,7 +367,7 @@ class AbsCal(object):
 
         # run delay_lincal
         fit = delay_slope_lincal(model, data, antpos, wgts=wgts, medfilt=medfilt, df=df, kernel=kernel, verbose=verbose,
-                                  time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol)
+                                 time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol)
 
         # separate pols if four_pol
         if four_pol:
@@ -517,7 +517,7 @@ class AbsCal(object):
         """ form complex gain from _ant_phi dict """
         if hasattr(self, '_ant_phi'):
             ant_phi = self.ant_phi
-            return odict(map(lambda k: (k, np.exp(1j*ant_phi[k])), flatten(self._gain_keys)))
+            return odict(map(lambda k: (k, np.exp(1j * ant_phi[k])), flatten(self._gain_keys)))
         else:
             return None
 
@@ -533,7 +533,7 @@ class AbsCal(object):
     def ant_phi_gain_arr(self):
         """ return _ant_phi_gain in ndarray format """
         if hasattr(self, '_ant_phi_arr'):
-            return np.exp(1j*self.ant_phi_arr)
+            return np.exp(1j * self.ant_phi_arr)
         else:
             return None
 
@@ -550,7 +550,7 @@ class AbsCal(object):
         """ form complex gain from _ant_dly dict """
         if hasattr(self, '_ant_dly'):
             ant_dly = self.ant_dly
-            return odict(map(lambda k: (k, np.exp(2j*np.pi*self.freqs.reshape(1, -1)*ant_dly[k])), flatten(self._gain_keys)))
+            return odict(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * ant_dly[k])), flatten(self._gain_keys)))
         else:
             return None
 
@@ -566,7 +566,7 @@ class AbsCal(object):
     def ant_dly_gain_arr(self):
         """ return ant_dly_gain in ndarray format """
         if hasattr(self, '_ant_dly_arr'):
-            return np.exp(2j*np.pi*self.freqs.reshape(-1, 1)*self.ant_dly_arr)
+            return np.exp(2j * np.pi * self.freqs.reshape(-1, 1) * self.ant_dly_arr)
         else:
             return None
 
@@ -583,7 +583,7 @@ class AbsCal(object):
         """ form complex gain from _ant_dly_phi dict """
         if hasattr(self, '_ant_dly_phi'):
             ant_dly_phi = self.ant_dly_phi
-            return odict(map(lambda k: (k, np.exp(1j*np.repeat(ant_dly_phi[k], self.Nfreqs, 1))), flatten(self._gain_keys)))
+            return odict(map(lambda k: (k, np.exp(1j * np.repeat(ant_dly_phi[k], self.Nfreqs, 1))), flatten(self._gain_keys)))
         else:
             return None
 
@@ -599,7 +599,7 @@ class AbsCal(object):
     def ant_dly_phi_gain_arr(self):
         """ return _ant_dly_phi_gain in ndarray format """
         if hasattr(self, '_ant_dly_phi_arr'):
-            return np.exp(1j*np.repeat(self.ant_dly_phi_arr, self.Nfreqs, 2))
+            return np.exp(1j * np.repeat(self.ant_dly_phi_arr, self.Nfreqs, 2))
         else:
             return None
 
@@ -618,7 +618,7 @@ class AbsCal(object):
             # get dly_slope dictionary
             dly_slope = self.dly_slope
             # turn delay slope into per-antenna complex gains, while iterating over self._gain_keys
-            return odict(map(lambda k: (k, np.exp(2j*np.pi*self.freqs.reshape(1, -1)*np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
+            return odict(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
         else:
             return None
 
@@ -633,7 +633,7 @@ class AbsCal(object):
             # get dly slope dictionary
             dly_slope = self.dly_slope[self._gain_keys[0][0]]
             # turn delay slope into per-antenna complex gains, while iterating over gain_keys
-            return odict(map(lambda k: (k, np.exp(2j*np.pi*self.freqs.reshape(1, -1)*np.einsum("i...,i->...", dly_slope, antpos[k[0]][:2]))), gain_keys))
+            return odict(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope, antpos[k[0]][:2]))), gain_keys))
         else:
             return None
 
@@ -649,7 +649,7 @@ class AbsCal(object):
     def dly_slope_gain_arr(self):
         """ form complex gain from _dly_slope_arr array """
         if hasattr(self, '_dly_slope_arr'):
-            return np.exp(2j*np.pi*self.freqs.reshape(-1, 1)*np.einsum("hi...,hi->h...", self._dly_slope_arr, self.antpos_arr[:, :2]))
+            return np.exp(2j * np.pi * self.freqs.reshape(-1, 1) * np.einsum("hi...,hi->h...", self._dly_slope_arr, self.antpos_arr[:, :2]))
         else:
             return None
 
@@ -719,7 +719,7 @@ class AbsCal(object):
         """ form complex gain from _abs_psi array """
         if hasattr(self, '_abs_psi'):
             abs_psi = self.abs_psi
-            return odict(map(lambda k: (k, np.exp(1j*abs_psi[k])), flatten(self._gain_keys)))
+            return odict(map(lambda k: (k, np.exp(1j * abs_psi[k])), flatten(self._gain_keys)))
         else:
             return None
 
@@ -731,7 +731,7 @@ class AbsCal(object):
         """
         if hasattr(self, '_abs_psi'):
             abs_psi = self.abs_psi[self._gain_keys[0][0]]
-            return odict(map(lambda k: (k, np.exp(1j*abs_psi)), gain_keys))
+            return odict(map(lambda k: (k, np.exp(1j * abs_psi)), gain_keys))
         else:
             return None
 
@@ -747,7 +747,7 @@ class AbsCal(object):
     def abs_psi_gain_arr(self):
         """ form complex gain from _abs_psi_arr array """
         if hasattr(self, '_abs_psi_arr'):
-            return np.exp(1j*self._abs_psi_arr)
+            return np.exp(1j * self._abs_psi_arr)
         else:
             return None
 
@@ -764,7 +764,7 @@ class AbsCal(object):
         """ form complex gain from _TT_Phi array """
         if hasattr(self, '_TT_Phi'):
             TT_Phi = self.TT_Phi
-            return odict(map(lambda k: (k, np.exp(1j*np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
+            return odict(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
         else:
             return None
 
@@ -777,7 +777,7 @@ class AbsCal(object):
         """
         if hasattr(self, '_TT_Phi'):
             TT_Phi = self.TT_Phi[self._gain_keys[0][0]]
-            return odict(map(lambda k: (k, np.exp(1j*np.einsum("i...,i->...", TT_Phi, antpos[k[0]][:2]))), gain_keys))
+            return odict(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi, antpos[k[0]][:2]))), gain_keys))
         else:
             return None
 
@@ -793,7 +793,7 @@ class AbsCal(object):
     def TT_Phi_gain_arr(self):
         """ form complex gain from _TT_Phi_arr array """
         if hasattr(self, '_TT_Phi_arr'):
-            return np.exp(1j*np.einsum("hi...,hi->h...", self._TT_Phi_arr, self.antpos_arr[:, :2]))
+            return np.exp(1j * np.einsum("hi...,hi->h...", self._TT_Phi_arr, self.antpos_arr[:, :2]))
         else:
             return None
 
@@ -817,7 +817,7 @@ def abscal_arg_parser():
     a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
     a.add_argument("--delay_cal", default=False, action='store_true', help='perform antenna delay calibration')
     a.add_argument("--avg_phs_cal", default=False, action='store_true', help='perform antenna avg phase calibration')
-    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')    
+    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
     a.add_argument("--gen_amp_cal", default=False, action='store_true', help='perform general antenna amplitude bandpass calibration')
@@ -840,7 +840,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
     a.add_argument("--data_is_omni_solution", default=False, action='store_true', help='assume input data file is an omnical visibility solution (still beta testing optimal weighting)')
     a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
-    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')    
+    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
     return a
@@ -862,7 +862,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
     which are run in that order if any of these parameters are set to True. Calibration steps are
     run and then directly applied to the data before proceeding to the next calibration step. To
     learn more about these steps, see the docstring of the following functions in abscal_funcs.py:
-    
+
     delay_cal : delay_lincal()
     avg_phs_cal : phs_logcal(avg=True)
     delay_slope_cal : delay_slope_lincal()
@@ -941,12 +941,12 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
         nomodelfiles = True
 
     # load model files
-    if nomodelfiles == False:
-        echo ("loading model files", type=1, verbose=verbose)
+    if not nomodelfiles:
+        echo("loading model files", type=1, verbose=verbose)
         (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
             model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
         antpos = model_antpos
-        model_lsts[model_lsts < model_lsts[0]] += 2*np.pi
+        model_lsts[model_lsts < model_lsts[0]] += 2 * np.pi
 
     # iterate over data files
     gains = []
@@ -963,7 +963,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
             calfits_fname = os.path.join(outdir, calfits_fname)
 
             # check path
-            if os.path.exists(calfits_fname) and overwrite == False:
+            if os.path.exists(calfits_fname) and not overwrite:
                 raise IOError("{} exists, not overwriting".format(calfits_fname))
 
         # load data and configure weights
@@ -972,7 +972,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
             data_pols) = io.load_vis(dfile, pop_autos=True, return_meta=True, pick_data_ants=False)
         Ntimes = len(data_times)
         Nfreqs = len(data_freqs)
-        data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
+        data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
 
         # get data ants
         total_data_antpos = copy.deepcopy(data_antpos)
@@ -985,12 +985,12 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
         # write blank calfits file if nomodelfiles
         if nomodelfiles:
             gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
-            gain_dict = map(lambda p: map(lambda a: ((a,p), np.ones((Ntimes, Nfreqs), np.complex)), data_ants), gain_pols)
+            gain_dict = map(lambda p: map(lambda a: ((a, p), np.ones((Ntimes, Nfreqs), np.complex)), data_ants), gain_pols)
             gain_dict = odict(flatten(gain_dict))
             flag_dict = odict(map(lambda k: (k, np.ones(gain_dict[k].shape, np.bool)), gain_dict.keys()))
             # write to file
             if write_calfits:
-                io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict, 
+                io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict,
                              return_uvc=False, overwrite=overwrite, history=history)
 
             # append gain dict to gains
@@ -1028,7 +1028,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
             gain_list.append(AC.ant_dly_phi_gain)
 
         if avg_phs_cal:
-            if delay_cal == False:
+            if not delay_cal:
                 echo("it is recommended to run a delay_cal before avg_phs_cal", verbose=verbose)
             if all_antenna_gains:
                 raise ValueError("can't run avg_phs_cal when all_antenna_gains is True")
@@ -1053,7 +1053,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
                 gain_list.append(AC.abs_eta_gain)
 
         if TT_phs_cal:
-            if delay_slope_cal == False:
+            if not delay_slope_cal:
                 echo("it is recommended to run a delay_slope_cal before TT_phs_cal", verbose=verbose)
             AC.TT_phs_logcal(verbose=verbose)
             AC.data = apply_gains(AC.data, AC.TT_Phi_gain)
@@ -1072,7 +1072,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
             gain_list.append(AC.ant_eta_gain)
 
         if gen_phs_cal:
-            if delay_cal == False and delay_slope_cal == False:
+            if not delay_cal and not delay_slope_cal:
                 echo("it is recommended to run a delay_cal or delay_slope_cal before gen_phs_cal", verbose=verbose)
             if all_antenna_gains:
                 raise ValueError("can't run gen_phs_cal when all_antenna_gains is True")
@@ -1087,7 +1087,7 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
 
         # write to file
         if write_calfits:
-            io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, return_uvc=False, 
+            io.write_cal(calfits_fname, gain_dict, data_freqs, data_times, return_uvc=False,
                          overwrite=overwrite, history=history)
 
         # append gain dict to gains
@@ -1106,5 +1106,3 @@ def abscal_run(data_files, model_files, verbose=True, overwrite=False, write_cal
     # return
     if return_gains or return_object:
         return return_obj
-
-

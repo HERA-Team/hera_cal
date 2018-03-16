@@ -34,7 +34,7 @@ if opts.ex_ants:
     for ant in opts.ex_ants.split(','):
         try:
             ex_ants.append(int(ant))
-        except:
+        except ValueError:
             pass
 
 
@@ -50,7 +50,7 @@ for filename in args:
         # check if bad ants count is larger than some number of antennas.
         if bad_ants[ba] > opts.frac * len(info.subsetant):
             # check if antenna
-            if type(ba[-1]) is str:
+            if isinstance(ba[-1], str):
                 ret_ba = ba[0]  # get antenna number of bad ant
             # else it's a baseline. Don't support this now
             else:

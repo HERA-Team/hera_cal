@@ -8,6 +8,7 @@ from copy import deepcopy
 from scipy import constants
 import argparse
 
+
 class Delay_Filter():
 
     def __init__(self):
@@ -17,7 +18,6 @@ class Delay_Filter():
         '''
         self.writable = False
 
-
     def load_data(self, input_data, filetype='miriad'):
         '''Loads in and stores data for delay filtering.
 
@@ -26,11 +26,10 @@ class Delay_Filter():
                 or list of UVData instances to concatenate into a single internal DataContainer
             filetype: file format of data. Default 'miriad.' Ignored if input_data is UVData object(s).
         '''
-        if isinstance(input_data, (str,UVData)):
+        if isinstance(input_data, (str, UVData)):
             self.writable = True
             self.input_data, self.filetype = input_data, filetype
         self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = io.load_vis(input_data, return_meta=True, filetype=filetype)
-
 
     def load_data_as_dicts(self, data, flags, freqs, antpos):
         '''Loads in data manually as a dictionary, an ordered dictionary, or a DataContainer.
@@ -43,8 +42,7 @@ class Delay_Filter():
         '''
         self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
 
-
-    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1.,tol=1e-9, window='none', skip_wgt=0.1, maxiter=100):
+    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., tol=1e-9, window='none', skip_wgt=0.1, maxiter=100):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
@@ -75,8 +73,8 @@ class Delay_Filter():
             to_filter = self.data.keys()
 
         for k in to_filter:
-            bl_len = np.linalg.norm(self.antpos[k[0]] - self.antpos[k[1]]) / constants.c * 1e9 #in ns
-            sdf = np.median(np.diff(self.freqs)) / 1e9 #in GHz
+            bl_len = np.linalg.norm(self.antpos[k[0]] - self.antpos[k[1]]) / constants.c * 1e9  # in ns
+            sdf = np.median(np.diff(self.freqs)) / 1e9  # in GHz
             if weight_dict is not None:
                 wgts = weight_dict[k]
             else:
@@ -88,9 +86,8 @@ class Delay_Filter():
             self.CLEAN_models[k] = d_mdl
             self.info[k] = info
 
-
-    def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history = '',
-                            clobber = False, write_CLEAN_models=False, **kwargs):
+    def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history='',
+                            clobber=False, write_CLEAN_models=False, **kwargs):
         '''Writes high-pass filtered data to disk, using input (which must be either
         a single path or a single UVData object) as a template.
 

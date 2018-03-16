@@ -7,10 +7,11 @@ import hera_cal as hc
 import operator
 import os
 import copy
+from functools import reduce
 
 
 polnum2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
-polstr2num = {"xx": -5, "yy": -6 ,"xy": -7, "yx": -8}
+polstr2num = {"xx": -5, "yy": -6, "xy": -7, "yx": -8}
 
 jonesnum2str = {-5: 'x', -6: 'y'}
 jonesstr2num = {'x': -5, 'y': -6}
@@ -49,28 +50,28 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
     '''
 
     uvd = UVData()
-    if isinstance(input_data, (tuple, list, np.ndarray)): #List loading
-        if np.all([isinstance(id, str) for id in input_data]): #List of visibility data paths
+    if isinstance(input_data, (tuple, list, np.ndarray)):  # List loading
+        if np.all([isinstance(id, str) for id in input_data]):  # List of visibility data paths
             if filetype == 'miriad':
                 uvd.read_miriad(list(input_data))
             elif filetype == 'uvfits':
-                 #TODO: implement this
+                # TODO: implement this
                 raise NotImplementedError('This function has not been implemented yet.')
             else:
                 raise NotImplementedError("Data filetype must be either 'miriad' or 'uvfits'.")
-        elif np.all([isinstance(id, UVData) for id in input_data]): #List of uvdata objects
+        elif np.all([isinstance(id, UVData) for id in input_data]):  # List of uvdata objects
             uvd = reduce(operator.add, input_data)
         else:
             raise TypeError('If input is a list, it must be only strings or only UVData objects.')
-    elif isinstance(input_data, str): #single visibility data path
+    elif isinstance(input_data, str):  # single visibility data path
         if filetype == 'miriad':
             uvd.read_miriad(input_data)
         elif filetype == 'uvfits':
-             #TODO: implement this
+            # TODO: implement this
             raise NotImplementedError('This function has not been implemented yet.')
         else:
             raise NotImplementedError("Data filetype must be either 'miriad' or 'uvfits'.")
-    elif isinstance(input_data, UVData): #single UVData object
+    elif isinstance(input_data, UVData):  # single UVData object
         uvd = input_data
     else:
         raise TypeError('Input must be a UVData object, a string, or a list of either.')
@@ -109,9 +110,9 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 
 def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
-              return_uvd=False, longitude=21.42830, start_jd=None, instrument="HERA", 
+              return_uvd=False, longitude=21.42830, start_jd=None, instrument="HERA",
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
-              telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395]),
+              telescope_location=np.array([5109325.85521063, 2005235.09142983, -3239928.42475395]),
               **kwargs):
     """
     Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
@@ -123,7 +124,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     lst_array : type=float ndarray, contains unique LST time bins [radians] of data (center of integration).
 
-    freq_array : type=ndarray, contains frequency bins of data [Hz]. 
+    freq_array : type=ndarray, contains frequency bins of data [Hz].
 
     antpos : type=dictionary, antenna position dictionary. keys are antenna integers and values
              are position vectors in meters in ENU (TOPO) frame.
@@ -165,12 +166,12 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
 
     kwargs : type=dictionary, additional parameters to set in UVData object.
-    
+
     Output:
     -------
     if return_uvd: return UVData instance
     """
-    ## configure UVData parameters
+    # configure UVData parameters
     # get pols
     pols = np.unique(map(lambda k: k[-1], data.keys()))
     Npols = len(pols)
@@ -222,11 +223,11 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     bls = np.repeat(np.array(bls), Ntimes, axis=0)
 
     # get ant_1_array, ant_2_array
-    ant_1_array = bls[:,0]
-    ant_2_array = bls[:,1]
+    ant_1_array = bls[:, 0]
+    ant_2_array = bls[:, 1]
 
     # get baseline array
-    baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
+    baseline_array = 2048 * (ant_2_array + 1) + (ant_1_array + 1) + 2 ^ 16
 
     # get antennas in data
     data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
@@ -261,8 +262,8 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'instrument',
               'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
               'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
-              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']   
-    local_params = locals()           
+              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']
+    local_params = locals()
 
     # overwrite paramters by kwargs
     local_params.update(kwargs)
@@ -346,7 +347,7 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
     '''
 
     # Load infile
-    if type(infilename) == UVData:
+    if isinstance(infilename, UVData):
         uvd = copy.deepcopy(infilename)
     else:
         uvd = UVData()
@@ -396,23 +397,23 @@ def load_cal(input_cal, return_meta=False):
         times: ndarray containing julian date bins of data
         pols: list of antenna polarization strings
     '''
-    #load UVCal object
+    # load UVCal object
     cal = UVCal()
-    if isinstance(input_cal, (tuple, list, np.ndarray)): #List loading
-        if np.all([isinstance(ic, str) for ic in input_cal]): #List of calfits paths
+    if isinstance(input_cal, (tuple, list, np.ndarray)):  # List loading
+        if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
             cal.read_calfits(list(input_cal))
-        elif np.all([isinstance(ic, UVCal) for ic in input_cal]): #List of UVCal objects
+        elif np.all([isinstance(ic, UVCal) for ic in input_cal]):  # List of UVCal objects
             cal = reduce(operator.add, input_cal)
         else:
             raise TypeError('If input is a list, it must be only strings or only UVCal objects.')
-    elif isinstance(input_cal, str): #single calfits path
+    elif isinstance(input_cal, str):  # single calfits path
         cal.read_calfits(input_cal)
-    elif isinstance(input_cal, UVCal): #single UVCal object
+    elif isinstance(input_cal, UVCal):  # single UVCal object
         cal = input_cal
     else:
         raise TypeError('Input must be a UVCal object, a string, or a list of either.')
 
-    #load gains, flags, and quals into dictionaries
+    # load gains, flags, and quals into dictionaries
     gains, quals, flags = odict(), odict(), odict()
     for i, ant in enumerate(cal.ant_array):
         for ip, pol in enumerate(cal.jones_array):
@@ -420,7 +421,7 @@ def load_cal(input_cal, return_meta=False):
             flags[(ant, jonesnum2str[pol])] = cal.flag_array[i, 0, :, :, ip].T
             quals[(ant, jonesnum2str[pol])] = cal.quality_array[i, 0, :, :, ip].T
 
-    #return quantities
+    # return quantities
     if return_meta:
         total_qual = cal.total_quality_array
         ants = cal.ant_array
@@ -433,7 +434,7 @@ def load_cal(input_cal, return_meta=False):
 
 
 def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=True,
-              return_uvc=True, outdir='./', overwrite=False, gain_convention='divide', 
+              return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
               history=' ', x_orientation="east", telescope_name='HERA', cal_style='redundant',
               **kwargs):
     '''Format gain solution dictionary into pyuvdata.UVCal and write to file
@@ -578,7 +579,7 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
         quals: Dictionary like gains but of per-antenna quality. Default (None) leaves unchanged.
         add_to_history: appends a string to the history of the output file
         overwrite: if True, overwrites existing file at outfilename
-        kwargs: dictionary mapping updated attributs to their new values. 
+        kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVCal documentation for more info.
     '''
     # Set gains, flags, and/or quals
@@ -597,7 +598,6 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
     cal.flag_array[zero_check] += True
     if zero_check.max() is True:
         print("Some of values in self.gain_array were zero and are flagged and set to 1.")
-
 
     # Set additional attributes
     cal.history += add_to_history
@@ -624,7 +624,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     '''
 
     # Load infile
-    if type(infilename) == UVCal:
+    if isinstance(infilename, UVCal):
         cal = copy.deepcopy(infilename)
     else:
         cal = UVCal()
@@ -635,6 +635,3 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
-
-
-

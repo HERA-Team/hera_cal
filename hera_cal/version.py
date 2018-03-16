@@ -21,7 +21,7 @@ def construct_version_info():
                                              stderr=subprocess.STDOUT).strip()
         git_version = subprocess.check_output(['git', '-C', hera_cal_dir, 'describe',
                                                '--tags', '--abbrev=0']).strip()
-    except:  # pragma: no cover  - can't figure out how to test exception.
+    except subprocess.CalledProcessError:  # pragma: no cover  - can't figure out how to test exception.
         try:
             # Check if a GIT_INFO file was created when installing package
             git_file = os.path.join(hera_cal_dir, 'GIT_INFO')
@@ -31,7 +31,7 @@ def construct_version_info():
                 git_hash = data[1]
                 git_description = data[2]
                 git_branch = data[3]
-        except:
+        except (IOError, OSError):
             git_origin = ''
             git_hash = ''
             git_description = ''
@@ -41,6 +41,7 @@ def construct_version_info():
                     'git_hash': git_hash, 'git_description': git_description,
                     'git_branch': git_branch}
     return version_info
+
 
 version_info = construct_version_info()
 version = version_info['version']
@@ -53,9 +54,9 @@ git_branch = version_info['git_branch']
 hera_cal_version_str = ('hera_cal version: ' + version + '.')
 if git_hash is not '':
     hera_cal_version_str += ('  Git origin: ' + git_origin +
-                            '.  Git hash: ' + git_hash +
-                            '.  Git branch: ' + git_branch +
-                            '.  Git description: ' + git_description + '.')
+                             '.  Git hash: ' + git_hash +
+                             '.  Git branch: ' + git_branch +
+                             '.  Git description: ' + git_description + '.')
 
 
 def main():
@@ -63,6 +64,7 @@ def main():
     print('git origin = {0}'.format(git_origin))
     print('git branch = {0}'.format(git_branch))
     print('git description = {0}'.format(git_description))
+
 
 if __name__ == '__main__':
     main()

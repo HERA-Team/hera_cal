@@ -7,11 +7,12 @@ from hera_cal.data import DATA_PATH
 
 
 class Test_HERACal(UVCal):
+
     def test_gainHC(self):
         fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
         meta, gains, vis, xtalk = omni.from_fits(fn)
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
-        optional = {'observer': 'heracal'} #because it's easier than changing the fits header
+        optional = {'observer': 'heracal'}  # because it's easier than changing the fits header
         hc = cal_formats.HERACal(meta, gains, **optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(
@@ -33,7 +34,7 @@ class Test_HERACal(UVCal):
         fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
         meta, gains, vis, xtalk = omni.from_fits(fn)
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
-        optional = {'observer': 'heracal', 'cal_style':'sky'} #because it's easier than changing the fits header
+        optional = {'observer': 'heracal', 'cal_style': 'sky'}  # because it's easier than changing the fits header
         nt.assert_raises(AttributeError, cal_formats.HERACal, meta, gains, **optional)
 
     def test_delayHC(self):
