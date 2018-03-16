@@ -1615,6 +1615,7 @@ def match_times(datafile, modelfiles, atol=1e-5):
     if data_time[1] < data_time[0]: data_time[1] += 2*np.pi
     model_start = model_times[0][0]
     model_times[model_times < model_start] += 2*np.pi
+    if data_time[0] < model_start: data_time += 2*np.pi
 
     # select model files
     matched_modelfiles = np.array(modelfiles)[(model_times[0] < data_time[1] + atol) & \
