@@ -380,7 +380,7 @@ def load_cal(input_cal, return_meta=False):
 
     Returns:
         if return_meta is True:
-            (gains, flags, quals, total_qual, ants, freqs, times, pols)
+            (gains, flags, quals, total_qual, ants, freqs, times, pols, history)
         else:
             (gains, flags)
 
@@ -395,6 +395,7 @@ def load_cal(input_cal, return_meta=False):
         freqs: ndarray containing frequency channels (Hz)
         times: ndarray containing julian date bins of data
         pols: list of antenna polarization strings
+        history : str history of file
     '''
     #load UVCal object
     cal = UVCal()
@@ -413,26 +414,28 @@ def load_cal(input_cal, return_meta=False):
         raise TypeError('Input must be a UVCal object, a string, or a list of either.')
 
     #load gains, flags, and quals into dictionaries
-    gains, quals, flags = odict(), odict(), odict()
-    for i, ant in enumerate(cal.ant_array):
-        for ip, pol in enumerate(cal.jones_array):
+    gains, quals, flags, total_qual = odict(), odict(), odict(), odict()
+    for ip, pol in enumerate(cal.jones_array):
+        if cal.total_quality_array is not None:
+            total_qual[jonesnum2str[pol]] = cal.total_quality_array[0, :, :, ip].T
+        for i, ant in enumerate(cal.ant_array):
             gains[(ant, jonesnum2str[pol])] = cal.gain_array[i, 0, :, :, ip].T
             flags[(ant, jonesnum2str[pol])] = cal.flag_array[i, 0, :, :, ip].T
             quals[(ant, jonesnum2str[pol])] = cal.quality_array[i, 0, :, :, ip].T
 
     #return quantities
     if return_meta:
-        total_qual = cal.total_quality_array
         ants = cal.ant_array
         freqs = np.unique(cal.freq_array)
         times = np.unique(cal.time_array)
         pols = [jonesnum2str[j] for j in cal.jones_array]
-        return gains, flags, quals, total_qual, ants, freqs, times, pols
+        history = cal.history
+        return gains, flags, quals, total_qual, ants, freqs, times, pols, history
     else:
         return gains, flags
 
 
-def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=True,
+def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=None, write_file=True,
               return_uvc=True, outdir='./', overwrite=False, gain_convention='divide', 
               history=' ', x_orientation="east", telescope_name='HERA', cal_style='redundant',
               **kwargs):
@@ -449,6 +452,8 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
                 Must match shape of gains.
         quality : type=dictionary, holds "quality" of calibration solution. Must match
                   shape of gains. See pyuvdata.UVCal doc for more details.
+        total_qual : type=dictionary, holds total_quality_array. Key(s) are polarization
+            string(s) and values are 2D (Ntimes, Nfreqs) ndarrays.
         write_file : type=bool, if True, write UVCal to calfits file
         return_uvc : type=bool, if True, return UVCal object
         outdir : type=str, output file directory
@@ -500,7 +505,10 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
     gain_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.complex)
     flag_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.bool)
     quality_array = np.empty((Nants_data, Nspws, Nfreqs, Ntimes, Njones), np.float)
+    total_quality_array = np.empty((Nspws, Nfreqs, Ntimes, Njones), np.float)
     for i, p in enumerate(pol_array):
+        if total_qual is not None:
+            total_quality_array[:, :, :, 0] = total_qual[p].T[None, :, :]
         for j, a in enumerate(ant_array):
             # ensure (a, p) is in gains
             if (a, p) in gains:
@@ -517,6 +525,9 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
                 gain_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.complex)
                 flag_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.bool)
                 quality_array[j, :, :, :, i] = np.ones((Nspws, Nfreqs, Ntimes), np.float)
+
+    if total_qual is None:
+        total_quality_array = None
 
     # Check gain_array for values close to zero, if so, set to 1
     zero_check = np.isclose(gain_array, 0, rtol=1e-10, atol=1e-10)
@@ -536,7 +547,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, write_file=T
               "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
               "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
               "time_array", "spw_array", "freq_array", "history", "integration_time",
-              "time_range", "x_orientation", "telescope_name", "gain_convention"]
+              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
 
     # create local parameter dict
     local_params = locals()

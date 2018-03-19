@@ -235,7 +235,7 @@ class Test_Calibration_IO(unittest.TestCase):
 
         fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
-        gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal([fname_xx,fname_yy], return_meta=True)
+        gains, flags, quals, total_qual, ants, freqs, times, pols, hist = io.load_cal([fname_xx,fname_yy], return_meta=True)
         self.assertEqual(len(gains.keys()),36)
         self.assertEqual(len(flags.keys()),36)
         self.assertEqual(len(quals.keys()),36)
@@ -246,7 +246,7 @@ class Test_Calibration_IO(unittest.TestCase):
         cal_xx, cal_yy = UVCal(), UVCal()
         cal_xx.read_calfits(fname_xx)
         cal_yy.read_calfits(fname_yy)
-        gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal([cal_xx,cal_yy], return_meta=True)
+        gains, flags, quals, total_qual, ants, freqs, times, pols, hist = io.load_cal([cal_xx,cal_yy], return_meta=True)
         self.assertEqual(len(gains.keys()),36)
         self.assertEqual(len(flags.keys()),36)
         self.assertEqual(len(quals.keys()),36)
@@ -265,7 +265,9 @@ class Test_Calibration_IO(unittest.TestCase):
         gains = {}
         quality = {}
         flags = {}
+        total_qual = {}
         for i, p in enumerate(pols):
+            total_qual[p] = np.ones((Ntimes, Nfreqs), np.float)
             for j, a in enumerate(ants):
                 gains[(a, p)] = np.ones((Ntimes, Nfreqs), np.complex)
                 quality[(a, p)] = np.ones((Ntimes, Nfreqs), np.float) * 2
@@ -276,7 +278,7 @@ class Test_Calibration_IO(unittest.TestCase):
 
         # test basic execution
         uvc = io.write_cal("ex.calfits", gains, freqs, times, flags=flags, quality=quality,
-                           overwrite=True, return_uvc=True, write_file=True)
+                           total_qual=total_qual, overwrite=True, return_uvc=True, write_file=True)
         self.assertTrue(os.path.exists("ex.calfits"))
         self.assertEqual(uvc.gain_array.shape, (10, 1, 64, 100, 1))
         self.assertAlmostEqual(uvc.gain_array[5].min(), 1.0)
@@ -287,6 +289,7 @@ class Test_Calibration_IO(unittest.TestCase):
         self.assertAlmostEqual(uvc.quality_array[0,0,0,0,0], 2)
         self.assertAlmostEqual(np.sum(uvc.quality_array), 128000.0)
         self.assertEqual(len(uvc.antenna_numbers), 10)
+        self.assertTrue(uvc.total_quality_array is not None)
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
         # test execution with different parameters
@@ -300,7 +303,7 @@ class Test_Calibration_IO(unittest.TestCase):
         outname = os.path.join(DATA_PATH, "test_output/zen.2457698.40355.xx.HH.uvc.modified.calfits.")
         cal = UVCal()
         cal.read_calfits(fname)
-        gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(fname, return_meta=True)
+        gains, flags, quals, total_qual, ants, freqs, times, pols, hist = io.load_cal(fname, return_meta=True)
 
         #make some modifications
         new_gains = {key: (2.+1.j)*val for key,val in gains.items()}
@@ -310,7 +313,7 @@ class Test_Calibration_IO(unittest.TestCase):
                       add_to_history='hello world', clobber=True, telescope_name='MWA')
         
         #test modifications
-        gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(outname, return_meta=True)
+        gains, flags, quals, total_qual, ants, freqs, times, pols, hist = io.load_cal(outname, return_meta=True)
         for k in gains.keys():
             self.assertTrue(np.all(new_gains[k] == gains[k]))
             self.assertTrue(np.all(new_flags[k] == flags[k]))
@@ -324,7 +327,7 @@ class Test_Calibration_IO(unittest.TestCase):
         #now try the same thing but with a UVCal object instead of path
         io.update_cal(cal, outname, gains=new_gains, flags=new_flags, quals=new_quals,
                       add_to_history='hello world', clobber=True, telescope_name='MWA')
-        gains, flags, quals, total_qual, ants, freqs, times, pols = io.load_cal(outname, return_meta=True)
+        gains, flags, quals, total_qual, ants, freqs, times, pols, hist = io.load_cal(outname, return_meta=True)
         for k in gains.keys():
             self.assertTrue(np.all(new_gains[k] == gains[k]))
             self.assertTrue(np.all(new_flags[k] == flags[k]))
