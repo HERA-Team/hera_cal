@@ -1088,31 +1088,21 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
             gain_dict = odict(flatten(gain_dict))
             flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
 
-        # load calfits file if provided
-        if calfits_infiles is not None:
-            (cf_gains, cf_flags, cf_quals, cf_total_qual, cf_ants, cf_freqs, cf_times,
-             cf_pols, cf_hist) = io.load_cal(calfits_infiles[i], return_meta=True)
-            _history = cf_hist + history
-            _quality = cf_quals
-            _total_qual = cf_total_qual
-
-            # assign gains and flags
-            shared_keys = sorted(set(cf_gains.keys()) & set(gain_dict.keys()))
-            shared_pols = sorted(set(map(lambda k: k[1], gain_dict.keys())) & set(cf_pols))
-            gain_dict = odict(map(lambda k: (k, gain_dict[k] * cf_gains[k]), shared_keys))
-            flag_dict = odict(map(lambda k: (k, flag_dict[k] + cf_flags[k]), shared_keys))
-            _quality = odict(map(lambda k: (k, _quality[k]), shared_keys))
-            _total_qual = odict(map(lambda p: (p, _total_qual[p]), shared_pols))
-
-        else:
-            _history = history
-            _quality = None
-            _total_qual = None
-
         # write to file
         if write_calfits:
-            io.write_cal(output_calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict, quality=_quality, 
-                         total_qual=_total_qual, return_uvc=False, overwrite=overwrite, history=_history)
+            # load calfits file if provided
+            if calfits_infiles is not None:
+                cal_in = UVCal()
+                cal_in.read_calfits(calfits_infiles[i])
+                out_gains, out_flags = io.load_cal(cal_in)
+                for k in out_gains.keys():
+                    out_gains[k] *= gain_dict[k]
+                    out_flags[k] += flag_dict[k]
+                io.update_cal(cal_in, output_calfits_fname,  gains=out_gains, flags=out_flags, add_to_history=history, clobber=overwrite)
+            # write a calfits from scratch
+            else:
+                io.write_cal(output_calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict, quality=None, 
+                     total_qual=None, return_uvc=False, overwrite=overwrite, history=history)
 
         # append gain dict to gains
         gains.append(gain_dict)

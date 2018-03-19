@@ -562,8 +562,8 @@ class Test_AbsCal:
         nt.assert_almost_equal(uvc.gain_array.max(), 1.0)
         os.remove('./ex.calfits')
         # test w/ calfits files
-        calfits_files = [os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')]
-        hc.abscal.abscal_run(data_files, model_files, calfits_files=calfits_files, delay_slope_cal=True,
+        calfits_infiles = [os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')]
+        hc.abscal.abscal_run(data_files, model_files, calfits_infiles=calfits_infiles, delay_slope_cal=True,
                              outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False)
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
