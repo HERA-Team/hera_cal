@@ -809,7 +809,7 @@ def abscal_arg_parser():
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
     a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_files", type=str, nargs='*', help="list of calfits files to multiply with abscal solution before writing to disk.")
+    a.add_argument("--calfits_infiles", type=str, nargs='*', help="list of calfits files to multiply with abscal solution before writing to disk.")
     a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits file.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
@@ -835,7 +835,7 @@ def omni_abscal_arg_parser():
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
     a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_files", type=str, nargs='*', help="list of calfits files to multiply with abscal solution before writing to disk.")
+    a.add_argument("--calfits_infiles", type=str, nargs='*', help="list of calfits files to multiply with abscal solution before writing to disk.")
     a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits file.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
@@ -848,7 +848,7 @@ def omni_abscal_arg_parser():
     return a
 
 
-def abscal_run(data_files, model_files, calfits_files=None, verbose=True, overwrite=False, write_calfits=True,
+def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, overwrite=False, write_calfits=True,
                output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, interp_model=True, all_antenna_gains=False,
                delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, abs_amp_cal=False,
@@ -883,9 +883,11 @@ def abscal_run(data_files, model_files, calfits_files=None, verbose=True, overwr
                 a list of paths to miriad file(s) containing complex
                 visibility data, or a path itself
 
-    calfits_files : type=list or string, path(s) to calfits files(s)
+    calfits_infiles : type=list or string, path(s) to calfits files(s)
                 a list of paths to calfits file(s) containing gain solutions
                 to multiply with abscal gain solution before writing to file.
+                These files should correspond one-to-one with data_files. History,
+                quality and flags are also propagated to final output calfits files.
 
     verbose : type=boolean, if True print output to stdout
 
@@ -1087,9 +1089,9 @@ def abscal_run(data_files, model_files, calfits_files=None, verbose=True, overwr
             flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
 
         # load calfits file if provided
-        if calfits_files is not None:
+        if calfits_infiles is not None:
             (cf_gains, cf_flags, cf_quals, cf_total_qual, cf_ants, cf_freqs, cf_times,
-             cf_pols, cf_hist) = io.load_cal(calfits_files[i], return_meta=True)
+             cf_pols, cf_hist) = io.load_cal(calfits_infiles[i], return_meta=True)
             _history = cf_hist + history
             _quality = cf_quals
             _total_qual = cf_total_qual
