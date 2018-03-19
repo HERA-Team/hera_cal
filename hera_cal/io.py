@@ -508,7 +508,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     total_quality_array = np.empty((Nspws, Nfreqs, Ntimes, Njones), np.float)
     for i, p in enumerate(pol_array):
         if total_qual is not None:
-            total_quality_array[:, :, :, 0] = total_qual[p].T[None, :, :]
+            total_quality_array[0, :, :, i] = total_qual[p].T[None, :, :]
         for j, a in enumerate(ant_array):
             # ensure (a, p) is in gains
             if (a, p) in gains:
