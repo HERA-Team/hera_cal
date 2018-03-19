@@ -1096,7 +1096,7 @@ def abscal_run(data_files, model_files, calfits_files=None, verbose=True, overwr
 
             # assign gains and flags
             shared_keys = sorted(set(cf_gains.keys()) & set(gain_dict.keys()))
-            shared_pols = sorted(set(map(lambda k: k[1], sgain_dict.keys())) & set(cf_pols))
+            shared_pols = sorted(set(map(lambda k: k[1], gain_dict.keys())) & set(cf_pols))
             gain_dict = odict(map(lambda k: (k, gain_dict[k] * cf_gains[k]), shared_keys))
             flag_dict = odict(map(lambda k: (k, flag_dict[k] + cf_flags[k]), shared_keys))
             _quality = odict(map(lambda k: (k, _quality[k]), shared_keys))
