@@ -254,7 +254,7 @@ class Calibration_Smoother():
         '''
         assert(isinstance(cal, (str, UVCal)))
         self.input_cal = cal
-        self.gains, self.flags, self.quals, _, _, self.freqs, self.times, self.pols =  io.load_cal(cal, return_meta=True)
+        self.gains, self.flags, self.quals, _, _, self.freqs, self.times, self.pols, hist =  io.load_cal(cal, return_meta=True)
         self.nFreq = len(self.freqs)
         self.nInt =len(self.times)
         self.tInt = np.median(np.diff(self.times))*24.0*60.0*60.0
@@ -262,12 +262,12 @@ class Calibration_Smoother():
         
         if prev_cal is not None:
             assert(isinstance(prev_cal, (str, UVCal, tuple, list, np.ndarray)))
-            self.prev_gains, self.prev_flags, self.prev_quals, _, _, self.prev_freqs, self.prev_times, self.prev_pols = io.load_cal(prev_cal, return_meta=True)
+            self.prev_gains, self.prev_flags, self.prev_quals, _, _, self.prev_freqs, self.prev_times, self.prev_pols, prev_hist = io.load_cal(prev_cal, return_meta=True)
             self.has_prev_cal = True
 
         if next_cal is not None:
             assert(isinstance(next_cal, (str, UVCal, tuple, list, np.ndarray)))
-            self.next_gains, self.next_flags, self.next_quals, _, _, self.next_freqs, self.next_times, self.next_pols = io.load_cal(next_cal, return_meta=True)
+            self.next_gains, self.next_flags, self.next_quals, _, _, self.next_freqs, self.next_times, self.next_pols, next_hist = io.load_cal(next_cal, return_meta=True)
             self.has_next_cal = True
 
         if self.has_data:
