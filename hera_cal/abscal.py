@@ -1100,7 +1100,7 @@ def abscal_run(data_files, model_files, calfits_files=None, verbose=True, overwr
             gain_dict = odict(map(lambda k: (k, gain_dict[k] * cf_gains[k]), shared_keys))
             flag_dict = odict(map(lambda k: (k, flag_dict[k] + cf_flags[k]), shared_keys))
             _quality = odict(map(lambda k: (k, _quality[k]), shared_keys))
-            _total_qual = odict(map(lambda k: (p, _total_qual[p]), shared_pols))
+            _total_qual = odict(map(lambda p: (p, _total_qual[p]), shared_pols))
 
         else:
             _history = history
