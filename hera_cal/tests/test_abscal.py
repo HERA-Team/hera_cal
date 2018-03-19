@@ -523,7 +523,7 @@ class Test_AbsCal:
         cf_name = "ex.calfits"
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
-        gains, = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, calfits_fname=cf_name, outdir=outdir,
+        gains, = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
                                     return_gains=True, verbose=False)
         nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
         if os.path.exists(os.path.join(outdir, cf_name)):
@@ -536,13 +536,16 @@ class Test_AbsCal:
                                      delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False)
         nt.assert_equal(gains[0][(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[0][(24,'x')].shape, (60, 64))
+        if os.path.exists('./ex.calfits'): os.remove('./ex.calfits')
         # check exceptions
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True,
-                calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, delay_cal=True, verbose=False)
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True,
-                calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_phs_cal=True, verbose=False)
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True,
-                calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_amp_cal=True, verbose=False)
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
+                output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, delay_cal=True, verbose=False)
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
+                output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_phs_cal=True, verbose=False)
+        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
+                output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_amp_cal=True, verbose=False)
+        if os.path.exists('./ex.calfits'):
+            os.remove('./ex.calfits')
         # check all antenna gains run
         hc.abscal.abscal_run(data_files, model_files, abs_amp_cal=True, all_antenna_gains=True, write_calfits=False)
         # test general bandpass solvers
@@ -550,14 +553,26 @@ class Test_AbsCal:
         # test exception
         nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
         # check blank & flagged calfits file written if no LST overlap
-        model_files = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458044.*.xx.HH.uvXRAA")))
-        hc.abscal.abscal_run(data_files, model_files, write_calfits=True, overwrite=True, outdir='./', calfits_fname='ex.calfits')
+        bad_model_files = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458044.*.xx.HH.uvXRAA")))
+        hc.abscal.abscal_run(data_files, bad_model_files, write_calfits=True, overwrite=True, outdir='./', 
+                            output_calfits_fname='ex.calfits', verbose=False)
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
         nt.assert_true(uvc.flag_array.min())
         nt.assert_almost_equal(uvc.gain_array.max(), 1.0)
         os.remove('./ex.calfits')
-
+        # test w/ calfits files
+        calfits_files = [os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')]
+        hc.abscal.abscal_run(data_files, model_files, calfits_files=calfits_files, delay_slope_cal=True,
+                             outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False)
+        uvc = UVCal()
+        uvc.read_calfits('./ex.calfits')
+        nt.assert_true(uvc.total_quality_array is not None)
+        nt.assert_almost_equal(uvc.quality_array[0,0,32,0,0], 0.13632354140281677)
+        nt.assert_true(uvc.flag_array[0].min())
+        nt.assert_false(uvc.flag_array[1].max())
+        nt.assert_true(len(uvc.history) > 1000)
+        os.remove('./ex.calfits')
 
     def test_mock_data(self):
         # load into pyuvdata object
