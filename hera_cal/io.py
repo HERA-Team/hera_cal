@@ -380,7 +380,7 @@ def load_cal(input_cal, return_meta=False):
 
     Returns:
         if return_meta is True:
-            (gains, flags, quals, total_qual, ants, freqs, times, pols, history)
+            (gains, flags, quals, total_qual, ants, freqs, times, pols)
         else:
             (gains, flags)
 
@@ -395,7 +395,6 @@ def load_cal(input_cal, return_meta=False):
         freqs: ndarray containing frequency channels (Hz)
         times: ndarray containing julian date bins of data
         pols: list of antenna polarization strings
-        history : str history of file
     '''
     #load UVCal object
     cal = UVCal()
@@ -418,6 +417,8 @@ def load_cal(input_cal, return_meta=False):
     for ip, pol in enumerate(cal.jones_array):
         if cal.total_quality_array is not None:
             total_qual[jonesnum2str[pol]] = cal.total_quality_array[0, :, :, ip].T
+        else:
+            total_qual = None
         for i, ant in enumerate(cal.ant_array):
             gains[(ant, jonesnum2str[pol])] = cal.gain_array[i, 0, :, :, ip].T
             flags[(ant, jonesnum2str[pol])] = cal.flag_array[i, 0, :, :, ip].T
@@ -429,8 +430,7 @@ def load_cal(input_cal, return_meta=False):
         freqs = np.unique(cal.freq_array)
         times = np.unique(cal.time_array)
         pols = [jonesnum2str[j] for j in cal.jones_array]
-        history = cal.history
-        return gains, flags, quals, total_qual, ants, freqs, times, pols, history
+        return gains, flags, quals, total_qual, ants, freqs, times, pols
     else:
         return gains, flags
 
