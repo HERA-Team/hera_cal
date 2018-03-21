@@ -64,6 +64,24 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         self.assertEqual(a.data, 'b')
         self.assertEqual(a.cal_outfile, 'c')
 
+    def test_time_filter(self):
+        gains = np.ones((10,10),dtype=complex)
+        gains[3,5] = 10.0
+        wgts = np.ones((10,10),dtype=float)
+        wgts[3,5] = 0
+        times = np.linspace(0,10*10/60./60./24.,10)
+        tf = sc.time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 1)
+        np.testing.assert_array_almost_equal(tf, np.ones((10,10),dtype=complex))
+
+    def test_freq_filter(self):
+        gains = np.ones((10,10),dtype=complex)
+        gains[3,5] = 10.0
+        wgts = np.ones((10,10),dtype=float)
+        wgts[3,5] = 0
+        freqs = np.linspace(100.,200.,10)
+        ff = sc.freq_filter(gains, wgts, freqs)
+        np.testing.assert_array_almost_equal(ff, np.ones((10,10),dtype=complex))
+
 class Test_Calibration_Smoother(unittest.TestCase):
 
     @classmethod

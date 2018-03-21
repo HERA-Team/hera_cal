@@ -143,7 +143,7 @@ def time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 0):
     for n in range(nMirrors):
         nBefore += (padded_gains[1:,:]).shape[0]
         padded_gains = np.vstack((np.flipud(padded_gains[1:,:]),gains,np.flipud(padded_gains[:-1,:])))
-        padded_wgts = np.vstack((np.flipud(padded_wgts[1:,:]),gains,np.flipud(padded_wgts[:-1,:])))
+        padded_wgts = np.vstack((np.flipud(padded_wgts[1:,:]),wgts,np.flipud(padded_wgts[:-1,:])))
 
     nInt, nFreq = padded_gains.shape
     conv_gains = padded_gains * padded_wgts
