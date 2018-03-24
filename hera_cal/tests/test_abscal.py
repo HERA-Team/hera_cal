@@ -220,8 +220,8 @@ class Test_AbsCal_Funcs:
     def test_rephase_vis(self):
         dfile = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
         mfiles = map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458042.12552.xx.HH.uvXA'])
-        m, mf, mantp, mant, mfr, mt, ml, mp = io.load_vis(mfiles)
-        d, df, dantp, dant, dfr, dt, dl, dp = io.load_vis(dfile)
+        m, mf, mantp, mant, mfr, mt, ml, mp = hc.io.load_vis(mfiles, return_meta=True)
+        d, df, dantp, dant, dfr, dt, dl, dp = hc.io.load_vis(dfile, return_meta=True)
         bls = odict(map(lambda k: (k, dantp[k[0]] - dantp[k[1]]), d.keys()))
 
         # basic execution
@@ -229,8 +229,8 @@ class Test_AbsCal_Funcs:
 
         k = new_m.keys()[0]
         nt.assert_equal(new_m[k].shape, d[k].shape)
-        nt.assert_true(new_f[k][0].min())
-        nt.assert_false(new_f[k][-1].max())
+        nt.assert_true(new_f[k][-1].min())
+        nt.assert_false(new_f[k][0].max())
 
 
 class Test_AbsCal:
