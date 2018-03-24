@@ -438,7 +438,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     return file_starts, file_stops, int_times
 
 
-def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True):
+def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False):
     """
     Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
     If inplace == True, this function directly edits the arrays in 'data' in memory, so as not to 
@@ -459,6 +459,8 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True):
     lat : type=float, latitude of observer in degrees North
 
     inplace : type=bool, if True edit arrays in data in memory, else make a copy and return
+
+    array : type=bool, if True, treat data as a visibility ndarray and bls as a baseline vector
 
     Notes:
     ------
@@ -493,6 +495,12 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True):
     if inplace == False:
         data = copy.deepcopy(data)
 
+    # turn array into dict
+    if array:
+        inplace = False
+        data = {'data': data}
+        bls = {'data': bls}
+
     # iterate over data keys
     for i, k in enumerate(data.keys()):
 
@@ -521,5 +529,8 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True):
         # multiply into data
         data[k] *= phs
 
+    if array:
+        data = data['data']
+        
     if inplace == False:
         return data

@@ -11,6 +11,8 @@ from hera_cal import io
 from pyuvdata import UVCal
 import glob
 from collections import OrderedDict as odict
+import copy
+import hera_cal as hc
 
 
 class TestAAFromCalfile(object):
@@ -165,7 +167,7 @@ def test_lst_rephase(self):
     bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
 
     # basic test: single dlst for all integrations
-    hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+    hc.utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # get phase error on shortest EW baseline
     k = (0, 1, 'xx')
     # check error at transit
@@ -178,7 +180,7 @@ def test_lst_rephase(self):
     # multiple phase term test: dlst per integration
     dlst = np.array([np.median(np.diff(lsts))] * data[k].shape[0])
     data = copy.deepcopy(data_drift)
-    hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+    hc.utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # check error at transit
     phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
     nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
@@ -189,11 +191,19 @@ def test_lst_rephase(self):
     # phase all integrations to a single integration
     dlst = lsts[50] - lsts
     data = copy.deepcopy(data_drift)
-    hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+    hc.utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # check error at transit
     phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration, 4])
     nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
     # check error across file
     phs_err = np.angle(data[k][:, 4] / data_drift[k][50, 4])
     nt.assert_true(np.abs(phs_err).max() < 1e-4)
+
+    # test operation on array
+    k = (0, 1, 'xx')
+    d = data_drift[k].copy()
+    d_phs = hc.utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
+    nt.assert_almost_equal(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
+
+
 
