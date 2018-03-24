@@ -980,7 +980,7 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
         echo("loading {}".format(dfile), type=1, verbose=verbose)
         (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
             data_pols) = io.load_vis(dfile, pop_autos=True, return_meta=True, pick_data_ants=False)
-        bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
+        bls = odict(map(lambda k: (k, data_antpos[k[0]] - data_antpos[k[1]]), data.keys()))
         Ntimes = len(data_times)
         Nfreqs = len(data_freqs)
         data_lsts[data_lsts < data_lsts[0]] += 2*np.pi

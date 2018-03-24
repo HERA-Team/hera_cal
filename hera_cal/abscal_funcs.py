@@ -948,7 +948,6 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9),
     else:
         return new_data
 
-
 def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=None,
                  kind='cubic', flag_extrapolate=True, medfilt_flagged=True, medfilt_window=(3, 7),
                  fill_value=None):
@@ -1109,6 +1108,66 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         # rejoin
         new_model[k] = interp_real + 1j*interp_imag
         new_flags[k] = f
+
+    return DataContainer(new_model), DataContainer(new_flags)
+
+
+def rephase_vis(model, model_lsts, data_lsts, bls, freqs, flags=None, max_dlst=0.005, latitude=-30.72152):
+    """
+    Rephase model visibility data onto LST grid of data_lsts.
+
+    Parameters:
+    -----------
+    model : type=DataContainer, holds complex visibility for model
+        keys are antenna-pair + pol tuples, values are 2d complex visibility
+        with shape (Ntimes, Nfreqs)
+
+    model_lsts : 1D array of the LST grid in model [radians], dtype=float, shape=(Ntimes,)
+
+    data_lsts : 1D array of the LST grid in data [radians], dtype=float, shape=(Ntimes,)
+
+    bls : type=dictionary, ant-pair keys that holds baseline position vector in ENU frame in meters
+
+    freqs : type=float ndarray, holds frequency channels of model in Hz.
+
+    flags : type=DataContainer, holds model flags
+
+    max_dlst : type=bool, maximum dlst [radians] to allow for rephasing, otherwise flag data.
+
+    latitude : type=float, latitude of array in degrees North
+
+    Return: (new_model, new_flags)
+    -------
+    new_model : DataContainer with rephased model
+    new_flags : DataContainer with new flags
+    """
+    # unravel LST array if necessary
+    if data_lsts.max() < data_lsts.min():
+        data_lsts[data_lsts]
+    # get nearest neighbor model points
+    lst_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts-x)), data_lsts))
+
+    # get dlst array
+    dlst = data_lsts - model_lsts[lst_nn]
+
+    # flag dlst above threshold
+    flag_lst = np.zeros_like(dlst, np.bool)
+    flag_lst[np.abs(dlst) > max_dlst] = True
+
+    # make new_model and new_flags
+    new_model = odict()
+    new_flags = odict()
+    for k in model.keys():
+        m = model[k][lst_nn, :]
+        new_model[k] = m
+        if flags is None:
+            new_flags[k] = np.zeros_like(m, np.bool)
+        else:
+            new_flags[k] = flags[k][lst_nn, :]
+        new_flags[k][flag_lst] = True
+
+    # rephase
+    new_model = utils.lst_rephase(new_model, bls, freqs, dlst, lat=latitude, inplace=False)
 
     return DataContainer(new_model), DataContainer(new_flags)
 
