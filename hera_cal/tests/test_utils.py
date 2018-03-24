@@ -155,7 +155,7 @@ def test_get_miriad_times():
     # test if str
     starts, stops, ints = utils.get_miriad_times(filepaths[0])
 
-def test_lst_rephase(self):
+def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
     data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
