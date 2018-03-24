@@ -180,50 +180,6 @@ class Test_lstbin:
         sw_k = hc.lstbin.switch_bl(key)
         nt.assert_equal(sw_k, (2, 1, 'xx'))
 
-    def test_lst_rephase(self):
-        # load point source sim w/ array at latitude = 0
-        fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
-        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
-        data_drift = copy.deepcopy(data)
-        transit_integration = 50
-
-        # get integration time in LST, baseline dict
-        dlst = np.median(np.diff(lsts))
-        bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
-
-        # basic test: single dlst for all integrations
-        hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
-        # get phase error on shortest EW baseline
-        k = (0, 1, 'xx')
-        # check error at transit
-        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
-        nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
-        # check error across file
-        phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
-        nt.assert_true(np.abs(phs_err).max() < 1e-4)
-
-        # multiple phase term test: dlst per integration
-        dlst = np.array([np.median(np.diff(lsts))] * data[k].shape[0])
-        data = copy.deepcopy(data_drift)
-        hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
-        # check error at transit
-        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
-        nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
-        # check err across file
-        phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
-        nt.assert_true(np.abs(phs_err).max() < 1e-4)
-
-        # phase all integrations to a single integration
-        dlst = lsts[50] - lsts
-        data = copy.deepcopy(data_drift)
-        hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=0.0)
-        # check error at transit
-        phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration, 4])
-        nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
-        # check error across file
-        phs_err = np.angle(data[k][:, 4] / data_drift[k][50, 4])
-        nt.assert_true(np.abs(phs_err).max() < 1e-4)
-
 
 
 

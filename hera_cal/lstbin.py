@@ -14,7 +14,7 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal import omni, utils, firstcal, cal_formats, redcal, abscal, io
+from hera_cal import omni, utils, firstcal, cal_formats, abscal, redcal, io
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
@@ -178,7 +178,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 # form baseline dictionary and lst_rephase
                 bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys()))
                 lst_shift = lst_grid[grid_indices] - l
-                lst_rephase(d, bls, freq_array, lst_shift, lat=lat)
+                utils.lst_rephase(d, bls, freq_array, lst_shift, lat=lat)
                 d.phase_type = "LSTBIN"
 
             except LSTBINPHASED:
@@ -765,83 +765,6 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         lst_grid += lst_start
 
     return lst_grid
-
-
-def lst_rephase(data, bls, freqs, dlst, lat=-30.72152):
-    """
-    Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
-    This function directly edits the arrays in 'data' in memory, so as not to make a copy of data.
-
-    Parameters:
-    -----------
-    data : type=DataContainer, holding 2D visibility data, with [0] axis time and [1] axis frequency
-
-    bls : type=dictionary, same keys as data, values are 3D float arrays holding baseline vector
-                            in ENU frame in meters
-
-    freqs : type=ndarray, frequency array of data [Hz]
-
-    dlst : type=ndarray or float, delta-LST to rephase by [radians]. If a float, shift all integrations
-                by dlst, elif an ndarray, shift each integration by different amount w/ shape=(Ntimes)
-
-    lat : type=float, latitude of observer in degrees North
-
-    Notes:
-    ------
-    The rephasing uses aipy.coord.top2eq_m and aipy.coord.eq2top_m matrices to convert from
-    array TOPO frame to Equatorial frame, induces time rotation, converts back to TOPO frame,
-    calculates new pointing vector s_prime and inserts a delay plane into the data for rephasing.
-
-    This method of rephasing follows Eqn. 21 & 22 of Zhang, Y. et al. 2018 10.3847/1538-4357/aaa029
-    """
-    # check format of dlst
-    if isinstance(dlst, list):
-        lat = np.ones_like(dlst) * lat
-        dlst = np.array(dlst)
-        zero = np.zeros_like(dlst)
-    elif isinstance(dlst, np.ndarray):
-        lat = np.ones_like(dlst) * lat
-        zero = np.zeros_like(dlst)
-
-    else:
-        zero = 0
-
-    # get top2eq matrix
-    top2eq = uvutils.top2eq_m(zero, lat*np.pi/180)
-
-    # get eq2top matrix
-    eq2top = uvutils.eq2top_m(-dlst, lat*np.pi/180)
-
-    # get full rotation matrix
-    rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
-
-    # iterate over data keys
-    for i, k in enumerate(data.keys()):
-
-        # get new s-hat vector
-        s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
-        s_diff = s_prime - np.array([0., 0., 1.0])
-
-        # get baseline vector
-        bl = bls[k]
-
-        # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
-        u = np.einsum("...i,i->...", s_diff, bl)
-
-        # get delay
-        tau = u / (aipy.const.c / 100.0)
-
-        # reshape tau
-        if type(tau) == np.ndarray:
-            pass
-        else:
-            tau = np.array([tau])
-
-        # get phasor
-        phs = np.exp(-2j*np.pi*freqs[None, :]*tau[:, None])
-
-        # multiply into data
-        data[k] *= phs
 
 
 def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
