@@ -78,9 +78,18 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         gains[3,5] = 10.0
         wgts = np.ones((10,10),dtype=float)
         wgts[3,5] = 0
-        freqs = np.linspace(100.,200.,10)
+        freqs = np.linspace(100.,200.,10)*1e6
         ff = sc.freq_filter(gains, wgts, freqs)
         np.testing.assert_array_almost_equal(ff, np.ones((10,10),dtype=complex))
+
+        #test rephasing
+        gains = np.ones((2,1000),dtype=complex)
+        wgts = np.ones((2,1000),dtype=float)
+        freqs = np.linspace(100.,200.,1000)*1e6
+        gains *= np.exp(2.0j * np.pi * np.outer(100e-9 * np.ones(2), freqs))
+        ff = sc.freq_filter(gains, wgts, freqs)
+        np.testing.assert_array_almost_equal(ff, gains, 2)
+
 
 class Test_Calibration_Smoother(unittest.TestCase):
 

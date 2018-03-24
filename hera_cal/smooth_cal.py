@@ -8,6 +8,7 @@ from copy import deepcopy
 import warnings
 import uvtools
 import argparse
+from hera_cal.abscal import fft_dly
 
 def drop_cross_vis(data):
     '''Delete all entries from a DataContiner that not autocorrelations in order to save memory.'''
@@ -79,6 +80,7 @@ def build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts = False):
 
 def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none', skip_wgt=0.1, maxiter=100):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
+    Befor filtering, removes a per-integration delay using abscal.fft_dly, then puts it back in after filtering.
     
     Arguments:
         gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter 
@@ -99,9 +101,11 @@ def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none
     '''
     sdf = np.median(np.diff(freqs)) / 1e9 #in GHz
     filter_size = (filter_scale / 1e3)**-1 #Puts it in ns
-    filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains, wgts, filter_size, sdf, tol=tol, window=window, 
+    (dlys, phi) = fft_dly(gains, wgts, df=sdf*1e9, medfilt=False) #delays are in seconds
+    rephasor = np.exp(-2.0j * np.pi * np.outer(dlys, freqs))
+    filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains*rephasor, wgts, filter_size, sdf, tol=tol, window=window, 
                                                                  skip_wgt=skip_wgt, maxiter=maxiter)
-    return filtered
+    return filtered/rephasor
 
 
 def time_kernel(nInt, tInt, filter_scale = 120.0):
