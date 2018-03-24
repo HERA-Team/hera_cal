@@ -436,3 +436,90 @@ def get_miriad_times(filepaths, add_int_buffer=False):
         int_times = int_times[0]
 
     return file_starts, file_stops, int_times
+
+
+def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True):
+    """
+    Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
+    If inplace == True, this function directly edits the arrays in 'data' in memory, so as not to 
+    make a copy of data.
+
+    Parameters:
+    -----------
+    data : type=DataContainer, holding 2D visibility data, with [0] axis time and [1] axis frequency
+
+    bls : type=dictionary, same keys as data, values are 3D float arrays holding baseline vector
+                            in ENU frame in meters
+
+    freqs : type=ndarray, frequency array of data [Hz]
+
+    dlst : type=ndarray or float, delta-LST to rephase by [radians]. If a float, shift all integrations
+                by dlst, elif an ndarray, shift each integration by different amount w/ shape=(Ntimes)
+
+    lat : type=float, latitude of observer in degrees North
+
+    inplace : type=bool, if True edit arrays in data in memory, else make a copy and return
+
+    Notes:
+    ------
+    The rephasing uses aipy.coord.top2eq_m and aipy.coord.eq2top_m matrices to convert from
+    array TOPO frame to Equatorial frame, induces time rotation, converts back to TOPO frame,
+    calculates new pointing vector s_prime and inserts a delay plane into the data for rephasing.
+
+    This method of rephasing follows Eqn. 21 & 22 of Zhang, Y. et al. 2018 "Unlocking Sensitivity..."
+    """
+    # check format of dlst
+    if isinstance(dlst, list):
+        lat = np.ones_like(dlst) * lat
+        dlst = np.array(dlst)
+        zero = np.zeros_like(dlst)
+    elif isinstance(dlst, np.ndarray):
+        lat = np.ones_like(dlst) * lat
+        zero = np.zeros_like(dlst)
+
+    else:
+        zero = 0
+
+    # get top2eq matrix
+    top2eq = uvutils.top2eq_m(zero, lat*np.pi/180)
+
+    # get eq2top matrix
+    eq2top = uvutils.eq2top_m(-dlst, lat*np.pi/180)
+
+    # get full rotation matrix
+    rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
+
+    # make copy of data if desired
+    if inplace == False:
+        data = copy.deepcopy(data)
+
+    # iterate over data keys
+    for i, k in enumerate(data.keys()):
+
+        # get new s-hat vector
+        s_prime = np.einsum("...ij,j->...i", rot, np.array([0.0, 0.0, 1.0]))
+        s_diff = s_prime - np.array([0., 0., 1.0])
+
+        # get baseline vector
+        bl = bls[k]
+
+        # dot bl with difference of pointing vectors to get new u: Zhang, Y. et al. 2018 (Eqn. 22)
+        u = np.einsum("...i,i->...", s_diff, bl)
+
+        # get delay
+        tau = u / (aipy.const.c / 100.0)
+
+        # reshape tau
+        if type(tau) == np.ndarray:
+            pass
+        else:
+            tau = np.array([tau])
+
+        # get phasor
+        phs = np.exp(-2j*np.pi*freqs[None, :]*tau[:, None])
+
+        # multiply into data
+        data[k] *= phs
+
+    if inplace == False:
+        return data

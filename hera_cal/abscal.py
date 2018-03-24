@@ -850,9 +850,9 @@ def omni_abscal_arg_parser():
 
 def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, overwrite=False, write_calfits=True,
                output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
-               match_red_bls=False, tol=1.0, reweight=False, interp_model=True, all_antenna_gains=False,
+               match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False,
                delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, abs_amp_cal=False,
-               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False, history=''):
+               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False, latitude=-30.72152, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -907,7 +907,7 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
     reweight : type=boolean, reweight unique baseline data based on redundancy
 
-    interp_model : type=boolean, interpolate model freq and time onto data freq and time
+    rephase_model : type=boolean, rephase nearest neighbor model pixels onto data lst grid
 
     all_antenna_gains : type=boolean, if True, use full antenna list in data file to make gains,
                 rather than just antennas present in the data. It is not possible
@@ -926,6 +926,8 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
     gen_amp_cal : type=boolean, if True, perform general amplitude bandpass calibration
 
     gen_phs_cal : type=boolean, if True, perform general phase bandpass calibration
+
+    latitude : type=float, latitude of array in degrees North
 
     Result:
     -------
@@ -978,6 +980,7 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
         echo("loading {}".format(dfile), type=1, verbose=verbose)
         (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
             data_pols) = io.load_vis(dfile, pop_autos=True, return_meta=True, pick_data_ants=False)
+        bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
         Ntimes = len(data_times)
         Nfreqs = len(data_freqs)
         data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
@@ -997,19 +1000,19 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                 data = match_red_baselines(data, data_antpos, model, model_antpos, tol=tol, verbose=verbose)
                 antpos = model_antpos
 
-            # interpolate model to match data
-            if interp_model:
-                interp_model, interp_mflags = interp2d_vis(model, model_lsts, model_freqs,
-                                                           data_lsts, data_freqs, flags=model_flags)
-                for k in interp_mflags.keys():
-                    wgts[k][interp_mflags[k]] *= 0
+            # rephase model to match data lst grid
+            if rephase_model:
+                new_model, new_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, flags=model_flags, latitude=latitude)
+
+                for k in new_flags.keys():
+                    wgts[k][new_flags[k]] *= 0
 
             # reweight according to redundancy
             if reweight:
                 wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
 
             # instantiate class
-            AC = AbsCal(interp_model, data, wgts=wgts, antpos=antpos, freqs=data_freqs)
+            AC = AbsCal(new_model, data, wgts=wgts, antpos=antpos, freqs=data_freqs)
             total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
 
             gain_list = []
