@@ -1144,6 +1144,7 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, flags=None, max_dlst=0
     # unravel LST array if necessary
     if data_lsts.max() < data_lsts.min():
         data_lsts[data_lsts]
+
     # get nearest neighbor model points
     lst_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts-x)), data_lsts))
 
@@ -1164,7 +1165,7 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, flags=None, max_dlst=0
             new_flags[k] = np.zeros_like(m, np.bool)
         else:
             new_flags[k] = flags[k][lst_nn, :]
-        new_flags[k][flag_lst] = True
+        new_flags[k][flag_lst, :] = True
 
     # rephase
     new_model = utils.lst_rephase(new_model, bls, freqs, dlst, lat=latitude, inplace=False)
