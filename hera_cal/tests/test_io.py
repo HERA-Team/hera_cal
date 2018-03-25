@@ -299,9 +299,9 @@ class Test_Calibration_IO(unittest.TestCase):
         # test single integration write
         gains = odict(map(lambda k: (k, gains[k][:1]), gains.keys()))
         uvc = io.write_cal("ex.calfits", gains, freqs, times[:1], return_uvc=True, outdir='./')
-        nt.assert_almost_equal(uvc.integration_time, 0.0)
-        nt.assert_equal(uvc.Ntimes, 1)
-        nt.assert_true(os.path.exists('ex.calfits'))
+        self.assertAlmostEqual(uvc.integration_time, 0.0)
+        self.assertEqual(uvc.Ntimes, 1)
+        self.assertTrue(os.path.exists('ex.calfits'))
         os.remove('ex.calfits')
 
 
