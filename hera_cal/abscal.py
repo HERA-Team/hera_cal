@@ -823,6 +823,7 @@ def abscal_arg_parser():
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
     a.add_argument("--gen_amp_cal", default=False, action='store_true', help='perform general antenna amplitude bandpass calibration')
     a.add_argument("--gen_phs_cal", default=False, action='store_true', help='perform general antenna phase bandpass calibration')
+    a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
     return a
 
 
@@ -845,6 +846,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')    
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
+    a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
     return a
 
 
@@ -852,7 +854,7 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False,
                delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, abs_amp_cal=False,
-               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False, latitude=-30.72152, history=''):
+               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False, latitude=-30.72152, max_dlst=0.005, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -929,6 +931,8 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
     latitude : type=float, latitude of array in degrees North
 
+    max_dlst : type=float, maximum allowed LST difference in model rephasing, otherwies model is flagged.
+
     Result:
     -------
     if return_gains: return (gains dictionary)
@@ -1002,10 +1006,14 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
             # rephase model to match data lst grid
             if rephase_model:
-                new_model, new_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, flags=model_flags, latitude=latitude)
+                new_model, new_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, 
+                                                   flags=model_flags, latitude=latitude, max_dlst=max_dlst)
 
+                # set wgts to zero wheree model is flagged
                 for k in new_flags.keys():
                     wgts[k][new_flags[k]] *= 0
+            else:
+                new_model = model
 
             # reweight according to redundancy
             if reweight:
