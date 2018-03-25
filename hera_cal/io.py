@@ -491,7 +491,10 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     time_array = np.array(times, np.float)
     Ntimes = len(time_array)
     time_range = np.array([time_array.min(), time_array.max()], np.float)
-    integration_time = np.median(np.diff(time_array)) * 24. * 3600.
+    if len(time_array) > 1:
+        integration_time = np.median(np.diff(time_array)) * 24. * 3600.
+    else:
+        integration_time = 0.0
 
     # get frequency info
     freq_array = np.array(freqs, np.float)
