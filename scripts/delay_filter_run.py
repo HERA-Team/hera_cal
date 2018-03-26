@@ -22,7 +22,8 @@ if a.write_model == False or a.write_both == True:
                            clobber = a.clobber, write_CLEAN_models = False)
 
 # Write low-pass model if desired
-if a.write_model == True or a.write_both == True:
-    a.outfile += 'M'
+if a.write_model or a.write_both:
+    if a.write_both:
+        a.outfile += 'M'
     df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history = ' '.join(sys.argv),
                            clobber = a.clobber, write_CLEAN_models = True)
