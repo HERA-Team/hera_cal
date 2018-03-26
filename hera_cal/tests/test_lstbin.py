@@ -37,6 +37,17 @@ class Test_lstbin:
         self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]
 
+    def test_make_lst_grid(self):
+        lst_grid = hc.lstbin.make_lst_grid(0.01, lst_start=None, verbose=False)
+        nt.assert_equal(len(lst_grid), 628)
+        nt.assert_almost_equal(lst_grid[0], 0.0050025360725952121)
+        lst_grid = hc.lstbin.make_lst_grid(0.01, lst_start=np.pi, verbose=False)
+        nt.assert_equal(len(lst_grid), 628)
+        nt.assert_almost_equal(lst_grid[0], 3.1365901175171982)
+        lst_grid = hc.lstbin.make_lst_grid(0.01, lst_start=-np.pi, verbose=False)
+        nt.assert_equal(len(lst_grid), 628)
+        nt.assert_almost_equal(lst_grid[0], 3.1365901175171982)
+
     def test_lstbin(self):
         dlst = 0.0007830490163484
         # test basic execution
