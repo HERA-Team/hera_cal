@@ -765,8 +765,8 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
     if lst_start is not None:
         # enforce lst_start to be within 0-2pi, else replace with 0
         if lst_start < 0 or lst_start > 2*np.pi:
-            abscal.echo("lst_start was < 0 or > 2pi, replacing with lst_start=0", verbose=verbose)
-            lst_start = 0.0
+            abscal.echo("lst_start was < 0 or > 2pi, taking modulus with (2pi)", verbose=verbose)
+            lst_start = lst_start % (2*np.pi)
         lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] - dlst/2
         lst_grid += lst_start
 
