@@ -123,8 +123,9 @@ def delay_filter_argparser():
                    "Note that if outfile is not supplied, the parser defaults to None, but delay_filter_run.py "
                    "will override this default, and instead sets outfile to infile + 'D'.")
     a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files (default "miriad")')
-    a.add_argument("--write_model", default=False, action="store_true", help="write the low-pass filtered CLEAN model rather\
-                   than the high-pass filtered residual")
+    a.add_argument("--write_model", default=False, action="store_true", help="Write the low-pass filtered CLEAN model "\
+                   "in addition to the high-pass filtered residual. This file gets an 'M' extension on top of the specified outfile,"\
+                   " or if no outfile is provided, a 'DM' extension on top of the infile.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
 
     filt_options = a.add_argument_group(title='Options for the delay filter')
