@@ -15,5 +15,12 @@ df = Delay_Filter()
 df.load_data(a.infile, filetype = a.filetype)
 df.run_filter(standoff = a.standoff, horizon = a.horizon, tol = a.tol, window = a.window,
               skip_wgt = a.skip_wgt, maxiter = a.maxiter)
+
+# Write high-pass residual
 df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history = ' '.join(sys.argv),
-                       clobber = a.clobber, write_CLEAN_models = a.write_model)
+                       clobber = a.clobber, write_CLEAN_models = False)
+
+# Write low-pass model if desired
+a.outfile += 'M'
+df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history = ' '.join(sys.argv),
+                       clobber = a.clobber, write_CLEAN_models = True)
