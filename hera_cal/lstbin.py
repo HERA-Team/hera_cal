@@ -147,6 +147,9 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         # get lst array
         l = lst_list[i]
 
+        # ensure l isn't wrapped relative to lst_grid
+        l[l < lst_grid.min()] += 2*np.pi
+
         # digitize data lst array "l"
         grid_indices = np.digitize(l, lst_grid_left[1:], right=True)
 
@@ -735,9 +738,9 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
                 is also greater than the input dlst. There is a minimum allowed dlst of 6.283e-6 radians,
                 or .0864 seconds.
 
-    lst_start : type=float, starting point for lst_grid, extending out 2pi from lst_start.
-                            lst_start must fall exactly on an LST bin given a dlst. If not, it is
-                            replaced with the closest bin. Default is lst_start at zero radians.
+    lst_start : type=float, starting point for lst_grid, which extends out 2pi from lst_start.
+                lst_start must fall exactly on an LST bin given a dlst, within 0-2pi. If not, it is
+                replaced with the closest bin. Default is lst_start at zero radians.
 
     Output:
     -------
@@ -761,6 +764,10 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
 
     # shift grid by lst_start
     if lst_start is not None:
+        # enforce lst_start to be within 0-2pi, else replace with 0
+        if lst_start < 0 or lst_start > 2*np.pi:
+            abscal.echo("lst_start was < 0 or > 2pi, replacing with lst_start=0", verbose=verbose)
+            lst_start = 0.0
         lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] - dlst/2
         lst_grid += lst_start
 

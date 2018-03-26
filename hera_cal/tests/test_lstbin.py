@@ -81,6 +81,11 @@ class Test_lstbin:
         # test sigma clip
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                    verbose=False, sig_clip=True, min_N=5, sigma=2)
+        # test wrapping
+        lst_list = map(lambda l: (copy.deepcopy(l) + 6) % (2*np.pi), self.lst_list)
+        output = hc.lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, lst_start=np.pi)
+        nt.assert_true(output[0][0] > output[0][-1])
+        nt.assert_equal(len(output[0][0]), 175)
 
     def test_lst_align(self):
         # test basic execution
