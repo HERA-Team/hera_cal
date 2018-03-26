@@ -17,10 +17,12 @@ df.run_filter(standoff = a.standoff, horizon = a.horizon, tol = a.tol, window = 
               skip_wgt = a.skip_wgt, maxiter = a.maxiter)
 
 # Write high-pass residual
-df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history = ' '.join(sys.argv),
-                       clobber = a.clobber, write_CLEAN_models = False)
+if a.write_model == False or a.write_both == True:
+    df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history = ' '.join(sys.argv),
+                           clobber = a.clobber, write_CLEAN_models = False)
 
 # Write low-pass model if desired
-a.outfile += 'M'
-df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history = ' '.join(sys.argv),
-                       clobber = a.clobber, write_CLEAN_models = True)
+if a.write_model == True or a.write_both == True:
+    a.outfile += 'M'
+    df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history = ' '.join(sys.argv),
+                           clobber = a.clobber, write_CLEAN_models = True)
