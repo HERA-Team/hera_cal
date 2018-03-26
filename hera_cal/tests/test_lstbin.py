@@ -85,7 +85,7 @@ class Test_lstbin:
         lst_list = map(lambda l: (copy.deepcopy(l) + 6) % (2*np.pi), self.lst_list)
         output = hc.lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, lst_start=np.pi)
         nt.assert_true(output[0][0] > output[0][-1])
-        nt.assert_equal(len(output[0][0]), 175)
+        nt.assert_equal(len(output[0]), 175)
 
     def test_lst_align(self):
         # test basic execution

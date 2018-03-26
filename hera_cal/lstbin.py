@@ -196,7 +196,6 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             if key in data:
                 pass
             elif switch_bl(key) in data:
-                print 'conjugating??'
                 # check to see if conj(key) exists in data
                 key = switch_bl(key)
                 d[key] = np.conj(d[switch_bl(key)])
