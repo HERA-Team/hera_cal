@@ -124,26 +124,31 @@ class Test_lstbin:
         # basic execution
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.20164.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.20164.uv'))
-        shutil.rmtree('./zen.xx.LST.0.20164.uv')
-        shutil.rmtree('./zen.xx.STD.0.20164.uv')
+        output_lst_file = "./zen.xx.LST.0.20124.uv"
+        output_std_file = "./zen.xx.STD.0.20124.uv"
+        nt.assert_true(os.path.exists(output_lst_file))
+        nt.assert_true(os.path.exists(output_std_file))
+        shutil.rmtree(output_lst_file)
+        shutil.rmtree(output_std_file)
         # test rephase
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False, rephase=True)
-        nt.assert_true(os.path.exists('./zen.xx.LST.0.20164.uv'))
-        nt.assert_true(os.path.exists('./zen.xx.STD.0.20164.uv'))
-        shutil.rmtree('./zen.xx.LST.0.20164.uv')
-        shutil.rmtree('./zen.xx.STD.0.20164.uv')
+        output_lst_file = "./zen.xx.LST.0.20124.uv"
+        output_std_file = "./zen.xx.STD.0.20124.uv"
+        nt.assert_true(os.path.exists(output_lst_file))
+        nt.assert_true(os.path.exists(output_std_file))
+        shutil.rmtree(output_lst_file)
+        shutil.rmtree(output_std_file)
 
         data_files = [[sorted(glob.glob(DATA_PATH+'/zen.2458043.*uvXRAA'))[0]],
                       [sorted(glob.glob(DATA_PATH+'/zen.2458045.*uvXRAA'))[-1]]]
         # test data_list is empty
         hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
                                 verbose=False)
-        nt.assert_true(os.path.exists("./zen.xx.LST.0.20164.uv"))
-        nt.assert_true(os.path.exists("./zen.xx.LST.0.31909.uv"))
-        nt.assert_true(os.path.exists("./zen.xx.LST.0.36608.uv"))
+        output_lst_files = ['./zen.xx.LST.0.20124.uv', './zen.xx.LST.0.31870.uv', './zen.xx.LST.0.36568.uv']
+        nt.assert_true(os.path.exists(output_lst_files[0]))
+        nt.assert_true(os.path.exists(output_lst_files[1]))
+        nt.assert_true(os.path.exists(output_lst_files[2]))
         output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
                                        glob.glob("./zen.xx.STD*")])
         for of in output_files:
