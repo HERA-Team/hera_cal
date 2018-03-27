@@ -553,24 +553,31 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     Result:
     -------
-    zen.{pol}.LST.{file_lst}.uv : containing LST-binned data
-    zen.{pol}.STD.{file_lst}.uv : containing standard deviation of LST bin
+    zen.{pol}.LST.{file_lst}.uv : holds LST bin avg (data_array) and bin count (nsample_array)
+    zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
     # get dlst from first data file if None
     if dlst is None:
         start, stop, int_time = utils.get_miriad_times(data_files[0][0])
         dlst = int_time
 
-    # get file start and stop times
-    data_times = map(lambda f: np.array(utils.get_miriad_times(f, add_int_buffer=True)).T[:, :2] % (2*np.pi), data_files)
+    # get start and stop times for each list of files in data_files.
+    # add_int_buffer adds an integration to the end time of df[:-1] files,
+    # and the %(2pi) ensures everything is within a 2pi LST grid.
+    data_times = []
+    for df in data_files:
+        data_times.append(np.array(utils.get_miriad_times(df, add_int_buffer=True))[:2, :].T % (2*np.pi))
 
     # unwrap data_times less than lst_start, get starting and ending lst
     start_lst = 100
     end_lst = -1
     for dt in data_times:
         # unwrap starts below lst_start
-        dt[:, 0][dt[:, 0] < lst_start] += 2*np.pi
+        dt[:, 0][dt[:, 0] < lst_start - atol] += 2*np.pi
 
+        # unwrap ends below starts
+        dt[:, 1][dt[:, 1] < dt[:, 0] - atol] += 2*np.pi
+ 
         # get start and end lst
         start_lst = np.min(np.append(start_lst, dt[:, 0]))
         end_lst = np.max(np.append(end_lst, dt.ravel()))
@@ -720,7 +727,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # write to file
         io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **miriad_kwargs)
-        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, verbose=verbose, filetype='miriad', **miriad_kwargs)
+        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **miriad_kwargs)
 
         del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
         garbage_collector.collect()

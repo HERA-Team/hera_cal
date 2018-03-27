@@ -376,8 +376,8 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     ------------
     filepaths : type=list, list of filepaths
 
-    add_int_buffer : type=bool, if True, extend start and stop times by a single integration duration
-        except for start of first file, and stop of last file.
+    add_int_buffer : type=bool, if True, extend stop times by a single integration duration
+        except for the list file in filepaths.
 
     Output: (file_starts, file_stops, int_times)
     -------
@@ -411,8 +411,6 @@ def get_miriad_times(filepaths, add_int_buffer=False):
         stop = start + (uv['ntimes']-1) * int_time
         # add integration buffer to beginning and end if desired
         if add_int_buffer:
-            if i != 0:
-                start -= int_time
             if i != (Nfiles-1):
                 stop += int_time
         # add half an integration to get center of integration
