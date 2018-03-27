@@ -611,8 +611,15 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     miriad_kwargs['outdir'] = outdir
     miriad_kwargs['overwrite'] = overwrite
  
-    # get frequency, time and antennas position information from the zeroth data file
+    # get metadata from the zeroth data file
     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
+
+    # push time and lst arrays forward by half an integration
+    abscal.echo("pushing time and lst arrays forward by half an integration b/c pyuvdata "\
+                "currently does not do this for us....", verbose=verbose)
+    t += np.median(np.diff(t)) / 2.0
+
+    # get frequency, time and antenna position information
     freq_array = copy.copy(f)
     antpos = copy.deepcopy(ap)
     start_jd = np.floor(t)[0]
@@ -649,7 +656,15 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[j][k], return_meta=True)
                     d.phase_type = 'drift'
 
-                    # unwrap l
+                    # unwrap l relative to itself
+                    l[l < l[0]] += 2*np.pi
+
+                    # push time and lst arrays forward by half an integration
+                    # b/c pyuvdata does not currently do this for us....
+                    l += np.median(np.diff(l)) / 2.0
+                    t += np.median(np.diff(t)) / 2.0
+
+                    # unwrap l relative to start_lst
                     l[l < start_lst] += 2*np.pi
 
                     # pass data references to data_status list
