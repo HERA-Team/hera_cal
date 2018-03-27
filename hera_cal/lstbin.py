@@ -30,7 +30,7 @@ import aipy
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
-            copy_rephase=True, freq_array=None, lat=-30.72152, verbose=True):
+            freq_array=None, lat=-30.72152, verbose=True):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -76,9 +76,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     return_no_avg : type=boolean, if True, return binned but un-averaged data and flags.
 
     rephase : type=bool, if True, phase data to center of LST bin before binning.
-
-    copy_rephase : type=bool, if True, copy data before rephasing such that input data in
-        data_list isn't overwritten
+        Note that this produces a copy of the data.
 
     antpos : type=dictionary, holds antenna position vectors in ENU frame in meters with 
         antenna integers as keys and 3D ndarrays as values. See io.load_vis(). Needed for rephase.
@@ -155,8 +153,8 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
         # make data_in_bin boolean array, and set to False data that don't fall in any bin
         data_in_bin = np.ones_like(l, np.bool)
-        data_in_bin[(l<lst_grid_left.min()-atol)] = False
-        data_in_bin[(l>lst_grid_left.max()+dlst+atol)] = False
+        data_in_bin[(l<lst_grid_left.min() - atol)] = False
+        data_in_bin[(l>lst_grid_left.max() + dlst + atol)] = False
 
         # update all_lst_indices
         all_lst_indices.update(set(grid_indices[data_in_bin]))
@@ -166,26 +164,14 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             if freq_array is None or antpos is None:
                 raise ValueError("freq_array and antpos is needed for rephase")
 
-            # check if d has already been phased (used for lst_bin_files)
-            try:
-                if hasattr(d, 'phase_type'):
-                    if d.phase_type == "drift":
-                        pass
-                    else:
-                        raise LSTBINPHASED
+            # form baseline dictionary
+            bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys()))
 
-                # copy rephased data if desired
-                if copy_rephase:
-                    d = copy.deepcopy(d)
+            # get appropriate lst_shift for each integration, then rephase
+            lst_shift = lst_grid[grid_indices] - l
 
-                # form baseline dictionary and lst_rephase
-                bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys()))
-                lst_shift = lst_grid[grid_indices] - l
-                utils.lst_rephase(d, bls, freq_array, lst_shift, lat=lat)
-                d.phase_type = "LSTBIN"
-
-            except LSTBINPHASED:
-                pass
+            # this makes a copy of the data in d
+            d = utils.lst_rephase(d, bls, freq_array, lst_shift, lat=lat, inplace=False)
 
         # iterate over keys in d
         for j, key in enumerate(d.keys()):
@@ -665,7 +651,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                     t += np.median(np.diff(t)) / 2.0
 
                     # unwrap l relative to start_lst
-                    l[l < start_lst] += 2*np.pi
+                    l[l < start_lst - atol] += 2*np.pi
 
                     # pass data references to data_status list
                     data_status[j][k] = [d, fl, ap, a, f, t, l, p]
@@ -711,8 +697,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         (bin_lst, bin_data, flag_data, std_data,
          num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, lst_start=start_lst,
                              lst_low=f_min, lst_hi=f_max, truncate_empty=False, sig_clip=sig_clip, 
-                             sigma=sigma, min_N=min_N, rephase=rephase, copy_rephase=False, 
-                             freq_array=freq_array, antpos=antpos)
+                             sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
         # make sure bin_lst is wrapped
         bin_lst = bin_lst % (2*np.pi)
