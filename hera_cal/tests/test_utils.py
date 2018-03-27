@@ -147,12 +147,8 @@ def test_get_miriad_times():
     # test with integration buffer
     _starts, _stops, _ints = utils.get_miriad_times(filepaths, add_int_buffer=True)
     nt.assert_almost_equal(starts[0], _starts[0])
-    nt.assert_almost_equal(stops[-1], _stops[-1])
-    nt.assert_not_almost_equal(starts[1], _starts[1])
-    nt.assert_not_almost_equal(stops[0], _stops[0])
-    nt.assert_almost_equal(_starts[1] + _ints[1], starts[1])
     nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
-    # test if str
+    # test if fed as a str
     starts, stops, ints = utils.get_miriad_times(filepaths[0])
 
 def test_lst_rephase():
