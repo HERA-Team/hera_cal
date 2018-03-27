@@ -40,7 +40,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     -----------
     data_list : type=list, list of DataContainer dictionaries holding complex visibility data
 
-    lst_list : type=list, list of ndarrays holding LST stamps of each data dictionary in data_list.
+    lst_list : type=list, list of ndarrays holding LST bin centers of each data dictionary in data_list.
         These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
     
     flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
@@ -89,7 +89,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
     Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
-    lst_bins : ndarray containing final lst grid of data
+    lst_bins : ndarray containing final lst grid of data (marks bin centers)
 
     data_avg : dictionary of data having averaged in each LST bin
 
@@ -699,7 +699,15 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                              lst_low=f_min, lst_hi=f_max, truncate_empty=False, sig_clip=sig_clip, 
                              sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
-        # make sure bin_lst is wrapped
+        # push lst_bins back to bin start rather than bin center
+        # b/c pyuvdata does not do this for us yet...
+        abscal.echo("pushing time and lst arrays backward by half an integration b/c pyuvdata "\
+                    "currently does not do this for us....", verbose=verbose)
+        # unwrap bin_lst
+        bin_lst[bin_lst < bin_lst[0] - atol] += 2*np.pi
+        # push back
+        bin_lst -= np.median(np.diff(bin_lst)) / 2.0
+        # re-wrap bin_lst
         bin_lst = bin_lst % (2*np.pi)
 
         # update history
