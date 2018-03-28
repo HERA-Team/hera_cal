@@ -603,7 +603,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     # push time and lst arrays forward by half an integration
     abscal.echo("pushing time and lst arrays forward by half an integration b/c pyuvdata "\
                 "currently does not do this for us....", verbose=verbose)
-    t += np.median(np.diff(t)) / 2.0
+    if len(t) > 1:
+        t += np.median(np.diff(t)) / 2.0
 
     # get frequency, time and antenna position information
     freq_array = copy.copy(f)
@@ -647,8 +648,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
                     # push time and lst arrays forward by half an integration
                     # b/c pyuvdata does not currently do this for us....
-                    l += np.median(np.diff(l)) / 2.0
-                    t += np.median(np.diff(t)) / 2.0
+                    if len(l) > 1:
+                        l += np.median(np.diff(l)) / 2.0
+                        t += np.median(np.diff(t)) / 2.0
 
                     # unwrap l relative to start_lst
                     l[l < start_lst - atol] += 2*np.pi
@@ -706,7 +708,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # unwrap bin_lst
         bin_lst[bin_lst < bin_lst[0] - atol] += 2*np.pi
         # push back
-        bin_lst -= np.median(np.diff(bin_lst)) / 2.0
+        if len(bin_lst) > 1:
+            bin_lst -= np.median(np.diff(bin_lst)) / 2.0
         # re-wrap bin_lst
         bin_lst = bin_lst % (2*np.pi)
 
