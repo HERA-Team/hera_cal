@@ -408,7 +408,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
         # get start and stop
         start = uv['lst']
         stop = start + (uv['ntimes']-1) * int_time
-        # add integration buffer to beginning and end if desired
+        # add integration buffer to end of file if desired
         if add_int_buffer:
             stop += int_time
         # add half an integration to get center of integration
