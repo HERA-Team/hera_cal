@@ -472,7 +472,12 @@ class Test_AbsCal:
         nt.assert_almost_equal(corr_data[(24, 25, 'xx')][0,0], (self.AC.data[(24,25,'xx')]/\
             self.AC.abs_eta_gain[(24,'x')]/self.AC.abs_eta_gain[(25,'x')]/self.AC.ant_eta_gain[(24,'x')]/\
             self.AC.ant_eta_gain[(25,'x')])[0,0])
- 
+        # test for missing data
+        gains = copy.deepcopy(self.AC.abs_eta_gain)
+        del gains[(24, 'x')]
+        corr_data = hc.abscal.apply_gains(self.AC.data, gains)
+        nt.assert_true((24, 25, 'xx') not in corr_data)
+
     def test_fill_dict_nans(self):
         data = copy.deepcopy(self.AC.data)
         wgts = copy.deepcopy(self.AC.wgts)
