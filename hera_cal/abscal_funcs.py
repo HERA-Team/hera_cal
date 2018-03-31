@@ -614,7 +614,8 @@ def merge_gains(gains):
 
 def apply_gains(data, gains, gain_convention='divide'):
     """
-    apply gain solutions to data
+    Apply gain solutions to data. If a requested antenna doesn't
+    exist in gains, eliminate associated visibilities from new_data.
 
     Parameters:
     -----------
@@ -659,6 +660,10 @@ def apply_gains(data, gains, gain_convention='divide'):
         # get gain keys
         g1 = (k[0], k[-1][0])
         g2 = (k[1], k[-1][1])
+
+        # ensure keys are in gains
+        if g1 not in gains or g2 not in gains:
+            continue
 
         # form visbility gain product
         vis_gain = gains[g1] * np.conj(gains[g2])
