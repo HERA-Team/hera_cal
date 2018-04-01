@@ -2,6 +2,7 @@ import numpy as np
 import hera_cal.io as io
 from pyuvdata import UVCal, UVData
 import argparse
+from hera_cal.datacontainer import DataContainer
 
 
 def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None, gain_convention='divide'):
@@ -27,8 +28,12 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
         bool_flags = True
     elif data_flags[data_flags.keys()[0]].dtype == np.float:
         bool_flags = False
+        wgts = data_flags
+        data_flags = DataContainer(dict(map(lambda k: (k, ~wgts[k].astype(np.bool)), wgts.keys())))
     else:
         raise ValueError("didn't recognize dtype of data_flags")
+
+    # loop over keys
     for (i,j,pol) in data.keys():
         if not np.all(data_flags[(i,j,pol)]):
             # Check to see that all necessary antennas are present in the gains
@@ -53,14 +58,14 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
                         data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = True
                     else:
                         # treat as data weights
-                        data_flags[(i,j,pol)][cal_flags[(i, pol[0])]] = 0.0
-                        data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = 0.0
+                        wgts[(i,j,pol)][cal_flags[(i, pol[0])]] = 0.0
+                        wgts[(i,j,pol)][cal_flags[(j, pol[1])]] = 0.0
             else:
                 # If any antenna is missing from the gains, the data is flagged
                 if bool_flags:
-                    data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)]) 
+                    data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)], dtype=np.bool) 
                 else:
-                    data_flags[(i,j,pol)] = np.zeros_like(data_flags[(i,j,pol)], dtype=np.float) 
+                    wgts[(i,j,pol)] = np.zeros_like(wgts[(i,j,pol)], dtype=np.float) 
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None, 
