@@ -79,6 +79,14 @@ class Test_Update_Cal(unittest.TestCase):
         with self.assertRaises(KeyError):
             ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='blah')
 
+        # test w/ data weights
+        dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
+        flags = DataContainer({(0,1,'xx'): deepcopy(f)})
+        wgts = DataContainer(dict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
+        del g_new[(0, 'x')]
+        ac.recalibrate_in_place(dc, wgts, g_new, cal_flags, gain_convention='divide')
+        self.assertAlmostEqual(wgts[(0,1,'xx')].max(), 0.0)
+
     def test_apply_cal(self):
         fname = os.path.join(DATA_PATH, "zen.2457698.40355.xx.HH.uvcA")
         outname = os.path.join(DATA_PATH, "test_output/zen.2457698.40355.xx.HH.applied.uvcA")
