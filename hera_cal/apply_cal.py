@@ -4,7 +4,7 @@ from pyuvdata import UVCal, UVData
 import argparse
 
 
-def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None, gain_convention = 'divide'):
+def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None, gain_convention='divide'):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in
     new calibration solutions, and updating flags from those calibration solutions. Previously 
     flagged data is left unmodified. Missing antennas from either the new gains or (if it's not None),
@@ -12,7 +12,8 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
     
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
-        data_flags: DataContainer containing data flags. This is modified in place.
+        data_flags: DataContainer containing data flags. This is modified in place. Can also be fed as a
+            data weights dictionary with float dtype.
         new_gains: Dictionary of complex calibration gains to apply with keys like (1,'x')
         cal_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
             if either antenna in a visibility is flagged.
@@ -21,6 +22,13 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
     '''
+    # get datatype of data_flags to determine if flags or wgts
+    if data_flags[data_flags.keys()[0]].dtype == np.bool:
+        bool_flags = True
+    elif data_flags[data_flags.keys()[0]].dtype == np.float:
+        bool_flags = False
+    else:
+        raise ValueError("didn't recognize dtype of data_flags")
     for (i,j,pol) in data.keys():
         if not np.all(data_flags[(i,j,pol)]):
             # Check to see that all necessary antennas are present in the gains
@@ -39,15 +47,24 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
                     else:
                         raise KeyError("gain_convention must be either 'divide' or 'multiply'.")
                     # update data flags
-                    data_flags[(i,j,pol)][cal_flags[(i, pol[0])]] = True
-                    data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = True
+                    if bool_flags:
+                        # treat as flags
+                        data_flags[(i,j,pol)][cal_flags[(i, pol[0])]] = True
+                        data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = True
+                    else:
+                        # treat as data weights
+                        data_flags[(i,j,pol)][cal_flags[(i, pol[0])]] = 0.0
+                        data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = 0.0
             else:
                 # If any antenna is missing from the gains, the data is flagged
-                data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)]) 
+                if bool_flags:
+                    data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)]) 
+                else:
+                    data_flags[(i,j,pol)] = np.zeros_like(data_flags[(i,j,pol)], dtype=np.float) 
 
 
-def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration = None, flags_npz = None, 
-              filetype = 'miriad', gain_convention = 'divide',  add_to_history = '', clobber = False, **kwargs):
+def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None, 
+              filetype='miriad', gain_convention='divide',  add_to_history='', clobber=False, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
