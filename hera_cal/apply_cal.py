@@ -14,7 +14,8 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
         data_flags: DataContainer containing data flags. This is modified in place. Can also be fed as a
-            data weights dictionary with float dtype.
+            data weights dictionary with float dtype. In this case, wgts of 0 are treated as flagged
+            data and non-zero wgts are unflagged data.
         new_gains: Dictionary of complex calibration gains to apply with keys like (1,'x')
         cal_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
             if either antenna in a visibility is flagged.
@@ -24,9 +25,9 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
     '''
     # get datatype of data_flags to determine if flags or wgts
-    if data_flags[data_flags.keys()[0]].dtype == np.bool:
+    if np.all([(df.dtype == np.bool) for df in data.values()]):
         bool_flags = True
-    elif data_flags[data_flags.keys()[0]].dtype == np.float:
+    elif np.all([(df.dtype == np.float) for df in data.values()]):
         bool_flags = False
         wgts = data_flags
         data_flags = DataContainer(dict(map(lambda k: (k, ~wgts[k].astype(np.bool)), wgts.keys())))
@@ -35,7 +36,11 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
 
     # loop over keys
     for (i,j,pol) in data.keys():
-        if not np.all(data_flags[(i,j,pol)]):
+        if bool_flags:
+            all_flagged = np.all(data_flags[(i,j,pol)])
+        else:
+            all_flagged = np.all(~data_flags[(i,j,pol)].astype(np.bool))
+        if not all_flagged:
             # Check to see that all necessary antennas are present in the gains
             if new_gains.has_key((i,pol[0])) and new_gains.has_key((j,pol[1])) and (old_gains == None
                 or (old_gains.has_key((i,pol[0])) and old_gains.has_key((j,pol[1])))):
