@@ -59,7 +59,9 @@ class Delay_Filter():
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
             window: window function for filtering applied to the filtered axis.
                 See aipy.dsp.gen_window for options.
-            skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt)
+            skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+                Model is left as 0s, residual is left as data, and info is {'skipped': True} for that 
+                time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
 
@@ -87,6 +89,10 @@ class Delay_Filter():
             self.filtered_residuals[k] = d_res
             self.CLEAN_models[k] = d_mdl
             self.info[k] = info
+            # Flag all channels for any time when skip_wgt gets triggered
+            for i, info_dict in enumerate(info):
+                if info_dict.get('skipped', False):
+                    self.flags[k][i,:] = np.ones_like(self.flags[k][i,:])
 
 
     def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history = '',
@@ -111,7 +117,7 @@ class Delay_Filter():
                 data_out = self.CLEAN_models
             else:
                 data_out = self.filtered_residuals
-            io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out, data=data_out,
+            io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out, data=data_out, flags=self.flags,
                           add_to_history=add_to_history, clobber=clobber, **kwargs)
 
 
@@ -137,7 +143,7 @@ def delay_filter_argparser():
     filt_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
     filt_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
                               see aipy.dsp.gen_window for options')
-    filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering rows with unflagged fraction ~< skip_wgt (default 0.1)')
+    filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
 
     return a
