@@ -25,9 +25,9 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
     '''
     # get datatype of data_flags to determine if flags or wgts
-    if np.all([(df.dtype == np.bool) for df in data.values()]):
+    if np.all([(df.dtype == np.bool) for df in data_flags.values()]):
         bool_flags = True
-    elif np.all([(df.dtype == np.float) for df in data.values()]):
+    elif np.all([(df.dtype == np.float) for df in data_flags.values()]):
         bool_flags = False
         wgts = data_flags
         data_flags = DataContainer(dict(map(lambda k: (k, ~wgts[k].astype(np.bool)), wgts.keys())))
