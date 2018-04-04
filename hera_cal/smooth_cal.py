@@ -92,12 +92,14 @@ def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none
         tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
         window: window function for filtering applied to the filtered axis. 
             See aipy.dsp.gen_window for options.        
-        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt) 
-            Only works properly when all weights are all between 0 and 1. 
+        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+            filtered is left unchanged and info is {'skipped': True} for that time. 
+            Only works properly when all weights are all between 0 and 1.
         maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
 
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs) 
+        info: info object from uvtools.dspec.high_pass_fourier_filter
     '''
     sdf = np.median(np.diff(freqs)) / 1e9 #in GHz
     filter_size = (filter_scale / 1e3)**-1 #Puts it in ns
@@ -105,7 +107,12 @@ def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none
     rephasor = np.exp(-2.0j * np.pi * np.outer(dlys, freqs))
     filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains*rephasor, wgts, filter_size, sdf, tol=tol, window=window, 
                                                                  skip_wgt=skip_wgt, maxiter=maxiter)
-    return filtered/rephasor
+    filtered /= rephasor
+    # put back in unfilted values if skip_wgt is triggered
+    for i, info_dict in enumerate(info):
+        if info_dict.get('skipped', False):
+            filtered[i,:] = gains[i,:]
+    return filtered, info
 
 
 def time_kernel(nInt, tInt, filter_scale = 120.0):
@@ -178,10 +185,12 @@ class Calibration_Smoother():
         self.binary_wgts = binary_wgts
 
 
-    def reset_filtering(self):
-        '''Reset gain smoothing to the original input gains.'''
+    def reset_filtering(self, rebuild_weights=True):
+        '''Reset gain smoothing to the original input gains. Also rebuilds weights unless otherwise specified'''
         self.filtered_gains = deepcopy(self.gains)
         self.freq_filtered, self.time_filtered = False, False
+        if rebuild_weights and self.has_data and self.has_cal:
+            self.build_weights(binary_wgts = self.binary_wgts)
 
 
     def check_consistency(self):
@@ -363,7 +372,7 @@ class Calibration_Smoother():
 
         # Now loop through and apply running Gaussian averages
         for antpol, gains in self.filtered_gains.items():
-            if not np.all(self.cal_flags[antpol]):
+            if not np.all(self.cal_flags[antpol]) and not np.all(self.wgts[antpol]==0):
                 g = deepcopy(gains)
                 w = deepcopy(self.wgts[antpol])
                 if self.has_prev_cal:
@@ -390,18 +399,24 @@ class Calibration_Smoother():
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
             window: window function for filtering applied to the filtered axis. 
                 See aipy.dsp.gen_window for options.        
-            skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt) 
-                Only works properly when weights are normalized to be 1 on average.
+            skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+                filtered_gains are left unchanged and self.wgts and self.cal_flags are set to 0 and True,
+                respectively. Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
         '''
         if not self.time_filtered:
             warnings.warn('It is usually better to time-filter first, then frequency-filter.')
 
         for antpol, gains in self.filtered_gains.items():
-            if not np.all(self.cal_flags[antpol]):
-                w = self.wgts[antpol]
-                self.filtered_gains[antpol] = freq_filter(gains, w, self.freqs, filter_scale=filter_scale,
-                                                          tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
+            w = self.wgts[antpol]
+            self.filtered_gains[antpol], info = freq_filter(gains, w, self.freqs, filter_scale=filter_scale,
+                                                            tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
+            # flag and give 0 weight to all channels for any time that triggers the skip_wgt
+            for i, info_dict in enumerate(info):
+                if info_dict.get('skipped', False):
+                    self.wgts[antpol][i,:] = np.zeros_like(self.wgts[antpol][i,:])
+                    self.cal_flags[antpol][i,:] = np.ones_like(self.cal_flags[antpol][i,:])
+
         self.freq_filtered = True
 
 
@@ -454,7 +469,7 @@ def smooth_cal_argparser():
     freq_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
     freq_options.add_argument("--window", type=str, default="none", help='window function for frequency filtering (default "none",\
                               see aipy.dsp.gen_window for options')
-    freq_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering rows with unflagged fraction ~< skip_wgt (default 0.1)')
+    freq_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     freq_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
     args = a.parse_args()
     return args
