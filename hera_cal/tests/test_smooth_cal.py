@@ -79,7 +79,7 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         wgts = np.ones((10,10),dtype=float)
         wgts[3,5] = 0
         freqs = np.linspace(100.,200.,10, endpoint=False)*1e6
-        ff = sc.freq_filter(gains, wgts, freqs)
+        ff, info = sc.freq_filter(gains, wgts, freqs)
         np.testing.assert_array_almost_equal(ff, np.ones((10,10),dtype=complex))
 
         #test rephasing
@@ -87,8 +87,18 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         wgts = np.ones((2,1000),dtype=float)
         freqs = np.linspace(100.,200.,1000, endpoint=False)*1e6
         gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
-        ff = sc.freq_filter(gains, wgts, freqs)
+        ff, info = sc.freq_filter(gains, wgts, freqs)
         np.testing.assert_array_almost_equal(ff, gains)
+
+        #test skip_wgt
+        gains = np.random.randn(10,10) + 1.0j*np.random.randn(10,10)
+        wgts = np.ones((10,10),dtype=float)
+        wgts[0,0:8] = 0
+        freqs = np.linspace(100.,200.,10, endpoint=False)*1e6
+        ff, info = sc.freq_filter(gains, wgts, freqs, skip_wgt=.5)
+        np.testing.assert_array_equal(ff[0,:], gains[0,:])
+        self.assertTrue(info[0]['skipped'])
+
 
 
 class Test_Calibration_Smoother(unittest.TestCase):
@@ -182,13 +192,16 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.assertEqual(g4.shape, g.shape)
 
         self.sc.reset_filtering()
-        self.sc.cal_flags[(36,'x')] = np.ones_like(self.sc.cal_flags[(36,'x')])
+        self.assertFalse(np.all(self.sc.cal_flags[(36,'x')] == np.ones_like(self.sc.cal_flags[(36,'x')])))
+        self.sc.wgts[(36,'x')] = np.zeros_like(self.sc.wgts[(36,'x')])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.sc.time_filter()
             np.testing.assert_array_equal(self.sc.filtered_gains[(36,'x')], g)
             self.sc.freq_filter()
             np.testing.assert_array_equal(self.sc.filtered_gains[(36,'x')], g)
+            #test skip_wgt propagation to flags
+            np.testing.assert_array_equal(self.sc.cal_flags[(36,'x')], np.ones_like(self.sc.cal_flags[(36,'x')]))
         self.sc.reset_filtering()
         self.sc.build_weights()
 
