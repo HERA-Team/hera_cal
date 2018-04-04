@@ -74,7 +74,8 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None, 
-              filetype='miriad', gain_convention='divide',  add_to_history='', clobber=False, **kwargs):
+              flag_nchan_low = 50, flag_nchan_high = 50, filetype='miriad', gain_convention='divide',  
+              add_to_history='', clobber=False, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -86,6 +87,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         old_calibration: filename of the calfits file (or a list of filenames) or UVCal object for the calibration 
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flags_npz: optional path to npz file containing just flags to be ORed with flags in input data
+        flag_chan_low: integer number of channels at the low frequency end of the band to always flag
+        flag_chan_high: integer number of channels at the high frequency end of the band to always flag
         filetype: filename for the new file, either 'miriad' or 'uvfits'
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
@@ -106,7 +109,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         uvd.flag_array = np.logical_or(npz_flags['flag_array'], uvd.flag_array)
         add_to_history += ' FLAGS_NPZ_HISTORY: ' + str(npz_flags['history']) + '\n'
     data, data_flags = io.load_vis(uvd)
-    
+
+    # apply band edge flags
+    for bl in data_flags.keys():
+        data_flags[bl][:,0:flag_nchan_low] = True
+        data_flags[bl][:,-flag_nchan_high:] = True
+
     # load new calibration solution
     if new_calibration is None:
         raise ValueError('Must provide a calibration solution to apply.')
@@ -141,6 +149,8 @@ def apply_cal_argparser():
     a.add_argument("--new_cal", type=str, default=None, nargs="+", help="path to new calibration calfits file (or files for cross-pol)")
     a.add_argument("--old_cal", type=str, default=None, nargs="+", help="path to old calibration calfits file to unapply (or files for cross-pol)")
     a.add_argument("--flags_npz", type=str, default=None, help="path to npz file of flags to OR with data flags")
+    a.add_argument("--flag_nchan_low", type=int, default=50, help="integer number of channels at the low frequency end of the band to always flag")
+    a.add_argument("--flag_nchan_high", type=int, default=50, help="integer number of channels at the high frequency end of the band to always flag")
     a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files')
     a.add_argument("--gain_convention", type=str, default='divide', 
                   help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
