@@ -113,6 +113,18 @@ class Test_Update_Cal(unittest.TestCase):
                         self.assertAlmostEqual(new_data[k][i,j] / 25.0, data[k][i,j],4)
                     if j < 300 or j > 923:
                         self.assertTrue(new_flags[k][i,j])
+
+        # test band edge flagging
+        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention = 'divide', 
+             flag_nchan_low = 450, flag_nchan_high = 400, filetype = 'miriad', clobber = True)
+        new_data, new_flags = io.load_vis(outname)
+        for k in new_data.keys():
+            for i in range(new_data[k].shape[0]):
+                for j in range(new_data[k].shape[1]):
+                    if not new_flags[k][i,j]:
+                        self.assertAlmostEqual(new_data[k][i,j] / 25.0, data[k][i,j],4)
+                    if j < 450 or j > 623:
+                        self.assertTrue(new_flags[k][i,j])
                     
         with self.assertRaises(ValueError):
             ac.apply_cal(fname, outname, None)
