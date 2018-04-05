@@ -113,7 +113,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     # apply band edge flags
     for bl in data_flags.keys():
         data_flags[bl][:,0:flag_nchan_low] = True
-        data_flags[bl][:,-flag_nchan_high:] = True
+        data_flags[bl][:,data_flags[bl].shape[1]-flag_nchan_high:] = True
 
     # load new calibration solution
     if new_calibration is None:
