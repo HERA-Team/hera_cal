@@ -120,6 +120,7 @@ class Test_Calibration_Smoother(unittest.TestCase):
             self.sc.load_data(data, prev_data=prev_data, next_data=next_data)
             self.sc.load_cal(self.cal, prev_cal=prev_cal, next_cal=next_cal) #improves test coverage
 
+
     def test_check_consistency(self):
         has_cal = self.sc.has_cal
         self.sc.has_cal = False
@@ -127,6 +128,7 @@ class Test_Calibration_Smoother(unittest.TestCase):
             self.sc.check_consistency()
         self.sc.has_cal = has_cal
 
+        # test inconsistency in times, for example, leads to ignored next/prev cal/data
         self.sc.prev_times += 1
         self.sc.next_times += 1
         with warnings.catch_warnings():
@@ -136,7 +138,6 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.assertFalse(self.sc.has_prev_data)
         self.assertFalse(self.sc.has_next_cal)
         self.assertFalse(self.sc.has_next_data)
-
         self.sc.prev_times -= 1
         self.sc.next_times -= 1
         self.sc.has_prev_cal = True
@@ -148,6 +149,26 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.assertTrue(self.sc.has_prev_data)
         self.assertTrue(self.sc.has_next_cal)
         self.assertTrue(self.sc.has_next_data)
+
+        # test that missing gain/auto-correlation gets turned into flags
+        prev_gains = deepcopy(self.sc.prev_gains)
+        prev_flags = deepcopy(self.sc.prev_flags)
+        prev_data = deepcopy(self.sc.prev_data)
+        prev_data_ant_flags = deepcopy(self.sc.prev_data_ant_flags)
+        self.sc.prev_gains = {(0,'x'): prev_gains[36,'x']} # so that values()[0] still works
+        self.sc.check_consistency()
+        np.testing.assert_array_equal(self.sc.prev_gains[36,'x'], 1.0 + 0.0j)
+        np.testing.assert_array_equal(self.sc.prev_flags[36,'x'], True)
+        np.testing.assert_array_equal(self.sc.prev_data[36, 36,'xx'], 1.0 + 0.0j)
+        np.testing.assert_array_equal(self.sc.prev_data_ant_flags[36,'x'], True)
+        self.assertTrue(self.sc.has_prev_data)
+        self.assertTrue(self.sc.has_prev_cal)
+        self.sc.prev_gains = prev_gains
+        self.sc.prev_flags = prev_flags
+        self.sc.prev_data = prev_data
+        self.sc.prev_data_ant_flags = prev_data_ant_flags
+        self.sc.check_consistency()
+
 
     def test_build_weights(self):
         self.assertTrue((36,'x') in self.sc.prev_wgts.keys())
