@@ -127,6 +127,27 @@ class Test_Calibration_Smoother(unittest.TestCase):
             self.sc.check_consistency()
         self.sc.has_cal = has_cal
 
+        self.sc.prev_times += 1
+        self.sc.next_times += 1
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.sc.check_consistency()
+        self.assertFalse(self.sc.has_prev_cal)
+        self.assertFalse(self.sc.has_prev_data)
+        self.assertFalse(self.sc.has_next_cal)
+        self.assertFalse(self.sc.has_next_data)
+
+        self.sc.prev_times -= 1
+        self.sc.next_times -= 1
+        self.sc.has_prev_cal = True
+        self.sc.has_prev_data = True
+        self.sc.has_next_cal = True
+        self.sc.has_next_data = True
+        self.sc.check_consistency()
+        self.assertTrue(self.sc.has_prev_cal)
+        self.assertTrue(self.sc.has_prev_data)
+        self.assertTrue(self.sc.has_next_cal)
+        self.assertTrue(self.sc.has_next_data)
 
     def test_build_weights(self):
         self.assertTrue((36,'x') in self.sc.prev_wgts.keys())
