@@ -183,7 +183,7 @@ class Test_Calibration_Smoother(unittest.TestCase):
     def test_load_cal(self):
         self.assertTrue(self.sc.nFreq,1024)
         self.assertTrue(self.sc.nInt,60)
-        self.assertAlmostEqual(self.sc.tInt, 10.737781226634979)
+        self.assertAlmostEqual(self.sc.tInt, 10.737419128417969)
         self.assertTrue(self.sc.has_cal)
         self.assertTrue(self.sc.has_next_cal)
         self.assertTrue(self.sc.has_prev_cal)

@@ -199,8 +199,7 @@ class Calibration_Smoother():
         if not (self.has_cal and self.has_data):
             raise AttributeError('Data consistency cannot be checked unless both load_cal() and load_data() have been run.')
 
-        assert(len(self.times) == len(self.data_times))
-        #assert(self.times == self.data_times) #TODO: revisit this
+        assert(np.all(np.abs(self.times - self.data_times) < 1e-9)) 
         assert(np.all(self.freqs == self.data_freqs))
         for (ant,pol) in self.gains.keys():
             assert((ant, ant, pol+pol) in self.data) #assert data has autocorrelations
@@ -210,11 +209,10 @@ class Calibration_Smoother():
                 assert(self.has_prev_cal and self.has_prev_data) #should have both or it doesn't make sense
                 assert(np.all(self.prev_freqs == self.freqs))
                 assert(np.all(self.prev_data_freqs == self.freqs))
-                assert(len(self.prev_times) == len(self.prev_data_times))
                 #test time contiguity
                 assert(np.abs(np.median(np.diff(self.times)) - self.times[0] + self.prev_times[-1]) < 1e-6)
                 assert(np.abs(np.median(np.diff(self.times)) - np.median(np.diff(self.prev_times))) < 1e-6)
-                #assert(np.all(self.prev_times == self.prev_data_times)) #TODO: revisit this
+                assert(np.all(np.abs(self.prev_times - self.prev_data_times) < 1e-9)) 
             except AssertionError:
                 warnings.warn('prev_cal and/or prev_data is inconsistent with central cal/data and will not be used for time smoothing.')
                 self.has_prev_cal, self.has_prev_data = False, False
@@ -232,14 +230,10 @@ class Calibration_Smoother():
                 assert(self.has_next_cal and self.has_next_data) #should have both or it doesn't make sense
                 assert(np.all(self.next_freqs == self.freqs))
                 assert(np.all(self.next_data_freqs == self.freqs))
-                assert(len(self.next_times) == len(self.next_data_times))
                 #test time contiguity
                 assert(np.abs(np.median(np.diff(self.times)) + self.times[-1] - self.next_times[0]) < 1e-6)
                 assert(np.abs(np.median(np.diff(self.times)) - np.median(np.diff(self.next_times))) < 1e-6)
-                #assert(np.all(self.next_times == self.next_data_times)) #TODO: revisit this
-                for (ant,pol) in self.gains.keys():
-                    assert((ant,pol) in self.next_gains.keys()) #assert next_gains has all the same keys
-                    assert((ant, ant, pol+pol) in self.next_data) #assert data has autocorrelations
+                assert(np.all(np.abs(self.next_times - self.next_data_times) < 1e-9))
             except AssertionError:
                 warnings.warn('next_cal and/or next_data is inconsistent with central cal/data and will not be used for time smoothing.')
                 self.has_next_cal, self.has_next_data = False, False
