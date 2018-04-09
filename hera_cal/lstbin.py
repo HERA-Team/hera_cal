@@ -115,6 +115,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
     # construct lst_grid
     lst_grid = make_lst_grid(dlst, lst_start=lst_start, verbose=verbose)
+    dlst = np.median(np.diff(lst_grid))
 
     # test for special case of lst grid restriction
     if lst_low is not None and lst_hi is not None and lst_hi < lst_low:
@@ -143,13 +144,13 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     # iterate over data_list
     for i, d in enumerate(data_list):
         # get lst array
-        l = lst_list[i]
+        l = copy.copy(lst_list[i])
 
         # ensure l isn't wrapped relative to lst_grid
         l[l < lst_grid.min()] += 2*np.pi
 
         # digitize data lst array "l"
-        grid_indices = np.digitize(l, lst_grid_left[1:], right=True)
+        grid_indices = np.digitize(l, lst_grid_left[1:], right=False)
 
         # make data_in_bin boolean array, and set to False data that don't fall in any bin
         data_in_bin = np.ones_like(l, np.bool)
@@ -575,7 +576,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     lst_grid = make_lst_grid(dlst, lst_start=start_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
-    # get starting and stopping indices
+    # get starting and stopping lst_grid indices
     start_diff = lst_grid - start_lst
     start_diff[start_diff < -dlst/2 - atol] = 100
     start_index = np.argmin(start_diff)
@@ -633,7 +634,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # locate all data files that fall within the range of lst for this output file
         f_min = np.min(f_lst)
-        f_max = np.max(f_lst)
+        f_max = np.max(f_lst) + dlst
         f_select = np.array(map(lambda d: map(lambda f: (f[1] > f_min - atol)&(f[0] < f_max + atol), d), data_times))
         if i == 0:
             old_f_select = copy.copy(f_select)
@@ -660,7 +661,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                         t += np.median(np.diff(t)) / 2.0
 
                     # unwrap l relative to start_lst
-                    l[l < start_lst - atol] += 2*np.pi
+                    l[l < start_lst + atol] += 2*np.pi
 
                     # pass data references to data_status list
                     data_status[j][k] = [d, fl, ap, a, f, t, l, p]
@@ -792,7 +793,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         if lst_start < 0 or lst_start >= 2*np.pi:
             abscal.echo("lst_start was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
             lst_start = lst_start % (2*np.pi)
-        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] + dlst/2
+        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))]
         lst_grid += lst_start
 
     return lst_grid
@@ -865,8 +866,4 @@ def switch_bl(key):
     """
     return (key[1], key[0], key[2][::-1])
 
-
-class LSTBINPHASED(Exception):
-    """ custom exception for lst_bin() """
-    pass
 
