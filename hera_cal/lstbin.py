@@ -499,6 +499,7 @@ def lst_bin_arg_parser():
     a.add_argument("--miriad_kwargs", default={}, type=dict, help="dict w/ kwargs to pass to miriad_to_data function")
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
     a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
+    a.add_argument("--output_file_select", default=None, nargs='*', type=list, help="list of output file integers ot run on. Default is all output files.")
     return a
 
 
