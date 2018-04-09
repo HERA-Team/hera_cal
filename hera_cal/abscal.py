@@ -842,7 +842,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
     a.add_argument("--data_is_omni_solution", default=False, action='store_true', help='assume input data file is an omnical visibility solution (still beta testing optimal weighting)')
-    a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
+    a.add_argument("--cal_shared_antennas_only", default=False, action='store_true', help='if True, only calibrate antennas present in both data and model.')
     a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')    
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
@@ -1115,8 +1115,11 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                 cal_in.read_calfits(calfits_infiles[i])
                 out_gains, out_flags = io.load_cal(cal_in)
                 for k in out_gains.keys():
-                    out_gains[k] *= gain_dict[k]
-                    out_flags[k] += flag_dict[k]
+                    if k in gain_dict:
+                        out_gains[k] *= gain_dict[k]
+                        out_flags[k] += flag_dict[k]
+                    else:
+                        out_flags[k] += np.ones(out_flags[k], np.bool)
                 io.update_cal(cal_in, output_calfits_fname,  gains=out_gains, flags=out_flags, add_to_history=history, clobber=overwrite)
             # write a calfits from scratch
             else:
