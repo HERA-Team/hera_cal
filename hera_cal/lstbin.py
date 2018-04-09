@@ -594,7 +594,11 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     if output_file_select is not None:
         if isinstance(output_file_select, (int, np.int)):
             output_file_select = [output_file_select]
-        file_lsts = map(lambda i: file_lsts[i], output_file_select)
+        try:
+            file_lsts = map(lambda i: file_lsts[i], output_file_select)
+        except IndexError:
+            print "Warning: one or more indices in output_file_select {} caused an index error with length {} file_lsts list, exiting...".format(output_file_select, nfiles)
+            return
 
     # create data file status: None if not opened, data objects if opened
     data_status = map(lambda d: map(lambda f: None, d), data_files)

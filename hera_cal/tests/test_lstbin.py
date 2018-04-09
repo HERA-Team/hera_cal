@@ -184,7 +184,10 @@ class Test_lstbin:
         for of in output_files:
             if os.path.exists(of):
                 shutil.rmtree(of)
-
+        # assert bad output_file_select produces no files
+        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=100,
+                                verbose=False)
+        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
 
     def test_lst_bin_arg_parser(self):
         a = hc.lstbin.lst_bin_arg_parser()
