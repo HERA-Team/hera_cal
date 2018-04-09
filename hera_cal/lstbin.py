@@ -147,7 +147,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         l = copy.copy(lst_list[i])
 
         # ensure l isn't wrapped relative to lst_grid
-        l[l < lst_grid.min()] += 2*np.pi
+        l[l < lst_grid_left.min() - atol] += 2*np.pi
 
         # digitize data lst array "l"
         grid_indices = np.digitize(l, lst_grid_left[1:], right=False)
