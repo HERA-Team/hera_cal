@@ -97,6 +97,10 @@ class Test_lstbin:
         output = hc.lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, lst_start=np.pi)
         nt.assert_true(output[0][0] > output[0][-1])
         nt.assert_equal(len(output[0]), 175)
+        # test appropriate data_count
+        output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=dlst, lst_low=0.25, lst_hi=0.3,
+                                   verbose=False)
+        nt.assert_true(np.isclose(output[4][(24, 25, 'xx')], 3.0).all())
 
     def test_lst_align(self):
         # test basic execution
@@ -158,11 +162,29 @@ class Test_lstbin:
         # test smaller ntimes file output, sweeping through f_select
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True,
                                 verbose=False)
-        output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
-                                       glob.glob("./zen.xx.STD*")])
+        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
+        # load a file
+        uvd1 = UVData()
+        uvd1.read_miriad(output_files[1])
+        # remove files
         for of in output_files:
             if os.path.exists(of):
                 shutil.rmtree(of)
+
+        # test output_file_select
+        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=1,
+                                verbose=False)
+        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
+        # load a file
+        uvd2 = UVData()
+        uvd2.read_miriad(output_files[0])
+        # assert equivalence with previous run
+        nt.assert_equal(uvd1, uvd2)
+        # remove files
+        for of in output_files:
+            if os.path.exists(of):
+                shutil.rmtree(of)
+
 
     def test_lst_bin_arg_parser(self):
         a = hc.lstbin.lst_bin_arg_parser()
