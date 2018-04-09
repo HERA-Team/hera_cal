@@ -503,7 +503,7 @@ def lst_bin_arg_parser():
 
 def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
                   outdir=None, overwrite=False, history=' ', lst_start=0, atol=1e-6, sig_clip=True,
-                  sigma=5.0, min_N=5, rephase=False, miriad_kwargs={}):
+                  sigma=5.0, min_N=5, rephase=False, miriad_kwargs={}, output_file_select=None):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
@@ -536,6 +536,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     atol : type=float, absolute tolerance for LST bin float comparison
 
     miriad_kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
+
+    output_file_select = : type=list, list of integer indices of the output files to run on
+        Default is all files.
 
     Result:
     -------
@@ -586,6 +589,10 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     # get output file lsts
     file_lsts = [lst_grid[start_index:end_index][ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
 
+    # select file_lsts
+    if output_file_select is not None:
+        file_lsts = file_lsts[output_file_select]
+
     # create data file status: None if not opened, data objects if opened
     data_status = map(lambda d: map(lambda f: None, d), data_files)
 
@@ -626,8 +633,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # locate all data files that fall within the range of lst for this output file
         f_min = np.min(f_lst)
-        f_max = np.max(f_lst)
-        f_select = np.array(map(lambda d: map(lambda f: (f[1] >= f_min)&(f[0] <= f_max), d), data_times))
+        f_max = np.max(f_lst) + dlst
+        f_select = np.array(map(lambda d: map(lambda f: (f[1] > f_min - atol)&(f[0] < f_max + atol), d), data_times))
         if i == 0:
             old_f_select = copy.copy(f_select)
 
@@ -772,7 +779,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         dlst_diff = dlsts - dlst
         dlst_diff[dlst_diff < 0] = 10
         new_dlst = dlsts[np.argmin(dlst_diff)]
-        abscal.echo("2pi is not equally divisible by input dlst ({:.16f}) at 1 part in 1e5.\n"
+        abscal.echo("2pi is not equally divisible by input dlst ({:.16f}) at 1 part in 1e7.\n"
                     "Using {:.16f} instead.".format(dlst, new_dlst), verbose=verbose)
         dlst = new_dlst
 
@@ -782,10 +789,10 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
     # shift grid by lst_start
     if lst_start is not None:
         # enforce lst_start to be within 0-2pi, else replace with 0
-        if lst_start < 0 or lst_start > 2*np.pi:
-            abscal.echo("lst_start was < 0 or > 2pi, taking modulus with (2pi)", verbose=verbose)
+        if lst_start < 0 or lst_start >= 2*np.pi:
+            abscal.echo("lst_start was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
             lst_start = lst_start % (2*np.pi)
-        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] - dlst/2
+        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] + dlst/2
         lst_grid += lst_start
 
     return lst_grid
