@@ -661,7 +661,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                         t += np.median(np.diff(t)) / 2.0
 
                     # unwrap l relative to start_lst
-                    l[l < start_lst + atol] += 2*np.pi
+                    l[l < start_lst - atol] += 2*np.pi
 
                     # pass data references to data_status list
                     data_status[j][k] = [d, fl, ap, a, f, t, l, p]
@@ -793,7 +793,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         if lst_start < 0 or lst_start >= 2*np.pi:
             abscal.echo("lst_start was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
             lst_start = lst_start % (2*np.pi)
-        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))]
+        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] - dlst/2
         lst_grid += lst_start
 
     return lst_grid
