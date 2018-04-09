@@ -152,18 +152,21 @@ class Test_Calibration_Smoother(unittest.TestCase):
 
         # test that missing gain/auto-correlation gets turned into flags
         prev_gains = deepcopy(self.sc.prev_gains)
+        prev_quals = deepcopy(self.sc.prev_quals)
         prev_flags = deepcopy(self.sc.prev_flags)
         prev_data = deepcopy(self.sc.prev_data)
         prev_data_ant_flags = deepcopy(self.sc.prev_data_ant_flags)
         self.sc.prev_gains = {(0,'x'): prev_gains[36,'x']} # so that values()[0] still works
         self.sc.check_consistency()
         np.testing.assert_array_equal(self.sc.prev_gains[36,'x'], 1.0 + 0.0j)
+        np.testing.assert_array_equal(self.sc.prev_quals[36,'x'], 1.0)
         np.testing.assert_array_equal(self.sc.prev_flags[36,'x'], True)
         np.testing.assert_array_equal(self.sc.prev_data[36, 36,'xx'], 1.0 + 0.0j)
         np.testing.assert_array_equal(self.sc.prev_data_ant_flags[36,'x'], True)
         self.assertTrue(self.sc.has_prev_data)
         self.assertTrue(self.sc.has_prev_cal)
         self.sc.prev_gains = prev_gains
+        self.sc.prev_quals = prev_quals
         self.sc.prev_flags = prev_flags
         self.sc.prev_data = prev_data
         self.sc.prev_data_ant_flags = prev_data_ant_flags

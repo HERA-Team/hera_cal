@@ -221,6 +221,7 @@ class Calibration_Smoother():
             for (ant,pol) in self.gains.keys():
                 if (ant,pol) not in self.prev_gains.keys() or (ant, ant, pol+pol) not in self.prev_data.keys():
                     self.prev_gains[(ant,pol)] = np.ones_like(self.prev_gains.values()[0]) # set gains to 1
+                    self.prev_quals[(ant,pol)] = np.ones_like(self.prev_quals.values()[0]) # set quals to 1
                     self.prev_flags[(ant,pol)] = np.ones_like(self.prev_flags.values()[0]) # all flagged
                     self.prev_data[(ant, ant, pol+pol)]  = np.ones_like(self.prev_data.values()[0]) # set autos to 1
                     self.prev_data_ant_flags[(ant,pol)]  = np.ones_like(self.prev_data_ant_flags.values()[0]) # all flagged
@@ -242,6 +243,7 @@ class Calibration_Smoother():
             for (ant,pol) in self.gains.keys():
                 if (ant,pol) not in self.next_gains.keys() or (ant, ant, pol+pol) not in self.next_data.keys():
                     self.next_gains[(ant,pol)] = np.ones_like(self.next_gains.values()[0]) # set gains to 1
+                    self.next_quals[(ant,pol)] = np.ones_like(self.next_quals.values()[0]) # set quals to 1
                     self.next_flags[(ant,pol)] = np.ones_like(self.next_flags.values()[0]) # all flagged
                     self.next_data[(ant, ant, pol+pol)]  = np.ones_like(self.next_data.values()[0]) # set autos to 1
                     self.next_data_ant_flags[(ant,pol)]  = np.ones_like(self.next_data_ant_flags.values()[0]) # all flagged
