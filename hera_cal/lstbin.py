@@ -634,7 +634,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # locate all data files that fall within the range of lst for this output file
         f_min = np.min(f_lst)
-        f_max = np.max(f_lst) + dlst
+        f_max = np.max(f_lst)
         f_select = np.array(map(lambda d: map(lambda f: (f[1] > f_min - atol)&(f[0] < f_max + atol), d), data_times))
         if i == 0:
             old_f_select = copy.copy(f_select)
