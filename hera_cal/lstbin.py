@@ -224,8 +224,8 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 continue
             for key in data.keys():
                 # fill data with blank data
-                data[key][index] = [np.zeros(Nfreqs, np.complex)]
-                flags[key][index] = [np.zeros(Nfreqs, np.bool)]
+                data[key][index] = [np.ones(Nfreqs, np.complex)]
+                flags[key][index] = [np.ones(Nfreqs, np.bool)]
 
         # use all LST bins              
         lst_bins = lst_grid
