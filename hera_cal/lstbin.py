@@ -626,6 +626,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     antpos = copy.deepcopy(ap)
     start_jd = np.floor(t)[0]
     miriad_kwargs['start_jd'] = start_jd
+    miriad_kwargs['integration_time'] = np.median(np.diff(t)) * 24 * 3600.
     del d, fl, ap, a, f, t, l, p
     garbage_collector.collect()
 
