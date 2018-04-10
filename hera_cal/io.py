@@ -112,7 +112,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               return_uvd=False, longitude=21.42830, start_jd=None, instrument="HERA", 
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
               telescope_location=np.array([5109325.85521063,2005235.09142983,-3239928.42475395]),
-              **kwargs):
+              integration_time=None, **kwargs):
     """
     Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
     documentation for more info on these attributes.
@@ -164,6 +164,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
 
+    integration_time : type=float, integration duration in seconds for data_array. This does not necessarily have
+        to be equal to the diff(time_array): for the case of LST-binning, this is not the duration of the LST-bin
+        but the integration time of the pre-binned data.
+
     kwargs : type=dictionary, additional parameters to set in UVData object.
     
     Output:
@@ -182,7 +186,8 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
             raise AttributeError("if time_array is not fed, start_jd must be fed")
         time_array = hc.utils.LST2JD(lst_array, start_jd, longitude=longitude)
     Ntimes = len(time_array)
-    integration_time = np.median(np.diff(time_array)) * 24 * 3600.
+    if integration_time is None:
+        integration_time = np.median(np.diff(time_array)) * 24 * 3600.
 
     # get freqs
     Nfreqs = len(freq_array)
