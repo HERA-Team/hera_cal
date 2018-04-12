@@ -247,7 +247,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
         return lst_bins, data_bin, flags_bin
 
-    # iterate over data keys and get statistics
+    # iterate over data keys (baselines) and get statistics
     for i, key in enumerate(data.keys()):
 
         # create empty lists
@@ -258,11 +258,11 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         imag_std = []
         bin_count = []
 
-        # iterate over sorted indices in data[key]
+        # iterate over sorted LST grid indices in data[key]
         for j, ind in enumerate(sorted(data[key].keys())):
 
             # make data and flag arrays from lists
-            d = np.array(data[key][ind])
+            d = np.array(data[key][ind]) # shape = (Ndays x Nfreqs)
             f = np.array(flags[key][ind])
             f[np.isnan(f)] = True
 
