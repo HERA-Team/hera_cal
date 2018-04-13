@@ -482,11 +482,8 @@ def lst_bin_arg_parser():
         "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
         "Consult lstbin.lst_bin_files() for further details on functionality.")
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files")
-    a.add_argument("--lst_init", type=float, default=np.pi, help="starting point for universal LST grid")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--lst_start", type=float, default=0, help="starting LST for binner as it sweeps across 2pi LST")
-    a.add_argument("--lst_low", default=None, type=float, help="enact a lower bound on LST grid")
-    a.add_argument("--lst_hi", default=None, type=float, help="enact an upper bound on LST grid")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{}.{}.{:7.5f}.uv", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
@@ -499,7 +496,7 @@ def lst_bin_arg_parser():
     a.add_argument("--miriad_kwargs", default={}, type=dict, help="dict w/ kwargs to pass to miriad_to_data function")
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
     a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
-    a.add_argument("--output_file_select", default=None, nargs='*', type=list, help="list of output file integers ot run on. Default is all output files.")
+    a.add_argument("--output_file_select", default=None, nargs='*', type=int, help="list of output file integers ot run on. Default is all output files.")
     return a
 
 
