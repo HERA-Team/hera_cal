@@ -65,7 +65,7 @@ pbs = "" \
 "start: $(date)\n" \
 "cd {cwd}\n" \
 "lstbin_run.py --dlst {dlst} --lst_start {lst_start} --ntimes_per_file {ntimes_per_file} " \
-"--file_ext {file_ext} --outdir {outdir} --overwrite {overwrite} --output_file_select {output_file_select} {sig_clip} --sigma {sigma} --min_N {min_N} {rephase} {data_files}\n" \
+"--file_ext {file_ext} --outdir {outdir} --overwrite {overwrite} {output_file_select} {sig_clip} --sigma {sigma} --min_N {min_N} {rephase} {data_files}\n" \
 "end: $(date)"
 
 # parse special kwargs
@@ -91,11 +91,11 @@ if params['arrayjob']:
 
     nfiles = len(output[3])
     params['arrayjob'] = "#PBS -t 0-{}%5".format(nfiles-1)
-    params['output_file_select'] = "${PBS_ARRAYID}"
+    params['output_file_select'] = "--output_file_select ${PBS_ARRAYID}"
 
 else:
     params['arrayjob'] = ''
-    params['output_file_select'] = None
+    params['output_file_select'] = ''
 
 # format string
 pbs_file = pbs.format(**params)
