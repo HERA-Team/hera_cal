@@ -11,19 +11,19 @@ lst_start: 3.0
 ntimes_per_file: 60
 dlst: 0.000782985
 data_files:
-  - "'/Users/nkern/data/2458114/zen.2458114.*.xx.HH.uv'"
-  - "'/Users/nkern/data/2458115/zen.2458115.*.xx.HH.uv'"
+  - /Users/nkern/data/2458114/zen.2458114.*.xx.HH.uv
+  - /Users/nkern/data/2458115/zen.2458115.*.xx.HH.uv
 
 # IO Parameters
-pbsfile: 'lstbin_pipe.sh'
+pbsfile: lstbin_pipe.sh
 overwrite: True
-outdir: './'
-outfile: "lstbin.out"
+outdir: ./
+outfile: lstbin.out
 
 # PBS Parameters
-queue: 'hera'
+queue: hera
 nodes: 1
 ppn: 1
-walltime: "12:00:00"
+walltime: 12:00:00
 arrayjob: False
-pmem: '16gb'
+pmem: 16gb
