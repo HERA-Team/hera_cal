@@ -111,10 +111,10 @@ for i, pol in enumerate(default_params['pols']):
         params['output_file_select'] = ''
 
     # add quotations to datafiles
-    data_files = map(lambda df: "'{}'".format(df), data_files)
+    params['data_files'] = map(lambda df: "'{}'".format(df), params['data_files'])
 
     # configure data files, which should be fed as a list of search strings
-    data_files = " ".join(data_files)
+    params['data_files'] = " ".join(params['data_files'])
 
     # format params that may be polarization specific
     params['outfile'] = params['outfile'].format(pol=pol)
