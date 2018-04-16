@@ -79,6 +79,11 @@ if isinstance(params['sig_clip'], (bool)):
         params['sig_clip'] = '--sig_clip'
     else:
         params['sig_clip'] = ''
+if params['overwrite']:
+    params['overwrite'] = '--overwrite'
+else:
+    params['overwrite'] = ''
+
 
 # configure data files, which should be fed as a list of search strings
 params['data_files'] = " ".join(params['data_files'])
