@@ -89,7 +89,7 @@ if params['arrayjob']:
     output = lstbin.config_lst_bin_files(params['data_files'], dlst=params['dlst'], lst_start=params['lst_start'],
                                          ntimes_per_file=params['ntimes_per_file'])
 
-    nfiles = len(output[2])
+    nfiles = len(output[3])
     params['arrayjob'] = "#PBS -t 0-{}%5".format(nfiles-1)
     params['output_file_select'] = "${PBS_ARRAYID}"
 

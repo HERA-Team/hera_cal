@@ -570,7 +570,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, verbo
     # get output file lsts
     file_lsts = [lst_grid[start_index:end_index][ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
 
-    return lst_grid, dlst, file_lsts, start_lst
+    return data_times, lst_grid, dlst, file_lsts, start_lst
 
 
 def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
@@ -617,8 +617,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     zen.{pol}.LST.{file_lst}.uv : holds LST bin avg (data_array) and bin count (nsample_array)
     zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
-    lst_grid, dlst, file_lsts, start_lst = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start,
-                                                                ntimes_per_file=ntimes_per_file, verbose=verbose)
+    (data_times, lst_grid, dlst, file_lsts, 
+     start_lst) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, 
+                                       ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
 
     # select file_lsts
