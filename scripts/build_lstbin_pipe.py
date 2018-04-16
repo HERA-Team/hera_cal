@@ -12,6 +12,7 @@ import argparse
 import yaml
 from hera_cal import lstbin
 import glob
+import copy
 
 # setup argparser
 args = argparse.ArgumentParser(description="Build a PBS script for hera_cal.lstbin")
@@ -24,7 +25,7 @@ a = args.parse_args()
 # load yaml file
 print "...loading {}".format(a.paramfile)
 with open(a.paramfile, 'r') as f:
-    _params = yaml.load(f)
+    yaml_params = yaml.load(f)
 
 # setup default parameters
 params = {
@@ -50,7 +51,7 @@ params = {
 }
 
 # update default parameters with parameter file
-params.update(_params)
+default_params.update(yaml_params)
 
 # setup PBS file
 pbs = "" \
@@ -70,49 +71,60 @@ pbs = "" \
 "echo end: $(date)"
 
 # parse special kwargs
-if isinstance(params['rephase'], (bool)):
-    if params['rephase']:
-        params['rephase'] = '--rephase'
+if isinstance(default_params['rephase'], (bool)):
+    if default_params['rephase']:
+        default_params['rephase'] = '--rephase'
     else:
-        params['rephase'] = ''
-if isinstance(params['sig_clip'], (bool)):
-    if params['sig_clip']:
-        params['sig_clip'] = '--sig_clip'
+        default_params['rephase'] = ''
+if isinstance(default_params['sig_clip'], (bool)):
+    if default_params['sig_clip']:
+        default_params['sig_clip'] = '--sig_clip'
     else:
-        params['sig_clip'] = ''
-if params['overwrite']:
-    params['overwrite'] = '--overwrite'
+        default_params['sig_clip'] = ''
+if default_params['overwrite']:
+    default_params['overwrite'] = '--overwrite'
 else:
-    params['overwrite'] = ''
+    default_params['overwrite'] = ''
 
-# setup arrayjob if desired
-if params['arrayjob']:
-    # parse datafiles
-    data_files = map(lambda df: sorted(glob.glob(df)), params['data_files'])
+# Loop over polarizations
+for i, p in enumerate(default_params['pols']):
+    params = copy.deepcopy(default_params)
 
-    # run config_lst_bin_files to get output files
-    output = lstbin.config_lst_bin_files(data_files, dlst=params['dlst'], lst_start=params['lst_start'],
-                                         ntimes_per_file=params['ntimes_per_file'])
+    # configure datafiles
+    data_files = map(lambda df: df.format(pol=p), params['data_files'])
 
-    nfiles = len(output[3])
-    params['arrayjob'] = "#PBS -t 0-{}%5".format(nfiles-1)
-    params['output_file_select'] = "--output_file_select ${PBS_ARRAYID}"
+    # setup arrayjob if desired
+    if params['arrayjob']:
+        # parse datafiles
+        _datafiles = map(lambda df: sorted(glob.glob(df)), data_files)
 
-else:
-    params['arrayjob'] = ''
-    params['output_file_select'] = ''
+        # run config_lst_bin_files to get output files
+        output = lstbin.config_lst_bin_files(_datafiles, dlst=params['dlst'], lst_start=params['lst_start'],
+                                             ntimes_per_file=params['ntimes_per_file'])
 
-# add quotations to datafiles
-params['data_files'] = map(lambda df: "'{}'".format(df), params['data_files'])
+        nfiles = len(output[3])
+        params['arrayjob'] = "#PBS -t 0-{}%5".format(nfiles-1)
+        params['output_file_select'] = "--output_file_select ${PBS_ARRAYID}"
 
-# configure data files, which should be fed as a list of search strings
-params['data_files'] = " ".join(params['data_files'])
+    else:
+        params['arrayjob'] = ''
+        params['output_file_select'] = ''
 
-# format string
-pbs_file = pbs.format(**params)
+    # add quotations to datafiles
+    data_files = map(lambda df: "'{}'".format(df), data_files)
 
-# write to file
-print "...writing {}".format(params['pbsfile'])
-with open(params['pbsfile'], 'w') as f:
-    f.write(pbs_file)
+    # configure data files, which should be fed as a list of search strings
+    data_files = " ".join(data_files)
+
+    # format params that may be polarization specific
+    params['outfile'] = params['outfile'].format(pol=pol)
+    params['pbsfile'] = params['pbsfile'].format(pol=pol)
+
+    # format string
+    pbs_file = pbs.format(**params)
+
+    # write to file
+    print "...writing {}".format(params['pbsfile'])
+    with open(params['pbsfile'], 'w') as f:
+        f.write(pbs_file)
 
