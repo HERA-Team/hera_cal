@@ -500,16 +500,12 @@ def lst_bin_arg_parser():
     return a
 
 
-def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
-                  outdir=None, overwrite=False, history=' ', lst_start=0, atol=1e-6, sig_clip=True,
-                  sigma=5.0, min_N=5, rephase=False, miriad_kwargs={}, output_file_select=None):
+def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, verbose=True, ntimes_per_file=60):
     """
-    LST bin a series of miriad files with identical frequency bins, but varying
-    time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
-    are taken from the first file in data_files.
+    Configure lst grid, starting LST and output files given input data files and LSTbin params.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
                  paths to miriad files from a particular night. These files should be sorted
                  by ascending Julian Date. Frequency axis of each file must be identical.
@@ -520,29 +516,15 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     ntimes_per_file : type=int, number of LST bins in a single output file
 
-    file_ext : type=str, extension to "zen." for output miriad files. This must have three
-               formatting placeholders, first for polarization(s), second for type of file
-               Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
-
-    outdir : type=str, output directory
-
-    overwrite : type=bool, if True overwrite output files
-
-    rephase : type=bool, if True, rephase data points in LST bin to center of bin
-
-    bin_kwargs : type=dictionary, keyword arguments for lst_bin.
-
-    atol : type=float, absolute tolerance for LST bin float comparison
-
-    miriad_kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
-
-    output_file_select : type=int or integer list, list of integer indices of the output files to run on.
-        Default is all files.
-
-    Result:
+    Returns (lst_grid, dlst, file_lsts, start_lst)
     -------
-    zen.{pol}.LST.{file_lst}.uv : holds LST bin avg (data_array) and bin count (nsample_array)
-    zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
+    lst_grid : float ndarray holding LST bin centers
+
+    dlst : float, LST bin width of output lst_grid
+
+    file_lsts : list, contains the lst grid of each output file
+
+    start_lst : float, starting lst for LST binner
     """
     # get dlst from first data file if None
     if dlst is None:
@@ -587,6 +569,57 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     # get output file lsts
     file_lsts = [lst_grid[start_index:end_index][ntimes_per_file*i:ntimes_per_file*(i+1)] for i in range(nfiles)]
+
+    return lst_grid, dlst, file_lsts, start_lst
+
+
+def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
+                  outdir=None, overwrite=False, history=' ', lst_start=0, atol=1e-6, sig_clip=True,
+                  sigma=5.0, min_N=5, rephase=False, miriad_kwargs={}, output_file_select=None):
+    """
+    LST bin a series of miriad files with identical frequency bins, but varying
+    time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
+    are taken from the first file in data_files.
+
+    Parameters:
+    -----------
+    data_files : type=list of lists: nested set of lists, with each nested list containing
+                 paths to miriad files from a particular night. These files should be sorted
+                 by ascending Julian Date. Frequency axis of each file must be identical.
+
+    dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
+
+    lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
+
+    ntimes_per_file : type=int, number of LST bins in a single output file
+
+    file_ext : type=str, extension to "zen." for output miriad files. This must have three
+               formatting placeholders, first for polarization(s), second for type of file
+               Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
+
+    outdir : type=str, output directory
+
+    overwrite : type=bool, if True overwrite output files
+
+    rephase : type=bool, if True, rephase data points in LST bin to center of bin
+
+    bin_kwargs : type=dictionary, keyword arguments for lst_bin.
+
+    atol : type=float, absolute tolerance for LST bin float comparison
+
+    miriad_kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
+
+    output_file_select : type=int or integer list, list of integer indices of the output files to run on.
+        Default is all files.
+
+    Result:
+    -------
+    zen.{pol}.LST.{file_lst}.uv : holds LST bin avg (data_array) and bin count (nsample_array)
+    zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
+    """
+    lst_grid, dlst, file_lsts, start_lst = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start,
+                                                                ntimes_per_file=ntimes_per_file, verbose=verbose)
+    nfiles = len(file_lsts)
 
     # select file_lsts
     if output_file_select is not None:
