@@ -63,11 +63,11 @@ pbs = "" \
 "#PBS -l pmem={pmem}\n" \
 "#PBS -V\n" \
 "{arrayjob}\n\n" \
-"start: $(date)\n" \
+"echo 'start: $(date)'\n" \
 "cd {cwd}\n" \
 "lstbin_run.py --dlst {dlst} --lst_start {lst_start} --ntimes_per_file {ntimes_per_file} " \
 "--file_ext {file_ext} --outdir {outdir} {overwrite} {output_file_select} {sig_clip} --sigma {sigma} --min_N {min_N} {rephase} {data_files}\n" \
-"end: $(date)"
+"echo 'end: $(date)'"
 
 # parse special kwargs
 if isinstance(params['rephase'], (bool)):
