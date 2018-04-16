@@ -87,11 +87,11 @@ else:
     default_params['overwrite'] = ''
 
 # Loop over polarizations
-for i, p in enumerate(default_params['pols']):
+for i, pol in enumerate(default_params['pols']):
     params = copy.deepcopy(default_params)
 
     # configure datafiles
-    data_files = map(lambda df: df.format(pol=p), params['data_files'])
+    data_files = map(lambda df: df.format(pol=pol), params['data_files'])
 
     # setup arrayjob if desired
     if params['arrayjob']:
