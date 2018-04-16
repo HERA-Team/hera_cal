@@ -20,9 +20,9 @@ data_files:
   - '/Users/nkern/data/2458115/zen.2458115.*.{pol}.HH.uv'
 
 # IO Parameters
-pbsfile: lstbin_pipe.sh
+pbsfile: 'lstbin_pipe_{pol}.sh'
 overwrite: True
-outdir: ./
+outdir: './'
 outfile: 'lstbin_{pol}.out'
 
 # PBS Parameters
