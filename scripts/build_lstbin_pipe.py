@@ -65,7 +65,7 @@ pbs = "" \
 "start: $(date)\n" \
 "cd {cwd}\n" \
 "lstbin_run.py --dlst {dlst} --lst_start {lst_start} --ntimes_per_file {ntimes_per_file} " \
-"--file_ext {file_ext} --outdir {outdir} --overwrite {overwrite} {output_file_select} {sig_clip} --sigma {sigma} --min_N {min_N} {rephase} {data_files}\n" \
+"--file_ext {file_ext} --outdir {outdir} {overwrite} {output_file_select} {sig_clip} --sigma {sigma} --min_N {min_N} {rephase} {data_files}\n" \
 "end: $(date)"
 
 # parse special kwargs
@@ -90,8 +90,11 @@ params['data_files'] = " ".join(params['data_files'])
 
 # setup arrayjob if desired
 if params['arrayjob']:
+    # parse datafiles
+    data_files = map(lambda df: sorted(glob.glob(df)), params['data_files'])
+
     # run config_lst_bin_files to get output files
-    output = lstbin.config_lst_bin_files(params['data_files'], dlst=params['dlst'], lst_start=params['lst_start'],
+    output = lstbin.config_lst_bin_files(data_files, dlst=params['dlst'], lst_start=params['lst_start'],
                                          ntimes_per_file=params['ntimes_per_file'])
 
     nfiles = len(output[3])
@@ -101,6 +104,9 @@ if params['arrayjob']:
 else:
     params['arrayjob'] = ''
     params['output_file_select'] = ''
+
+# add quotations to datafiles
+params['data_files'] = map(lambda df: "'{}'".format(df), params['data_files'])
 
 # format string
 pbs_file = pbs.format(**params)
