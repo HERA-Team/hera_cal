@@ -11,6 +11,7 @@ import os
 import argparse
 import yaml
 from hera_cal import lstbin
+import glob
 
 # setup argparser
 args = argparse.ArgumentParser(description="Build a PBS script for hera_cal.lstbin")
@@ -84,10 +85,6 @@ if params['overwrite']:
 else:
     params['overwrite'] = ''
 
-
-# configure data files, which should be fed as a list of search strings
-params['data_files'] = " ".join(params['data_files'])
-
 # setup arrayjob if desired
 if params['arrayjob']:
     # parse datafiles
@@ -107,6 +104,9 @@ else:
 
 # add quotations to datafiles
 params['data_files'] = map(lambda df: "'{}'".format(df), params['data_files'])
+
+# configure data files, which should be fed as a list of search strings
+params['data_files'] = " ".join(params['data_files'])
 
 # format string
 pbs_file = pbs.format(**params)
