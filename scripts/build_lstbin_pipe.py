@@ -91,12 +91,12 @@ for i, pol in enumerate(default_params['pols']):
     params = copy.deepcopy(default_params)
 
     # configure datafiles
-    data_files = map(lambda df: df.format(pol=pol), params['data_files'])
+    params['data_files'] = map(lambda df: df.format(pol=pol), params['data_files'])
 
     # setup arrayjob if desired
     if params['arrayjob']:
         # parse datafiles
-        _datafiles = map(lambda df: sorted(glob.glob(df)), data_files)
+        _datafiles = map(lambda df: sorted(glob.glob(df)), params['data_files'])
 
         # run config_lst_bin_files to get output files
         output = lstbin.config_lst_bin_files(_datafiles, dlst=params['dlst'], lst_start=params['lst_start'],
