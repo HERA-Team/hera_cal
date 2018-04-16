@@ -28,7 +28,7 @@ with open(a.paramfile, 'r') as f:
     yaml_params = yaml.load(f)
 
 # setup default parameters
-params = {
+default_params = {
 'pbsfile'   : 'lstbin_pipe.sh',
 'rephase'   : '',
 'sig_clip'  : '',
