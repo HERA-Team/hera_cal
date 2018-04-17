@@ -556,6 +556,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, verbo
     if start_lst >= (2*np.pi):
         start_lst -= 2*np.pi
         end_lst -= 2*np.pi
+        for dt in data_times:
+            dt -= 2*np.pi
 
     # create lst_grid
     lst_grid = make_lst_grid(dlst, lst_start=start_lst, verbose=verbose)
