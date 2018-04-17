@@ -552,6 +552,11 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, verbo
         start_lst = np.min(np.append(start_lst, dt[:, 0]))
         end_lst = np.max(np.append(end_lst, dt.ravel()))
 
+    # ensure start_lst isn't beyond 2pi
+    if start_lst >= (2*np.pi):
+        start_lst -= 2*np.pi
+        end_lst -= 2*np.pi
+
     # create lst_grid
     lst_grid = make_lst_grid(dlst, lst_start=start_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
