@@ -1405,7 +1405,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
 
 
 def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, median=False, tol=1.0,
-                            mirror_red_data=False):
+                            mirror_red_data=False, reds = None):
     """
     Given complex visibility data spanning one or more redundant
     baseline groups, average redundant visibilities and return
@@ -1427,6 +1427,9 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
 
     mirror_red_data : type=boolean, if True, mirror average visibility across red bls
 
+    reds : list of list of redundant baselines with polarization strings. 
+           If None, reds is produced from antpos.
+
     Output: (red_data, red_flags, red_keys)
     -------
     """
@@ -1440,12 +1443,13 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
     if flags is None:
         flags = DataContainer(odict(map(lambda k: (k, np.zeros_like(data[k]).astype(np.bool)), data.keys())))
 
-    # get redundant baselines
-    _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=pols, low_hi=True)
+    # get redundant baselines if not provided
+    if reds is None:
+        reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=pols, low_hi=True)
 
     # strip reds of keys not in data
-    reds = []
-    for i, bl_group in enumerate(_reds):
+    stripped_reds = []
+    for i, bl_group in enumerate(reds):
         group = []
         for k in bl_group:
             if k in data:
@@ -1458,7 +1462,7 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
     red_flags = odict()
 
     # iterate over reds
-    for i, bl_group in enumerate(reds):
+    for i, bl_group in enumerate(stripped_reds):
         # average redundant baseline group
         if median:
             d = np.nanmedian(map(lambda k: data[k], bl_group), axis=0)
