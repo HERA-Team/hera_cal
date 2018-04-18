@@ -1455,7 +1455,7 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
             if k in data:
                 group.append(k)
         if len(group) > 0:
-            reds.append(group)
+            stripped_reds.append(group)
 
     # make red_data dictionary
     red_data = odict()
