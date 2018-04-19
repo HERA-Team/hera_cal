@@ -44,17 +44,22 @@ class AbsCal(object):
         where T_dly is a delay slope in [ns / meter]
         and B_ij is the baseline vector between ant i and j.
 
-    5) Average amplitude linear calibration solves the equation:
+    5) frequency-independent phase slope calibration
+        median_over_freq(V_ij^data / V_ij^model) = dot(Phi, B_ji)
+        where Phi is a phase slope in [radians / meter]
+        and B_ij is the baseline vector between ant i and j.
+
+    6) Average amplitude linear calibration solves the equation:
             log|V_ij^data / V_ij^model| = log|g_avg_i| + log|g_avg_j|
  
-    6) Tip-Tilt phase logarithmic calibration solves the equation
+    7) Tip-Tilt phase logarithmic calibration solves the equation
             angle(V_ij^data /  V_ij^model) = psi + dot(TT_Phi, B_ij)
         where psi is an overall gain phase scalar, 
         TT_Phi is the gain phase slope vector [radians / meter]
         and B_ij is the baseline vector between antenna i and j.
 
     Methods (1), (2) and (3) can be thought of as general bandpass solvers, whereas
-    methods (4), (5) and (6) are methods that would be used for data that has already
+    methods (4), (5), (6), and (7) are methods that would be used for data that has already
     been redundantly calibrated.
 
     Be warned that the linearizations of the phase solvers suffer from phase wrapping
@@ -112,7 +117,7 @@ class AbsCal(object):
                  antenna_pos, ants = uvd.get_ENU_antpos()
                  antpos = dict(zip(ants, antenna_pos))
                  ----
-                 This is needed only for Tip Tilt phase calibration.
+                 This is needed only for Tip Tilt, phase slope, and delay slope calibration.
 
         freqs : ndarray of frequency array, type=ndarray, dtype=float
                 1d array containing visibility frequencies in Hz.
@@ -398,6 +403,40 @@ class AbsCal(object):
         self._dly_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
         self._dly_slope_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._dly_slope[k][0], self._dly_slope[k][1]]), pk), self._gain_keys), 0, -1)
 
+    def global_phase_slope_logcal(self, tol=1.0, verbose=True):
+        """
+        Solve for a frequency-independent spatial phase slope (a subset of the omnical degeneracies) by calling 
+        abscal_funcs.global_phase_slope_logcal method. See abscal_funcs.global_phase_slope_logcal for details.
+
+        Parameters:
+        -----------
+        tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
+
+        verbose : type=boolean, if True print feedback to stdout
+
+        Result:
+        -------
+        per-antenna delays, per-antenna delay gains, per-antenna phase + phase gains
+        can be accessed via the methods
+            self.phs_slope
+            self.phs_slope_gain
+            self.phs_slope_arr
+            self.phs_slope_gain_arr
+        """
+
+        # assign data
+        model = self.model
+        data = copy.deepcopy(self.data)
+        wgts = copy.deepcopy(self.wgts)
+        antpos = self.antpos
+
+        # run global_phase_slope_logcal
+        fit = global_phase_slope_logcal(model, data, antpos, wgts=wgts, verbose=verbose, tol=tol)
+
+        # form result
+        self._phs_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
+        self._phs_slope_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._phs_slope[k][0], self._phs_slope[k][1]]), pk), self._gain_keys), 0, -1)
+
     def abs_amp_logcal(self, verbose=True):
         """
         call abscal_funcs.abs_amp_logcal() method. see its docstring for more details.
@@ -476,6 +515,8 @@ class AbsCal(object):
         self._TT_Phi = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
         self._TT_Phi_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]), pk), self._gain_keys), 0, -1)
 
+    ############################# amp_logcal results #############################
+
     @property
     def ant_eta(self):
         """ return _ant_eta dict, containing per-antenna amplitude solution """
@@ -509,6 +550,8 @@ class AbsCal(object):
         else:
             return None
 
+    ############################# phs_logcal results #############################
+
     @property
     def ant_phi(self):
         """ return _ant_phi dict, containing per-antenna phase solution """
@@ -541,6 +584,8 @@ class AbsCal(object):
             return np.exp(1j*self.ant_phi_arr)
         else:
             return None
+
+    ############################# delay_lincal results #############################
 
     @property
     def ant_dly(self):
@@ -608,6 +653,8 @@ class AbsCal(object):
         else:
             return None
 
+    ############################# delay_slope_lincal results #############################
+
     @property
     def dly_slope(self):
         """ return _dly_slope dict, containing the delay slope across the array """
@@ -666,6 +713,68 @@ class AbsCal(object):
         else:
             return None
 
+    ############################# global_phase_slope_logcal results #############################
+
+    @property
+    def phs_slope(self):
+        """ return _phs_slope dict, containing the frequency-indpendent phase slope across the array """
+        if hasattr(self, '_phs_slope'):
+            return copy.deepcopy(self._phs_slope)
+        else:
+            return None
+
+    @property
+    def phs_slope_gain(self):
+        """ form a per-antenna complex gain from _phs_slope dict and the antpos dictionary attached to the class"""
+        if hasattr(self, '_phs_slope'):
+            # get phs_slope dictionary
+            phs_slope = self.phs_slope
+            # turn phs slope into per-antenna complex gains, while iterating over self._gain_keys
+            return odict(map(lambda k: (k, np.exp(np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
+        else:
+            return None
+
+    def custom_phs_slope_gain(self, gain_keys, antpos):
+        """
+        return phs_slope_gain with custom gain keys and antenna positions
+
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant position vectors
+        """
+        if hasattr(self, '_phs_slope'):
+            # get phs slope dictionary
+            phs_slope = self.phs_slope[self._gain_keys[0][0]]
+            # turn phs slope into per-antenna complex gains, while iterating over gain_keys
+            return odict(map(lambda k: (k, np.exp(np.einsum("i...,i->...", phs_slope, antpos[k[0]][:2]))), gain_keys))
+        else:
+            return None
+
+    @property
+    def phs_slope_arr(self):
+        """ return _phs_slope_arr array """
+        if hasattr(self, '_phs_slope_arr'):
+            return copy.copy(self._phs_slope_arr)
+        else:
+            return None
+
+    @property
+    def phs_slope_gain_arr(self):
+        """ form complex gain from _phs_slope_arr array """
+        if hasattr(self, '_phs_slope_arr'):
+            return np.exp(np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
+        else:
+            return None
+
+    @property
+    def phs_slope_ant_phs_arr(self):
+        """ form antenna delays from _phs_slope_arr array """
+        if hasattr(self, '_phs_slope_arr'):
+            return np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2])
+        else:
+            return None
+
+    ############################# abs_amp_logcal results #############################
+
     @property
     def abs_eta(self):
         """return _abs_eta dict"""
@@ -710,6 +819,8 @@ class AbsCal(object):
             return np.exp(self._abs_eta_arr).astype(np.complex)
         else:
             return None
+
+    ############################# TT_phs_logcal results #############################
 
     @property
     def abs_psi(self):
