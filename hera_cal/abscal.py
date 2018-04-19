@@ -1,4 +1,4 @@
-"""
+l """
 abscal.py
 ---------
 
@@ -329,9 +329,8 @@ class AbsCal(object):
     def delay_slope_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
                             four_pol=False):
         """
-        Solve for per-antenna delay according to the equation
-        by calling abscal_funcs.delay_lincal method.
-        See abscal_funcs.delay_lincal for details.
+        Solve for an array-wide delay slope (a subset of the omnical degeneracies) by calling 
+        abscal_funcs.delay_slope_lincal method. See abscal_funcs.delay_slope_lincal for details.
 
         Parameters:
         -----------
@@ -339,13 +338,19 @@ class AbsCal(object):
 
         kernel : size of median filter across (time, freq) axes, type=(int, int)
 
-        time_avg : boolean, if True, average resultant antenna delays across time 
+        time_ax : the time axis index of the data
+
+        freq_ax : the freq axis index of the data
+
+        verbose : type=boolean, if True print feedback to stdout
+
+        time_avg : boolean, if True, average resultant delay slope across time 
 
         four_pol : boolean, if True, form a joint polarization solution
 
         Result:
         -------
-        per-antenna delays, per-antenna delay gains, per-antenna phase + phase gains
+        delays slopes, per-antenna delay gains, per-antenna phase + phase gains
         can be accessed via the methods
             self.dly_slope
             self.dly_slope_gain
@@ -365,7 +370,7 @@ class AbsCal(object):
         # get freq channel width
         df = np.median(np.diff(self.freqs))
 
-        # run delay_lincal
+        # run delay_slope_lincal
         fit = delay_slope_lincal(model, data, antpos, wgts=wgts, medfilt=medfilt, df=df, kernel=kernel, verbose=verbose,
                                   time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol)
 
@@ -810,7 +815,7 @@ def abscal_arg_parser():
     a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
     a.add_argument("--calfits_infiles", type=str, nargs='*', help="list of calfits files to multiply with abscal solution before writing to disk.")
-    a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits file.")
+    a.add_argument("--output_calfits_fname", type=str, nargs='*', default=[], help="names of output calfits files.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
@@ -837,7 +842,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
     a.add_argument("--calfits_infiles", type=str, nargs='*', help="list of calfits files to multiply with abscal solution before writing to disk.")
-    a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits file.")
+    a.add_argument("--output_calfits_fname", type=str, nargs='*', default=[], help="names of output calfits files.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
@@ -877,15 +882,15 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
     Parameters:
     -----------
-    data_files : type=list or string, path(s) to data miriad file(s)
+    data_files : type=list of strings, path(s) to data miriad file(s)
                 a list of paths to miriad file(s) containing complex
                 visibility data, or a path itself
 
-    model_files : type=list or sring, path(s) to model miriad files(s)
+    model_files : type=list of strings, path(s) to model miriad files(s)
                 a list of paths to miriad file(s) containing complex
                 visibility data, or a path itself
 
-    calfits_infiles : type=list or string, path(s) to calfits files(s)
+    calfits_infiles : type=list of strings, path(s) to calfits files(s)
                 a list of paths to calfits file(s) containing gain solutions
                 to multiply with abscal gain solution before writing to file.
                 These files should correspond one-to-one with data_files. History,
@@ -897,7 +902,7 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
     write_calfits : type=boolean, if True, write out gains as calfits file
 
-    output_calfits_fname : type=str, filename of output calfits filename
+    output_calfits_fname : type=list of strings, filenames (not full path) of output calfits files 
 
     outdir : type=str, path to output directory
 
@@ -906,6 +911,8 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
     return_object : type=boolean, if True, return AbsCal object
 
     match_red_bls : type=boolean, match unique data baselines to model baselines based on redundancy
+
+    tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
 
     reweight : type=boolean, reweight unique baseline data based on redundancy
 
@@ -970,15 +977,17 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
         # check output filepath
         if write_calfits:
             # configure filename
-            if output_calfits_fname is None:
-                output_calfits_fname = os.path.basename(dfile) + '.abscal.calfits'
+            if output_calfits_fname == []:
+                output_calfits_file = os.path.basename(dfile) + '.abscal.calfits'
+            else:
+                output_calfits_file = output_calfits_fname[i]
             if outdir is None:
                 outdir = os.path.dirname(dfile)
-            output_calfits_fname = os.path.join(outdir, output_calfits_fname)
+            output_calfits_file = os.path.join(outdir, output_calfits_file)
 
             # check path
-            if os.path.exists(output_calfits_fname) and overwrite == False:
-                raise IOError("{} exists, not overwriting".format(output_calfits_fname))
+            if os.path.exists(output_calfits_file) and overwrite == False:
+                raise IOError("{} exists, not overwriting".format(output_calfits_file))
 
         # load data and configure weights
         echo("loading {}".format(dfile), type=1, verbose=verbose)
@@ -1120,10 +1129,10 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                         out_flags[k] += flag_dict[k]
                     else:
                         out_flags[k] += np.ones(out_flags[k], np.bool)
-                io.update_cal(cal_in, output_calfits_fname,  gains=out_gains, flags=out_flags, add_to_history=history, clobber=overwrite)
+                io.update_cal(cal_in, output_calfits_file,  gains=out_gains, flags=out_flags, add_to_history=history, clobber=overwrite)
             # write a calfits from scratch
             else:
-                io.write_cal(output_calfits_fname, gain_dict, data_freqs, data_times, flags=flag_dict, quality=None, 
+                io.write_cal(output_calfits_file, gain_dict, data_freqs, data_times, flags=flag_dict, quality=None, 
                      total_qual=None, return_uvc=False, overwrite=overwrite, history=history)
 
         # append gain dict to gains
