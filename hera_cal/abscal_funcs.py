@@ -651,12 +651,12 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, verbose=True, tol=
         # calculated frequency median of unflagged angle(data/model)
         delta_phi = np.angle(avg_data[rk] / avg_model[rk])
         delta_phi[avg_flags[rk]] = np.nan
-        ls_data[eqn_str] = np.nanmedian(delta_phi, axis=1)
+        ls_data[eqn_str] = np.nanmedian(delta_phi, axis=1, keepdims=True)
 
         # set weights based on redundancy of unflagged channels
         for red in reds:
             if rk in red or (rk[1],rk[0],rk[2][::-1]) in red:
-                ls_wgts[eqn_str] = np.sum([~flags[bl] for bl in red], axis=(0,2)).astype(np.float)
+                ls_wgts[eqn_str] = np.sum([~flags[bl] for bl in red], axis=(0,2), keepdims=True)[0].astype(np.float)
 
         # set unobserved data to 0 with 0 weight
         ls_wgts[eqn_str][np.isnan(ls_data[eqn_str])] = 0
