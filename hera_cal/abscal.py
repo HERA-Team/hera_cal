@@ -1,4 +1,4 @@
-l """
+"""
 abscal.py
 ---------
 
@@ -730,7 +730,7 @@ class AbsCal(object):
             # get phs_slope dictionary
             phs_slope = self.phs_slope
             # turn phs slope into per-antenna complex gains, while iterating over self._gain_keys
-            return odict(map(lambda k: (k, np.exp(np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
+            return odict(map(lambda k: (k, np.exp(np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
         else:
             return None
 
@@ -745,7 +745,7 @@ class AbsCal(object):
             # get phs slope dictionary
             phs_slope = self.phs_slope[self._gain_keys[0][0]]
             # turn phs slope into per-antenna complex gains, while iterating over gain_keys
-            return odict(map(lambda k: (k, np.exp(np.einsum("i...,i->...", phs_slope, antpos[k[0]][:2]))), gain_keys))
+            return odict(map(lambda k: (k, np.exp(np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope, antpos[k[0]][:2]))), gain_keys))
         else:
             return None
 
@@ -761,7 +761,7 @@ class AbsCal(object):
     def phs_slope_gain_arr(self):
         """ form complex gain from _phs_slope_arr array """
         if hasattr(self, '_phs_slope_arr'):
-            return np.exp(np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
+            return np.exp(np.ones_like(self.freqs).reshape(1, -1) * np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
         else:
             return None
 
@@ -1178,9 +1178,9 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                 else:
                     gain_list.append(AC.dly_slope_gain)
 
-            if phs_slope_cal:
+            if phase_slope_cal:
                 if delay_slope_cal == False:
-                    echo("it is recommended to run a delay_slope_cal before phs_slope_cal", verbose=verbose)
+                    echo("it is recommended to run a delay_slope_cal before phase_slope_cal", verbose=verbose)
                 AC.global_phase_slope_logcal(tol=tol, verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys()))
                 apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.phs_slope_gain, cal_flags, gain_convention='divide')
@@ -1199,8 +1199,8 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                     gain_list.append(AC.abs_eta_gain)
 
             if TT_phs_cal:
-                if delay_slope_cal == False or phs_slope_cal == False:
-                    echo("it is recommended to run a delay_slope_cal and a phs_slope_cal before TT_phs_cal", verbose=verbose)
+                if delay_slope_cal == False or phase_slope_cal == False:
+                    echo("it is recommended to run a delay_slope_cal and a phase_slope_cal before TT_phs_cal", verbose=verbose)
                 AC.TT_phs_logcal(verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.TT_Phi_gain[k], np.bool)), AC.TT_Phi_gain.keys()))
                 apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.TT_Phi_gain, cal_flags, gain_convention='divide')
