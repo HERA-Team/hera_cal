@@ -730,7 +730,7 @@ class AbsCal(object):
             # get phs_slope dictionary
             phs_slope = self.phs_slope
             # turn phs slope into per-antenna complex gains, while iterating over self._gain_keys
-            return odict(map(lambda k: (k, np.exp(np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
+            return odict(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
         else:
             return None
 
@@ -745,7 +745,7 @@ class AbsCal(object):
             # get phs slope dictionary
             phs_slope = self.phs_slope[self._gain_keys[0][0]]
             # turn phs slope into per-antenna complex gains, while iterating over gain_keys
-            return odict(map(lambda k: (k, np.exp(np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope, antpos[k[0]][:2]))), gain_keys))
+            return odict(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope, antpos[k[0]][:2]))), gain_keys))
         else:
             return None
 
@@ -761,7 +761,7 @@ class AbsCal(object):
     def phs_slope_gain_arr(self):
         """ form complex gain from _phs_slope_arr array """
         if hasattr(self, '_phs_slope_arr'):
-            return np.exp(np.ones_like(self.freqs).reshape(1, -1) * np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
+            return np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
         else:
             return None
 
