@@ -98,7 +98,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
     with a linear solver applied to the logarithmically linearized equation:
 
-    angle(V_ij,xy^data / V_ij,xy^model) = angle(g_i_x) * angle(conj(g_j_y))
+    angle(V_ij,xy^data / V_ij,xy^model) = angle(g_i_x * conj(g_j_y))
                                         = psi_x - psi_y + PHI^ew_x*r_i^ew + PHI^ns_x*r_i^ns
                                           - PHI^ew_y*r_j^ew - PHI^ns_y*r_j^ns
 
@@ -482,13 +482,13 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
+    antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
+
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data. These are only used to find delays from
            itegrations that are unflagged for at least two frequency bins. In this case, 
            the delays are assumed to have equal weight, otherwise the delays take zero weight.
-
-    antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
     df : type=float, frequency spacing between channels in Hz
 
@@ -506,7 +506,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     -------
     fit : dictionary containing delay slope (T_x) for each pol [seconds / meter].
     """
-    echo("...configuring linsolve data for delay_lincal", verbose=verbose)
+    echo("...configuring linsolve data for delay_slope_lincal", verbose=verbose)
 
     # get shared keys
     keys = sorted(set(model.keys()) & set(data.keys()))
@@ -583,6 +583,90 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
+    return fit
+
+def global_phase_slope_logcal(model, data, antpos, wgts=None, verbose=True, tol=1.0):
+    """
+    Solve for a frequency-independent spatial phase slope using the equation 
+
+    median_over_freq(V_ij,xy^data / V_ij,xy^model) = dot(Phi_x, r_i) - dot(Phi_y, r_j)
+
+    Parameters:
+    -----------
+    model : visibility data of refence model, type=DataContainer
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            values are complex ndarray visibilities.
+            these must 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
+
+    data : visibility data of measurements, type=DataContainer
+           keys are antenna pair + pol tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
+
+    antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
+
+    wgts : weights of data, type=DataContainer, [default=None]
+           keys are antenna pair + pol tuples (must match model), values are real floats
+           matching shape of model and data. These are only used to find delays from
+           itegrations that are unflagged for at least two frequency bins. In this case, 
+           the delays are assumed to have equal weight, otherwise the delays take zero weight.
+
+    verbose : print output, type=boolean, [default=False]
+
+    tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
+
+    Output:
+    -------
+    fit : dictionary containing frequency-indpendent phase slope, e.g. Phi_ns_x 
+          for each position component and polarization [radians / meter].
+    """
+    echo("...configuring linsolve data for global_phase_slope_logcal", verbose=verbose)
+
+    # get keys from model and data dictionaries
+    keys = sorted(set(model.keys()) & set(data.keys()))
+    ants = np.unique(antpos.keys())
+
+    # make weights if None and make flags
+    if wgts is None:
+        wgts = odict()
+        for i, k in enumerate(keys):
+            wgts[k] = np.ones_like(data[k], dtype=np.float)
+    flags = DataContainer({k: wgts[k]==0 for k in keys})
+
+    # average data over baselines
+    reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols(), low_hi=True)
+    avg_data, avg_flags, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}), 
+                                    antpos, flags=flags, broadcast_flags=False, tol=tol, reds=reds)
+    avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}), 
+                      antpos, flags=flags, broadcast_flags = False, tol=tol, reds=reds)
+    
+    # build linear system
+    ls_data, ls_wgts = {}, {}
+    for rk in red_keys:
+        # build equation string 
+        eqn_str = '{}*Phi_ew_{} + {}*Phi_ns_{} - {}*Phi_ew_{} - {}*Phi_ns_{}'
+        eqn_str = eqn_str.format(antpos[rk[0]][0], rk[2][0], antpos[rk[0]][1], rk[2][0],
+                                 antpos[rk[1]][0], rk[2][1], antpos[rk[1]][1], rk[2][1])
+
+        # calculated frequency median of unflagged angle(data/model)
+        delta_phi = np.angle(avg_data[rk] / avg_model[rk])
+        delta_phi[avg_flags[rk]] = np.nan
+        ls_data[eqn_str] = np.nanmedian(delta_phi, axis=1)
+
+        # set weights based on redundancy of unflagged channels
+        for red in reds:
+            if rk in red or (rk[1],rk[0],rk[2][::-1]) in red:
+                ls_wgts[eqn_str] = np.sum([~flags[bl] for bl in red], axis=(0,2)).astype(np.float)
+
+        # set unobserved data to 0 with 0 weight
+        ls_wgts[eqn_str][np.isnan(ls_data[eqn_str])] = 0
+        ls_data[eqn_str][np.isnan(ls_data[eqn_str])] = 0
+
+    # setup linsolve and run
+    solver = linsolve.LinearSolver(ls_data, wgts=ls_wgts)
+    echo("...running linsolve", verbose=verbose)
+    fit = solver.solve()
+    echo("...finished linsolve", verbose=verbose)
     return fit
 
 
@@ -1405,7 +1489,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
 
 
 def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, median=False, tol=1.0,
-                            mirror_red_data=False, reds = None):
+                            mirror_red_data=False, reds=None):
     """
     Given complex visibility data spanning one or more redundant
     baseline groups, average redundant visibilities and return
