@@ -918,8 +918,8 @@ def abscal_arg_parser():
     """
     argparser for general abscal run. By default no calibration is performed: the user
     needs to specify which calibration steps they want via the delay_cal, avg_phs_cal,
-    delay_slope_cal, abs_amp_cal, TT_phs_cal, gen_amp_cal and gen_phs_cal flags. To learn
-    more about these calibration steps, read the doc-string of the abscal_run() function
+    delay_slope_cal, phase_slope_cal, abs_amp_cal, TT_phs_cal, gen_amp_cal and gen_phs_cal flags. 
+    To learn more about these calibration steps, read the doc-string of the abscal_run() function
     in abscal.py, and the docstring of the AbsCal() class in abscal.py.
     """
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
@@ -934,7 +934,8 @@ def abscal_arg_parser():
     a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
     a.add_argument("--delay_cal", default=False, action='store_true', help='perform antenna delay calibration')
     a.add_argument("--avg_phs_cal", default=False, action='store_true', help='perform antenna avg phase calibration')
-    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')    
+    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')
+    a.add_argument("--phase_slope_cal", default=False, action='store_true', help='perform frequency-indepdendent phase slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
     a.add_argument("--gen_amp_cal", default=False, action='store_true', help='perform general antenna amplitude bandpass calibration')
@@ -946,8 +947,8 @@ def abscal_arg_parser():
 def omni_abscal_arg_parser():
     """
     argparser specifically for abscal on omnni-calibrated data. The calibration steps exposed to the user
-    include: delay_slope_cal, abs_amp_cal and TT_phs_cal. To learn more about these steps, read the doc-string of the
-    abscal_run() function in abscal.py, and the docstring of the AbsCal() class in abscal.py.
+    include: delay_slope_cal, phase_slope_cal, abs_amp_cal and TT_phs_cal. To learn more about these steps, read the 
+    doc-string of the abscal_run() function in abscal.py, and the docstring of the AbsCal() class in abscal.py.
     """
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
     a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
@@ -959,7 +960,8 @@ def omni_abscal_arg_parser():
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
     a.add_argument("--data_is_omni_solution", default=False, action='store_true', help='assume input data file is an omnical visibility solution (still beta testing optimal weighting)')
     a.add_argument("--cal_shared_antennas_only", default=False, action='store_true', help='if True, only calibrate antennas present in both data and model.')
-    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')    
+    a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')
+    a.add_argument("--phase_slope_cal", default=False, action='store_true', help='perform frequency-indepdendent phase slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
@@ -969,7 +971,7 @@ def omni_abscal_arg_parser():
 def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, overwrite=False, write_calfits=True,
                output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False,
-               delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, abs_amp_cal=False,
+               delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
                TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False, latitude=-30.72152, max_dlst=0.005, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
@@ -1036,6 +1038,8 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
     delay_cal : type=boolean, if True, perform delay calibration
 
     delay_slope_cal : type=boolean, if True, perform delay slope calibration
+
+    phase_slope_cal : type=boolean, if True, perform perform frequency-indepdendent phase slope calibration
 
     avg_phs_cal : type=boolean, if True, perform average phase calibration
 
@@ -1174,6 +1178,17 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                 else:
                     gain_list.append(AC.dly_slope_gain)
 
+            if phs_slope_cal:
+                if delay_slope_cal == False:
+                    echo("it is recommended to run a delay_slope_cal before phs_slope_cal", verbose=verbose)
+                AC.global_phase_slope_logcal(tol=tol, verbose=verbose)
+                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys()))
+                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.phs_slope_gain, cal_flags, gain_convention='divide')
+                if all_antenna_gains:
+                    gain_list.append(AC.custom_phs_slope_gain(total_gain_keys, total_data_antpos))
+                else:
+                    gain_list.append(AC.phs_slope_gain)
+
             if abs_amp_cal:
                 AC.abs_amp_logcal(verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.abs_eta_gain[k], np.bool)), AC.abs_eta_gain.keys()))
@@ -1184,8 +1199,8 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                     gain_list.append(AC.abs_eta_gain)
 
             if TT_phs_cal:
-                if delay_slope_cal == False:
-                    echo("it is recommended to run a delay_slope_cal before TT_phs_cal", verbose=verbose)
+                if delay_slope_cal == False or phs_slope_cal == False:
+                    echo("it is recommended to run a delay_slope_cal and a phs_slope_cal before TT_phs_cal", verbose=verbose)
                 AC.TT_phs_logcal(verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.TT_Phi_gain[k], np.bool)), AC.TT_Phi_gain.keys()))
                 apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.TT_Phi_gain, cal_flags, gain_convention='divide')
