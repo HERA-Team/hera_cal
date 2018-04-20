@@ -531,13 +531,13 @@ class Test_AbsCal:
         a = hc.abscal.omni_abscal_arg_parser()
 
     def test_abscal_run(self):
-        data_files = [os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")]
+        data_files = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
         gains, = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
-        nt.assert_equal(gains[0][(24,'x')].dtype, np.complex)
-        nt.assert_equal(gains[0][(24,'x')].shape, (60, 64))
+        nt.assert_equal(gains[(24,'x')].dtype, np.complex)
+        nt.assert_equal(gains[(24,'x')].shape, (60, 64))
         # write calfits
         outdir = "./"
         cf_name = "ex.calfits"
@@ -554,8 +554,8 @@ class Test_AbsCal:
         # check all calibration routines
         gains, = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True,
                                      delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False)
-        nt.assert_equal(gains[0][(24,'x')].dtype, np.complex)
-        nt.assert_equal(gains[0][(24,'x')].shape, (60, 64))
+        nt.assert_equal(gains[(24,'x')].dtype, np.complex)
+        nt.assert_equal(gains[(24,'x')].shape, (60, 64))
         if os.path.exists('./ex.calfits'): os.remove('./ex.calfits')
         # check exceptions
         nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
@@ -582,8 +582,8 @@ class Test_AbsCal:
         nt.assert_almost_equal(uvc.gain_array.max(), 1.0)
         os.remove('./ex.calfits')
         # test w/ calfits files
-        calfits_infiles = [os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')]
-        hc.abscal.abscal_run(data_files, model_files, calfits_infiles=calfits_infiles, delay_slope_cal=True,
+        calfits_infile = os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')
+        hc.abscal.abscal_run(data_files, model_files, calfits_infile=calfits_infile, delay_slope_cal=True,
                              outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False)
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
