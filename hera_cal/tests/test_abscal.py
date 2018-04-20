@@ -576,7 +576,7 @@ class Test_AbsCal:
         hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
                                      match_red_bls=True, reweight=True)
         # check all calibration routines
-        gains, = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True,
+        gains, = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True, delay_slope_cal=True, phase_slope_cal=True,
                                      delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False)
         nt.assert_equal(gains[(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[(24,'x')].shape, (60, 64))
@@ -607,7 +607,7 @@ class Test_AbsCal:
         os.remove('./ex.calfits')
         # test w/ calfits files
         calfits_infile = os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')
-        hc.abscal.abscal_run(data_files, model_files, calfits_infile=calfits_infile, delay_slope_cal=True,
+        hc.abscal.abscal_run(data_files, model_files, calfits_infile=calfits_infile, delay_slope_cal=True, phase_slope_cal=True,
                              outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False)
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
