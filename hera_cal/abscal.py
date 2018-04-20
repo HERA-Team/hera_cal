@@ -45,7 +45,7 @@ class AbsCal(object):
         and B_ij is the baseline vector between ant i and j.
 
     5) frequency-independent phase slope calibration
-        median_over_freq(V_ij^data / V_ij^model) = dot(Phi, B_ji)
+        median_over_freq(angle(V_ij^data / V_ij^model)) = dot(Phi, B_ji)
         where Phi is a phase slope in [radians / meter]
         and B_ij is the baseline vector between ant i and j.
 
