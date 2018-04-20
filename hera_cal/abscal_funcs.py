@@ -589,7 +589,7 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, verbose=True, tol=
     """
     Solve for a frequency-independent spatial phase slope using the equation 
 
-    median_over_freq(V_ij,xy^data / V_ij,xy^model) = dot(Phi_x, r_i) - dot(Phi_y, r_j)
+    median_over_freq(angle(V_ij,xy^data / V_ij,xy^model)) = dot(Phi_x, r_i) - dot(Phi_y, r_j)
 
     Parameters:
     -----------
@@ -634,7 +634,13 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, verbose=True, tol=
     flags = DataContainer({k: wgts[k]==0 for k in keys})
 
     # average data over baselines
-    reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols(), low_hi=True)
+    _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols(), low_hi=True)
+    reds = []
+    for _red in _reds:
+        red = [bl for bl in _red if bl in keys]
+        if len(red) > 0:
+            reds.append(red)
+
     avg_data, avg_flags, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}), 
                                     antpos, flags=flags, broadcast_flags=False, tol=tol, reds=reds)
     avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}), 
