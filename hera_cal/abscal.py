@@ -923,10 +923,10 @@ def abscal_arg_parser():
     in abscal.py, and the docstring of the AbsCal() class in abscal.py.
     """
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
-    a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
+    a.add_argument("--data_file", type=str, help="file path of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_infiles", type=str, nargs='*', help="list of calfits files to multiply with abscal solution before writing to disk.")
-    a.add_argument("--output_calfits_fname", type=str, nargs='*', default=[], help="names of output calfits files.")
+    a.add_argument("--calfits_infile", type=str, help="path to calfits file to multiply with abscal solution before writing to disk.")
+    a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits files.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
@@ -938,6 +938,8 @@ def abscal_arg_parser():
     a.add_argument("--phase_slope_cal", default=False, action='store_true', help='perform frequency-indepdendent phase slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
+    a.add_argument("--TT_phs_max_iter", type=int, default=10, help="maximum number of iterations of TT_phs_cal allowed")
+    a.add_argument("--TT_phs_conv_crit", type=float, default=1e-6, help="convergence criterion in Delta g / g for stopping iterative TT_phs_cal")
     a.add_argument("--gen_amp_cal", default=False, action='store_true', help='perform general antenna amplitude bandpass calibration')
     a.add_argument("--gen_phs_cal", default=False, action='store_true', help='perform general antenna phase bandpass calibration')
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
@@ -951,10 +953,10 @@ def omni_abscal_arg_parser():
     doc-string of the abscal_run() function in abscal.py, and the docstring of the AbsCal() class in abscal.py.
     """
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
-    a.add_argument("--data_files", type=str, nargs='*', help="list of file paths of data to-be-calibrated.", required=True)
+    a.add_argument("--data_file", type=str, help="file path of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_infiles", type=str, nargs='*', help="list of calfits files to multiply with abscal solution before writing to disk.")
-    a.add_argument("--output_calfits_fname", type=str, nargs='*', default=[], help="names of output calfits files.")
+    a.add_argument("--calfits_infile", type=str, help="path to calfits file to multiply with abscal solution before writing to disk.")
+    a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits files.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
@@ -964,15 +966,18 @@ def omni_abscal_arg_parser():
     a.add_argument("--phase_slope_cal", default=False, action='store_true', help='perform frequency-indepdendent phase slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
+    a.add_argument("--TT_phs_max_iter", type=int, default=10, help="maximum number of iterations of TT_phs_cal allowed")
+    a.add_argument("--TT_phs_conv_crit", type=float, default=1e-6, help="convergence criterion in Delta g / g for stopping iterative TT_phs_cal")
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
     return a
 
 
-def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, overwrite=False, write_calfits=True,
+def abscal_run(data_file, model_files, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
                output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False,
                delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
-               TT_phs_cal=False, gen_amp_cal=False, gen_phs_cal=False, latitude=-30.72152, max_dlst=0.005, history=''):
+               TT_phs_cal=False, TT_phs_max_iter=10, TT_phs_conv_crit = 1e-6, gen_amp_cal=False, gen_phs_cal=False, 
+               latitude=-30.72152, max_dlst=0.005, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -995,19 +1000,13 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
     Parameters:
     -----------
-    data_files : type=list of strings, path(s) to data miriad file(s)
-                a list of paths to miriad file(s) containing complex
-                visibility data, or a path itself
+    data_file : type=str, path to data miriad file containing complex visibility data
 
-    model_files : type=list of strings, path(s) to model miriad files(s)
-                a list of paths to miriad file(s) containing complex
-                visibility data, or a path itself
+    model_files : type=list of strings, paths to model miriad files containing complex visibility data
 
-    calfits_infiles : type=list of strings, path(s) to calfits files(s)
-                a list of paths to calfits file(s) containing gain solutions
-                to multiply with abscal gain solution before writing to file.
-                These files should correspond one-to-one with data_files. History,
-                quality and flags are also propagated to final output calfits files.
+    calfits_infile : type=str, path to calfits files containing gain solutions
+                     to multiply with abscal gain solution before writing to file.
+                     History, quality and flags are also propagated to final output calfits file.
 
     verbose : type=boolean, if True print output to stdout
 
@@ -1015,7 +1014,7 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
     write_calfits : type=boolean, if True, write out gains as calfits file
 
-    output_calfits_fname : type=list of strings, filenames (not full path) of output calfits files 
+    output_calfits_fname : type=str, filename (not full path) of output calfits file
 
     outdir : type=str, path to output directory
 
@@ -1045,7 +1044,11 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
     abs_amp_cal : type=boolean, if True, perform absolute gain calibration
 
-    TT_phs_cal : type=boolean, if True, perform Tip-Tilt phase calibration
+    TT_phs_cal : type=boolean, if True, perform iterative Tip-Tilt phase calibration
+
+    TT_phs_max_iter : type=int, maximum number of iterations of TT_phs_cal allowed
+
+    TT_phs_conv_crit : type=float, convergence criterion in Delta g / g for stopping iterative TT_phs_cal
 
     gen_amp_cal : type=boolean, if True, perform general amplitude bandpass calibration
 
@@ -1062,13 +1065,9 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
     if return_gains and return_objects: return (gains dictionary, AbsCal instance)
     if write_calfits: writes a calfits file with gain solutions
     """
-    # only load model files needed to create LST overlap w/ data files
+    # only load model files needed to create LST overlap w/ data file
     # and reject data files that have no LST overlap w/ any of model files
-    all_model_files = []
-    for df in data_files:
-        all_model_files.extend(match_times(df, model_files))
-
-    model_files = sorted(set(all_model_files))
+    model_files = sorted(set(match_times(data_file, model_files)))
 
     # check length of model files
     nomodelfiles = False
@@ -1078,129 +1077,122 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
 
     # load model files
     if nomodelfiles == False:
-        echo ("loading model files", type=1, verbose=verbose)
+        echo ("loading model file(s)", type=1, verbose=verbose)
         (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
             model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
         antpos = model_antpos
         model_lsts[model_lsts < model_lsts[0]] += 2*np.pi
 
-    # iterate over data files
-    gains = []
-    echo("loading data files", type=1, verbose=verbose)
-    for i, dfile in enumerate(data_files):
+    # check output filepath
+    if write_calfits:
+        # configure filename
+        if output_calfits_fname is None:
+            output_calfits_fname = os.path.basename(data_file) + '.abscal.calfits'
+        if outdir is None:
+            outdir = os.path.dirname(data_file)
+        output_calfits_path = os.path.join(outdir, output_calfits_fname)
 
-        # check output filepath
-        if write_calfits:
-            # configure filename
-            if output_calfits_fname == []:
-                output_calfits_file = os.path.basename(dfile) + '.abscal.calfits'
+        # check path
+        if os.path.exists(output_calfits_path) and overwrite == False:
+            raise IOError("{} exists, not overwriting".format(output_calfits_path))
+
+    # load data and configure weights
+    echo("loading {}".format(data_file), type=1, verbose=verbose)
+    (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
+        data_pols) = io.load_vis(data_file, pop_autos=True, return_meta=True, pick_data_ants=False)
+    bls = odict(map(lambda k: (k, data_antpos[k[0]] - data_antpos[k[1]]), data.keys()))
+    Ntimes = len(data_times)
+    Nfreqs = len(data_freqs)
+    data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
+
+    # get data ants
+    total_data_antpos = copy.deepcopy(data_antpos)
+    data_ants = np.unique(map(lambda k: k[:2], data.keys()))
+    data_antpos = odict(map(lambda k: (k, data_antpos[k]), data_ants))
+
+    # get wgts
+    wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
+
+    # ensure nomodelfiles is False
+    if nomodelfiles == False:
+        # match redundant baselines
+        if match_red_bls:
+            data = match_red_baselines(data, data_antpos, model, model_antpos, tol=tol, verbose=verbose)
+            antpos = model_antpos
+
+        # rephase model to match data lst grid
+        if rephase_model:
+            new_model, new_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, 
+                                               flags=model_flags, latitude=latitude, max_dlst=max_dlst)
+            # set wgts to zero wheree model is flagged
+            for k in new_flags.keys():
+                wgts[k][new_flags[k]] *= 0
+        else:
+            new_model = model
+
+        # reweight according to redundancy
+        if reweight:
+            wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
+
+        # instantiate class
+        AC = AbsCal(new_model, data, wgts=wgts, antpos=antpos, freqs=data_freqs)
+        total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
+
+        gain_list = []
+
+        if delay_cal:
+            if all_antenna_gains:
+                raise ValueError("can't run delay_cal when all_antenna_gains is True")
+            AC.delay_lincal(verbose=verbose, time_avg=True)
+            result_gains = merge_gains((AC.ant_dly_gain, AC.ant_dly_phi_gain))
+            cal_flags = odict(map(lambda k: (k, np.zeros_like(result_gains[k], np.bool)), result_gains.keys()))
+            apply_cal.recalibrate_in_place(AC.data, AC.wgts, result_gains, cal_flags, gain_convention='divide')
+            gain_list.append(AC.ant_dly_gain)
+            gain_list.append(AC.ant_dly_phi_gain)
+
+        if avg_phs_cal:
+            if delay_cal == False:
+                echo("it is recommended to run a delay_cal before avg_phs_cal", verbose=verbose)
+            if all_antenna_gains:
+                raise ValueError("can't run avg_phs_cal when all_antenna_gains is True")
+            AC.phs_logcal(avg=True, verbose=verbose)
+            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
+            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
+            gain_list.append(AC.ant_phi_gain)
+
+        if delay_slope_cal:
+            AC.delay_slope_lincal(verbose=verbose, time_avg=True)
+            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
+            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
+            if all_antenna_gains:
+                gain_list.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
             else:
-                output_calfits_file = output_calfits_fname[i]
-            if outdir is None:
-                outdir = os.path.dirname(dfile)
-            output_calfits_file = os.path.join(outdir, output_calfits_file)
+                gain_list.append(AC.dly_slope_gain)
 
-            # check path
-            if os.path.exists(output_calfits_file) and overwrite == False:
-                raise IOError("{} exists, not overwriting".format(output_calfits_file))
-
-        # load data and configure weights
-        echo("loading {}".format(dfile), type=1, verbose=verbose)
-        (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
-            data_pols) = io.load_vis(dfile, pop_autos=True, return_meta=True, pick_data_ants=False)
-        bls = odict(map(lambda k: (k, data_antpos[k[0]] - data_antpos[k[1]]), data.keys()))
-        Ntimes = len(data_times)
-        Nfreqs = len(data_freqs)
-        data_lsts[data_lsts < data_lsts[0]] += 2*np.pi
-
-        # get data ants
-        total_data_antpos = copy.deepcopy(data_antpos)
-        data_ants = np.unique(map(lambda k: k[:2], data.keys()))
-        data_antpos = odict(map(lambda k: (k, data_antpos[k]), data_ants))
-
-        # get wgts
-        wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
-
-        # ensure nomodelfiles is False
-        if nomodelfiles == False:
-            # match redundant baselines
-            if match_red_bls:
-                data = match_red_baselines(data, data_antpos, model, model_antpos, tol=tol, verbose=verbose)
-                antpos = model_antpos
-
-            # rephase model to match data lst grid
-            if rephase_model:
-                new_model, new_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, 
-                                                   flags=model_flags, latitude=latitude, max_dlst=max_dlst)
-
-                # set wgts to zero wheree model is flagged
-                for k in new_flags.keys():
-                    wgts[k][new_flags[k]] *= 0
+        if phase_slope_cal:
+            if delay_slope_cal == False:
+                echo("it is recommended to run a delay_slope_cal before phase_slope_cal", verbose=verbose)
+            AC.global_phase_slope_logcal(tol=tol, verbose=verbose)
+            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys()))
+            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.phs_slope_gain, cal_flags, gain_convention='divide')
+            if all_antenna_gains:
+                gain_list.append(AC.custom_phs_slope_gain(total_gain_keys, total_data_antpos))
             else:
-                new_model = model
+                gain_list.append(AC.phs_slope_gain)
 
-            # reweight according to redundancy
-            if reweight:
-                wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
+        if abs_amp_cal:
+            AC.abs_amp_logcal(verbose=verbose)
+            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.abs_eta_gain[k], np.bool)), AC.abs_eta_gain.keys()))
+            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.abs_eta_gain, cal_flags, gain_convention='divide')
+            if all_antenna_gains:
+                gain_list.append(AC.custom_abs_eta_gain(total_gain_keys))
+            else:
+                gain_list.append(AC.abs_eta_gain)
 
-            # instantiate class
-            AC = AbsCal(new_model, data, wgts=wgts, antpos=antpos, freqs=data_freqs)
-            total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
-
-            gain_list = []
-
-            if delay_cal:
-                if all_antenna_gains:
-                    raise ValueError("can't run delay_cal when all_antenna_gains is True")
-                AC.delay_lincal(verbose=verbose, time_avg=True)
-                result_gains = merge_gains((AC.ant_dly_gain, AC.ant_dly_phi_gain))
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(result_gains[k], np.bool)), result_gains.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, result_gains, cal_flags, gain_convention='divide')
-                gain_list.append(AC.ant_dly_gain)
-                gain_list.append(AC.ant_dly_phi_gain)
-
-            if avg_phs_cal:
-                if delay_cal == False:
-                    echo("it is recommended to run a delay_cal before avg_phs_cal", verbose=verbose)
-                if all_antenna_gains:
-                    raise ValueError("can't run avg_phs_cal when all_antenna_gains is True")
-                AC.phs_logcal(avg=True, verbose=verbose)
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
-                gain_list.append(AC.ant_phi_gain)
-
-            if delay_slope_cal:
-                AC.delay_slope_lincal(verbose=verbose, time_avg=True)
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
-                if all_antenna_gains:
-                    gain_list.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
-                else:
-                    gain_list.append(AC.dly_slope_gain)
-
-            if phase_slope_cal:
-                if delay_slope_cal == False:
-                    echo("it is recommended to run a delay_slope_cal before phase_slope_cal", verbose=verbose)
-                AC.global_phase_slope_logcal(tol=tol, verbose=verbose)
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.phs_slope_gain, cal_flags, gain_convention='divide')
-                if all_antenna_gains:
-                    gain_list.append(AC.custom_phs_slope_gain(total_gain_keys, total_data_antpos))
-                else:
-                    gain_list.append(AC.phs_slope_gain)
-
-            if abs_amp_cal:
-                AC.abs_amp_logcal(verbose=verbose)
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.abs_eta_gain[k], np.bool)), AC.abs_eta_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.abs_eta_gain, cal_flags, gain_convention='divide')
-                if all_antenna_gains:
-                    gain_list.append(AC.custom_abs_eta_gain(total_gain_keys))
-                else:
-                    gain_list.append(AC.abs_eta_gain)
-
-            if TT_phs_cal:
-                if delay_slope_cal == False or phase_slope_cal == False:
-                    echo("it is recommended to run a delay_slope_cal and a phase_slope_cal before TT_phs_cal", verbose=verbose)
+        if TT_phs_cal:
+            if delay_slope_cal == False or phase_slope_cal == False:
+                echo("it is recommended to run a delay_slope_cal and a phase_slope_cal before TT_phs_cal", verbose=verbose)
+            for i in range(TT_phs_max_iter):
                 AC.TT_phs_logcal(verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.TT_Phi_gain[k], np.bool)), AC.TT_Phi_gain.keys()))
                 apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.TT_Phi_gain, cal_flags, gain_convention='divide')
@@ -1210,66 +1202,74 @@ def abscal_run(data_files, model_files, calfits_infiles=None, verbose=True, over
                 else:
                     gain_list.append(AC.abs_psi_gain)
                     gain_list.append(AC.TT_Phi_gain)
+                # test for convergence
+                if len(gain_list) > 2:
+                    gains_before = merge_gains(gain_list[:-2])
+                    gains_after = merge_gains(gain_list)
+                    # take L2 norm over antennas and times
+                    gains_norm = np.linalg.norm([gains_after[k] for k in gains_after.keys()],axis=(0,1))
+                    delta_gains_norm = np.linalg.norm([gains_after[k] - gains_before[k] for k in gains_after.keys()],axis=(0,1))
+                    # take median over frequency to avoid the effect of band edges and RFI
+                    echo("TT_phs_cal convergence criterion: " + str(np.median(delta_gains_norm / gains_norm)), verbose=verbose)
+                    if np.median(delta_gains_norm / gains_norm) < TT_phs_conv_crit:
+                        break
 
-            if gen_amp_cal:
-                if all_antenna_gains:
-                    raise ValueError("can't run gen_amp_cal when all_antenna_gains is True")
-                AC.amp_logcal(verbose=verbose)
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_eta_gain[k], np.bool)), AC.ant_eta_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_eta_gain, cal_flags, gain_convention='divide')
-                gain_list.append(AC.ant_eta_gain)
+        if gen_amp_cal:
+            if all_antenna_gains:
+                raise ValueError("can't run gen_amp_cal when all_antenna_gains is True")
+            AC.amp_logcal(verbose=verbose)
+            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_eta_gain[k], np.bool)), AC.ant_eta_gain.keys()))
+            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_eta_gain, cal_flags, gain_convention='divide')
+            gain_list.append(AC.ant_eta_gain)
 
-            if gen_phs_cal:
-                if delay_cal == False and delay_slope_cal == False:
-                    echo("it is recommended to run a delay_cal or delay_slope_cal before gen_phs_cal", verbose=verbose)
-                if all_antenna_gains:
-                    raise ValueError("can't run gen_phs_cal when all_antenna_gains is True")
-                AC.phs_logcal(verbose=verbose)
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
-                gain_list.append(AC.ant_phi_gain)
+        if gen_phs_cal:
+            if delay_cal == False and delay_slope_cal == False:
+                echo("it is recommended to run a delay_cal or delay_slope_cal before gen_phs_cal", verbose=verbose)
+            if all_antenna_gains:
+                raise ValueError("can't run gen_phs_cal when all_antenna_gains is True")
+            AC.phs_logcal(verbose=verbose)
+            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
+            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
+            gain_list.append(AC.ant_phi_gain)
 
-            # collate gains
-            if len(gain_list) == 0:
-                raise ValueError("abscal_run executed without any calibration arguments set to True")
-            gain_dict = merge_gains(gain_list)
-            flag_dict = odict(map(lambda k: (k, np.zeros((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
+        # collate gains
+        if len(gain_list) == 0:
+            raise ValueError("abscal_run executed without any calibration arguments set to True")
+        gain_dict = merge_gains(gain_list)
+        flag_dict = odict(map(lambda k: (k, np.zeros((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
 
-        # make blank gains if no modelfiles
+    # make blank gains if no modelfiles
+    else:
+        gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
+        gain_dict = map(lambda p: map(lambda a: ((a,p), np.ones((Ntimes, Nfreqs), np.complex)), data_ants), gain_pols)
+        gain_dict = odict(flatten(gain_dict))
+        flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
+
+    # write to file
+    if write_calfits:
+        # load calfits file if provided
+        if calfits_infile is not None:
+            cal_in = UVCal()
+            cal_in.read_calfits(calfits_infile)
+            out_gains, out_flags = io.load_cal(cal_in)
+            for k in out_gains.keys():
+                if k in gain_dict:
+                    out_gains[k] *= gain_dict[k]
+                    out_flags[k] += flag_dict[k]
+                else:
+                    out_flags[k] += np.ones(out_flags[k], np.bool)
+            io.update_cal(cal_in, output_calfits_path,  gains=out_gains, flags=out_flags, add_to_history=history, clobber=overwrite)
+        # write a calfits from scratch
         else:
-            gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
-            gain_dict = map(lambda p: map(lambda a: ((a,p), np.ones((Ntimes, Nfreqs), np.complex)), data_ants), gain_pols)
-            gain_dict = odict(flatten(gain_dict))
-            flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
-
-        # write to file
-        if write_calfits:
-            # load calfits file if provided
-            if calfits_infiles is not None:
-                cal_in = UVCal()
-                cal_in.read_calfits(calfits_infiles[i])
-                out_gains, out_flags = io.load_cal(cal_in)
-                for k in out_gains.keys():
-                    if k in gain_dict:
-                        out_gains[k] *= gain_dict[k]
-                        out_flags[k] += flag_dict[k]
-                    else:
-                        out_flags[k] += np.ones(out_flags[k], np.bool)
-                io.update_cal(cal_in, output_calfits_file,  gains=out_gains, flags=out_flags, add_to_history=history, clobber=overwrite)
-            # write a calfits from scratch
-            else:
-                io.write_cal(output_calfits_file, gain_dict, data_freqs, data_times, flags=flag_dict, quality=None, 
-                     total_qual=None, return_uvc=False, overwrite=overwrite, history=history)
-
-        # append gain dict to gains
-        gains.append(gain_dict)
+            io.write_cal(output_calfits_path, gain_dict, data_freqs, data_times, flags=flag_dict, quality=None, 
+                 total_qual=None, return_uvc=False, overwrite=overwrite, history=history)
 
     # form return tuple
     return_obj = ()
 
     # return gains if desired
     if return_gains:
-        return_obj += (gains,)
+        return_obj += (gain_dict,)
 
     if return_object:
         return_obj += (AC,)
