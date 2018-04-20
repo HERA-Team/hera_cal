@@ -442,7 +442,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.phs_slope_gain[(24, 'x')].shape, (60, 64))
         nt.assert_equal(self.AC.phs_slope_arr.shape, (7, 2, 60, 1, 1))
         nt.assert_equal(self.AC.phs_slope_gain_arr.shape, (7, 60, 64, 1))
-        nt.assert_equal(self.AC.phs_slope_ant_dly_arr.shape, (7, 60, 1, 1))
+        nt.assert_equal(self.AC.phs_slope_ant_phs_arr.shape, (7, 60, 1, 1))
         g = self.AC.custom_phs_slope_gain(self.gk, self.ap)
         nt.assert_equal(g[(0,'x')].shape, (60, 64))
         # test Nones
@@ -451,7 +451,7 @@ class Test_AbsCal:
         nt.assert_equal(AC.phs_slope_gain, None)
         nt.assert_equal(AC.phs_slope_arr, None)
         nt.assert_equal(AC.phs_slope_gain_arr, None)
-        nt.assert_equal(AC.phs_slope_ant_dly_arr, None)
+        nt.assert_equal(AC.phs_slope_ant_phs_arr, None)
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
         AC.wgts[(24,25,'xx')] *= 0
         AC.global_phase_slope_logcal(verbose=False)

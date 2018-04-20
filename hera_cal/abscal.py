@@ -761,7 +761,7 @@ class AbsCal(object):
     def phs_slope_gain_arr(self):
         """ form complex gain from _phs_slope_arr array """
         if hasattr(self, '_phs_slope_arr'):
-            return np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
+            return np.exp(1.0j * np.ones_like(self.freqs).reshape(-1, 1) * np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
         else:
             return None
 
