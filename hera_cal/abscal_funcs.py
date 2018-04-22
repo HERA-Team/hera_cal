@@ -325,27 +325,24 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
-    eqns = []
-    for i, k in enumerate(keys):
-        ant1 = "phi_{}_{}".format(k[0], k[2][0])
-        ant2 = "phi_{}_{}".format(k[1], k[2][1])
-        if refant == k[0]:
-            ant1 += "*a1"
-        elif refant == k[1]:
-            ant2 += "*a1"
-        eqns.append((k, "{} - {}".format(ant1, ant2)))
-    eqns = odict(eqns)
+    eqns = odict([(k, "phi_{}_{} - phi_{}_{}".format(k[0], k[2][0], k[1], k[2][1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict()
+
+    # setup linsolve dictionaries
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
+
+    # get unique gain polarizations
+    gain_pols = np.unique(map(lambda k: [k[2][0], k[2][1]], keys))
 
     # set reference antenna phase to zero
     if refant is None:
         refant = keys[0][0]
     assert np.array(map(lambda k: refant in k, keys)).any(), "refant {} not found in data and model".format(refant)
-    ls_design_matrix['a1'] = 0.0
 
-    # setup linsolve dictionaries
-    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
-    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
+    for p in gain_pols:
+        ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
+        ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(wgts.values()[0])
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
@@ -462,29 +459,26 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     ywgts = odict(zip(keys, ratio_wgts))
 
     # setup linsolve equation dictionary
-    eqns = []
-    for i, k in enumerate(keys):
-        ant1 = "tau_{}_{}".format(k[0], k[2][0])
-        ant2 = "tau_{}_{}".format(k[1], k[2][1])
-        if refant == k[0]:
-            ant1 += "*a1"
-        elif refant == k[1]:
-            ant2 += "*a1"
-        eqns.append((k, "{} - {}".format(ant1, ant2)))
-    eqns = odict(eqns)
+    eqns = odict([(k, 'tau_{}_{} - tau_{}_{}'.format(k[0], k[2][0], k[1], k[2][1])) for i, k in enumerate(keys)])
 
     # setup design matrix dictionary
     ls_design_matrix = odict()
 
-    # set reference antenna delay to zero
-    if refant is None:
-        refant = keys[0][0]
-    assert np.array(map(lambda k: refant in k, keys)).any(), "refant {} not found in data and model".format(refant)
-    ls_design_matrix['a1'] = 0.0
-
     # setup linsolve data dictionary
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
     ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
+
+    # get unique gain polarizations
+    gain_pols = np.unique(map(lambda k: [k[2][0], k[2][1]], keys))
+
+    # set reference antenna phase to zero
+    if refant is None:
+        refant = keys[0][0]
+    assert np.array(map(lambda k: refant in k, keys)).any(), "refant {} not found in data and model".format(refant)
+
+    for p in gain_pols:
+        ls_data['tau_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
+        ls_wgts['tau_{}_{}'.format(refant, p)] = np.ones_like(ywgts.values()[0])
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
@@ -496,17 +490,13 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     if solve_offsets:
         # setup linsolve parameters
         ydata = odict(zip(keys, ratio_offsets))
-        eqns = []
-        for i, k in enumerate(keys):
-            ant1 = "phi_{}_{}".format(k[0], k[2][0])
-            ant2 = "phi_{}_{}".format(k[1], k[2][1])
-            if refant == k[0]: ant1 += "*a1"
-            elif refant == k[1]: ant2 += "*a1"
-            eqns.append((k, "{}-{}".format(ant1, ant2)))
-        eqns = odict(eqns)
-        ls_design_matrix = odict([("a1", 0.0)])
+        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], k[2][0], k[1], k[2][1])) for i, k in enumerate(keys)])
         ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
         ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
+        ls_design_matrix = odict()
+        for p in gain_pols:
+            ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
+            ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(ywgts.values()[0])
         sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
         echo("...running linsolve", verbose=verbose)
         offset_fit = sol.solve()
