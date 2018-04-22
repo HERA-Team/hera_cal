@@ -177,10 +177,10 @@ class Test_AbsCal_Funcs:
     def test_avg_data_across_red_bls(self):
         # test basic execution 
         data, flags, antpos, ants, freqs, times, lsts, pols = hc.io.load_vis(self.data_file, return_meta=True)
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, flags=self.wgts, tol=2.0)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, wgts=self.wgts, tol=2.0)
         # test various kwargs
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, median=True)
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_flags=True)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=True)
         nt.assert_equal(len(rd.keys()), 9)
         nt.assert_equal(len(rf.keys()), 9)
         # test averaging worked
@@ -188,7 +188,7 @@ class Test_AbsCal_Funcs:
         v = np.mean([data[(52,53,'xx')],data[(37,38,'xx')],data[(24,25,'xx')],data[(38,39,'xx')]], axis=0)
         nt.assert_true(np.isclose(rd[(24,25,'xx')], v).min())
         # test mirror_red_data
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, flags=self.wgts, tol=2.0, mirror_red_data=True)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, wgts=self.wgts, tol=2.0, mirror_red_data=True)
         nt.assert_equal(len(rd.keys()), 21)
         nt.assert_equal(len(rf.keys()), 21)
 
@@ -260,11 +260,16 @@ class Test_AbsCal:
         nt.assert_almost_equal(AC.bls[(24,25,'xx')][0], -14.607842046642745)
         # init with meta
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
-        # test feeding file
-        AC = hc.abscal.AbsCal(self.model_fname, self.data_fname, refant=24)
+        # test feeding file and refant and bl_cut and bl_taper
+        AC = hc.abscal.AbsCal(self.model_fname, self.data_fname, refant=24, antpos=self.AC.antpos, 
+                              bl_cut=26.0, bl_taper_fwhm=15.0)
         # test ref ant
         nt.assert_equal(AC.refant, 24)
         nt.assert_almost_equal(np.linalg.norm(AC.antpos[24]), 0.0)
+        # test bl cut
+        nt.assert_false((np.array(map(lambda k: np.linalg.norm(AC.bls[k]), AC.bls.keys()))>26.0).any())
+        # test bl taper
+        nt.assert_true(np.median(AC.wgts[(24, 25, 'xx')]) > np.median(AC.wgts[(24, 39, 'xx')]))
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
