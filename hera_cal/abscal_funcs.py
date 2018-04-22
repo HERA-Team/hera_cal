@@ -92,7 +92,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
+def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zero_psi=True,
                   four_pol=False):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
@@ -124,6 +124,10 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
+
+    refant : antenna number integer to use as a reference,
+        The antenna position coordaintes are centered at the reference, such that its phase
+        is identically zero across all frequencies. If None, use the first key in data as refant.
 
     antpos : antenna position vectors, type=dictionary
           keys are antenna integers, values are 2D
@@ -162,6 +166,12 @@ def TT_phs_logcal(model, data, antpos, wgts=None, verbose=True, zero_psi=False,
 
     # fill nans and infs
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
+
+    # center antenna positions about the reference antenna
+    if refant is None:
+        refant = keys[0][0]
+    assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
+    antpos = odict(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys()))
 
     # setup antenna position terms
     r_ew = odict(map(lambda a: (a, "r_ew_{}".format(a)), ants))
@@ -263,7 +273,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def phs_logcal(model, data, wgts=None, verbose=True):
+def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     """
     calculate per-antenna gain phase via the 
     logarithmically linearized equation
@@ -289,6 +299,10 @@ def phs_logcal(model, data, wgts=None, verbose=True):
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
+    refant : integer antenna number of reference antenna, defult=None
+        The refant phase will be set to identically zero in the linear equations.
+        By default this takes the first antenna in data.
+
     Output:
     -------
     fit : dictionary containing phi_i = angle(g_i) for each antenna
@@ -311,8 +325,23 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
-    eqns = odict([(k, "phi_{}_{} - phi_{}_{}".format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
+    eqns = []
+    for i, k in enumerate(keys):
+        ant1 = "phi_{}_{}".format(k[0], k[2][0])
+        ant2 = "phi_{}_{}".format(k[1], k[2][1])
+        if refant == k[0]:
+            ant1 += "*a1"
+        elif refant == k[1]:
+            ant2 += "*a1"
+        eqns.append((k, "{} - {}".format(ant1, ant2)))
+    eqns = odict(eqns)
     ls_design_matrix = odict()
+
+    # set reference antenna phase to zero
+    if refant is None:
+        refant = keys[0][0]
+    assert np.array(map(lambda k: refant in k, keys)).any(), "refant {} not found in data and model".format(refant)
+    ls_design_matrix['a1'] = 0.0
 
     # setup linsolve dictionaries
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -327,7 +356,7 @@ def phs_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medfilt=True, kernel=(1, 5),
+def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offsets=True, medfilt=True, kernel=(1, 5),
                  verbose=True, time_ax=0, freq_ax=1, antpos=None, four_pol=False):
     """
     Solve for per-antenna delays according to the equation
@@ -353,6 +382,10 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
            matching shape of model and data. These are only used to find delays from
            itegrations that are unflagged for at least two frequency bins. In this case, 
            the delays are assumed to have equal weight, otherwise the delays take zero weight.
+
+    refant : antenna number integer to use as reference
+        Set the reference antenna to have zero delay, such that its phase is set to identically 
+        zero across all freqs. By default use the first key in data.
 
     df : type=float, frequency spacing between channels in Hz
 
@@ -429,10 +462,25 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     ywgts = odict(zip(keys, ratio_wgts))
 
     # setup linsolve equation dictionary
-    eqns = odict([(k, 'tau_{}_{} - tau_{}_{}'.format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
+    eqns = []
+    for i, k in enumerate(keys):
+        ant1 = "tau_{}_{}".format(k[0], k[2][0])
+        ant2 = "tau_{}_{}".format(k[1], k[2][1])
+        if refant == k[0]:
+            ant1 += "*a1"
+        elif refant == k[1]:
+            ant2 += "*a1"
+        eqns.append((k, "{} - {}".format(ant1, ant2)))
+    eqns = odict(eqns)
 
     # setup design matrix dictionary
     ls_design_matrix = odict()
+
+    # set reference antenna delay to zero
+    if refant is None:
+        refant = keys[0][0]
+    assert np.array(map(lambda k: refant in k, keys)).any(), "refant {} not found in data and model".format(refant)
+    ls_design_matrix['a1'] = 0.0
 
     # setup linsolve data dictionary
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -448,8 +496,15 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     if solve_offsets:
         # setup linsolve parameters
         ydata = odict(zip(keys, ratio_offsets))
-        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
-        ls_design_matrix = odict()
+        eqns = []
+        for i, k in enumerate(keys):
+            ant1 = "phi_{}_{}".format(k[0], k[2][0])
+            ant2 = "phi_{}_{}".format(k[1], k[2][1])
+            if refant == k[0]: ant1 += "*a1"
+            elif refant == k[1]: ant2 += "*a1"
+            eqns.append((k, "{}_{}".format(ant1, ant2)))
+        eqns = odict(eqns)
+        ls_design_matrix = odict([("a1", 0.0)])
         ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
         ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
         sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
@@ -461,7 +516,7 @@ def delay_lincal(model, data, wgts=None, df=9.765625e4, solve_offsets=True, medf
     return fit
 
 
-def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
+def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
                          verbose=True, time_ax=0, freq_ax=1, four_pol=False):
     """
     Solve for an array-wide delay slope according to the equation
@@ -490,6 +545,10 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
            itegrations that are unflagged for at least two frequency bins. In this case, 
            the delays are assumed to have equal weight, otherwise the delays take zero weight.
 
+    refant : antenna number integer to use as a reference,
+        The antenna position coordaintes are centered at the reference, such that its phase
+        is identically zero across all frequencies. If None, use the first key in data as refant.
+
     df : type=float, frequency spacing between channels in Hz
 
     medfilt : type=boolean, median filter visiblity ratio before taking fft
@@ -516,6 +575,12 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys): wgts[k] = np.ones_like(data[k], dtype=np.float)
+
+    # center antenna positions about the reference antenna
+    if refant is None:
+        refant = keys[0][0]
+    assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
+    antpos = odict(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys()))
 
     # median filter and FFT to get delays
     ratio_delays = []
@@ -585,7 +650,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, df=9.765625e4, medfilt=Tr
 
     return fit
 
-def global_phase_slope_logcal(model, data, antpos, wgts=None, verbose=True, tol=1.0):
+def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, tol=1.0):
     """
     Solve for a frequency-independent spatial phase slope using the equation 
 
@@ -611,6 +676,10 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, verbose=True, tol=
            itegrations that are unflagged for at least two frequency bins. In this case, 
            the delays are assumed to have equal weight, otherwise the delays take zero weight.
 
+    refant : antenna number integer to use as a reference,
+        The antenna position coordaintes are centered at the reference, such that its phase
+        is identically zero across all frequencies. If None, use the first key in data as refant.
+
     verbose : print output, type=boolean, [default=False]
 
     tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
@@ -632,6 +701,12 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, verbose=True, tol=
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(data[k], dtype=np.float)
     flags = DataContainer({k: wgts[k]==0 for k in keys})
+
+    # center antenna positions about the reference antenna
+    if refant is None:
+        refant = keys[0][0]
+    assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
+    antpos = odict(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys()))
 
     # average data over baselines
     _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols(), low_hi=True)
