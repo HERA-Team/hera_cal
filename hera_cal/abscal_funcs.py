@@ -437,7 +437,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax, solve_phase=solve_offsets)
 
         # set nans to zero
-        rwgts = np.ones_like(dly, np.float)
+        rwgts = np.nanmean(wgts[k], axis=freq_ax, keepdims=True)
         isnan = np.isnan(dly)
         dly[isnan] = 0.0
         rwgts[isnan] = 0.0
@@ -593,7 +593,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
         dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
 
         # set nans to zero
-        rwgts = np.ones_like(dly, np.float)
+        rwgts = np.nanmean(wgts[k], axis=freq_ax, keepdims=True)
         isnan = np.isnan(dly)
         dly[isnan] = 0.0
         rwgts[isnan] = 0.0
@@ -690,7 +690,6 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
         wgts = odict()
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(data[k], dtype=np.float)
-    flags = DataContainer({k: wgts[k]==0 for k in keys})
 
     # center antenna positions about the reference antenna
     if refant is None:
@@ -706,10 +705,10 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
         if len(red) > 0:
             reds.append(red)
 
-    avg_data, avg_flags, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}), 
-                                    antpos, flags=flags, broadcast_flags=False, tol=tol, reds=reds)
+    avg_data, avg_wgts, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}), 
+                                    antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
     avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}), 
-                      antpos, flags=flags, broadcast_flags = False, tol=tol, reds=reds)
+                      antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
     
     # build linear system
     ls_data, ls_wgts = {}, {}
@@ -721,13 +720,10 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
 
         # calculated frequency median of unflagged angle(data/model)
         delta_phi = np.angle(avg_data[rk] / avg_model[rk])
-        delta_phi[avg_flags[rk]] = np.nan
-        ls_data[eqn_str] = np.nanmedian(delta_phi, axis=1, keepdims=True)
-
-        # set weights based on redundancy of unflagged channels
-        for red in reds:
-            if rk in red or (rk[1],rk[0],rk[2][::-1]) in red:
-                ls_wgts[eqn_str] = np.sum([~flags[bl] for bl in red], axis=(0,2), keepdims=True)[0].astype(np.float)
+        avg_wgts[rk][np.isinf(delta_phi)+np.isnan(delta_phi)] = 0.0
+        delta_phi[np.isinf(delta_phi)+np.isnan(delta_phi)] = 0.0
+        ls_data[eqn_str] = np.median(delta_phi * avg_wgts[rk], axis=1, keepdims=True) / np.median(avg_wgts[rk], axis=1, keepdims=True)
+        ls_wgts[eqn_str] = np.sum(avg_wgts[rk], axis=1, keepdims=True)
 
         # set unobserved data to 0 with 0 weight
         ls_wgts[eqn_str][np.isnan(ls_data[eqn_str])] = 0
@@ -1559,7 +1555,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
     return DataContainer(new_model)
 
 
-def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, median=False, tol=1.0,
+def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, median=False, tol=1.0,
                             mirror_red_data=False, reds=None):
     """
     Given complex visibility data spanning one or more redundant
@@ -1572,9 +1568,11 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
 
     antpos : type=dictionary, antenna position dictionary
 
-    flags : type=DataContainer, data flags
+    wgts : type=DataContainer, data weights as float
 
-    broadcast_flags : type=boolean, if True, broadcast all flags across red baselines
+    broadcast_wgts : type=boolean, if True, take geometric mean of input weights as output weights,
+        else use mean. If True, this has the effect of broadcasting a single flag from any particular 
+        baseline to all baselines in a baseline group.
 
     median : type=boolean, if True, take median of redundant baselines instead of mean
 
@@ -1585,18 +1583,18 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
     reds : list of list of redundant baselines with polarization strings. 
            If None, reds is produced from antpos.
 
-    Output: (red_data, red_flags, red_keys)
+    Output: (red_data, red_wgts, red_keys)
     -------
     """
     # get data keys
     keys = data.keys()
 
-    # get data, flags and ants
+    # get data, wgts and ants
     data = copy.deepcopy(data)
     pols = np.unique(map(lambda k: k[2], data.keys()))
     ants = np.unique(np.concatenate(keys))
-    if flags is None:
-        flags = DataContainer(odict(map(lambda k: (k, np.zeros_like(data[k]).astype(np.bool)), data.keys())))
+    if wgts is None:
+        wgts = DataContainer(odict(map(lambda k: (k, np.ones_like(data[k]).astype(np.float)), data.keys())))
 
     # get redundant baselines if not provided
     if reds is None:
@@ -1614,27 +1612,29 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
 
     # make red_data dictionary
     red_data = odict()
-    red_flags = odict()
+    red_wgts = odict()
 
     # iterate over reds
     for i, bl_group in enumerate(stripped_reds):
         # average redundant baseline group
         if median:
-            d = np.nanmedian(map(lambda k: data[k], bl_group), axis=0)
+            d = np.nanmedian(map(lambda k: data[k]*wgts[k], bl_group), axis=0)
+            d /= np.nanmedian(map(lambda k: wgts[k], bl_group), axis=0)
         else:
-            d = np.nanmean(map(lambda k: data[k], bl_group), axis=0)
+            d = np.nansum(map(lambda k: data[k]*wgts[k], bl_group), axis=0)
+            d /= np.nansum(map(lambda k: wgts[k], bl_group), axis=0)
 
-        # get flags
-        if broadcast_flags:
-            f = np.max(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
+        # get wgts
+        if broadcast_wgts:
+            w = np.array(reduce(operator.add, map(lambda k: wgts[k], bl_group)), np.float) / len(bl_group)
         else:
-            f = np.min(map(lambda k: flags[k], bl_group), axis=0).astype(np.bool)
+            w = np.array(reduce(operator.mul, map(lambda k: wgts[k], bl_group)), np.float) ** (1./len(bl_group))
 
         # iterate over bl_group
         for j, key in enumerate(sorted(bl_group)):
-            # assign to red_data and flags
+            # assign to red_data and wgts
             red_data[key] = d
-            red_flags[key] = f
+            red_wgts[key] = w
 
             # break if no mirror
             if mirror_red_data is False:
@@ -1643,7 +1643,7 @@ def avg_data_across_red_bls(data, antpos, flags=None, broadcast_flags=True, medi
     # get red_data keys
     red_keys = red_data.keys()
 
-    return DataContainer(red_data), DataContainer(red_flags), red_keys
+    return DataContainer(red_data), DataContainer(red_wgts), red_keys
 
 
 def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
@@ -1670,7 +1670,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
 
     Output:
     -------
-    if output_data: return (red_data, red_flags, red_keys)
+    if output_data: return (red_data, red_wgts, red_keys)
     """
     # check output file
     if outdir is None:
@@ -1687,15 +1687,16 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
 
     # get data
     data, flags = io.load_vis(uvd, pop_autos=True, return_meta=False, pick_data_ants=True)
+    wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
 
     # get antpos and baselines
     antpos, ants = uvd.get_ENU_antpos()
     antpos = dict(zip(ants, antpos))
 
     # avg data across reds
-    red_data, red_flags, red_keys = avg_data_across_red_bls(data, antpos, flags=flags, **kwargs)
+    red_data, red_wgts, red_keys = avg_data_across_red_bls(data, antpos, wgts=wgts, **kwargs)
     uvd_data = np.array(map(lambda k: red_data[k], red_keys))
-    uvd_flags = np.array(map(lambda k: red_flags[k], red_keys))
+    uvd_flags = np.array(map(lambda k: ~red_wgts[k].astype(np.bool), red_keys))
     uvd_bls = np.array(map(lambda k: k[:2], red_keys))
     blts_select = np.array(map(lambda k: uvd.antpair2ind(*k), uvd_bls)).reshape(-1)
     Nbls = len(uvd_bls)
@@ -1726,7 +1727,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
 
     # output data
     if output_data:
-        return red_data, red_flags, red_keys
+        return red_data, red_wgts, red_keys
 
 
 def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
