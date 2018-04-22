@@ -67,8 +67,7 @@ class AbsCal(object):
     phs_logcal or a TT_phs_logcal bandpass routine.
     """
 
-    def __init__(self, model, data, wgts=None, antpos=None, freqs=None,
-                 model_ftype='miriad', data_ftype='miriad', verbose=True):
+    def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None, verbose=True):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -87,9 +86,6 @@ class AbsCal(object):
                 Optionally, model can be a path to a miriad or uvfits file, or a
                 pyuvdata.UVData object, or a list of either.
 
-        model_ftype : type=str, if model is a path to a file, this is its filetype
-                      options=['miriad', 'uvfits']
-
         data : visibility data of measurements, type=DataContainer
                keys are antenna pair + pol tuples (must match model), values are
                complex ndarray visibilities matching shape of model
@@ -98,8 +94,9 @@ class AbsCal(object):
                 pyuvdata.UVData object, or a list of either. In this case, wgts, antpos, 
                 freqs, times and pols are overwritten with equivalent information from data object.
 
-        data_ftype : type=str, if data is a path to a file, this is its filetype
-                     options=['miriad', 'uvfits']
+        refant : antenna number integer for reference antenna
+            The refence antenna is used in the phase solvers, where an absolute phase is applied to all
+            antennas such that the refant's phase is set to identically zero.
 
         wgts : weights of data, type=DataContainer, [default=None]
                keys are antenna pair + pol tuples (must match model), values are real floats
@@ -185,12 +182,20 @@ class AbsCal(object):
         # setup ants
         self.ants = np.unique(np.concatenate(map(lambda k: k[:2], self.keys)))
         self.Nants = len(self.ants)
+        if refant is None:
+            refant = self.keys[0][0]
+            print "using {} for reference antenna".format(refant)
+        else:
+            assert refant in self.ants, "refant {} not found in self.ants".format(refant)
+        self.refant = refant
 
         # setup antenna positions
         self.antpos = antpos
         self.antpos_arr = None
         self.bls = None
         if self.antpos is not None:
+            # center antpos about reference antenna
+            self.antpos = odict(map(lambda k: (k, antpos[k] - antpos[self.refant]), antpos.keys()))
             self.bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in self.keys])
             self.antpos_arr = np.array(map(lambda x: self.antpos[x], self.ants))
             self.antpos_arr -= np.median(self.antpos_arr, axis=0)
@@ -233,6 +238,8 @@ class AbsCal(object):
 
         Parameters:
         -----------
+        refant : antenna number integer to use as reference antenna, whose phase is set to zero
+
         avg : type=boolean, if True, average solution across time and frequency
 
         verbose : type=boolean, if True print feedback to stdout
@@ -252,7 +259,7 @@ class AbsCal(object):
         wgts = copy.deepcopy(self.wgts)
 
         # run linsolve
-        fit = phs_logcal(model, data, wgts=wgts, verbose=verbose)
+        fit = phs_logcal(model, data, wgts=wgts, refant=self.refant, verbose=verbose)
 
         # form result array
         self._ant_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
@@ -304,8 +311,8 @@ class AbsCal(object):
         df = np.median(np.diff(self.freqs))
 
         # run delay_lincal
-        fit = delay_lincal(model, data, wgts=wgts, solve_offsets=solve_offsets, medfilt=medfilt, df=df, kernel=kernel, verbose=verbose,
-                           time_ax=time_ax, freq_ax=freq_ax)
+        fit = delay_lincal(model, data, wgts=wgts, refant=self.refant, solve_offsets=solve_offsets, 
+                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax)
 
         # time average
         if time_avg:
@@ -376,8 +383,8 @@ class AbsCal(object):
         df = np.median(np.diff(self.freqs))
 
         # run delay_slope_lincal
-        fit = delay_slope_lincal(model, data, antpos, wgts=wgts, medfilt=medfilt, df=df, kernel=kernel, verbose=verbose,
-                                  time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol)
+        fit = delay_slope_lincal(model, data, antpos, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df, 
+                                 kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol)
 
         # separate pols if four_pol
         if four_pol:
@@ -431,7 +438,7 @@ class AbsCal(object):
         antpos = self.antpos
 
         # run global_phase_slope_logcal
-        fit = global_phase_slope_logcal(model, data, antpos, wgts=wgts, verbose=verbose, tol=tol)
+        fit = global_phase_slope_logcal(model, data, antpos, wgts=wgts, refant=self.refant, verbose=verbose, tol=tol)
 
         # form result
         self._phs_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
@@ -465,12 +472,14 @@ class AbsCal(object):
         self._abs_eta = odict(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys)))
         self._abs_eta_arr = np.moveaxis(map(lambda pk: map(lambda k: self._abs_eta[k], pk), self._gain_keys), 0, -1)
 
-    def TT_phs_logcal(self, verbose=True, zero_psi=False, four_pol=False):
+    def TT_phs_logcal(self, refant=None, verbose=True, zero_psi=True, four_pol=False):
         """
         call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
+        refant : type=int, antenna number of reference antenna, whose phase will be set to identically zero
+
         zero_psi : type=boolean, set overall gain phase (psi) to identically zero in linsolve equations
 
         four_pol : type=boolean, even if multiple polarizations are present in data, make free
@@ -498,7 +507,7 @@ class AbsCal(object):
         antpos = self.antpos
 
         # run TT_phs_logcal
-        fit = TT_phs_logcal(model, data, antpos, wgts=wgts, verbose=verbose, zero_psi=zero_psi, four_pol=four_pol)
+        fit = TT_phs_logcal(model, data, antpos, wgts=wgts, refant=self.refant, verbose=verbose, zero_psi=zero_psi, four_pol=four_pol)
 
         # manipulate if four_pol
         if four_pol:
@@ -514,6 +523,9 @@ class AbsCal(object):
 
         self._TT_Phi = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
         self._TT_Phi_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]), pk), self._gain_keys), 0, -1)
+
+        # project out an absolute phase such that reference antenna has identically zero phase
+
 
     ############################# amp_logcal results #############################
 
@@ -943,6 +955,7 @@ def abscal_arg_parser():
     a.add_argument("--gen_amp_cal", default=False, action='store_true', help='perform general antenna amplitude bandpass calibration')
     a.add_argument("--gen_phs_cal", default=False, action='store_true', help='perform general antenna phase bandpass calibration')
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
+    a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
     return a
 
 
@@ -969,10 +982,11 @@ def omni_abscal_arg_parser():
     a.add_argument("--TT_phs_max_iter", type=int, default=10, help="maximum number of iterations of TT_phs_cal allowed")
     a.add_argument("--TT_phs_conv_crit", type=float, default=1e-6, help="convergence criterion in Delta g / g for stopping iterative TT_phs_cal")
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
+    a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
     return a
 
 
-def abscal_run(data_file, model_files, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
+def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
                output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False,
                delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
@@ -1007,6 +1021,8 @@ def abscal_run(data_file, model_files, calfits_infile=None, verbose=True, overwr
     calfits_infile : type=str, path to calfits files containing gain solutions
                      to multiply with abscal gain solution before writing to file.
                      History, quality and flags are also propagated to final output calfits file.
+
+    refant : antenna number integer to use as reference antenna.
 
     verbose : type=boolean, if True print output to stdout
 
@@ -1135,7 +1151,7 @@ def abscal_run(data_file, model_files, calfits_infile=None, verbose=True, overwr
             wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
 
         # instantiate class
-        AC = AbsCal(new_model, data, wgts=wgts, antpos=antpos, freqs=data_freqs)
+        AC = AbsCal(new_model, data, wgts=wgts, refant=refant, antpos=antpos, freqs=data_freqs)
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
 
         gain_list = []
@@ -1244,6 +1260,13 @@ def abscal_run(data_file, model_files, calfits_infile=None, verbose=True, overwr
         gain_dict = map(lambda p: map(lambda a: ((a,p), np.ones((Ntimes, Nfreqs), np.complex)), data_ants), gain_pols)
         gain_dict = odict(flatten(gain_dict))
         flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
+
+    # ensure reference antenna phase has been projected out (i.e. set to zero)
+    for p in AC.gain_pols:
+        refant_phs = gain_dict[(AC.refant, p)] / np.abs(gain_dict[(AC.refant, p)])
+        for k in gain_dict.keys(): 
+            if p in k:
+                gain_dict[k] /= refant_phs
 
     # write to file
     if write_calfits:
