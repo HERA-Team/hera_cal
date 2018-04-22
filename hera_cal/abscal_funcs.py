@@ -502,7 +502,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
             ant2 = "phi_{}_{}".format(k[1], k[2][1])
             if refant == k[0]: ant1 += "*a1"
             elif refant == k[1]: ant2 += "*a1"
-            eqns.append((k, "{}_{}".format(ant1, ant2)))
+            eqns.append((k, "{}-{}".format(ant1, ant2)))
         eqns = odict(eqns)
         ls_design_matrix = odict([("a1", 0.0)])
         ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
