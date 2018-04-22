@@ -66,7 +66,6 @@ class AbsCal(object):
     pathologies, meaning that a delay calibration should generally precede a
     phs_logcal or a TT_phs_logcal bandpass routine.
     """
-
     def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None, verbose=True):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
