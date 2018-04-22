@@ -240,7 +240,7 @@ class Test_AbsCal:
         # load into pyuvdata object
         self.data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
-        self.AC = hc.abscal.AbsCal(self.data_fname, self.model_fname)
+        self.AC = hc.abscal.AbsCal(self.data_fname, self.model_fname, refant=24)
 
         # make custom gain keys
         d, fl, ap, a, f, t, l, p = hc.io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
@@ -261,7 +261,10 @@ class Test_AbsCal:
         # init with meta
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         # test feeding file
-        AC = hc.abscal.AbsCal(self.model_fname, self.data_fname)
+        AC = hc.abscal.AbsCal(self.model_fname, self.data_fname, refant=24)
+        # test ref ant
+        nt.assert_equal(AC.refant, 24)
+        nt.assert_almost_equal(np.linalg.norm(AC.antpos[24]), 0.0)
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
@@ -298,6 +301,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.abs_psi_gain[(24, 'x')].shape, (60, 64))
         nt.assert_equal(self.AC.TT_Phi[(24, 'x')].shape, (2, 60, 64))
         nt.assert_equal(self.AC.TT_Phi_gain[(24, 'x')].shape, (60, 64))
+        nt.assert_true(np.isclose(np.angle(self.AC.TT_Phi_gain[(24, 'x')]), 0.0).all())
         # test merge pols
         self.AC.TT_phs_logcal(verbose=False, four_pol=True)
         nt.assert_equal(self.AC.TT_Phi_arr.shape, (7, 2, 60, 64, 1))
@@ -347,6 +351,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.ant_phi_arr.dtype, np.float)
         nt.assert_equal(self.AC.ant_phi_gain_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.ant_phi_gain_arr.dtype, np.complex)
+        nt.assert_true(np.isclose(np.angle(self.AC.ant_phi_gain[(24, 'x')]), 0.0).all())
         self.AC.phs_logcal(verbose=False, avg=True)
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_equal(AC.ant_phi, None)
@@ -374,6 +379,8 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.ant_dly_arr.dtype, np.float)
         nt.assert_equal(self.AC.ant_dly_gain_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.ant_dly_gain_arr.dtype, np.complex)
+        nt.assert_true(np.isclose(np.angle(self.AC.ant_dly_gain[(24, 'x')]), 0.0).all())
+        nt.assert_true(np.isclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'x')]), 0.0).all())
         # test exception
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_raises(AttributeError, AC.delay_lincal)
@@ -406,6 +413,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.dly_slope_arr.shape, (7, 2, 60, 1, 1))
         nt.assert_equal(self.AC.dly_slope_gain_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.dly_slope_ant_dly_arr.shape, (7, 60, 1, 1))
+        nt.assert_true(np.isclose(np.angle(self.AC.dly_slope_gain[(24, 'x')]), 0.0).all())
         g = self.AC.custom_dly_slope_gain(self.gk, self.ap)
         nt.assert_equal(g[(0,'x')].shape, (60, 64))
         # test exception
@@ -443,6 +451,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.phs_slope_arr.shape, (7, 2, 60, 1, 1))
         nt.assert_equal(self.AC.phs_slope_gain_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.phs_slope_ant_phs_arr.shape, (7, 60, 1, 1))
+        nt.assert_true(np.isclose(np.angle(self.AC.phs_slope_gain[(24, 'x')]), 0.0).all())
         g = self.AC.custom_phs_slope_gain(self.gk, self.ap)
         nt.assert_equal(g[(0,'x')].shape, (60, 64))
         # test Nones
