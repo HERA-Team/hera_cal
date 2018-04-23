@@ -984,6 +984,7 @@ def abscal_arg_parser():
     a.add_argument("--all_antenna_gains", default=False, action='store_true', help='if True, use full antenna list in data file to make gains')
     a.add_argument("--delay_cal", default=False, action='store_true', help='perform antenna delay calibration')
     a.add_argument("--avg_phs_cal", default=False, action='store_true', help='perform antenna avg phase calibration')
+    a.add_argument("--avg_dly_slope_cal", default=False, action='store_true', help="Perform delay slope calibration and average solution across time before applying gains.")
     a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')
     a.add_argument("--phase_slope_cal", default=False, action='store_true', help='perform frequency-indepdendent phase slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
@@ -996,7 +997,6 @@ def abscal_arg_parser():
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
     a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
-    a.add_argument("--dly_time_avg", default=False, action='store_true', help="average the delay solutions across time before forming gains")
     return a
 
 
@@ -1016,6 +1016,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--silence", default=False, action='store_true', help="silence output from abscal while running.")
     a.add_argument("--data_is_omni_solution", default=False, action='store_true', help='assume input data file is an omnical visibility solution (still beta testing optimal weighting)')
     a.add_argument("--cal_shared_antennas_only", default=False, action='store_true', help='if True, only calibrate antennas present in both data and model.')
+    a.add_argument("--avg_dly_slope_cal", default=False, action='store_true', help="Perform delay slope calibration and average solution across time before applying gains.")
     a.add_argument("--delay_slope_cal", default=False, action='store_true', help='perform delay slope calibration')
     a.add_argument("--phase_slope_cal", default=False, action='store_true', help='perform frequency-indepdendent phase slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
@@ -1026,16 +1027,15 @@ def omni_abscal_arg_parser():
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
     a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
-    a.add_argument("--dly_time_avg", default=False, action='store_true', help="average the delay solutions across time before forming gains")
     return a
 
 
 def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
                bl_cut=None, bl_taper_fwhm=None ,output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False,
-               delay_cal=False, avg_phs_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
+               delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
                TT_phs_cal=False, TT_phs_max_iter=10, TT_phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, 
-               dly_time_avg=False, latitude=-30.72152, max_dlst=0.005, history=''):
+               latitude=-30.72152, max_dlst=0.005, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -1050,6 +1050,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     
     delay_cal : delay_lincal()
     avg_phs_cal : phs_logcal(avg=True)
+    avg_dly_slope_cal : delay_slope_lincal(time_avg=True)
     delay_slope_cal : delay_slope_lincal()
     abs_amp_cal : abs_amp_logcal()
     TT_phs_cal : TT_phs_logcal()
@@ -1102,6 +1103,8 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     delay_cal : type=boolean, if True, perform delay calibration
 
+    avg_dly_slope_cal: type=boolean, if True, run delay_slope_cal with time_avg = True
+
     delay_slope_cal : type=boolean, if True, perform delay slope calibration
 
     phase_slope_cal : type=boolean, if True, perform perform frequency-indepdendent phase slope calibration
@@ -1119,8 +1122,6 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     gen_amp_cal : type=boolean, if True, perform general amplitude bandpass calibration
 
     gen_phs_cal : type=boolean, if True, perform general phase bandpass calibration
-
-    dly_time_avg: type=boolean, if True, average the delay solutions across time before forming gains
 
     latitude : type=float, latitude of array in degrees North
 
@@ -1211,7 +1212,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if delay_cal:
             if all_antenna_gains:
                 raise ValueError("can't run delay_cal when all_antenna_gains is True")
-            AC.delay_lincal(verbose=verbose, time_avg=dly_time_avg)
+            AC.delay_lincal(verbose=verbose, time_avg=False)
             result_gains = merge_gains((AC.ant_dly_gain, AC.ant_dly_phi_gain))
             cal_flags = odict(map(lambda k: (k, np.zeros_like(result_gains[k], np.bool)), result_gains.keys()))
             apply_cal.recalibrate_in_place(AC.data, AC.wgts, result_gains, cal_flags, gain_convention='divide')
@@ -1228,8 +1229,17 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
             gain_list.append(AC.ant_phi_gain)
 
+        if avg_dly_slope_cal:
+            AC.delay_slope_lincal(verbose=verbose, time_avg=True)
+            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
+            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
+            if all_antenna_gains:
+                gain_list.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
+            else:
+                gain_list.append(AC.dly_slope_gain)
+
         if delay_slope_cal:
-            AC.delay_slope_lincal(verbose=verbose, time_avg=dly_time_avg)
+            AC.delay_slope_lincal(verbose=verbose, time_avg=False)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
             apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
             if all_antenna_gains:
