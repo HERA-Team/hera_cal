@@ -554,6 +554,11 @@ class Test_AbsCal:
         dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=True, solve_phase=True)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset.shape, (60, 1))
+        # test windows and edgecut
+        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=False, solve_phase=False, edge_cut=2, window='hann')
+        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=False, solve_phase=False, window='blackmanharris')
+        nt.assert_raises(ValueError, hc.abscal.fft_dly, vis, window='foo')
+        nt.assert_raises(AssertionError, hc.abscal.fft_dly, vis, edge_cut=1000)
         # test mock data
         tau = np.array([1.5e-8]).reshape(1, -1) # 15 nanoseconds
         f = np.linspace(0, 100e6, 1024)

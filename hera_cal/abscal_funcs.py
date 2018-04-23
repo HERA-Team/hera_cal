@@ -354,7 +354,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
 
 
 def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offsets=True, medfilt=True, kernel=(1, 5),
-                 verbose=True, time_ax=0, freq_ax=1, antpos=None, four_pol=False):
+                 verbose=True, time_ax=0, freq_ax=1, antpos=None, four_pol=False, window=None, edge_cut=None):
     """
     Solve for per-antenna delays according to the equation
 
@@ -401,6 +401,11 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
 
     four_pol : type=boolean, if True, fit multiple polarizations together 
 
+    window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
+        None is a top-hat window.
+
+    edge_cut : int, number of channels to flag at each band edge in FFT window
+
     Output:
     -------
     fit : dictionary containing delay (tau_i_x) for each antenna and optionally
@@ -434,7 +439,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax, solve_phase=solve_offsets)
+        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, 
+                              freq_ax=freq_ax, solve_phase=solve_offsets, window=window, edge_cut=edge_cut)
 
         # set nans to zero
         rwgts = np.nanmean(wgts[k], axis=freq_ax, keepdims=True)
@@ -507,7 +513,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
-                         verbose=True, time_ax=0, freq_ax=1, four_pol=False):
+                         verbose=True, time_ax=0, freq_ax=1, four_pol=False, window=None, edge_cut=None):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -551,6 +557,11 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     four_pol : type=boolean, if True, fit multiple polarizations together 
 
+    window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
+        None is a top-hat window.
+
+    edge_cut : int, number of channels to flag at each band edge of vis in FFT window
+
     Output:
     -------
     fit : dictionary containing delay slope (T_x) for each pol [seconds / meter].
@@ -590,7 +601,8 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, freq_ax=freq_ax)
+        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, 
+                              freq_ax=freq_ax, window=window, edge_cut=edge_cut)
 
         # set nans to zero
         rwgts = np.nanmean(wgts[k], axis=freq_ax, keepdims=True)
@@ -959,7 +971,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
 
 
 def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1,
-            solve_phase=True):
+            window=None, solve_phase=True, edge_cut=None):
     """
     get delay of visibility across band using FFT w/ tukey window
     and quadratic fit to delay peak.
@@ -977,6 +989,11 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     time_ax : time axis of data
 
     freq_ax : frequency axis of data
+
+    window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
+        None is a top-hat window.
+
+    edge_cut : int, number of channels to flag at each band edge of vis in FFT window
 
     Output: (dlys, phi)
     -------
@@ -999,11 +1016,31 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     else:
         vis_smooth = vis
 
-    # fft
-    window = np.repeat(signal.windows.tukey(Nfreqs)[np.newaxis], Ntimes, axis=time_ax)
-    window = np.moveaxis(window, 0, time_ax)
-    window *= wgts
-    vfft = np.fft.fft(vis_smooth * window, axis=freq_ax)
+    # construct window
+    win = np.moveaxis(np.repeat(np.zeros(Nfreqs)[np.newaxis], Ntimes, axis=0), 0, time_ax)
+
+    if edge_cut is not None:
+        assert 2*edge_cut < Nfreqs, "edge_cut cannot be >= Nfreqs/2"
+        win_slice = slice(edge_cut, Nfreqs-edge_cut)
+        win_Nfreqs = Nfreqs - 2*edge_cut
+    else:
+        win_slice = slice(None)
+        win_Nfreqs = Nfreqs
+
+    if window is None:
+        win[:, win_slice] = signal.windows.tukey(win_Nfreqs, 0.0)
+    elif window == 'blackmanharris':
+        win[:, win_slice] = signal.windows.blackmanharris(win_Nfreqs)
+    elif window == 'hann':
+        win[:, win_slice] = signal.windows.hann(win_Nfreqs)
+    else:
+        raise ValueError("didn't recognize window {}".format(window))
+
+    # multiply wgts
+    win *= wgts
+
+    # fft w/ window
+    vfft = np.fft.fft(vis_smooth * win, axis=freq_ax)
 
     # get argmax of abs
     amp = np.abs(vfft)

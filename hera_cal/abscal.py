@@ -309,7 +309,7 @@ class AbsCal(object):
             self._ant_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys), 0, -1)
 
     def delay_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
-                     solve_offsets=True):
+                     solve_offsets=True, window=None, edge_cut=None):
         """
         Solve for per-antenna delay according to the equation
         by calling abscal_funcs.delay_lincal method.
@@ -322,6 +322,11 @@ class AbsCal(object):
         kernel : size of median filter across (time, freq) axes, type=(int, int)
 
         time_avg : boolean, if True, average resultant antenna delays across time 
+
+        window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
+            None is a top-hat window.
+
+        edge_cut : int, number of channels to flag at each band edge in FFT window
 
         Result:
         -------
@@ -350,7 +355,8 @@ class AbsCal(object):
 
         # run delay_lincal
         fit = delay_lincal(model, data, wgts=wgts, refant=self.refant, solve_offsets=solve_offsets, 
-                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax)
+                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax,
+                           window=window, edge_cut=edge_cut)
 
         # time average
         if time_avg:
@@ -377,7 +383,7 @@ class AbsCal(object):
             self._ant_dly_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_dly_phi[k], pk), self._gain_keys), 0, -1)
 
     def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
-                            four_pol=False):
+                           four_pol=False, window=None, edge_cut=None):
         """
         Solve for an array-wide delay slope (a subset of the omnical degeneracies) by calling 
         abscal_funcs.delay_slope_lincal method. See abscal_funcs.delay_slope_lincal for details.
@@ -397,6 +403,11 @@ class AbsCal(object):
         time_avg : boolean, if True, average resultant delay slope across time 
 
         four_pol : boolean, if True, form a joint polarization solution
+
+        window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
+            None is a top-hat window.
+
+        edge_cut : int, number of channels to flag at each band edge in FFT window
 
         Result:
         -------
@@ -422,7 +433,8 @@ class AbsCal(object):
 
         # run delay_slope_lincal
         fit = delay_slope_lincal(model, data, antpos, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df, 
-                                 kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol)
+                                 kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol,
+                                 window=window, edge_cut=edge_cut)
 
         # separate pols if four_pol
         if four_pol:
@@ -997,6 +1009,8 @@ def abscal_arg_parser():
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
     a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
+    a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
+    a.add_argument("--edge_cut", default=None, type=int, help="number of channels to flag on each band-edge before FFT in delay solvers.")
     return a
 
 
@@ -1027,12 +1041,14 @@ def omni_abscal_arg_parser():
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
     a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
+    a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
+    a.add_argument("--edge_cut", default=None, type=int, help="number of channels to flag on each band-edge before FFT in delay solvers.")
     return a
 
 
 def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
                bl_cut=None, bl_taper_fwhm=None ,output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
-               match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False,
+               match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=None,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
                TT_phs_cal=False, TT_phs_max_iter=10, TT_phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, 
                latitude=-30.72152, max_dlst=0.005, history=''):
@@ -1127,6 +1143,11 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     max_dlst : type=float, maximum allowed LST difference in model rephasing, otherwies model is flagged.
 
+    window : str, window to enact on data before FFT for delay solver, options=['blackmanharris', 'hann', None]
+        None is a top-hat window.
+
+    edge_cut : int, number of channels to flag at each band edge in delay solvers
+
     Result:
     -------
     if return_gains: return (gains dictionary)
@@ -1212,7 +1233,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if delay_cal:
             if all_antenna_gains:
                 raise ValueError("can't run delay_cal when all_antenna_gains is True")
-            AC.delay_lincal(verbose=verbose, time_avg=False)
+            AC.delay_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
             result_gains = merge_gains((AC.ant_dly_gain, AC.ant_dly_phi_gain))
             cal_flags = odict(map(lambda k: (k, np.zeros_like(result_gains[k], np.bool)), result_gains.keys()))
             apply_cal.recalibrate_in_place(AC.data, AC.wgts, result_gains, cal_flags, gain_convention='divide')
@@ -1230,7 +1251,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             gain_list.append(AC.ant_phi_gain)
 
         if avg_dly_slope_cal:
-            AC.delay_slope_lincal(verbose=verbose, time_avg=True)
+            AC.delay_slope_lincal(verbose=verbose, time_avg=True, window=window, edge_cut=edge_cut)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
             apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
             if all_antenna_gains:
@@ -1239,7 +1260,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                 gain_list.append(AC.dly_slope_gain)
 
         if delay_slope_cal:
-            AC.delay_slope_lincal(verbose=verbose, time_avg=False)
+            AC.delay_slope_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
             apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
             if all_antenna_gains:
