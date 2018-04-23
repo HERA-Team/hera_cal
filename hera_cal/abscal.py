@@ -276,8 +276,6 @@ class AbsCal(object):
 
         Parameters:
         -----------
-        refant : antenna number integer to use as reference antenna, whose phase is set to zero
-
         avg : type=boolean, if True, average solution across time and frequency
 
         verbose : type=boolean, if True print feedback to stdout
@@ -522,15 +520,15 @@ class AbsCal(object):
         self._abs_eta = odict(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys)))
         self._abs_eta_arr = np.moveaxis(map(lambda pk: map(lambda k: self._abs_eta[k], pk), self._gain_keys), 0, -1)
 
-    def TT_phs_logcal(self, refant=None, verbose=True, zero_psi=True, four_pol=False):
+    def TT_phs_logcal(self, verbose=True, zero_psi=True, four_pol=False):
         """
         call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        refant : type=int, antenna number of reference antenna, whose phase will be set to identically zero
-
-        zero_psi : type=boolean, set overall gain phase (psi) to identically zero in linsolve equations
+        zero_psi : type=boolean, set overall gain phase (psi) to identically zero in linsolve equations.
+            This is separate than the reference antenna's absolute phase being set to zero, as it can account
+            for absolute phase offsets between polarizations.
 
         four_pol : type=boolean, even if multiple polarizations are present in data, make free
                     variables polarization un-aware: i.e. one solution across all polarizations.
@@ -573,8 +571,6 @@ class AbsCal(object):
 
         self._TT_Phi = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
         self._TT_Phi_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]), pk), self._gain_keys), 0, -1)
-
-        # project out an absolute phase such that reference antenna has identically zero phase
 
 
     ############################# amp_logcal results #############################
@@ -1339,10 +1335,10 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
         # ensure reference antenna phase has been projected out (i.e. set to zero)
         for p in AC.gain_pols:
-            refant_phs = gain_dict[(AC.refant, p)] / np.abs(gain_dict[(AC.refant, p)])
+            refant_phasor = gain_dict[(AC.refant, p)] / np.abs(gain_dict[(AC.refant, p)])
             for k in gain_dict.keys(): 
                 if p in k:
-                    gain_dict[k] /= refant_phs
+                    gain_dict[k] /= refant_phasor
 
     # make blank gains if no modelfiles
     else:

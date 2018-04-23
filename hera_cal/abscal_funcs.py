@@ -721,7 +721,7 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
                                     antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
     avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}), 
                       antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
-    
+
     # build linear system
     ls_data, ls_wgts = {}, {}
     for rk in red_keys:
