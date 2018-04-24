@@ -354,7 +354,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
 
 
 def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offsets=True, medfilt=True, kernel=(1, 5),
-                 verbose=True, time_ax=0, freq_ax=1, antpos=None, four_pol=False, window=None, edge_cut=None):
+                 verbose=True, time_ax=0, freq_ax=1, antpos=None, four_pol=False, window=None, edge_cut=0):
     """
     Solve for per-antenna delays according to the equation
 
@@ -404,7 +404,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
         None is a top-hat window.
 
-    edge_cut : int, number of channels to flag at each band edge in FFT window
+    edge_cut : int, number of channels to exclude at each band edge in FFT window
 
     Output:
     -------
@@ -513,7 +513,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
-                         verbose=True, time_ax=0, freq_ax=1, four_pol=False, window=None, edge_cut=None):
+                         verbose=True, time_ax=0, freq_ax=1, four_pol=False, window=None, edge_cut=0):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -560,7 +560,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
         None is a top-hat window.
 
-    edge_cut : int, number of channels to flag at each band edge of vis in FFT window
+    edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
 
     Output:
     -------
@@ -730,11 +730,11 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
         eqn_str = eqn_str.format(antpos[rk[0]][0], rk[2][0], antpos[rk[0]][1], rk[2][0],
                                  antpos[rk[1]][0], rk[2][1], antpos[rk[1]][1], rk[2][1])
 
-        # calculated frequency median of unflagged angle(data/model)
+        # calculated frequency weighted-mean of unflagged angle(data/model)
         delta_phi = np.angle(avg_data[rk] / avg_model[rk])
         avg_wgts[rk][np.isinf(delta_phi)+np.isnan(delta_phi)] = 0.0
         delta_phi[np.isinf(delta_phi)+np.isnan(delta_phi)] = 0.0
-        ls_data[eqn_str] = np.median(delta_phi * avg_wgts[rk], axis=1, keepdims=True) / np.median(avg_wgts[rk], axis=1, keepdims=True)
+        ls_data[eqn_str] = np.sum(delta_phi * avg_wgts[rk], axis=1, keepdims=True) / np.sum(avg_wgts[rk], axis=1, keepdims=True)
         ls_wgts[eqn_str] = np.sum(avg_wgts[rk], axis=1, keepdims=True)
 
         # set unobserved data to 0 with 0 weight
@@ -971,7 +971,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
 
 
 def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1,
-            window=None, solve_phase=True, edge_cut=None):
+            window=None, solve_phase=True, edge_cut=0):
     """
     get delay of visibility across band using FFT w/ tukey window
     and quadratic fit to delay peak.
@@ -993,7 +993,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
         None is a top-hat window.
 
-    edge_cut : int, number of channels to flag at each band edge of vis in FFT window
+    edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
 
     Output: (dlys, phi)
     -------
@@ -1019,8 +1019,8 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     # construct window
     win = np.moveaxis(np.repeat(np.zeros(Nfreqs)[np.newaxis], Ntimes, axis=0), 0, time_ax)
 
-    if edge_cut is not None:
-        assert 2*edge_cut < Nfreqs, "edge_cut cannot be >= Nfreqs/2"
+    if edge_cut > 0:
+        assert 2*edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
         win_slice = slice(edge_cut, Nfreqs-edge_cut)
         win_Nfreqs = Nfreqs - 2*edge_cut
     else:
@@ -1034,7 +1034,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     elif window == 'hann':
         win[:, win_slice] = signal.windows.hann(win_Nfreqs)
     else:
-        raise ValueError("didn't recognize window {}".format(window))
+        raise ValueError("didn't recognize window {} from ['blackmanharris', 'hann', None]".format(window))
 
     # multiply wgts
     win *= wgts
@@ -1592,7 +1592,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
     return DataContainer(new_model)
 
 
-def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, median=False, tol=1.0,
+def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.0,
                             mirror_red_data=False, reds=None):
     """
     Given complex visibility data spanning one or more redundant
@@ -1610,8 +1610,6 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, median
     broadcast_wgts : type=boolean, if True, take geometric mean of input weights as output weights,
         else use mean. If True, this has the effect of broadcasting a single flag from any particular 
         baseline to all baselines in a baseline group.
-
-    median : type=boolean, if True, take median of redundant baselines instead of mean
 
     tol : type=float, redundant baseline tolerance threshold
 
@@ -1654,12 +1652,8 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, median
     # iterate over reds
     for i, bl_group in enumerate(stripped_reds):
         # average redundant baseline group
-        if median:
-            d = np.nanmedian(map(lambda k: data[k]*wgts[k], bl_group), axis=0)
-            d /= np.nanmedian(map(lambda k: wgts[k], bl_group), axis=0)
-        else:
-            d = np.nansum(map(lambda k: data[k]*wgts[k], bl_group), axis=0)
-            d /= np.nansum(map(lambda k: wgts[k], bl_group), axis=0)
+        d = np.nansum(map(lambda k: data[k]*wgts[k], bl_group), axis=0)
+        d /= np.nansum(map(lambda k: wgts[k], bl_group), axis=0)
 
         # get wgts
         if broadcast_wgts:

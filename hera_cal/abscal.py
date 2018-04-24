@@ -214,20 +214,7 @@ class AbsCal(object):
         if bl_cut is not None:
             assert self.antpos is not None, "can't request a bl_cut if antpos is not fed"
 
-            # restrict visibilities to bl_cut criterion
-            _model = odict()
-            _data = odict()
-            _wgts = odict()
-            for k in self.keys:
-                if np.linalg.norm(self.bls[k]) <= bl_cut:
-                    _model[k] = self.model[k]
-                    _data[k] = self.data[k]
-                    _wgts[k] = self.wgts[k]
-
-            assert len(_data) > 0, "no baselines were kept after baseline cut..."
-            _model = DataContainer(_model)
-            _data = DataContainer(_data)
-            _wgts = DataContainer(_wgts)
+            _model, _data, _wgts = _cut_bls([self.model, self.data, self.wgts], self.bls, bl_cut)
 
             # re-init
             self.__init__(_model, _data, refant=self.refant, wgts=_wgts, antpos=self.antpos, freqs=self.freqs, verbose=verbose)
@@ -307,7 +294,7 @@ class AbsCal(object):
             self._ant_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys), 0, -1)
 
     def delay_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
-                     solve_offsets=True, window=None, edge_cut=None):
+                     solve_offsets=True, window=None, edge_cut=0):
         """
         Solve for per-antenna delay according to the equation
         by calling abscal_funcs.delay_lincal method.
@@ -381,7 +368,7 @@ class AbsCal(object):
             self._ant_dly_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_dly_phi[k], pk), self._gain_keys), 0, -1)
 
     def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
-                           four_pol=False, window=None, edge_cut=None):
+                           four_pol=False, window=None, edge_cut=0):
         """
         Solve for an array-wide delay slope (a subset of the omnical degeneracies) by calling 
         abscal_funcs.delay_slope_lincal method. See abscal_funcs.delay_slope_lincal for details.
@@ -405,7 +392,7 @@ class AbsCal(object):
         window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
             None is a top-hat window.
 
-        edge_cut : int, number of channels to flag at each band edge in FFT window
+        edge_cut : int, number of channels to exclude at each band edge in FFT window
 
         Result:
         -------
@@ -1006,7 +993,7 @@ def abscal_arg_parser():
     a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
-    a.add_argument("--edge_cut", default=None, type=int, help="number of channels to flag on each band-edge before FFT in delay solvers.")
+    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge before FFT in delay solvers.")
     return a
 
 
@@ -1038,13 +1025,13 @@ def omni_abscal_arg_parser():
     a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
-    a.add_argument("--edge_cut", default=None, type=int, help="number of channels to flag on each band-edge before FFT in delay solvers.")
+    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge before FFT in delay solvers.")
     return a
 
 
 def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
                bl_cut=None, bl_taper_fwhm=None ,output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
-               match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=None,
+               match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
                TT_phs_cal=False, TT_phs_max_iter=10, TT_phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, 
                latitude=-30.72152, max_dlst=0.005, history=''):
@@ -1379,5 +1366,44 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     # return
     if return_gains or return_object:
         return return_obj
+
+
+
+def _cut_bls(datacontainers, bls, bl_cut):
+    """
+    Cut visibility data based on maximum baseline length. Note
+    that this directly overwrites the data in these containers (i.e. inplace).
+
+    Parameters
+    ----------
+    datacontainers : list of DataContainer objects to perform baseline cut on
+
+    bls : dictionary, keys are antenna-pair tuples and values are baseline vectors in meters
+
+    bl_cut : float, maximum baseline separation [meters] to keep in data
+
+    Output (cut_datacontainers)
+    ------
+    cut_datacontainers : list of DataContainer objects with bl cut enacted
+    """
+    # initiate empty list
+    cut_datacontainers = []
+    # iterate over datacontainers
+    for i, dc in enumerate(datacontainers):
+        new_dc = odict()
+        for k in dc.keys():
+            if np.linalg.norm(bls[k]) <= bl_cut:
+                new_dc[k] = dc[k]
+
+        if len(new_dc) > 0:
+            cut_datacontainers.append(DataContainer(new_dc))
+        else:
+            print "no baselines were kept after baseline cut..."
+            cut_datacontainers.append(new_dc)
+
+    return cut_datacontainers
+
+
+
 
 
