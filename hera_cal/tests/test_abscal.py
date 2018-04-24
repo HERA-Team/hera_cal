@@ -179,12 +179,12 @@ class Test_AbsCal_Funcs:
         data, flags, antpos, ants, freqs, times, lsts, pols = hc.io.load_vis(self.data_file, return_meta=True)
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, wgts=self.wgts, tol=2.0)
         # test various kwargs
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, median=True)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0)
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=True)
         nt.assert_equal(len(rd.keys()), 9)
         nt.assert_equal(len(rf.keys()), 9)
         # test averaging worked
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, median=False)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0)
         v = np.mean([data[(52,53,'xx')],data[(37,38,'xx')],data[(24,25,'xx')],data[(38,39,'xx')]], axis=0)
         nt.assert_true(np.isclose(rd[(24,25,'xx')], v).min())
         # test mirror_red_data
