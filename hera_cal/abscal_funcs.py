@@ -1031,6 +1031,7 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
         win_Nfreqs = Nfreqs
 
     if window is None:
+        # this is a top-hat window
         win[:, win_slice] = signal.windows.tukey(win_Nfreqs, 0.0)
     elif window == 'blackmanharris':
         win[:, win_slice] = signal.windows.blackmanharris(win_Nfreqs)

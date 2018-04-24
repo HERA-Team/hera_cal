@@ -232,6 +232,11 @@ class Test_AbsCal_Funcs:
         nt.assert_true(new_f[k][-1].min())
         nt.assert_false(new_f[k][0].max())
 
+    def test_cut_bl(self):
+        Nbls = len(self.data)
+        _data = hc.abscal.cut_bls(self.data, self.bls, 20.0)
+        nt.assert_true(Nbls, 21)
+        nt.assert_true(len(_data), 12)
 
 class Test_AbsCal:
 
