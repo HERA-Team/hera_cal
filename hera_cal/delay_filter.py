@@ -44,7 +44,7 @@ class Delay_Filter():
         self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
 
 
-    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1.,tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100):
+    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1.,tol=1e-9, window='blackman-harris', skip_wgt=0.5, maxiter=100):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
@@ -143,7 +143,7 @@ def delay_filter_argparser():
     filt_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
     filt_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
                               see aipy.dsp.gen_window for options')
-    filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
+    filt_options.add_argument("--skip_wgt", type=float, default=0.5, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.5)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
 
     return a
