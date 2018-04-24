@@ -730,11 +730,14 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
         eqn_str = eqn_str.format(antpos[rk[0]][0], rk[2][0], antpos[rk[0]][1], rk[2][0],
                                  antpos[rk[1]][0], rk[2][1], antpos[rk[1]][1], rk[2][1])
 
-        # calculated frequency weighted-mean of unflagged angle(data/model)
+        # calculate median of unflagged angle(data/model)
+        # ls_weights are sum of non-binary weights
         delta_phi = np.angle(avg_data[rk] / avg_model[rk])
+        binary_flgs = np.isclose(avg_wgts[rk], 0.0)
+        delta_phi[binary_flgs] *= np.nan
         avg_wgts[rk][np.isinf(delta_phi)+np.isnan(delta_phi)] = 0.0
-        delta_phi[np.isinf(delta_phi)+np.isnan(delta_phi)] = 0.0
-        ls_data[eqn_str] = np.sum(delta_phi * avg_wgts[rk], axis=1, keepdims=True) / np.sum(avg_wgts[rk], axis=1, keepdims=True)
+        delta_phi[np.isinf(delta_phi)+np.isnan(delta_phi)] *= np.nan
+        ls_data[eqn_str] = np.nanmedian(delta_phi, axis=1, keepdims=True)
         ls_wgts[eqn_str] = np.sum(avg_wgts[rk], axis=1, keepdims=True)
 
         # set unobserved data to 0 with 0 weight

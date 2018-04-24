@@ -311,7 +311,7 @@ class AbsCal(object):
         window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
             None is a top-hat window.
 
-        edge_cut : int, number of channels to flag at each band edge in FFT window
+        edge_cut : int, number of channels to exclude at each band edge in FFT window
 
         Result:
         -------
@@ -1129,7 +1129,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     window : str, window to enact on data before FFT for delay solver, options=['blackmanharris', 'hann', None]
         None is a top-hat window.
 
-    edge_cut : int, number of channels to flag at each band edge in delay solvers
+    edge_cut : int, number of channels to exclude at each band edge in delay solvers
 
     Result:
     -------
