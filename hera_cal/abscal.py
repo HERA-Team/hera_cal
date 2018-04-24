@@ -214,7 +214,9 @@ class AbsCal(object):
         if bl_cut is not None:
             assert self.antpos is not None, "can't request a bl_cut if antpos is not fed"
 
-            _model, _data, _wgts = _cut_bls([self.model, self.data, self.wgts], self.bls, bl_cut)
+            _model = cut_bls(self.model, self.bls, bl_cut)
+            _data = cut_bls(self.data, self.bls, bl_cut)
+            _wgts = cut_bls(self.wgts, self.bls, bl_cut)
 
             # re-init
             self.__init__(_model, _data, refant=self.refant, wgts=_wgts, antpos=self.antpos, freqs=self.freqs, verbose=verbose)
@@ -1209,10 +1211,17 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
         # instantiate class
         AC = AbsCal(new_model, data, wgts=wgts, refant=refant, antpos=antpos, freqs=data_freqs, bl_cut=bl_cut, bl_taper_fwhm=bl_taper_fwhm)
+
+        # center total_data_antpos w/ refant
+        total_data_antpos = odict(map(lambda k: (k, total_data_antpos[k] - total_data_antpos[AC.refant]), total_data_antpos.keys()))
+
+        # construct total_gain_keys
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
 
+        # initialize empty gain_list
         gain_list = []
 
+        # perform various calibration routines
         if delay_cal:
             if all_antenna_gains:
                 raise ValueError("can't run delay_cal when all_antenna_gains is True")
@@ -1369,14 +1378,14 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
 
 
-def _cut_bls(datacontainers, bls, bl_cut):
+def cut_bls(datacontainer, bls, bl_cut):
     """
     Cut visibility data based on maximum baseline length. Note
     that this directly overwrites the data in these containers (i.e. inplace).
 
     Parameters
     ----------
-    datacontainers : list of DataContainer objects to perform baseline cut on
+    datacontainer : DataContainer object to perform baseline cut on
 
     bls : dictionary, keys are antenna-pair tuples and values are baseline vectors in meters
 
@@ -1384,24 +1393,16 @@ def _cut_bls(datacontainers, bls, bl_cut):
 
     Output (cut_datacontainers)
     ------
-    cut_datacontainers : list of DataContainer objects with bl cut enacted
+    cut_datacontainer : DataContainer object with bl cut enacted
     """
-    # initiate empty list
-    cut_datacontainers = []
-    # iterate over datacontainers
-    for i, dc in enumerate(datacontainers):
-        new_dc = odict()
-        for k in dc.keys():
-            if np.linalg.norm(bls[k]) <= bl_cut:
-                new_dc[k] = dc[k]
+    cut_datacontainer = odict()
+    for k in datacontainer.keys():
+        if np.linalg.norm(bls[k]) <= bl_cut:
+            cut_datacontainer[k] = datacontainer[k]
 
-        if len(new_dc) > 0:
-            cut_datacontainers.append(DataContainer(new_dc))
-        else:
-            print "no baselines were kept after baseline cut..."
-            cut_datacontainers.append(new_dc)
+    assert len(cut_datacontainer) > 0, "no baselines were kept after baseline cut..."
 
-    return cut_datacontainers
+    return DataContainer(cut_datacontainer)
 
 
 
