@@ -11,7 +11,7 @@ args = a.parse_args()
 history = ' '.join(sys.argv)
 
 kwargs = dict(vars(args))
-kwargs.pop('data_files')
+kwargs.pop('data_file')
 kwargs.pop('model_files')
 kwargs.pop('silence')
 verbose = args.silence is False
