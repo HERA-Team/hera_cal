@@ -986,7 +986,7 @@ def abscal_arg_parser():
     a.add_argument("--phase_slope_cal", default=False, action='store_true', help='perform frequency-indepdendent phase slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
-    a.add_argument("--TT_phs_max_iter", type=int, default=10, help="maximum number of iterations of TT_phs_cal allowed")
+    a.add_argument("--TT_phs_max_iter", type=int, default=100, help="maximum number of iterations of TT_phs_cal allowed")
     a.add_argument("--TT_phs_conv_crit", type=float, default=1e-6, help="convergence criterion in Delta g / g for stopping iterative TT_phs_cal")
     a.add_argument("--gen_amp_cal", default=False, action='store_true', help='perform general antenna amplitude bandpass calibration')
     a.add_argument("--gen_phs_cal", default=False, action='store_true', help='perform general antenna phase bandpass calibration')
@@ -1020,7 +1020,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--phase_slope_cal", default=False, action='store_true', help='perform frequency-indepdendent phase slope calibration')
     a.add_argument("--abs_amp_cal", default=False, action='store_true', help='perform absolute amplitude calibration')
     a.add_argument("--TT_phs_cal", default=False, action='store_true', help='perform Tip-Tilt phase slope calibration')
-    a.add_argument("--TT_phs_max_iter", type=int, default=10, help="maximum number of iterations of TT_phs_cal allowed")
+    a.add_argument("--TT_phs_max_iter", type=int, default=100, help="maximum number of iterations of TT_phs_cal allowed")
     a.add_argument("--TT_phs_conv_crit", type=float, default=1e-6, help="convergence criterion in Delta g / g for stopping iterative TT_phs_cal")
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
@@ -1035,7 +1035,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                bl_cut=None, bl_taper_fwhm=None ,output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
-               TT_phs_cal=False, TT_phs_max_iter=10, TT_phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, 
+               TT_phs_cal=False, TT_phs_max_iter=100, TT_phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, 
                latitude=-30.72152, max_dlst=0.005, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
