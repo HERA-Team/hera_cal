@@ -1211,9 +1211,10 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
         # instantiate class
         AC = AbsCal(new_model, data, wgts=wgts, refant=refant, antpos=antpos, freqs=data_freqs, bl_cut=bl_cut, bl_taper_fwhm=bl_taper_fwhm)
+        refant = AC.refant
 
         # center total_data_antpos w/ refant
-        total_data_antpos = odict(map(lambda k: (k, total_data_antpos[k] - total_data_antpos[AC.refant]), total_data_antpos.keys()))
+        total_data_antpos = odict(map(lambda k: (k, total_data_antpos[k] - total_data_antpos[refant]), total_data_antpos.keys()))
 
         # construct total_gain_keys
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
@@ -1328,10 +1329,12 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             raise ValueError("abscal_run executed without any calibration arguments set to True")
         gain_dict = merge_gains(gain_list)
         flag_dict = odict(map(lambda k: (k, np.zeros((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
+        gain_pols = AC.gain_pols
+        gain_keys = gain_dict.keys()
 
         # ensure reference antenna phase has been projected out (i.e. set to zero)
         for p in AC.gain_pols:
-            refant_phasor = gain_dict[(AC.refant, p)] / np.abs(gain_dict[(AC.refant, p)])
+            refant_phasor = gain_dict[(refant, p)] / np.abs(gain_dict[(refant, p)])
             for k in gain_dict.keys(): 
                 if p in k:
                     gain_dict[k] /= refant_phasor
@@ -1339,28 +1342,50 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     # make blank gains if no modelfiles
     else:
         gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
-        gain_dict = map(lambda p: map(lambda a: ((a,p), np.ones((Ntimes, Nfreqs), np.complex)), data_ants), gain_pols)
-        gain_dict = odict(flatten(gain_dict))
-        flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
+        gain_keys = flatten(map(lambda p: map(lambda a: (a, p), data_ants), gain_pols))
+        gain_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.complex)), gain_keys))
+        flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_keys))
+        if refant is None:
+            refant = gain_keys[0][0]
 
-    # write to file
+    # make extra calfits metadata
+    total_qual = odict(map(lambda p: (p, np.ones((Ntimes, Nfreqs), np.float)), gain_pols))
+    quals = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.float)), gain_keys))
+
+    # load in extra calfits file if provided
+    if calfits_infile is not None:
+        cal_in = UVCal()
+        cal_in.read_calfits(calfits_infile)
+        (out_gains, out_flags, quals, total_qual, ants, freqs, times, 
+         pols) = io.load_cal(cal_in, return_meta=True)
+        history = cal_in.history + history
+
+        # construct merged gains
+        total_keys = set(out_gains.keys()).union(set(gain_dict.keys()))
+        new_gains = odict()
+        new_flags = odict()
+        for k in total_keys:
+            new_gains[k] = np.ones((Ntimes, Nfreqs), np.complex)
+            new_flags[k] = np.zeros((Ntimes, Nfreqs), np.bool)
+            if k in gain_dict and k in out_gains:
+                new_gains[k] *= gain_dict[k] * out_gains[k]
+                new_flags[k] += out_flags[k]
+            else:
+                new_flags[k] += True
+
+        gain_dict = new_gains
+        flag_dict = new_flags
+
+    # ensure reference antenna phase has been projected out (i.e. set to zero)
+    for p in gain_pols:
+        refant_phasor = gain_dict[(refant, p)] / np.abs(gain_dict[(refant, p)])
+        for k in gain_keys: 
+            if p in k:
+                gain_dict[k] /= refant_phasor
+
     if write_calfits:
-        # load calfits file if provided
-        if calfits_infile is not None:
-            cal_in = UVCal()
-            cal_in.read_calfits(calfits_infile)
-            out_gains, out_flags = io.load_cal(cal_in)
-            for k in out_gains.keys():
-                if k in gain_dict:
-                    out_gains[k] *= gain_dict[k]
-                    out_flags[k] += flag_dict[k]
-                else:
-                    out_flags[k] += np.ones(out_flags[k], np.bool)
-            io.update_cal(cal_in, output_calfits_path,  gains=out_gains, flags=out_flags, add_to_history=history, clobber=overwrite)
-        # write a calfits from scratch
-        else:
-            io.write_cal(output_calfits_path, gain_dict, data_freqs, data_times, flags=flag_dict, quality=None, 
-                 total_qual=None, return_uvc=False, overwrite=overwrite, history=history)
+        io.write_cal(output_calfits_path, gain_dict, data_freqs, data_times, flags=flag_dict, quality=quals, 
+                     total_qual=total_qual, return_uvc=False, overwrite=overwrite, history=history)
 
     # form return tuple
     return_obj = ()
