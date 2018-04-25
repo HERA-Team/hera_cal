@@ -1332,13 +1332,6 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         gain_pols = AC.gain_pols
         gain_keys = gain_dict.keys()
 
-        # ensure reference antenna phase has been projected out (i.e. set to zero)
-        for p in AC.gain_pols:
-            refant_phasor = gain_dict[(refant, p)] / np.abs(gain_dict[(refant, p)])
-            for k in gain_dict.keys(): 
-                if p in k:
-                    gain_dict[k] /= refant_phasor
-
     # make blank gains if no modelfiles
     else:
         gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
