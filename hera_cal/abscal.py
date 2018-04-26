@@ -1368,7 +1368,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     # ensure reference antenna phase has been projected out (i.e. set to zero)
     for p in gain_pols:
         refant_phasor = gain_dict[(refant, p)] / np.abs(gain_dict[(refant, p)])
-        for k in gain_keys: 
+        for k in gain_dict.keys(): 
             if p in k:
                 gain_dict[k] /= refant_phasor
 
