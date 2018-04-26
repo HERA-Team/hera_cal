@@ -1354,18 +1354,14 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         history = cal_in.history + history
 
         # construct merged gains
-        total_keys = set(out_gains.keys()).union(set(gain_dict.keys()))
         new_gains = odict()
         new_flags = odict()
-        for k in total_keys:
-            new_gains[k] = np.ones((Ntimes, Nfreqs), np.complex)
-            new_flags[k] = np.zeros((Ntimes, Nfreqs), np.bool)
-            if k in gain_dict and k in out_gains:
-                new_gains[k] *= gain_dict[k] * out_gains[k]
-                new_flags[k] += out_flags[k]
+        for k in out_gains.keys():
+            if k in gain_dict:
+                new_gains[k] = out_gains[k] * gain_dict[k]
+                new_flags[k] = out_flags[k] + flag_dict[k]
             else:
-                new_flags[k] += True
-
+                new_flags[k] = out_flags[k] + np.ones_like(out_flags[k], np.bool)
         gain_dict = new_gains
         flag_dict = new_flags
 
