@@ -68,13 +68,13 @@ class Test_Delay_Filter(unittest.TestCase):
         bl = np.linalg.norm(dfil.antpos[24] - dfil.antpos[25]) / constants.c * 1e9
         sdf = (dfil.freqs[1]-dfil.freqs[0])/1e9
         
-        dfil.run_filter(to_filter=[k], standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.5, maxiter=100)
-        d_mdl, d_res, info = delay_filter(dfil.data[k], np.logical_not(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.5, maxiter=100)
+        dfil.run_filter(to_filter=[k], standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+        d_mdl, d_res, info = delay_filter(dfil.data[k], np.logical_not(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
         np.testing.assert_almost_equal(d_mdl, dfil.CLEAN_models[k])
         np.testing.assert_almost_equal(d_res, dfil.filtered_residuals[k])
 
-        dfil.run_filter(to_filter=[k], weight_dict={k: np.ones_like(dfil.flags[k])}, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.5, maxiter=100)
-        d_mdl, d_res, info = delay_filter(dfil.data[k], np.ones_like(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.5, maxiter=100)
+        dfil.run_filter(to_filter=[k], weight_dict={k: np.ones_like(dfil.flags[k])}, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+        d_mdl, d_res, info = delay_filter(dfil.data[k], np.ones_like(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
         np.testing.assert_almost_equal(d_mdl, dfil.CLEAN_models[k])
         np.testing.assert_almost_equal(d_res, dfil.filtered_residuals[k])
 

@@ -78,7 +78,7 @@ def build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts = False):
     return wgts
 
 
-def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none', skip_wgt=0.5, maxiter=100):
+def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none', skip_wgt=0.1, maxiter=100):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Befor filtering, removes a per-integration delay using abscal.fft_dly, then puts it back in after filtering.
     
@@ -407,7 +407,7 @@ class Calibration_Smoother():
         self.time_filtered = True
 
 
-    def freq_filter(self, filter_scale = 10.0, tol=1e-09, window='none', skip_wgt=0.5, maxiter=100):
+    def freq_filter(self, filter_scale = 10.0, tol=1e-09, window='none', skip_wgt=0.1, maxiter=100):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
     
         Arguments:
@@ -487,7 +487,7 @@ def smooth_cal_argparser():
     freq_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
     freq_options.add_argument("--window", type=str, default="none", help='window function for frequency filtering (default "none",\
                               see aipy.dsp.gen_window for options')
-    freq_options.add_argument("--skip_wgt", type=float, default=0.5, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.5)')
+    freq_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     freq_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
     args = a.parse_args()
     return args
