@@ -199,7 +199,7 @@ class Calibration_Smoother():
         if not (self.has_cal and self.has_data):
             raise AttributeError('Data consistency cannot be checked unless both load_cal() and load_data() have been run.')
 
-        assert(np.all(np.abs(self.times - self.data_times) < 1e-9)) 
+        assert(np.all(np.abs(self.times - self.data_times) < 1e-8)) 
         assert(np.all(self.freqs == self.data_freqs))
         for (ant,pol) in self.gains.keys():
             assert((ant, ant, pol+pol) in self.data) #assert data has autocorrelations
@@ -212,7 +212,7 @@ class Calibration_Smoother():
                 #test time contiguity
                 assert(np.abs(np.median(np.diff(self.times)) - self.times[0] + self.prev_times[-1]) < 1e-6)
                 assert(np.abs(np.median(np.diff(self.times)) - np.median(np.diff(self.prev_times))) < 1e-6)
-                assert(np.all(np.abs(self.prev_times - self.prev_data_times) < 1e-9)) 
+                assert(np.all(np.abs(self.prev_times - self.prev_data_times) < 1e-8)) 
             except AssertionError:
                 warnings.warn('prev_cal and/or prev_data is inconsistent with central cal/data and will not be used for time smoothing.')
                 self.has_prev_cal, self.has_prev_data = False, False
@@ -234,7 +234,7 @@ class Calibration_Smoother():
                 #test time contiguity
                 assert(np.abs(np.median(np.diff(self.times)) + self.times[-1] - self.next_times[0]) < 1e-6)
                 assert(np.abs(np.median(np.diff(self.times)) - np.median(np.diff(self.next_times))) < 1e-6)
-                assert(np.all(np.abs(self.next_times - self.next_data_times) < 1e-9))
+                assert(np.all(np.abs(self.next_times - self.next_data_times) < 1e-8))
             except AssertionError:
                 warnings.warn('next_cal and/or next_data is inconsistent with central cal/data and will not be used for time smoothing.')
                 self.has_next_cal, self.has_next_data = False, False
