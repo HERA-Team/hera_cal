@@ -8,9 +8,8 @@ import operator
 import os
 import copy
 
-
-polnum2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
-polstr2num = {"xx": -5, "yy": -6 ,"xy": -7, "yx": -8}
+polstr2num = {'I': 1, 'Q': 2, 'U': 3, 'V': 4, 'RR': -1, 'LL': -2, 'RL': -3, 'LR': -4, 'xx': -5, 'yy': -6, 'xy': -7, 'yx': -8}
+polnum2str = {val: key for key,val in polstr2num.items()}
 
 jonesnum2str = {-5: 'x', -6: 'y'}
 jonesstr2num = {'x': -5, 'y': -6}
