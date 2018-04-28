@@ -1199,6 +1199,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if rephase_model:
             new_model, new_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, 
                                                flags=model_flags, latitude=latitude, max_dlst=max_dlst)
+            del model, model_flags
             # set wgts to zero wheree model is flagged
             for k in new_flags.keys():
                 wgts[k][new_flags[k]] *= 0
