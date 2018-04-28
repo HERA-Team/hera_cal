@@ -7,6 +7,7 @@ import hera_cal as hc
 import operator
 import os
 import copy
+import gc as garbage_collector
 
 polstr2num = {'I': 1, 'Q': 2, 'U': 3, 'V': 4, 'RR': -1, 'LL': -2, 'RL': -3, 'LR': -4, 'xx': -5, 'yy': -6, 'xy': -7, 'yx': -8}
 polnum2str = {val: key for key,val in polstr2num.items()}
@@ -102,9 +103,11 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         antpos = odict(zip(ants, antpos))
         pols = np.array([polnum2str[polnum] for polnum in uvd.polarization_array])
         del uvd
+        garbage_collector.collect()
         return data, flags, antpos, ants, freqs, times, lsts, pols
     else:
         del uvd
+        garbage_collector.collect()
         return data, flags
 
 

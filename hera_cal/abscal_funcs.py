@@ -1309,7 +1309,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     return DataContainer(new_model), DataContainer(new_flags)
 
 
-def rephase_vis(model, model_lsts, data_lsts, bls, freqs, flags=None, max_dlst=0.005, latitude=-30.72152):
+def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=None, max_dlst=0.005, latitude=-30.72152):
     """
     Rephase model visibility data onto LST grid of data_lsts.
 
@@ -1326,6 +1326,8 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, flags=None, max_dlst=0
     bls : type=dictionary, ant-pair keys that holds baseline position vector in ENU frame in meters
 
     freqs : type=float ndarray, holds frequency channels of model in Hz.
+
+    inplace : type=bool, if True edit data in memory, else make a copy and return
 
     flags : type=DataContainer, holds model flags
 
@@ -1353,8 +1355,15 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, flags=None, max_dlst=0
     flag_lst[np.abs(dlst) > max_dlst] = True
 
     # make new_model and new_flags
-    new_model = odict()
-    new_flags = odict()
+    if inplace:
+        new_model = model
+    else:
+        new_model = odict()
+    if inplace and flags is not None:
+        new_flags = flags
+    else:
+        new_flags = odict()
+
     for k in model.keys():
         m = model[k][lst_nn, :]
         new_model[k] = m
@@ -1367,7 +1376,10 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, flags=None, max_dlst=0
     # rephase
     new_model = utils.lst_rephase(new_model, bls, freqs, dlst, lat=latitude, inplace=False)
 
-    return DataContainer(new_model), DataContainer(new_flags)
+    if inplace:
+        return new_model, new_flags
+    else:
+        return DataContainer(new_model), DataContainer(new_flags)
 
 
 def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
