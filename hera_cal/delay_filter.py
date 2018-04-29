@@ -7,6 +7,7 @@ from uvtools.dspec import delay_filter
 from copy import deepcopy
 from scipy import constants
 import argparse
+import datetime
 
 class Delay_Filter():
 
@@ -44,7 +45,8 @@ class Delay_Filter():
         self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
 
 
-    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1.,tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100):
+    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., tol=1e-9, 
+                   window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
@@ -64,6 +66,7 @@ class Delay_Filter():
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+            verbose: If True print feedback to stdout
 
         Results are stored in:
             self.filtered_residuals: DataContainer formatted like self.data with only high-delay components
@@ -77,6 +80,8 @@ class Delay_Filter():
             to_filter = self.data.keys()
 
         for k in to_filter:
+            if verbose:
+                print "\nStarting filter on {} at {}".format(k, str(datetime.datetime.now()))
             bl_len = np.linalg.norm(self.antpos[k[0]] - self.antpos[k[1]]) / constants.c * 1e9 #in ns
             sdf = np.median(np.diff(self.freqs)) / 1e9 #in GHz
             if weight_dict is not None:
