@@ -9,12 +9,14 @@ import warnings
 import uvtools
 import argparse
 from hera_cal.abscal import fft_dly
+import gc as garbage_collector
 
 def drop_cross_vis(data):
     '''Delete all entries from a DataContiner that not autocorrelations in order to save memory.'''
     for (i,j,pol) in data.keys():
         if i != j or pol[0] != pol[1]:
             del data[(i,j,pol)]
+            garbage_collector.collect()
     return data
 
 
@@ -334,6 +336,7 @@ class Calibration_Smoother():
             self.prev_data = drop_cross_vis(self.prev_data)
             self.prev_data_ant_flags = synthesize_ant_flags(prev_data_flags)
             del prev_data_flags
+            garbage_collector.collect()
             self.has_prev_data = True
 
         if next_data is not None:
@@ -342,6 +345,7 @@ class Calibration_Smoother():
             self.next_data = drop_cross_vis(self.next_data)
             self.next_data_ant_flags = synthesize_ant_flags(next_data_flags)
             del next_data_flags
+            garbage_collector.collect()
             self.has_next_data = True
 
         if self.has_cal:
