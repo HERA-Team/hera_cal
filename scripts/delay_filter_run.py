@@ -14,7 +14,7 @@ if a.outfile is None:
 df = Delay_Filter()
 df.load_data(a.infile, filetype=a.filetype)
 df.run_filter(standoff=a.standoff, horizon=a.horizon, tol=a.tol, window=a.window,
-              skip_wgt=a.skip_wgt, maxiter=a.maxiter)
+              skip_wgt=a.skip_wgt, maxiter=a.maxiter, edge_flag=a.edge_flag)
 
 # Write high-pass residual
 if a.write_model == False or a.write_all == True:
