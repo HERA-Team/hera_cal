@@ -46,7 +46,7 @@ class Delay_Filter():
 
 
     def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., tol=1e-9, 
-                   window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False):
+                   window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False, edge_flag=0):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
@@ -67,6 +67,7 @@ class Delay_Filter():
                 Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
             verbose: If True print feedback to stdout
+            edge_flag: Integer number of channels to flag on each band edge before filtering.
 
         Results are stored in:
             self.filtered_residuals: DataContainer formatted like self.data with only high-delay components
@@ -88,6 +89,13 @@ class Delay_Filter():
                 wgts = weight_dict[k]
             else:
                 wgts = np.logical_not(self.flags[k])
+
+            # edge flag
+            if edge_flag > 0:
+                self.flags[k][:, :edge_flag] = True
+                self.flags[k][:, -edge_flag:] = True
+                wgts[:, :edge_flag] = 0.0
+                wgts[:, -edge_flag:] = 0.0
 
             d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon,
                                               tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
