@@ -31,7 +31,7 @@ class Delay_Filter():
             self.writable = True
             self.input_data, self.filetype = input_data, filetype
         self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = io.load_vis(input_data, return_meta=True, filetype=filetype)
-
+        self.Nfreqs = len(self.freqs)
 
     def load_data_as_dicts(self, data, flags, freqs, antpos):
         '''Loads in data manually as a dictionary, an ordered dictionary, or a DataContainer.
@@ -100,8 +100,9 @@ class Delay_Filter():
                     self.flags[k][i,:] = np.ones_like(self.flags[k][i,:])
 
 
-    def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history = '',
-                            clobber = False, write_CLEAN_models=False, **kwargs):
+    def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history='',
+                            clobber = False, write_CLEAN_models=False, write_filled_data=False, 
+                            **kwargs):
         '''Writes high-pass filtered data to disk, using input (which must be either
         a single path or a single UVData object) as a template.
 
@@ -112,6 +113,8 @@ class Delay_Filter():
             clobber: if True, overwrites existing file at outfilename
             write_CLEAN_models: if True, save the low-pass filtered CLEAN model rather
                 than the high-pass filtered residual
+            write_filled_data: if True, save the original data with its flags filled in
+                with the CLEAN model rather writing the high-pass filtered residual.
             kwargs: addtional keyword arguments update the UVData object before saving.
                 Must be valid UVData object attributes.
         '''
@@ -119,11 +122,29 @@ class Delay_Filter():
             raise NotImplementedError('Writing functionality requires that the input be a single file path string or a single UVData object.')
         else:
             if write_CLEAN_models:
+                assert not write_filled_data, "cannot choose both write_CLEAN_models and write_filled_data"
                 data_out = self.CLEAN_models
+                flags_out = self.flags
+            elif write_filled_data:
+                assert not write_CLEAN_models, "cannot choose both write_CLEAN_models and write_filled_data"
+                # construct filled data and filled flags
+                data_out = deepcopy(self.data)
+                flags_out = deepcopy(self.flags)
+                for k in data_out.keys():
+                    # get flags
+                    f = flags_out[k].copy()
+                    # if flagged across all freqs, "unflag" this f
+                    f[np.sum(f, axis=1) / float(self.Nfreqs) > 0.9999] = False
+                    # replace data_out with CLEAN_models at f == True
+                    data_out[k][f] = self.CLEAN_models[k][f]
+                    # unflag at f == True
+                    flags_out[k][f] = False
             else:
                 data_out = self.filtered_residuals
-            io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out, data=data_out, flags=self.flags,
-                          add_to_history=add_to_history, clobber=clobber, **kwargs)
+                flags_out = self.flags
+            io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out, 
+                          data=data_out, flags=flags_out, add_to_history=add_to_history, clobber=clobber, 
+                          **kwargs)
 
 
 def delay_filter_argparser():
@@ -135,10 +156,13 @@ def delay_filter_argparser():
                    "will override this default, and instead sets outfile to infile + 'D'.")
     a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files (default "miriad")')
     a.add_argument("--write_model", default=False, action="store_true", help="Write the low-pass filtered CLEAN model rather"\
-                   "than the high-pass filtered residual.")
-    a.add_argument("--write_both", default=False, action='store_true', help="Write both the high-pass residual and the low-pass "\
-                    "CLEAN model. The residual gets the outfile name (or default 'D' extension), and the model gets an 'M' extension "\
-                    "on top of the residual filename.")
+                   "than the high-pass filtered residual or the flag-filled data.")
+    a.add_argument("--write_filled", default=False, action='store_true', help='Write the original data with its flags filled with '\
+                    "the CLEAN model instead of residual or CLEAN model.")
+    a.add_argument("--write_all", default=False, action='store_true', help="Write the high-pass residual, the low-pass "\
+                    "CLEAN model and the flag-filled original data. The residual gets the outfile name (or default 'D' extension), " \
+                    "and the model and original data get the 'M' and 'F' extension on top of the residual filename respectively.")
+    a.add_argument("--edge_flag", default=0, type=int, help="Number of channels to flag on each band edge before filtering.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
 
     filt_options = a.add_argument_group(title='Options for the delay filter')
