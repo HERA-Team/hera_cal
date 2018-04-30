@@ -85,9 +85,11 @@ class Test_Delay_Filter(unittest.TestCase):
             self.assertTrue(dfil.info.has_key(k))
 
         # test skip_wgt imposition of flags
+        dfil = df.Delay_Filter()
+        dfil.load_data(fname)
         wgts={k: np.ones_like(dfil.flags[k])}
-        wgts[k][0,0:50] = 0
-        dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-3, window='blackman-harris', skip_wgt=0.5, maxiter=100)
+        wgts[k][0,:] = 0.0
+        dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.5, maxiter=100)
         self.assertTrue(dfil.info[k][0]['skipped'])
         np.testing.assert_array_equal(dfil.flags[k][0,:], np.ones_like(dfil.flags[k][0,:]))
         np.testing.assert_array_equal(dfil.CLEAN_models[k][0,:], np.zeros_like(dfil.CLEAN_models[k][0,:]))
@@ -112,9 +114,15 @@ class Test_Delay_Filter(unittest.TestCase):
         self.assertEqual(uvd.telescope_name, 'PAPER')
         
         filtered_residuals, flags = io.load_vis(uvd)
+
         dfil.write_filtered_data(outfilename, write_CLEAN_models=True, clobber=True)
         CLEAN_models, flags = io.load_vis(outfilename)
+
+        dfil.write_filtered_data(outfilename, write_filled_data=True, clobber=True)
+        filled_data, filled_flags = io.load_vis(outfilename)
+
         for k in data.keys():
+            np.testing.assert_array_almost_equal(filled_data[k][~flags[k]], data[k][~flags[k]])
             np.testing.assert_array_almost_equal(dfil.CLEAN_models[k], CLEAN_models[k])
             np.testing.assert_array_almost_equal(dfil.filtered_residuals[k], filtered_residuals[k])
             np.testing.assert_array_almost_equal(data[k][~flags[k]], (CLEAN_models[k] + filtered_residuals[k])[~flags[k]], 5)
