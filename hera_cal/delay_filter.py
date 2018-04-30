@@ -99,6 +99,31 @@ class Delay_Filter():
                 if info_dict.get('skipped', False):
                     self.flags[k][i,:] = np.ones_like(self.flags[k][i,:])
 
+    def get_filled_data(self):
+        """Get original data with flagged pixels filled with CLEAN_models
+
+        Returns
+            filled_data: DataContainer with original data and flags filled with CLEAN model
+            filled_flgs: DataContainer with flags set to False unless time is skipped
+        """
+        assert hasattr(self, 'CLEAN_models') and hasattr(self, 'data') and hasattr(self, 'flags'), "self.CLEAN_models, "\
+            "self.data and self.flags must all exist to get filled data"
+        # construct filled data and filled flags
+        filled_data = deepcopy(self.data)
+        filled_flgs = deepcopy(self.flags)
+
+        # iterate over filled_data keys
+        for k in filled_data.keys():
+            # get flags
+            f = filled_flgs[k].copy()
+            # if flagged across all freqs, "unflag" this f
+            f[np.sum(f, axis=1) / float(self.Nfreqs) > 0.99999] = False
+            # replace data_out with CLEAN_models at f == True
+            filled_data[k][f] = self.CLEAN_models[k][f]
+            # unflag at f == True
+            filled_flgs[k][f] = False
+
+        return filled_data, filled_flgs
 
     def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history='',
                             clobber = False, write_CLEAN_models=False, write_filled_data=False, 
@@ -128,17 +153,7 @@ class Delay_Filter():
             elif write_filled_data:
                 assert not write_CLEAN_models, "cannot choose both write_CLEAN_models and write_filled_data"
                 # construct filled data and filled flags
-                data_out = deepcopy(self.data)
-                flags_out = deepcopy(self.flags)
-                for k in data_out.keys():
-                    # get flags
-                    f = flags_out[k].copy()
-                    # if flagged across all freqs, "unflag" this f
-                    f[np.sum(f, axis=1) / float(self.Nfreqs) > 0.9999] = False
-                    # replace data_out with CLEAN_models at f == True
-                    data_out[k][f] = self.CLEAN_models[k][f]
-                    # unflag at f == True
-                    flags_out[k][f] = False
+                data_out, flags_out = self.get_filled_data()
             else:
                 data_out = self.filtered_residuals
                 flags_out = self.flags
