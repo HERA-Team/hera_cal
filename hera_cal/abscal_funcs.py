@@ -1374,11 +1374,11 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=N
         new_flags[k][flag_lst, :] = True
 
     # rephase
-    new_model = utils.lst_rephase(new_model, bls, freqs, dlst, lat=latitude, inplace=False)
-
     if inplace:
+        utils.lst_rephase(new_model, bls, freqs, dlst, lat=latitude, inplace=True)
         return new_model, new_flags
     else:
+        new_model = utils.lst_rephase(new_model, bls, freqs, dlst, lat=latitude, inplace=False)
         return DataContainer(new_model), DataContainer(new_flags)
 
 
