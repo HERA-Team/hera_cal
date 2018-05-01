@@ -46,7 +46,8 @@ class Delay_Filter():
 
 
     def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., tol=1e-9, 
-                   window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False, edge_flag=0):
+                   window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False, 
+                   flag_nchan_low=0, flag_nchan_high=0):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
@@ -67,7 +68,8 @@ class Delay_Filter():
                 Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
             verbose: If True print feedback to stdout
-            edge_flag: Integer number of channels to flag on each band edge before filtering.
+            flag_nchan_low: Integer number of channels to flag on lower band edge before filtering
+            flag_nchan_low: Integer number of channels to flag on upper band edge before filtering
 
         Results are stored in:
             self.filtered_residuals: DataContainer formatted like self.data with only high-delay components
@@ -91,11 +93,12 @@ class Delay_Filter():
                 wgts = np.logical_not(self.flags[k])
 
             # edge flag
-            if edge_flag > 0:
-                self.flags[k][:, :edge_flag] = True
-                self.flags[k][:, -edge_flag:] = True
-                wgts[:, :edge_flag] = 0.0
-                wgts[:, -edge_flag:] = 0.0
+            if flag_nchan_low > 0:
+                self.flags[k][:, :flag_nchan_low] = True
+                wgts[:, :flag_nchan_low] = 0.0
+            if flag_nchan_high > 0:
+                self.flags[k][:, :flag_nchan_high] = True
+                wgts[:, :flag_nchan_high] = 0.0                
 
             d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon,
                                               tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
@@ -185,7 +188,8 @@ def delay_filter_argparser():
     a.add_argument("--write_all", default=False, action='store_true', help="Write the high-pass residual, the low-pass "\
                     "CLEAN model and the flag-filled original data. The residual gets the outfile name (or default 'D' extension), " \
                     "and the model and original data get the 'M' and 'F' extension on top of the residual filename respectively.")
-    a.add_argument("--edge_flag", default=0, type=int, help="Number of channels to flag on each band edge before filtering.")
+    a.add_argument("--flag_nchan_low", default=0, type=int, help="Number of channels to flag on lower band edge before filtering.")
+    a.add_argument("--flag_nchan_high", default=0, type=int, help="Number of channels to flag on upper band edge before filtering.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
 
     filt_options = a.add_argument_group(title='Options for the delay filter')
