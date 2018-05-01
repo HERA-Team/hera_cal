@@ -47,7 +47,7 @@ class Delay_Filter():
 
     def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., tol=1e-9, 
                    window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False, 
-                   flag_nchan_low=0, flag_nchan_high=0):
+                   flag_nchan_low=0, flag_nchan_high=0, **win_kwargs):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
@@ -70,6 +70,7 @@ class Delay_Filter():
             verbose: If True print feedback to stdout
             flag_nchan_low: Integer number of channels to flag on lower band edge before filtering
             flag_nchan_low: Integer number of channels to flag on upper band edge before filtering
+            win_kwargs : keyword arguments to feed aipy.dsp.gen_window()
 
         Results are stored in:
             self.filtered_residuals: DataContainer formatted like self.data with only high-delay components
@@ -101,7 +102,7 @@ class Delay_Filter():
                 wgts[:, -flag_nchan_high:] = 0.0                
 
             d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon,
-                                              tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
+                                              tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
             self.filtered_residuals[k] = d_res
             self.CLEAN_models[k] = d_mdl
             self.info[k] = info
@@ -137,7 +138,7 @@ class Delay_Filter():
         return filled_data, filled_flgs
 
     def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history='',
-                            clobber = False, write_CLEAN_models=False, write_filled_data=False, 
+                            clobber=False, write_CLEAN_models=False, write_filled_data=False, 
                             **kwargs):
         '''Writes high-pass filtered data to disk, using input (which must be either
         a single path or a single UVData object) as a template.
@@ -201,5 +202,6 @@ def delay_filter_argparser():
                               see aipy.dsp.gen_window for options')
     filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    filt_options.add_argument("--alpha", type-float, default=None, help="If window='tukey', use this alpha parameter.")
 
     return a

@@ -6,16 +6,23 @@ import sys
 parser = delay_filter_argparser()
 a = parser.parse_args()
 
+# set outfile
 if a.outfile is None:
     # If outfile is not supplied, append 'D' to infile.
     a.outfile = a.infile + 'D'
+
+# set kwargs
+kwargs = {}
+if a.alpha is not None:
+  kwargs['alpha'] = a.alpha
+
 
 # Run Delay Filter
 df = Delay_Filter()
 df.load_data(a.infile, filetype=a.filetype)
 df.run_filter(standoff=a.standoff, horizon=a.horizon, tol=a.tol, window=a.window,
               skip_wgt=a.skip_wgt, maxiter=a.maxiter, flag_nchan_low=a.flag_nchan_low,
-              flag_nchan_high=a.flag_nchan_high)
+              flag_nchan_high=a.flag_nchan_high, **kwargs)
 
 # Write high-pass residual
 if a.write_model == False or a.write_all == True:
