@@ -104,7 +104,7 @@ class Test_Delay_Filter(unittest.TestCase):
         dfil = df.Delay_Filter()
         dfil.load_data(fname)
         data = dfil.data
-        dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edge_flag=5)
+        dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, flag_nchan_low=5, flag_nchan_high=5)
         outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.uvORAD')
         dfil.write_filtered_data(outfilename, add_to_history='Hello_world.', clobber=True, telescope_name='PAPER')
 
