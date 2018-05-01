@@ -97,8 +97,8 @@ class Delay_Filter():
                 self.flags[k][:, :flag_nchan_low] = True
                 wgts[:, :flag_nchan_low] = 0.0
             if flag_nchan_high > 0:
-                self.flags[k][:, :flag_nchan_high] = True
-                wgts[:, :flag_nchan_high] = 0.0                
+                self.flags[k][:, -flag_nchan_high:] = True
+                wgts[:, -flag_nchan_high:] = 0.0                
 
             d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon,
                                               tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter)
