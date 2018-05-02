@@ -22,7 +22,7 @@ df = Delay_Filter()
 df.load_data(a.infile, filetype=a.filetype)
 df.run_filter(standoff=a.standoff, horizon=a.horizon, tol=a.tol, window=a.window,
               skip_wgt=a.skip_wgt, maxiter=a.maxiter, flag_nchan_low=a.flag_nchan_low,
-              flag_nchan_high=a.flag_nchan_high, **kwargs)
+              flag_nchan_high=a.flag_nchan_high, min_dly=a.min_dly, gain=a.gain, **kwargs)
 
 # Write high-pass residual
 if a.write_model == False or a.write_all == True:
