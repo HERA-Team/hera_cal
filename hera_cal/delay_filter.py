@@ -45,9 +45,9 @@ class Delay_Filter():
         self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
 
 
-    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., tol=1e-9, 
-                   window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False, 
-                   flag_nchan_low=0, flag_nchan_high=0, **win_kwargs):
+    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., min_dly=0.0, 
+                   tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False, 
+                   flag_nchan_low=0, flag_nchan_high=0, gain=0.1, **win_kwargs):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
@@ -59,6 +59,7 @@ class Delay_Filter():
                 of self.flags. uvtools.dspec.delay_filter will renormalize to compensate
             standoff: fixed additional delay beyond the horizon (in ns)
             horizon: proportionality constant for bl_len where 1 is the horizon (full light travel time)
+            min_dly: minimum delay used for cleaning [ns]: if bl_len * horizon + standoff < min_dly, use min_dly.
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
             window: window function for filtering applied to the filtered axis.
                 See aipy.dsp.gen_window for options.
@@ -70,6 +71,8 @@ class Delay_Filter():
             verbose: If True print feedback to stdout
             flag_nchan_low: Integer number of channels to flag on lower band edge before filtering
             flag_nchan_low: Integer number of channels to flag on upper band edge before filtering
+            gain: The fraction of a residual used in each iteration. If this is too low, clean takes
+                unnecessarily long. If it is too high, clean does a poor job of deconvolving.
             win_kwargs : keyword arguments to feed aipy.dsp.gen_window()
 
         Results are stored in:
@@ -101,8 +104,8 @@ class Delay_Filter():
                 self.flags[k][:, -flag_nchan_high:] = True
                 wgts[:, -flag_nchan_high:] = 0.0                
 
-            d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon,
-                                              tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
+            d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon, min_dly=min_dly,
+                                              tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter, gain=gain, **win_kwargs)
             self.filtered_residuals[k] = d_res
             self.CLEAN_models[k] = d_mdl
             self.info[k] = info
@@ -197,11 +200,13 @@ def delay_filter_argparser():
     filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
     filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
                               (full light travel time)')
+    filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for cleaning.")
     filt_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
     filt_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
                               see aipy.dsp.gen_window for options')
     filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    filt_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     filt_options.add_argument("--alpha", type-float, default=None, help="If window='tukey', use this alpha parameter.")
 
     return a
