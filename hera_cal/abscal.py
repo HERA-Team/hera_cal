@@ -1420,7 +1420,7 @@ def cut_bls(datacontainer, bls, bl_cut):
     """
     cut_datacontainer = odict()
     for k in datacontainer.keys():
-        if np.linalg.norm(bls[k]) <= bl_cut:
+        if bls.has_key(k) and np.linalg.norm(bls[k]) <= bl_cut:
             cut_datacontainer[k] = datacontainer[k]
 
     assert len(cut_datacontainer) > 0, "no baselines were kept after baseline cut..."
