@@ -184,7 +184,7 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(len(rd.keys()), 9)
         nt.assert_equal(len(rf.keys()), 9)
         # test averaging worked
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=False)
         v = np.mean([data[(52,53,'xx')],data[(37,38,'xx')],data[(24,25,'xx')],data[(38,39,'xx')]], axis=0)
         nt.assert_true(np.isclose(rd[(24,25,'xx')], v).min())
         # test mirror_red_data
