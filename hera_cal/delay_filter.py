@@ -207,6 +207,6 @@ def delay_filter_argparser():
     filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
     filt_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
-    filt_options.add_argument("--alpha", type-float, default=None, help="If window='tukey', use this alpha parameter.")
+    filt_options.add_argument("--alpha", type=float, default=None, help="If window='tukey', use this alpha parameter.")
 
     return a
