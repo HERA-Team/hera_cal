@@ -1673,9 +1673,9 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
 
         # get wgts
         if broadcast_wgts:
-            w = np.array(reduce(operator.add, map(lambda k: wgts[k], bl_group)), np.float) / len(bl_group)
-        else:
             w = np.array(reduce(operator.mul, map(lambda k: wgts[k], bl_group)), np.float) ** (1./len(bl_group))
+        else:
+            w = np.array(reduce(operator.add, map(lambda k: wgts[k], bl_group)), np.float) / len(bl_group)
 
         # iterate over bl_group
         for j, key in enumerate(sorted(bl_group)):
