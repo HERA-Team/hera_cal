@@ -175,14 +175,19 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(np.array(l).ndim, 1)
 
     def test_avg_data_across_red_bls(self):
-        # test basic execution 
+        # test basic execution
+        wgts = copy.deepcopy(self.wgts)
+        wgts[(24, 25, 'xx')][45, 45] = 0.0
         data, flags, antpos, ants, freqs, times, lsts, pols = hc.io.load_vis(self.data_file, return_meta=True)
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, wgts=self.wgts, tol=2.0)
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, wgts=wgts, tol=2.0, broadcast_wgts=False)
+        nt.assert_equal(rd[(24, 25, 'xx')].shape, (60, 64))
+        nt.assert_true(rf[(24, 25, 'xx')][45, 45] > 0.0)
         # test various kwargs
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0)
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=True)
+        wgts[(24, 25, 'xx')][45, 45] = 0.0
+        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, wgts=wgts, broadcast_wgts=True)
         nt.assert_equal(len(rd.keys()), 9)
         nt.assert_equal(len(rf.keys()), 9)
+        nt.assert_almost_equal(rf[(24, 25, 'xx')][45,45], 0.0)
         # test averaging worked
         rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=False)
         v = np.mean([data[(52,53,'xx')],data[(37,38,'xx')],data[(24,25,'xx')],data[(38,39,'xx')]], axis=0)
