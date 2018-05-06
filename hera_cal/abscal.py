@@ -447,7 +447,7 @@ class AbsCal(object):
         self._dly_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
         self._dly_slope_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._dly_slope[k][0], self._dly_slope[k][1]]), pk), self._gain_keys), 0, -1)
 
-    def global_phase_slope_logcal(self, tol=1.0, verbose=True):
+    def global_phase_slope_logcal(self, tol=1.0, edge_cut=0, verbose=True):
         """
         Solve for a frequency-independent spatial phase slope (a subset of the omnical degeneracies) by calling 
         abscal_funcs.global_phase_slope_logcal method. See abscal_funcs.global_phase_slope_logcal for details.
@@ -455,6 +455,8 @@ class AbsCal(object):
         Parameters:
         -----------
         tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
+
+        edge_cut : int, number of channels to exclude at each band edge in phase slope solver
 
         verbose : type=boolean, if True print feedback to stdout
 
@@ -475,7 +477,7 @@ class AbsCal(object):
         antpos = self.antpos
 
         # run global_phase_slope_logcal
-        fit = global_phase_slope_logcal(model, data, antpos, wgts=wgts, refant=self.refant, verbose=verbose, tol=tol)
+        fit = global_phase_slope_logcal(model, data, antpos, wgts=wgts, refant=self.refant, verbose=verbose, tol=tol, edge_cut=edge_cut)
 
         # form result
         self._phs_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
@@ -995,7 +997,7 @@ def abscal_arg_parser():
     a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
-    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge before FFT in delay solvers.")
+    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
     return a
 
 
@@ -1027,7 +1029,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
-    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge before FFT in delay solvers.")
+    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
     return a
 
 
@@ -1131,7 +1133,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     window : str, window to enact on data before FFT for delay solver, options=['blackmanharris', 'hann', None]
         None is a top-hat window.
 
-    edge_cut : int, number of channels to exclude at each band edge in delay solvers
+    edge_cut : int, number of channels to exclude at each band edge in delay and global phase solvers
 
     Result:
     -------
@@ -1269,7 +1271,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             if delay_slope_cal == False:
                 echo("it is recommended to run a delay_slope_cal before phase_slope_cal", verbose=verbose)
             for i in range(phs_max_iter):
-                AC.global_phase_slope_logcal(tol=tol, verbose=verbose)
+                AC.global_phase_slope_logcal(tol=tol, edge_cut=edge_cut, verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys()))
                 apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.phs_slope_gain, cal_flags, gain_convention='divide')
                 if all_antenna_gains:
