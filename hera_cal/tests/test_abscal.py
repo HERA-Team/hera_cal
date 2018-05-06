@@ -460,7 +460,7 @@ class Test_AbsCal:
 
     def test_global_phase_slope_logcal(self):
         # test w/o offsets
-        self.AC.global_phase_slope_logcal(verbose=False, edge_cut=10)
+        self.AC.global_phase_slope_logcal(verbose=False, edge_cut=31)
         nt.assert_equal(self.AC.phs_slope[(24, 'x')].shape, (2, 60, 1))
         nt.assert_equal(self.AC.phs_slope_gain[(24, 'x')].shape, (60, 64))
         nt.assert_equal(self.AC.phs_slope_arr.shape, (7, 2, 60, 1, 1))
