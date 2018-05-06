@@ -1279,8 +1279,8 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                 else:
                     merged_gains.append(AC.phs_slope_gain)
                 # test for convergence
-                if len(merged_gains) > 2:
-                    gains_before = merge_gains(merged_gains[:-2])
+                if len(merged_gains) > 1:
+                    gains_before = merge_gains(merged_gains[:-1])
                     gains_after = merge_gains(merged_gains)
                     # take L2 norm over antennas and times
                     gains_norm = np.linalg.norm([gains_after[k] for k in gains_after.keys()],axis=(0,1))
