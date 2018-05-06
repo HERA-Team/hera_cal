@@ -740,8 +740,8 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
         delta_phi[binary_flgs] *= np.nan
         avg_wgts[rk][np.isinf(delta_phi)+np.isnan(delta_phi)] = 0.0
         delta_phi[np.isinf(delta_phi)+np.isnan(delta_phi)] *= np.nan
-        ls_data[eqn_str] = np.nanmedian(delta_phi[:, edge_cut:(len(delta_phi)-edge_cut)], axis=1, keepdims=True)
-        ls_wgts[eqn_str] = np.sum(avg_wgts[rk][:, edge_cut:(len(delta_phi)-edge_cut)], axis=1, keepdims=True)
+        ls_data[eqn_str] = np.nanmedian(delta_phi[:, edge_cut:(delta_phi.shape[1]-edge_cut)], axis=1, keepdims=True)
+        ls_wgts[eqn_str] = np.sum(avg_wgts[rk][:, edge_cut:(delta_phi.shape[1]-edge_cut)], axis=1, keepdims=True)
 
         # set unobserved data to 0 with 0 weight
         ls_wgts[eqn_str][np.isnan(ls_data[eqn_str])] = 0
