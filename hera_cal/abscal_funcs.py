@@ -652,7 +652,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     return fit
 
-def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, tol=1.0):
+def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, tol=1.0, edge_cut=0):
     """
     Solve for a frequency-independent spatial phase slope using the equation 
 
@@ -686,12 +686,15 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
 
     tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
 
+    edge_cut : int, number of channels to exclude at each band edge in phase slope solver
+
     Output:
     -------
     fit : dictionary containing frequency-indpendent phase slope, e.g. Phi_ns_x 
           for each position component and polarization [radians / meter].
     """
     echo("...configuring linsolve data for global_phase_slope_logcal", verbose=verbose)
+    assert 2*edge_cut < data.values()[0].shape[1] - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
 
     # get keys from model and data dictionaries
     keys = sorted(set(model.keys()) & set(data.keys()))
@@ -737,8 +740,8 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
         delta_phi[binary_flgs] *= np.nan
         avg_wgts[rk][np.isinf(delta_phi)+np.isnan(delta_phi)] = 0.0
         delta_phi[np.isinf(delta_phi)+np.isnan(delta_phi)] *= np.nan
-        ls_data[eqn_str] = np.nanmedian(delta_phi, axis=1, keepdims=True)
-        ls_wgts[eqn_str] = np.sum(avg_wgts[rk], axis=1, keepdims=True)
+        ls_data[eqn_str] = np.nanmedian(delta_phi[:, edge_cut:(len(delta_phi)-edge_cut)], axis=1, keepdims=True)
+        ls_wgts[eqn_str] = np.sum(avg_wgts[rk][:, edge_cut:(len(delta_phi)-edge_cut)], axis=1, keepdims=True)
 
         # set unobserved data to 0 with 0 weight
         ls_wgts[eqn_str][np.isnan(ls_data[eqn_str])] = 0
