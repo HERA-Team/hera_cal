@@ -353,8 +353,9 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     return fit
 
 
-def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offsets=True, medfilt=True, kernel=(1, 5),
-                 verbose=True, time_ax=0, freq_ax=1, antpos=None, four_pol=False, window=None, edge_cut=0):
+def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offsets=True, medfilt=True, 
+                 kernel=(1, 15), verbose=True, antpos=None, four_pol=False, window='tukey',
+                 dly_maxiter=10, dly_tol=1e-3, edge_cut=0):
     """
     Solve for per-antenna delays according to the equation
 
@@ -393,16 +394,15 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
 
     kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
 
-    time_ax : type=int, time axis of model and data
-
-    freq_ax : type=int, freq axis of model and data
-
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
     four_pol : type=boolean, if True, fit multiple polarizations together 
 
-    window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
-        None is a top-hat window.
+    window : str, window to enact on data before FFT for dly solver. See abscal.fft_delay for options.
+
+    dly_maxiter : int, maximum number of iterations in fft_delay
+
+    dly_tol : float, delay tolerance in nanosec in fft_delay
 
     edge_cut : int, number of channels to exclude at each band edge in FFT window
 
@@ -439,11 +439,11 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, 
-                              freq_ax=freq_ax, solve_phase=solve_offsets, window=window, edge_cut=edge_cut)
+        dly, offset = fft_delay(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, window=window, 
+                                edge_cut=edge_cut, maxiter=dly_maxiter, conv_tol=dly_tol, verbose=verbose)
 
         # set nans to zero
-        rwgts = np.nanmean(wgts[k], axis=freq_ax, keepdims=True)
+        rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
         isnan = np.isnan(dly)
         dly[isnan] = 0.0
         rwgts[isnan] = 0.0
@@ -512,8 +512,9 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     return fit
 
 
-def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True, kernel=(1, 5),
-                         verbose=True, time_ax=0, freq_ax=1, four_pol=False, window=None, edge_cut=0):
+def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True, 
+                       kernel=(1, 15), four_pol=False, window='tukey', edge_cut=0, dly_maxiter=10,
+                       dly_tol=1e-3, verbose=True):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -551,16 +552,17 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
 
-    time_ax : type=int, time axis of model and data
-
-    freq_ax : type=int, freq axis of model and data
-
     four_pol : type=boolean, if True, fit multiple polarizations together 
 
-    window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
-        None is a top-hat window.
+    window : str, window to enact on data before FFT in solving for delay.
+        See abscal.fft_delay for options.
 
     edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
+        when solving for visibility delays
+
+    dly_maxiter : int, maximum number of iterations in fft_delay
+
+    dly_tol : float, delay tolerance in nanosec in fft_delay
 
     Output:
     -------
@@ -601,11 +603,11 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = fft_dly(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, time_ax=time_ax, 
-                              freq_ax=freq_ax, window=window, edge_cut=edge_cut)
+        dly, offset = fft_delay(ratio, wgts=wgts[k], df=df, medfilt=medfilt, kernel=kernel, window=window, 
+                                edge_cut=edge_cut, maxiter=dly_maxiter, conv_tol=dly_tol, verbose=verbose)
 
         # set nans to zero
-        rwgts = np.nanmean(wgts[k], axis=freq_ax, keepdims=True)
+        rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
         isnan = np.isnan(dly)
         dly[isnan] = 0.0
         rwgts[isnan] = 0.0
@@ -976,11 +978,16 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1,
-            window=None, solve_phase=True, edge_cut=0):
+def fft_delay(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 21),
+              window='tukey', maxiter=10, conv_tol=1e-2, edge_cut=0, verbose=True):
     """
-    get delay of visibility across band using FFT w/ tukey window
-    and quadratic fit to delay peak.
+    Get the dominant delay of a complex visibility across frequency using an FFT and 
+    a quadratic fit to the delay peak. This delay (and phase) is turned into a gain via
+
+    g = exp(j * 2pi * nu * dly + j * phi)
+
+    where nu is the (unspecified) frequency array of the data, and phi is the phase of the
+    delay mode anchored at the beginning of the bandpass (not 0 Hz, as is done in CASA).
 
     Parameters:
     -----------
@@ -992,27 +999,29 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
 
     kernel : size of median filter kernel along (time, freq) axes
 
-    time_ax : time axis of data
+    window : str, window to enact on data before FFT, 
+        options=['blackmanharris', 'tukey', None]. None is a top-hat window.
 
-    freq_ax : frequency axis of data
+    maxiter : int, maximum number of delay solver interations
 
-    window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
-        None is a top-hat window.
+    conv_tol : float, convergence tolerance to stop delay solver iterations [nano-seconds]
+        This is based on the average "peak_shift" value, which is the delay-bin offset
+        from the peak delay mode to the peak of a quadratic-fit in units of ns.
 
     edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
 
     Output: (dlys, phi)
     -------
-    dlys : ndarray containing delay for each integration
+    dlys : float ndarray containing recovered delay [sec] for each time integration
 
-    phi : ndarray containing phase of delay mode for each integration
+    phis : float ndarray containing phase [radians] of each recovered delay
     """
     # get array params
-    Nfreqs = vis.shape[freq_ax]
-    Ntimes = vis.shape[time_ax]
+    Nfreqs = vis.shape[1]
+    Ntimes = vis.shape[0]
 
     # get wgt
-    if wgts is None:
+    if wgts is None: 
         wgts = np.ones_like(vis, dtype=np.float)
 
     # smooth via median filter
@@ -1020,88 +1029,130 @@ def fft_dly(vis, wgts=None, df=9.765625e4, medfilt=True, kernel=(1, 11), time_ax
     if medfilt:
         vis_smooth = signal.medfilt(np.real(vis), kernel_size=kernel) + 1j*signal.medfilt(np.imag(vis), kernel_size=kernel)
     else:
-        vis_smooth = vis
-
-    # construct window
-    win = np.moveaxis(np.repeat(np.zeros(Nfreqs)[np.newaxis], Ntimes, axis=0), 0, time_ax)
-
-    if edge_cut > 0:
-        assert 2*edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
-        win_slice = slice(edge_cut, Nfreqs-edge_cut)
-        win_Nfreqs = Nfreqs - 2*edge_cut
-    else:
-        win_slice = slice(None)
-        win_Nfreqs = Nfreqs
+        vis_smooth = vis.copy()
 
     if window is None:
         # this is a top-hat window
-        win[:, win_slice] = signal.windows.tukey(win_Nfreqs, 0.0)
+        win = signal.windows.tukey(Nfreqs, 0.0)[None]
     elif window == 'blackmanharris':
-        win[:, win_slice] = signal.windows.blackmanharris(win_Nfreqs)
-    elif window == 'hann':
-        win[:, win_slice] = signal.windows.hann(win_Nfreqs)
+        win = signal.windows.blackmanharris(Nfreqs)[None]
+    elif window == 'tukey':
+        # this is a "tukey" window
+        win = signal.windows.tukey(Nfreqs, 0.5)[None]
     else:
-        raise ValueError("didn't recognize window {} from ['blackmanharris', 'hann', None]".format(window))
+        raise ValueError("didn't recognize window {}".format(window))
+
+    # cut edges of window if desired
+    if edge_cut > 0:
+        assert 2*edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
+        win[:, :edge_cut] = 0.0
+        win[:, -edge_cut:] = 0.0
 
     # multiply wgts
-    win *= wgts
+    win = win * wgts
 
-    # fft w/ window
-    vfft = np.fft.fft(vis_smooth * win, axis=freq_ax)
+    # intialize delay and phi lists
+    delay_list = []
+    phi_list = []
 
-    # get argmax of abs
-    amp = np.abs(vfft)
-    argmax = np.moveaxis(np.argmax(amp, axis=freq_ax)[np.newaxis], 0, freq_ax)
+    # enter loop over iterations
+    niter = 0
+    while niter < maxiter:
+        # fft w/ window
+        vfft = np.fft.fft(vis_smooth * win, axis=1)
 
+        # get peak delay, phase, peak and shift
+        dlys, phi, shifts = vis_peak_delay(vfft)
+
+        # update vis_smooth with delay solutions
+        nu = np.arange(Nfreqs)[None]
+        vis_smooth *= np.exp(-2j*np.pi*nu*dlys - 1j*phi)
+  
+        # put delay and shift into nano-seconds
+        dlys *= 1e9 / df
+        shifts *= 1e9 / df
+
+        # append to list
+        delay_list.append(dlys)
+        phi_list.append(phi)
+
+        # evaluate convergence criterion based on average of peak_shift across time
+        avg_shift = np.median(np.abs(shifts))
+        if np.median(np.abs(shifts)) < conv_tol:
+            break
+
+        # increase niter counter
+        niter += 1
+
+    if verbose: print "niter: {:d}, delay convergence: {:.5f} ns".format(niter, avg_shift)
+
+    # get final delays
+    dlys = reduce(operator.add, delay_list)
+    phis = reduce(operator.add, phi_list)
+
+    return dlys/1e9, phis
+
+
+def vis_peak_delay(vis_ft):
+    """
+    Given a complex (2D) visiblity FT, find the delay bin when the power
+    is maximized, fit a quadratic to this peak and 2 NN points then shift 
+    the calculated delay bin to match delay at quadratic peak. At this delay,
+    take 2 NN points, interpolate Re and Im separately and take angle to
+    get the phase offset of the calculated delay mode. Return the 
+    peak delay bin (int), the quadratic peak fractional offset (float)
+    and the phase (float) of the associated delay mode.
+    
+    To turn the dly output from this function into a true delay with
+    units of seconds, you need to divide by delta-nu of the 
+    original frequency bins.
+    
+    Parameters
+    ----------
+    vis_ft : complex 2D array of FT of visibility data along freq, shape=(Ntimes, Nfreqs)
+    
+    Returns
+    -------
+    dlys : float array containing peak delay modes [unitless], shape=(Ntimes, 1)
+        Must be divided by (d_nu) to get into seconds
+    phi : float array containing phase offset [radians] of delay mode anchored at the 
+        start of bandpass, shape=(Ntimes, 1)
+    shift : float array containing fractional delay shift of quadratic peak.
+        To put into seconds, divide by (d_nu).
+    """
+    # get metadata
+    Ntimes = vis_ft.shape[0]
+    Nfreqs = vis_ft.shape[1]
+    
+    # get metadata
+    Nfreqs = vis_ft.shape[1]
+
+    # wrap for edge cases
+    _vfft = np.tile(vis_ft, 3)
+    
+    # get amplitude array and get delays of its peak
+    amps = np.abs(_vfft)
+    peaks = np.argmax(amps[:, :Nfreqs], axis=1) + Nfreqs
+    
     # get delays
-    fftfreqs = np.fft.fftfreq(Nfreqs, 1)
-    dfreq = np.median(np.diff(fftfreqs))
-    dlys = fftfreqs[argmax]
+    dlys = np.fft.fftfreq(Nfreqs)[peaks - Nfreqs]
+    
+    # get nearest neighbors
+    NNs = np.array(map(lambda i: _vfft[i, peaks[i]-1:peaks[i]+2], range(Ntimes)))
 
-    # get peak shifts, and add to dlys
-    def get_peak(amp, max_ind):
-        Nchan = len(amp)
-        y = np.concatenate([amp,amp,amp])
-        max_ind += Nchan
-        y = y[max_ind-1:max_ind+2]
-        r = np.abs(np.diff(y))
-        r = r[0] / r[1]
-        peak = 0.5 * (r-1) / (r+1)
-        return peak
+    # get offset in fractional delay bin of peak of quadratic
+    d = np.abs(np.diff(np.abs(NNs), axis=1)).clip(1e-20, np.inf)
+    r = d[:, 0]  / d[:, 1]
+    shifts = 0.5 * (r - 1) / (r + 1)
+    
+    # shift delays by shifts
+    dlys += shifts / Nfreqs
 
-    peak_shifts = np.array([get_peak(np.take(amp, i, axis=time_ax), np.take(argmax, i, axis=time_ax)[0]) for i in range(Ntimes)])
-    dlys += np.moveaxis(peak_shifts.reshape(-1, 1) * dfreq, 0, time_ax)
-
-    phi = None
-    if solve_phase:
-        # get phase offsets by interpolating real and imag component of FFT
-        vfft_real = []
-        vfft_imag = []
-        for i, a in enumerate(argmax):
-            # get real and imag of each argmax
-            real = np.take(vfft.real, i, axis=time_ax)
-            imag = np.take(vfft.imag, i, axis=time_ax)
-
-            # wrap around
-            real = np.concatenate([real, real, real])
-            imag = np.concatenate([imag, imag, imag])
-            a += Nfreqs
-
-            # add interpolation component
-            rl = interpolate.interp1d(np.arange(Nfreqs*3), real)(a + peak_shifts[i])
-            im = interpolate.interp1d(np.arange(Nfreqs*3), imag)(a + peak_shifts[i])
-
-            # insert into arrays
-            vfft_real.append(rl)
-            vfft_imag.append(im)
-
-        vfft_real = np.moveaxis(np.array(vfft_real), 0, time_ax)
-        vfft_imag = np.moveaxis(np.array(vfft_imag), 0, time_ax)
-        vfft_interp = vfft_real + 1j*vfft_imag
-        phi = np.angle(vfft_interp)
-        dlys /= df
-
-    return dlys, phi
+    # interpolate real and imaginary of NNs at shift to get phase
+    NNs_interp = interpolate.interp1d(np.array([-1., 0., 1.]), NNs, kind='linear', copy=False, axis=1)(shifts)
+    phi = np.angle(NNs_interp.diagonal())
+    
+    return dlys[:, None], phi[:, None], shifts[:, None] / Nfreqs
 
 
 def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3,9), array=False):

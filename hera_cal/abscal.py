@@ -295,8 +295,8 @@ class AbsCal(object):
             self._ant_phi = odict(map(lambda k: (k, np.ones_like(self._ant_phi[k])*np.angle(np.median(np.real(np.exp(1j*self._ant_phi[k])))+1j*np.median(np.imag(np.exp(1j*self._ant_phi[k]))))), flatten(self._gain_keys)))
             self._ant_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys), 0, -1)
 
-    def delay_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
-                     solve_offsets=True, window=None, edge_cut=0):
+    def delay_lincal(self, medfilt=True, kernel=(1, 21), verbose=True, time_avg=False,
+                     solve_offsets=False, window='tukey', edge_cut=0, dly_maxiter=10, dly_tol=1e-3):
         """
         Solve for per-antenna delay according to the equation
         by calling abscal_funcs.delay_lincal method.
@@ -314,6 +314,10 @@ class AbsCal(object):
             None is a top-hat window.
 
         edge_cut : int, number of channels to exclude at each band edge in FFT window
+
+        dly_maxiter : int, maximum number of iterations in fft_delay
+
+        dly_tol : float, delay tolerance in nanosec in fft_delay
 
         Result:
         -------
@@ -342,24 +346,24 @@ class AbsCal(object):
 
         # run delay_lincal
         fit = delay_lincal(model, data, wgts=wgts, refant=self.refant, solve_offsets=solve_offsets, 
-                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax,
-                           window=window, edge_cut=edge_cut)
+                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose, window=window, 
+                           edge_cut=edge_cut, dly_maxiter=dly_maxiter, dly_tol=dly_tol)
 
         # time average
         if time_avg:
             k = flatten(self._gain_keys)[0]
-            Ntimes = fit["tau_{}_{}".format(k[0], k[1])].shape[time_ax]
+            Ntimes = fit["tau_{}_{}".format(k[0], k[1])].shape[0]
             for i, k in enumerate(flatten(self._gain_keys)):
                 tau_key = "tau_{}_{}".format(k[0], k[1])
-                tau_avg = np.moveaxis(np.median(fit[tau_key], axis=time_ax)[np.newaxis], 0, time_ax)
-                fit[tau_key] = np.repeat(tau_avg, Ntimes, axis=time_ax)
+                tau_avg = np.median(fit[tau_key], axis=0, keepdims=True)
+                fit[tau_key] = np.repeat(tau_avg, Ntimes, axis=0)
                 if solve_offsets:
                     phi_key = "phi_{}_{}".format(k[0], k[1])
                     gain = np.exp(1j*fit[phi_key])
-                    real_avg = np.median(np.real(gain), axis=time_ax)
-                    imag_avg = np.median(np.imag(gain), axis=time_ax)
-                    phi_avg = np.moveaxis(np.angle(real_avg + 1j*imag_avg)[np.newaxis], 0, time_ax)
-                    fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=time_ax)
+                    real_avg = np.median(np.real(gain), axis=0)
+                    imag_avg = np.median(np.imag(gain), axis=0)
+                    phi_avg = np.angle(real_avg + 1j*imag_avg)[np.newaxis]
+                    fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=0)
 
         # form result
         self._ant_dly = odict(map(lambda k: (k, copy.copy(fit["tau_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
@@ -369,8 +373,8 @@ class AbsCal(object):
             self._ant_dly_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0],k[1])])), flatten(self._gain_keys)))
             self._ant_dly_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_dly_phi[k], pk), self._gain_keys), 0, -1)
 
-    def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
-                           four_pol=False, window=None, edge_cut=0):
+    def delay_slope_lincal(self, medfilt=True, kernel=(1, 21), verbose=True, time_avg=False,
+                           four_pol=False, window='tukey', edge_cut=0, dly_maxiter=10, dly_tol=1e-3):
         """
         Solve for an array-wide delay slope (a subset of the omnical degeneracies) by calling 
         abscal_funcs.delay_slope_lincal method. See abscal_funcs.delay_slope_lincal for details.
@@ -380,10 +384,6 @@ class AbsCal(object):
         medfilt : boolean, if True median filter data before fft
 
         kernel : size of median filter across (time, freq) axes, type=(int, int)
-
-        time_ax : the time axis index of the data
-
-        freq_ax : the freq axis index of the data
 
         verbose : type=boolean, if True print feedback to stdout
 
@@ -395,6 +395,10 @@ class AbsCal(object):
             None is a top-hat window.
 
         edge_cut : int, number of channels to exclude at each band edge in FFT window
+
+        dly_maxiter : int, maximum number of iterations in fft_delay
+
+        dly_tol : float, delay tolerance in nanosec in fft_delay
 
         Result:
         -------
@@ -420,8 +424,8 @@ class AbsCal(object):
 
         # run delay_slope_lincal
         fit = delay_slope_lincal(model, data, antpos, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df, 
-                                 kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol,
-                                 window=window, edge_cut=edge_cut)
+                                 kernel=kernel, verbose=verbose, four_pol=four_pol, dly_maxiter=dly_maxiter,
+                                 dly_tol=dly_tol, window=window, edge_cut=edge_cut)
 
         # separate pols if four_pol
         if four_pol:
@@ -434,14 +438,14 @@ class AbsCal(object):
         # time average
         if time_avg:
             k = flatten(self._gain_keys)[0]
-            Ntimes = fit["T_ew_{}".format(k[1])].shape[time_ax]
+            Ntimes = fit["T_ew_{}".format(k[1])].shape[0]
             for i, k in enumerate(flatten(self._gain_keys)):
                 ew_key = "T_ew_{}".format(k[1])
                 ns_key = "T_ns_{}".format(k[1])
-                ew_avg = np.moveaxis(np.median(fit[ew_key], axis=time_ax)[np.newaxis], 0, time_ax)
-                ns_avg = np.moveaxis(np.median(fit[ns_key], axis=time_ax)[np.newaxis], 0, time_ax)
-                fit[ew_key] = np.repeat(ew_avg, Ntimes, axis=time_ax)
-                fit[ns_key] = np.repeat(ns_avg, Ntimes, axis=time_ax)
+                ew_avg = np.median(fit[ew_key], axis=0, keepdims=True)
+                ns_avg = np.median(fit[ns_key], axis=0, keepdims=True)
+                fit[ew_key] = np.repeat(ew_avg, Ntimes, axis=0)
+                fit[ns_key] = np.repeat(ns_avg, Ntimes, axis=0)
 
         # form result
         self._dly_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
@@ -469,7 +473,6 @@ class AbsCal(object):
             self.phs_slope_arr
             self.phs_slope_gain_arr
         """
-
         # assign data
         model = self.model
         data = copy.deepcopy(self.data)
@@ -962,7 +965,6 @@ class AbsCal(object):
         else:
             return None
 
-
 def abscal_arg_parser():
     """
     argparser for general abscal run. By default no calibration is performed: the user
@@ -994,10 +996,14 @@ def abscal_arg_parser():
     a.add_argument("--gen_phs_cal", default=False, action='store_true', help='perform general antenna phase bandpass calibration')
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
-    a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
+    a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length larger than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
-    a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
-    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
+    a.add_argument("--window", default='tukey', type=str, help="window to enact on data before FFT in delay solvers, see abscal.fft_delay for options.")
+    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to exclude on each band-edge in delay and global phase solvers.")
+    a.add_argument("--dly_maxiter", default=10, type=int, help="maximum number of iterations in fft_delay for delay solvers.")
+    a.add_argument("--dly_tol", default=1e-3, type=float, help="convergence tolerance [nanosec] for fft_delay in delay solver.")
+    a.add_argument("--dly_medfilt", default=False, action='store_true', help="run median filter in fft_delay before solving for delays.")
+    a.add_argument("--dly_kernel", default=(1, 21), type=int, help="if median filtering in fft_delay, size of median kernel (time-ax, freq-ax).")
     return a
 
 
@@ -1026,10 +1032,14 @@ def omni_abscal_arg_parser():
     a.add_argument("--phs_conv_crit", type=float, default=1e-6, help="convergence criterion in Delta g / g for stopping iterative phase_slope_cal or TT_phs_cal")
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
-    a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
+    a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length larger than bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
-    a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
-    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
+    a.add_argument("--window", default='tukey', type=str, help="window to enact on data before FFT in delay solvers, see abscal.fft_delay for options.")
+    a.add_argument("--edge_cut", default=0, type=int, help="number of channels to exclude on each band-edge in delay and global phase solvers.")
+    a.add_argument("--dly_maxiter", default=10, type=int, help="maximum number of iterations in fft_delay for delay solvers.")
+    a.add_argument("--dly_tol", default=1e-3, type=float, help="convergence tolerance [nanosec] for fft_delay in delay solver.")
+    a.add_argument("--dly_medfilt", default=False, action='store_true', help="run median filter in fft_delay before solving for delays.")
+    a.add_argument("--dly_kernel", default=(1, 21), type=int, help="if median filtering in fft_delay, size of median kernel (time-ax, freq-ax).")
     return a
 
 
@@ -1037,8 +1047,8 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                bl_cut=None, bl_taper_fwhm=None ,output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
-               TT_phs_cal=False, phs_max_iter=100, phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, 
-               latitude=-30.72152, max_dlst=0.005, history=''):
+               TT_phs_cal=False, phs_max_iter=100, phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, dly_maxiter=10,
+               dly_tol=1e-3, dly_medfilt=True, dly_kernel=(1, 21), latitude=-30.72152, max_dlst=0.005, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -1134,6 +1144,14 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         None is a top-hat window.
 
     edge_cut : int, number of channels to exclude at each band edge in delay and global phase solvers
+
+    dly_maxiter : int, maximum number of iterations in fft_delay
+
+    dly_tol : float, delay tolerance in nanosec in fft_delay
+
+    dly_medfilt : boolean, if True, median filter data in fft_delay call
+
+    dly_kernel : len-2 integer tuple, size of medfilt kernel in fft_delay (time-ax, freq-ax)
 
     Result:
     -------
@@ -1248,7 +1266,8 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             merged_gains = [merge_gains(merged_gains)]
 
         if avg_dly_slope_cal:
-            AC.delay_slope_lincal(verbose=verbose, time_avg=True, window=window, edge_cut=edge_cut)
+            AC.delay_slope_lincal(verbose=verbose, time_avg=True, window=window, edge_cut=edge_cut, dly_maxiter=dly_maxiter, 
+                                  medfilt=dly_medfilt, kernel=dly_kernel, dly_tol=dly_tol)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
             apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
             if all_antenna_gains:
@@ -1258,7 +1277,8 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             merged_gains = [merge_gains(merged_gains)]
 
         if delay_slope_cal:
-            AC.delay_slope_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
+            AC.delay_slope_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut, dly_maxiter=dly_maxiter, 
+                                  medfilt=dly_medfilt, kernel=dly_kernel, dly_tol=dly_tol)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
             apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
             if all_antenna_gains:

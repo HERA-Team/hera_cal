@@ -394,13 +394,13 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.ant_dly_arr.dtype, np.float)
         nt.assert_equal(self.AC.ant_dly_gain_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.ant_dly_gain_arr.dtype, np.complex)
-        nt.assert_true(np.isclose(np.angle(self.AC.ant_dly_gain[(24, 'x')]), 0.0).all())
+        nt.assert_true(np.isclose(np.angle(self.AC.ant_dly_gain[(24, 'x')]), 0.0, atol=1e-3).all())
         nt.assert_true(np.isclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'x')]), 0.0).all())
         # test exception
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_raises(AttributeError, AC.delay_lincal)
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freq_array)
+        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freq_array, verbose=False)
         nt.assert_equal(AC.ant_dly, None)
         nt.assert_equal(AC.ant_dly_gain, None)
         nt.assert_equal(AC.ant_dly_arr, None)
@@ -546,36 +546,34 @@ class Test_AbsCal:
         nt.assert_almost_equal(wgts[(25, 38, 'xx')][15, 20], 0)
         nt.assert_almost_equal(wgts[(25, 38, 'xx')][20, 15], 0)
 
-    def test_fft_dly(self):
+    def test_fft_delay(self):
         # test basic execution
         k = (24, 25, 'xx')
         vis = self.AC.model[k] / self.AC.data[k]
         hc.abscal.fill_dict_nans(vis, nan_fill=0.0, inf_fill=0.0, array=True)
         df = np.median(np.diff(self.AC.freqs))
         # basic execution
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=False, solve_phase=False)
+        dly, offset = hc.abscal.fft_delay(vis, df=df, medfilt=False, verbose=False, maxiter=1)
         nt.assert_equal(dly.shape, (60, 1))
-        nt.assert_equal(offset, None)
+        nt.assert_equal(offset.shape, (60, 1))
         # median filtering
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=True, solve_phase=False)
-        nt.assert_equal(dly.shape, (60, 1))
-        nt.assert_equal(offset, None)
-        # solve phase
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=True, solve_phase=True)
+        dly, offset = hc.abscal.fft_delay(vis, df=df, medfilt=True, verbose=False, maxiter=1)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset.shape, (60, 1))
         # test windows and edgecut
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=False, solve_phase=False, edge_cut=2, window='hann')
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=False, solve_phase=False, window='blackmanharris')
-        nt.assert_raises(ValueError, hc.abscal.fft_dly, vis, window='foo')
-        nt.assert_raises(AssertionError, hc.abscal.fft_dly, vis, edge_cut=1000)
+        dly, offset = hc.abscal.fft_delay(vis, df=df, medfilt=False, verbose=False, maxiter=1, window='blackmanharris')
+        dly, offset = hc.abscal.fft_delay(vis, df=df, medfilt=False, verbose=False, maxiter=1, window=None)
+        nt.assert_raises(ValueError, hc.abscal.fft_delay, vis, window='foo')
+        nt.assert_raises(AssertionError, hc.abscal.fft_delay, vis, edge_cut=1000)
         # test mock data
-        tau = np.array([1.5e-8]).reshape(1, -1) # 15 nanoseconds
-        f = np.linspace(0, 100e6, 1024)
+        tau = 37.5e-9
+        phi = np.pi/2
+        f = np.linspace(0, 100e6, 1024, endpoint=False)
         df = np.median(np.diff(f))
-        r = np.exp(1j*2*np.pi*f*tau)
-        dly, offset = hc.abscal.fft_dly(r, df=df, medfilt=True, kernel=(1, 5))
-        nt.assert_almost_equal(float(dly), 1.5e-8, delta=1e-9)
+        r = np.exp(2j*np.pi*f*37.5e-9 + 1j*phi)[None]
+        dly, offset = hc.abscal.fft_delay(r, df=df, medfilt=True, kernel=(1, 5), maxiter=10, verbose=False)
+        nt.assert_almost_equal(dly, tau, delta=0.1)
+        nt.assert_almost_equal(phi, offset, delta=0.1)
 
     def test_abscal_arg_parser(self):
         a = hc.abscal.abscal_arg_parser()
@@ -667,7 +665,7 @@ class Test_AbsCal:
         # setup AbsCal
         AC = hc.abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run delay_slope_cal
-        AC.delay_slope_lincal(time_avg=True, verbose=False)
+        AC.delay_slope_lincal(time_avg=True, verbose=False, kernel=(1, 5), edge_cut=5)
         # test recovery: accuracy only checked at 10% level
         nt.assert_almost_equal(AC.dly_slope_arr[0,0,0,0,0], 1e-9, delta=1e-10)
         nt.assert_almost_equal(AC.dly_slope_arr[0,1,0,0,0], -2e-9, delta=1e-10)
