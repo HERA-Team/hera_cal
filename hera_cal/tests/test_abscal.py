@@ -588,9 +588,11 @@ class Test_AbsCal:
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
-        gains, = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        gains, = hc.abscal.abscal_run(data_files, model_files, solar_flag=True, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
         nt.assert_equal(gains[(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[(24,'x')].shape, (60, 64))
+        # all data should be 1. b/c solar_flag flagged all data
+        nt.assert_true(gains[(24, 'x')].astype(np.bool).all())
         # write calfits
         outdir = "./"
         cf_name = "ex.calfits"
