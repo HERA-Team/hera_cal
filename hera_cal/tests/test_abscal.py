@@ -650,7 +650,6 @@ class Test_AbsCal:
         nt.assert_true(uvc.total_quality_array is not None)
         nt.assert_almost_equal(uvc.quality_array[0,0,32,0,0], 0.13632354140281677)
         nt.assert_true(uvc.flag_array[0].min())
-        nt.assert_false(uvc.flag_array[1].max())
         nt.assert_true(len(uvc.history) > 1000)
         # assert refant phase is zero
         nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
