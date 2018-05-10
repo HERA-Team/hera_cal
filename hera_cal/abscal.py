@@ -998,6 +998,8 @@ def abscal_arg_parser():
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
     a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
+    a.add_argument("--solar_flag", default=False, action='store_true', help="FLag data when the sun is above some specified altitude.")
+    a.add_argument("--solar_horizon", default=0.0, type=float, help="Solar altitude above which we flag data [degrees].")
     return a
 
 
@@ -1030,6 +1032,8 @@ def omni_abscal_arg_parser():
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
     a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
+    a.add_argument("--solar_flag", default=False, action='store_true', help="FLag data when the sun is above some specified altitude.")
+    a.add_argument("--solar_horizon", default=0.0, type=float, help="Solar altitude above which we flag data [degrees].")
     return a
 
 
@@ -1038,7 +1042,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
                TT_phs_cal=False, phs_max_iter=100, phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, 
-               latitude=-30.72152, max_dlst=0.005, history=''):
+               latitude=-30.72152, max_dlst=0.005, solar_flag=False, solar_horizon=0.0, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -1186,6 +1190,11 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     total_data_antpos = copy.deepcopy(data_antpos)
     data_ants = np.unique(map(lambda k: k[:2], data.keys()))
     data_antpos = odict(map(lambda k: (k, data_antpos[k]), data_ants))
+
+    # solar flag
+    if solar_flag:
+        utils.solar_flag(data_flags, int(np.floor(np.mean(data_times))), time_array=data_times, 
+                         flag_alt=solar_horizon, inplace=True)
 
     # get wgts
     wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))

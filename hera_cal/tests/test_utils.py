@@ -201,5 +201,28 @@ def test_lst_rephase():
     d_phs = hc.utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
     nt.assert_almost_equal(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
 
+def test_solar_flag():
+    data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+    uvd = UVData()
+    uvd.read_miriad(data_fname)
+    data, flags, antp, ant, f, t, l, p = hc.io.load_vis(uvd, return_meta=True)
+    # get solar altitude
+    a = hc.utils.get_sun_alt(2458043)
+    nt.assert_true(isinstance(a, (float, np.float, np.float64)))
+    a = hc.utils.get_sun_alt([2458043, 2458043.5])
+    nt.assert_true(isinstance(a, (np.ndarray)))
+    # test solar flag
+    bl = (24, 25, 'xx')
+    _flags = hc.utils.solar_flag(flags, 2458043, time_array=t, flag_alt=20.0, inplace=False)
+    nt.assert_true(_flags[bl][:41].all())
+    nt.assert_false(flags[bl][:41].all())
+    # test ndarray
+    hc.utils.solar_flag(flags[bl], 2458043, time_array=t, flag_alt=20.0, inplace=True)
+    nt.assert_true(flags[bl][:41].all())
+    # test uvd
+    hc.utils.solar_flag(uvd, 2458043, flag_alt=20.0, inplace=True)
+    nt.assert_true(uvd.get_flags(bl)[:41].all())
+    # test exception
+    nt.assert_raises(AssertionError, hc.utils.solar_flag, flags, 2458043)
 
 

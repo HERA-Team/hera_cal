@@ -9,6 +9,7 @@ from pyuvdata import UVCal, UVData
 import os
 import hera_cal
 import copy
+from scipy.interpolate import interp1d
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -308,6 +309,128 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
         return RA
     else:
         return RA[0]
+
+
+def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
+    """
+    Given longitude and latitude, get the Solar alittude at a given time.
+
+    Parameters
+    ----------
+    jds : float or ndarray of floats
+        Array of Julian Dates
+
+    longitude : float
+        Longitude of observer in degrees East
+
+    latitude : float
+        Latitude of observer in degrees North
+
+    Returns
+    -------
+    alts : float or ndarray
+        Array of altitudes [degrees] of the Sun
+    """
+    # type check
+    array = True
+    if isinstance(jds, (float, np.float, np.float64, int, np.int, np.int32)):
+        jds = [jds]
+        array = False 
+
+    # get earth location
+    e = crd.EarthLocation(lat=latitude*unt.deg, lon=longitude*unt.deg)
+
+    # get AltAz frame
+    a = crd.AltAz(location=e)
+
+    # get Sun locations
+    alts = np.array(map(lambda t: crd.get_sun(Time(t, format='jd')).transform_to(a).alt.value, jds))
+
+    if array:
+        return alts
+    else:
+        return alts[0]
+
+ 
+def solar_flag(flags, start_jd, time_array=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, 
+               inplace=False):
+    """
+    Apply flags at times when the Sun is above some minimum altitude.
+
+    Parameters
+    ----------
+    flags : flag ndarray, or DataContainer, or pyuvdata.UVData object
+
+    start_jd : int
+        Integer Julian Date to perform calculation for
+
+    time_array : 1D float ndarray
+        If flags is an ndarray or DataContainer, this contains the time bins 
+        of the data's time axis in Julian Date
+
+    flag_alt : float
+        If the Sun is greater than this altitude [degrees], we flag the data.
+
+    longitude : float
+        Longitude of observer in degrees East
+
+    latitude : float
+        Latitude of observer in degrees North
+        
+    Returns
+    -------
+    flags : solar-applied flags, same format as input
+    """
+    # type check
+    if isinstance(flags, hera_cal.datacontainer.DataContainer):
+        dtype = 'DC'
+    elif isinstance(flags, np.ndarray):
+        dtype = 'ndarr'
+    elif isinstance(flags, UVData):
+        dtype = 'uvd'
+    if dtype in ['ndarr', 'DC']:
+        assert time_array is not None, "if flags is an ndarray or DataContainer, must feed a time_array"
+
+    # inplace
+    if not inplace:
+        flags = copy.deepcopy(flags)
+
+    # get array of times across jd
+    jds = np.linspace(start_jd, start_jd+1, 21)
+
+    # get alts
+    alts = get_sun_alt(jds, longitude=longitude, latitude=latitude)
+
+    # interpolate at high-res
+    _jds = np.linspace(start_jd, start_jd+1, 201)
+    _alts = interp1d(jds, alts, kind='quadratic')(_jds)
+
+    # step through points and set min and maxjd
+    sunup = True
+    for jd, alt in zip(_jds, _alts):
+        if sunup == True:
+            if alt < flag_alt:
+                minjd = jd
+                sunup = False
+        if sunup == False:
+            if alt > flag_alt:
+                maxjd = jd
+                sunup = True
+
+    # apply flags
+    if dtype == 'DC':
+        flag_arr = (time_array < minjd) | (time_array > maxjd)
+        for k in flags.keys():
+            flags[k][flag_arr, :] = True
+    elif dtype == 'ndarr':
+        flag_arr = (time_array < minjd) | (time_array > maxjd)
+        flags[flag_arr, :] = True
+    elif dtype == 'uvd':
+        time_array = flags.time_array
+        flag_arr = (time_array < minjd) | (time_array > maxjd)
+        flags.flag_array[flag_arr] = True
+
+    return flags
 
 
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
