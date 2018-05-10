@@ -1369,6 +1369,11 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         gain_pols = AC.gain_pols
         gain_keys = gain_dict.keys()
 
+        # join gain_flag_dict with flag_dict
+        for k in flag_dict:
+            if k in gain_flag_dict:
+                flag_dict[k] += gain_flag_dict[k]
+
     # make blank gains if no modelfiles
     else:
         gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
@@ -1377,11 +1382,6 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_keys))
         if refant is None:
             refant = gain_keys[0][0]
-
-    # join gain_flag_dict with flag_dict
-    for k in flag_dict:
-        if k in gain_flag_dict:
-            flag_dict[k] += gain_flag_dict[k]
 
     # make extra calfits metadata
     total_qual = odict(map(lambda p: (p, np.ones((Ntimes, Nfreqs), np.float)), gain_pols))
