@@ -1196,8 +1196,6 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         utils.solar_flag(data_flags, int(np.floor(np.mean(data_times))), time_array=data_times, 
                          flag_alt=solar_horizon, inplace=True)
 
-    # get wgts
-    wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
 
     # ensure nomodelfiles is False
     if nomodelfiles == False:
@@ -1210,11 +1208,15 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if rephase_model:
             new_model, new_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, inplace=True,
                                                flags=model_flags, latitude=latitude, max_dlst=max_dlst)
-            # set wgts to zero wheree model is flagged
+            # update data flags w/ model flags
             for k in new_flags.keys():
-                wgts[k][new_flags[k]] *= 0
+                if k in data_flags:
+                    data_flags[k] += new_flags[k]
         else:
             new_model = model
+
+        # get wgts
+        wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
 
         # reweight according to redundancy
         if reweight:
@@ -1229,6 +1231,9 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
         # construct total_gain_keys
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
+
+        # construct antenna flag_dict based purely on data flags
+        gain_flag_dict = utils.data_to_gain_flags(data_flags, gain_keys=total_gain_keys)
 
         # initialize empty gain_list
         merged_gains = []
@@ -1373,6 +1378,11 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if refant is None:
             refant = gain_keys[0][0]
 
+    # join gain_flag_dict with flag_dict
+    for k in flag_dict:
+        if k in gain_flag_dict:
+            flag_dict[k] += gain_flag_dict[k]
+
     # make extra calfits metadata
     total_qual = odict(map(lambda p: (p, np.ones((Ntimes, Nfreqs), np.float)), gain_pols))
     quals = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.float)), gain_keys))
@@ -1413,7 +1423,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     # return gains if desired
     if return_gains:
-        return_obj += (gain_dict,)
+        return_obj += (gain_dict, flag_dict)
 
     if return_object:
         return_obj += (AC,)
@@ -1421,8 +1431,6 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     # return
     if return_gains or return_object:
         return return_obj
-
-
 
 def cut_bls(datacontainer, bls, bl_cut):
     """
@@ -1449,8 +1457,5 @@ def cut_bls(datacontainer, bls, bl_cut):
     assert len(cut_datacontainer) > 0, "no baselines were kept after baseline cut..."
 
     return DataContainer(cut_datacontainer)
-
-
-
 
 

@@ -588,17 +588,22 @@ class Test_AbsCal:
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
-        gains, = hc.abscal.abscal_run(data_files, model_files, solar_flag=True, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        gains, flags = hc.abscal.abscal_run(data_files, model_files, solar_flag=False, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        # assert shapes and types
         nt.assert_equal(gains[(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[(24,'x')].shape, (60, 64))
-        # all data should be 1. b/c solar_flag flagged all data
-        nt.assert_true(gains[(24, 'x')].astype(np.bool).all())
+        # first freq bin should be flagged due to complete flagging in model and data
+        nt.assert_true(flags[(24, 'x')][:, 0].all())
+        # solar flag run
+        gains, flags = hc.abscal.abscal_run(data_files, model_files, solar_flag=True, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        # all data should be flagged
+        nt.assert_true(flags[(24, 'x')].all())
         # write calfits
         outdir = "./"
         cf_name = "ex.calfits"
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
-        gains, = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
+        gains, flags = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
                                     return_gains=True, verbose=False)
         nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
         if os.path.exists(os.path.join(outdir, cf_name)):
@@ -607,7 +612,7 @@ class Test_AbsCal:
         hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
                                      match_red_bls=True, reweight=True)
         # check all calibration routines
-        gains, = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True, delay_slope_cal=True, phase_slope_cal=True,
+        gains, flags= hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True, delay_slope_cal=True, phase_slope_cal=True,
                                      delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False)
         nt.assert_equal(gains[(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[(24,'x')].shape, (60, 64))

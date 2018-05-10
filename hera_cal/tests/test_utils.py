@@ -226,3 +226,24 @@ def test_solar_flag():
     nt.assert_raises(AssertionError, hc.utils.solar_flag, flags, 2458043)
 
 
+def test_data_to_gain():
+    data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+    uvd = UVData()
+    uvd.read_miriad(data_fname)
+    data, flags, antp, ant, f, t, l, p = hc.io.load_vis(uvd, return_meta=True)
+    # artificially flag data
+    for k in flags.keys():
+        flags[k][:, 20:25] = True
+    # test w/ no gain_keys
+    gd = hc.utils.data_to_gain_flags(flags)
+    for k in gd:
+        nt.assert_true(gd[k][:, 20:25].all())
+    # test w/ gain_keys
+    gd = hc.utils.data_to_gain_flags(flags, [(24, 'x'), (25, 'x')])
+    nt.assert_true(gd.keys() == [(24, 'x'), (25, 'x')])
+    for k in gd:
+        nt.assert_true(gd[k][:, 20:25].all())
+
+
+
+
