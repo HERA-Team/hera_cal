@@ -10,6 +10,7 @@ import os
 import hera_cal
 import copy
 from scipy.interpolate import interp1d
+from collections import OrderedDict as odict
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -653,3 +654,52 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         
     if inplace == False:
         return data
+
+
+def data_to_gain_flags(flags, gain_keys=None):
+    """
+    Scroll through visibility flag DataContainer and find pixels (time, freq)
+    where an antenna has all flagged measurements, i.e. it's gain is 
+    completely unconstrained, and return a gain flag dict with results.
+
+    Parameters
+    ----------
+    flags : flag DataContainer
+
+    gain_keys : list of gain keys (ant, gain_pol) to create output flag_dict
+        for. Default is to parse keys of flags to construct this list.
+    
+    Returns
+    -------
+    flag_dict : dictionary with gain flags
+    """
+    # type check
+    assert isinstance(flags, hera_cal.datacontainer.DataContainer), "flags must be fed as a datacontainer"
+    Ntimes, Nfreqs = flags[flags.keys()[0]].shape
+
+    # get gain_keys if not provided
+    if gain_keys is None:
+        gain_keys = []
+        for k in flags.keys():
+            k1 = (k[0], k[2][0])
+            if k1 not in gain_keys:
+                gain_keys.append(k1)
+            k2 = (k[1], k[2][1])
+            if k2 not in gain_keys:
+                gain_keys.append(k2)
+
+    # construct completely flagged gain_dict
+    gain_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_keys))
+
+    # iterate over flags and unflag pixels where an antenna has unflagged data
+    for k in flags.keys():
+        k1 = (k[0], k[2][0])
+        k2 = (k[1], k[2][1])
+        if k1 in gain_dict:
+            gain_dict[k1] *= flags[k]
+        if k2 in gain_dict:
+            gain_dict[k2] *= flags[k]
+
+    return gain_dict
+
+
