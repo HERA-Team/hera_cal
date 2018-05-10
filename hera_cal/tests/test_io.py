@@ -60,17 +60,14 @@ class Test_Visibility_IO(unittest.TestCase):
 
         # test uvfits
         fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
-        with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis(fname, filetype='uvfits')
-        with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis([fname,fname], filetype='uvfits')
-        #self.assertEqual(d[(0,1,'xx')].shape, (60,64))
+        d, f = io.load_vis(fname, filetype='uvfits')
+        nt.assert_equal(d[d.keys()[0]].shape, (60, 64))
 
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(IOError):
             d, f = io.load_vis(fname, filetype='not_a_real_filetype')
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(IOError):
             d, f = io.load_vis(['str1','str2'], filetype='not_a_real_filetype')
-        with self.assertRaises(TypeError):
+        with self.assertRaises(IOError):
             d, f = io.load_vis([1,2], filetype='uvfits')
 
         # test w/ meta pick_data_ants
