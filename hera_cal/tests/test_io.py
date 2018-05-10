@@ -10,6 +10,8 @@ import hera_cal.io as io
 import os
 import shutil
 import copy
+import nose.tools as nt
+
 
 class Test_Visibility_IO(unittest.TestCase):
 
@@ -56,7 +58,7 @@ class Test_Visibility_IO(unittest.TestCase):
         self.assertEqual(len(ap[24]), 3)
         self.assertEqual(len(f), len(self.freq_array))
 
-        #test uvfits
+        # test uvfits
         fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
         with self.assertRaises(NotImplementedError):
             d, f = io.load_vis(fname, filetype='uvfits')
@@ -80,6 +82,28 @@ class Test_Visibility_IO(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             d, f = io.load_vis(1.0)
+
+        # test polarization and antenna_nums partial IO
+        d, f = io.load_vis(fname, polarizations=['xx'], antenna_nums=[24,25,37])
+        nt.assert_equal(d.keys(), [(24, 24, 'xx'), (24, 25, 'xx'), (24, 37, 'xx'), (25, 25, 'xx'),
+                                   (25, 37, 'xx'), (37, 37, 'xx'),])
+        # test timerange partial IO
+        d, f = io.load_vis(fname, times=[2458043.12700, 2458043.12726])
+        nt.assert_equal(d[d.keys()[0]].shape, (3, 64))
+        # test antpairs_nums
+        d, f = io.load_vis(fname, ant_pairs_nums=[(24, 25)])
+        nt.assert_equal(len(d.keys()), 1)
+        # test w/ uvd
+        uvd = UVData()
+        uvd.read_miriad(fname)
+        d, f = io.load_vis(uvd, ant_pairs_nums=[(24, 25)])
+        nt.assert_equal(len(d.keys()), 1)
+        # test w/ multiple uvd
+        uvd2 = UVData()
+        uvd2.read_miriad(fname2)
+        d, f = io.load_vis([uvd, uvd2], ant_pairs_nums=[(24, 25)])
+        nt.assert_equal(len(d.keys()), 1)
+        nt.assert_equal(d[d.keys()[0]].shape, (120, 64))
 
     def test_load_vis_nested(self):
         #duplicated testing from firstcal.UVData_to_dict
