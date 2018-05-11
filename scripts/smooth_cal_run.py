@@ -2,7 +2,7 @@
 
 """Command-line drive script for hera_cal.smooth_cal. By default, this script
 1) loads in the calibration solutions and (optionally) the associated flagging npzs for (usually) a whole day 
-2) performs a time smoothing of the calibration solutions (e.g. averaging) using Gaussian kernel (default 30 min FWHM)
+2) performs a time smoothing of the calibration solutions (e.g. averaging) using Gaussian kernel (default 1800 s FWHM)
 3) performs a frequency smoothing by delay-filtering the solutions (default 10 MHz scale e.g. 100 ns delay filter).
 4) writes the smoothed calibrations solutions to disk.
 Frequency smoothing is generally more important and the two smoothing operations do not commute as currently written,

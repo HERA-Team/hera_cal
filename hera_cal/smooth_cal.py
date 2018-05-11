@@ -80,13 +80,13 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
     return filtered, info
 
 
-def time_kernel(nInt, tInt, filter_scale=30.0):
+def time_kernel(nInt, tInt, filter_scale=1800.0):
     '''Build time averaging gaussian kernel.
     
     Arguments:
         nInt: number of integrations to be filtered
-        tInt: length of integrations (minutes)
-        filter_scale: float in minutes of FWHM of Gaussian smoothing kernel in time
+        tInt: length of integrations (seconds)
+        filter_scale: float in seconds of FWHM of Gaussian smoothing kernel in time
 
     Returns:
         kernel: numpy array of length 2 * nInt + 1
@@ -97,7 +97,7 @@ def time_kernel(nInt, tInt, filter_scale=30.0):
     return kernel / np.sum(kernel)
 
 
-def time_filter(gains, wgts, times, filter_scale=30.0, nMirrors=0):
+def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
     '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
     the mirroring of gains and wgts and appending the mirrored gains and wgts to both ends, 
     ensuring temporal smoothness of the rolling average.
@@ -106,7 +106,7 @@ def time_filter(gains, wgts, times, filter_scale=30.0, nMirrors=0):
         gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter
         wgts: ndarray of shape=(Ntimes,Nfreqs) of real linear multiplicative weights
         times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
-        filter_scale: float in minutes of FWHM of Gaussian smoothing kernel in time
+        filter_scale: float in seconds of FWHM of Gaussian smoothing kernel in time
         nMirrors: Number of times to reflect gains and wgts (each one increases nTimes by 3)
 
     Returns:
@@ -123,7 +123,7 @@ def time_filter(gains, wgts, times, filter_scale=30.0, nMirrors=0):
     nInt, nFreq = padded_gains.shape
     conv_gains = padded_gains * padded_wgts
     conv_weights = padded_wgts
-    kernel = time_kernel(nInt, np.median(np.diff(times))*24*60, filter_scale=filter_scale)
+    kernel = time_kernel(nInt, np.median(np.diff(times))*24*60*60, filter_scale=filter_scale)
     for i in range(nFreq):
         conv_gains[:,i] = scipy.signal.convolve(conv_gains[:,i], kernel, mode='same')
         conv_weights[:,i] = scipy.signal.convolve(conv_weights[:,i], kernel, mode='same')
@@ -140,9 +140,8 @@ class CalibrationSmoother():
         calfits files and, optionally, a corresponding list of flag npz files, which must match the calfits files 
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time. 
         Gains and flags are assigned to the nearest gridpoint using np.searchsorted. It is assumed that:
-        1) Sorting calfits_list and flags_npz_list string will put them in chronological order
-        2) All calfits and npzs have the same frequencies
-        3) The integration time does not change between files and integrations in a file are contiguous in time
+        1) All calfits and npzs have the same frequencies
+        2) The npz times and calfits time map one-to-one to the same set of integrations
 
         Arguments:
             calfits_list: list of string paths to calfits files containing calibration solutions and flags
@@ -151,27 +150,28 @@ class CalibrationSmoother():
                 antennas involved, unless either antenna is completely flagged for all times and frequencies.
         '''
         # load calibration files
-        self.cals = sorted(calfits_list)
+        self.cals = calfits_list
         self.gains, self.cal_flags, self.cal_freqs, self.cal_times = odict(), odict(), odict(), odict()
         for cal in self.cals:
             (self.gains[cal], self.cal_flags[cal], _, _, _, self.cal_freqs[cal], 
                  self.cal_times[cal], _) = io.load_cal(cal, return_meta=True)
             
         # load flags files
-        self.npzs = sorted(flags_npz_list)
+        self.npzs = flags_npz_list
         if len(self.npzs) > 0:
             self.npz_flags, self.npz_freqs, self.npz_times = odict(), odict(), odict()
-            for cal, npz in zip(self.cals, self.npzs):
-                self.npz_flags[cal] = synthesize_ant_flags(io.load_npz_flags(npz))
+            for npz in self.npzs:
+                self.npz_flags[npz] = synthesize_ant_flags(io.load_npz_flags(npz))
                 npz_dict = np.load(npz)
-                self.npz_freqs[cal] = np.unique(npz_dict['freq_array'])
-                self.npz_times[cal] = np.unique(npz_dict['time_array'])
+                self.npz_freqs[npz] = npz_dict['freq_array']
+                self.npz_times[npz] = np.unique(npz_dict['time_array'])
                     
         # set up time grid
-        all_file_times = np.array(self.cal_times.values()).ravel()
+        all_file_times = sorted(np.array(self.cal_times.values()).ravel())
         self.dt = np.median(np.diff(all_file_times))
-        self.time_grid = np.arange(all_file_times[0], all_file_times[-1]+self.dt, self.dt)
+        self.time_grid = np.arange(all_file_times[0], all_file_times[-1]+self.dt/2.0, self.dt)
         self.time_indices = {cal: np.searchsorted(self.time_grid, times) for cal, times in self.cal_times.items()}
+        self.npz_time_indices = {npz: np.searchsorted(self.time_grid, times) for npz, times in self.npz_times.items()}
                 
         # build multi-file grids for each antenna's gains and flags
         self.freqs = self.cal_freqs[self.cals[0]]
@@ -185,8 +185,9 @@ class CalibrationSmoother():
                 if self.gains[cal].has_key(ant):
                     self.gain_grids[ant][self.time_indices[cal],:] = self.gains[cal][ant]
                     self.flag_grids[ant][self.time_indices[cal],:] = self.cal_flags[cal][ant]
-                if len(self.npzs) > 0 and self.npz_flags[cal].has_key(ant):
-                    self.flag_grids[ant][self.time_indices[cal],:] +=  self.npz_flags[cal][ant]
+            for npz in self.npzs:
+                if self.npz_flags[npz].has_key(ant):
+                    self.flag_grids[ant][self.npz_time_indices[npz],:] += self.npz_flags[npz][ant]
         
         # perform data quality checks
         self.check_consistency()
@@ -198,25 +199,22 @@ class CalibrationSmoother():
         Ensures that all files have the same frequencies, that they are time-ordered, that
         times are internally contiguous in a file and that calibration and flagging times match.
         '''
-        all_cal_times = np.array(self.cal_times.values()).ravel()
-        assert np.all(sorted(all_cal_times) == all_cal_times), \
-               'Calfits times are not sorted.'
         all_time_indices = np.array(self.time_indices.values()).ravel()
         assert len(all_time_indices) == len(np.unique(all_time_indices)), \
-               'Multiple integrations map to the same time index.'
+               'Multiple calibration integrations map to the same time index.'
+        if len(self.npzs) > 0:
+            all_npz_time_indices = np.array(self.npz_time_indices.values()).ravel()
+            assert len(all_npz_time_indices) == len(np.unique(all_npz_time_indices)), \
+               'Multiple flagging npz integrations map to the same time index.'
+            assert np.all(np.unique(all_npz_time_indices) == np.unique(all_time_indices)), \
+                   'The number of unique indices for the flag npzs does not match the calibration files.'
         for n,cal in enumerate(self.cals):
-            assert np.abs(np.median(np.diff(self.cal_times[cal])) - self.dt) < 1e-8, \
-                   'Times within {} are not contiguous.'.format(cal)
             assert np.all(np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4), \
                    '{} and {} have different frequencies.'.format(cal, self.cals[0])
-            assert np.all(np.diff(self.time_indices[cal]) == 1), \
-                   '{} does not map uniformly to the time grid.'.format(cal)  
-            if len(self.npzs) > 0:
-                assert np.all(np.abs(self.npz_freqs[cal] - self.freqs) < 1e-4), \
-                       '{} and {} have different frequencies.'.format(self.npzs[n], self.cals[0])
-                assert np.all(np.abs(self.cal_times[cal] - self.npz_times[cal]) < 1e-8), \
-                       '{} and {} have different times.'.format(self.npzs[n], cal)
-    
+        for n,npz in enumerate(self.npzs):
+            assert np.all(np.abs(self.npz_freqs[npz] - self.freqs) < 1e-4), \
+                   '{} and {} have different frequencies.'.format(npz, self.cals[0])
+
 
     def reset_filtering(self):
         '''Reset gain smoothing to the original input gains.'''
@@ -225,13 +223,13 @@ class CalibrationSmoother():
         self.freq_filtered, self.time_filtered = False, False
 
         
-    def time_filter(self, filter_scale=30.0, mirror_kernel_min_sigmas=5):
+    def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
         the mirroring of gains and flags and appending the mirrored gains and wgts to both ends, 
         ensuring temporal smoothness of the rolling average.
     
         Arguments:
-            filter_scale: float in minutes of FWHM of Gaussian smoothing kernel in time
+            filter_scale: float in seconds of FWHM of Gaussian smoothing kernel in time
             mirror_kernel_min_sigmas: Number of stdev into the Gaussian kernel one must go before edge
                 effects can be ignored.  
         '''
@@ -241,7 +239,7 @@ class CalibrationSmoother():
         
         # Make sure that the gain_grid will be sufficiently padded on each side to avoid edge effects
         needed_buffer = filter_scale / (2*(2*np.log(2))**.5) * mirror_kernel_min_sigmas 
-        duration = self.dt * len(self.time_grid) * 24 * 60        
+        duration = self.dt * len(self.time_grid) * 24 * 60 * 60
         nMirrors = 0
         while (nMirrors*duration < needed_buffer):
             nMirrors += 1
@@ -262,7 +260,7 @@ class CalibrationSmoother():
                 to the half-width (i.e. the width of the positive part) of the region in fourier 
                 space, symmetric about 0, that is filtered out. 
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-            window: window function for filtering applied to the filtered axis. 
+            window: window function for filtering applied to the filtered axis. Default tukey has alpha=0.5.
                 See aipy.dsp.gen_window for options.        
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 filtered_gains are left unchanged and self.wgts and self.cal_flags are set to 0 and True,
@@ -292,7 +290,7 @@ class CalibrationSmoother():
         
         Arguments:
             output_replace: tuple of input calfile substrings: ("to_replace", "to_replace_with")
-            add_to_history: appends a string to the history of the output file
+            add_to_history: appends a string to the history of the output file (in addition to the )
             clobber: if True, overwrites existing file at outfilename
             kwargs: dictionary mapping updated attributes to their new values.
                 See pyuvdata.UVCal documentation for more info.
@@ -318,7 +316,7 @@ def smooth_cal_argparser():
     # Options relating to smoothing in time
     time_options = a.add_argument_group(title='Time smoothing options')
     time_options.add_argument("--disable_time", default=False, action="store_true", help="turn off time smoothing")
-    time_options.add_argument("--time_scale", type=float, default=30.0, help="FWHM in minutes of time smoothing Gaussian kernel (default 30 min)")
+    time_options.add_argument("--time_scale", type=float, default=1800.0, help="FWHM in seconds of time smoothing Gaussian kernel (default 1800 s)")
     time_options.add_argument("--mirror_sigmas", type=float, default=5.0, help="number of stdev into the Gaussian kernel\
                               one must go before edge effects can be ignored (default 5)")
 

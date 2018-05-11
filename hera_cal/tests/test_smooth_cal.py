@@ -49,7 +49,7 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         wgts = np.ones((10,10),dtype=float)
         wgts[3,5] = 0
         times = np.linspace(0,10*10/60./60./24.,10, endpoint=False)
-        tf = smooth_cal.time_filter(gains, wgts, times, filter_scale = 30.0, nMirrors = 1)
+        tf = smooth_cal.time_filter(gains, wgts, times, filter_scale = 1800.0, nMirrors = 1)
         np.testing.assert_array_almost_equal(tf, np.ones((10,10),dtype=complex))
 
     def test_freq_filter(self):
@@ -87,36 +87,31 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.cs = smooth_cal.CalibrationSmoother(calfits_list, flags_npz_list=flags_npz_list)
 
     def test_check_consistency(self):
-        self.cs.cal_times[self.cs.cals[0]][0] += 1
-        with self.assertRaises(AssertionError):
-            self.cs.check_consistency()
-        self.cs.cal_times[self.cs.cals[0]][0] -= 1
-
         temp_time = self.cs.cal_times[self.cs.cals[0]][0]
         self.cs.cal_times[self.cs.cals[0]][0] = self.cs.cal_times[self.cs.cals[0]][1]
+        self.cs.time_indices = {cal: np.searchsorted(self.cs.time_grid, times) for cal, times in self.cs.cal_times.items()}
         with self.assertRaises(AssertionError):
             self.cs.check_consistency()
         self.cs.cal_times[self.cs.cals[0]][0] = temp_time
-
-        self.cs.cal_times[self.cs.cals[0]][0] += 1e-7
-        with self.assertRaises(AssertionError):
-            self.cs.check_consistency()
-        self.cs.cal_times[self.cs.cals[0]][0] -= 1e-7
+        self.cs.time_indices = {cal: np.searchsorted(self.cs.time_grid, times) for cal, times in self.cs.cal_times.items()}
 
         self.cs.cal_freqs[self.cs.cals[0]] += 1
         with self.assertRaises(AssertionError):
             self.cs.check_consistency()
         self.cs.cal_freqs[self.cs.cals[0]] -= 1
 
-        self.cs.npz_freqs[self.cs.cals[0]] += 1
+        self.cs.npz_freqs[self.cs.npzs[0]] += 1
         with self.assertRaises(AssertionError):
             self.cs.check_consistency()
-        self.cs.npz_freqs[self.cs.cals[0]] -= 1
+        self.cs.npz_freqs[self.cs.npzs[0]] -= 1
 
-        self.cs.npz_times[self.cs.cals[0]][0] += 1
+        temp_time = self.cs.npz_times[self.cs.npzs[0]][0]
+        self.cs.npz_times[self.cs.npzs[0]][0] = self.cs.npz_times[self.cs.npzs[0]][1]
+        self.cs.npz_time_indices = {npz: np.searchsorted(self.cs.time_grid, times) for npz, times in self.cs.npz_times.items()}
         with self.assertRaises(AssertionError):
             self.cs.check_consistency()
-        self.cs.npz_times[self.cs.cals[0]][0] -= 1
+        self.cs.npz_times[self.cs.npzs[0]][0] = temp_time
+        self.cs.npz_time_indices = {npz: np.searchsorted(self.cs.time_grid, times) for npz, times in self.cs.npz_times.items()}
 
     def test_load_cal_and_flags(self):
         self.assertEqual(len(self.cs.freqs),1024)
