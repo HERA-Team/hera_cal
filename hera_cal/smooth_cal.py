@@ -162,7 +162,7 @@ class CalibrationSmoother():
         if len(self.npzs) > 0:
             self.npz_flags, self.npz_freqs, self.npz_times = odict(), odict(), odict()
             for cal, npz in zip(self.cals, self.npzs):
-                self.npz_flags[cal] = synthesize_ant_flags(flags_npz_to_DataContainer(npz))
+                self.npz_flags[cal] = synthesize_ant_flags(io.load_npz_flags(npz))
                 npz_dict = np.load(npz)
                 self.npz_freqs[cal] = np.unique(npz_dict['freq_array'])
                 self.npz_times[cal] = np.unique(npz_dict['time_array'])
@@ -214,7 +214,7 @@ class CalibrationSmoother():
             if len(self.npzs) > 0:
                 assert np.all(np.abs(self.npz_freqs[cal] - self.freqs) < 1e-4), \
                        '{} and {} have different frequencies.'.format(self.npzs[n], self.cals[0])
-                assert np.all(np.abs(self.cal_times[cal] - self.npz_times[cal] < 1e-8)), \
+                assert np.all(np.abs(self.cal_times[cal] - self.npz_times[cal]) < 1e-8), \
                        '{} and {} have different times.'.format(self.npzs[n], cal)
     
 
@@ -309,10 +309,10 @@ def smooth_cal_argparser():
     '''Arg parser for commandline operation of calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
     a.add_argument("calfits_list", type=str, nargs='+', help="list of paths to chronologically sortable calfits files (usually a full day)")
-    a.add_argument("flags_npz_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
+    a.add_argument("--flags_npz_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
                    sortable flag npz files (usually a full day)")
-    a.add_argument("infile_replace", type=str, default='.abs.', help="substring of files in calfits_list to replace for output files")
-    a.add_argument("outfile_replace", type=str, default='.smooth_abs.', help="replacement substring for output files")
+    a.add_argument("--infile_replace", type=str, default='.abs.', help="substring of files in calfits_list to replace for output files")
+    a.add_argument("--outfile_replace", type=str, default='.smooth_abs.', help="replacement substring for output files")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at cal_outfile (default False)')
 
     # Options relating to smoothing in time
