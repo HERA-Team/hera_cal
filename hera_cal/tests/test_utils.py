@@ -213,17 +213,17 @@ def test_solar_flag():
     nt.assert_true(isinstance(a, (np.ndarray)))
     # test solar flag
     bl = (24, 25, 'xx')
-    _flags = hc.utils.solar_flag(flags, 2458043, time_array=t, flag_alt=20.0, inplace=False)
+    _flags = hc.utils.solar_flag(flags, times=t, flag_alt=20.0, inplace=False)
     nt.assert_true(_flags[bl][:41].all())
     nt.assert_false(flags[bl][:41].all())
     # test ndarray
-    hc.utils.solar_flag(flags[bl], 2458043, time_array=t, flag_alt=20.0, inplace=True)
+    hc.utils.solar_flag(flags[bl], times=t, flag_alt=20.0, inplace=True)
     nt.assert_true(flags[bl][:41].all())
     # test uvd
-    hc.utils.solar_flag(uvd, 2458043, flag_alt=20.0, inplace=True)
+    hc.utils.solar_flag(uvd, flag_alt=20.0, inplace=True)
     nt.assert_true(uvd.get_flags(bl)[:41].all())
     # test exception
-    nt.assert_raises(AssertionError, hc.utils.solar_flag, flags, 2458043)
+    nt.assert_raises(AssertionError, hc.utils.solar_flag, flags)
 
 
 def test_data_to_gain():

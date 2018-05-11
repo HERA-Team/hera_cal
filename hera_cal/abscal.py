@@ -1193,9 +1193,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     # solar flag
     if solar_flag:
-        utils.solar_flag(data_flags, int(np.floor(np.mean(data_times))), time_array=data_times, 
-                         flag_alt=solar_horizon, inplace=True)
-
+        utils.solar_flag(data_flags,  times=data_times, flag_alt=solar_horizon, inplace=True)
 
     # ensure nomodelfiles is False
     if nomodelfiles == False:

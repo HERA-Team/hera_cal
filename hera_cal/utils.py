@@ -352,9 +352,8 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
     else:
         return alts[0]
 
- 
-def solar_flag(flags, start_jd, time_array=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, 
-               inplace=False):
+
+def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False):
     """
     Apply flags at times when the Sun is above some minimum altitude.
 
@@ -365,7 +364,7 @@ def solar_flag(flags, start_jd, time_array=None, flag_alt=0.0, longitude=21.4283
     start_jd : int
         Integer Julian Date to perform calculation for
 
-    time_array : 1D float ndarray
+    times : 1D float ndarray
         If flags is an ndarray or DataContainer, this contains the time bins 
         of the data's time axis in Julian Date
 
@@ -373,11 +372,16 @@ def solar_flag(flags, start_jd, time_array=None, flag_alt=0.0, longitude=21.4283
         If the Sun is greater than this altitude [degrees], we flag the data.
 
     longitude : float
-        Longitude of observer in degrees East
+        Longitude of observer in degrees East (if flags is a UVData object, 
+        use its stored longitude instead)
 
     latitude : float
-        Latitude of observer in degrees North
+        Latitude of observer in degrees North (if flags is a UVData object, 
+        use its stored latitude instead)
         
+    inplace: bool
+        If inplace, edit flags instead of returning a new flags object.
+
     Returns
     -------
     flags : solar-applied flags, same format as input
@@ -388,50 +392,32 @@ def solar_flag(flags, start_jd, time_array=None, flag_alt=0.0, longitude=21.4283
     elif isinstance(flags, np.ndarray):
         dtype = 'ndarr'
     elif isinstance(flags, UVData):
+        latitude, longitude, altitude = flags.telescope_location_lat_lon_alt_degrees
+        times = np.unique(flags.time_array)
         dtype = 'uvd'
     if dtype in ['ndarr', 'DC']:
-        assert time_array is not None, "if flags is an ndarray or DataContainer, must feed a time_array"
+        assert times is not None, "if flags is an ndarray or DataContainer, must feed in times"
 
     # inplace
     if not inplace:
         flags = copy.deepcopy(flags)
 
-    # get array of times across jd
-    jds = np.linspace(start_jd, start_jd+1, 21)
-
     # get alts
-    alts = get_sun_alt(jds, longitude=longitude, latitude=latitude)
-
-    # interpolate at high-res
-    _jds = np.linspace(start_jd, start_jd+1, 201)
-    _alts = interp1d(jds, alts, kind='quadratic')(_jds)
-
-    # step through points and set min and maxjd
-    sunup = True
-    for jd, alt in zip(_jds, _alts):
-        if sunup == True:
-            if alt < flag_alt:
-                minjd = jd
-                sunup = False
-        if sunup == False:
-            if alt > flag_alt:
-                maxjd = jd
-                sunup = True
+    alts = get_sun_alt(times, longitude=longitude, latitude=latitude)
 
     # apply flags
     if dtype == 'DC':
-        flag_arr = (time_array < minjd) | (time_array > maxjd)
         for k in flags.keys():
-            flags[k][flag_arr, :] = True
+            flags[k][alts > flag_alt, :] = True
     elif dtype == 'ndarr':
-        flag_arr = (time_array < minjd) | (time_array > maxjd)
-        flags[flag_arr, :] = True
+        flags[alts > flag_alt, :] = True
     elif dtype == 'uvd':
-        time_array = flags.time_array
-        flag_arr = (time_array < minjd) | (time_array > maxjd)
-        flags.flag_array[flag_arr] = True
+        time_alt_dict = {t: alt for t,alt in zip(times, alts)}
+        is_flagged = np.array([time_alt_dict[t] > flag_alt for t in flags.time_array])
+        flags.flag_array[is_flagged] = True
 
-    return flags
+    if not inplace:
+        return flags
 
 
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
