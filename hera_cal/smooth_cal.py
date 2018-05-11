@@ -1,8 +1,6 @@
 import numpy as np
 import scipy
 from hera_cal import io
-from pyuvdata import UVData, UVCal
-from hera_cal.datacontainer import DataContainer
 from collections import OrderedDict as odict
 from copy import deepcopy
 import warnings
