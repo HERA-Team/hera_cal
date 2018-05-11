@@ -347,6 +347,18 @@ class Test_Calibration_IO(unittest.TestCase):
         os.remove(outname)
 
 
+class Test_Flags_NPZ_IO(unittest.TestCase):
+
+    def test_load_npz_flags(self):
+        npzfile = os.path.join(DATA_PATH, "test_input/zen.2458101.45361.xx.HH.uvOCR_53x_54x_only.flags.applied.npz")
+        flags = io.load_npz_flags(npzfile)
+        self.assertTrue(flags.has_key((53,54,'xx')))
+        for f in flags.values():
+            self.assertEqual(f.shape, (60,1024))
+            np.testing.assert_array_equal(f[:,0:50], True)
+            np.testing.assert_array_equal(f[:,-50:], True)
+            self.assertFalse(np.all(f))
+            
 
 if __name__ == '__main__':
     unittest.main()
