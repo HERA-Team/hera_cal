@@ -10,13 +10,13 @@ so frequency smoothing is performed second to ensure frequency smoothness of cal
 detailed explanation of the parameters.
 """
 
-from hera_cal.smooth_cal import Calibration_Smoother, smooth_cal_argparser
+from hera_cal.smooth_cal import CalibrationSmoother, smooth_cal_argparser
 import sys
 
 a = smooth_cal_argparser()
 
 # Run Calibration smoothing
-cs = Calibration_Smoother(a.calfits_list, flag_npz_list=a.flags_npz_list)
+cs = CalibrationSmoother(a.calfits_list, flag_npz_list=a.flags_npz_list)
 if not a.disable_time:
     sc.time_filter(filter_scale=a.time_scale, mirror_kernel_min_sigmas=a.mirror_sigmas)
 if not a.disable_freq:
