@@ -312,6 +312,7 @@ def smooth_cal_argparser():
     a.add_argument("--infile_replace", type=str, default='.abs.', help="substring of files in calfits_list to replace for output files")
     a.add_argument("--outfile_replace", type=str, default='.smooth_abs.', help="replacement substring for output files")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at cal_outfile (default False)')
+    a.add_argument("--only_run", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list glob is only_run (default always run)')
 
     # Options relating to smoothing in time
     time_options = a.add_argument_group(title='Time smoothing options')
