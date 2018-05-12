@@ -16,7 +16,7 @@ import glob
 
 a = smooth_cal_argparser()
 
-if a.only_run is None or sorted(glob.glob(a.calfits_list))[0] == a.only_run:
+if a.run_if_first is None or sorted(glob.glob(a.calfits_list))[0] == a.run_if_first:
     # Run calibration smoothing
     cs = CalibrationSmoother(a.calfits_list, flag_npz_list=a.flags_npz_list)
     if not a.disable_time:
@@ -29,4 +29,4 @@ if a.only_run is None or sorted(glob.glob(a.calfits_list))[0] == a.only_run:
     sc.write_smoothed_cal(a.cal_outfile, output_replace=(a.infile_replace,a.outfile_replace),
                           add_to_history = ' '.join(sys.argv), clobber=a.clobber)
 else:
-    print sorted(glob.glob(a.calfits_list))[0], 'is not', a.only_run, '...skipping.'
+    print sorted(glob.glob(a.calfits_list))[0], 'is not', a.run_if_first, '...skipping.'
