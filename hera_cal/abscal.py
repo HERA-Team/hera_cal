@@ -1209,6 +1209,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if rephase_model:
             new_model, model_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, inplace=True,
                                                  flags=model_flags, latitude=latitude, max_dlst=max_dlst)
+            model_times = data_times
         else:
             new_model = model
 
