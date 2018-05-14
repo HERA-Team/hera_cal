@@ -680,6 +680,8 @@ def synthesize_ant_flags(flags, threshold=0.0):
     '''
     # type check
     assert isinstance(flags, hera_cal.datacontainer.DataContainer), "flags must be fed as a datacontainer"
+    assert threshold >= 0.0 and threshold <= 1.0, "threshold must be 0.0 <= threshold <= 1.0"
+    if np.isclose(threshold, 1.0): threshold = threshold - 1e-10
 
     # get Ntimes and Nfreqs
     Ntimes, Nfreqs = flags[flags.keys()[0]].shape

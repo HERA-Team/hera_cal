@@ -23,7 +23,7 @@ if a.window == 'tukey':
 
 if a.run_if_first is None or sorted(glob.glob(a.calfits_list))[0] == a.run_if_first:
     # Run calibration smoothing
-    cs = CalibrationSmoother(a.calfits_list, flag_npz_list=a.flags_npz_list)
+    cs = CalibrationSmoother(a.calfits_list, flag_npz_list=a.flags_npz_list, antflag_thresh=a.antflag_thresh)
     if not a.disable_time:
         sc.time_filter(filter_scale=a.time_scale, mirror_kernel_min_sigmas=a.mirror_sigmas)
     if not a.disable_freq:

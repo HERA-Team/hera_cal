@@ -231,7 +231,7 @@ def test_synthesize_ant_flags():
                            (0,1,'xx'): np.ones((5,5),bool),
                            (1,2,'xx'): np.zeros((5,5),bool),
                            (2,3,'xx'): np.zeros((5,5),bool)})
-    flags[(2,3,'xx')][:,4] = True
+    flags[(2, 3, 'xx')][:, 4] = True
     # aggressive flagging
     ant_flags = utils.synthesize_ant_flags(flags, threshold=0.0)
     np.testing.assert_array_equal(ant_flags[(0,'x')], True)
@@ -243,5 +243,11 @@ def test_synthesize_ant_flags():
     # conservative flagging
     ant_flags = utils.synthesize_ant_flags(flags, threshold=0.75)
     np.testing.assert_array_equal(ant_flags[(2, 'x')][:, 4], False)
+    # very conservative flagging
+    flags[(1, 2, 'xx')][:3, 4] = True
+    ant_flags = utils.synthesize_ant_flags(flags, threshold=1.0)
+    np.testing.assert_array_equal(ant_flags[(2,'x')][:3,4], True)
+    np.testing.assert_array_equal(ant_flags[(2,'x')][3:,4], False)
+    
 
 

@@ -7,7 +7,6 @@ import warnings
 import uvtools
 import argparse
 from hera_cal.abscal import fft_dly
-import gc as garbage_collector
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, 
@@ -105,7 +104,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 class CalibrationSmoother():
     
-    def __init__(self, calfits_list, flags_npz_list=[]):
+    def __init__(self, calfits_list, flags_npz_list=[], antflag_thresh=0.0):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of 
         calfits files and, optionally, a corresponding list of flag npz files, which must match the calfits files 
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time. 
@@ -118,6 +117,9 @@ class CalibrationSmoother():
             flags_npz_list: list of string paths to npz files containing flags as a function of baseline, times
                 and frequency. Must have all baselines for all times. Flags on baselines are broadcast to both 
                 antennas involved, unless either antenna is completely flagged for all times and frequencies.
+            antflag_thresh: float, fraction of flagged pixels across all visibilities (with a common antenna)
+                needed to flag that antenna gain at a particular time and frequency. antflag_thresh=0.0 is
+                aggressive flag broadcasting, antflag_thresh=1.0 is conservative flag_broadcasting.
         '''
         # load calibration files
         self.cals = calfits_list
@@ -131,7 +133,7 @@ class CalibrationSmoother():
         if len(self.npzs) > 0:
             self.npz_flags, self.npz_freqs, self.npz_times = odict(), odict(), odict()
             for npz in self.npzs:
-                self.npz_flags[npz] = utils.synthesize_ant_flags(io.load_npz_flags(npz))
+                self.npz_flags[npz] = utils.synthesize_ant_flags(io.load_npz_flags(npz), threshold=antflag_thresh)
                 npz_dict = np.load(npz)
                 self.npz_freqs[npz] = npz_dict['freq_array']
                 self.npz_times[npz] = np.unique(npz_dict['time_array'])
@@ -279,9 +281,11 @@ def smooth_cal_argparser():
     a.add_argument("--infile_replace", type=str, default='.abs.', help="substring of files in calfits_list to replace for output files")
     a.add_argument("--outfile_replace", type=str, default='.smooth_abs.', help="replacement substring for output files")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at cal_outfile (default False)')
+    a.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged pixels across all visibilities (with a common antenna) \
+                   needed to flag that antenna gain at a particular time and frequency. 0.0 is aggressive flag broadcasting, while 1.0 is \
+                   conservative flag broadcasting.")
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list glob\
                    matches run_if_first (default None means always run)')
-
     # Options relating to smoothing in time
     time_options = a.add_argument_group(title='Time smoothing options')
     time_options.add_argument("--disable_time", default=False, action="store_true", help="turn off time smoothing")
