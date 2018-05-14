@@ -17,22 +17,6 @@ import warnings
 
 class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
 
-    def test_build_weights(self):
-        unnorm_chisq_per_ant = np.ones((10,10))
-        autocorr = 4.0 * np.ones((10,10))
-        autocorr[0,0] = 0
-        flags = np.random.randn(10,10) < 0
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore") # intentionally ignore divide by zero error, since we put it in
-            wgts = sc.build_weights(unnorm_chisq_per_ant, autocorr, flags)
-        np.testing.assert_array_equal(wgts[flags], 0.0)
-        self.assertEqual(wgts[0,0], 0)
-        self.assertAlmostEqual(np.mean(wgts[wgts > 0]), 1.0)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore") # intentionally ignore divide by zero error, since we put it in
-            wgts = sc.build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts=True)
-        np.testing.assert_array_equal(wgts[wgts > 0], 1.0)
-        
     def test_time_kernel(self):
         kernel = smooth_cal.time_kernel(100, 10.0, filter_scale=1.0)
         self.assertAlmostEqual(np.sum(kernel), 1.0)
@@ -51,7 +35,7 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         wgts = np.ones((10,10),dtype=float)
         wgts[3,5] = 0
         times = np.linspace(0,10*10/60./60./24.,10, endpoint=False)
-        tf = smooth_cal.time_filter(gains, wgts, times, filter_scale = 1800.0, nMirrors = 1)
+        tf = smooth_cal.time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=1)
         np.testing.assert_array_almost_equal(tf, np.ones((10,10),dtype=complex))
 
     def test_freq_filter(self):
