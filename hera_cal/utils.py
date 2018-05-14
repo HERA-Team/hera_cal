@@ -353,7 +353,7 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
         return alts[0]
 
 
-def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False):
+def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False, Nsteps=11):
     """
     Apply flags at times when the Sun is above some minimum altitude.
 
@@ -382,6 +382,10 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     inplace: bool
         If inplace, edit flags instead of returning a new flags object.
 
+    Nsteps : int
+        Number of steps from times.min() to times.max() to use in get_solar_alt call.
+        If the range of times is <= a single day, Nsteps=11 is a good-enough resolution.
+
     Returns
     -------
     flags : solar-applied flags, same format as input
@@ -403,7 +407,11 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
         flags = copy.deepcopy(flags)
 
     # get alts
-    alts = get_sun_alt(times, longitude=longitude, latitude=latitude)
+    _times = np.linspace(times.min(), times.max(), Nsteps)
+    _alts = get_sun_alt(_times, longitude=longitude, latitude=latitude)
+
+    # interpolate _alts
+    alts = interp1d(_times, _alts, kind='quadratic')(times)
 
     # apply flags
     if dtype == 'DC':
@@ -642,50 +650,67 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         return data
 
 
-def data_to_gain_flags(flags, gain_keys=None):
-    """
-    Scroll through visibility flag DataContainer and find pixels (time, freq)
-    where an antenna has all flagged measurements, i.e. it's gain is 
-    completely unconstrained, and return a gain flag dict with results.
+def synthesize_ant_flags(flags, threshold=0.2):
+    '''
+    Synthesizes flags on visibilities into flags on antennas. For a given antenna and
+    a given time and frequency, if the fraction of flagged pixels in all visibilities with that
+    antenna exceeds 'threshold', the antenna gain is flagged at that time and frequency. This
+    excludes contributions from antennas that are completely flagged, i.e. are dead.
 
-    Parameters
-    ----------
-    flags : flag DataContainer
+    Arguments:
+        flags: DataContainer containing boolean data flag waterfalls
+        threshold: float, fraction of flagged pixels across all visibilities (with a common antenna)
+            needed to flag that antenna gain at a particular time and frequency.
 
-    gain_keys : list of gain keys (ant, gain_pol) to create output flag_dict
-        for. Default is to parse keys of flags to construct this list.
-    
-    Returns
-    -------
-    flag_dict : dictionary with gain flags
-    """
+    Returns:
+        ant_flags: dictionary mapping antenna-pol keys like (1,'x') to boolean flag waterfalls
+    '''
     # type check
     assert isinstance(flags, hera_cal.datacontainer.DataContainer), "flags must be fed as a datacontainer"
+
+    # get Ntimes and Nfreqs
     Ntimes, Nfreqs = flags[flags.keys()[0]].shape
 
-    # get gain_keys if not provided
-    if gain_keys is None:
-        gain_keys = []
-        for k in flags.keys():
-            k1 = (k[0], k[2][0])
-            if k1 not in gain_keys:
-                gain_keys.append(k1)
-            k2 = (k[1], k[2][1])
-            if k2 not in gain_keys:
-                gain_keys.append(k2)
+    # get antenna-pol keys
+    antpols = set([ap for (i,j,pol) in flags.keys() for ap in [(i, pol[0]), (j, pol[1])]])
 
-    # construct completely flagged gain_dict
-    gain_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_keys))
+    # get dictionary of completely flagged ants to exclude
+    is_excluded = {ap: True for ap in antpols}
+    for (i,j,pol), flags_here in flags.items():
+        if not np.all(flags_here): 
+            is_excluded[(i,pol[0])] = False
+            is_excluded[(j,pol[1])] = False
 
-    # iterate over flags and unflag pixels where an antenna has unflagged data
-    for k in flags.keys():
-        k1 = (k[0], k[2][0])
-        k2 = (k[1], k[2][1])
-        if k1 in gain_dict:
-            gain_dict[k1] *= flags[k]
-        if k2 in gain_dict:
-            gain_dict[k2] *= flags[k]
+    # construct dictionary of visibility count (number each antenna touches)
+    # and dictionary of number of flagged visibilities each antenna has (excluding dead ants)
+    # per time and freq
+    ant_Nvis = {ap: 0 for ap in antpols}
+    ant_Nflag = {ap: np.zeros((Ntimes, Nfreqs), np.float) for ap in antpols}
+    for (i, j, pol), flags_here in flags.items():
+        # get antenna keys
+        ap1 = (i, pol[0])
+        ap2 = (j, pol[1])
+        # only continue if not in is_excluded
+        if not is_excluded[ap1] and not is_excluded[ap2]:
+            # add to Nvis count
+            ant_Nvis[ap1] += 1
+            ant_Nvis[ap2] += 1
+            # Add to Nflag count
+            ant_Nflag[ap1] += flags_here.astype(np.float)
+            ant_Nflag[ap2] += flags_here.astype(np.float)
 
-    return gain_dict
+    # iterate over antpols and construct antenna gain dictionaries
+    ant_flags = {}
+    for ap in antpols:
+        # create flagged arrays for excluded ants
+        if is_excluded[ap]:
+            ant_flags[ap] = np.ones((Ntimes, Nfreqs), np.bool)
+        # else create flags based on threshold
+        else:
+            # handle Nvis = 0 cases
+            if ant_Nvis[ap] == 0: ant_Nvis[ap] = 1e-10
+            # create antenna flags
+            ant_flags[ap] = (ant_Nflag[ap] / ant_Nvis[ap]) > threshold
 
+    return ant_flags
 

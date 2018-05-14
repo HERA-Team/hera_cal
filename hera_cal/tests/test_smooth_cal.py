@@ -17,20 +17,22 @@ import warnings
 
 class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
 
-    def test_synthesize_ant_flags(self):
-        flags = DataContainer({(0,0,'xx'): np.ones((5,5),bool),
-                               (0,1,'xx'): np.ones((5,5),bool),
-                               (1,2,'xx'): np.zeros((5,5),bool),
-                               (2,3,'xx'): np.zeros((5,5),bool)})
-        flags[(2,3,'xx')][:,4] = True
-        ant_flags = smooth_cal.synthesize_ant_flags(flags)
-        np.testing.assert_array_equal(ant_flags[(0,'x')], True)
-        np.testing.assert_array_equal(ant_flags[(1,'x')], False)
-        np.testing.assert_array_equal(ant_flags[(2,'x')][:,0:4], False)
-        np.testing.assert_array_equal(ant_flags[(2,'x')][:,4], True)
-        np.testing.assert_array_equal(ant_flags[(3,'x')][:,0:4], False)
-        np.testing.assert_array_equal(ant_flags[(3,'x')][:,4], True)
-
+    def test_build_weights(self):
+        unnorm_chisq_per_ant = np.ones((10,10))
+        autocorr = 4.0 * np.ones((10,10))
+        autocorr[0,0] = 0
+        flags = np.random.randn(10,10) < 0
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore") # intentionally ignore divide by zero error, since we put it in
+            wgts = sc.build_weights(unnorm_chisq_per_ant, autocorr, flags)
+        np.testing.assert_array_equal(wgts[flags], 0.0)
+        self.assertEqual(wgts[0,0], 0)
+        self.assertAlmostEqual(np.mean(wgts[wgts > 0]), 1.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore") # intentionally ignore divide by zero error, since we put it in
+            wgts = sc.build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts=True)
+        np.testing.assert_array_equal(wgts[wgts > 0], 1.0)
+        
     def test_time_kernel(self):
         kernel = smooth_cal.time_kernel(100, 10.0, filter_scale=1.0)
         self.assertAlmostEqual(np.sum(kernel), 1.0)

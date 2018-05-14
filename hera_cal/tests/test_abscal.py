@@ -588,14 +588,14 @@ class Test_AbsCal:
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
-        gains, flags = hc.abscal.abscal_run(data_files, model_files, solar_flag=False, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        gains, flags = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
         # assert shapes and types
         nt.assert_equal(gains[(24,'x')].dtype, np.complex)
         nt.assert_equal(gains[(24,'x')].shape, (60, 64))
         # first freq bin should be flagged due to complete flagging in model and data
         nt.assert_true(flags[(24, 'x')][:, 0].all())
         # solar flag run
-        gains, flags = hc.abscal.abscal_run(data_files, model_files, solar_flag=True, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        gains, flags = hc.abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
         # all data should be flagged
         nt.assert_true(flags[(24, 'x')].all())
         # write calfits
