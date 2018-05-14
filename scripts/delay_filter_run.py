@@ -13,8 +13,8 @@ if a.outfile is None:
 
 # set kwargs
 kwargs = {}
-if a.alpha is not None:
-  kwargs['alpha'] = a.alpha
+if a.window == 'tukey':
+    kwargs['alpha'] = a.alpha
 
 
 # Run Delay Filter
