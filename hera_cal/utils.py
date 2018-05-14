@@ -353,7 +353,8 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
         return alts[0]
 
 
-def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False, Nsteps=11):
+def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False, 
+               interp=False, interp_Nsteps=11, verbose=True):
     """
     Apply flags at times when the Sun is above some minimum altitude.
 
@@ -382,9 +383,15 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     inplace: bool
         If inplace, edit flags instead of returning a new flags object.
 
-    Nsteps : int
+    interp : bool
+        If True, evaluate Solar altitude with a coarse grid and interpolate at times values.
+
+    interp_Nsteps : int
         Number of steps from times.min() to times.max() to use in get_solar_alt call.
         If the range of times is <= a single day, Nsteps=11 is a good-enough resolution.
+
+    verbose : bool
+        if True, print feedback to standard output
 
     Returns
     -------
@@ -396,6 +403,7 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     elif isinstance(flags, np.ndarray):
         dtype = 'ndarr'
     elif isinstance(flags, UVData):
+        if verbose: print "Note: using latitude and longitude in given UVData object"
         latitude, longitude, altitude = flags.telescope_location_lat_lon_alt_degrees
         times = np.unique(flags.time_array)
         dtype = 'uvd'
@@ -406,12 +414,17 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     if not inplace:
         flags = copy.deepcopy(flags)
 
-    # get alts
-    _times = np.linspace(times.min(), times.max(), Nsteps)
-    _alts = get_sun_alt(_times, longitude=longitude, latitude=latitude)
+    # get solar alts
+    if interp:
+        # first evaluate coarse grid, then interpolate
+        _times = np.linspace(times.min(), times.max(), interp_Nsteps)
+        _alts = get_sun_alt(_times, longitude=longitude, latitude=latitude)
 
-    # interpolate _alts
-    alts = interp1d(_times, _alts, kind='quadratic')(times)
+        # interpolate _alts
+        alts = interp1d(_times, _alts, kind='quadratic')(times)
+    else:
+        # directly evaluate solar altitude at times
+        alts = get_sun_alt(times, longitude=longitude, latitude=latitude)
 
     # apply flags
     if dtype == 'DC':
@@ -420,9 +433,9 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     elif dtype == 'ndarr':
         flags[alts > flag_alt, :] = True
     elif dtype == 'uvd':
-        time_alt_dict = {t: alt for t,alt in zip(times, alts)}
-        is_flagged = np.array([time_alt_dict[t] > flag_alt for t in flags.time_array])
-        flags.flag_array[is_flagged] = True
+        for t, a in zip(times, alts):
+            if a > flag_alt:
+                flags.flag_array[np.isclose(flags.time_array, t)] = True
 
     if not inplace:
         return flags
@@ -650,7 +663,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         return data
 
 
-def synthesize_ant_flags(flags, threshold=0.2):
+def synthesize_ant_flags(flags, threshold=0.0):
     '''
     Synthesizes flags on visibilities into flags on antennas. For a given antenna and
     a given time and frequency, if the fraction of flagged pixels in all visibilities with that
