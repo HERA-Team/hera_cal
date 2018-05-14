@@ -22,6 +22,7 @@ the i-th and j-th antenna respectively.
 from abscal_funcs import *
 import gc as garbage_collector
 
+
 class AbsCal(object):
     """
     AbsCal object used to for phasing and scaling visibility data to an absolute reference model. 
@@ -998,8 +999,8 @@ def abscal_arg_parser():
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
     a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
-    a.add_argument("--solar_flag", default=False, action='store_true', help="FLag data when the sun is above some specified altitude.")
-    a.add_argument("--solar_horizon", default=0.0, type=float, help="Solar altitude above which we flag data [degrees].")
+    a.add_argument("--solar_horizon", default=90.0, type=float, help="Solar altitude flagging threshold [degrees]. The data are flagged when the Sun is above this altitude.")
+    a.add_argument("--antflag_thresh", default=0.2, type=float, help="fraction of flagged visibilities per antenna needed to flag the antenna gain per time and frequency.")
     return a
 
 
@@ -1032,8 +1033,8 @@ def omni_abscal_arg_parser():
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
     a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
-    a.add_argument("--solar_flag", default=False, action='store_true', help="FLag data when the sun is above some specified altitude.")
-    a.add_argument("--solar_horizon", default=0.0, type=float, help="Solar altitude above which we flag data [degrees].")
+    a.add_argument("--solar_horizon", default=90.0, type=float, help="Solar altitude flagging threshold [degrees]. The data are flagged when the Sun is above this altitude.")
+    a.add_argument("--antflag_thresh", default=0.2, type=float, help="fraction of flagged visibilities per antenna needed to flag the antenna gain per time and frequency.")
     return a
 
 
@@ -1042,7 +1043,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
                TT_phs_cal=False, phs_max_iter=100, phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False, 
-               latitude=-30.72152, max_dlst=0.005, solar_flag=False, solar_horizon=0.0, history=''):
+               latitude=-30.72152, max_dlst=0.005, solar_horizon=90.0, antflag_thresh=0.2, history=''):
     """
     run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -1139,6 +1140,12 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     edge_cut : int, number of channels to exclude at each band edge in delay and global phase solvers
 
+    solar_horizon : float, Solar altitude flagging threshold [degrees]
+        When the Sun is above this altitude in the data or the model, the data are flagged.
+
+    antflag_thresh : float, fraction of flagged visibilities per antenna needed to flag the 
+        antenna gain per time and frequency
+
     Result:
     -------
     if return_gains: return (gains dictionary)
@@ -1191,12 +1198,12 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     data_ants = np.unique(map(lambda k: k[:2], data.keys()))
     data_antpos = odict(map(lambda k: (k, data_antpos[k]), data_ants))
 
-    # solar flag
-    if solar_flag:
-        utils.solar_flag(data_flags,  times=data_times, flag_alt=solar_horizon, inplace=True)
-
     # ensure nomodelfiles is False
     if nomodelfiles == False:
+        # solar flag
+        utils.solar_flag(data_flags, times=data_times, flag_alt=solar_horizon, inplace=True)
+        utils.solar_flag(model_flags, times=model_times, flag_alt=solar_horizon, inplace=True)
+
         # match redundant baselines
         if match_red_bls:
             data = match_red_baselines(data, data_antpos, model, model_antpos, tol=tol, verbose=verbose)
@@ -1231,7 +1238,10 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
 
         # construct antenna flag_dict based purely on data flags
-        gain_flag_dict = utils.data_to_gain_flags(data_flags, gain_keys=total_gain_keys)
+        gain_flag_dict = utils.synthesize_ant_flags(data_flags, threshold=antflag_thresh)
+        for k in total_gain_keys:
+            if k not in gain_flag_dict:
+                gain_flag_dict[k] = np.ones((Ntimes, Nfreqs), np.bool)
 
         # initialize empty gain_list
         merged_gains = []

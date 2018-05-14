@@ -1,47 +1,55 @@
 import numpy as np
 import scipy
-from hera_cal import io
+from hera_cal import io, utils
+from pyuvdata import UVData, UVCal
+from hera_cal.datacontainer import DataContainer
 from collections import OrderedDict as odict
 from copy import deepcopy
 import warnings
 import uvtools
 import argparse
 from hera_cal.abscal import fft_dly
+import gc as garbage_collector
 
 
-def synthesize_ant_flags(flags):
-    '''Conservatively synthesizes flags on visibilities into flags on antennas. Any flag at any time or
-    frequency for visibility Vij is propagated to both antenna i and antenna j, unless that flag is
-    due to either antenna i or antenna j being flagged for all times and all frequencies for all 
-    visibilities that its involved in, in which case its flags are just applied to that antenna.
+def drop_cross_vis(data):
+    '''Delete all entries from a DataContiner that not autocorrelations in order to save memory.'''
+    for (i,j,pol) in data.keys():
+        if i != j or pol[0] != pol[1]:
+            del data[(i,j,pol)]
+            garbage_collector.collect()
+    return data
+
+
+def build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts = False):
+    '''Builds waterfall of linear multiplicative weights to use in smoothing. 
+    Our model treats flagged visibilities get 0 weight. The idea is that (chi^2)**-1 is a reasonable
+    proxy for an inverse variance weight, but our omnical chisq are unnormalized by the visibility noise
+    variance. To get around this, we use autocorreations as a noise proxy, which gets us weights that
+    are proportional to (chi^2)**-1.
 
     Arguments:
-        flags: DataContainer containing boolean data flag waterfalls
-
+        unnorm_chisq_per_ant: numpy array of Omnical's chi^2 per antenna. Units of visibility^2.
+        autocorr: numpy array of autocorrelations, taken as a noise level as a function of time and freq
+        flags: numpy array of booleans. True means flagged and thus 0 weight.
+        binary_wgts: if True, set all weights that are not zero to 1.
+    
     Returns:
-        ant_flags: dictionary mapping antenna-pol keys like (1,'x') to boolean flag waterfalls
+        wgts: numpy array weights normalized so that the non-zero entries average to 1.
     '''
-    antpols = set([ap for (i,j,pol) in flags.keys() for ap in [(i, pol[0]), (j, pol[1])]])
-    is_excluded = {ap: True for ap in antpols}
-    for (i,j,pol), flags_here in flags.items():
-        if not np.all(flags_here): 
-            is_excluded[(i,pol[0])] = False
-            is_excluded[(j,pol[1])] = False
-    ant_flags = {}
-    for (antpol) in antpols:
-        if is_excluded[antpol]:
-            ant_flags[antpol] = flags[(antpol[0], antpol[0], antpol[1]+antpol[1])]
-    for (i,j,pol), flags_here in flags.items():
-        if not is_excluded[(i,pol[0])] and not is_excluded[(j,pol[1])]:
-            for antpol in [(i,pol[0]), (j,pol[1])]:
-                if ant_flags.has_key(antpol):
-                    ant_flags[antpol] = np.logical_or(ant_flags[antpol], flags_here)
-                else:
-                    ant_flags[antpol] = flags_here
-    return ant_flags
+    # weights ~ (unnorm_chi^2 / sigma^2)**-1
+    wgts = np.abs(autocorr)**2 / unnorm_chisq_per_ant
+    # Anywhere with chisq == 0 or autocorr == 0 is also treated as flagged
+    wgts[np.logical_not(np.isfinite(wgts))] = 0
+    wgts[flags] = 0.0
+    # Renormalize weights to make skip_wgt work properly
+    wgts[wgts > 0] /= np.mean(wgts[wgts > 0])
+    if binary_wgts:
+        wgts[wgts > 0] = 1.0
+    return wgts
 
 
-def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, **win_kwargs):
+def freq_filter(gains, wgts, freqs, filter_scale = 10.0, tol=1e-09, window='none', skip_wgt=0.1, maxiter=100):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Befor filtering, removes a per-integration delay using abscal.fft_dly, then puts it back in after filtering.
     
@@ -192,7 +200,6 @@ class CalibrationSmoother():
         # perform data quality checks
         self.check_consistency()
         self.reset_filtering()
-
             
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag npzs).
@@ -222,6 +229,50 @@ class CalibrationSmoother():
         self.filtered_flag_grids = deepcopy(self.flag_grids)
         self.freq_filtered, self.time_filtered = False, False
 
+    def load_data(self, data, prev_data=None, next_data=None, filetype='miriad', antflag_thresh=0.2):
+        '''Loads in data associated with the calibration to be smoothed. Used only to produce
+        weights from flags and autocorrelations. If previous and subsequent calibration files
+        are also to be loaded, must load associated data files as well.
+
+        Arguments:
+            data: UVData object or path to data file corresponding to the calibration to be smoothed
+            prev_cal: UVData object or path to data file, or a list of either in chronological order,
+                that correspond to the prev_cal file(s) loaded.
+            next_cal: UVData object, path to data file, or a list of either in chronological order,
+                that correspond to the next_cal file(s) loaded.
+            filetype: file format of data. Default 'miriad.' Ignored if input_data is UVData object(s).
+            antflag_thresh: float, fraction of flagged visibilities per antenna needed to flag
+                an antenna gain per time and freq.
+        '''
+        assert(isinstance(data, (str, UVData)))
+        self.data_filetype = filetype
+        self.data, data_flags, _, _, self.data_freqs, self.data_times, _, self.data_pols = io.load_vis(data, return_meta=True, filetype=filetype)
+        #TODO: speed this up by only loading the autocorrelations and the flags
+        self.data = drop_cross_vis(self.data)
+        self.data_ant_flags = utils.synthesize_ant_flags(data_flags, threshold=antflag_thresh)
+        self.has_data = True
+
+        if prev_data is not None:
+            assert(isinstance(prev_data, (str, UVData, tuple, list, np.ndarray)))
+            self.prev_data, prev_data_flags, _, _, self.prev_data_freqs, self.prev_data_times, _, _ = io.load_vis(prev_data, return_meta=True, filetype=filetype)
+            self.prev_data = drop_cross_vis(self.prev_data)
+            self.prev_data_ant_flags = utils.synthesize_ant_flags(prev_data_flags, threshold=antflag_thresh)
+            del prev_data_flags
+            garbage_collector.collect()
+            self.has_prev_data = True
+
+        if next_data is not None:
+            assert(isinstance(next_data, (str, UVData, tuple, list, np.ndarray)))
+            self.next_data, next_data_flags, _, _, self.next_data_freqs, self.next_data_times, _, _ = io.load_vis(next_data, return_meta=True, filetype=filetype)
+            self.next_data = drop_cross_vis(self.next_data)
+            self.next_data_ant_flags = utils.synthesize_ant_flags(next_data_flags, threshold=antflag_thresh)
+            del next_data_flags
+            garbage_collector.collect()
+            self.has_next_data = True
+
+        if self.has_cal:
+            self.check_consistency()
+            self.build_weights()
         
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
