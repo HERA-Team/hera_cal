@@ -1000,7 +1000,7 @@ def abscal_arg_parser():
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
     a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
     a.add_argument("--solar_horizon", default=90.0, type=float, help="Solar altitude flagging threshold [degrees]. The data are flagged when the Sun is above this altitude.")
-    a.add_argument("--antflag_thresh", default=0.2, type=float, help="fraction of flagged visibilities per antenna needed to flag the antenna gain per time and frequency.")
+    a.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged visibilities per antenna needed to flag the antenna gain per time and frequency.")
     return a
 
 
@@ -1034,7 +1034,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
     a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
     a.add_argument("--solar_horizon", default=90.0, type=float, help="Solar altitude flagging threshold [degrees]. The data are flagged when the Sun is above this altitude.")
-    a.add_argument("--antflag_thresh", default=0.2, type=float, help="fraction of flagged visibilities per antenna needed to flag the antenna gain per time and frequency.")
+    a.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged visibilities per antenna needed to flag the antenna gain per time and frequency.")
     return a
 
 
@@ -1200,10 +1200,6 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     # ensure nomodelfiles is False
     if nomodelfiles == False:
-        # solar flag
-        utils.solar_flag(data_flags, times=data_times, flag_alt=solar_horizon, inplace=True)
-        utils.solar_flag(model_flags, times=model_times, flag_alt=solar_horizon, inplace=True)
-
         # match redundant baselines
         if match_red_bls:
             data = match_red_baselines(data, data_antpos, model, model_antpos, tol=tol, verbose=verbose)
@@ -1211,14 +1207,19 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
         # rephase model to match data lst grid
         if rephase_model:
-            new_model, new_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, inplace=True,
-                                               flags=model_flags, latitude=latitude, max_dlst=max_dlst)
-            # update data flags w/ model flags
-            for k in new_flags.keys():
-                if k in data_flags:
-                    data_flags[k] += new_flags[k]
+            new_model, model_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, inplace=True,
+                                                 flags=model_flags, latitude=latitude, max_dlst=max_dlst)
         else:
             new_model = model
+
+        # solar flag
+        utils.solar_flag(data_flags, times=data_times, flag_alt=solar_horizon, inplace=True)
+        utils.solar_flag(model_flags, times=model_times, flag_alt=solar_horizon, inplace=True)
+
+        # update data flags w/ model flags
+        for k in model_flags.keys():
+            if k in data_flags:
+                data_flags[k] += model_flags[k]
 
         # get wgts
         wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
