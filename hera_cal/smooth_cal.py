@@ -131,7 +131,7 @@ class CalibrationSmoother():
         if len(self.npzs) > 0:
             self.npz_flags, self.npz_freqs, self.npz_times = odict(), odict(), odict()
             for npz in self.npzs:
-                self.npz_flags[npz] = synthesize_ant_flags(io.load_npz_flags(npz))
+                self.npz_flags[npz] = utils.synthesize_ant_flags(io.load_npz_flags(npz))
                 npz_dict = np.load(npz)
                 self.npz_freqs[npz] = npz_dict['freq_array']
                 self.npz_times[npz] = np.unique(npz_dict['time_array'])
