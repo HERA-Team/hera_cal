@@ -16,7 +16,6 @@ kwargs = {}
 if a.window == 'tukey':
     kwargs['alpha'] = a.alpha
 
-
 # Run Delay Filter
 df = Delay_Filter()
 df.load_data(a.infile, filetype=a.filetype)

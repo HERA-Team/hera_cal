@@ -139,7 +139,7 @@ class CalibrationSmoother():
                 self.npz_times[npz] = np.unique(npz_dict['time_array'])
                     
         # set up time grid
-        all_file_times = sorted(np.array(self.cal_times.values()).ravel())
+        all_file_times = sorted(np.array([t for times in self.cal_times.values() for t in times]))
         self.dt = np.median(np.diff(all_file_times))
         self.time_grid = np.arange(all_file_times[0], all_file_times[-1]+self.dt/2.0, self.dt)
         self.time_indices = {cal: np.searchsorted(self.time_grid, times) for cal, times in self.cal_times.items()}
@@ -170,11 +170,11 @@ class CalibrationSmoother():
         Ensures that all files have the same frequencies, that they are time-ordered, that
         times are internally contiguous in a file and that calibration and flagging times match.
         '''
-        all_time_indices = np.array(self.time_indices.values()).ravel()
+        all_time_indices = np.array([i for indices in self.time_indices.values() for i in indices])
         assert len(all_time_indices) == len(np.unique(all_time_indices)), \
                'Multiple calibration integrations map to the same time index.'
         if len(self.npzs) > 0:
-            all_npz_time_indices = np.array(self.npz_time_indices.values()).ravel()
+            all_npz_time_indices = np.array([i for indices in self.npz_time_indices.values() for i in indices])
             assert len(all_npz_time_indices) == len(np.unique(all_npz_time_indices)), \
                'Multiple flagging npz integrations map to the same time index.'
             assert np.all(np.unique(all_npz_time_indices) == np.unique(all_time_indices)), \
