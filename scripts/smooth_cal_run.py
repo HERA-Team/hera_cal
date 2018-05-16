@@ -12,7 +12,6 @@ detailed explanation of the parameters.
 
 from hera_cal.smooth_cal import CalibrationSmoother, smooth_cal_argparser
 import sys
-import glob
 
 a = smooth_cal_argparser()
 
@@ -21,7 +20,7 @@ kwargs = {}
 if a.window == 'tukey':
     kwargs['alpha'] = a.alpha
 
-if a.run_if_first is None or sorted(glob.glob(a.calfits_list))[0] == a.run_if_first:
+if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
     # Run calibration smoothing
     cs = CalibrationSmoother(a.calfits_list, flag_npz_list=a.flags_npz_list, antflag_thresh=a.antflag_thresh)
     if not a.disable_time:

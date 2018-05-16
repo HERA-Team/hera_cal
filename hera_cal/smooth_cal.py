@@ -284,7 +284,7 @@ def smooth_cal_argparser():
     a.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged pixels across all visibilities (with a common antenna) \
                    needed to flag that antenna gain at a particular time and frequency. 0.0 is aggressive flag broadcasting, while 1.0 is \
                    conservative flag broadcasting.")
-    a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list glob\
+    a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
     # Options relating to smoothing in time
     time_options = a.add_argument_group(title='Time smoothing options')
