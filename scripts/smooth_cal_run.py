@@ -31,4 +31,4 @@ if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
     sc.write_smoothed_cal(a.cal_outfile, output_replace=(a.infile_replace,a.outfile_replace),
                           add_to_history = ' '.join(sys.argv), clobber=a.clobber)
 else:
-    print sorted(glob.glob(a.calfits_list))[0], 'is not', a.run_if_first, '...skipping.'
+    print sorted(a.calfits_list)[0], 'is not', a.run_if_first, '...skipping.'
