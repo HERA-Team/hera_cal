@@ -303,6 +303,6 @@ def smooth_cal_argparser():
                               see aipy.dsp.gen_window for options')
     freq_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     freq_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
-    freq_options.add_argument("--alpha", type=int, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
+    freq_options.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
     args = a.parse_args()
     return args
