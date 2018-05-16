@@ -26,8 +26,8 @@ if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
     if not a.disable_time:
         cs.time_filter(filter_scale=a.time_scale, mirror_kernel_min_sigmas=a.mirror_sigmas)
     if not a.disable_freq:
-        cs.freq_filter(filter_scale=a.freq_scale, tol=a.tol, window=a.window, skip_wgt=a.skip_wgt, 
-                       maxiter=a.maxiter, alpha=a.alpha, **kwargs)
+        cs.freq_filter(filter_scale=a.freq_scale, tol=a.tol, window=a.window, 
+                       skip_wgt=a.skip_wgt, maxiter=a.maxiter, **kwargs)
     cs.write_smoothed_cal(a.cal_outfile, output_replace=(a.infile_replace,a.outfile_replace),
                           add_to_history = ' '.join(sys.argv), clobber=a.clobber)
 else:
