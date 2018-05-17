@@ -1205,6 +1205,10 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             data = match_red_baselines(data, data_antpos, model, model_antpos, tol=tol, verbose=verbose)
             antpos = model_antpos
 
+        # solar flag data and model
+        utils.solar_flag(data_flags, times=data_times, flag_alt=solar_horizon, inplace=True)
+        utils.solar_flag(model_flags, times=model_times, flag_alt=solar_horizon, inplace=True)
+
         # rephase model to match data lst grid
         if rephase_model:
             new_model, model_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, inplace=True,
@@ -1212,10 +1216,6 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             model_times = data_times
         else:
             new_model = model
-
-        # solar flag
-        utils.solar_flag(data_flags, times=data_times, flag_alt=solar_horizon, inplace=True)
-        utils.solar_flag(model_flags, times=model_times, flag_alt=solar_horizon, inplace=True)
 
         # update data flags w/ model flags
         for k in model_flags.keys():
