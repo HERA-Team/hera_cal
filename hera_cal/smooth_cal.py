@@ -143,7 +143,8 @@ class CalibrationSmoother():
         self.dt = np.median(np.diff(all_file_times))
         self.time_grid = np.arange(all_file_times[0], all_file_times[-1]+self.dt/2.0, self.dt)
         self.time_indices = {cal: np.searchsorted(self.time_grid, times) for cal, times in self.cal_times.items()}
-        self.npz_time_indices = {npz: np.searchsorted(self.time_grid, times) for npz, times in self.npz_times.items()}
+        if len(self.npzs) > 0:
+            self.npz_time_indices = {npz: np.searchsorted(self.time_grid, times) for npz, times in self.npz_times.items()}
                 
         # build multi-file grids for each antenna's gains and flags
         self.freqs = self.cal_freqs[self.cals[0]]
@@ -157,9 +158,10 @@ class CalibrationSmoother():
                 if self.gains[cal].has_key(ant):
                     self.gain_grids[ant][self.time_indices[cal],:] = self.gains[cal][ant]
                     self.flag_grids[ant][self.time_indices[cal],:] = self.cal_flags[cal][ant]
-            for npz in self.npzs:
-                if self.npz_flags[npz].has_key(ant):
-                    self.flag_grids[ant][self.npz_time_indices[npz],:] += self.npz_flags[npz][ant]
+            if len(self.npzs) > 0:
+                for npz in self.npzs:
+                    if self.npz_flags[npz].has_key(ant):
+                        self.flag_grids[ant][self.npz_time_indices[npz],:] += self.npz_flags[npz][ant]
         
         # perform data quality checks
         self.check_consistency()
@@ -173,18 +175,18 @@ class CalibrationSmoother():
         all_time_indices = np.array([i for indices in self.time_indices.values() for i in indices])
         assert len(all_time_indices) == len(np.unique(all_time_indices)), \
                'Multiple calibration integrations map to the same time index.'
+        for n,cal in enumerate(self.cals):
+            assert np.all(np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4), \
+                   '{} and {} have different frequencies.'.format(cal, self.cals[0])
         if len(self.npzs) > 0:
             all_npz_time_indices = np.array([i for indices in self.npz_time_indices.values() for i in indices])
             assert len(all_npz_time_indices) == len(np.unique(all_npz_time_indices)), \
                'Multiple flagging npz integrations map to the same time index.'
             assert np.all(np.unique(all_npz_time_indices) == np.unique(all_time_indices)), \
                    'The number of unique indices for the flag npzs does not match the calibration files.'
-        for n,cal in enumerate(self.cals):
-            assert np.all(np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4), \
-                   '{} and {} have different frequencies.'.format(cal, self.cals[0])
-        for n,npz in enumerate(self.npzs):
-            assert np.all(np.abs(self.npz_freqs[npz] - self.freqs) < 1e-4), \
-                   '{} and {} have different frequencies.'.format(npz, self.cals[0])
+            for n,npz in enumerate(self.npzs):
+                assert np.all(np.abs(self.npz_freqs[npz] - self.freqs) < 1e-4), \
+                       '{} and {} have different frequencies.'.format(npz, self.cals[0])
 
     def reset_filtering(self):
         '''Reset gain smoothing to the original input gains.'''
