@@ -32,10 +32,7 @@ class Test_Update_Cal(unittest.TestCase):
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='divide')
         for i in range(10):
             for j in range(10):
-                if not f[i,j]:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]*g0_old[i,j]*np.conj(g1_old[i,j])/g0_new[i,j]/np.conj(g1_new[i,j]))
-                else:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j],vis[i,j])
+                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]*g0_old[i,j]*np.conj(g1_old[i,j])/g0_new[i,j]/np.conj(g1_new[i,j]))
                 if f[i,j] or cal_flags[(0,'x')][i,j] or cal_flags[(1,'x')][i,j]:
                     self.assertTrue(flags[(0,1,'xx')][i,j])
                 else:
@@ -47,10 +44,7 @@ class Test_Update_Cal(unittest.TestCase):
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, gain_convention='divide')
         for i in range(10):
             for j in range(10):
-                if not f[i,j]:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_new[i,j]/np.conj(g1_new[i,j]))
-                else:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j],vis[i,j])
+                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_new[i,j]/np.conj(g1_new[i,j]))
 
         # test multiply
         dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
@@ -58,10 +52,7 @@ class Test_Update_Cal(unittest.TestCase):
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='multiply')
         for i in range(10):
             for j in range(10):
-                if not f[i,j]:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_old[i,j]/np.conj(g1_old[i,j])*g0_new[i,j]*np.conj(g1_new[i,j]))
-                else:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j],vis[i,j])
+                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_old[i,j]/np.conj(g1_old[i,j])*g0_new[i,j]*np.conj(g1_new[i,j]))
 
         # test flag propagation when missing antennas in gains
         dc = DataContainer({(0,1,'xx'): deepcopy(vis)})

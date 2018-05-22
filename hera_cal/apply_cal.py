@@ -8,7 +8,7 @@ from hera_cal.datacontainer import DataContainer
 def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None, gain_convention='divide'):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in
     new calibration solutions, and updating flags from those calibration solutions. Previously 
-    flagged data is left unmodified. Missing antennas from either the new gains or (if it's not None),
+    flagged data is modified, but left flagged. Missing antennas from either the new gains or (if it's not None),
     the old gains are automatically flagged in the data's visibilities that involves those antennas.
     
     Arguments:
@@ -36,41 +36,36 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
 
     # loop over keys
     for (i,j,pol) in data.keys():
-        if bool_flags:
-            all_flagged = np.all(data_flags[(i,j,pol)])
-        else:
-            all_flagged = np.all(~data_flags[(i,j,pol)].astype(np.bool))
-        if not all_flagged:
-            # Check to see that all necessary antennas are present in the gains
-            if new_gains.has_key((i,pol[0])) and new_gains.has_key((j,pol[1])) and (old_gains == None
-                or (old_gains.has_key((i,pol[0])) and old_gains.has_key((j,pol[1])))):
-                    gigj_new = new_gains[(i,pol[0])] * np.conj(new_gains[(j,pol[1])])
-                    if old_gains is not None:
-                        gigj_old = old_gains[(i,pol[0])] * np.conj(old_gains[(j,pol[1])])
-                    else:
-                        gigj_old = np.ones_like(gigj_new)
-                    # update all the data, assuming it wasn't flagged to begin with
-                    if gain_convention == 'divide':
-                        data[(i,j,pol)][~data_flags[(i,j,pol)]] *= (gigj_old / gigj_new)[~data_flags[(i,j,pol)]]
-                    elif gain_convention == 'multiply':
-                        data[(i,j,pol)][~data_flags[(i,j,pol)]] *= (gigj_new / gigj_old)[~data_flags[(i,j,pol)]]
-                    else:
-                        raise KeyError("gain_convention must be either 'divide' or 'multiply'.")
-                    # update data flags
-                    if bool_flags:
-                        # treat as flags
-                        data_flags[(i,j,pol)][cal_flags[(i, pol[0])]] = True
-                        data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = True
-                    else:
-                        # treat as data weights
-                        wgts[(i,j,pol)][cal_flags[(i, pol[0])]] = 0.0
-                        wgts[(i,j,pol)][cal_flags[(j, pol[1])]] = 0.0
-            else:
-                # If any antenna is missing from the gains, the data is flagged
-                if bool_flags:
-                    data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)], dtype=np.bool) 
+        # Check to see that all necessary antennas are present in the gains
+        if new_gains.has_key((i,pol[0])) and new_gains.has_key((j,pol[1])) and (old_gains == None
+            or (old_gains.has_key((i,pol[0])) and old_gains.has_key((j,pol[1])))):
+                gigj_new = new_gains[(i,pol[0])] * np.conj(new_gains[(j,pol[1])])
+                if old_gains is not None:
+                    gigj_old = old_gains[(i,pol[0])] * np.conj(old_gains[(j,pol[1])])
                 else:
-                    wgts[(i,j,pol)] = np.zeros_like(wgts[(i,j,pol)], dtype=np.float) 
+                    gigj_old = np.ones_like(gigj_new)
+                # update all the data, even if it was flagged
+                if gain_convention == 'divide':
+                    data[(i,j,pol)] *= (gigj_old / gigj_new)
+                elif gain_convention == 'multiply':
+                    data[(i,j,pol)] *= (gigj_new / gigj_old)
+                else:
+                    raise KeyError("gain_convention must be either 'divide' or 'multiply'.")
+                # update data flags
+                if bool_flags:
+                    # treat as flags
+                    data_flags[(i,j,pol)][cal_flags[(i, pol[0])]] = True
+                    data_flags[(i,j,pol)][cal_flags[(j, pol[1])]] = True
+                else:
+                    # treat as data weights
+                    wgts[(i,j,pol)][cal_flags[(i, pol[0])]] = 0.0
+                    wgts[(i,j,pol)][cal_flags[(j, pol[1])]] = 0.0
+        else:
+            # If any antenna is missing from the gains, the data is flagged
+            if bool_flags:
+                data_flags[(i,j,pol)] = np.ones_like(data_flags[(i,j,pol)], dtype=np.bool) 
+            else:
+                wgts[(i,j,pol)] = np.zeros_like(wgts[(i,j,pol)], dtype=np.float) 
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None, 
