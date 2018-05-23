@@ -150,5 +150,5 @@ def apply_cal_argparser():
     a.add_argument("--gain_convention", type=str, default='divide', 
                   help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
-    a.add_argument("--vis_units", defualt=None, type=str, help="String to insert into vis_units attribute of output visibility file.")
+    a.add_argument("--vis_units", default=None, type=str, help="String to insert into vis_units attribute of output visibility file.")
     return a
