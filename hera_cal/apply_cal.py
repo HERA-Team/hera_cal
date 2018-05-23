@@ -70,7 +70,7 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None, 
               flag_nchan_low=0, flag_nchan_high=0, filetype='miriad', gain_convention='divide',  
-              add_to_history='', clobber=False, vis_units=None, **kwargs):
+              add_to_history='', clobber=False, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -90,7 +90,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flags_npz (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
-        vis_units: str, change vis_units attribute to desired format if not None. See pyuvdata.UVData for options.
         kwargs: dictionary mapping updated attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
@@ -131,10 +130,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             old_uvc.read_calfits(old_calibration)
         add_to_history += ' OLD_CALFITS_HISTORY: ' + old_uvc.history + '\n'
         old_calibration, _ = io.load_cal(old_uvc)
-
-    # parse vis_units
-    if vis_units is not None:
-        kwargs['vis_units'] = vis_units
 
     recalibrate_in_place(data, data_flags, new_gains, new_flags, old_gains=old_calibration, gain_convention=gain_convention)
     io.update_vis(data_infilename, data_outfilename, filetype_in=filetype, filetype_out=filetype, data=data, 
