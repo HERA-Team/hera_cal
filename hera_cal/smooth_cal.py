@@ -138,10 +138,11 @@ class CalibrationSmoother():
                 self.npz_freqs[npz] = npz_dict['freq_array']
                 self.npz_times[npz] = np.unique(npz_dict['time_array'])
                     
-        # set up time grid
+        # set up time grid (note that it is offset by .5 dt so that times always map to the same 
+        # index, even if they are slightly different between the npzs and the calfits files)
         all_file_times = sorted(np.array([t for times in self.cal_times.values() for t in times]))
         self.dt = np.median(np.diff(all_file_times))
-        self.time_grid = np.arange(all_file_times[0], all_file_times[-1]+self.dt/2.0, self.dt)
+        self.time_grid = np.arange(all_file_times[0] + self.dt/2.0, all_file_times[-1] + self.dt, self.dt)
         self.time_indices = {cal: np.searchsorted(self.time_grid, times) for cal, times in self.cal_times.items()}
         if len(self.npzs) > 0:
             self.npz_time_indices = {npz: np.searchsorted(self.time_grid, times) for npz, times in self.npz_times.items()}
@@ -204,6 +205,7 @@ class CalibrationSmoother():
             mirror_kernel_min_sigmas: Number of stdev into the Gaussian kernel one must go before edge
                 effects can be ignored.  
         '''
+        print 'Now performing time filtering...'
         if self.freq_filtered:
             warnings.warn('It is usually better to time-filter first, then frequency-filter.')
         self.time_filtered = True
@@ -240,6 +242,7 @@ class CalibrationSmoother():
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                     Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
         '''
+        print 'Now performing frequency filtering...'
         if not self.time_filtered:
             warnings.warn('It is usually better to time-filter first, then frequency-filter.')
         self.freq_filtered = True
@@ -266,6 +269,7 @@ class CalibrationSmoother():
             kwargs: dictionary mapping updated attributes to their new values.
                 See pyuvdata.UVCal documentation for more info.
         '''
+        print 'Now writing smoothed calibration solutions...'
         for cal in self.cals:
             outfilename = cal.replace(output_replace[0], output_replace[1])
             out_gains = {ant: self.filtered_gain_grids[ant][self.time_indices[cal],:] for ant in self.ants}
