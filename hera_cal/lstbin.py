@@ -493,10 +493,10 @@ def lst_bin_arg_parser():
     a.add_argument("--min_N", type=int, default=4, help="minimum number of points in bin needed to proceed with sigma clipping")
     a.add_argument("--rephase", default=False, action='store_true', help="rephase data to center of LST bin before binning")
     a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
-    a.add_argument("--miriad_kwargs", default={}, type=dict, help="dict w/ kwargs to pass to miriad_to_data function")
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
     a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
     a.add_argument("--output_file_select", default=None, nargs='*', type=int, help="list of output file integers ot run on. Default is all output files.")
+    a.add_argument("--vis_units", default=None, type=str, help="visibility units of output files.")
     return a
 
 
@@ -582,7 +582,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, verbo
 
 def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
                   outdir=None, overwrite=False, history=' ', lst_start=0, atol=1e-6, sig_clip=True,
-                  sigma=5.0, min_N=5, rephase=False, miriad_kwargs={}, output_file_select=None):
+                  sigma=5.0, min_N=5, rephase=False, output_file_select=None, **kwargs):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
@@ -614,10 +614,10 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     atol : type=float, absolute tolerance for LST bin float comparison
 
-    miriad_kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
-
     output_file_select : type=int or integer list, list of integer indices of the output files to run on.
         Default is all files.
+
+    kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
     -------
@@ -647,8 +647,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
 
     # update miriad_kwrgs
-    miriad_kwargs['outdir'] = outdir
-    miriad_kwargs['overwrite'] = overwrite
+    kwargs['outdir'] = outdir
+    kwargs['overwrite'] = overwrite
  
     # get metadata from the zeroth data file
     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
@@ -663,8 +663,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     freq_array = copy.copy(f)
     antpos = copy.deepcopy(ap)
     start_jd = np.floor(t)[0]
-    miriad_kwargs['start_jd'] = start_jd
-    miriad_kwargs['integration_time'] = np.median(np.diff(t)) * 24 * 3600.
+    kwargs['start_jd'] = start_jd
+    kwargs['integration_time'] = np.median(np.diff(t)) * 24 * 3600.
     del d, fl, ap, a, f, t, l, p
     garbage_collector.collect()
 
@@ -769,7 +769,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # update history
         file_history = history + " Input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
-        miriad_kwargs['history'] = file_history
+        kwargs['history'] = file_history
 
         # erase data references
         del file_list, data_list, flgs_list, lst_list
@@ -791,8 +791,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             continue
 
         # write to file
-        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **miriad_kwargs)
-        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **miriad_kwargs)
+        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **kwargs)
+        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **kwargs)
 
         del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
         garbage_collector.collect()

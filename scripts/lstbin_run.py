@@ -53,6 +53,9 @@ if type(data_files[0]) is not list:
 kwargs['verbose'] = kwargs['silence'] is False
 del kwargs['silence']
 
+# configure vis_units
+if args.vis_units is None:
+    del kwargs['vis_units']
 
 lstbin.lst_bin_files(data_files, **kwargs)
 

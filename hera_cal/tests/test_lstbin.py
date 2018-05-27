@@ -161,11 +161,14 @@ class Test_lstbin:
 
         # test smaller ntimes file output, sweeping through f_select
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True,
-                                verbose=False)
+                                verbose=False, vis_units='Jy')
         output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
         # load a file
         uvd1 = UVData()
         uvd1.read_miriad(output_files[1])
+        nt.assert_equal(uvd1.vis_units, 'Jy')
+        nt.assert_equal(uvd1.Ntimes, 80)
+        nt.assert_almost_equal(uvd1.nsample_array.max(), 3.0)
         # remove files
         for of in output_files:
             if os.path.exists(of):
@@ -173,7 +176,7 @@ class Test_lstbin:
 
         # test output_file_select
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=1,
-                                verbose=False)
+                                verbose=False, vis_units='Jy')
         output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
         # load a file
         uvd2 = UVData()
