@@ -235,7 +235,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     ant_2_array = bls[:,1]
 
     # get baseline array
-    baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
+    baseline_array = 2048 * (ant_1_array+1) + (ant_2_array+1) + 2^16
 
     # get antennas in data
     data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
