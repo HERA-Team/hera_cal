@@ -38,13 +38,14 @@ default_params = {
 'dlst'      : None,
 'lst_start' : 0.0,
 'outdir'    : None,
+'vis_units' : 'Jy',
 'ntimes_per_file' : 60,
 'file_ext'  : "{}.{}.{:7.5f}.uv",
 'queue'     : 'hera',
 'outfile'   : 'lstbin.out',
 'nodes'     : 1,
 'ppn'       : 1,
-'pmem'      : '16gb',
+'vmem'      : '16gb',
 'walltime'  : '24:00:00',
 'arrayjob'  : False,
 'cwd'       : os.getcwd()
@@ -61,13 +62,13 @@ pbs = "" \
 "#PBS -o {outfile}\n" \
 "#PBS -l nodes={nodes}:ppn={ppn}\n" \
 "#PBS -l walltime={walltime}\n" \
-"#PBS -l pmem={pmem}\n" \
+"#PBS -l vmem={vmem}\n" \
 "#PBS -V\n" \
 "{arrayjob}\n\n" \
 "echo start: $(date)\n" \
 "cd {cwd}\n" \
 "lstbin_run.py --dlst {dlst} --lst_start {lst_start} --ntimes_per_file {ntimes_per_file} " \
-"--file_ext {file_ext} --outdir {outdir} {overwrite} {output_file_select} {sig_clip} --sigma {sigma} --min_N {min_N} {rephase} {data_files}\n" \
+"--file_ext {file_ext} --outdir {outdir} {overwrite} {output_file_select} --vis_units {vis_units} {sig_clip} --sigma {sigma} --min_N {min_N} {rephase} {data_files}\n" \
 "echo end: $(date)"
 
 # parse special kwargs

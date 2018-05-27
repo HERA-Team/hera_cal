@@ -31,4 +31,4 @@ nodes: 1
 ppn: 1
 walltime: '12:00:00'
 arrayjob: True
-pmem: 16gb
+vmem: 16gb
