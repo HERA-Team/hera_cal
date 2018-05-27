@@ -123,6 +123,8 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     Parameters:
     -----------
+    fname : type=str, output filename of visibliity data
+    
     data : type=DataContainer, holds complex visibility data.
 
     lst_array : type=float ndarray, contains unique LST time bins [radians] of data (center of integration).

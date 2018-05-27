@@ -45,7 +45,7 @@ default_params = {
 'outfile'   : 'lstbin.out',
 'nodes'     : 1,
 'ppn'       : 1,
-'vmem'      : '16gb',
+'vmem'      : '32gb',
 'walltime'  : '24:00:00',
 'arrayjob'  : False,
 'cwd'       : os.getcwd()

@@ -496,7 +496,7 @@ def lst_bin_arg_parser():
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
     a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
     a.add_argument("--output_file_select", default=None, nargs='*', type=int, help="list of output file integers ot run on. Default is all output files.")
-    a.add_argument("--vis_units", default=None, type=str, help="visibility units of output files.")
+    a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
     return a
 
 
