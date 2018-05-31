@@ -42,7 +42,7 @@ kwargs = dict(vars(args))
 kwargs['history'] += history
 
 # configure data_files
-data_files = map(lambda s: sorted(glob.glob(s)), args.data_files)
+data_files = map(lambda s: sorted(glob.glob(s.strip("'").strip('"'))), args.data_files)
 del kwargs['data_files']
 
 # ensure data_files is a set of nested lists
