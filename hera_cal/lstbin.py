@@ -495,7 +495,7 @@ def lst_bin_arg_parser():
     a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
     a.add_argument("--atol", default=1e-6, type=float, help="absolute tolerance when comparing LST bin floats")
     a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
-    a.add_argument("--output_file_select", default=None, nargs='*', type=int, help="list of output file integers ot run on. Default is all output files.")
+    a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers ot run on. Default is all output files.")
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
     return a
 
@@ -631,8 +631,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     # select file_lsts
     if output_file_select is not None:
-        if isinstance(output_file_select, (int, np.int)):
+        if isinstance(output_file_select, (int, np.integer)):
             output_file_select = [output_file_select]
+        output_file_select = [int(o) for o in output_file_select]
         try:
             file_lsts = map(lambda i: file_lsts[i], output_file_select)
         except IndexError:
