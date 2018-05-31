@@ -57,5 +57,9 @@ del kwargs['silence']
 if args.vis_units is None:
     del kwargs['vis_units']
 
+# handle output_file_select fed as None
+if kwargs['output_file_select'] == ['None']:
+    del kwargs['output_file_select']
+    
 lstbin.lst_bin_files(data_files, **kwargs)
 
