@@ -6,15 +6,14 @@ import sys
 from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 import hera_cal as hc
-from uvtools.data import DATA_PATH
+from hera_cal.data import DATA_PATH
 from collections import OrderedDict as odict
 import copy
 import glob
-import uvtools as uvt
 
 
 def test_timeavg_waterfall():
-    fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+    fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
 
     uvd = UVData()
     uvd.read_miriad(fname)
@@ -33,31 +32,31 @@ def test_timeavg_waterfall():
     blv = antpos[ants.tolist().index(24)] - antpos[ants.tolist().index(25)]
 
     # test basic execution
-    ad, af, an, al, aea = uvt.frf.timeavg_waterfall(d, 4, verbose=False)
-    nt.assert_equal(ad.shape, (2, 1024))
-    nt.assert_equal(af.shape, (2, 1024))
-    nt.assert_equal(an.shape, (2, 1024))
+    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 25, verbose=False)
+    nt.assert_equal(ad.shape, (3, 64))
+    nt.assert_equal(af.shape, (3, 64))
+    nt.assert_equal(an.shape, (3, 64))
     nt.assert_false(np.any(af))
-    nt.assert_almost_equal(an[0, 0], 4.0)
-    nt.assert_almost_equal(an[1, 0], 2.0)
+    nt.assert_almost_equal(an[1, 0], 25.0)
+    nt.assert_almost_equal(an[2, 0], 10.0)
 
     # test rephase
-    ad, af, an, al, aea = uvt.frf.timeavg_waterfall(d, 4, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
+    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 25, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
                                                     nsamples=n, extra_arrays=dict(times=t), verbose=False)
-    nt.assert_equal(ad.shape, (2, 1024))
-    nt.assert_equal(af.shape, (2, 1024))
-    nt.assert_equal(an.shape, (2, 1024))
+    nt.assert_equal(ad.shape, (3, 64))
+    nt.assert_equal(af.shape, (3, 64))
+    nt.assert_equal(an.shape, (3, 64))
     nt.assert_true(np.any(af))
-    nt.assert_equal(len(al), 2)
-    nt.assert_equal(len(aea['avg_times']), 2)
-    nt.assert_almost_equal(an.max(), 98.0)
+    nt.assert_equal(len(al), 3)
+    nt.assert_equal(len(aea['avg_times']), 3)
+    nt.assert_almost_equal(an.max(), 25.0)
 
 
 class Test_FRFilter:
 
     def setUp(self):
-        self.fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
-        self.F = uvt.frf.FRFilter()
+        self.fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
+        self.F = hc.frf.FRFilter()
         self.uvd = UVData()
         self.uvd.read_miriad(self.fname)
 
@@ -69,18 +68,18 @@ class Test_FRFilter:
 
     def test_timeavg_data(self):
         self.F.load_data(self.uvd)
-        self.F.timeavg_data(600.0, rephase=True)
+        self.F.timeavg_data(35, rephase=True)
         nt.assert_equal(self.F.Navg, 3)
 
         self.F.timeavg_data(1e10, rephase=True, verbose=False)
-        nt.assert_equal(self.F.Navg, 6)
+        nt.assert_equal(self.F.Navg, 60)
 
         # exceptions
-        nt.assert_raises(AssertionError, self.F.timeavg_data, 100.0)
+        nt.assert_raises(AssertionError, self.F.timeavg_data, 1.0)
 
     def test_write_data(self):
         self.F.load_data(self.uvd)
-        self.F.timeavg_data(600.0, rephase=False, verbose=False)
+        self.F.timeavg_data(35, rephase=False, verbose=False)
         u = self.F.write_data("./out.uv", write_avg=True, filetype='miriad', overwrite=True)
         nt.assert_true(os.path.exists("./out.uv"))
         uv = UVData()
