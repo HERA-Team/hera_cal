@@ -10,5 +10,7 @@ import abscal
 import lstbin
 import smooth_cal
 import apply_cal
+import frf
+from frf import FRFilter
 
 __version__ = version.version
