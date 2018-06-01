@@ -337,7 +337,7 @@ class FRFilter(object):
             new_uvd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
             new_uvd.time_array[blts_inds] = times
             new_uvd.lst_array[blts_inds] = lsts
-            new_uvd.zenith_ra[blts_inds] = hc.utils.JD2RA(times, lon)
+            new_uvd.zenith_ra[blts_inds] = utils.JD2RA(times, lon)
             new_uvd.zenith_ra_degrees[blts_inds] = new_uvd.zenith_ra[blts_inds] * 180 / np.pi
             new_uvd.zenith_dec[blts_inds] = lat * np.pi / 180
             new_uvd.zenith_dec_degrees[blts_inds] = lat
