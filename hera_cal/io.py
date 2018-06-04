@@ -16,7 +16,9 @@ jonesnum2str = {-5: 'x', -6: 'y'}
 jonesstr2num = {'x': -5, 'y': -6}
 
 
-def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
+def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, 
+             nested_dict=False, antenna_nums=None, ant_pairs_nums=None, ant_str=None,
+             polarizations=None, times=None):
     '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
@@ -30,7 +32,22 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
             where visibilities and flags are accessed as data[(0,1)]['xx']
-
+        antenna_nums: The antennas numbers to read into the object.
+        ant_pairs_nums: A list of antenna number tuples (e.g. [(0,1), (3,2)])
+            specifying baselines to read into the object. Ordering of the
+            numbers within the tuple does not matter. 
+            A single antenna iterable e.g. (1,) is interpreted as all visibilities with 
+            that antenna (only for miriad files).
+        ant_str: A string containing information about what kinds of visibility data
+            to read-in.  Can be 'auto', 'cross', 'all'.
+        polarizations: List of polarization integers or strings to read-in.
+            Ex: ['xx', 'yy', ...]
+        times: Julian Date times to load in
+            if filetype == 'miriad':
+                This is a len-2 list containing min and max range of times (Julian Date) to read-in.
+                Ex: [2458115.20, 2458115.40]
+            elif filetype == 'uvfits':
+                This is a list of the exact float times to read-in (see pyuvdata.UVData.select)
     Returns:
         if return_meta is True:
             (data, flags, antpos, ants, freqs, times, lsts, pols)
@@ -47,33 +64,9 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         lsts: ndarray containing LST bins of data (radians)
         pol: ndarray containing list of polarization strings
     '''
-
-    uvd = UVData()
-    if isinstance(input_data, (tuple, list, np.ndarray)): #List loading
-        if np.all([isinstance(id, str) for id in input_data]): #List of visibility data paths
-            if filetype == 'miriad':
-                uvd.read_miriad(list(input_data))
-            elif filetype == 'uvfits':
-                 #TODO: implement this
-                raise NotImplementedError('This function has not been implemented yet.')
-            else:
-                raise NotImplementedError("Data filetype must be either 'miriad' or 'uvfits'.")
-        elif np.all([isinstance(id, UVData) for id in input_data]): #List of uvdata objects
-            uvd = reduce(operator.add, input_data)
-        else:
-            raise TypeError('If input is a list, it must be only strings or only UVData objects.')
-    elif isinstance(input_data, str): #single visibility data path
-        if filetype == 'miriad':
-            uvd.read_miriad(input_data)
-        elif filetype == 'uvfits':
-             #TODO: implement this
-            raise NotImplementedError('This function has not been implemented yet.')
-        else:
-            raise NotImplementedError("Data filetype must be either 'miriad' or 'uvfits'.")
-    elif isinstance(input_data, UVData): #single UVData object
-        uvd = input_data
-    else:
-        raise TypeError('Input must be a UVData object, a string, or a list of either.')
+    # get UVData object
+    uvd = file_to_uvd(input_data, filetype=filetype, antenna_nums=antenna_nums, ant_pairs_nums=ant_pairs_nums,
+                      ant_str=ant_str, polarizations=polarizations, times=times)
 
     data, flags = odict(), odict()
     # create nested dictionaries of visibilities in the data[bl][pol] filetype, removing autos if desired
@@ -355,7 +348,6 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
-
     # Load infile
     if type(infilename) == UVData:
         uvd = copy.deepcopy(infilename)
@@ -379,6 +371,63 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         raise NotImplementedError('This function has not been implemented yet.')
     else:
         raise TypeError("Input filetype must be either 'miriad' or 'uvfits'.")
+
+
+def file_to_uvd(filepaths, filetype='miriad', antenna_nums=None, ant_pairs_nums=None, ant_str=None,
+                polarizations=None, times=None):
+    """
+    Read a list of filepaths into a UVData object
+
+    Arguments:
+        filepaths: string, path to file, or list of string paths to files
+        filetype: string, filetype, options=['miriad']
+        antenna_nums: The antennas numbers to read into the object.
+        ant_pairs_nums: A list of antenna number tuples (e.g. [(0,1), (3,2)])
+            specifying baselines to read into the object. Ordering of the
+            numbers within the tuple does not matter. 
+            A single antenna iterable e.g. (1,) is interpreted as all visibilities with 
+            that antenna (only for miriad files).
+        ant_str: A string containing information about what kinds of visibility data
+            to read-in.  Can be 'auto', 'cross', 'all'.
+        polarizations: List of polarization integers or strings to read-in.
+            Ex: ['xx', 'yy', ...]
+        times: Julian Date times to load in
+            if filetype == 'miriad':
+                This is a len-2 list containing min and max range of times (Julian Date) to read-in.
+                Ex: [2458115.20, 2458115.40]
+            elif filetype == 'uvfits':
+                This is a list of the exact float times to read-in (see pyuvdata.UVData.select)
+    Returns:
+        uvd: pyuvdata.UVData object
+    """
+    # type check
+    if isinstance(filepaths, (list, np.ndarray, tuple)):
+        if isinstance(filepaths[0], UVData):
+            assert times is None, "Cannot perform times selection when converting UVData to DataContainer"
+            return reduce(operator.add, map(lambda uvd: uvd.select(antenna_nums=antenna_nums,
+                                                                   ant_pairs_nums=ant_pairs_nums,
+                                                                   ant_str=ant_str, inplace=False,
+                                                                   polarizations=polarizations), filepaths))
+    else:
+        if isinstance(filepaths, UVData):
+            assert times is None, "Cannot perform times selection converting UVData to DataContainer"
+            return filepaths.select(antenna_nums=antenna_nums, ant_pairs_nums=ant_pairs_nums, ant_str=ant_str,
+                                    polarizations=polarizations, inplace=False)
+
+    # instantiate blank object
+    uvd = UVData()
+
+    # read miriad
+    if filetype == 'miriad':
+        uvd.read_miriad(filepaths, antenna_nums=antenna_nums, ant_pairs_nums=ant_pairs_nums,
+                        ant_str=ant_str, polarizations=polarizations, time_range=times)
+    elif filetype == 'uvfits':
+        uvd.read_uvfits(filepaths, antenna_nums=antenna_nums, ant_pairs_nums=ant_pairs_nums,
+                        ant_str=ant_str, polarizations=polarizations, times=times)
+    else:
+        raise IOError("Didn't recognize {} filetype".format(filetype))
+
+    return uvd
 
 
 def load_cal(input_cal, return_meta=False):
