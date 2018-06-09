@@ -51,6 +51,21 @@ def test_timeavg_waterfall():
     nt.assert_equal(len(aea['avg_times']), 3)
     nt.assert_almost_equal(an.max(), 25.0)
 
+    # test various Navgs
+    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 1, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
+                                                    nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    nt.assert_equal(ad.shape, (60, 64))
+    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
+                                                    nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    nt.assert_equal(ad.shape, (1, 64))
+
+    # wrap lst
+    ad2, af2, an2, al2, aea2 = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=l + 1.52917804, freqs=fr, bl_vec=blv, 
+                                                    nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    nt.assert_equal(ad.shape, (1, 64))
+    nt.assert_true(np.isclose(ad, ad2).all())
+    nt.assert_almost_equal(al, al2 - 1.52917804)
+
 
 class Test_FRFilter:
 
