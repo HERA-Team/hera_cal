@@ -156,12 +156,15 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
             dlst = mean_l - l
             d = utils.lst_rephase(d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True)
 
+        # form data weights : flag weights * nsample 
         w = fw * n
         w_sum = np.sum(w, axis=0, keepdims=False).clip(1e-10, np.inf)
 
+        # perfom weighted average of data along time
         ad = np.sum(d * w, keepdims=False, axis=0) / w_sum
         an = np.sum(w, keepdims=False, axis=0)
 
+        # append to data lists
         avg_data.append(ad)
         win_flags.append(np.min(f, axis=0, keepdims=False))
         avg_nsamples.append(an)
