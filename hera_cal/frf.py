@@ -66,7 +66,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
 
     extra_arrays : dict, optional
         Dictionary of extra 1D arrays with shape=(Ntimes,) to push through
-        averaging windows.
+        averaging windows. For example, a time_array, zenith_ra array, or
+        anything that has length Ntimes.
     
     verbose : bool, optional
         if True, report feedback to standard output.
@@ -95,7 +96,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     assert isinstance(data, np.ndarray), "data must be fed as an ndarray"
     if rephase:
         assert lsts is not None and freqs is not None and bl_vec is not None, "" \
-               "If rephase is True, must feed lsts and freqs"
+               "If rephase is True, must feed lsts, freqs and bl_vec."
 
     # unwrap lsts if fed
     if lsts is not None:
@@ -190,33 +191,33 @@ class FRFilter(object):
         """
         pass
 
-    def load_data(self, inp_data, filetype='miriad'):
+    def load_data(self, input_data, filetype='miriad'):
         """
         Load in visibility data for filtering
 
         Parameters
         ----------
-        inp_data : UVData or str
+        input_data : UVData or str
             UVData object or string filepath to visibility data
 
         filetype : str
             File format of the data. Only miriad is currently supported.
         """
-        assert isinstance(inp_data, (UVData, str, np.str)), "inp_data must be fed as a UVData object or a string filepath"
+        assert isinstance(input_data, (UVData, str, np.str)), "input_data must be fed as a UVData object or a string filepath"
 
         # load uvdata if fed as string
-        if isinstance(inp_data, (str, np.str)):
+        if isinstance(input_data, (str, np.str)):
             ### TODO: Change to using hc.io.file_to_uvd
-            self.inp_uvdata = UVData()
-            self.inp_uvdata.read_miriad(inp_data)
+            self.input_uvdata = UVData()
+            self.input_uvdata.read_miriad(input_data)
         else:
-            self.inp_uvdata = inp_data
+            self.input_uvdata = input_data
 
         self.filetype = filetype
 
         (self.data, self.flags, self.antpos, self.ants, self.freqs, self.times, self.lsts, 
-         self.pols) = io.load_vis(self.inp_uvdata, return_meta=True, filetype=filetype)
-        self.nsamples = odict([(k, self.inp_uvdata.get_nsamples(k)) for k in self.data.keys()])
+         self.pols) = io.load_vis(self.input_uvdata, return_meta=True, filetype=filetype)
+        self.nsamples = odict([(k, self.input_uvdata.get_nsamples(k)) for k in self.data.keys()])
         self.nsamples = datacontainer.DataContainer(self.nsamples)
         self.Nfreqs = len(self.freqs)
         self.Ntimes = len(self.times)
@@ -224,7 +225,7 @@ class FRFilter(object):
         self.dtime = np.median(np.diff(self.times))
         self.bls = sorted(set([k[:2] for k in self.data.keys()]))
         self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
-        self.lat = self.inp_uvdata.telescope_location_lat_lon_alt[0] * 180 / np.pi
+        self.lat = self.input_uvdata.telescope_location_lat_lon_alt[0] * 180 / np.pi
 
     def timeavg_data(self, t_avg, rephase=False, verbose=True):
         """
@@ -291,10 +292,16 @@ class FRFilter(object):
             Output file format. Currently only miriad is supported.
 
         add_to_history = str
-            History string to add to existing UVData object attached as self.inp_uvdata.
+            History string to add to the UVData object before writing to disk.
 
         overwrite: bool
             If True, overwrite output if it exists.
+
+        Returns
+        -------
+        new_uvd : UVData object
+            A copy of the input_UVData object, but with updated data
+            and relevant metadata.
         """
         # check output
         if os.path.exists(outfilename) and not overwrite:
@@ -302,7 +309,7 @@ class FRFilter(object):
             return
 
         # create new UVData object
-        new_uvd = copy.deepcopy(self.inp_uvdata)
+        new_uvd = copy.deepcopy(self.input_uvdata)
 
         # set write data references
         if write_avg:
@@ -346,7 +353,7 @@ class FRFilter(object):
         if filetype == 'miriad':
             new_uvd.write_miriad(outfilename, clobber=True)
         else:
-            raise ValueError("filetype {} not recognized".format(filetype))
+            raise NotImplementedError("filetype {} not recognized".format(filetype))
 
         return new_uvd
 
