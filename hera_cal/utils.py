@@ -9,6 +9,8 @@ from pyuvdata import UVCal, UVData
 import os
 import hera_cal
 import copy
+from scipy.interpolate import interp1d
+from collections import OrderedDict as odict
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -310,6 +312,135 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
         return RA[0]
 
 
+def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
+    """
+    Given longitude and latitude, get the Solar alittude at a given time.
+
+    Parameters
+    ----------
+    jds : float or ndarray of floats
+        Array of Julian Dates
+
+    longitude : float
+        Longitude of observer in degrees East
+
+    latitude : float
+        Latitude of observer in degrees North
+
+    Returns
+    -------
+    alts : float or ndarray
+        Array of altitudes [degrees] of the Sun
+    """
+    # type check
+    array = True
+    if isinstance(jds, (float, np.float, np.float64, int, np.int, np.int32)):
+        jds = [jds]
+        array = False 
+
+    # get earth location
+    e = crd.EarthLocation(lat=latitude*unt.deg, lon=longitude*unt.deg)
+
+    # get AltAz frame
+    a = crd.AltAz(location=e)
+
+    # get Sun locations
+    alts = np.array(map(lambda t: crd.get_sun(Time(t, format='jd')).transform_to(a).alt.value, jds))
+
+    if array:
+        return alts
+    else:
+        return alts[0]
+
+
+def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False, 
+               interp=False, interp_Nsteps=11, verbose=True):
+    """
+    Apply flags at times when the Sun is above some minimum altitude.
+
+    Parameters
+    ----------
+    flags : flag ndarray, or DataContainer, or pyuvdata.UVData object
+
+    start_jd : int
+        Integer Julian Date to perform calculation for
+
+    times : 1D float ndarray
+        If flags is an ndarray or DataContainer, this contains the time bins 
+        of the data's time axis in Julian Date
+
+    flag_alt : float
+        If the Sun is greater than this altitude [degrees], we flag the data.
+
+    longitude : float
+        Longitude of observer in degrees East (if flags is a UVData object, 
+        use its stored longitude instead)
+
+    latitude : float
+        Latitude of observer in degrees North (if flags is a UVData object, 
+        use its stored latitude instead)
+        
+    inplace: bool
+        If inplace, edit flags instead of returning a new flags object.
+
+    interp : bool
+        If True, evaluate Solar altitude with a coarse grid and interpolate at times values.
+
+    interp_Nsteps : int
+        Number of steps from times.min() to times.max() to use in get_solar_alt call.
+        If the range of times is <= a single day, Nsteps=11 is a good-enough resolution.
+
+    verbose : bool
+        if True, print feedback to standard output
+
+    Returns
+    -------
+    flags : solar-applied flags, same format as input
+    """
+    # type check
+    if isinstance(flags, hera_cal.datacontainer.DataContainer):
+        dtype = 'DC'
+    elif isinstance(flags, np.ndarray):
+        dtype = 'ndarr'
+    elif isinstance(flags, UVData):
+        if verbose: print "Note: using latitude and longitude in given UVData object"
+        latitude, longitude, altitude = flags.telescope_location_lat_lon_alt_degrees
+        times = np.unique(flags.time_array)
+        dtype = 'uvd'
+    if dtype in ['ndarr', 'DC']:
+        assert times is not None, "if flags is an ndarray or DataContainer, must feed in times"
+
+    # inplace
+    if not inplace:
+        flags = copy.deepcopy(flags)
+
+    # get solar alts
+    if interp:
+        # first evaluate coarse grid, then interpolate
+        _times = np.linspace(times.min(), times.max(), interp_Nsteps)
+        _alts = get_sun_alt(_times, longitude=longitude, latitude=latitude)
+
+        # interpolate _alts
+        alts = interp1d(_times, _alts, kind='quadratic')(times)
+    else:
+        # directly evaluate solar altitude at times
+        alts = get_sun_alt(times, longitude=longitude, latitude=latitude)
+
+    # apply flags
+    if dtype == 'DC':
+        for k in flags.keys():
+            flags[k][alts > flag_alt, :] = True
+    elif dtype == 'ndarr':
+        flags[alts > flag_alt, :] = True
+    elif dtype == 'uvd':
+        for t, a in zip(times, alts):
+            if a > flag_alt:
+                flags.flag_array[np.isclose(flags.time_array, t)] = True
+
+    if not inplace:
+        return flags
+
+
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
     """
     multiply together multiple calfits gain solutions (overlapping in time and frequency)
@@ -530,3 +661,71 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         
     if inplace == False:
         return data
+
+
+def synthesize_ant_flags(flags, threshold=0.0):
+    '''
+    Synthesizes flags on visibilities into flags on antennas. For a given antenna and
+    a given time and frequency, if the fraction of flagged pixels in all visibilities with that
+    antenna exceeds 'threshold', the antenna gain is flagged at that time and frequency. This
+    excludes contributions from antennas that are completely flagged, i.e. are dead.
+
+    Arguments:
+        flags: DataContainer containing boolean data flag waterfalls
+        threshold: float, fraction of flagged pixels across all visibilities (with a common antenna)
+            needed to flag that antenna gain at a particular time and frequency.
+
+    Returns:
+        ant_flags: dictionary mapping antenna-pol keys like (1,'x') to boolean flag waterfalls
+    '''
+    # type check
+    assert isinstance(flags, hera_cal.datacontainer.DataContainer), "flags must be fed as a datacontainer"
+    assert threshold >= 0.0 and threshold <= 1.0, "threshold must be 0.0 <= threshold <= 1.0"
+    if np.isclose(threshold, 1.0): threshold = threshold - 1e-10
+
+    # get Ntimes and Nfreqs
+    Ntimes, Nfreqs = flags[flags.keys()[0]].shape
+
+    # get antenna-pol keys
+    antpols = set([ap for (i,j,pol) in flags.keys() for ap in [(i, pol[0]), (j, pol[1])]])
+
+    # get dictionary of completely flagged ants to exclude
+    is_excluded = {ap: True for ap in antpols}
+    for (i,j,pol), flags_here in flags.items():
+        if not np.all(flags_here): 
+            is_excluded[(i,pol[0])] = False
+            is_excluded[(j,pol[1])] = False
+
+    # construct dictionary of visibility count (number each antenna touches)
+    # and dictionary of number of flagged visibilities each antenna has (excluding dead ants)
+    # per time and freq
+    ant_Nvis = {ap: 0 for ap in antpols}
+    ant_Nflag = {ap: np.zeros((Ntimes, Nfreqs), np.float) for ap in antpols}
+    for (i, j, pol), flags_here in flags.items():
+        # get antenna keys
+        ap1 = (i, pol[0])
+        ap2 = (j, pol[1])
+        # only continue if not in is_excluded
+        if not is_excluded[ap1] and not is_excluded[ap2]:
+            # add to Nvis count
+            ant_Nvis[ap1] += 1
+            ant_Nvis[ap2] += 1
+            # Add to Nflag count
+            ant_Nflag[ap1] += flags_here.astype(np.float)
+            ant_Nflag[ap2] += flags_here.astype(np.float)
+
+    # iterate over antpols and construct antenna gain dictionaries
+    ant_flags = {}
+    for ap in antpols:
+        # create flagged arrays for excluded ants
+        if is_excluded[ap]:
+            ant_flags[ap] = np.ones((Ntimes, Nfreqs), np.bool)
+        # else create flags based on threshold
+        else:
+            # handle Nvis = 0 cases
+            if ant_Nvis[ap] == 0: ant_Nvis[ap] = 1e-10
+            # create antenna flags
+            ant_flags[ap] = (ant_Nflag[ap] / ant_Nvis[ap]) > threshold
+
+    return ant_flags
+

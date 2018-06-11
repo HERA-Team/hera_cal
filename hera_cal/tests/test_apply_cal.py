@@ -32,10 +32,7 @@ class Test_Update_Cal(unittest.TestCase):
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='divide')
         for i in range(10):
             for j in range(10):
-                if not f[i,j]:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]*g0_old[i,j]*np.conj(g1_old[i,j])/g0_new[i,j]/np.conj(g1_new[i,j]))
-                else:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j],vis[i,j])
+                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]*g0_old[i,j]*np.conj(g1_old[i,j])/g0_new[i,j]/np.conj(g1_new[i,j]))
                 if f[i,j] or cal_flags[(0,'x')][i,j] or cal_flags[(1,'x')][i,j]:
                     self.assertTrue(flags[(0,1,'xx')][i,j])
                 else:
@@ -47,10 +44,7 @@ class Test_Update_Cal(unittest.TestCase):
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, gain_convention='divide')
         for i in range(10):
             for j in range(10):
-                if not f[i,j]:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_new[i,j]/np.conj(g1_new[i,j]))
-                else:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j],vis[i,j])
+                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_new[i,j]/np.conj(g1_new[i,j]))
 
         # test multiply
         dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
@@ -58,10 +52,7 @@ class Test_Update_Cal(unittest.TestCase):
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='multiply')
         for i in range(10):
             for j in range(10):
-                if not f[i,j]:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_old[i,j]/np.conj(g1_old[i,j])*g0_new[i,j]*np.conj(g1_new[i,j]))
-                else:
-                    self.assertAlmostEqual(dc[(0,1,'xx')][i,j],vis[i,j])
+                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_old[i,j]/np.conj(g1_old[i,j])*g0_new[i,j]*np.conj(g1_new[i,j]))
 
         # test flag propagation when missing antennas in gains
         dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
@@ -93,7 +84,7 @@ class Test_Update_Cal(unittest.TestCase):
         old_cal = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
         flags_npz = os.path.join(DATA_PATH, "zen.2457698.40355.xx.HH.uvcA.fake_flags.npz")
-        
+
         uvd = UVData()
         uvd.read_miriad(fname)
         uvd.flag_array = np.logical_or(uvd.flag_array, np.load(flags_npz)['flag_array'])
@@ -103,8 +94,11 @@ class Test_Update_Cal(unittest.TestCase):
         uvc_old.read_calfits(old_cal)
         uvc_old.gain_array *= (3.0 + 4.0j)
 
-        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention = 'divide', 
-                     flags_npz = flags_npz, filetype = 'miriad', clobber = True)
+        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention='divide', 
+                     flags_npz=flags_npz, filetype='miriad', clobber=True, vis_units='Jy')
+        u = UVData()
+        u.read_miriad(outname)
+        self.assertEqual(u.vis_units, 'Jy')
         new_data, new_flags = io.load_vis(outname)
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):
@@ -115,8 +109,8 @@ class Test_Update_Cal(unittest.TestCase):
                         self.assertTrue(new_flags[k][i,j])
 
         # test band edge flagging
-        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention = 'divide', 
-             flag_nchan_low = 450, flag_nchan_high = 400, filetype = 'miriad', clobber = True)
+        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention='divide', 
+             flag_nchan_low=450, flag_nchan_high=400, filetype='miriad', clobber=True)
         new_data, new_flags = io.load_vis(outname)
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):
@@ -125,18 +119,18 @@ class Test_Update_Cal(unittest.TestCase):
                         self.assertAlmostEqual(new_data[k][i,j] / 25.0, data[k][i,j],4)
                     if j < 450 or j > 623:
                         self.assertTrue(new_flags[k][i,j])
-                    
+
         with self.assertRaises(ValueError):
             ac.apply_cal(fname, outname, None)
         shutil.rmtree(outname)
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
-        args = ac.apply_cal_argparser()
+        a = ac.apply_cal_argparser()
+        args = a.parse_args()
         self.assertEqual(args.infile, 'a')
         self.assertEqual(args.outfile, 'b')
         self.assertEqual(args.new_cal, ['d'])
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -123,6 +123,8 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     Parameters:
     -----------
+    fname : type=str, output filename of visibliity data
+    
     data : type=DataContainer, holds complex visibility data.
 
     lst_array : type=float ndarray, contains unique LST time bins [radians] of data (center of integration).
@@ -235,7 +237,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     ant_2_array = bls[:,1]
 
     # get baseline array
-    baseline_array = 2048 * (ant_2_array+1) + (ant_1_array+1) + 2^16
+    baseline_array = 2048 * (ant_1_array+1) + (ant_2_array+1) + 2**16
 
     # get antennas in data
     data_ants = np.unique(np.concatenate([ant_1_array, ant_2_array]))
@@ -633,6 +635,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     '''Loads an existing calfits file with pyuvdata, modifies some subset of of its parameters,
     and then writes a new calfits file to disk. Cannot modify the shape of gain arrays.
     More than one spectral window is not supported.
+    
     Arguments:
         infilename: filename of the base calfits file to be updated, or UVCal object
         outfilename: filename of the new calfits file
@@ -645,7 +648,6 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVCal documentation for more info.
     '''
-
     # Load infile
     if type(infilename) == UVCal:
         cal = copy.deepcopy(infilename)
@@ -660,4 +662,28 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     cal.write_calfits(outfilename, clobber=clobber)
 
 
+def load_npz_flags(npzfile):
+    '''Load flags from a npz file (like those produced by hera_qm.xrfi) and converts 
+    them into a DataContainer. More than one spectral window is not supported. Assumes 
+    every baseline has the same times present and that the times are in order.
 
+    Arguments:
+        npzfile: path to .npz file containing flags and array metadata
+    Returns:
+        flags: Dictionary of boolean flags as a function of time and
+            frequency with keys in the (1,'x') format
+    '''
+    npz = np.load(npzfile)
+    pols = [polnum2str[p] for p in npz['polarization_array']]
+    nTimes = len(np.unique(npz['time_array']))
+    nAntpairs = len(npz['antpairs'])
+    nFreqs = npz['flag_array'].shape[2]
+    assert npz['flag_array'].shape[0] == nAntpairs * nTimes, \
+           'flag_array must have flags for all baselines for all times.'
+    
+    flags = {}
+    for p,pol in enumerate(pols):
+        flag_array = np.reshape(npz['flag_array'][:,0,:,p], (nTimes, nAntpairs, nFreqs))
+        for n,(i,j) in enumerate(npz['antpairs']):
+            flags[i,j,pol] = flag_array[:,n,:]
+    return DataContainer(flags)

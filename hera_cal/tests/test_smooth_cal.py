@@ -1,5 +1,5 @@
 from hera_cal import io
-from hera_cal import smooth_cal as sc
+from hera_cal import smooth_cal
 from hera_cal.datacontainer import DataContainer
 import numpy as np
 import unittest
@@ -8,61 +8,26 @@ from pyuvdata.utils import check_histories
 from pyuvdata import UVCal, UVData
 from hera_cal.data import DATA_PATH
 import os
+import glob
 import sys
 import shutil
 from scipy import constants
 import warnings
 
+
 class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
 
-    def test_drop_cross_vis(self):
-        dc = DataContainer({(1,1,'xx'): np.ones((10,10)), (1,2,'xx'): np.zeros((10,10)), (1,1,'xy'):np.zeros((10,10))})
-        self.assertEqual(len(dc),3)
-        dc = sc.drop_cross_vis(dc)
-        self.assertEqual(len(dc),1)
-
-    def test_synthesize_ant_flags(self):
-        flags = DataContainer({(0,0,'xx'): np.ones((5,5),bool),
-                               (0,1,'xx'): np.ones((5,5),bool),
-                               (1,2,'xx'): np.zeros((5,5),bool),
-                               (2,3,'xx'): np.zeros((5,5),bool)})
-        flags[(2,3,'xx')][:,4] = True
-        ant_flags = sc.synthesize_ant_flags(flags)
-        np.testing.assert_array_equal(ant_flags[(0,'x')], True)
-        np.testing.assert_array_equal(ant_flags[(1,'x')], False)
-        np.testing.assert_array_equal(ant_flags[(2,'x')][:,0:4], False)
-        np.testing.assert_array_equal(ant_flags[(2,'x')][:,4], True)
-        np.testing.assert_array_equal(ant_flags[(3,'x')][:,0:4], False)
-        np.testing.assert_array_equal(ant_flags[(3,'x')][:,4], True)
-
-    def test_build_weights(self):
-        unnorm_chisq_per_ant = np.ones((10,10))
-        autocorr = 4.0 * np.ones((10,10))
-        autocorr[0,0] = 0
-        flags = np.random.randn(10,10) < 0
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore") # intentionally ignore divide by zero error, since we put it in
-            wgts = sc.build_weights(unnorm_chisq_per_ant, autocorr, flags)
-        np.testing.assert_array_equal(wgts[flags], 0.0)
-        self.assertEqual(wgts[0,0], 0)
-        self.assertAlmostEqual(np.mean(wgts[wgts > 0]), 1.0)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore") # intentionally ignore divide by zero error, since we put it in
-            wgts = sc.build_weights(unnorm_chisq_per_ant, autocorr, flags, binary_wgts=True)
-        np.testing.assert_array_equal(wgts[wgts > 0], 1.0)
-        
     def test_time_kernel(self):
-        kernel = sc.time_kernel(100, 10.0, filter_scale=1.0)
+        kernel = smooth_cal.time_kernel(100, 10.0, filter_scale=1.0)
         self.assertAlmostEqual(np.sum(kernel), 1.0)
         self.assertEqual(np.max(kernel), kernel[100])
         self.assertEqual(len(kernel), 201)
 
     def test_smooth_cal_argparser(self):
-        sys.argv = [sys.argv[0], 'a', 'b', 'c']
-        a = sc.smooth_cal_argparser()
-        self.assertEqual(a.cal_infile, 'a')
-        self.assertEqual(a.data, 'b')
-        self.assertEqual(a.cal_outfile, 'c')
+        sys.argv = [sys.argv[0], 'a', 'b', '--flags_npz_list', 'c']
+        a = smooth_cal.smooth_cal_argparser()
+        self.assertEqual(a.calfits_list, ['a','b'])
+        self.assertEqual(a.flags_npz_list, ['c'])
 
     def test_time_filter(self):
         gains = np.ones((10,10),dtype=complex)
@@ -70,7 +35,7 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         wgts = np.ones((10,10),dtype=float)
         wgts[3,5] = 0
         times = np.linspace(0,10*10/60./60./24.,10, endpoint=False)
-        tf = sc.time_filter(gains, wgts, times, filter_scale = 120.0, nMirrors = 1)
+        tf = smooth_cal.time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=1)
         np.testing.assert_array_almost_equal(tf, np.ones((10,10),dtype=complex))
 
     def test_freq_filter(self):
@@ -79,7 +44,7 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         wgts = np.ones((10,10),dtype=float)
         wgts[3,5] = 0
         freqs = np.linspace(100.,200.,10, endpoint=False)*1e6
-        ff, info = sc.freq_filter(gains, wgts, freqs)
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs)
         np.testing.assert_array_almost_equal(ff, np.ones((10,10),dtype=complex))
 
         #test rephasing
@@ -87,7 +52,7 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         wgts = np.ones((2,1000),dtype=float)
         freqs = np.linspace(100.,200.,1000, endpoint=False)*1e6
         gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
-        ff, info = sc.freq_filter(gains, wgts, freqs)
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs)
         np.testing.assert_array_almost_equal(ff, gains)
 
         #test skip_wgt
@@ -95,179 +60,114 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         wgts = np.ones((10,10),dtype=float)
         wgts[0,0:8] = 0
         freqs = np.linspace(100.,200.,10, endpoint=False)*1e6
-        ff, info = sc.freq_filter(gains, wgts, freqs, skip_wgt=.5)
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5)
         np.testing.assert_array_equal(ff[0,:], gains[0,:])
         self.assertTrue(info[0]['skipped'])
 
 
-
 class Test_Calibration_Smoother(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(self):
-        super(Test_Calibration_Smoother, self).setUpClass()
-        prev,here,subq = '22245','22991', '23737'
-        data = os.path.join(DATA_PATH, 'test_input/zen.2458099.' + here + '.xx.HH.uvOR_36x_auto_only')
-        prev_data = os.path.join(DATA_PATH, 'test_input/zen.2458099.' + prev + '.xx.HH.uvOR_36x_auto_only')
-        next_data = os.path.join(DATA_PATH, 'test_input/zen.2458099.' + subq + '.xx.HH.uvOR_36x_auto_only')
-        self.cal = os.path.join(DATA_PATH, 'test_input/zen.2458099.' + here + '.HH.uv.omni.calfits_36x_only')
-        prev_cal = os.path.join(DATA_PATH, 'test_input/zen.2458099.' + prev + '.HH.uv.omni.calfits_36x_only')
-        next_cal = os.path.join(DATA_PATH, 'test_input/zen.2458099.' + subq + '.HH.uv.omni.calfits_36x_only')
-        self.sc = sc.Calibration_Smoother()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore") # intentionally ignore divide by zero error, since we put it in
-            self.sc.load_cal(self.cal, prev_cal=prev_cal, next_cal=next_cal)
-            self.sc.load_data(data, prev_data=prev_data, next_data=next_data)
-            self.sc.load_cal(self.cal, prev_cal=prev_cal, next_cal=next_cal) #improves test coverage
-
+    def setUp(self):
+        calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
+        flags_npz_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
+        self.cs = smooth_cal.CalibrationSmoother(calfits_list, flags_npz_list=flags_npz_list)
 
     def test_check_consistency(self):
-        has_cal = self.sc.has_cal
-        self.sc.has_cal = False
-        with self.assertRaises(AttributeError):
-            self.sc.check_consistency()
-        self.sc.has_cal = has_cal
+        temp_time = self.cs.cal_times[self.cs.cals[0]][0]
+        self.cs.cal_times[self.cs.cals[0]][0] = self.cs.cal_times[self.cs.cals[0]][1]
+        self.cs.time_indices = {cal: np.searchsorted(self.cs.time_grid, times) for cal, times in self.cs.cal_times.items()}
+        with self.assertRaises(AssertionError):
+            self.cs.check_consistency()
+        self.cs.cal_times[self.cs.cals[0]][0] = temp_time
+        self.cs.time_indices = {cal: np.searchsorted(self.cs.time_grid, times) for cal, times in self.cs.cal_times.items()}
 
-        # test inconsistency in times, for example, leads to ignored next/prev cal/data
-        self.sc.prev_times += 1
-        self.sc.next_times += 1
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            self.sc.check_consistency()
-        self.assertFalse(self.sc.has_prev_cal)
-        self.assertFalse(self.sc.has_prev_data)
-        self.assertFalse(self.sc.has_next_cal)
-        self.assertFalse(self.sc.has_next_data)
-        self.sc.prev_times -= 1
-        self.sc.next_times -= 1
-        self.sc.has_prev_cal = True
-        self.sc.has_prev_data = True
-        self.sc.has_next_cal = True
-        self.sc.has_next_data = True
-        self.sc.check_consistency()
-        self.assertTrue(self.sc.has_prev_cal)
-        self.assertTrue(self.sc.has_prev_data)
-        self.assertTrue(self.sc.has_next_cal)
-        self.assertTrue(self.sc.has_next_data)
+        self.cs.cal_freqs[self.cs.cals[0]] += 1
+        with self.assertRaises(AssertionError):
+            self.cs.check_consistency()
+        self.cs.cal_freqs[self.cs.cals[0]] -= 1
 
-        # test that missing gain/auto-correlation gets turned into flags
-        prev_gains = deepcopy(self.sc.prev_gains)
-        prev_quals = deepcopy(self.sc.prev_quals)
-        prev_flags = deepcopy(self.sc.prev_flags)
-        prev_data = deepcopy(self.sc.prev_data)
-        prev_data_ant_flags = deepcopy(self.sc.prev_data_ant_flags)
-        self.sc.prev_gains = {(0,'x'): prev_gains[36,'x']} # so that values()[0] still works
-        self.sc.check_consistency()
-        np.testing.assert_array_equal(self.sc.prev_gains[36,'x'], 1.0 + 0.0j)
-        np.testing.assert_array_equal(self.sc.prev_quals[36,'x'], 1.0)
-        np.testing.assert_array_equal(self.sc.prev_flags[36,'x'], True)
-        np.testing.assert_array_equal(self.sc.prev_data[36, 36,'xx'], 1.0 + 0.0j)
-        np.testing.assert_array_equal(self.sc.prev_data_ant_flags[36,'x'], True)
-        self.assertTrue(self.sc.has_prev_data)
-        self.assertTrue(self.sc.has_prev_cal)
-        self.sc.prev_gains = prev_gains
-        self.sc.prev_quals = prev_quals
-        self.sc.prev_flags = prev_flags
-        self.sc.prev_data = prev_data
-        self.sc.prev_data_ant_flags = prev_data_ant_flags
-        self.sc.check_consistency()
+        self.cs.npz_freqs[self.cs.npzs[0]] += 1
+        with self.assertRaises(AssertionError):
+            self.cs.check_consistency()
+        self.cs.npz_freqs[self.cs.npzs[0]] -= 1
 
+        temp_time = self.cs.npz_times[self.cs.npzs[0]][0]
+        self.cs.npz_times[self.cs.npzs[0]][0] = self.cs.npz_times[self.cs.npzs[0]][1]
+        self.cs.npz_time_indices = {npz: np.searchsorted(self.cs.time_grid, times) for npz, times in self.cs.npz_times.items()}
+        with self.assertRaises(AssertionError):
+            self.cs.check_consistency()
+        self.cs.npz_times[self.cs.npzs[0]][0] = temp_time
+        self.cs.npz_time_indices = {npz: np.searchsorted(self.cs.time_grid, times) for npz, times in self.cs.npz_times.items()}
 
-    def test_build_weights(self):
-        self.assertTrue((36,'x') in self.sc.prev_wgts.keys())
-        self.assertTrue((36,'x') in self.sc.wgts.keys())
-        self.assertTrue((36,'x') in self.sc.next_wgts.keys())
-        np.testing.assert_array_equal(self.sc.wgts[36,'x'] == 0, self.sc.cal_flags[36,'x'])
-        np.testing.assert_array_equal(self.sc.wgts[36,'x'] == 0, self.sc.data_ant_flags[36,'x'])
-        np.testing.assert_array_equal(self.sc.next_wgts[36,'x'] == 0, self.sc.next_data_ant_flags[36,'x'])
-        np.testing.assert_array_equal(self.sc.prev_wgts[36,'x'] == 0, self.sc.prev_data_ant_flags[36,'x'])
-        
-
-    def test_load_cal(self):
-        self.assertTrue(self.sc.nFreq,1024)
-        self.assertTrue(self.sc.nInt,60)
-        self.assertAlmostEqual(self.sc.tInt, 10.737419128417969)
-        self.assertTrue(self.sc.has_cal)
-        self.assertTrue(self.sc.has_next_cal)
-        self.assertTrue(self.sc.has_prev_cal)
-        self.assertFalse(self.sc.freq_filtered)
-        self.assertFalse(self.sc.time_filtered)
-        self.assertTrue((36,'x') in self.sc.wgts.keys())
-        np.testing.assert_array_equal(self.sc.gains[36,'x'], self.sc.filtered_gains[36,'x'])
-
-
-    def test_load_data(self):
-        self.assertEqual(self.sc.data_filetype, 'miriad')
-        self.assertTrue(self.sc.has_data)
-        self.assertTrue(self.sc.has_next_data)
-        self.assertTrue(self.sc.has_prev_data)
-        for d in (self.sc.data, self.sc.prev_data, self.sc.next_data):
-            for (i,j,pol) in d.keys():
-                self.assertEqual(i,j)
-                self.assertEqual(pol[0],pol[1])
-
+    def test_load_cal_and_flags(self):
+        self.assertEqual(len(self.cs.freqs),1024)
+        self.assertEqual(len(self.cs.time_grid),180)
+        self.assertAlmostEqual(self.cs.dt, 10.737419128417969/24/60/60)
+        self.assertFalse(self.cs.freq_filtered)
+        self.assertFalse(self.cs.time_filtered)
+        self.assertTrue(self.cs.gain_grids.has_key((54,'x')))
+        self.assertTrue(self.cs.flag_grids.has_key((54,'x')))
+        self.assertEqual(self.cs.gain_grids[54,'x'].shape, (180,1024))
+        self.assertEqual(self.cs.flag_grids[54,'x'].shape, (180,1024))
+        np.testing.assert_array_equal(self.cs.flag_grids[54,'x'][60:120,:], True)
 
     def test_filtering(self):
-        
-        g = deepcopy(self.sc.filtered_gains[36,'x'])
+        g = deepcopy(self.cs.filtered_gain_grids[54,'x'])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.sc.freq_filter()
-        g2 = deepcopy(self.sc.filtered_gains[36,'x'])
+            self.cs.freq_filter(window='tukey', alpha=.45)
+        g2 = deepcopy(self.cs.filtered_gain_grids[54,'x'])
         self.assertFalse(np.all(g == g2))
-        self.assertTrue(self.sc.freq_filtered)
+        self.assertTrue(self.cs.freq_filtered)
         self.assertEqual(g2.shape, g.shape)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.sc.time_filter()
-        g3 = deepcopy(self.sc.filtered_gains[36,'x'])
+            self.cs.time_filter()
+        g3 = deepcopy(self.cs.filtered_gain_grids[54,'x'])
         self.assertFalse(np.all(g == g3))
-        self.sc.has_next_cal, self.sc.has_prev_cal = False, False
-        self.assertTrue(self.sc.time_filtered)
+        self.assertTrue(self.cs.time_filtered)
         self.assertEqual(g3.shape, g.shape)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.sc.time_filter()
-        g4 = deepcopy(self.sc.filtered_gains[36,'x'])
+            self.cs.time_filter()
+        g4 = deepcopy(self.cs.filtered_gain_grids[54,'x'])
         self.assertFalse(np.all(g3 == g4))
-        self.sc.has_next_cal, self.sc.has_prev_cal = True, True
-        self.assertTrue(self.sc.time_filtered)
+        self.assertTrue(self.cs.time_filtered)
         self.assertEqual(g4.shape, g.shape)
 
-        self.sc.reset_filtering()
-        self.assertFalse(np.all(self.sc.cal_flags[(36,'x')] == np.ones_like(self.sc.cal_flags[(36,'x')])))
-        self.sc.wgts[(36,'x')] = np.zeros_like(self.sc.wgts[(36,'x')])
+        self.cs.reset_filtering()
+        self.assertFalse(np.all(self.cs.flag_grids[(54,'x')] == np.ones_like(self.cs.flag_grids[(54,'x')])))
+        self.cs.filtered_flag_grids[(54,'x')] = np.zeros_like(self.cs.flag_grids[(54,'x')])
+        self.cs.filtered_flag_grids[(54,'x')][:,0:1000] = True
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.sc.time_filter()
-            np.testing.assert_array_equal(self.sc.filtered_gains[(36,'x')], g)
-            self.sc.freq_filter()
-            np.testing.assert_array_equal(self.sc.filtered_gains[(36,'x')], g)
+            self.cs.freq_filter()
+            np.testing.assert_array_equal(self.cs.filtered_gain_grids[(54,'x')], g)
+            self.cs.time_filter()
+            np.testing.assert_array_equal(self.cs.filtered_gain_grids[(54,'x')], g)
             #test skip_wgt propagation to flags
-            np.testing.assert_array_equal(self.sc.cal_flags[(36,'x')], np.ones_like(self.sc.cal_flags[(36,'x')]))
-        self.sc.reset_filtering()
-        self.sc.build_weights()
-
-        self.sc.filtered_gains[36,'x'] = g
-        self.sc.time_filtered, self.sc.freq_filtered = False, False
+            np.testing.assert_array_equal(self.cs.filtered_flag_grids[(54,'x')], 
+                                          np.ones_like(self.cs.filtered_flag_grids[(54,'x')]))
+        self.cs.reset_filtering()
+        self.cs.filtered_gain_grids[54,'x'] = g
+        self.cs.time_filtered, self.cs.freq_filtered = False, False
 
     def test_write(self):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
-        g = deepcopy(self.sc.filtered_gains[36,'x'])
-        self.sc.filtered_gains[36,'x'] = np.ones_like(self.sc.filtered_gains[36,'x'])
-        self.sc.write_smoothed_cal(outfilename, add_to_history='hello world', clobber=True, telescope_name='PAPER')
-        self.sc.filtered_gains[36,'x'] = g
-
-        old_cal, new_cal = UVCal(), UVCal()
-        old_cal.read_calfits(self.cal)
-        new_cal.read_calfits(outfilename)
-        self.assertTrue(check_histories(new_cal.history, old_cal.history + 'hello world'))
-        self.assertEqual(new_cal.telescope_name,'PAPER')
-        gains, flags = io.load_cal(outfilename)
-        np.testing.assert_array_equal(gains[36,'x'], np.ones_like(g))
-        os.remove(outfilename)
+        g = deepcopy(self.cs.filtered_gain_grids[54,'x'])
+        self.cs.write_smoothed_cal(output_replace=('test_input/','test_output/smoothed_'),
+                                   add_to_history='hello world', clobber=True, telescope_name='PAPER')
+        for cal in self.cs.cals:
+            old_cal, new_cal = UVCal(), UVCal()
+            old_cal.read_calfits(cal)
+            new_cal.read_calfits(cal.replace('test_input/','test_output/smoothed_'))
+            self.assertTrue(check_histories(new_cal.history, old_cal.history + 'hello world'))
+            self.assertEqual(new_cal.telescope_name,'PAPER')
+            gains, flags = io.load_cal(new_cal)
+            np.testing.assert_array_equal(gains[54,'x'], g[self.cs.time_indices[cal],:])
+            os.remove(cal.replace('test_input/','test_output/smoothed_'))
 
 
 if __name__ == '__main__':

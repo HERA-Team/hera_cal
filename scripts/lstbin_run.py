@@ -42,7 +42,7 @@ kwargs = dict(vars(args))
 kwargs['history'] += history
 
 # configure data_files
-data_files = map(lambda s: sorted(glob.glob(s)), args.data_files)
+data_files = map(lambda s: sorted(glob.glob(s.strip("'").strip('"'))), args.data_files)
 del kwargs['data_files']
 
 # ensure data_files is a set of nested lists
@@ -53,6 +53,13 @@ if type(data_files[0]) is not list:
 kwargs['verbose'] = kwargs['silence'] is False
 del kwargs['silence']
 
+# configure vis_units
+if args.vis_units is None:
+    del kwargs['vis_units']
 
+# handle output_file_select fed as None
+if kwargs['output_file_select'] == ['None']:
+    del kwargs['output_file_select']
+    
 lstbin.lst_bin_files(data_files, **kwargs)
 
