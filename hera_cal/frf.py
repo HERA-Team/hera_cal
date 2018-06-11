@@ -7,7 +7,7 @@ import copy
 import os
 
 
-def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts=None, 
+def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts=None,
                       freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
     """
     Calculate the time average of a visibility waterfall. The average is optionally
@@ -20,7 +20,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
 
     Additionally, one can rephase each integration in the averaging window to the LST of the
     window-center before taking their average. This assumes the
-    input data are drift-scan phased. See hera_cal.utils.lst_rephase 
+    input data are drift-scan phased. See hera_cal.utils.lst_rephase
     for details on the rephasing algorithm. By feeding an nsample array,
     one can also construct the averaged nsample for each averaging window.
 
@@ -28,7 +28,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     ----------
     data : ndarray
         2D complex ndarray of complex visibility with shape=(Ntimes, Nfreqs)
-        The rows of data are assumed to be ordered chronologically, in either 
+        The rows of data are assumed to be ordered chronologically, in either
         asending or descending order.
 
     Navg : int
@@ -50,7 +50,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         feed lsts, freqs and bl_vec if True.
 
     lsts : ndarray, optional
-        1D float array holding the LST [radians] of each time integration in 
+        1D float array holding the LST [radians] of each time integration in
         data. Shape=(Ntimes,)
 
     freqs : ndarray, optional
@@ -68,7 +68,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         Dictionary of extra 1D arrays with shape=(Ntimes,) to push through
         averaging windows. For example, a time_array, zenith_ra array, or
         anything that has length Ntimes.
-    
+
     verbose : bool, optional
         if True, report feedback to standard output.
 
@@ -99,7 +99,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     assert isinstance(data, np.ndarray), "data must be fed as an ndarray"
     if rephase:
         assert lsts is not None and freqs is not None and bl_vec is not None, "" \
-               "If rephase is True, must feed lsts, freqs and bl_vec."
+            "If rephase is True, must feed lsts, freqs and bl_vec."
 
     # unwrap lsts if fed
     if lsts is not None:
@@ -125,9 +125,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     # calculate Navg_times, the number of remaining time samples after averaging
     Navg_times = float(Ntimes) / Navg
     if Navg_times % 1 > 1e-10:
-        if verbose: print "Warning: Ntimes is not evenly divisible by Navg, " \
-                          "meaning the last output time sample will be noisier "\
-                          "than the others."
+        if verbose:
+            print "Warning: Ntimes is not evenly divisible by Navg, " \
+                "meaning the last output time sample will be noisier " \
+                "than the others."
     Navg_times = int(np.ceil(Navg_times))
 
     # form output avg list
@@ -149,17 +150,17 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
 
         # calculate mean_l and l, if lsts was fed
         if lsts is not None:
-            l = lsts[start:end]
-            mean_l = np.mean(l)
+            lst = lsts[start:end]
+            mean_l = np.mean(lst)
             avg_lsts.append(mean_l)
 
         # rephase data if desired
         if rephase:
             # get dlst and rephase
-            dlst = mean_l - l
+            dlst = mean_l - lst
             d = utils.lst_rephase(d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True)
 
-        # form data weights : flag weights * nsample 
+        # form data weights : flag weights * nsample
         w = fw * n
         w_sum = np.sum(w, axis=0, keepdims=False).clip(1e-10, np.inf)
 
@@ -182,7 +183,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     avg_lsts = np.array(avg_lsts, np.float)
 
     # wrap lsts
-    avg_lsts = avg_lsts % (2*np.pi)
+    avg_lsts = avg_lsts % (2 * np.pi)
 
     return dict(avg_data=avg_data, win_flags=win_flags, avg_nsamples=avg_nsamples,
                 avg_lsts=avg_lsts, avg_extra_arrays=avg_extra_arrays)
@@ -214,7 +215,7 @@ class FRFilter(object):
 
         # load uvdata if fed as string
         if isinstance(input_data, (str, np.str)):
-            ### TODO: Change to using hc.io.file_to_uvd
+            # TODO: Change to using hc.io.file_to_uvd
             self.input_uvdata = UVData()
             self.input_uvdata.read_miriad(input_data)
         else:
@@ -222,7 +223,7 @@ class FRFilter(object):
 
         self.filetype = filetype
 
-        (self.data, self.flags, self.antpos, self.ants, self.freqs, self.times, self.lsts, 
+        (self.data, self.flags, self.antpos, self.ants, self.freqs, self.times, self.lsts,
          self.pols) = io.load_vis(self.input_uvdata, return_meta=True, filetype=filetype)
         self.nsamples = odict([(k, self.input_uvdata.get_nsamples(k)) for k in self.data.keys()])
         self.nsamples = datacontainer.DataContainer(self.nsamples)
@@ -238,10 +239,10 @@ class FRFilter(object):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The time-averaged data, flags, time arrays, etc. are stored in avg_* attributes.
-        Note that although denoted avg_flags for consistency, this array stores the AND 
+        Note that although denoted avg_flags for consistency, this array stores the AND
         of flags in each averaging window.
 
-        The t_avg provided will be rounded to the nearest time that makes Navg 
+        The t_avg provided will be rounded to the nearest time that makes Navg
         an integer, and is stored as self.t_avg.
 
         Parameters
@@ -250,14 +251,14 @@ class FRFilter(object):
             Width of time-averaging window in seconds.
         """
         # turn t_avg into Navg given dtime
-        Navg = int(np.round((t_avg /  (3600.0 * 24) / self.dtime)))
+        Navg = int(np.round((t_avg / (3600.0 * 24) / self.dtime)))
         assert Navg > 0, "A t_avg of {:0.5f} makes Navg=0, which is too small.".format(t_avg)
         if Navg > self.Ntimes:
             Navg = self.Ntimes
         old_t_avg = t_avg
         t_avg = Navg * self.dtime * 3600.0 * 24
 
-        if verbose: 
+        if verbose:
             print "The t_avg provided of {:.1f} has been shifted to {:.1f} to make Navg = {:d}".format(old_t_avg, t_avg, Navg)
 
         # setup lists
@@ -271,7 +272,7 @@ class FRFilter(object):
                                        rephase=rephase, lsts=self.lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
                                        lat=self.lat, extra_arrays=dict(times=self.times), verbose=verbose)
             ad, af, an, al, ea = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
-                                 output['avg_lsts'], output['avg_extra_arrays'])
+                                  output['avg_lsts'], output['avg_extra_arrays'])
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
@@ -365,6 +366,3 @@ class FRFilter(object):
             raise NotImplementedError("filetype {} not recognized".format(filetype))
 
         return new_uvd
-
-
-
