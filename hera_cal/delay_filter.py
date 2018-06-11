@@ -9,6 +9,7 @@ from scipy import constants
 import argparse
 import datetime
 
+
 class Delay_Filter():
 
     def __init__(self):
@@ -18,7 +19,6 @@ class Delay_Filter():
         '''
         self.writable = False
 
-
     def load_data(self, input_data, filetype='miriad'):
         '''Loads in and stores data for delay filtering.
 
@@ -27,7 +27,7 @@ class Delay_Filter():
                 or list of UVData instances to concatenate into a single internal DataContainer
             filetype: file format of data. Default 'miriad.' Ignored if input_data is UVData object(s).
         '''
-        if isinstance(input_data, (str,UVData)):
+        if isinstance(input_data, (str, UVData)):
             self.writable = True
             self.input_data, self.filetype = input_data, filetype
         self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = io.load_vis(input_data, return_meta=True, filetype=filetype)
@@ -44,9 +44,8 @@ class Delay_Filter():
         '''
         self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
 
-
-    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., min_dly=0.0, 
-                   tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False, 
+    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., min_dly=0.0,
+                   tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False,
                    flag_nchan_low=0, flag_nchan_high=0, gain=0.1, **win_kwargs):
         '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
@@ -64,7 +63,7 @@ class Delay_Filter():
             window: window function for filtering applied to the filtered axis.
                 See aipy.dsp.gen_window for options.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-                Model is left as 0s, residual is left as data, and info is {'skipped': True} for that 
+                Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
@@ -89,8 +88,8 @@ class Delay_Filter():
         for k in to_filter:
             if verbose:
                 print "\nStarting filter on {} at {}".format(k, str(datetime.datetime.now()))
-            bl_len = np.linalg.norm(self.antpos[k[0]] - self.antpos[k[1]]) / constants.c * 1e9 #in ns
-            sdf = np.median(np.diff(self.freqs)) / 1e9 #in GHz
+            bl_len = np.linalg.norm(self.antpos[k[0]] - self.antpos[k[1]]) / constants.c * 1e9  # in ns
+            sdf = np.median(np.diff(self.freqs)) / 1e9  # in GHz
             if weight_dict is not None:
                 wgts = weight_dict[k]
             else:
@@ -102,7 +101,7 @@ class Delay_Filter():
                 wgts[:, :flag_nchan_low] = 0.0
             if flag_nchan_high > 0:
                 self.flags[k][:, -flag_nchan_high:] = True
-                wgts[:, -flag_nchan_high:] = 0.0                
+                wgts[:, -flag_nchan_high:] = 0.0
 
             d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon, min_dly=min_dly,
                                               tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter, gain=gain, **win_kwargs)
@@ -112,7 +111,7 @@ class Delay_Filter():
             # Flag all channels for any time when skip_wgt gets triggered
             for i, info_dict in enumerate(info):
                 if info_dict.get('skipped', False):
-                    self.flags[k][i,:] = np.ones_like(self.flags[k][i,:])
+                    self.flags[k][i, :] = np.ones_like(self.flags[k][i, :])
 
     def get_filled_data(self):
         """Get original data with flagged pixels filled with CLEAN_models
@@ -141,7 +140,7 @@ class Delay_Filter():
         return filled_data, filled_flgs
 
     def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history='',
-                            clobber=False, write_CLEAN_models=False, write_filled_data=False, 
+                            clobber=False, write_CLEAN_models=False, write_filled_data=False,
                             **kwargs):
         '''Writes high-pass filtered data to disk, using input (which must be either
         a single path or a single UVData object) as a template.
@@ -172,8 +171,8 @@ class Delay_Filter():
             else:
                 data_out = self.filtered_residuals
                 flags_out = self.flags
-            io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out, 
-                          data=data_out, flags=flags_out, add_to_history=add_to_history, clobber=clobber, 
+            io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out,
+                          data=data_out, flags=flags_out, add_to_history=add_to_history, clobber=clobber,
                           **kwargs)
 
 
@@ -185,13 +184,13 @@ def delay_filter_argparser():
                    "Note that if outfile is not supplied, the parser defaults to None, but delay_filter_run.py "
                    "will override this default, and instead sets outfile to infile + 'D'.")
     a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files (default "miriad")')
-    a.add_argument("--write_model", default=False, action="store_true", help="Write the low-pass filtered CLEAN model rather"\
+    a.add_argument("--write_model", default=False, action="store_true", help="Write the low-pass filtered CLEAN model rather"
                    "than the high-pass filtered residual or the flag-filled data.")
-    a.add_argument("--write_filled", default=False, action='store_true', help='Write the original data with its flags filled with '\
-                    "the CLEAN model instead of residual or CLEAN model.")
-    a.add_argument("--write_all", default=False, action='store_true', help="Write the high-pass residual, the low-pass "\
-                    "CLEAN model and the flag-filled original data. The residual gets the outfile name (or default 'D' extension), " \
-                    "and the model and original data get the 'M' and 'F' extension on top of the residual filename respectively.")
+    a.add_argument("--write_filled", default=False, action='store_true', help='Write the original data with its flags filled with '
+                   "the CLEAN model instead of residual or CLEAN model.")
+    a.add_argument("--write_all", default=False, action='store_true', help="Write the high-pass residual, the low-pass "
+                   "CLEAN model and the flag-filled original data. The residual gets the outfile name (or default 'D' extension), "
+                   "and the model and original data get the 'M' and 'F' extension on top of the residual filename respectively.")
     a.add_argument("--flag_nchan_low", default=0, type=int, help="Number of channels to flag on lower band edge before filtering.")
     a.add_argument("--flag_nchan_high", default=0, type=int, help="Number of channels to flag on upper band edge before filtering.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')

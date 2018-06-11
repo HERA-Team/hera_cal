@@ -46,7 +46,7 @@ data_files = map(lambda s: sorted(glob.glob(s.strip("'").strip('"'))), args.data
 del kwargs['data_files']
 
 # ensure data_files is a set of nested lists
-if type(data_files[0]) is not list:
+if not isinstance(data_files[0], list):
     raise ValueError("data_files is not a set of nested lists. check input to data_files. See lstbin_run.py doc-string for examples.")
 
 # configure verbose
@@ -60,6 +60,5 @@ if args.vis_units is None:
 # handle output_file_select fed as None
 if kwargs['output_file_select'] == ['None']:
     del kwargs['output_file_select']
-    
-lstbin.lst_bin_files(data_files, **kwargs)
 
+lstbin.lst_bin_files(data_files, **kwargs)

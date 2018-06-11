@@ -29,6 +29,7 @@ class TestAAFromCalfile(object):
         aa = utils.get_aa_from_calfile(self.freqs, self.calfile)
         nt.assert_equal(len(aa), 128)
 
+
 class TestAAFromUV(object):
     def setUp(self):
         # define test file that is compatible with get_aa_from_uv
@@ -42,6 +43,7 @@ class TestAAFromUV(object):
         # like miriad, aipy will pad the aa with non-existent antennas,
         #   because there is no concept of antenna names
         nt.assert_equal(len(aa), 88)
+
 
 class TestAA(object):
     def setUp(self):
@@ -79,16 +81,18 @@ def test_JD2LST():
     nt.assert_equal(len(lst), 9)
     nt.assert_almost_equal(lst[3], 0.81486300218170715)
 
+
 def test_LST2JD():
     # test basic execution
     lst = np.pi
     jd = utils.LST2JD(lst, start_jd=2458042)
     nt.assert_almost_equal(jd, 2458042.8708433118)
     # test array execution
-    lst = np.arange(np.pi, np.pi+1.1, 0.2)
+    lst = np.arange(np.pi, np.pi + 1.1, 0.2)
     jd = utils.LST2JD(lst, start_jd=2458042)
     nt.assert_equal(len(jd), 6)
     nt.assert_almost_equal(jd[3], 2458042.9660755517)
+
 
 def test_JD2RA():
     # test basic execution
@@ -105,6 +109,7 @@ def test_JD2RA():
     # test J2000 epoch
     ra = utils.JD2RA(jd, epoch='J2000')
     nt.assert_almost_equal(ra[0], 225.37671446615548)
+
 
 def test_combine_calfits():
     test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
@@ -126,7 +131,7 @@ def test_combine_calfits():
     uvc_dly.read_calfits(test_file1)
     uvc_abs = UVCal()
     uvc_abs.read_calfits(test_file2)
-    nt.assert_almost_equal(uvc_dly.gain_array[0,0,10,10,0] * uvc_abs.gain_array[0,0,10,10,0], uvc.gain_array[0,0,10,10,0])
+    nt.assert_almost_equal(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
     utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=False)
@@ -134,8 +139,9 @@ def test_combine_calfits():
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
 
+
 def test_get_miriad_times():
-    filepaths = sorted(glob.glob(DATA_PATH+"/zen.2458042.*.xx.HH.uvXA"))
+    filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
     # test execution
     starts, stops, ints = utils.get_miriad_times(filepaths, add_int_buffer=False)
     nt.assert_almost_equal(starts[0], 4.7293432458811866)
@@ -150,6 +156,7 @@ def test_get_miriad_times():
     nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
     # test if fed as a str
     starts, stops, ints = utils.get_miriad_times(filepaths[0])
+
 
 def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
@@ -167,7 +174,7 @@ def test_lst_rephase():
     # get phase error on shortest EW baseline
     k = (0, 1, 'xx')
     # check error at transit
-    phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
+    phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4])
     nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
     # check error across file
     phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
@@ -178,7 +185,7 @@ def test_lst_rephase():
     data = copy.deepcopy(data_drift)
     hc.utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # check error at transit
-    phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration+1, 4])
+    phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4])
     nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
     # check err across file
     phs_err = np.angle(data[k][:-1, 4] / data_drift[k][1:, 4])
@@ -200,6 +207,7 @@ def test_lst_rephase():
     d = data_drift[k].copy()
     d_phs = hc.utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
     nt.assert_almost_equal(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
+
 
 def test_solar_flag():
     data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -227,27 +235,24 @@ def test_solar_flag():
 
 
 def test_synthesize_ant_flags():
-    flags = datacontainer.DataContainer({(0,0,'xx'): np.ones((5,5),bool),
-                           (0,1,'xx'): np.ones((5,5),bool),
-                           (1,2,'xx'): np.zeros((5,5),bool),
-                           (2,3,'xx'): np.zeros((5,5),bool)})
+    flags = datacontainer.DataContainer({(0, 0, 'xx'): np.ones((5, 5), bool),
+                                         (0, 1, 'xx'): np.ones((5, 5), bool),
+                                         (1, 2, 'xx'): np.zeros((5, 5), bool),
+                                         (2, 3, 'xx'): np.zeros((5, 5), bool)})
     flags[(2, 3, 'xx')][:, 4] = True
     # aggressive flagging
     ant_flags = utils.synthesize_ant_flags(flags, threshold=0.0)
-    np.testing.assert_array_equal(ant_flags[(0,'x')], True)
-    np.testing.assert_array_equal(ant_flags[(1,'x')], False)
-    np.testing.assert_array_equal(ant_flags[(2,'x')][:,0:4], False)
-    np.testing.assert_array_equal(ant_flags[(2,'x')][:,4], True)
-    np.testing.assert_array_equal(ant_flags[(3,'x')][:,0:4], False)
-    np.testing.assert_array_equal(ant_flags[(3,'x')][:,4], True)
+    np.testing.assert_array_equal(ant_flags[(0, 'x')], True)
+    np.testing.assert_array_equal(ant_flags[(1, 'x')], False)
+    np.testing.assert_array_equal(ant_flags[(2, 'x')][:, 0:4], False)
+    np.testing.assert_array_equal(ant_flags[(2, 'x')][:, 4], True)
+    np.testing.assert_array_equal(ant_flags[(3, 'x')][:, 0:4], False)
+    np.testing.assert_array_equal(ant_flags[(3, 'x')][:, 4], True)
     # conservative flagging
     ant_flags = utils.synthesize_ant_flags(flags, threshold=0.75)
     np.testing.assert_array_equal(ant_flags[(2, 'x')][:, 4], False)
     # very conservative flagging
     flags[(1, 2, 'xx')][:3, 4] = True
     ant_flags = utils.synthesize_ant_flags(flags, threshold=1.0)
-    np.testing.assert_array_equal(ant_flags[(2,'x')][:3,4], True)
-    np.testing.assert_array_equal(ant_flags[(2,'x')][3:,4], False)
-    
-
-
+    np.testing.assert_array_equal(ant_flags[(2, 'x')][:3, 4], True)
+    np.testing.assert_array_equal(ant_flags[(2, 'x')][3:, 4], False)

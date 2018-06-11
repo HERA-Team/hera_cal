@@ -9,7 +9,8 @@ data = [version.git_origin, version.git_hash, version.git_description, version.g
 with open(os.path.join('hera_cal', 'GIT_INFO'), 'w') as outfile:
     json.dump(data, outfile)
 
-def package_files(package_dir,subdirectory):
+
+def package_files(package_dir, subdirectory):
     # walk the input package_dir/subdirectory
     # return a package_data list
     paths = []
@@ -19,7 +20,9 @@ def package_files(package_dir,subdirectory):
             path = path.replace(package_dir + '/', '')
             paths.append(os.path.join(path, filename))
     return paths
-data_files = package_files('hera_cal','data') + package_files('hera_cal','calibrations')
+
+
+data_files = package_files('hera_cal', 'data') + package_files('hera_cal', 'calibrations')
 
 setup_args = {
     'name': 'hera_cal',
@@ -44,4 +47,4 @@ setup_args = {
 
 
 if __name__ == '__main__':
-    apply(setup, (), setup_args)
+    setup(*(), **setup_args)
