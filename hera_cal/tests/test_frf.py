@@ -32,7 +32,9 @@ def test_timeavg_waterfall():
     blv = antpos[ants.tolist().index(24)] - antpos[ants.tolist().index(25)]
 
     # test basic execution
-    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 25, verbose=False)
+    output = hc.frf.timeavg_waterfall(d, 25, verbose=False)
+    ad, af, an, al, aea = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
+                            output['avg_lsts'], output['avg_extra_arrays'])
     nt.assert_equal(ad.shape, (3, 64))
     nt.assert_equal(af.shape, (3, 64))
     nt.assert_equal(an.shape, (3, 64))
@@ -41,8 +43,11 @@ def test_timeavg_waterfall():
     nt.assert_almost_equal(an[2, 0], 10.0)
 
     # test rephase
-    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 25, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
+    output = hc.frf.timeavg_waterfall(d, 25, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
                                                     nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    ad, af, an, al, aea = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
+                            output['avg_lsts'], output['avg_extra_arrays'])
+
     nt.assert_equal(ad.shape, (3, 64))
     nt.assert_equal(af.shape, (3, 64))
     nt.assert_equal(an.shape, (3, 64))
@@ -52,16 +57,24 @@ def test_timeavg_waterfall():
     nt.assert_almost_equal(an.max(), 25.0)
 
     # test various Navgs
-    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 1, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
+    output = hc.frf.timeavg_waterfall(d, 1, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
                                                     nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    ad, af, an, al, aea = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
+                            output['avg_lsts'], output['avg_extra_arrays'])
+
     nt.assert_equal(ad.shape, (60, 64))
-    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
+    output = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=l, freqs=fr, bl_vec=blv, 
                                                     nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    ad, af, an, al, aea = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
+                            output['avg_lsts'], output['avg_extra_arrays'])
     nt.assert_equal(ad.shape, (1, 64))
 
     # wrap lst
-    ad2, af2, an2, al2, aea2 = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=l + 1.52917804, freqs=fr, bl_vec=blv, 
+    output = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=l + 1.52917804, freqs=fr, bl_vec=blv, 
                                                     nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    ad2, af2, an2, al2, aea2 = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
+                            output['avg_lsts'], output['avg_extra_arrays'])
+ 
     nt.assert_equal(ad.shape, (1, 64))
     nt.assert_true(np.isclose(ad, ad2).all())
     nt.assert_almost_equal(al, al2 - 1.52917804)
@@ -77,9 +90,9 @@ class Test_FRFilter:
 
     def test_load_data(self):
         self.F.load_data(self.fname)
-        nt.assert_equal(self.F.inp_uvdata, self.uvd)
+        nt.assert_equal(self.F.input_uvdata, self.uvd)
         self.F.load_data(self.uvd)
-        nt.assert_equal(self.F.inp_uvdata, self.uvd)
+        nt.assert_equal(self.F.input_uvdata, self.uvd)
 
     def test_timeavg_data(self):
         self.F.load_data(self.uvd)

@@ -72,8 +72,11 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     verbose : bool, optional
         if True, report feedback to standard output.
 
-    Returns
+    Returns (output_dictionary)
     -------
+    output_dictionary : dictionary
+        A dictionary containing the following variables
+
     avg_data : ndarray
         2D complex array with time-average spectrum, shape=(Navg_times, Nfreqs)
 
@@ -181,7 +184,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     # wrap lsts
     avg_lsts = avg_lsts % (2*np.pi)
 
-    return avg_data, win_flags, avg_nsamples, avg_lsts, avg_extra_arrays
+    return dict(avg_data=avg_data, win_flags=win_flags, avg_nsamples=avg_nsamples,
+                avg_lsts=avg_lsts, avg_extra_arrays=avg_extra_arrays)
 
 
 class FRFilter(object):
@@ -263,9 +267,11 @@ class FRFilter(object):
 
         # iterate over keys
         for i, k in enumerate(self.data.keys()):
-            ad, af, an, al, ea = timeavg_waterfall(self.data[k], Navg, flags=self.flags[k], nsamples=self.nsamples[k],
-                                                   rephase=rephase, lsts=self.lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
-                                                   lat=self.lat, extra_arrays=dict(times=self.times), verbose=verbose)
+            output = timeavg_waterfall(self.data[k], Navg, flags=self.flags[k], nsamples=self.nsamples[k],
+                                       rephase=rephase, lsts=self.lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
+                                       lat=self.lat, extra_arrays=dict(times=self.times), verbose=verbose)
+            ad, af, an, al, ea = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
+                                 output['avg_lsts'], output['avg_extra_arrays'])
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
