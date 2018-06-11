@@ -48,26 +48,26 @@ class Test_Delay_Filter(unittest.TestCase):
         filename1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
         filename2 = os.path.join(DATA_PATH, 'zen.2458043.13298.xx.HH.uvORA')
         dfil = df.Delay_Filter()
-        dfil.load_data([filename1,filename2])
+        dfil.load_data([filename1, filename2])
         self.assertFalse(dfil.writable)
 
     def test_load_data_as_dicts(self):
         dfil = df.Delay_Filter()
-        dfil.load_data_as_dicts(None,None,None,None)
-        self.assertTrue(hasattr(dfil,'data'))
-        self.assertTrue(hasattr(dfil,'flags'))
-        self.assertTrue(hasattr(dfil,'freqs'))
-        self.assertTrue(hasattr(dfil,'antpos'))
+        dfil.load_data_as_dicts(None, None, None, None)
+        self.assertTrue(hasattr(dfil, 'data'))
+        self.assertTrue(hasattr(dfil, 'flags'))
+        self.assertTrue(hasattr(dfil, 'freqs'))
+        self.assertTrue(hasattr(dfil, 'antpos'))
         self.assertFalse(dfil.writable)
 
     def test_run_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        k = (24,25,'xx')
+        k = (24, 25, 'xx')
         dfil = df.Delay_Filter()
         dfil.load_data(fname)
         bl = np.linalg.norm(dfil.antpos[24] - dfil.antpos[25]) / constants.c * 1e9
-        sdf = (dfil.freqs[1]-dfil.freqs[0])/1e9
-        
+        sdf = (dfil.freqs[1] - dfil.freqs[0]) / 1e9
+
         dfil.run_filter(to_filter=[k], standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
         d_mdl, d_res, info = delay_filter(dfil.data[k], np.logical_not(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
         np.testing.assert_almost_equal(d_mdl, dfil.CLEAN_models[k])
@@ -80,21 +80,21 @@ class Test_Delay_Filter(unittest.TestCase):
 
         dfil.run_filter()
         for k in dfil.data.keys():
-            self.assertEqual(dfil.filtered_residuals[k].shape, (60,64))
-            self.assertEqual(dfil.CLEAN_models[k].shape, (60,64))
-            self.assertTrue(dfil.info.has_key(k))
+            self.assertEqual(dfil.filtered_residuals[k].shape, (60, 64))
+            self.assertEqual(dfil.CLEAN_models[k].shape, (60, 64))
+            self.assertTrue(k in dfil.info)
 
         # test skip_wgt imposition of flags
         dfil = df.Delay_Filter()
         dfil.load_data(fname)
-        wgts={k: np.ones_like(dfil.flags[k])}
-        wgts[k][0,:] = 0.0
+        wgts = {k: np.ones_like(dfil.flags[k])}
+        wgts[k][0, :] = 0.0
         dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.5, maxiter=100)
         self.assertTrue(dfil.info[k][0]['skipped'])
-        np.testing.assert_array_equal(dfil.flags[k][0,:], np.ones_like(dfil.flags[k][0,:]))
-        np.testing.assert_array_equal(dfil.CLEAN_models[k][0,:], np.zeros_like(dfil.CLEAN_models[k][0,:]))
-        np.testing.assert_array_equal(dfil.filtered_residuals[k][0,:], dfil.data[k][0,:])
-        
+        np.testing.assert_array_equal(dfil.flags[k][0, :], np.ones_like(dfil.flags[k][0, :]))
+        np.testing.assert_array_equal(dfil.CLEAN_models[k][0, :], np.zeros_like(dfil.CLEAN_models[k][0, :]))
+        np.testing.assert_array_equal(dfil.filtered_residuals[k][0, :], dfil.data[k][0, :])
+
     def test_write_filtered_data(self):
         dfil = df.Delay_Filter()
         with self.assertRaises(NotImplementedError):
@@ -110,9 +110,9 @@ class Test_Delay_Filter(unittest.TestCase):
 
         uvd = UVData()
         uvd.read_miriad(outfilename)
-        self.assertEqual(uvd.history.replace('\n','').replace(' ','')[-12:], 'Hello_world.')
+        self.assertEqual(uvd.history.replace('\n', '').replace(' ', '')[-12:], 'Hello_world.')
         self.assertEqual(uvd.telescope_name, 'PAPER')
-        
+
         filtered_residuals, flags = io.load_vis(uvd)
 
         dfil.write_filtered_data(outfilename, write_CLEAN_models=True, clobber=True)

@@ -38,7 +38,7 @@ class AntennaArray(a.pol.AntennaArray):
             return {}
         for k in ant_prms:
             if k == 'aa':
-                if not prms.has_key('aa'):
+                if 'aa' not in prms:
                     prms['aa'] = {}
                 for val in ant_prms[k]:
                     if val == 'tau_ns':
@@ -106,6 +106,7 @@ class AntennaArray(a.pol.AntennaArray):
             self.update()
         return changed
 
+
 prms = {
     'loc': ('-30:43:17.5', '21:25:41.9'),  # KAT, SA (GPS)
     'antpos_ideal': {
@@ -115,7 +116,7 @@ prms = {
 
         64: {'top_x': -21.9, 'top_y': -12.6439709, 'top_z': 0.0},  # a3
         53: {'top_x': -7.3, 'top_y': -12.6439709, 'top_z': 0.0},  # a4
-        31: {'top_x': 7.3,  'top_y': -12.6439709, 'top_z': 0.0},  # a5
+        31: {'top_x': 7.3, 'top_y': -12.6439709, 'top_z': 0.0},  # a5
         65: {'top_x': 21.9, 'top_y': -12.6439709, 'top_z': 0.0},  # a5
 
 
@@ -126,9 +127,9 @@ prms = {
         43: {'top_x': 29.2, 'top_y': 0.0, 'top_z': 0.0},  # a5
 
         105: {'top_x': -21.9, 'top_y': 12.6439709, 'top_z': 0.0},  # a3
-        22: {'top_x': -7.3,   'top_y': 12.6439709, 'top_z': 0.0},  # a4
-        81: {'top_x': 7.3,    'top_y': 12.6439709, 'top_z': 0.0},  # a5
-        10: {'top_x': 21.9,   'top_y': 12.6439709, 'top_z': 0.0},  # a5
+        22: {'top_x': -7.3, 'top_y': 12.6439709, 'top_z': 0.0},  # a4
+        81: {'top_x': 7.3, 'top_y': 12.6439709, 'top_z': 0.0},  # a5
+        10: {'top_x': 21.9, 'top_y': 12.6439709, 'top_z': 0.0},  # a5
 
 
         72: {'top_x': -14.6, 'top_y': 25.28794179, 'top_z': 0.0},  # a0

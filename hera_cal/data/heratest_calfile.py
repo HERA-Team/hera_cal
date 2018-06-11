@@ -74,6 +74,7 @@ class AntennaArray(a.pol.AntennaArray):
             self.update()
         return changed
 
+
 prms = {
     'loc': ('-30:43:17.5', '21:25:41.9'),  # KAT, SA (GPS)
     'antpos_ideal': {
@@ -297,7 +298,7 @@ def get_aa(freqs):
     return aa
 
 # src_prms = {
-#'J071717.6-250454':{'ra':109.32351, 'dec':-25.0817}}
+# 'J071717.6-250454':{'ra':109.32351, 'dec':-25.0817}}
 #
 # def get_catalog(srcs=None, cutoff= None, catalogs=['helm','misc']):
 #    custom_srcs = ['J071717.6-250454', 'J020012.1-305327', 'J002549.1-260210']

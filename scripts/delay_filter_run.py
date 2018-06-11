@@ -24,7 +24,7 @@ df.run_filter(standoff=a.standoff, horizon=a.horizon, tol=a.tol, window=a.window
               flag_nchan_high=a.flag_nchan_high, min_dly=a.min_dly, gain=a.gain, **kwargs)
 
 # Write high-pass residual
-if a.write_model == False or a.write_all == True:
+if not a.write_model or a.write_all:
     df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history=' '.join(sys.argv),
                            clobber=a.clobber, write_CLEAN_models=False, write_filled_data=False)
 
@@ -41,5 +41,3 @@ if a.write_filled or a.write_all:
         a.outfile = a.outfile[:-1] + 'F'
     df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history=' '.join(sys.argv),
                            clobber=a.clobber, write_CLEAN_models=False, write_filled_data=True)
-
-
