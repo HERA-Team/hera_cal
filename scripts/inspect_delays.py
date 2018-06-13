@@ -8,7 +8,7 @@ import pyuvdata
 import glob
 import pylab as p
 
-### Options ###
+# Options
 o = optparse.OptionParser()
 o.set_usage('inspect_delays.py [options] *firstcal.fits')
 o.set_description(__doc__)
@@ -26,7 +26,7 @@ for f in args:
         exit()
 
     for i, ant in enumerate(cal.ant_array):
-        if not ant in delays:
+        if ant not in delays:
             delays[ant] = []
         delays[ant].append(cal.delay_array[i, 0, :, 0])
 

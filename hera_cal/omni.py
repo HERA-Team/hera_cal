@@ -2,6 +2,7 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 import omnical
 from pyuvdata import UVCal, UVData, uvtel
+import pyuvdata.utils as uvutils
 import aipy
 from aipy.miriad import pol2str
 import warnings
@@ -9,6 +10,7 @@ import os
 import glob
 import re
 import optparse
+import astropy.constants as const
 from hera_cal import redcal
 from hera_cal import utils
 from hera_cal import cal_formats
@@ -100,7 +102,8 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     Return:
         reds: list of lists of redundant baselines as antenna pair tuples.
     '''
-    def pol(bl): return bl[0].pol() + bl[1].pol()
+    def pol(bl):
+        return bl[0].pol() + bl[1].pol()
     if crosspols:
         reds = [r for r in reds if pol(r[0]) in crosspols]
     if ex_crosspols:
@@ -207,13 +210,14 @@ class RedundantInfo(omnical.calib.RedundantInfo):
         meta, gains, vis = omnical.calib.RedundantInfo.unpack_calpar(
             self, calpar, **kwargs)
 
-        def mk_ap(a): return Antpol(a, self.nant)
+        def mk_ap(a):
+            return Antpol(a, self.nant)
         if 'res' in meta:
             for i, j in meta['res'].keys():
                 api, apj = mk_ap(i), mk_ap(j)
                 pol = api.pol() + apj.pol()
                 bl = (api.ant(), apj.ant())
-                if not meta['res'].has_key(pol):
+                if pol not in meta['res']:
                     meta['res'][pol] = {}
                 meta['res'][pol][bl] = meta['res'].pop((i, j))
         # XXX make chisq a nested dict, with individual antpol keys?
@@ -225,7 +229,7 @@ class RedundantInfo(omnical.calib.RedundantInfo):
                 pass
         for i in gains.keys():
             ap = mk_ap(i)
-            if not gains.has_key(ap.pol()):
+            if ap.pol() not in gains:
                 gains[ap.pol()] = {}
             gains[ap.pol()][ap.ant()] = gains.pop(i).conj()
             if nondegenerategains:
@@ -234,7 +238,7 @@ class RedundantInfo(omnical.calib.RedundantInfo):
             api, apj = mk_ap(i), mk_ap(j)
             pol = api.pol() + apj.pol()
             bl = (api.ant(), apj.ant())
-            if not vis.has_key(pol):
+            if pol not in vis:
                 vis[pol] = {}
             vis[pol][bl] = vis.pop((i, j))
         return meta, gains, vis
@@ -334,6 +338,18 @@ def aa_to_info(aa, pols=['x'], fcal=False, minV=False, tol=1.0, **kwargs):
     return info
 
 
+def info_reds_to_redcal_reds(reds, nant, pol_to_factor=POLNUM):
+    '''Converts the notion of reds from info.get_reds() here to the one used by redcal.
+    Takes a pol_to_factor dict (default global dictionary POLNUM) of the form {'x':0, 'y':1}
+    to figure from a number what the antpol is. E.g. 129 is actually (1,'y').
+    nant usually comes from info.nant.'''
+
+    reverse_POLNUM = {factor: pol for pol, factor in pol_to_factor.items()}
+    redcal_reds = [[(i % nant, j % nant, reverse_POLNUM[i // nant] + reverse_POLNUM[j // nant])
+                    for (i, j) in bls] for bls in reds]
+    return redcal_reds
+
+
 def remove_degen(info, g, v, g0, minV=False):
     ''' This function properly removes omnical degeneracies in the 1pol, 2pol, 4pol, and
     4pol_minV cases. Wraps the remove_degen fucntion in hera_cal.redcal. See HERA Memo #30
@@ -361,40 +377,28 @@ def remove_degen(info, g, v, g0, minV=False):
     # Intitalize relevant lists to build input sols and get positions
     pols = v.keys()
     antpols = g.keys()
-    ants = [(ant,antpol) for antpol in antpols for ant in g[antpol].keys()]
-    bl_pairs = [(i,j,pol) for pol in pols for (i,j) in v[pol].keys()]
+    ants = [(ant, antpol) for antpol in antpols for ant in g[antpol].keys()]
+    bl_pairs = [(i, j, pol) for pol in pols for (i, j) in v[pol].keys()]
 
     # Taking polarization non-aware stuff from omnical and reextracting the relevant info for remove_degen
     info_antpos = info.get_antpos()
     antpos = dict(zip([ant[0] for ant in ants],
-        [np.append(info_antpos[ant[0],0:2],[0]) for ant in ants]))
-
-    # Set up redcal with empy reds (reds not needed for remove_degen) and then automatically determine pol_mode
-    rc = redcal.RedundantCalibrator(reds = [])
-    if len(pols) == 1 and len(antpols) == 1:
-        rc.pol_mode = '1pol'
-    elif len(pols) == 2 and len(antpols) == 2:
-        rc.pol_mode = '2pol'
-    elif len(pols) == 4 and len(antpols) == 2 and minV:
-        rc.pol_mode = '4pol_minV'
-    elif len(pols) == 4 and len(antpols) == 2:
-        rc.pol_mode = '4pol'
-    else:
-        rc.pol_mode = 'unrecognized_pol_mode'
+                      [np.append(info_antpos[ant[0], 0:2], [0]) for ant in ants]))
 
     # Put sols into properly formatted dictionaries and remove degeneracies
-    sol = {(i,antpol): g[antpol][i] for (i,antpol) in ants}
-    sol.update({(i,j,pol): v[pol][(i,j)] for (i,j,pol) in bl_pairs})
-    sol0 = {(i,antpol): g0[antpol][i] for (i,antpol) in ants}
+    sol = {(i, antpol): g[antpol][i] for (i, antpol) in ants}
+    sol.update({(i, j, pol): v[pol][(i, j)] for (i, j, pol) in bl_pairs})
+    sol0 = {(i, antpol): g0[antpol][i] for (i, antpol) in ants}
+    rc = redcal.RedundantCalibrator(info_reds_to_redcal_reds(info.get_reds(), info.nant, pol_to_factor=POLNUM))
     newSol = rc.remove_degen(antpos, sol, degen_sol=sol0)
 
     # Put back into omnical format dictionaires
     g3 = {antpol: {} for antpol in antpols}
     v3 = {pol: {} for pol in pols}
-    for (i,antpol) in ants:
-        g3[antpol][i] = newSol[(i,antpol)]
-    for (i,j,pol) in bl_pairs:
-        v3[pol][(i,j)] = newSol[(i,j,pol)]
+    for (i, antpol) in ants:
+        g3[antpol][i] = newSol[(i, antpol)]
+    for (i, j, pol) in bl_pairs:
+        v3[pol][(i, j)] = newSol[(i, j, pol)]
     return g3, v3
 
 
@@ -465,15 +469,14 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
         gains (dict): dictionary of gains
         xtalk (dict): dictionary of xtalk
     '''
-    if type(filename) is str:
+    if isinstance(filename, str):
         filename = [filename]
-    if type(pols) is str:
+    if isinstance(pols, str):
         pols = [pols]
-    if type(bls) is tuple and type(bls[0]) is int:
+    if isinstance(bls, tuple) and isinstance(bls[0], int):
         bls = [bls]
-    if type(ants) is int:
+    if isinstance(ants, int):
         ants = [ants]
-    #filename = np.array(filename)
     meta, gains, vismdl, xtalk = {}, {}, {}, {}
 
     def parse_key(k):
@@ -487,8 +490,8 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
         for k in npz.files:
             if k[0].isdigit():
                 pol, ant = k[-1:], int(k[:-1])
-                if (pols == None or pol in pols) and (ants == None or ant in ants):
-                    if not gains.has_key(pol):
+                if (pols is None or pol in pols) and (ants is None or ant in ants):
+                    if pol not in gains:
                         gains[pol] = {}
                     gains[pol][ant] = gains[pol].get(
                         ant, []) + [np.copy(npz[k])]
@@ -501,11 +504,11 @@ def from_npz(filename, pols=None, bls=None, ants=None, verbose=False):
             if (bls is not None) and (bl not in bls):
                 continue
             if k.startswith('<'):
-                if not vismdl.has_key(pol):
+                if pol not in vismdl:
                     vismdl[pol] = {}
                 vismdl[pol][bl] = vismdl[pol].get(bl, []) + [np.copy(npz[k])]
             elif k.startswith('('):
-                if not xtalk.has_key(pol):
+                if pol not in xtalk:
                     xtalk[pol] = {}
                 try:
                     # resize xtalk to be like vismdl (with a time dimension too)
@@ -568,7 +571,7 @@ def from_fits(filename, keep_delay=False, **kwargs):
         gains (dict): dictionary of gains
         xtalk (dict): dictionary of xtalk
     """
-    if type(filename) is str:
+    if isinstance(filename, str):
         filename = [filename]
     meta, gains = {}, {}
     poldict = {-5: 'xx', -6: 'yy', -7: 'xy', -8: 'yx'}
@@ -584,9 +587,9 @@ def from_fits(filename, keep_delay=False, **kwargs):
 
         print(f)
 
-        #######error checks#######
+        # error checks
         # checks to see if all files have the same cal_types
-        if meta.has_key('caltype'):
+        if 'caltype' in meta:
             if cal.cal_type == meta['caltype']:
                 pass
             else:
@@ -595,7 +598,7 @@ def from_fits(filename, keep_delay=False, **kwargs):
             meta['caltype'] = cal.cal_type
 
         # checks to see if all files have the same gain conventions
-        if meta.has_key('gain_conventions'):
+        if 'gain_conventions' in meta:
             if cal.gain_convention == meta['gain_conventions']:
                 pass
             else:
@@ -605,7 +608,7 @@ def from_fits(filename, keep_delay=False, **kwargs):
             meta['gain_conventions'] = cal.gain_convention
 
         # checks to see if all files have the same gain conventions
-        if meta.has_key('inttime'):
+        if 'inttime' in meta:
             if cal.integration_time == meta['inttime']:
                 pass
             else:
@@ -615,7 +618,7 @@ def from_fits(filename, keep_delay=False, **kwargs):
             meta['inttime'] = cal.integration_time
 
         # checks to see if all files have the same frequencies
-        if meta.has_key('freqs'):
+        if 'freqs' in meta:
             if np.all(cal.freq_array.flatten() == meta['freqs']):
                 pass
             else:
@@ -672,7 +675,7 @@ def from_fits(filename, keep_delay=False, **kwargs):
                     else:
                         raise ValueError("Not a recognized file type.")
 
-        if not 'times' in meta.keys():
+        if 'times' not in meta.keys():
             meta['times'] = cal.time_array
         else:
             meta['times'] = np.concatenate([meta['times'], cal.time_array])
@@ -684,10 +687,10 @@ def from_fits(filename, keep_delay=False, **kwargs):
     # if these are omnical solutions, there vis.fits and xtalk.fits were
     # created.
     if not firstcal:
-        visfile = ['.'.join(fitsname.split('.')[:-2]) +
-                   '.vis.uvfits' for fitsname in filename]
-        xtalkfile = ['.'.join(fitsname.split('.')[:-2]) +
-                     '.xtalk.uvfits' for fitsname in filename]
+        visfile = ['.'.join(fitsname.split('.')[:-2])
+                   + '.vis.uvfits' for fitsname in filename]
+        xtalkfile = ['.'.join(fitsname.split('.')[:-2])
+                     + '.xtalk.uvfits' for fitsname in filename]
 
         vis = UVData()
         xtalk = UVData()
@@ -730,7 +733,7 @@ def from_fits(filename, keep_delay=False, **kwargs):
                             x[pol][xtalk.baseline_to_antnums(bl)] = np.concatenate([x[pol][xtalk.baseline_to_antnums(
                                 bl)], np.resize(xtalk.data_array[k:k + xtalk.Ntimes, 0, :, p], DATA_SHAPE)])
         # use vis to get lst array
-        if not 'lsts' in meta.keys():
+        if 'lsts' not in meta.keys():
             meta['lsts'] = vis.lst_array[:vis.Ntimes]
         else:
             meta['lsts'] = np.concatenate(
@@ -788,11 +791,19 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
 
     # generate uvw
     uvw = []
+    # get first frequency in aa object, and convert from GHz -> Hz
+    try:
+        freq = aa.get_freqs()[0] * 1e9
+    except IndexError:
+        freq = aa.get_freqs() * 1e9
+    # get wavelength in meters
+    lamb = const.c.to('m/s').value / freq
     for t in range(uv.Ntimes):
         for bl in bls:
             uvw.append(aa.gen_uvw(
                 *uv.baseline_to_antnums(bl), src='z').reshape(3, -1))
-    uv.uvw_array = np.array(uvw).reshape(-1, 3)
+    # multiply by wavelength
+    uv.uvw_array = np.array(uvw).reshape(-1, 3) * lamb
 
     uv.ant_1_array = uv.baseline_to_antnums(blts)[0]
     uv.ant_2_array = uv.baseline_to_antnums(blts)[1]
@@ -823,16 +834,59 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     uv.zenith_dec = np.array([aa.lat] * uv.Nblts)
 
     # antenna information
-    uv.Nants_telescope = len(aa)
-    uv.antenna_numbers = np.arange(uv.Nants_telescope, dtype=int)
-    uv.Nants_data = len(np.unique(np.concatenate(
-        [uv.ant_1_array, uv.ant_2_array]).flatten()))
-    uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
-    antpos = []
-    for k in aa:
-        antpos.append(k.pos)
+    ants_data = np.unique(np.concatenate([uv.ant_1_array, uv.ant_2_array]).flatten())
+    uv.Nants_data = len(ants_data)
 
-    uv.antenna_positions = np.array(antpos)
+    ants_telescope = []
+    antpos = np.zeros((len(aa), 3))
+    c_ns = const.c.to('m/ns').value
+    lat, lon, alt = uv.telescope_location_lat_lon_alt
+    idx = 0
+
+    # Compute antenna positions.
+    # AntennaArray positions are in rotECEF, absolutely referenced (rather than relative to
+    # the array center), and are in nanoseconds (instead of meters).
+    # pyuvdata is expecting antenna_positions in ECEF, relative to the array location, in meters.
+    # We can use utility functions in pyuvdata to perform these conversions.
+    # Also note that AntennaArray antenna positions do _not_ follow the above convention when
+    # generated from a calfile (get_aa_from_calfile), as opposed to the data
+    # (using get_aa_from_uv). Antenna positions in the uvfits files will be wrong for
+    # calfile-generated aa objects.
+    for iant, ant in enumerate(aa):
+        # test to see if antenna is "far" from center of the Earth
+        if np.linalg.norm(ant.pos) > 1e6:
+            # convert from ns -> m
+            pos = ant.pos * c_ns
+
+            # rotate from rotECEF -> ECEF
+            pos_ecef = uvutils.ECEF_from_rotECEF(pos, lon)
+
+            # subtract off array location, to get just relative positions
+            rel_pos = pos_ecef - uv.telescope_location
+
+            # save in array
+            antpos[idx, :] = rel_pos
+
+            # also save antenna number to list of antennas
+            ants_telescope.append(iant)
+
+            # increment counter
+            idx += 1
+
+    # Save antenna information.
+    if len(ants_telescope) < uv.Nants_data:
+        # Not enough valid antenna positions; default to antennas in data
+        # and give them positions of 0.
+        uv.Nants_telescope = uv.Nants_data
+        uv.antenna_numbers = np.asarray(sorted(ants_data))
+        uv.antenna_positions = np.zeros((uv.Nants_data, 3))
+    else:
+        # Save antenna positions we computed.
+        uv.Nants_telescope = len(ants_telescope)
+        uv.antenna_numbers = np.asarray(ants_telescope)
+        uv.antenna_positions = np.array(antpos[:idx, :])
+
+    uv.antenna_names = ['ant{0}'.format(ant) for ant in uv.antenna_numbers]
     uv.antenna_diameters = tobj.antenna_diameters * np.ones(uv.Nants_telescope)
 
     # do a consistency check
@@ -851,7 +905,7 @@ def getPol(fname):
     '''
     # XXX assumes file naming format
     # extract just the filename if we're passed a path with periods in it
-    fn = re.findall('zen\.\d{7}\.\d{5}\..*', fname)[0]
+    fn = re.findall(r'zen\.\d{7}\.\d{5}\..*', fname)[0]
     return fn.split('.')[3]
 
 
@@ -872,7 +926,7 @@ def file2djd(fname):
     Returns:
         decimal_jd: the decimal julian date at the start of the file (string)
     '''
-    return re.findall("\d{7}\.\d{5}", fname)[0]
+    return re.findall(r"\d{7}\.\d{5}", fname)[0]
 
 
 def process_ex_ants(ex_ants, metrics_json=''):
@@ -920,7 +974,7 @@ def get_optionParser(methodName):
     methods = ['omni_run', 'omni_apply']
     try:
         assert(methodName in methods)
-    except:
+    except BaseException:
         raise AssertionError('methodName must be one of %s' %
                              (','.join(methods)))
 
@@ -953,6 +1007,8 @@ def get_optionParser(methodName):
                      help='metrics from hera_qm about array qualities')
         o.add_option('--overwrite', action='store_true', default=False,
                      help="Overwrite output files even if they already exist.")
+        o.add_option('--reds_tolerance', type='float', default=1.0,
+                     help="Tolerance level for calculating reds. Default is 1.0ns")
 
     elif methodName == 'omni_apply':
         o.add_option('--firstcal', action='store_true',
@@ -962,6 +1018,9 @@ def get_optionParser(methodName):
         o.add_option('--outpath', dest='outpath', default=None, type='string',
                      help='Directory to write-out omnical-ibrated visibility data. Will use input file path by default.')
         o.add_option('--overwrite', action='store_true', default=False, help='Overwrite output file if it exists.')
+        o.add_option('--noflag_missing', action='store_true', default=False,
+                     help='Don\'t flag visibilities of antennas that exist in the data, but do not have a '
+                     'corresponding gain in the calibration solution. Default is False')
 
     return o
 
@@ -976,7 +1035,7 @@ def omni_run(files, opts, history):
         "file".vis.uvfits:  omnical model visibilities (one per unique baseline). (uvfits file)
         "file".xtalk.uvfits:  time-averaged visibilities used for cross-talk estimation (one per baseline, but only one time sample). (uvfits file)
         "file".omni.calfits:  combined first-cal and omnical best-guess gains and chi^2 per antenna. (pyuvdata.calfits file)
-    
+
     Example:
         - 4pol calibration:
             ./scripts/omni_run.py -C ${CALFILE} -p xx,xy,yx,yy --ex_ants=22,43,81 --firstcal=${firstcal_xx},${firstcal_yy} --omnipath=/path/for/solutions ${file_xx} ${file_xy} ${file_yx} ${file_yy}
@@ -1018,13 +1077,13 @@ def omni_run(files, opts, history):
     else:
         ex_ants = []
     info = aa_to_info(aa, pols=list(set(''.join(pols))),
-                      ex_ants=ex_ants, crosspols=pols, minV=opts.minV)
+                      ex_ants=ex_ants, crosspols=pols, minV=opts.minV, tol=opts.reds_tolerance)
     reds = info.get_reds()
     bls = [bl for red in reds for bl in red]
 
     # append reds to history
-    history += '\n{0}'.format(reds)
-    ### Collect all firstcal files ###
+    history += '\nredundant_baslines = {0}'.format(reds)
+    # Collect all firstcal files
     firstcal_files = {}
     if not opts.firstcal:
         raise ValueError('Please provide a firstcal file. Exiting...')
@@ -1043,7 +1102,7 @@ def omni_run(files, opts, history):
             firstcal_files[pp] = sorted([s for s in flist if pp in s])
             Nf += len(firstcal_files[pp])
 
-    ### Match firstcal files according to mode of calibration ###
+    # Match firstcal files according to mode of calibration
     filesByPol = {}
     for pp in pols:
         filesByPol[pp] = []
@@ -1064,7 +1123,7 @@ def omni_run(files, opts, history):
 
     # XXX can these be combined into one loop?
 
-    ### Execute Omnical stages ###
+    # Execute Omnical stages
     for filenumber in range(len(files) // len(pols)):
         file_group = {}  # there is one file_group per djd
         for pp in pols:
@@ -1076,7 +1135,7 @@ def omni_run(files, opts, history):
                 file_group[pols[0]]).replace('.%s' % pols[0], '')
         fitsname = '%s/%s.omni.calfits' % (opts.omnipath, bname)
 
-        if os.path.exists(fitsname) == True and opts.overwrite==False:
+        if os.path.exists(fitsname) and not opts.overwrite:
             print('   %s exists. Skipping...' % fitsname)
             continue
 
@@ -1095,11 +1154,6 @@ def omni_run(files, opts, history):
                         for pp in linear_pol_keys]
 
         _, g0, _, _ = from_fits(fcalfile)
-
-        #uvd = pyuvdata.UVData()
-        #uvd.read_miriad([file_group[pp] for pp in pols])
-        # XXX This will become much simpler when pyuvdata can read multiple MIRIAD
-        # files at once.
 
         # collect metadata -- should be the same for each file
         f0 = file_group[pols[0]]
@@ -1178,12 +1232,12 @@ def omni_run(files, opts, history):
         optional = {'observer': 'hera_cal'}
 
         print('   Saving %s' % fitsname)
-        hc = cal_formats.HERACal(m2, g3, ex_ants=ex_ants,  optional=optional)
+        hc = cal_formats.HERACal(m2, g3, ex_ants=ex_ants, optional=optional)
 
         if opts.minV:
-            if 'xy' in v3.keys() and not 'yx' in v3.keys():
+            if 'xy' in v3.keys() and 'yx' not in v3.keys():
                 v3['yx'] = v3['xy']
-            elif 'yx' in v3.keys() and not 'xy' in v3.keys():
+            elif 'yx' in v3.keys() and 'xy' not in v3.keys():
                 v3['xy'] = v3['yx']
 
         hc.write_calfits(fitsname, clobber=opts.overwrite)
@@ -1209,7 +1263,7 @@ def omni_apply(files, opts):
         opts: required and optional parameters, as specified by hera_cal.omni.get_optionParser("omni_apply") (string)
     Returns:
         calibrated_files: calibrated visibiity files (miriad uv file)
-    
+
     Examples:
         - Apply Omnical solution in 4pol mode:
             ./scripts/omni_apply.py -p xx,xy,yx,yy --omnipath=${omni_calfile} --extension="O" ${file_xx} ${file_xy} ${file_yx} ${file_yy}
@@ -1279,7 +1333,7 @@ def omni_apply(files, opts):
                 cal.read_calfits(filedict[f][0])
             else:
                 # read each file in and add to base file
-                for i,fn in enumerate(filedict[f]):
+                for i, fn in enumerate(filedict[f]):
                     if i == 0:
                         cal = UVCal()
                         cal.read_calfits(fn)
@@ -1297,9 +1351,12 @@ def omni_apply(files, opts):
             for bl, k in zip(*np.unique(mir.baseline_array, return_index=True)):
                 blmask = np.where(mir.baseline_array == bl)[0]
                 ai, aj = mir.baseline_to_antnums(bl)
-                if not ai in cal.ant_array or not aj in cal.ant_array:
-                    continue
                 for nsp, nspws in enumerate(mir.spw_array):
+                    if ai not in cal.ant_array or aj not in cal.ant_array:
+                        if not opts.noflag_missing:
+                            # flag the visibilities if either antenna is missing from calibration solutions
+                            mir.flag_array[blmask, nsp, :, p] = True
+                        continue
                     if cal.cal_type == 'gain' and cal.gain_convention == 'multiply':
                         mir.data_array[blmask, nsp, :, p] = \
                             mir.data_array[blmask, nsp, :, p] * \

@@ -11,8 +11,8 @@ class Test_HERACal(UVCal):
         fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
         meta, gains, vis, xtalk = omni.from_fits(fn)
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
-        optional = {'observer': 'heracal'} #because it's easier than changing the fits header
-        hc = cal_formats.HERACal(meta, gains, optional=optional)
+        optional = {'observer': 'heracal'}  # because it's easier than changing the fits header
+        hc = cal_formats.HERACal(meta, gains, **optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits'))
@@ -22,8 +22,19 @@ class Test_HERACal(UVCal):
             elif param == '_time_range':  # why do we need this?
                 nt.assert_equal(np.testing.assert_almost_equal(
                     getattr(hc, param).value, getattr(uv, param).value, 5), None)
+            elif param == '_extra_keywords':
+                continue
             else:
+                if "_antenna_" in param:
+                    param = param[1:]
                 nt.assert_true(np.all(getattr(hc, param) == getattr(uv, param)))
+
+    def test_exception(self):
+        fn = os.path.join(DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.omni.calfits')
+        meta, gains, vis, xtalk = omni.from_fits(fn)
+        meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
+        optional = {'observer': 'heracal', 'cal_style': 'sky'}  # because it's easier than changing the fits header
+        nt.assert_raises(AttributeError, cal_formats.HERACal, meta, gains, **optional)
 
     def test_delayHC(self):
         # make test data
@@ -35,7 +46,7 @@ class Test_HERACal(UVCal):
         meta['inttime'] = np.diff(meta['times'])[0] * 60 * 60 * 24
         meta.pop('chisq9x')
         optional = {'observer': 'Zaki Ali (zakiali@berkeley.edu)'}
-        hc = cal_formats.HERACal(meta, gains, optional=optional, DELAY=True)
+        hc = cal_formats.HERACal(meta, gains, DELAY=True, **optional)
         uv = UVCal()
         uv.read_calfits(os.path.join(
             DATA_PATH, 'test_input', 'zen.2457698.40355.xx.HH.uvc.first.calfits'))
@@ -51,76 +62,12 @@ class Test_HERACal(UVCal):
             elif param == '_time_range':  # why do we need this?
                 nt.assert_equal(np.testing.assert_almost_equal(
                     getattr(hc, param).value, getattr(uv, param).value, 5), None)
+            elif param == '_extra_keywords':
+                continue
             else:
+                if "_antenna_" in param:
+                    # comparison between _antenna_numbers (and _antenna_names) fails but
+                    # comparison betwen antenna_numbers (and antenna_names) does not fail
+                    param = param[1:]
                 nt.assert_true(
                     np.all(getattr(hc, param) == getattr(uv, param)))
-
-
-class Test_AbsCal(UVCal):
-    def test_AbsCal_from_gains_linpol(self):
-        '''
-        Test generating an AbsCal object for a linearly polarized visibility
-        '''
-        miriad_fn = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')
-        abscal_fn = os.path.join(DATA_PATH, 'test_input', 'abscal_gains_x.npz')
-        polname = 'xx'
-        gain_convention = 'multiply'
-        append2hist = "  Absolutely calibrated with the galactic center. "
-        ac = cal_formats.AbsCal(miriad_fn, [abscal_fn], polname, gain_convention,
-                    append2hist=append2hist)
-        nt.assert_equal(ac.Nants_data, 19)
-        nt.assert_equal(ac.Njones, 1)
-
-    def test_AbsCal_from_gains_xpol(self):
-        '''
-        Test generating an AbsCal object for a cross-polarized visibility
-        '''
-        miriad_fn = os.path.join(DATA_PATH, 'zen.2457698.40355.xy.HH.uvcA')
-        abscal_fn_x = os.path.join(DATA_PATH, 'test_input', 'abscal_gains_x.npz')
-        abscal_fn_y = os.path.join(DATA_PATH, 'test_input', 'abscal_gains_y.npz')
-        polname = 'xy'
-        gain_convention = 'multiply'
-        append2hist = "  Absolutely calibrated with the galactic center. "
-        ac = cal_formats.AbsCal(miriad_fn, [abscal_fn_x, abscal_fn_y], polname,
-                                gain_convention, append2hist=append2hist)
-        nt.assert_equal(ac.Nants_data, 19)
-        nt.assert_equal(ac.Njones, 2)
-
-    def test_AbsCal_errors(self):
-        '''
-        Test some cases that should raise errors
-        '''
-        # test an unrecognized gain convention
-        miriad_fn = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')
-        abscal_fn = os.path.join(DATA_PATH, 'test_input', 'abscal_gains_x.npz')
-        polname = 'xx'
-        gain_convention = 'subtract'
-        nt.assert_raises(AssertionError, cal_formats.AbsCal, miriad_fn, [abscal_fn], polname,
-                         gain_convention)
-
-        # test the polname not being found in the miriad filename
-        polname = 'yy'
-        gain_convention = 'multiply'
-        nt.assert_raises(AssertionError, cal_formats.AbsCal, miriad_fn, [abscal_fn], polname,
-                         gain_convention)
-
-        # test passing in the wrong abscal polarization
-        abscal_fn = os.path.join(DATA_PATH, 'test_input', 'abscal_gains_y.npz')
-        polname = 'xx'
-        nt.assert_raises(AssertionError, cal_formats.AbsCal, miriad_fn, [abscal_fn], polname,
-                         gain_convention)
-
-        # test passing in not enough gains files for a cross pol file
-        miriad_fn = os.path.join(DATA_PATH, 'zen.2457698.40355.xy.HH.uvcA')
-        abscal_fn = os.path.join(DATA_PATH, 'test_input', 'abscal_gains_x.npz')
-        polname = 'xy'
-        nt.assert_raises(AssertionError, cal_formats.AbsCal, miriad_fn, [abscal_fn], polname,
-                         gain_convention)
-
-        # test passing in too many gains files for a linear polarization file
-        miriad_fn = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')
-        abscal_fn_x = os.path.join(DATA_PATH, 'test_input', 'abscal_gains_x.npz')
-        abscal_fn_y = os.path.join(DATA_PATH, 'test_input', 'abscal_gains_y.npz')
-        polname = 'xx'
-        nt.assert_raises(AssertionError, cal_formats.AbsCal, miriad_fn, [abscal_fn_x, abscal_fn_y],
-                         polname, gain_convention)
