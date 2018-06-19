@@ -250,4 +250,15 @@ def test_synthesize_ant_flags():
     np.testing.assert_array_equal(ant_flags[(2,'x')][3:,4], False)
     
 
+def test_chisq():
+    data = datacontainer.DataContainer({(0,1,'xx'): np.ones((5, 10), dtype=complex)})
+    model = datacontainer.DataContainer({(0,1,'xx'): 2 * np.ones((5, 10), dtype=complex)})
+    data_wgts = datacontainer.DataContainer({(0,1,'xx'): np.ones((5, 10), dtype=float)})
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
+    nt.assert_true(chisq.shape == (5,10))
+    nt.assert_true(nObs.shape == (5,10))
+    nt.assert_true(chisq.dtype == float)
+    nt.assert_true(nObs.dtype == int)
+    np.testing.assert_array_equal(chisq,1.0)
+    np.testing.assert_array_equal(nObs,1)
 

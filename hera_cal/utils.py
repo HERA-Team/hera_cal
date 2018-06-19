@@ -730,7 +730,7 @@ def synthesize_ant_flags(flags, threshold=0.0):
     return ant_flags
 
 
-def chisq(data, model, data_wgts, gains=None, gain_flags=None, chisq=None, nObs=None, chisq_per_ant={}, nObs_per_ant={}):
+def chisq(data, model, data_wgts, gains={}, gain_flags={}, chisq=None, nObs=None, chisq_per_ant={}, nObs_per_ant={}):
     """Computes chi^2 defined as:
     
     chi^2 sum_ij(|data_ij - model_ij * g_i conj(g_j)| * wgts_ij)
@@ -749,10 +749,10 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, chisq=None, nObs=
             where sigma is the noise on the data (but not necessarily the model if gains are provided).
             Flags are be expressed as data_wgts equal to 0, so (~flags) produces binary weights.
         gains: optional dictionary mapping ant-pol keys like (1,'x') to a waterfall of complex gains to
-            be multiplied into the model (or, equivalently, divided out from the data). Default: assume
-            data has already been calibrated and thus all gains are 1.0.
+            be multiplied into the model (or, equivalently, divided out from the data). Default: empty
+            dict which assumes data has already been calibrated and thus all gains are 1.0.
         gain_flags: optional dictionary mapping ant-pol keys like (1,'x') to a boolean flags waterfall
-            with the same shape as the data. Default: no per-antenna flagging (i.e. all False).
+            with the same shape as the data. Default: empty dict with no per-antenna flagging.
         chisq: optional chisq to update (see below)
         nObs: optional nObs to update (see below). Must be specified if chisq is specified and must be 
             left as None if chisq is left as None.
@@ -783,15 +783,15 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, chisq=None, nObs=
         if data.has_key(bl) and data_wgts.has_key(bl):
             ant1, ant2 = (bl[0],bl[2][0]), (bl[1],bl[2][1])
             model_here = copy.deepcopy(model[bl])
-            if gains is not None:
+            if len(gains) > 0:
                 model_here *= (gains[ant1] * np.conj(gains[ant2]))
-            assert np.isrealobj(data_wgts[bl])isrealobj
-            wgts = data_wgts[bl] * ~(gain_flags.get(ant1, False)) * ~(gain_flags.get(ant12 False))
+            assert np.isrealobj(data_wgts[bl])
+            wgts = data_wgts[bl] * ~(gain_flags.get(ant1, False)) * ~(gain_flags.get(ant2, False))
             chisq_here = np.array(np.abs(model_here - data[bl]) * wgts, dtype=float)
             chisq += chisq_here
-            nObs += (data_wgts > 0)
+            nObs += (wgts > 0)
             for ant in [ant1, ant2]:
-                if chisq_per_ant.has_key[ant]:
+                if chisq_per_ant.has_key(ant):
                     assert nObs_per_ant.has_key(ant)
                     chisq_per_ant[ant] += chisq_here
                     nObs_per_ant[ant] += (data_wgts > 0)
