@@ -251,14 +251,43 @@ def test_synthesize_ant_flags():
     
 
 def test_chisq():
-    data = datacontainer.DataContainer({(0,1,'xx'): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer({(0,1,'xx'): 2 * np.ones((5, 10), dtype=complex)})
-    data_wgts = datacontainer.DataContainer({(0,1,'xx'): np.ones((5, 10), dtype=float)})
+    #test basic case
+    data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
+    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
-    nt.assert_true(chisq.shape == (5,10))
-    nt.assert_true(nObs.shape == (5,10))
+    nt.assert_true(chisq.shape == (5, 10))
+    nt.assert_true(nObs.shape == (5, 10))
     nt.assert_true(chisq.dtype == float)
     nt.assert_true(nObs.dtype == int)
-    np.testing.assert_array_equal(chisq,1.0)
-    np.testing.assert_array_equal(nObs,1)
+    np.testing.assert_array_equal(chisq, 1.0)
+    np.testing.assert_array_equal(nObs, 1)
+    np.testing.assert_array_equal(chisq_per_ant[0, 'x'], 1.0)
+    np.testing.assert_array_equal(chisq_per_ant[1, 'x'], 1.0)
+    np.testing.assert_array_equal(nObs_per_ant[0, 'x'], 1)
+    np.testing.assert_array_equal(nObs_per_ant[1, 'x'], 1)
+
+    # test with weights
+
+    #test update case
+    data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
+    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, chisq=chisq, nObs=nObs, 
+                                                           chisq_per_ant=chisq_per_ant, nObs_per_ant=nObs_per_ant)
+    np.testing.assert_array_equal(chisq, 2.0)
+    np.testing.assert_array_equal(nObs, 2)
+    np.testing.assert_array_equal(chisq_per_ant[0, 'x'], 2.0)
+    np.testing.assert_array_equal(chisq_per_ant[1, 'x'], 2.0)
+    np.testing.assert_array_equal(nObs_per_ant[0, 'x'], 2)
+    np.testing.assert_array_equal(nObs_per_ant[1, 'x'], 2)
+
+
+    #test with gains and gain flags
+    gains = {(0, 'x'): .5 * np.ones((5, 10), dtype=complex), 
+             (1, 'x'): .5 * np.ones((5, 10), dtype=complex)}
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, gains=gains)
+
+    gain_flags = {(0,'x'): np.ones((5, 10), dtype=bool)}
+
 
