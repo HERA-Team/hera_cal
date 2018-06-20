@@ -813,7 +813,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, chisq=None, nObs=
                     chisq_per_ant[ant] = chisq_per_ant[ant] + chisq_here
                     nObs_per_ant[ant] = nObs_per_ant[ant] + (wgts > 0)
                 else:
-                    assert ~nObs_per_ant.has_key(ant)
+                    assert not nObs_per_ant.has_key(ant)
                     chisq_per_ant[ant] = copy.deepcopy(chisq_here)
                     nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
     return chisq, nObs, chisq_per_ant, nObs_per_ant

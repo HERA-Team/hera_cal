@@ -251,7 +251,7 @@ def test_synthesize_ant_flags():
     
 
 def test_chisq():
-    #test basic case
+    # test basic case
     data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
     model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
@@ -268,11 +268,17 @@ def test_chisq():
     np.testing.assert_array_equal(nObs_per_ant[1, 'x'], 1)
 
     # test with weights
+    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.zeros((5, 10), dtype=float)})
+    data_wgts[(0, 1, 'xx')][:,0] = 1.0
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
+    nt.assert_equal(np.sum(chisq), 5.0)
+    nt.assert_equal(np.sum(nObs), 5)
 
-    #test update case
+    # test update case
     data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
     model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, chisq=chisq, nObs=nObs, 
                                                            chisq_per_ant=chisq_per_ant, nObs_per_ant=nObs_per_ant)
     np.testing.assert_array_equal(chisq, 2.0)
@@ -282,12 +288,29 @@ def test_chisq():
     np.testing.assert_array_equal(nObs_per_ant[0, 'x'], 2)
     np.testing.assert_array_equal(nObs_per_ant[1, 'x'], 2)
 
+    # test with gains and gain flags
+    gains = {(0, 'x'): .5**.5 * np.ones((5, 10), dtype=complex), 
+             (1, 'x'): .5**.5 * np.ones((5, 10), dtype=complex)}
+    gain_flags = {(0, 'x'): np.zeros((5, 10), dtype=bool), 
+                  (1, 'x'): np.zeros((5, 10), dtype=bool)}
+    gain_flags[0, 'x'][:, 0] = True
+    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, gains=gains, gain_flags=gain_flags)
+    nt.assert_almost_equal(np.sum(chisq), 0.0)
+    nt.assert_equal(np.sum(nObs), 45)
+    nt.assert_almost_equal(np.sum(chisq_per_ant[0, 'x']), 0.0)
+    nt.assert_almost_equal(np.sum(chisq_per_ant[1, 'x']), 0.0)
+    nt.assert_equal(np.sum(nObs_per_ant[1, 'x']), 45)
+    nt.assert_equal(np.sum(nObs_per_ant[1, 'x']), 45)
 
-    #test with gains and gain flags
-    gains = {(0, 'x'): .5 * np.ones((5, 10), dtype=complex), 
-             (1, 'x'): .5 * np.ones((5, 10), dtype=complex)}
-    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, gains=gains)
-
-    gain_flags = {(0,'x'): np.ones((5, 10), dtype=bool)}
-
+    # test errors
+    nt.assert_raises(ValueError, utils.chisq, data, model, data_wgts, chisq=chisq)
+    nt.assert_raises(ValueError, utils.chisq, data, model, data_wgts, nObs=nObs)
+    nt.assert_raises(ValueError, utils.chisq, data, model, data_wgts, chisq_per_ant=chisq_per_ant)
+    nt.assert_raises(ValueError, utils.chisq, data, model, data_wgts, nObs_per_ant=nObs_per_ant)
+    nt.assert_raises(AssertionError, utils.chisq, data, model, data_wgts, chisq_per_ant=chisq_per_ant, nObs_per_ant={})
+    nt.assert_raises(AssertionError, utils.chisq, data, model, data_wgts, chisq_per_ant={}, nObs_per_ant=nObs_per_ant)
+    nt.assert_raises(KeyError, utils.chisq, data, model, data_wgts, gains={(0, 'x'): np.ones((5, 10), dtype=complex)})
+    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): 1.0j * np.ones((5, 10), dtype=float)})
+    nt.assert_raises(AssertionError, utils.chisq, data, model, data_wgts)
 
