@@ -817,7 +817,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
             chisq_here = np.array(np.abs(model_here - data[bl]) * wgts, dtype=float)
             if by_antpol:
                 if chisq.has_key(bl[2][0]):
-                    assert nObs.has_key(bl[2])
+                    assert nObs.has_key(bl[2][0])
                     chisq[bl[2][0]] = chisq[bl[2][0]] + chisq_here
                     nObs[bl[2][0]] = nObs[bl[2][0]] + (wgts > 0)
                 else:

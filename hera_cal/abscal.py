@@ -1424,9 +1424,15 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             if p in k:
                 gain_dict[k] /= refant_phasor
 
+
     if write_calfits:
-        io.write_cal(output_calfits_path, gain_dict, data_freqs, data_times, flags=flag_dict, quality=quals, 
-                     total_qual=total_qual, return_uvc=False, overwrite=overwrite, history=history)
+        # recalculate chi^2 by comparing abscal model to data
+        if nomodelfiles == False:
+            total_qual, _, quals, nObs_per_ant = utils.chisq(AC.data, AC.model, AC.wgts, 
+                                                     gain_flags=flag_dict, by_antpol=True)
+        io.write_cal(output_calfits_path, gain_dict, data_freqs, data_times, 
+                     flags=flag_dict, quality=quals, total_qual=total_qual, 
+                     return_uvc=False, overwrite=overwrite, history=history)
 
     # form return tuple
     return_obj = ()
