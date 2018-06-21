@@ -294,7 +294,6 @@ def test_chisq():
     gain_flags = {(0, 'x'): np.zeros((5, 10), dtype=bool), 
                   (1, 'x'): np.zeros((5, 10), dtype=bool)}
     gain_flags[0, 'x'][:, 0] = True
-    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, gains=gains, gain_flags=gain_flags)
     nt.assert_almost_equal(np.sum(chisq), 0.0)
     nt.assert_equal(np.sum(nObs), 45)
@@ -303,9 +302,20 @@ def test_chisq():
     nt.assert_equal(np.sum(nObs_per_ant[1, 'x']), 45)
     nt.assert_equal(np.sum(nObs_per_ant[1, 'x']), 45)
 
+    # test by_pol option
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, by_pol=True)
+    nt.assert_true(chisq.has_key('xx'))
+    nt.assert_true(nObs.has_key('xx'))
+    nt.assert_true(chisq['xx'].shape, (5, 10))
+    nt.assert_true(nObs['xx'].shape, (5, 10))
+    np.testing.assert_array_equal(chisq['xx'], 1.0)
+    np.testing.assert_array_equal(nObs['xx'], 1)
+
     # test errors
     nt.assert_raises(ValueError, utils.chisq, data, model, data_wgts, chisq=chisq)
     nt.assert_raises(ValueError, utils.chisq, data, model, data_wgts, nObs=nObs)
+    nt.assert_raises(AssertionError, utils.chisq, data, model, data_wgts, by_pol=True, chisq={'xx': 1}, nObs={})
+    nt.assert_raises(AssertionError, utils.chisq, data, model, data_wgts, by_pol=True, nObs={'xx': 1}, chisq={})
     nt.assert_raises(ValueError, utils.chisq, data, model, data_wgts, chisq_per_ant=chisq_per_ant)
     nt.assert_raises(ValueError, utils.chisq, data, model, data_wgts, nObs_per_ant=nObs_per_ant)
     nt.assert_raises(AssertionError, utils.chisq, data, model, data_wgts, chisq_per_ant=chisq_per_ant, nObs_per_ant={})
@@ -313,4 +323,7 @@ def test_chisq():
     nt.assert_raises(KeyError, utils.chisq, data, model, data_wgts, gains={(0, 'x'): np.ones((5, 10), dtype=complex)})
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): 1.0j * np.ones((5, 10), dtype=float)})
     nt.assert_raises(AssertionError, utils.chisq, data, model, data_wgts)
+
+
+
 
