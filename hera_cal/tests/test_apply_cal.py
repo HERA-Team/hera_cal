@@ -13,70 +13,71 @@ import shutil
 from scipy import constants
 import warnings
 
+
 class Test_Update_Cal(unittest.TestCase):
 
     def test_recalibrate_in_place(self):
         np.random.seed(21)
-        vis = np.random.randn(10,10) + 1.0j*np.random.randn(10,10) 
-        dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
-        f = np.random.randn(10,10) > 0
-        flags = DataContainer({(0,1,'xx'): deepcopy(f)})
-        g0_new = np.random.randn(10,10) + 1.0j*np.random.randn(10,10) 
-        g1_new = np.random.randn(10,10) + 1.0j*np.random.randn(10,10)
-        g_new = {(0,'x'): g0_new, (1,'x'): g1_new}
-        g0_old = np.random.randn(10,10) + 1.0j*np.random.randn(10,10) 
-        g1_old = np.random.randn(10,10) + 1.0j*np.random.randn(10,10)
-        g_old = {(0,'x'): g0_old, (1,'x'): g1_old}
-        cal_flags = {(0,'x'): np.random.randn(10,10) > 0, (1,'x'): np.random.randn(10,10) > 0}
+        vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
+        f = np.random.randn(10, 10) > 0
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
+        g0_new = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g1_new = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g_new = {(0, 'x'): g0_new, (1, 'x'): g1_new}
+        g0_old = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g1_old = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g_old = {(0, 'x'): g0_old, (1, 'x'): g1_old}
+        cal_flags = {(0, 'x'): np.random.randn(10, 10) > 0, (1, 'x'): np.random.randn(10, 10) > 0}
         # test standard operation
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='divide')
         for i in range(10):
             for j in range(10):
-                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]*g0_old[i,j]*np.conj(g1_old[i,j])/g0_new[i,j]/np.conj(g1_new[i,j]))
-                if f[i,j] or cal_flags[(0,'x')][i,j] or cal_flags[(1,'x')][i,j]:
-                    self.assertTrue(flags[(0,1,'xx')][i,j])
+                self.assertAlmostEqual(dc[(0, 1, 'xx')][i, j], vis[i, j] * g0_old[i, j] * np.conj(g1_old[i, j]) / g0_new[i, j] / np.conj(g1_new[i, j]))
+                if f[i, j] or cal_flags[(0, 'x')][i, j] or cal_flags[(1, 'x')][i, j]:
+                    self.assertTrue(flags[(0, 1, 'xx')][i, j])
                 else:
-                    self.assertFalse(flags[(0,1,'xx')][i,j])
+                    self.assertFalse(flags[(0, 1, 'xx')][i, j])
 
         # test without old cal
-        dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
-        flags = DataContainer({(0,1,'xx'): deepcopy(f)})
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, gain_convention='divide')
         for i in range(10):
             for j in range(10):
-                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_new[i,j]/np.conj(g1_new[i,j]))
+                self.assertAlmostEqual(dc[(0, 1, 'xx')][i, j], vis[i, j] / g0_new[i, j] / np.conj(g1_new[i, j]))
 
         # test multiply
-        dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
-        flags = DataContainer({(0,1,'xx'): deepcopy(f)})
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='multiply')
         for i in range(10):
             for j in range(10):
-                self.assertAlmostEqual(dc[(0,1,'xx')][i,j], vis[i,j]/g0_old[i,j]/np.conj(g1_old[i,j])*g0_new[i,j]*np.conj(g1_new[i,j]))
+                self.assertAlmostEqual(dc[(0, 1, 'xx')][i, j], vis[i, j] / g0_old[i, j] / np.conj(g1_old[i, j]) * g0_new[i, j] * np.conj(g1_new[i, j]))
 
         # test flag propagation when missing antennas in gains
-        dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
-        flags = DataContainer({(0,1,'xx'): deepcopy(f)})
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         ac.recalibrate_in_place(dc, flags, {}, cal_flags, gain_convention='divide')
-        np.testing.assert_array_equal(flags[(0,1,'xx')], True)
-        dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
-        flags = DataContainer({(0,1,'xx'): deepcopy(f)})
+        np.testing.assert_array_equal(flags[(0, 1, 'xx')], True)
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains={}, gain_convention='divide')
-        np.testing.assert_array_equal(flags[(0,1,'xx')], True)
+        np.testing.assert_array_equal(flags[(0, 1, 'xx')], True)
 
         # test error
-        dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
-        flags = DataContainer({(0,1,'xx'): deepcopy(f)})
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         with self.assertRaises(KeyError):
             ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='blah')
 
         # test w/ data weights
-        dc = DataContainer({(0,1,'xx'): deepcopy(vis)})
-        flags = DataContainer({(0,1,'xx'): deepcopy(f)})
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         wgts = DataContainer(dict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
         del g_new[(0, 'x')]
         ac.recalibrate_in_place(dc, wgts, g_new, cal_flags, gain_convention='divide')
-        self.assertAlmostEqual(wgts[(0,1,'xx')].max(), 0.0)
+        self.assertAlmostEqual(wgts[(0, 1, 'xx')].max(), 0.0)
 
     def test_apply_cal(self):
         fname = os.path.join(DATA_PATH, "zen.2457698.40355.xx.HH.uvcA")
@@ -94,7 +95,7 @@ class Test_Update_Cal(unittest.TestCase):
         uvc_old.read_calfits(old_cal)
         uvc_old.gain_array *= (3.0 + 4.0j)
 
-        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention='divide', 
+        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention='divide',
                      flags_npz=flags_npz, filetype='miriad', clobber=True, vis_units='Jy')
         u = UVData()
         u.read_miriad(outname)
@@ -103,22 +104,22 @@ class Test_Update_Cal(unittest.TestCase):
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):
                 for j in range(new_data[k].shape[1]):
-                    if not new_flags[k][i,j]:
-                        self.assertAlmostEqual(new_data[k][i,j] / 25.0, data[k][i,j],4)
+                    if not new_flags[k][i, j]:
+                        self.assertAlmostEqual(new_data[k][i, j] / 25.0, data[k][i, j], 4)
                     if j < 300 or j > 923:
-                        self.assertTrue(new_flags[k][i,j])
+                        self.assertTrue(new_flags[k][i, j])
 
         # test band edge flagging
-        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention='divide', 
-             flag_nchan_low=450, flag_nchan_high=400, filetype='miriad', clobber=True)
+        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention='divide',
+                     flag_nchan_low=450, flag_nchan_high=400, filetype='miriad', clobber=True)
         new_data, new_flags = io.load_vis(outname)
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):
                 for j in range(new_data[k].shape[1]):
-                    if not new_flags[k][i,j]:
-                        self.assertAlmostEqual(new_data[k][i,j] / 25.0, data[k][i,j],4)
+                    if not new_flags[k][i, j]:
+                        self.assertAlmostEqual(new_data[k][i, j] / 25.0, data[k][i, j], 4)
                     if j < 450 or j > 623:
-                        self.assertTrue(new_flags[k][i,j])
+                        self.assertTrue(new_flags[k][i, j])
 
         with self.assertRaises(ValueError):
             ac.apply_cal(fname, outname, None)
@@ -131,6 +132,7 @@ class Test_Update_Cal(unittest.TestCase):
         self.assertEqual(args.infile, 'a')
         self.assertEqual(args.outfile, 'b')
         self.assertEqual(args.new_cal, ['d'])
+
 
 if __name__ == '__main__':
     unittest.main()

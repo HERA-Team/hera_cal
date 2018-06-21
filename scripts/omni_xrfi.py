@@ -1,8 +1,8 @@
 #! /usr/bin/env python
 """
-This script uses hera_cal.xrfi.xrfi to create flags based 
+This script uses hera_cal.xrfi.xrfi to create flags based
 on the omnical chisq output (currently average over chisq
-per antenna. This creates a new calfits file with a 
+per antenna. This creates a new calfits file with a
 flag array with it.
 """
 

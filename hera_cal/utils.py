@@ -51,7 +51,7 @@ class AntennaArray(aipy.pol.AntennaArray):
             except(KeyError):
                 pass
             if ant_changed:
-                #rotate from zenith to equatorial, convert from meters to ns
+                # rotate from zenith to equatorial, convert from meters to ns
                 ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * self.cm_p_m
             changed |= ant_changed
         if changed:
@@ -125,7 +125,7 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
         bp_i = {'x': bp_i, 'y': bp_i}
         twist = 0.
         antennas.append(aipy.pol.Antenna(0., 0., 0., beam, phsoff=phsoff,
-                        amp=amp, bp_r=bp_r, bp_i=bp_i, pointing=(0., np.pi / 2, twist)))
+                                         amp=amp, bp_r=bp_r, bp_i=bp_i, pointing=(0., np.pi / 2, twist)))
 
     # Make the AntennaArray and set position parameters
     aa = AntennaArray(location, antennas, antpos_ideal=antpos_ideal)
@@ -185,7 +185,7 @@ def JD2LST(JD, longitude=21.42830):
         # construct astropy Time object
         t = Time(jd, format='jd', scale='utc')
         # get LST in radians at epoch of jd
-        LST.append(t.sidereal_time('apparent', longitude=longitude*unt.deg).radian)
+        LST.append(t.sidereal_time('apparent', longitude=longitude * unt.deg).radian)
     LST = np.array(LST)
 
     if _array:
@@ -296,9 +296,9 @@ def JD2RA(JD, longitude=21.42830, latitude=-30.72152, epoch='current'):
 
         # use J2000 epoch
         elif epoch == 'J2000':
-            loc = crd.EarthLocation(lat=latitude*unt.deg, lon=longitude*unt.deg)
+            loc = crd.EarthLocation(lat=latitude * unt.deg, lon=longitude * unt.deg)
             t = Time(jd, format='jd', scale='utc')
-            zen = crd.SkyCoord(frame='altaz', alt=90*unt.deg, az=0*unt.deg, obstime=t, location=loc)
+            zen = crd.SkyCoord(frame='altaz', alt=90 * unt.deg, az=0 * unt.deg, obstime=t, location=loc)
             RA.append(zen.icrs.ra.degree)
 
         else:
@@ -336,10 +336,10 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
     array = True
     if isinstance(jds, (float, np.float, np.float64, int, np.int, np.int32)):
         jds = [jds]
-        array = False 
+        array = False
 
     # get earth location
-    e = crd.EarthLocation(lat=latitude*unt.deg, lon=longitude*unt.deg)
+    e = crd.EarthLocation(lat=latitude * unt.deg, lon=longitude * unt.deg)
 
     # get AltAz frame
     a = crd.AltAz(location=e)
@@ -353,7 +353,7 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
         return alts[0]
 
 
-def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False, 
+def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False,
                interp=False, interp_Nsteps=11, verbose=True):
     """
     Apply flags at times when the Sun is above some minimum altitude.
@@ -366,20 +366,20 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
         Integer Julian Date to perform calculation for
 
     times : 1D float ndarray
-        If flags is an ndarray or DataContainer, this contains the time bins 
+        If flags is an ndarray or DataContainer, this contains the time bins
         of the data's time axis in Julian Date
 
     flag_alt : float
         If the Sun is greater than this altitude [degrees], we flag the data.
 
     longitude : float
-        Longitude of observer in degrees East (if flags is a UVData object, 
+        Longitude of observer in degrees East (if flags is a UVData object,
         use its stored longitude instead)
 
     latitude : float
-        Latitude of observer in degrees North (if flags is a UVData object, 
+        Latitude of observer in degrees North (if flags is a UVData object,
         use its stored latitude instead)
-        
+
     inplace: bool
         If inplace, edit flags instead of returning a new flags object.
 
@@ -403,7 +403,8 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     elif isinstance(flags, np.ndarray):
         dtype = 'ndarr'
     elif isinstance(flags, UVData):
-        if verbose: print "Note: using latitude and longitude in given UVData object"
+        if verbose:
+            print "Note: using latitude and longitude in given UVData object"
         latitude, longitude, altitude = flags.telescope_location_lat_lon_alt_degrees
         times = np.unique(flags.time_array)
         dtype = 'uvd'
@@ -519,7 +520,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     """
     _array = True
     # check filepaths type
-    if type(filepaths) == str:
+    if isinstance(filepaths, str):
         _array = False
         filepaths = [filepaths]
 
@@ -535,10 +536,10 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     for i, f in enumerate(filepaths):
         uv = aipy.miriad.UV(f)
         # get integration time
-        int_time = uv['inttime'] * 2*np.pi / (23.9344699*3600.)
+        int_time = uv['inttime'] * 2 * np.pi / (23.9344699 * 3600.)
         # get start and stop
         start = uv['lst']
-        stop = start + (uv['ntimes']-1) * int_time
+        stop = start + (uv['ntimes'] - 1) * int_time
         # add integration buffer to end of file if desired
         if add_int_buffer:
             stop += int_time
@@ -554,8 +555,8 @@ def get_miriad_times(filepaths, add_int_buffer=False):
     int_times = np.array(int_times)
 
     # make sure times don't wrap
-    file_starts[np.where(file_starts < 0)] += 2*np.pi
-    file_stops[np.where(file_stops >= 2*np.pi)] -= 2*np.pi
+    file_starts[np.where(file_starts < 0)] += 2 * np.pi
+    file_stops[np.where(file_stops >= 2 * np.pi)] -= 2 * np.pi
 
     if _array is False:
         file_starts = file_starts[0]
@@ -568,7 +569,7 @@ def get_miriad_times(filepaths, add_int_buffer=False):
 def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False):
     """
     Shift phase center of each integration in data by amount dlst [radians] along right ascension axis.
-    If inplace == True, this function directly edits the arrays in 'data' in memory, so as not to 
+    If inplace == True, this function directly edits the arrays in 'data' in memory, so as not to
     make a copy of data.
 
     Parameters:
@@ -610,16 +611,16 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         zero = 0
 
     # get top2eq matrix
-    top2eq = uvutils.top2eq_m(zero, lat*np.pi/180)
+    top2eq = uvutils.top2eq_m(zero, lat * np.pi / 180)
 
     # get eq2top matrix
-    eq2top = uvutils.eq2top_m(-dlst, lat*np.pi/180)
+    eq2top = uvutils.eq2top_m(-dlst, lat * np.pi / 180)
 
     # get full rotation matrix
     rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
 
     # make copy of data if desired
-    if inplace == False:
+    if not inplace:
         data = copy.deepcopy(data)
 
     # turn array into dict
@@ -645,21 +646,21 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         tau = u / (aipy.const.c / 100.0)
 
         # reshape tau
-        if type(tau) == np.ndarray:
+        if isinstance(tau, np.ndarray):
             pass
         else:
             tau = np.array([tau])
 
         # get phasor
-        phs = np.exp(-2j*np.pi*freqs[None, :]*tau[:, None])
+        phs = np.exp(-2j * np.pi * freqs[None, :] * tau[:, None])
 
         # multiply into data
         data[k] *= phs
 
     if array:
         data = data['data']
-        
-    if inplace == False:
+
+    if not inplace:
         return data
 
 
@@ -681,20 +682,21 @@ def synthesize_ant_flags(flags, threshold=0.0):
     # type check
     assert isinstance(flags, hera_cal.datacontainer.DataContainer), "flags must be fed as a datacontainer"
     assert threshold >= 0.0 and threshold <= 1.0, "threshold must be 0.0 <= threshold <= 1.0"
-    if np.isclose(threshold, 1.0): threshold = threshold - 1e-10
+    if np.isclose(threshold, 1.0):
+        threshold = threshold - 1e-10
 
     # get Ntimes and Nfreqs
     Ntimes, Nfreqs = flags[flags.keys()[0]].shape
 
     # get antenna-pol keys
-    antpols = set([ap for (i,j,pol) in flags.keys() for ap in [(i, pol[0]), (j, pol[1])]])
+    antpols = set([ap for (i, j, pol) in flags.keys() for ap in [(i, pol[0]), (j, pol[1])]])
 
     # get dictionary of completely flagged ants to exclude
     is_excluded = {ap: True for ap in antpols}
-    for (i,j,pol), flags_here in flags.items():
-        if not np.all(flags_here): 
-            is_excluded[(i,pol[0])] = False
-            is_excluded[(j,pol[1])] = False
+    for (i, j, pol), flags_here in flags.items():
+        if not np.all(flags_here):
+            is_excluded[(i, pol[0])] = False
+            is_excluded[(j, pol[1])] = False
 
     # construct dictionary of visibility count (number each antenna touches)
     # and dictionary of number of flagged visibilities each antenna has (excluding dead ants)
@@ -723,7 +725,8 @@ def synthesize_ant_flags(flags, threshold=0.0):
         # else create flags based on threshold
         else:
             # handle Nvis = 0 cases
-            if ant_Nvis[ap] == 0: ant_Nvis[ap] = 1e-10
+            if ant_Nvis[ap] == 0:
+                ant_Nvis[ap] = 1e-10
             # create antenna flags
             ant_flags[ap] = (ant_Nflag[ap] / ant_Nvis[ap]) > threshold
 

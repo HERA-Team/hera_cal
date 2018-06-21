@@ -71,7 +71,7 @@ class HERACal(UVCal):
         try:
             chisqarray = np.array([[meta['chisq' + str(ant) + pol2str[pol]]
                                     for ant in ants] for pol in pols]).swapaxes(0, 3).swapaxes(0, 1)
-        except:
+        except BaseException:
             # XXX EXCEPT WHAT?
             chisqarray = np.ones(datarray.shape, dtype=float)
         # get the array-wide chisq, which does not have separate axes for
@@ -82,11 +82,11 @@ class HERACal(UVCal):
             totchisqarray = totchisqarray[:, :, np.newaxis]
             # repeat polarization axis npol times for proper shape
             totchisqarray = np.repeat(totchisqarray, npol, axis=-1)
-        except:
+        except BaseException:
             # XXX EXCEPT WHAT?
             # leave it empty
             totchisqarray = None
-        
+
         pols = np.array(pols)
         freq = np.array(freq)
         antarray = np.array(list(map(int, ants)))
@@ -106,10 +106,10 @@ class HERACal(UVCal):
         self.antenna_names = antnames
         self.antenna_numbers = numarray
         self.ant_array = np.array(antarray[:self.Nants_data])
-        
-        self.Nspws = nspw # XXX: needs to change when we support more than 1 spw!
+
+        self.Nspws = nspw  # XXX: needs to change when we support more than 1 spw!
         self.spw_array = np.array([0])
-        
+
         self.freq_array = freq.reshape(self.Nspws, -1)
         self.channel_width = np.diff(self.freq_array)[0][0]
         self.jones_array = pols
@@ -120,7 +120,7 @@ class HERACal(UVCal):
         self.x_orientation = 'east'
         self.time_range = [self.time_array[0], self.time_array[-1]]
         self.freq_range = [self.freq_array[0][0], self.freq_array[0][-1]]
-        
+
         # set the optional attributes to UVCal class, which may overwrite previous
         # parameters set by default
         for key in optional:
@@ -156,6 +156,3 @@ class HERACal(UVCal):
 
         # run a check
         self.check()
-
-
-        
