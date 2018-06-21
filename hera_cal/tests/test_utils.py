@@ -254,9 +254,8 @@ def test_synthesize_ant_flags():
     # very conservative flagging
     flags[(1, 2, 'xx')][:3, 4] = True
     ant_flags = utils.synthesize_ant_flags(flags, threshold=1.0)
-<<<<<<< HEAD
-    np.testing.assert_array_equal(ant_flags[(2,'x')][:3,4], True)
-    np.testing.assert_array_equal(ant_flags[(2,'x')][3:,4], False)
+    np.testing.assert_array_equal(ant_flags[(2, 'x')][:3, 4], True)
+    np.testing.assert_array_equal(ant_flags[(2, 'x')][3:, 4], False)
     
 
 def test_chisq():
@@ -343,7 +342,3 @@ def test_chisq():
     nt.assert_true(len(nObs) == 0)
     nt.assert_true(len(chisq_per_ant) == 0)
     nt.assert_true(len(chisq_per_ant) == 0)
-=======
-    np.testing.assert_array_equal(ant_flags[(2, 'x')][:3, 4], True)
-    np.testing.assert_array_equal(ant_flags[(2, 'x')][3:, 4], False)
->>>>>>> master
