@@ -736,9 +736,9 @@ def synthesize_ant_flags(flags, threshold=0.0):
 def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
           chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
     """Computes chi^2 defined as:
-    
+
     chi^2 sum_ij(|data_ij - model_ij * g_i conj(g_j)| * wgts_ij)
-    
+
     and also a chisq_per_antenna which is the same sum but with fixed i. Also keeps track of the
     number of unflagged observations that go into each chi^2 waterfal, both overall and per-antenna.
 
@@ -760,7 +760,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
         by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy arrays.
             Additionally, if by_antpol is True, cross-polarized visibilities are ignored.
         chisq: optional chisq to update (see below)
-        nObs: optional nObs to update (see below). Must be specified if chisq is specified and must be 
+        nObs: optional nObs to update (see below). Must be specified if chisq is specified and must be
             left as None if chisq is left as None.
         chisq_per_ant: optional chisq_per_ant to update (see below)
         nObs_per_ant: optional nObs_per_ant to update (see below). Must have same keys as chisq_per_ant.
@@ -770,9 +770,9 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
             is provided, this is the sum of the input chisq and the calculated chisq from all unflagged
             data-to-model comparisons possible given their overlapping baselines. If by_antpol is True,
             instead returns a dictionary that maps antenna polarization strings to these numpy arrays.
-        nObs: numpy array with the integer number of unflagged data-to-model comparisons that go into 
+        nObs: numpy array with the integer number of unflagged data-to-model comparisons that go into
             each time and frequency of the chisq calculation. If nObs is specified, this updates that
-            with a count of any new unflagged data-to-model comparisons. If by_antpol is True, instead 
+            with a count of any new unflagged data-to-model comparisons. If by_antpol is True, instead
             returns a dictionary that maps antenna polarization strings to these numpy arrays.
         chisq_per_ant: dictionary mapping ant-pol keys like (1,'x') to chisq per antenna, computed as
             above but keeping i fixed and varying only j. If chisq_per_ant is specified, this adds in
@@ -791,7 +791,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
             nObs = np.zeros(list(data.values())[0].shape, dtype=int)
     elif (chisq is None) ^ (nObs is None):
         raise ValueError('Both chisq and nObs must be specified or nor neither can be.')
-    
+
     # build containers for chisq_per_ant and nObs_per_ant if not supplied
     if chisq_per_ant is None and nObs_per_ant is None:
         chisq_per_ant = {}
@@ -801,21 +801,21 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
 
     for bl in data.keys():
         if model.has_key(bl) and data_wgts.has_key(bl) and (not by_antpol or bl[2][0] == bl[2][1]):
-            ant1, ant2 = (bl[0],bl[2][0]), (bl[1],bl[2][1])
-            
+            ant1, ant2 = (bl[0], bl[2][0]), (bl[1], bl[2][1])
+
             # multiply model by gains if they are supplied
             if gains is not None:
                 model_here = model[bl] * gains[ant1] * np.conj(gains[ant2])
             else:
                 model_here = copy.deepcopy(model[bl])
-            
+
             # include gain flags in data weights
             assert np.isrealobj(data_wgts[bl])
             if gain_flags is not None:
                 wgts = data_wgts[bl] * ~(gain_flags[ant1]) * ~(gain_flags[ant2])
             else:
                 wgts = copy.deepcopy(data_wgts[bl])
-            
+
             # calculate chi^2
             chisq_here = np.array(np.abs(model_here - data[bl]) * wgts, dtype=float)
             if by_antpol:
