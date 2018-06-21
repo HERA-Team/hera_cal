@@ -400,7 +400,7 @@ def load_cal(input_cal, return_meta=False):
         flags: Dictionary of flags in the same format as the gains
         quals: Dictionary of of qualities of calibration solutions in the same
             format as the gains (e.g. omnical chi^2 per antenna)
-        total_qual: ndarray of toal calibration quality for the whole array
+        total_qual: ndarray of total calibration quality for the whole array
             (e.g. omnical overall chi^2)
         ants: ndarray containing unique antenna indices
         freqs: ndarray containing frequency channels (Hz)
