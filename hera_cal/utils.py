@@ -730,7 +730,7 @@ def synthesize_ant_flags(flags, threshold=0.0):
     return ant_flags
 
 
-def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_pol=False,
+def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
           chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
     """Computes chi^2 defined as:
     
@@ -754,7 +754,8 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_pol=False,
             which is interpreted as all gains are 1.0 (ie..e the data is already calibrated)
         gain_flags: optional dictionary mapping ant-pol keys like (1,'x') to a boolean flags waterfall
             with the same shape as the data. Default: None, which means no per-antenna flagging.
-        by_pol: if True, chisq and nObs are dictionaries mapping visibility polarizations to numpy arrays.
+        by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy arrays.
+            Additionally, if by_antpol is True, cross-polarized visibilities are ignored.
         chisq: optional chisq to update (see below)
         nObs: optional nObs to update (see below). Must be specified if chisq is specified and must be 
             left as None if chisq is left as None.
@@ -764,12 +765,12 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_pol=False,
     Returns:
         chisq: numpy array with the same shape each visibility of chi^2 calculated as above. If chisq
             is provided, this is the sum of the input chisq and the calculated chisq from all unflagged
-            data-to-model comparisons possible given their overlapping baselines. If by_pol is True,
-            instead returns a dictionary that maps polarization strings to these numpy arrays.
+            data-to-model comparisons possible given their overlapping baselines. If by_antpol is True,
+            instead returns a dictionary that maps antenna polarization strings to these numpy arrays.
         nObs: numpy array with the integer number of unflagged data-to-model comparisons that go into 
             each time and frequency of the chisq calculation. If nObs is specified, this updates that
-            with a count of any new unflagged data-to-model comparisons. If by_pol is True, instead 
-            returns a dictionary that maps polarization strings to these numpy arrays.
+            with a count of any new unflagged data-to-model comparisons. If by_antpol is True, instead 
+            returns a dictionary that maps antenna polarization strings to these numpy arrays.
         chisq_per_ant: dictionary mapping ant-pol keys like (1,'x') to chisq per antenna, computed as
             above but keeping i fixed and varying only j. If chisq_per_ant is specified, this adds in
             new chisq calculations that include this antenna
@@ -779,7 +780,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_pol=False,
     """
     # build containers for chisq and nObs if not supplied
     if chisq is None and nObs is None:
-        if by_pol:
+        if by_antpol:
             chisq = {}
             nObs = {}
         else:
@@ -796,7 +797,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_pol=False,
         raise ValueError('Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be.')
 
     for bl in data.keys():
-        if model.has_key(bl) and data_wgts.has_key(bl):
+        if model.has_key(bl) and data_wgts.has_key(bl) and (not by_antpol or bl[2][0] == bl[2][1]):
             ant1, ant2 = (bl[0],bl[2][0]), (bl[1],bl[2][1])
             
             # multiply model by gains if they are supplied
@@ -814,15 +815,15 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_pol=False,
             
             # calculate chi^2
             chisq_here = np.array(np.abs(model_here - data[bl]) * wgts, dtype=float)
-            if by_pol:
-                if chisq.has_key(bl[2]):
+            if by_antpol:
+                if chisq.has_key(bl[2][0]):
                     assert nObs.has_key(bl[2])
-                    chisq[bl[2]] = chisq[bl[2]] + chisq_here
-                    nObs[bl[2]] = nObs[bl[2]] + (wgts > 0)
+                    chisq[bl[2][0]] = chisq[bl[2][0]] + chisq_here
+                    nObs[bl[2][0]] = nObs[bl[2][0]] + (wgts > 0)
                 else:
-                    assert not nObs.has_key(bl[2])
-                    chisq[bl[2]] = copy.deepcopy(chisq_here)
-                    nObs[bl[2]] = np.array(wgts > 0, dtype=int)
+                    assert not nObs.has_key(bl[2][0])
+                    chisq[bl[2][0]] = copy.deepcopy(chisq_here)
+                    nObs[bl[2][0]] = np.array(wgts > 0, dtype=int)
             else:
                 chisq += chisq_here
                 nObs += (wgts > 0)
