@@ -193,6 +193,7 @@ class FRFilter(object):
     """
     Fringe Rate Filter
     """
+
     def __init__(self):
         """
         Fringe Rate Filter
