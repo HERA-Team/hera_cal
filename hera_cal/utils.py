@@ -733,11 +733,11 @@ def synthesize_ant_flags(flags, threshold=0.0):
     return ant_flags
 
 
-def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
+def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=False,
           chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
     """Computes chi^2 defined as:
 
-    chi^2 sum_ij(|data_ij - model_ij * g_i conj(g_j)| * wgts_ij)
+    chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)| * wgts_ij)
 
     and also a chisq_per_antenna which is the same sum but with fixed i. Also keeps track of the
     number of unflagged observations that go into each chi^2 waterfal, both overall and per-antenna.
@@ -757,8 +757,8 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
             which is interpreted as all gains are 1.0 (ie..e the data is already calibrated)
         gain_flags: optional dictionary mapping ant-pol keys like (1,'x') to a boolean flags waterfall
             with the same shape as the data. Default: None, which means no per-antenna flagging.
-        by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy arrays.
-            Additionally, if by_antpol is True, cross-polarized visibilities are ignored.
+        split_by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy arrays.
+            Additionally, if split_by_antpol is True, cross-polarized visibilities are ignored.
         chisq: optional chisq to update (see below)
         nObs: optional nObs to update (see below). Must be specified if chisq is specified and must be
             left as None if chisq is left as None.
@@ -768,12 +768,12 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
     Returns:
         chisq: numpy array with the same shape each visibility of chi^2 calculated as above. If chisq
             is provided, this is the sum of the input chisq and the calculated chisq from all unflagged
-            data-to-model comparisons possible given their overlapping baselines. If by_antpol is True,
-            instead returns a dictionary that maps antenna polarization strings to these numpy arrays.
+            data-to-model comparisons possible given their overlapping baselines. If split_by_antpol is
+            True, instead returns a dictionary that maps antenna polarization strings to these numpy arrays.
         nObs: numpy array with the integer number of unflagged data-to-model comparisons that go into
             each time and frequency of the chisq calculation. If nObs is specified, this updates that
-            with a count of any new unflagged data-to-model comparisons. If by_antpol is True, instead
-            returns a dictionary that maps antenna polarization strings to these numpy arrays.
+            with a count of any new unflagged data-to-model comparisons. If split_by_antpol is True,
+            instead returns a dictionary that maps antenna polarization strings to these numpy arrays.
         chisq_per_ant: dictionary mapping ant-pol keys like (1,'x') to chisq per antenna, computed as
             above but keeping i fixed and varying only j. If chisq_per_ant is specified, this adds in
             new chisq calculations that include this antenna
@@ -783,7 +783,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
     """
     # build containers for chisq and nObs if not supplied
     if chisq is None and nObs is None:
-        if by_antpol:
+        if split_by_antpol:
             chisq = {}
             nObs = {}
         else:
@@ -800,7 +800,8 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
         raise ValueError('Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be.')
 
     for bl in data.keys():
-        if model.has_key(bl) and data_wgts.has_key(bl) and (not by_antpol or bl[2][0] == bl[2][1]):
+        # make that if split_by_antpol is true, the baseline is not cross-polarized
+        if model.has_key(bl) and data_wgts.has_key(bl) and (not split_by_antpol or bl[2][0] == bl[2][1]):
             ant1, ant2 = (bl[0], bl[2][0]), (bl[1], bl[2][1])
 
             # multiply model by gains if they are supplied
@@ -817,8 +818,8 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, by_antpol=False,
                 wgts = copy.deepcopy(data_wgts[bl])
 
             # calculate chi^2
-            chisq_here = np.array(np.abs(model_here - data[bl]) * wgts, dtype=float)
-            if by_antpol:
+            chisq_here = np.asarray(np.abs(model_here - data[bl]) * wgts, dtype=np.float64)
+            if split_by_antpol:
                 if chisq.has_key(bl[2][0]):
                     assert nObs.has_key(bl[2][0])
                     chisq[bl[2][0]] = chisq[bl[2][0]] + chisq_here
