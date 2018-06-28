@@ -483,6 +483,7 @@ def lst_bin_arg_parser():
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--lst_start", type=float, default=0, help="starting LST for binner as it sweeps across 2pi LST")
+    a.add_argunent("--fixed_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{}.{}.{:7.5f}.uv", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
