@@ -483,7 +483,7 @@ def lst_bin_arg_parser():
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--lst_start", type=float, default=0, help="starting LST for binner as it sweeps across 2pi LST")
-    a.add_argument("--fixed_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
+    a.add_argument("--fixed_lst_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{}.{}.{:7.5f}.uv", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
@@ -500,7 +500,7 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed_start=False, verbose=True,
+def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed_lst_start=False, verbose=True,
                          ntimes_per_file=60):
     """
     Configure lst grid, starting LST and output files given input data files and LSTbin params.
@@ -515,7 +515,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
 
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
 
-    fixed_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
+    fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
         record. Otherwise, LST grid starts at LST of first data record.
 
     ntimes_per_file : type=int, number of LST bins in a single output file
@@ -564,7 +564,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
             dt -= 2 * np.pi
 
     # create lst_grid
-    if fixed_start:
+    if fixed_lst_start:
         start_lst = lst_start
     lst_grid = make_lst_grid(dlst, lst_start=start_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
@@ -587,7 +587,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
 
 
 def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
-                  outdir=None, overwrite=False, history=' ', lst_start=0, fixed_start=False, atol=1e-6,
+                  outdir=None, overwrite=False, history=' ', lst_start=0, fixed_lst_start=False, atol=1e-6,
                   sig_clip=True, sigma=5.0, min_N=5, rephase=False, output_file_select=None, **kwargs):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
@@ -604,7 +604,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
 
-    fixed_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
+    fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
         record. Otherwise, LST grid starts at LST of first data record.
 
     ntimes_per_file : type=int, number of LST bins in a single output file
@@ -634,7 +634,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
     (data_times, lst_grid, dlst, file_lsts,
-     start_lst) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, fixed_start=fixed_start,
+     start_lst) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
                                        ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
 
