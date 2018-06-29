@@ -193,6 +193,16 @@ class Test_lstbin:
                                 verbose=False)
         output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
 
+        # test fixed start
+        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                                verbose=False, lst_start=0.18, fixed_lst_start=True)
+        output_lst_file = "./zen.xx.LST.0.17932.uv"
+        output_std_file = "./zen.xx.STD.0.17932.uv"
+        nt.assert_true(os.path.exists(output_lst_file))
+        nt.assert_true(os.path.exists(output_std_file))
+        shutil.rmtree(output_lst_file)
+        shutil.rmtree(output_std_file)
+
     def test_lst_bin_arg_parser(self):
         a = hc.lstbin.lst_bin_arg_parser()
 
