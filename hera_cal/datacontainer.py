@@ -48,6 +48,14 @@ class DataContainer:
         self._bls = set([k[:2] for k in self._data.keys()])
         self._pols = set([k[-1] for k in self._data.keys()])
 
+        # placeholders for metadata
+        self.antpos = None
+        self.freqs = None
+        self.times = None
+        self.lsts = None
+        self.times_by_bl = None
+        self.lsts_by_bl = None
+
     def mk_key(self, bl, pol):
         '''Combine a baseline pair tuple and a polarization into a 3-tuple key.'''
         return bl + (pol,)

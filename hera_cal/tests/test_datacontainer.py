@@ -42,6 +42,12 @@ class TestDataContainer(unittest.TestCase):
             self.assertEqual(len(k), 3)
         self.assertEqual(set(self.bls), dc._bls)
         self.assertEqual(set(self.pols), dc._pols)
+        self.assertIsNone(dc.antpos)
+        self.assertIsNone(dc.freqs)
+        self.assertIsNone(dc.times)
+        self.assertIsNone(dc.lsts)
+        self.assertIsNone(dc.times_by_bl)
+        self.assertIsNone(dc.lsts_by_bl)
         self.assertRaises(
             AssertionError, datacontainer.DataContainer, {(1, 2, 3, 4): 2})
 
