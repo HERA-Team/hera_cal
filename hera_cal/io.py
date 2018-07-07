@@ -9,12 +9,121 @@ import os
 import copy
 import gc as garbage_collector
 from functools import reduce
+from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
+from hera_cal.utils import split_pol, conj_pol
+import collections
 
-polstr2num = {'I': 1, 'Q': 2, 'U': 3, 'V': 4, 'RR': -1, 'LL': -2, 'RL': -3, 'LR': -4, 'xx': -5, 'yy': -6, 'xy': -7, 'yx': -8}
-polnum2str = {val: key for key, val in polstr2num.items()}
 
-jonesnum2str = {-5: 'x', -6: 'y'}
-jonesstr2num = {'x': -5, 'y': -6}
+class HERACal(UVCal):
+    '''HERAData is a subclass of pyuvdata.UVCal meant to serve as an interface between 
+    pyuvdata-readable calfits files and dictionaries (the in-memory format for hera_cal)
+    that map antennas and polarizations to gains, flags, and qualities. Supports standard
+    UVCal functionality, along with read() and update() functionality for going back and
+    forth to dictionaires. Upon read(), stores useful metadata internally.
+    
+    Does not support partial data loading or writing. Assumes a single spectral window.
+    '''
+    
+    def __init__(self, input_cal):
+        '''Instantiate a HERACal object. Currently only supports calfits files.
+        
+        Arguments:
+            input_cal: string calfits file path or list of paths
+        '''
+        super(HERACal, self).__init__()
+        
+        # parse input_data as filepath(s)
+        if isinstance(input_cal, str):
+            self.filepaths = [input_cal]
+        elif isinstance(input_cal, collections.Iterable):  # List loading
+            if np.all([isinstance(i, str) for i in input_cal]):  # List of visibility data paths
+                self.filepaths = list(input_cal)
+            else:
+                raise TypeError('If input_cal is a list, it must be a list of strings.')
+        else: 
+            raise ValueError('input_cal must be a string or a list of strings.')
+
+    def _extract_metadata(self):
+        '''Extract and store useful metadata and array indexing dictionaries.'''
+        self.freqs = np.unique(self.freq_array)
+        self.times = np.unique(self.time_array)
+        self.pols = [jnum2str(j) for j in self.jones_array]
+        self._jnum_indices = {jnum: i for i, jnum in enumerate(self.jones_array)}        
+        self.ants= [(ant, pol) for ant in self.ant_array for pol in self.pols]
+        self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}        
+        
+    def build_cal_dicts(self):
+        '''Turns the calibration information currently loaded into the HERACal object
+        into dictionaries that map antenna-pol tuples to calibration waterfalls. Computes
+        and stores internally useful metadata in the process.
+        
+        Returns:
+            gains: dict mapping antenna-pol keys to (Nint, Nfreq) complex gains arrays
+            flags: dict mapping antenna-pol keys to (Nint, Nfreq) boolean flag arrays
+            quals: dict mapping antenna-pol keys to (Nint, Nfreq) float qual arrays
+            total_qual: dict mapping polarization to (Nint, Nfreq) float total quality array
+        '''
+        self._extract_metadata()
+        gains, flags, quals, total_qual = odict(), odict(), odict(), odict()
+              
+        # build dict of gains, flags, and quals
+        for (ant, pol) in self.ants:
+            i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol)]
+            gains[(ant, pol)] = np.array(self.gain_array[i, 0, :, :, ip].T)
+            flags[(ant, pol)] = np.array(self.flag_array[i, 0, :, :, ip].T)
+            quals[(ant, pol)] = np.array(self.quality_array[i, 0, :, :, ip].T)
+        
+        # build dict of total_qual if available
+        for pol in self.pols:
+            ip = self._jnum_indices[jstr2num(pol)]
+            if self.total_quality_array is not None:
+                total_qual[pol] = np.array(self.total_quality_array[0, :, :, ip].T)
+            else:
+                total_qual = None
+        
+        return gains, flags, quals, total_qual
+
+    def read(self):
+        '''Reads calibration information from file, computes useful metadata and returns
+        dictionaries that map antenna-pol tuples to calibration waterfalls. 
+        
+        Returns:
+            gains: dict mapping antenna-pol keys to (Nint, Nfreq) complex gains arrays
+            flags: dict mapping antenna-pol keys to (Nint, Nfreq) boolean flag arrays
+            quals: dict mapping antenna-pol keys to (Nint, Nfreq) float qual arrays
+            total_qual: dict mapping polarization to (Nint, Nfreq) float total quality array
+        '''
+        self.read_calfits(self.filepaths)
+        return self.build_cal_dicts()
+    
+    def update(self, gains=None, flags=None, quals=None, total_qual=None):
+        '''Update internal calibrations arrays (data_array, flag_array, and nsample_array)
+        using DataContainers (if not left as None) in preparation for writing to disk. 
+
+        Arguments:
+            gains: optional dict mapping antenna-pol to complex gains arrays
+            flags: optional dict mapping antenna-pol to boolean flag arrays
+            quals: optional dict mapping antenna-pol to float qual arrays
+            total_qual: optional dict mapping polarization to float total quality array
+        '''
+        # loop over and update gains, flags, and quals
+        data_arrays = [self.gain_array, self.flag_array, self.quality_array]
+        for to_update, array in zip([gains, flags, quals], data_arrays):
+            if to_update is not None:
+                for (ant, pol) in to_update.keys():
+                    i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol)]
+                    array[i, 0, :, :, ip] = to_update[(ant, pol)].T
+        
+        # update total_qual
+        if total_qual is not None:
+            for pol in total_qual.keys():
+                ip = self._jnum_indices[jstr2num(pol)]
+                self.total_quality_array[0, :, :, ip] = total_qual[pol].T
+
+
+#######################################################################
+#                             LEGACY CODE
+#######################################################################
 
 
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
@@ -383,11 +492,12 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
 
 
 def load_cal(input_cal, return_meta=False):
-    '''Load calfits files or UVCal objects into dictionaries, optionally returning
-    the most useful metadata. More than one spectral window is not supported.
+    '''LEGACY CODE TO BE DEPRECATED!
+    Load calfits files or UVCal/HERACal objects into dictionaries, optionally
+    returning the most useful metadata. More than one spectral window is not supported.
 
     Arguments:
-        input_cal: path to calfits file, UVCal object, or a list of either
+        input_cal: path to calfits file, UVCal/HERACal object, or a list of either
         return_meta: if True, returns additional information (see below)
 
     Returns:
@@ -408,41 +518,30 @@ def load_cal(input_cal, return_meta=False):
         times: ndarray containing julian date bins of data
         pols: list of antenna polarization strings
     '''
-    # load UVCal object
-    cal = UVCal()
-    if isinstance(input_cal, (tuple, list, np.ndarray)):  # List loading
+    # load HERACal object and extract gains, data, etc.
+    if isinstance(input_cal, str):  # single calfits path
+        hc = HERACal(input_cal)
+        gains, flags, quals, total_qual = hc.read()
+    elif isinstance(input_cal, (UVCal,HERACal)):  # single UVCal/HERACal object
+        hc = input_cal
+        hc.__class__ = HERACal
+        gains, flags, quals, total_qual = hc.build_cal_dicts()
+    elif isinstance(input_cal, collections.Iterable):  # List loading
         if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
-            cal.read_calfits(list(input_cal))
-        elif np.all([isinstance(ic, UVCal) for ic in input_cal]):  # List of UVCal objects
-            cal = reduce(operator.add, input_cal)
+            hc = HERACal(input_cal)
+            gains, flags, quals, total_qual = hc.read()
+        elif np.all([isinstance(ic, (UVCal, HERACal)) for ic in input_cal]):  # List of UVCal/HERACal objects
+            hc = reduce(operator.add, input_cal)
+            hc.__class__ = HERACal
+            gains, flags, quals, total_qual = hc.build_cal_dicts()
         else:
-            raise TypeError('If input is a list, it must be only strings or only UVCal objects.')
-    elif isinstance(input_cal, str):  # single calfits path
-        cal.read_calfits(input_cal)
-    elif isinstance(input_cal, UVCal):  # single UVCal object
-        cal = input_cal
+            raise TypeError('If input is a list, it must be only strings or only UVCal/HERACal objects.')
     else:
-        raise TypeError('Input must be a UVCal object, a string, or a list of either.')
-
-    # load gains, flags, and quals into dictionaries
-    gains, quals, flags, total_qual = odict(), odict(), odict(), odict()
-    for ip, pol in enumerate(cal.jones_array):
-        if cal.total_quality_array is not None:
-            total_qual[jonesnum2str[pol]] = cal.total_quality_array[0, :, :, ip].T
-        else:
-            total_qual = None
-        for i, ant in enumerate(cal.ant_array):
-            gains[(ant, jonesnum2str[pol])] = cal.gain_array[i, 0, :, :, ip].T
-            flags[(ant, jonesnum2str[pol])] = cal.flag_array[i, 0, :, :, ip].T
-            quals[(ant, jonesnum2str[pol])] = cal.quality_array[i, 0, :, :, ip].T
+        raise TypeError('Input must be a UVCal/HERACal object, a string, or a list of either.')
 
     # return quantities
     if return_meta:
-        ants = cal.ant_array
-        freqs = np.unique(cal.freq_array)
-        times = np.unique(cal.time_array)
-        pols = [jonesnum2str[j] for j in cal.jones_array]
-        return gains, flags, quals, total_qual, ants, freqs, times, pols
+        return gains, flags, quals, total_qual, np.array([ant[0] for ant in hc.ants]), hc.freqs, hc.times, hc.pols
     else:
         return gains, flags
 
@@ -483,9 +582,6 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         if return_uvc: returns UVCal object
         else: returns None
     '''
-    # helpful dictionaries for antenna polarization of gains
-    str2pol = {'x': -5, 'y': -6}
-    pol2str = {-5: 'x', -6: 'y'}
 
     # get antenna info
     ant_array = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
@@ -496,7 +592,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
 
     # get polarization info
     pol_array = np.array(sorted(set(map(lambda k: k[1].lower(), gains.keys()))))
-    jones_array = np.array(map(lambda p: str2pol[p], pol_array), np.int)
+    jones_array = np.array(map(lambda p: jstr2num(p), pol_array), np.int)
     Njones = len(jones_array)
 
     # get time info
@@ -593,11 +689,12 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
 
 
 def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **kwargs):
-    '''Update UVCal object with gains, flags, quals, history, and/or other parameters
+    '''LEGACY CODE TO BE DEPRECATED!
+    Update UVCal object with gains, flags, quals, history, and/or other parameters
     Cannot modify the shape of gain arrays. More than one spectral window is not supported.
 
     Arguments:
-        cal: UVCal object to be updated
+        cal: UVCal/HERACal object to be updated
         gains: Dictionary of complex calibration gains with shape=(Ntimes,Nfreqs)
             with keys in the (1,'x') format. Default (None) leaves unchanged.
         flags: Dictionary like gains but of flags. Default (None) leaves unchanged.
@@ -607,15 +704,10 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVCal documentation for more info.
     '''
-    # Set gains, flags, and/or quals
-    for i, ant in enumerate(cal.ant_array):
-        for ip, pol in enumerate(cal.jones_array):
-            if gains is not None:
-                cal.gain_array[i, 0, :, :, ip] = gains[(ant, jonesnum2str[pol])].T
-            if flags is not None:
-                cal.flag_array[i, 0, :, :, ip] = flags[(ant, jonesnum2str[pol])].T
-            if quals is not None:
-                cal.quality_array[i, 0, :, :, ip] = quals[(ant, jonesnum2str[pol])].T
+    original_class = cal.__class__
+    cal.__class__ = HERACal
+    cal._extract_metadata()
+    cal.update(gains=gains, flags=flags, quals=quals)
 
     # Check gain_array for values close to zero, if so, set to 1
     zero_check = np.isclose(cal.gain_array, 0, rtol=1e-10, atol=1e-10)
@@ -629,6 +721,7 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
     for attribute, value in kwargs.items():
         cal.__setattr__(attribute, value)
     cal.check()
+    cal.__class__ = original_class
 
 
 def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_to_history='', clobber=False, **kwargs):
@@ -649,14 +742,13 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
             See pyuvdata.UVCal documentation for more info.
     '''
     # Load infile
-    if isinstance(infilename, UVCal):
+    if isinstance(infilename, (UVCal, HERACal)):
         cal = copy.deepcopy(infilename)
     else:
-        cal = UVCal()
-        cal.read_calfits(infilename)
+        cal = HERACal(infilename)
+        cal.read()
 
-    update_uvcal(cal, gains=gains, flags=flags, quals=quals,
-                 add_to_history=add_to_history, **kwargs)
+    update_uvcal(cal, gains=gains, flags=flags, quals=quals, add_to_history=add_to_history, **kwargs)
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
