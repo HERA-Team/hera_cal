@@ -13,6 +13,75 @@ import shutil
 import copy
 
 
+class Test_HERACal(unittest.TestCase):
+    
+    def setUp(self):
+        self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
+        self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
+        self.fname_both = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
+    
+    def test_init(self):
+        hc = HERACal(self.fname_xx)
+        self.assertEqual(hc.filepaths, [self.fname_xx])
+        hc = HERACal([self.fname_xx, self.fname_yy])
+        self.assertEqual(hc.filepaths, [self.fname_xx, self.fname_yy])
+        hc = HERACal((self.fname_xx, self.fname_yy))
+        self.assertEqual(hc.filepaths, [self.fname_xx, self.fname_yy])        
+        with self.assertRaises(TypeError):
+            hc = HERACal([0,1])
+        with self.assertRaises(ValueError):
+            hc = HERACal(None)
+            
+    def test_read(self):
+        # test one file with both polarizations and a non-None total quality array
+        hc = HERACal(self.fname_both)
+        gains, flags, quals, total_qual = hc.read()
+        uvc = UVCal()
+        uvc.read_calfits(self.fname_both)
+        np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, 'jxx'])
+        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, 'jxx'])        
+        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, 'jxx'])                
+        np.testing.assert_array_equal(uvc.total_quality_array[0, :, :, 0].T, total_qual['jxx'])
+        np.testing.assert_array_equal(np.unique(uvc.freq_array), hc.freqs)
+        np.testing.assert_array_equal(np.unique(uvc.time_array), hc.times)        
+        self.assertEqual(hc.pols, ['jxx', 'jyy'])
+        self.assertEqual(set([ant[0] for ant in hc.ants]), set(uvc.ant_array))
+        
+        # test list loading
+        hc = HERACal([self.fname_xx, self.fname_yy])
+        gains, flags, quals, total_qual = hc.read()
+        self.assertEqual(len(gains.keys()), 36)
+        self.assertEqual(len(flags.keys()), 36)
+        self.assertEqual(len(quals.keys()), 36)
+        self.assertEqual(hc.freqs.shape, (1024,))
+        self.assertEqual(hc.times.shape, (3,))
+        self.assertEqual(sorted(hc.pols), ['jxx', 'jyy'])
+        
+    def test_write(self):
+        hc = HERACal(self.fname_both)
+        gains, flags, quals, total_qual = hc.read()
+        for key in gains.keys():
+            gains[key] *= 2.0 + 1.0j
+            flags[key] = np.logical_not(flags[key])
+            quals[key] *= 2.0
+        for key in total_qual.keys():
+            total_qual[key] *= 2
+        hc.update(gains=gains, flags=flags, quals=quals, total_qual=total_qual)
+        hc.write_calfits('test.calfits', clobber=True)
+        
+        gains_in, flags_in, quals_in, total_qual_in = hc.read()
+        hc2 = HERACal('test.calfits')
+        gains_out, flags_out, quals_out, total_qual_out = hc2.read()
+        for key in gains_in.keys():
+            np.testing.assert_array_equal(gains_in[key] * (2.0 + 1.0j), gains_out[key])
+            np.testing.assert_array_equal(np.logical_not(flags_in[key]), flags_out[key])            
+            np.testing.assert_array_equal(quals_in[key] * (2.0), quals_out[key])
+        for key in total_qual.keys():
+            np.testing.assert_array_equal(total_qual_in[key] * (2.0), total_qual_out[key])        
+        
+        os.remove('test.calfits')
+
+
 class Test_Visibility_IO_Legacy(unittest.TestCase):
 
     def test_load_vis(self):
