@@ -15,6 +15,23 @@ import copy
 import hera_cal as hc
 
 
+class Test_Pol_Ops(object):
+    def test_split_pol(self):
+        nt.assert_equal(utils.split_pol('xx'),('jxx','jxx'))
+        nt.assert_equal(utils.split_pol('xy'),('jxx','jyy'))
+        nt.assert_equal(utils.split_pol('XY'),('jxx','jyy'))
+        nt.assert_raises(ValueError, utils.split_pol, 'I')
+        nt.assert_raises(ValueError, utils.split_pol, 'pV')
+
+    def test_conj_pol(self):
+        nt.assert_equal(utils.conj_pol('xx'),'xx')
+        nt.assert_equal(utils.conj_pol('XX'),'XX')
+        nt.assert_equal(utils.conj_pol('XY'),'YX')
+        nt.assert_equal(utils.conj_pol('yx'),'xy')
+        nt.assert_equal(utils.conj_pol('Q'),'Q')
+        nt.assert_equal(utils.conj_pol('pU'),'pU')
+
+
 class TestAAFromCalfile(object):
     def setUp(self):
         # define frequencies

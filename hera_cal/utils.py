@@ -11,6 +11,24 @@ import hera_cal
 import copy
 from scipy.interpolate import interp1d
 from collections import OrderedDict as odict
+from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
+
+
+def split_pol(pol):
+    '''Splits visibility polarization string into anntenna polarizations.'''
+    if polstr2num(pol) > 0: # this includes Stokes and pseudo-Stokes visibilities
+        raise ValueError('Unable to split Stokes or pseudo-Stokes polarization ' + pol)
+    return jnum2str(jstr2num(pol[0])), jnum2str(jstr2num(pol[1]))
+
+
+def conj_pol(pol):
+    '''Given V_ij^(pol), return the polarization of V_ji^(conj pol) such
+    (V_ji^(conj pol))* = V_ij^(pol). This means xy -> yx and yx -> xy, but
+    psuedo-Stokes visibilities are unaffected. Case is left unmodified.'''
+    if polstr2num(pol) > 0:  # this includes Stokes and pseudo-Stokes visibilities
+        return pol
+    else:
+        return pol[::-1]
 
 
 class AntennaArray(aipy.pol.AntennaArray):
