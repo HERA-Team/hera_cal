@@ -7,12 +7,13 @@ from hera_cal.data import DATA_PATH
 from collections import OrderedDict as odict
 from hera_cal.datacontainer import DataContainer
 import hera_cal.io as io
+from hera_cal.io import HERACal
 import os
 import shutil
 import copy
 
 
-class Test_Visibility_IO(unittest.TestCase):
+class Test_Visibility_IO_Legacy(unittest.TestCase):
 
     def test_load_vis(self):
         # duplicated testing from abscal_funcs.UVData2AbsCalDict
@@ -210,7 +211,7 @@ class Test_Visibility_IO(unittest.TestCase):
         shutil.rmtree(outname)
 
 
-class Test_Calibration_IO(unittest.TestCase):
+class Test_Calibration_IO_Legacy(unittest.TestCase):
 
     def test_load_cal(self):
 
@@ -239,7 +240,7 @@ class Test_Calibration_IO(unittest.TestCase):
         self.assertEqual(len(quals.keys()), 36)
         self.assertEqual(freqs.shape, (1024,))
         self.assertEqual(times.shape, (3,))
-        self.assertEqual(sorted(pols), ['x', 'y'])
+        self.assertEqual(sorted(pols), ['jxx', 'jyy'])
 
         cal_xx, cal_yy = UVCal(), UVCal()
         cal_xx.read_calfits(fname_xx)
@@ -250,7 +251,7 @@ class Test_Calibration_IO(unittest.TestCase):
         self.assertEqual(len(quals.keys()), 36)
         self.assertEqual(freqs.shape, (1024,))
         self.assertEqual(times.shape, (3,))
-        self.assertEqual(sorted(pols), ['x', 'y'])
+        self.assertEqual(sorted(pols), ['jxx', 'jyy'])
 
     def test_write_cal(self):
         # create fake data
