@@ -121,6 +121,391 @@ class HERACal(UVCal):
                 self.total_quality_array[0, :, :, ip] = total_qual[pol].T
 
 
+class HERAData(UVData):
+    '''HERAData is a subclass of pyuvdata.UVData meant to serve as an interface between 
+    pyuvdata-compatible data formats on disk (especially uvh5) and DataContainers,
+    the in-memory format for visibilities used in hera_cal. In addition to standard 
+    UVData functionality, HERAData supports read() and update() functions that interface
+    between internal UVData data storage and DataContainers, which contain visibility
+    data in a dictionary-like format, along with some useful metadata. read() supports
+    partial data loading, though only the most useful subset of selection modes from 
+    pyuvdata (and not all modes for all data types).
+    
+    When using uvh5, HERAData supports additional useful functionality:
+    * Upon __init__(), the most useful metadata describing the entire file is loaded into
+      the object (everything in HERAData_metas; see get_metadata_dict() for details).
+    * Partial writing using partial_write(), which will initialize a new file with the
+      same metadata and write to disk using DataContainers by assuming that the user is
+      writing to the same part of the data as the most recent read().
+    * Generators that enable iterating over baseline, frequency, or time in chunks (see 
+      iterate_over_bls(), iterate_over_freqs(), and iterate_over_times() for details).
+      
+    Assumes a single spectral window. Assumes that data for a given baseline is regularly
+    spaced in the underlying data_array.
+    '''
+    
+    # static list of useful metadata to calculate and save
+    HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols', 
+                      'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
+
+    def __init__(self, input_data, filetype='uvh5'):
+        '''Instantiate a HERAData object. If the filetype is uvh5, read in and store 
+        useful metadata (see get_metadata_dict()), either as object attributes or, 
+        if input_data is a list, as dictionaries mapping string paths to metadata.
+        
+        Arguments:
+            input_data: string data file path or list of string data file paths
+            filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
+        '''
+        # initialize as empty UVData object
+        super(HERAData, self).__init__()
+        self.filetype = filetype
+        
+        # parse input_data as filepath(s)
+        if isinstance(input_data, str):
+            self.filepaths = [input_data]
+        elif isinstance(input_data, collections.Iterable):  # List loading
+            if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
+                self.filepaths = list(input_data)
+            else:
+                raise TypeError('If input_data is a list, it must be a list of strings.')
+        else: 
+            raise ValueError('input_data must be a string or a list of strings.')
+        
+        # load metadata from file
+        if self.filetype is 'uvh5':            
+            # read all UVData metadata from first file
+            temp_paths = deepcopy(self.filepaths)
+            self.filepaths = self.filepaths[0]
+            self.read(read_data=False)
+            self.filepaths = temp_paths
+            
+            if len(self.filepaths) > 1:  # save HERAData_metas in dicts
+                for meta in self.HERAData_metas:
+                    setattr(self, meta, {})
+                for path in self.filepaths:
+                    hc = HERAData(path, filetype='uvh5')
+                    meta_dict = self.get_metadata_dict()
+                    for meta in self.HERAData_metas:
+                        getattr(self, meta)[path] = meta_dict[meta]
+            else:  # save HERAData_metas as attributes       
+                self.writers = {}
+                for key, value in self.get_metadata_dict().items():
+                    setattr(self, key, value)
+                
+        elif self.filetype in ['miriad', 'uvfits']:
+            for meta in self.HERAData_metas:
+                setattr(self, meta, None)  # no pre-loading of metadata
+        else:
+            raise NotImplementedError('Filetype ' + self.filetype + ' has not been implemented.')
+      
+    def get_metadata_dict(self):
+        ''' Produces a dictionary of the most useful metadata. Used as object
+        attributes and as metadata to store in DataContainers.
+        
+        Returns:
+            metadata_dict: dictionary of all items in self.HERAData_metas
+        '''
+        antpos, ants = self.get_ENU_antpos()
+        ants = sorted(ants)
+        antpos = dict(zip(ants, antpos))
+        
+        freqs = np.unique(self.freq_array)
+        times = np.unique(self.time_array)
+        lst_indices = np.unique(self.lst_array.ravel(), return_index=True)[1]
+        lsts = self.lst_array.ravel()[np.sort(lst_indices)]
+        pols = [polnum2str(polnum) for polnum in self.polarization_array]
+        antpairs = self.get_antpairs()
+        bls = [antpair + (pol,) for antpair in antpairs for pol in pols]
+        
+        times_by_bl = {antpair: np.array(self.time_array[self._blt_slices[antpair]]) 
+                                          for antpair in antpairs}
+        lsts_by_bl = {antpair: np.array(self.lst_array[self._blt_slices[antpair]]) 
+                                         for antpair in antpairs}
+
+        locs = locals()
+        return {meta: eval(meta, {}, locs) for meta in self.HERAData_metas}
+
+    def _determine_blt_slicing(self):
+        '''Determine the mapping between antenna pairs and
+        slices of the blt axis of the data_array.'''
+        self._blt_slices = {}
+        for ant1, ant2 in self.get_antpairs():
+            indices = self.antpair2ind(ant1, ant2)
+            if len(indices) == 1:
+                self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, self.Nblts)
+            elif not (len(set(np.ediff1d(indices))) == 1):
+                raise NotImplementedError('UVData objects with non-regular spacing of ' +
+                                          'baselines in its baseline-times are not supported.')
+            else:
+                self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, 
+                                                       indices[1] - indices[0])
+
+            
+    def _determine_pol_indexing(self):
+        '''Determine the mapping between polnums and indices
+        in the polarization axis of the data_array.'''
+        self._polnum_indices = {}
+        for i, polnum in enumerate(self.polarization_array):
+            self._polnum_indices[polnum] = i   
+
+            
+    def _get_slice(self, data_array, key):
+        '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts 
+        away both baseline ordering (by applying complex conjugation) and polarization capitalization.
+        
+        Arguments:
+            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol) 
+            key: if of the form (0,1,'xx'), return anumpy array.
+                 if of the form (0,1), return a dict mapping pol strings to waterfalls.
+                 if of of the form 'xx', return a dict mapping ant-pair tuples to waterfalls.
+        '''        
+        if isinstance(key, tuple) and len(key) == 3:  # asking for bl-pol
+            try:
+                return np.array(np.squeeze(data_array[self._blt_slices[key[0:2]], 0, :, 
+                                self._polnum_indices[polstr2num(key[2])]]))        
+            except KeyError:
+                return np.conj(np.squeeze(data_array[self._blt_slices[key[1::-1]], 0, :, 
+                               self._polnum_indices[polstr2num(conj_pol(key[2]))]]))
+
+        elif isinstance(key, tuple) and len(key) == 2:  # asking for antpair
+            pols = np.array([polnum2str(polnum) for polnum in self.polarization_array])
+            return {pol: self._get_slice(data_array, key + (pol,)) for pol in pols}
+        elif isinstance(key, str):  # asking for a pol
+            return {antpair: self._get_slice(data_array, antpair + (key,)) for antpair in self.get_antpairs()}
+        else:
+            raise KeyError('Unrecognized key type for slicing data.')
+
+    def _set_slice(self, data_array, key, value):
+        '''Update data_array with Nint by Nfreq waterfall(s). Abstracts away both baseline 
+        ordering (by applying complex conjugation) and polarization capitalization.
+        
+        Arguments:
+            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol) 
+            key: baseline (e.g. (0,1,'xx)), ant-pair tuple (e.g. (0,1)), or pol str (e.g. 'xx')
+            value: if key is a baseline, must be an (Nint, Nfreq) numpy array;
+                   if key is an ant-pair tuple, must be a dict mapping pol strings to waterfalls;
+                   if key is a pol str, must be a dict mapping ant-pair tuples to waterfalls
+        '''
+        if isinstance(key, tuple) and len(key) == 3:  # providing bl-pol
+            try:
+                data_array[self._blt_slices[key[0:2]], 0, : , 
+                           self._polnum_indices[polstr2num(key[2])]] = value
+            except(KeyError):
+                data_array[self._blt_slices[key[1::-1]], 0, : , 
+                           self._polnum_indices[polstr2num(conj_pol(key[2]))]] = np.conj(value)
+        elif isinstance(key, tuple) and len(key) == 2:  # providing antpair with all pols
+            for pol in value.keys():
+                self._set_slice(data_array, (key + (pol,)), value[pol])
+        elif isinstance(key, str):  # providing pol with all antpairs
+            for antpair in value.keys():
+                self._set_slice(data_array, (antpair + (key,)), value[antpair])
+        else:
+            raise KeyError('Unrecognized key type for slicing data.')            
+     
+    def build_datacontainers(self):
+        '''Turns the data currently loaded into the HERAData object into DataContainers.
+        Returned DataContainers include useful metadata specific to the data actually
+        in the DataContainers (which may be a subset of the total data). This includes
+        antenna positions, frequencies, all times, all lsts, and times and lsts by baseline.
+        
+        Returns:
+            data: DataContainer mapping baseline keys to complex visibility waterfalls
+            flags: DataContainer mapping baseline keys to boolean flag waterfalls
+            nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls
+        '''
+        # build up DataContainers
+        data, flags, nsamples = odict(), odict(), odict()
+        meta = self.get_metadata_dict()
+        for bl in meta['bls']:
+            data[bl] = self._get_slice(self.data_array, bl)
+            flags[bl] = self._get_slice(self.flag_array, bl)
+            nsamples[bl] = self._get_slice(self.nsample_array, bl)
+        data = DataContainer(data)
+        flags = DataContainer(flags)
+        nsamples = DataContainer(nsamples)
+        
+        # store useful metadata inside the DataContainers
+        for dc in [data, flags, nsamples]:
+            for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
+                setattr(dc, attr, meta[attr])
+            
+        return data, flags, nsamples
+    
+    def read(self, bls=None,  polarizations=None, times=None,
+             frequencies=None, freq_chans=None, read_data=True):
+        '''Reads data from file. Supports partial data loading. Default: read all data in file.
+      
+        Arguments:
+            bls: A list of antenna number tuples (e.g. [(0,1), (3,2)]) or a list of
+                baseline 3-tuples (e.g. [(0,1,'xx'), (2,3,'yy')]) specifying baselines
+                to keep in the object. For length-2 tuples, the  ordering of the numbers
+                within the tuple does not matter. For length-3 tuples, the polarization
+                string is in the order of the two antennas. If length-3 tuples are provided,
+                the polarizations argument below must be None. Ignored if read_data is False.
+            polarizations: The polarizations to include when reading data into
+                the object.  Ignored if read_data is False.
+            times: The times to include when reading data into the object.
+                Ignored if read_data is False. Miriad not supported.
+            frequencies: The frequencies to include when reading data into the
+                object.  Ignored if read_data is False. Miriad not supported.
+            freq_chans: The frequency channel numbers to include when reading
+                data into the object. Ignored if read_data is False. Miriad not supported.
+            read_data: Read in the visibility and flag data. If set to false, only the 
+                basic metadata will be read in and nothing will be returned. Results in an
+                incompletely defined object (check will not pass). Default True.
+        
+        Returns:
+            data: DataContainer mapping baseline keys to complex visibility waterfalls
+            flags: DataContainer mapping baseline keys to boolean flag waterfalls
+            nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls
+        '''
+        # save last read parameters
+        locs = locals()
+        partials = ['bls', 'polarizations', 'times', 'frequencies', 'freq_chans']
+        self.last_read_kwargs = {p: eval(p, {}, locs) for p in partials}
+        
+        # load data
+        if self.filetype is 'uvh5':
+            self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
+                           frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
+        if self.filetype is 'miriad':
+            if any([not read_data, times is not None, frequencies is not None, freq_chans is not None]):
+                raise NotImplementedError('Miriad partial loading is not implemented with these options.')
+            self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
+        if self.filetype is 'uvfits':
+            if not read_data:
+                raise NotImplementedError('uvfits partial is not implemented for reading only metadata')
+            self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations, 
+                             times=times, frequencies=frequencies, freq_chans=freq_chans)
+        
+        # process data into DataContainers
+        if read_data or self.filetype is 'uvh5':
+            self._determine_blt_slicing()
+            self._determine_pol_indexing()
+        if read_data:
+            return self.build_datacontainers()
+
+    def __getitem__(self, key):
+        '''Shortcut for reading a single visibility waterfall given a baseline tuple.'''
+        return self.read(bls=key)[0][key]
+
+    def update(self, data=None, flags=None, nsamples=None):
+        '''Update internal data arrays (data_array, flag_array, and nsample_array)
+        using DataContainers (if not left as None) in preparation for writing to disk. 
+
+        Arguments:
+            data: Optional DataContainer mapping baselines to complex visibility waterfalls
+            flags: Optional DataContainer mapping baselines to boolean flag waterfalls
+            nsamples: Optional DataContainer mapping baselines to interger Nsamples waterfalls
+        '''
+        if data is not None:
+            for bl in data.keys():
+                self._set_slice(self.data_array, bl, data[bl])
+        if flags is not None:
+            for bl in flags.keys():
+                self._set_slice(self.flag_array, bl, flags[bl])
+        if nsamples is not None:
+            for bl in nsamples.keys():
+                self._set_slice(self.nsample_array, bl, nsamples[bl])
+                
+    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False):
+        '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
+        call to HERAData.read() in this object. Does not work for other filetypes or when the
+        HERAData object is initialized with a list of files. 
+        
+        Arguments:
+            output_path: path to file to write uvh5 file to
+            data: Optional DataContainer mapping baselines to complex visibility waterfalls
+            flags: Optional DataContainer mapping baselines to boolean flag waterfalls
+            nsamples: Optional DataContainer mapping baselines to interger Nsamples waterfalls
+            clobber: if True, overwrites existing file at output_path
+        '''
+        # Type verifications
+        if self.filetype is not 'uvh5':
+            raise NotImplementedError('Partial writing for filetype ' + self.filetype + ' has not been implemented.')
+        if len(self.filepaths) > 1:
+            raise NotImplementedError('Partial writing for list-loaded HERAData objects has not been implemented.')
+        if not isinstance(output_path, str):
+            raise ValueError('output_path must be a string path file to write.')
+        
+        # get writer or initialize new writer if necessary
+        if output_path in self.writers:
+            hd_writer = self.writers[output_path]
+        else:
+            hd_writer = HERAData(self.filepaths[0])
+#             hd_writer.read(read_data=False)
+            hd_writer.initialize_uvh5_file(output_path, clobber=clobber)
+            self.writers[output_path] = hd_writer
+        
+        # make a copy of this object and then update the relevant arrays using DataContainers
+        this = deepcopy(self)
+        this.update(data=data, flags=flags, nsamples=nsamples)
+        hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
+                                  this.nsample_array, **self.last_read_kwargs)
+        
+    def iterate_over_bls(self, Nbls=1):
+        '''Produces a generator that iteratively yields successive calls to 
+        HERAData.read() by baseline or group of baselines.
+        
+        Arguments:
+            Nbls: number of baselines to load at once. 
+
+        Yields:
+            data, flags, nsamples: DataContainers (see HERAData.read() for more info).    
+        '''
+        if self.filetype is not 'uvh5':
+            raise NotImplementedError('Baseline iteration for filetype ' + self.filetype +
+                                      ' has not been implemented.')
+        if isinstance(self.bls, dict):  # multiple files
+            bls = sorted(list(set([bl for bls in self.bls.values() for bl in bls])))
+        else:
+            bls = sorted(self.bls)
+        for i in range(0, len(bls), Nbls):
+            yield self.read(bls=bls[i:i + Nbls])
+
+            
+    def iterate_over_freqs(self, Nchans=1):
+        '''Produces a generator that iteratively yields successive calls to 
+        HERAData.read() by frequency channel or group of contiguous channels.
+        
+        Arguments:
+            Nchans: number of frequencies to load at once. 
+
+        Yields:
+            data, flags, nsamples: DataContainers (see HERAData.read() for more info).    
+        '''
+        if self.filetype is not 'uvh5':
+            raise NotImplementedError('Frequency iteration for filetype ' + self.filetype +
+                                      ' has not been implemented.')
+        if isinstance(self.freqs, dict):  # multiple files
+            freqs = np.unique(self.freqs.values())
+        else:
+            freqs = self.freqs
+        for i in range(0, len(freqs), Nchans):
+            yield self.read(frequencies=freqs[i:i + Nchans])
+
+    def iterate_over_times(self, Nints=1):
+        '''Produces a generator that iteratively yields successive calls to 
+        HERAData.read() by time or group of contiguous times.
+        
+        Arguments:
+            Nints: number of integrations to load at once. 
+
+        Yields:
+            data, flags, nsamples: DataContainers (see HERAData.read() for more info).
+        '''
+        if self.filetype is not 'uvh5':
+            raise NotImplementedError('Time iteration for filetype ' + self.filetype +
+                                      ' has not been implemented.')
+        if isinstance(self.times, dict):  # multiple files
+            times = np.unique(self.times.values())
+        else:
+            times = self.times
+        for i in range(0, len(times), Nints):
+            yield self.read(times=times[i:i + Nints])
+
+
 #######################################################################
 #                             LEGACY CODE
 #######################################################################
