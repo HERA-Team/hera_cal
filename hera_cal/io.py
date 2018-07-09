@@ -175,7 +175,7 @@ class HERAData(UVData):
         # load metadata from file
         if self.filetype is 'uvh5':            
             # read all UVData metadata from first file
-            temp_paths = deepcopy(self.filepaths)
+            temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
             self.read(read_data=False)
             self.filepaths = temp_paths
@@ -439,7 +439,7 @@ class HERAData(UVData):
             self.writers[output_path] = hd_writer
         
         # make a copy of this object and then update the relevant arrays using DataContainers
-        this = deepcopy(self)
+        this = copy.deepcopy(self)
         this.update(data=data, flags=flags, nsamples=nsamples)
         hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
                                   this.nsample_array, **self.last_read_kwargs)
