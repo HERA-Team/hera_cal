@@ -269,11 +269,11 @@ class HERAData(UVData):
         '''        
         if isinstance(key, tuple) and len(key) == 3:  # asking for bl-pol
             try:
-                return np.array(np.squeeze(data_array[self._blt_slices[key[0:2]], 0, :, 
-                                self._polnum_indices[polstr2num(key[2])]]))        
+                return np.array(data_array[self._blt_slices[key[0:2]], 0, :, 
+                                self._polnum_indices[polstr2num(key[2])]])
             except KeyError:
-                return np.conj(np.squeeze(data_array[self._blt_slices[key[1::-1]], 0, :, 
-                               self._polnum_indices[polstr2num(conj_pol(key[2]))]]))
+                return np.conj(data_array[self._blt_slices[key[1::-1]], 0, :, 
+                               self._polnum_indices[polstr2num(conj_pol(key[2]))]])
 
         elif isinstance(key, tuple) and len(key) == 2:  # asking for antpair
             pols = np.array([polnum2str(polnum) for polnum in self.polarization_array])

@@ -210,13 +210,13 @@ class Test_HERAData(unittest.TestCase):
         d, f, n = hd.read(bls=[(80, 81)])
         for p in d.pols():
             np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (80, 81, p)),
-                                                 hd.get_data((80, 81, p)).flatten())
+                                                 hd.get_data((80, 81, p)))
             try:
                 np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (81, 80, p)),
-                                                     hd.get_data((81, 80, p)).flatten())
+                                                     hd.get_data((81, 80, p)))
             except: # this is only here until pyuvdata fixes issue #398
                 np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (81, 80, p)),
-                                                     hd.get_data((81, 80, p[::-1])).flatten())
+                                                     hd.get_data((81, 80, p[::-1])))
         
     def test_set_slice(self):
         hd = HERAData(self.uvh5_1)
