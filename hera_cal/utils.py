@@ -818,9 +818,10 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
         raise ValueError('Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be.')
 
     for bl in data.keys():
+        ap1, ap2 = split_pol(bl[2])
         # make that if split_by_antpol is true, the baseline is not cross-polarized
-        if model.has_key(bl) and data_wgts.has_key(bl) and (not split_by_antpol or bl[2][0] == bl[2][1]):
-            ant1, ant2 = (bl[0], bl[2][0]), (bl[1], bl[2][1])
+        if model.has_key(bl) and data_wgts.has_key(bl) and (not split_by_antpol or ap1 == ap2):
+            ant1, ant2 = (bl[0], ap1), (bl[1], ap2)
 
             # multiply model by gains if they are supplied
             if gains is not None:
@@ -838,14 +839,14 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
             # calculate chi^2
             chisq_here = np.asarray(np.abs(model_here - data[bl]) * wgts, dtype=np.float64)
             if split_by_antpol:
-                if chisq.has_key(bl[2][0]):
-                    assert nObs.has_key(bl[2][0])
-                    chisq[bl[2][0]] = chisq[bl[2][0]] + chisq_here
-                    nObs[bl[2][0]] = nObs[bl[2][0]] + (wgts > 0)
+                if chisq.has_key(ap1):
+                    assert nObs.has_key(ap1)
+                    chisq[ap1] = chisq[ap1] + chisq_here
+                    nObs[ap1] = nObs[ap1] + (wgts > 0)
                 else:
-                    assert not nObs.has_key(bl[2][0])
-                    chisq[bl[2][0]] = copy.deepcopy(chisq_here)
-                    nObs[bl[2][0]] = np.array(wgts > 0, dtype=int)
+                    assert not nObs.has_key(ap1)
+                    chisq[ap1] = copy.deepcopy(chisq_here)
+                    nObs[ap1] = np.array(wgts > 0, dtype=int)
             else:
                 chisq += chisq_here
                 nObs += (wgts > 0)
