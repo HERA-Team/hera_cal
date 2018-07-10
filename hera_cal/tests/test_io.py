@@ -9,6 +9,7 @@ from hera_cal.datacontainer import DataContainer
 import hera_cal.io as io
 from hera_cal.io import HERACal, HERAData
 import os
+import warnings
 import shutil
 import copy
 
@@ -26,7 +27,7 @@ class Test_HERACal(unittest.TestCase):
         hc = HERACal([self.fname_xx, self.fname_yy])
         self.assertEqual(hc.filepaths, [self.fname_xx, self.fname_yy])
         hc = HERACal((self.fname_xx, self.fname_yy))
-        self.assertEqual(hc.filepaths, [self.fname_xx, self.fname_yy])        
+        self.assertEqual(hc.filepaths, [self.fname_xx, self.fname_yy])
         with self.assertRaises(TypeError):
             hc = HERACal([0,1])
         with self.assertRaises(ValueError):
@@ -39,11 +40,11 @@ class Test_HERACal(unittest.TestCase):
         uvc = UVCal()
         uvc.read_calfits(self.fname_both)
         np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, 'jxx'])
-        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, 'jxx'])        
-        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, 'jxx'])                
+        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, 'jxx'])
+        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, 'jxx'])
         np.testing.assert_array_equal(uvc.total_quality_array[0, :, :, 0].T, total_qual['jxx'])
         np.testing.assert_array_equal(np.unique(uvc.freq_array), hc.freqs)
-        np.testing.assert_array_equal(np.unique(uvc.time_array), hc.times)        
+        np.testing.assert_array_equal(np.unique(uvc.time_array), hc.times)
         self.assertEqual(hc.pols, ['jxx', 'jyy'])
         self.assertEqual(set([ant[0] for ant in hc.ants]), set(uvc.ant_array))
         
@@ -74,13 +75,16 @@ class Test_HERACal(unittest.TestCase):
         gains_out, flags_out, quals_out, total_qual_out = hc2.read()
         for key in gains_in.keys():
             np.testing.assert_array_equal(gains_in[key] * (2.0 + 1.0j), gains_out[key])
-            np.testing.assert_array_equal(np.logical_not(flags_in[key]), flags_out[key])            
+            np.testing.assert_array_equal(np.logical_not(flags_in[key]), flags_out[key])
             np.testing.assert_array_equal(quals_in[key] * (2.0), quals_out[key])
         for key in total_qual.keys():
-            np.testing.assert_array_equal(total_qual_in[key] * (2.0), total_qual_out[key])        
+            np.testing.assert_array_equal(total_qual_in[key] * (2.0), total_qual_out[key])
         
         os.remove('test.calfits')
 
+
+from hera_cal.data import DATA_PATH
+import os
 
 class Test_HERAData(unittest.TestCase):
      
@@ -90,7 +94,7 @@ class Test_HERAData(unittest.TestCase):
         self.miriad_1 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.miriad_2 = os.path.join(DATA_PATH, "zen.2458043.13298.xx.HH.uvORA")
         self.uvfits = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
-        self.four_pol = [os.path.join(DATA_PATH, 'zen.2457698.40355.{}.HH.uvcA'.format(pol)) 
+        self.four_pol = [os.path.join(DATA_PATH, 'zen.2457698.40355.{}.HH.uvcA'.format(pol))
                          for pol in ['xx','yy','xy','yx']]
     
     def test_init(self):
@@ -115,7 +119,7 @@ class Test_HERAData(unittest.TestCase):
             self.assertEqual(len(hd.freqs[f]), 1024)
             self.assertEqual(len(hd.bls[f]), 3)
             self.assertEqual(len(hd.times[f]), 60)
-            self.assertEqual(len(hd.lsts[f]), 60)      
+            self.assertEqual(len(hd.lsts[f]), 60)
         self.assertFalse(hasattr(hd, 'writers'))
 
         # miriad
@@ -137,7 +141,28 @@ class Test_HERAData(unittest.TestCase):
             hd = HERAData(None)
         with self.assertRaises(NotImplementedError):
             hd = HERAData(self.uvh5_1, 'not a real type')
+        with self.assertRaises(IOError):
+            hd = HERAData('fake path')
 
+    def test_reset(self):
+        hd = HERAData(self.uvh5_1)
+        hd.read()
+        hd.reset()
+        self.assertIsNone(hd.data_array)
+        self.assertIsNone(hd.flag_array)
+        self.assertIsNone(hd.nsample_array)
+        self.assertEqual(hd.filepaths, [self.uvh5_1])
+        for meta in hd.HERAData_metas:
+            self.assertIsNotNone(getattr(hd, meta))
+        self.assertEqual(len(hd.freqs), 1024)
+        self.assertEqual(len(hd.bls), 3)
+        self.assertEqual(len(hd.times), 60)
+        self.assertEqual(len(hd.lsts), 60)
+        self.assertEqual(hd.writers, {})
+        
+        
+
+            
     def test_get_metadata_dict(self):
         hd = HERAData(self.uvh5_1)
         metas = hd.get_metadata_dict()
@@ -253,22 +278,19 @@ class Test_HERAData(unittest.TestCase):
             d, f, n = hd.read(polarizations=['xy'])
         
         # miriad
-        hd = HERAData([self.miriad_1, self.miriad_2], filetype='miriad')
-        d, f, n = hd.read(bls=(52, 53), polarizations=['XX'])
+        hd = HERAData(self.miriad_1, filetype='miriad')
+        d, f, n = hd.read()
+        hd = HERAData(self.miriad_1, filetype='miriad')
+        with warnings.catch_warnings(record=True) as w:
+            d, f, n = hd.read(bls=(52, 53), polarizations=['XX'], frequencies=d.freqs[0:30], times=d.times[0:10])
+            self.assertEqual(len(w), 1)        
         self.assertEqual(hd.last_read_kwargs['polarizations'], ['XX'])
         for dc in [d, f, n]:
             self.assertEqual(len(dc), 1)
             self.assertEqual(dc.keys(), [(52, 53, 'XX')])
-            self.assertEqual(dc[52, 53, 'xx'].shape, (120, 64))
-    
+            self.assertEqual(dc[52, 53, 'xx'].shape, (10, 30))
         with self.assertRaises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
-        with self.assertRaises(NotImplementedError):
-            d, f, n = hd.read(frequencies=[0])
-        with self.assertRaises(NotImplementedError):
-            d, f, n = hd.read(times=[0])
-        with self.assertRaises(NotImplementedError):
-            d, f, n = hd.read(freq_chans=[0])
 
         # uvfits
         hd = HERAData(self.uvfits, filetype='uvfits')
@@ -299,7 +321,7 @@ class Test_HERAData(unittest.TestCase):
         for bl in hd.bls:
             np.testing.assert_array_almost_equal(d[bl], d2[bl])
             np.testing.assert_array_equal(f[bl], f2[bl])
-            np.testing.assert_array_equal(n[bl], n2[bl])            
+            np.testing.assert_array_equal(n[bl], n2[bl])
     
     def test_partial_write(self):
         hd = HERAData(self.uvh5_1)
@@ -336,7 +358,7 @@ class Test_HERAData(unittest.TestCase):
         for bl in hd.bls:
             np.testing.assert_array_almost_equal(d[bl] * (2.0 + 1.0j), d2[bl])
             np.testing.assert_array_equal(f[bl], f2[bl])
-            np.testing.assert_array_equal(n[bl], n2[bl])            
+            np.testing.assert_array_equal(n[bl], n2[bl])
         os.remove('out.h5')
             
         # test errors
@@ -361,7 +383,13 @@ class Test_HERAData(unittest.TestCase):
         for (d, f, n) in hd.iterate_over_bls():
             for dc in (d, f, n):
                 self.assertEqual(len(d.keys()), 1)
-                self.assertEqual(list(d.values())[0].shape, (120, 1024))            
+                self.assertEqual(list(d.values())[0].shape, (120, 1024))
+        
+        hd = HERAData(self.miriad_1, filetype='miriad')
+        d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')]))
+        self.assertEqual(d.keys(), [(52, 53, 'XX')])
+        with self.assertRaises(NotImplementedError):
+            next(hd.iterate_over_bls())
 
     def test_iterate_over_freqs(self):
         hd = HERAData(self.uvh5_1)
@@ -375,6 +403,15 @@ class Test_HERAData(unittest.TestCase):
             for dc in (d, f, n):
                 self.assertEqual(len(dc.keys()), 3)
                 self.assertEqual(list(dc.values())[0].shape, (120, 512))
+                
+        hd = HERAData(self.uvfits, filetype='uvfits')
+        d, f, n = hd.read()
+        d, f, n = next(hd.iterate_over_freqs(Nchans=2, freqs=d.freqs[0:2]))
+        for value in d.values():
+            self.assertEqual(value.shape, (60, 2))
+        with self.assertRaises(NotImplementedError):
+            next(hd.iterate_over_bls())
+
                 
     def test_iterate_over_times(self):
         hd = HERAData(self.uvh5_1)
@@ -393,7 +430,20 @@ class Test_HERAData(unittest.TestCase):
                 self.assertEqual(len(dc.keys()), 3)
                 self.assertEqual(list(dc.values())[0].shape, (30, 1024))
         os.remove('out1.h5')
-        os.remove('out2.h5')        
+        os.remove('out2.h5')
+        
+        hd = HERAData(self.uvfits, filetype='uvfits')
+        d, f, n = hd.read()
+        d, f, n = next(hd.iterate_over_times(Nints=2, times=d.times[0:2]))
+        for value in d.values():
+            self.assertEqual(value.shape, (2, 64))
+        with self.assertRaises(NotImplementedError):
+            next(hd.iterate_over_times())
+
+
+        
+if __name__ == '__main__':
+    unittest.main(argv=['first-arg-is-ignored'], exit=False)
 
 
 class Test_Visibility_IO_Legacy(unittest.TestCase):

@@ -7,6 +7,7 @@ import hera_cal as hc
 import operator
 import os
 import copy
+import warnings
 import gc as garbage_collector
 from functools import reduce
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
@@ -159,7 +160,6 @@ class HERAData(UVData):
         '''
         # initialize as empty UVData object
         super(HERAData, self).__init__()
-        self.filetype = filetype
         
         # parse input_data as filepath(s)
         if isinstance(input_data, str):
@@ -171,9 +171,13 @@ class HERAData(UVData):
                 raise TypeError('If input_data is a list, it must be a list of strings.')
         else: 
             raise ValueError('input_data must be a string or a list of strings.')
+        for f in self.filepaths:
+            if not os.path.exists(f):
+                raise IOError('Cannot find file ' + f)
         
         # load metadata from file
-        if self.filetype is 'uvh5':            
+        self.filetype = filetype        
+        if self.filetype is 'uvh5':
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
@@ -188,7 +192,7 @@ class HERAData(UVData):
                     meta_dict = self.get_metadata_dict()
                     for meta in self.HERAData_metas:
                         getattr(self, meta)[path] = meta_dict[meta]
-            else:  # save HERAData_metas as attributes       
+            else:  # save HERAData_metas as attributes
                 self.writers = {}
                 for key, value in self.get_metadata_dict().items():
                     setattr(self, key, value)
@@ -198,7 +202,11 @@ class HERAData(UVData):
                 setattr(self, meta, None)  # no pre-loading of metadata
         else:
             raise NotImplementedError('Filetype ' + self.filetype + ' has not been implemented.')
-      
+    
+    def reset(self):
+        '''Resets all standard UVData attributes, potentially freeing memory.'''
+        super(HERAData, self).__init__()
+    
     def get_metadata_dict(self):
         ''' Produces a dictionary of the most useful metadata. Used as object
         attributes and as metadata to store in DataContainers.
@@ -346,11 +354,11 @@ class HERAData(UVData):
             polarizations: The polarizations to include when reading data into
                 the object.  Ignored if read_data is False.
             times: The times to include when reading data into the object.
-                Ignored if read_data is False. Miriad not supported.
-            frequencies: The frequencies to include when reading data into the
-                object.  Ignored if read_data is False. Miriad not supported.
-            freq_chans: The frequency channel numbers to include when reading
-                data into the object. Ignored if read_data is False. Miriad not supported.
+                Ignored if read_data is False. Miriad will load then select on this axis.
+            frequencies: The frequencies to include when reading data. Ignored if read_data 
+                is False. Miriad will load then select on this axis.
+            freq_chans: The frequency channel numbers to include when reading data. Ignored 
+                if read_data is False. Miriad will load then select on this axis.
             read_data: Read in the visibility and flag data. If set to false, only the 
                 basic metadata will be read in and nothing will be returned. Results in an
                 incompletely defined object (check will not pass). Default True.
@@ -369,15 +377,18 @@ class HERAData(UVData):
         if self.filetype is 'uvh5':
             self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
                            frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
-        if self.filetype is 'miriad':
-            if any([not read_data, times is not None, frequencies is not None, freq_chans is not None]):
-                raise NotImplementedError('Miriad partial loading is not implemented with these options.')
-            self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
-        if self.filetype is 'uvfits':
+        else:
             if not read_data:
-                raise NotImplementedError('uvfits partial is not implemented for reading only metadata')
-            self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations, 
-                             times=times, frequencies=frequencies, freq_chans=freq_chans)
+                raise NotImplementedError('reading only metadata is not implemented for' + self.filetype)
+            if self.filetype is 'miriad':
+                self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
+                if any([times is not None, frequencies is not None, freq_chans is not None]):
+                    warnings.warn('miriad does not support partial loading for times and frequencies. '
+                                  'Loading the file first and then performing select.')
+                self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
+            if self.filetype is 'uvfits':
+                self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations, 
+                                 times=times, frequencies=frequencies, freq_chans=freq_chans)
         
         # process data into DataContainers
         if read_data or self.filetype is 'uvh5':
@@ -434,7 +445,6 @@ class HERAData(UVData):
             hd_writer = self.writers[output_path]
         else:
             hd_writer = HERAData(self.filepaths[0])
-#             hd_writer.read(read_data=False)
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)
             self.writers[output_path] = hd_writer
         
@@ -444,64 +454,71 @@ class HERAData(UVData):
         hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
                                   this.nsample_array, **self.last_read_kwargs)
         
-    def iterate_over_bls(self, Nbls=1):
+    def iterate_over_bls(self, Nbls=1, bls=None):
         '''Produces a generator that iteratively yields successive calls to 
         HERAData.read() by baseline or group of baselines.
         
         Arguments:
-            Nbls: number of baselines to load at once. 
+            Nbls: number of baselines to load at once.
+            bls: optional user-provided list of baselines to iterate over.
+                Default: use self.bls (which only works for uvh5).
 
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).    
         '''
-        if self.filetype is not 'uvh5':
-            raise NotImplementedError('Baseline iteration for filetype ' + self.filetype +
-                                      ' has not been implemented.')
-        if isinstance(self.bls, dict):  # multiple files
-            bls = sorted(list(set([bl for bls in self.bls.values() for bl in bls])))
-        else:
-            bls = sorted(self.bls)
+        if bls is None:
+            if self.filetype is not 'uvh5':
+                raise NotImplementedError('Baseline iteration without explicitly setting bls for filetype ' + self.filetype +
+                                          '  without setting bls has not been implemented.')
+            bls = self.bls
+            if isinstance(bls, dict):  # multiple files
+                bls = list(set([bl for bls in bls.values() for bl in bls]))
+            bls = sorted(bls)
         for i in range(0, len(bls), Nbls):
             yield self.read(bls=bls[i:i + Nbls])
 
             
-    def iterate_over_freqs(self, Nchans=1):
+    def iterate_over_freqs(self, Nchans=1, freqs=None):
         '''Produces a generator that iteratively yields successive calls to 
         HERAData.read() by frequency channel or group of contiguous channels.
         
         Arguments:
             Nchans: number of frequencies to load at once. 
+            freqs: optional user-provided list of frequencies to iterate over.
+                Default: use self.freqs (which only works for uvh5).
 
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).    
         '''
-        if self.filetype is not 'uvh5':
-            raise NotImplementedError('Frequency iteration for filetype ' + self.filetype +
-                                      ' has not been implemented.')
-        if isinstance(self.freqs, dict):  # multiple files
-            freqs = np.unique(self.freqs.values())
-        else:
+        if freqs is None:          
+            if self.filetype is not 'uvh5':
+                raise NotImplementedError('Frequency iteration for filetype ' + self.filetype +
+                                          '  without setting freqs has not been implemented.')
             freqs = self.freqs
+            if isinstance(self.freqs, dict):  # multiple files
+                freqs = np.unique(self.freqs.values())
         for i in range(0, len(freqs), Nchans):
             yield self.read(frequencies=freqs[i:i + Nchans])
 
-    def iterate_over_times(self, Nints=1):
+    def iterate_over_times(self, Nints=1, times=None):
         '''Produces a generator that iteratively yields successive calls to 
         HERAData.read() by time or group of contiguous times.
         
         Arguments:
             Nints: number of integrations to load at once. 
+            times: optional user-provided list of times to iterate over.
+                Default: use self.times (which only works for uvh5).
 
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
-        if self.filetype is not 'uvh5':
-            raise NotImplementedError('Time iteration for filetype ' + self.filetype +
-                                      ' has not been implemented.')
-        if isinstance(self.times, dict):  # multiple files
-            times = np.unique(self.times.values())
-        else:
+        if times is None:
+            if self.filetype is not 'uvh5':
+                raise NotImplementedError('Time iteration for filetype ' + self.filetype +
+                                          '  without setting times has not been implemented.')
             times = self.times
+            if isinstance(times, dict):  # multiple files
+                times = np.unique(times.values())
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
 
