@@ -8,7 +8,6 @@ import operator
 import os
 import copy
 import warnings
-import gc as garbage_collector
 from functools import reduce
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
 from hera_cal.utils import split_pol, conj_pol
@@ -49,9 +48,9 @@ class HERACal(UVCal):
         self.freqs = np.unique(self.freq_array)
         self.times = np.unique(self.time_array)
         self.pols = [jnum2str(j) for j in self.jones_array]
-        self._jnum_indices = {jnum: i for i, jnum in enumerate(self.jones_array)}        
+        self._jnum_indices = {jnum: i for i, jnum in enumerate(self.jones_array)}
         self.ants= [(ant, pol) for ant in self.ant_array for pol in self.pols]
-        self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}        
+        self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}
         
     def build_cal_dicts(self):
         '''Turns the calibration information currently loaded into the HERACal object
@@ -385,10 +384,11 @@ class HERAData(UVData):
                 if any([times is not None, frequencies is not None, freq_chans is not None]):
                     warnings.warn('miriad does not support partial loading for times and frequencies. '
                                   'Loading the file first and then performing select.')
-                self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
+                    self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
             if self.filetype is 'uvfits':
                 self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations, 
                                  times=times, frequencies=frequencies, freq_chans=freq_chans)
+                self.unphase_to_drift()
         
         # process data into DataContainers
         if read_data or self.filetype is 'uvh5':
@@ -464,7 +464,7 @@ class HERAData(UVData):
                 Default: use self.bls (which only works for uvh5).
 
         Yields:
-            data, flags, nsamples: DataContainers (see HERAData.read() for more info).    
+            data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
         if bls is None:
             if self.filetype is not 'uvh5':
@@ -488,7 +488,7 @@ class HERAData(UVData):
                 Default: use self.freqs (which only works for uvh5).
 
         Yields:
-            data, flags, nsamples: DataContainers (see HERAData.read() for more info).    
+            data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
         if freqs is None:          
             if self.filetype is not 'uvh5':
@@ -529,15 +529,15 @@ class HERAData(UVData):
 
 
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
-    '''Load miriad or uvfits files or UVData objects into DataContainers, optionally returning
+    '''Load miriad or uvfits files or UVData/HERAData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
 
     Arguments:
-        input_data: data file path, or UVData instance, or list of either strings of data file paths
-            or list of UVData instances to concatenate into a single dictionary
+        input_data: data file path, or UVData/HERAData instance, or list of either strings of data
+            file paths or list of UVData/HERAData instances to concatenate into a single dictionary
         return_meta:  boolean, if True: also return antpos, ants, freqs, times, lsts, and pols
-        filetype: either 'miriad' or 'uvfits', can be ignored if input_data is UVData objects
+        filetype: either 'miriad' or 'uvfits', can be ignored if input_data is UVData/HERAData objects
         pop_autos: boolean, if True: remove autocorrelations
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
@@ -559,67 +559,54 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         lsts: ndarray containing LST bins of data (radians)
         pol: ndarray containing list of polarization strings
     '''
-
-    uvd = UVData()
-    if isinstance(input_data, (tuple, list, np.ndarray)):  # List loading
-        if np.all([isinstance(id, str) for id in input_data]):  # List of visibility data paths
-            if filetype == 'miriad':
-                uvd.read_miriad(list(input_data))
-            elif filetype == 'uvfits':
-                # TODO: implement this
-                raise NotImplementedError('This function has not been implemented yet.')
-            else:
-                raise NotImplementedError("Data filetype must be either 'miriad' or 'uvfits'.")
-        elif np.all([isinstance(id, UVData) for id in input_data]):  # List of uvdata objects
-            uvd = reduce(operator.add, input_data)
+    if not filetype in ['miriad', 'uvfits', 'uvh5']:
+        raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
+    if isinstance(input_data, str):  # single visibility data path
+        hd = HERAData(input_data, filetype=filetype)
+        d, f, n = hd.read()
+    elif isinstance(input_data, (UVData, HERAData)):  # single UVData object
+        hd = input_data
+        hd.__class__ = HERAData
+        hd._determine_blt_slicing()
+        hd._determine_pol_indexing()
+        d, f, n = hd.build_datacontainers()
+    elif isinstance(input_data, collections.Iterable):  # List loading
+        if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
+            hd = HERAData(input_data, filetype=filetype)
+            d, f, n = hd.read()
+        elif np.all([isinstance(i, (UVData, HERAData)) for i in input_data]):  # List of uvdata objects
+            hd = reduce(operator.add, input_data)
+            hd.__class__ = HERAData
+            hd._determine_blt_slicing()
+            hd._determine_pol_indexing()
+            d, f, n = hd.build_datacontainers()
         else:
-            raise TypeError('If input is a list, it must be only strings or only UVData objects.')
-    elif isinstance(input_data, str):  # single visibility data path
-        if filetype == 'miriad':
-            uvd.read_miriad(input_data)
-        elif filetype == 'uvfits':
-            # TODO: implement this
-            raise NotImplementedError('This function has not been implemented yet.')
-        else:
-            raise NotImplementedError("Data filetype must be either 'miriad' or 'uvfits'.")
-    elif isinstance(input_data, UVData):  # single UVData object
-        uvd = input_data
+            raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.') 
     else:
-        raise TypeError('Input must be a UVData object, a string, or a list of either.')
+        raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
+    
+    # remove autos if requested
+    if pop_autos:
+        for k in d.keys():
+            if k[0] == k[1]:
+                del d[k], f[k], n[k]
 
-    data, flags = odict(), odict()
-    # create nested dictionaries of visibilities in the data[bl][pol] filetype, removing autos if desired
-    for nbl, (i, j) in enumerate(uvd.get_antpairs()):
-        if (not pop_autos) or (i != j):
-            if (i, j) not in data:
-                data[i, j], flags[i, j] = odict(), odict()
-            for ip, pol in enumerate(uvd.polarization_array):
-                pol = polnum2str[pol]
-                data[(i, j)][pol] = copy.deepcopy(uvd.get_data((i, j, pol)))
-                flags[(i, j)][pol] = copy.deepcopy(uvd.get_flags((i, j, pol)))
-
-    # If we don't want nested dicts, convert to DataContainer
-    if not nested_dict:
-        data, flags = DataContainer(data), DataContainer(flags)
+    # convert into nested dict if necessary
+    if nested_dict:
+        data, flags = odict(), odict()
+        antpairs = [key[0:2] for key in d.keys()]
+        for ap in antpairs:
+            data[ap] = d[ap]
+            flags[ap] = f[ap]
+    else:
+        data, flags = d, f
 
     # get meta
     if return_meta:
-        freqs = np.unique(uvd.freq_array)
-        times = np.unique(uvd.time_array)
-        lsts = []
-        for l in uvd.lst_array.ravel():
-            if l not in lsts:
-                lsts.append(l)
-        lsts = np.array(lsts)
-        antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
+        antpos, ants = hd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
         antpos = odict(zip(ants, antpos))
-        pols = np.array([polnum2str[polnum] for polnum in uvd.polarization_array])
-        del uvd
-        garbage_collector.collect()
-        return data, flags, antpos, ants, freqs, times, lsts, pols
+        return data, flags, antpos, ants, d.freqs, d.times, d.lsts, d.pols()
     else:
-        del uvd
-        garbage_collector.collect()
         return data, flags
 
 
@@ -696,7 +683,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # get pols
     pols = np.unique(map(lambda k: k[-1], data.keys()))
     Npols = len(pols)
-    polarization_array = np.array(map(lambda p: polstr2num[p], pols))
+    polarization_array = np.array(map(lambda p: polstr2num(p), pols))
 
     # get times
     if time_array is None:
@@ -815,29 +802,28 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
 
 def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
-    '''Updates a UVData object with data or parameters. Cannot modify the shape of
+    '''Updates a UVData/HERAData object with data or parameters. Cannot modify the shape of
     data arrays. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
 
     Arguments:
-        uv: UVData object to be updated
+        uv: UVData/HERAData object to be updated
         data: dictionary or DataContainer of complex visibility data to update. Keys
             like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update.
         flags: dictionary or DataContainer of data flags to update.
             Default (None) does not update.
-        add_to_history: appends a string to the history of the UVData object
+        add_to_history: appends a string to the history of the UVData/HERAData object
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
-    # set data and/or flags
-    if data is not None or flags is not None:
-        for (i, j) in uvd.get_antpairs():
-            this_bl = (uvd.baseline_array == uvd.antnums_to_baseline(i, j))
-            for ip, pol in enumerate(uvd.polarization_array):
-                if data is not None:
-                    uvd.data_array[this_bl, 0, :, ip] = data[(i, j, polnum2str[pol])]
-                if flags is not None:
-                    uvd.flag_array[this_bl, 0, :, ip] = flags[(i, j, polnum2str[pol])]
+    
+    # perform update
+    original_class = uvd.__class__
+    uvd.__class__ = HERAData
+    uvd._determine_blt_slicing()
+    uvd._determine_pol_indexing()
+    uvd.update(data=data, flags=flags)
+    uvd.__class__ = original_class
 
     # set additional attributes
     uvd.history += add_to_history
@@ -854,43 +840,37 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
     and that the times are in order.
 
     Arguments:
-        infilename: filename of the base visibility file to be updated, or UVData object
+        infilename: filename of the base visibility file to be updated, or UVData/HERAData object
         outfilename: filename of the new visibility file
-        filetype_in: either 'miriad' or 'uvfits' (ignored if infile is a UVData object)
+        filetype_in: either 'miriad' or 'uvfits' (ignored if infile is a UVData/HERAData object)
         filetype_out: either 'miriad' or 'uvfits'
         data: dictionary or DataContainer of complex visibility data to update. Keys
             like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update.
         flags: dictionary or DataContainer of data flags to update.
             Default (None) does not update.
         add_to_history: appends a string to the history of the output file
-        clobber: if True, overwrites existing file at outfilename
+        clobber: if True, overwrites existing file at outfilename. Always True for uvfits.
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
 
     # Load infile
-    if isinstance(infilename, UVData):
-        uvd = copy.deepcopy(infilename)
+    if isinstance(infilename, (UVData, HERAData)):
+        hd = copy.deepcopy(infilename)
     else:
-        uvd = UVData()
-        if filetype_in == 'miriad':
-            uvd.read_miriad(infilename)
-        elif filetype_in == 'uvfits':
-            # TODO: implement this
-            raise NotImplementedError('This function has not been implemented yet.')
-        else:
-            raise TypeError("Input filetype must be either 'miriad' or 'uvfits'.")
-
-    update_uvdata(uvd, data=data, flags=flags, add_to_history=add_to_history, **kwargs)
+        hd = HERAData(infilename, filetype=filetype_in)
+        hd.read()
+    update_uvdata(hd, data=data, flags=flags, add_to_history=add_to_history, **kwargs)
 
     # write out results
     if filetype_out == 'miriad':
-        uvd.write_miriad(outfilename, clobber=clobber)
+        hd.write_miriad(outfilename, clobber=clobber)
     elif filetype_out == 'uvfits':
-        # TODO: implement this
-        raise NotImplementedError('This function has not been implemented yet.')
+        hd.write_uvfits(outfilename, force_phase=True, spoof_nonessential=True)
+    elif filetype_out == 'uvh5':
+        hd.write_uvh5(outfilename, clobber=clobber)
     else:
-        raise TypeError("Input filetype must be either 'miriad' or 'uvfits'.")
+        raise TypeError("Input filetype must be either 'miriad', 'uvfits', or 'uvh5'.")
 
 
 def load_cal(input_cal, return_meta=False):
@@ -1168,7 +1148,7 @@ def load_npz_flags(npzfile):
             frequency with keys in the (1,'x') format
     '''
     npz = np.load(npzfile)
-    pols = [polnum2str[p] for p in npz['polarization_array']]
+    pols = [polnum2str(p) for p in npz['polarization_array']]
     nTimes = len(np.unique(npz['time_array']))
     nAntpairs = len(npz['antpairs'])
     nFreqs = npz['flag_array'].shape[2]

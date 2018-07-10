@@ -8,6 +8,7 @@ from collections import OrderedDict as odict
 from hera_cal.datacontainer import DataContainer
 import hera_cal.io as io
 from hera_cal.io import HERACal, HERAData
+from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
 import os
 import warnings
 import shutil
@@ -159,9 +160,6 @@ class Test_HERAData(unittest.TestCase):
         self.assertEqual(len(hd.times), 60)
         self.assertEqual(len(hd.lsts), 60)
         self.assertEqual(hd.writers, {})
-        
-        
-
             
     def test_get_metadata_dict(self):
         hd = HERAData(self.uvh5_1)
@@ -441,11 +439,6 @@ class Test_HERAData(unittest.TestCase):
             next(hd.iterate_over_times())
 
 
-        
-if __name__ == '__main__':
-    unittest.main(argv=['first-arg-is-ignored'], exit=False)
-
-
 class Test_Visibility_IO_Legacy(unittest.TestCase):
 
     def test_load_vis(self):
@@ -491,20 +484,10 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
         self.assertEqual(len(ap[24]), 3)
         self.assertEqual(len(f), len(self.freq_array))
 
-        # test uvfits
-        fname = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
-        with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis(fname, filetype='uvfits')
-        with self.assertRaises(NotImplementedError):
-            d, f = io.load_vis([fname, fname], filetype='uvfits')
-        #self.assertEqual(d[(0,1,'xx')].shape, (60,64))
-
         with self.assertRaises(NotImplementedError):
             d, f = io.load_vis(fname, filetype='not_a_real_filetype')
         with self.assertRaises(NotImplementedError):
             d, f = io.load_vis(['str1', 'str2'], filetype='not_a_real_filetype')
-        with self.assertRaises(TypeError):
-            d, f = io.load_vis([1, 2], filetype='uvfits')
 
         # test w/ meta pick_data_ants
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -518,7 +501,6 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
 
     def test_load_vis_nested(self):
         # duplicated testing from firstcal.UVData_to_dict
-        str2pol = io.polstr2num
         filename1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
         filename2 = os.path.join(DATA_PATH, 'zen.2458043.13298.xx.HH.uvORA')
         uvd1 = UVData()
@@ -533,7 +515,7 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
         d, f = io.load_vis([uvd1, uvd2], nested_dict=True)
         for i, j in d:
             for pol in d[i, j]:
-                uvpol = list(uvd1.polarization_array).index(str2pol[pol])
+                uvpol = list(uvd1.polarization_array).index(polstr2num(pol))
                 uvmask = np.all(
                     np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
@@ -544,7 +526,7 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
         d, f = io.load_vis([filename1, filename2], nested_dict=True)
         for i, j in d:
             for pol in d[i, j]:
-                uvpol = list(uvd.polarization_array).index(str2pol[pol])
+                uvpol = list(uvd.polarization_array).index(polstr2num(pol))
                 uvmask = np.all(
                     np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
@@ -617,16 +599,10 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
         shutil.rmtree(outname)
 
         # Coverage for errors
-        with self.assertRaises(NotImplementedError):
-            io.update_vis(uvd, outname, data=new_data, flags=new_flags, filetype_out='uvfits',
-                          add_to_history='hello world', clobber=True, telescope_name='PAPER')
-        with self.assertRaises(NotImplementedError):
-            io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_in='uvfits',
-                          add_to_history='hello world', clobber=True, telescope_name='PAPER')
         with self.assertRaises(TypeError):
             io.update_vis(uvd, outname, data=new_data, flags=new_flags, filetype_out='not_a_real_filetype',
                           add_to_history='hello world', clobber=True, telescope_name='PAPER')
-        with self.assertRaises(TypeError):
+        with self.assertRaises(NotImplementedError):
             io.update_vis(fname, outname, data=new_data, flags=new_flags, filetype_in='not_a_real_filetype',
                           add_to_history='hello world', clobber=True, telescope_name='PAPER')
 
