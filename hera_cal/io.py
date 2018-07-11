@@ -699,8 +699,8 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     Nspws = 1
 
     # get baselines keys
-    bls = sorted(data.bls())
-    Nbls = len(bls)
+    antpairs = sorted(data.antpairs())
+    Nbls = len(antpairs)
     Nblts = Nbls * Ntimes
 
     # reconfigure time_array and lst_array
@@ -708,29 +708,29 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
 
     # get data array
-    data_array = np.moveaxis(map(lambda p: map(lambda bl: data[str(p)][bl], bls), pols), 0, -1)
+    data_array = np.moveaxis(map(lambda p: map(lambda ap: data[str(p)][ap], antpairs), pols), 0, -1)
 
     # resort time and baseline axes
     data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
     if nsamples is None:
         nsample_array = np.ones_like(data_array, np.float)
     else:
-        nsample_array = np.moveaxis(map(lambda p: map(lambda bl: nsamples[str(p)][bl], bls), pols), 0, -1)
+        nsample_array = np.moveaxis(map(lambda p: map(lambda ap: nsamples[str(p)][ap], antpairs), pols), 0, -1)
         nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # flags
     if flags is None:
         flag_array = np.zeros_like(data_array, np.float).astype(np.bool)
     else:
-        flag_array = np.moveaxis(map(lambda p: map(lambda bl: flags[str(p)][bl].astype(np.bool), bls), pols), 0, -1)
+        flag_array = np.moveaxis(map(lambda p: map(lambda ap: flags[str(p)][ap].astype(np.bool), antpairs), pols), 0, -1)
         flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # configure baselines
-    bls = np.repeat(np.array(bls), Ntimes, axis=0)
+    antpairs = np.repeat(np.array(antpairs), Ntimes, axis=0)
 
     # get ant_1_array, ant_2_array
-    ant_1_array = bls[:, 0]
-    ant_2_array = bls[:, 1]
+    ant_1_array = antpairs[:, 0]
+    ant_2_array = antpairs[:, 1]
 
     # get baseline array
     baseline_array = 2048 * (ant_1_array + 1) + (ant_2_array + 1) + 2**16
