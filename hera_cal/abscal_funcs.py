@@ -78,8 +78,8 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
 
     # setup linsolve equations
     # a{} is a dummy variable to prevent linsolve from overwriting repeated measurements
-    eqns = odict([(k, "a{}*eta_{}+a{}*eta_{}".format(i, utils.split_pol(k[-1])[0], 
-                  i, utils.split_pol(k[-1])[1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, "a{}*eta_{}+a{}*eta_{}".format(i, utils.split_pol(k[-1])[0],
+                                                     i, utils.split_pol(k[-1])[1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict([("a{}".format(i), 1.0) for i, k in enumerate(keys)])
 
     # setup linsolve dictionaries
@@ -183,13 +183,13 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     # setup linsolve equations
     if four_pol:
         eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
-                       "".format(utils.split_pol(k[2])[0], utils.split_pol(k[2])[1], r_ew[k[0]], 
-                       r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
+                       "".format(utils.split_pol(k[2])[0], utils.split_pol(k[2])[1], r_ew[k[0]],
+                                 r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
     else:
         eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
-                       "".format(utils.split_pol(k[2])[0], utils.split_pol(k[2])[1], utils.split_pol(k[2])[0], 
-                       r_ew[k[0]], utils.split_pol(k[2])[0], r_ns[k[0]], utils.split_pol(k[2])[1],
-                       r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
+                       "".format(utils.split_pol(k[2])[0], utils.split_pol(k[2])[1], utils.split_pol(k[2])[0],
+                                 r_ew[k[0]], utils.split_pol(k[2])[0], r_ns[k[0]], utils.split_pol(k[2])[1],
+                                 r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
     # set design matrix entries
     ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))
@@ -262,8 +262,8 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
-    eqns = odict([(k, "eta_{}_{} + eta_{}_{}".format(k[0], utils.split_pol(k[-1])[0], 
-                  k[1], utils.split_pol(k[-1])[1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, "eta_{}_{} + eta_{}_{}".format(k[0], utils.split_pol(k[-1])[0],
+                                                     k[1], utils.split_pol(k[-1])[1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict()
 
     # setup linsolve dictionaries
@@ -332,7 +332,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
 
     # setup linsolve equations
     eqns = odict([(k, "phi_{}_{} - phi_{}_{}".format(k[0], utils.split_pol(k[2])[0],
-                 k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
+                                                     k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict()
 
     # setup linsolve dictionaries
@@ -473,8 +473,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     ywgts = odict(zip(keys, ratio_wgts))
 
     # setup linsolve equation dictionary
-    eqns = odict([(k, 'tau_{}_{} - tau_{}_{}'.format(k[0], utils.split_pol(k[2])[0], 
-                  k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, 'tau_{}_{} - tau_{}_{}'.format(k[0], utils.split_pol(k[2])[0],
+                                                     k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
 
     # setup design matrix dictionary
     ls_design_matrix = odict()
@@ -505,8 +505,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     if solve_offsets:
         # setup linsolve parameters
         ydata = odict(zip(keys, ratio_offsets))
-        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], utils.split_pol(k[2])[0], 
-                      k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
+        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], utils.split_pol(k[2])[0],
+                                                         k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
         ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
         ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
         ls_design_matrix = odict()
@@ -645,9 +645,9 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
                        "".format(r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
     else:
         eqns = odict([(k, "T_ew_{}*{} + T_ns_{}*{} - T_ew_{}*{} - T_ns_{}*{}"
-                       "".format(utils.split_pol(k[2])[0], r_ew[k[0]], utils.split_pol(k[2])[0], r_ns[k[0]], 
-                       utils.split_pol(k[2])[1], r_ew[k[1]], utils.split_pol(k[2])[1], r_ns[k[1]])) 
-                       for i, k in enumerate(keys)])
+                       "".format(utils.split_pol(k[2])[0], r_ew[k[0]], utils.split_pol(k[2])[0], r_ns[k[0]],
+                                 utils.split_pol(k[2])[1], r_ew[k[1]], utils.split_pol(k[2])[1], r_ns[k[1]]))
+                      for i, k in enumerate(keys)])
 
     # set design matrix entries
     ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))

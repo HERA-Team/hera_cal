@@ -5,6 +5,7 @@ import argparse
 from hera_cal.datacontainer import DataContainer
 from hera_cal import utils
 
+
 def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None, gain_convention='divide'):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in
     new calibration solutions, and updating flags from those calibration solutions. Previously
@@ -39,7 +40,7 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
         ap1, ap2 = utils.split_pol(pol)
         # Check to see that all necessary antennas are present in the gains
         if (i, ap1) in new_gains and (j, ap2) in new_gains and (old_gains is None
-                                 or ((i, ap1) in old_gains and (j, ap2) in old_gains)):
+                                                                or ((i, ap1) in old_gains and (j, ap2) in old_gains)):
             gigj_new = new_gains[(i, ap1)] * np.conj(new_gains[(j, ap2)])
             if old_gains is not None:
                 gigj_old = old_gains[(i, ap1)] * np.conj(old_gains[(j, ap2)])

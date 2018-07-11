@@ -15,23 +15,23 @@ import collections
 
 
 class HERACal(UVCal):
-    '''HERAData is a subclass of pyuvdata.UVCal meant to serve as an interface between 
+    '''HERAData is a subclass of pyuvdata.UVCal meant to serve as an interface between
     pyuvdata-readable calfits files and dictionaries (the in-memory format for hera_cal)
     that map antennas and polarizations to gains, flags, and qualities. Supports standard
     UVCal functionality, along with read() and update() functionality for going back and
     forth to dictionaires. Upon read(), stores useful metadata internally.
-    
+
     Does not support partial data loading or writing. Assumes a single spectral window.
     '''
-    
+
     def __init__(self, input_cal):
         '''Instantiate a HERACal object. Currently only supports calfits files.
-        
+
         Arguments:
             input_cal: string calfits file path or list of paths
         '''
         super(HERACal, self).__init__()
-        
+
         # parse input_data as filepath(s)
         if isinstance(input_cal, str):
             self.filepaths = [input_cal]
@@ -40,7 +40,7 @@ class HERACal(UVCal):
                 self.filepaths = list(input_cal)
             else:
                 raise TypeError('If input_cal is a list, it must be a list of strings.')
-        else: 
+        else:
             raise ValueError('input_cal must be a string or a list of strings.')
 
     def _extract_metadata(self):
@@ -49,14 +49,14 @@ class HERACal(UVCal):
         self.times = np.unique(self.time_array)
         self.pols = [jnum2str(j) for j in self.jones_array]
         self._jnum_indices = {jnum: i for i, jnum in enumerate(self.jones_array)}
-        self.ants= [(ant, pol) for ant in self.ant_array for pol in self.pols]
+        self.ants = [(ant, pol) for ant in self.ant_array for pol in self.pols]
         self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}
-        
+
     def build_cal_dicts(self):
         '''Turns the calibration information currently loaded into the HERACal object
         into dictionaries that map antenna-pol tuples to calibration waterfalls. Computes
         and stores internally useful metadata in the process.
-        
+
         Returns:
             gains: dict mapping antenna-pol keys to (Nint, Nfreq) complex gains arrays
             flags: dict mapping antenna-pol keys to (Nint, Nfreq) boolean flag arrays
@@ -65,14 +65,14 @@ class HERACal(UVCal):
         '''
         self._extract_metadata()
         gains, flags, quals, total_qual = odict(), odict(), odict(), odict()
-              
+
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
             i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol)]
             gains[(ant, pol)] = np.array(self.gain_array[i, 0, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, 0, :, :, ip].T)
             quals[(ant, pol)] = np.array(self.quality_array[i, 0, :, :, ip].T)
-        
+
         # build dict of total_qual if available
         for pol in self.pols:
             ip = self._jnum_indices[jstr2num(pol)]
@@ -80,13 +80,13 @@ class HERACal(UVCal):
                 total_qual[pol] = np.array(self.total_quality_array[0, :, :, ip].T)
             else:
                 total_qual = None
-        
+
         return gains, flags, quals, total_qual
 
     def read(self):
         '''Reads calibration information from file, computes useful metadata and returns
-        dictionaries that map antenna-pol tuples to calibration waterfalls. 
-        
+        dictionaries that map antenna-pol tuples to calibration waterfalls.
+
         Returns:
             gains: dict mapping antenna-pol keys to (Nint, Nfreq) complex gains arrays
             flags: dict mapping antenna-pol keys to (Nint, Nfreq) boolean flag arrays
@@ -95,10 +95,10 @@ class HERACal(UVCal):
         '''
         self.read_calfits(self.filepaths)
         return self.build_cal_dicts()
-    
+
     def update(self, gains=None, flags=None, quals=None, total_qual=None):
         '''Update internal calibrations arrays (data_array, flag_array, and nsample_array)
-        using DataContainers (if not left as None) in preparation for writing to disk. 
+        using DataContainers (if not left as None) in preparation for writing to disk.
 
         Arguments:
             gains: optional dict mapping antenna-pol to complex gains arrays
@@ -113,7 +113,7 @@ class HERACal(UVCal):
                 for (ant, pol) in to_update.keys():
                     i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol)]
                     array[i, 0, :, :, ip] = to_update[(ant, pol)].T
-        
+
         # update total_qual
         if total_qual is not None:
             for pol in total_qual.keys():
@@ -122,44 +122,44 @@ class HERACal(UVCal):
 
 
 class HERAData(UVData):
-    '''HERAData is a subclass of pyuvdata.UVData meant to serve as an interface between 
+    '''HERAData is a subclass of pyuvdata.UVData meant to serve as an interface between
     pyuvdata-compatible data formats on disk (especially uvh5) and DataContainers,
-    the in-memory format for visibilities used in hera_cal. In addition to standard 
+    the in-memory format for visibilities used in hera_cal. In addition to standard
     UVData functionality, HERAData supports read() and update() functions that interface
     between internal UVData data storage and DataContainers, which contain visibility
     data in a dictionary-like format, along with some useful metadata. read() supports
-    partial data loading, though only the most useful subset of selection modes from 
+    partial data loading, though only the most useful subset of selection modes from
     pyuvdata (and not all modes for all data types).
-    
+
     When using uvh5, HERAData supports additional useful functionality:
     * Upon __init__(), the most useful metadata describing the entire file is loaded into
       the object (everything in HERAData_metas; see get_metadata_dict() for details).
     * Partial writing using partial_write(), which will initialize a new file with the
       same metadata and write to disk using DataContainers by assuming that the user is
       writing to the same part of the data as the most recent read().
-    * Generators that enable iterating over baseline, frequency, or time in chunks (see 
+    * Generators that enable iterating over baseline, frequency, or time in chunks (see
       iterate_over_bls(), iterate_over_freqs(), and iterate_over_times() for details).
-      
+
     Assumes a single spectral window. Assumes that data for a given baseline is regularly
     spaced in the underlying data_array.
     '''
-    
+
     # static list of useful metadata to calculate and save
-    HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols', 
+    HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols',
                       'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
 
     def __init__(self, input_data, filetype='uvh5'):
-        '''Instantiate a HERAData object. If the filetype is uvh5, read in and store 
-        useful metadata (see get_metadata_dict()), either as object attributes or, 
+        '''Instantiate a HERAData object. If the filetype is uvh5, read in and store
+        useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
-        
+
         Arguments:
             input_data: string data file path or list of string data file paths
             filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
         '''
         # initialize as empty UVData object
         super(HERAData, self).__init__()
-        
+
         # parse input_data as filepath(s)
         if isinstance(input_data, str):
             self.filepaths = [input_data]
@@ -168,21 +168,21 @@ class HERAData(UVData):
                 self.filepaths = list(input_data)
             else:
                 raise TypeError('If input_data is a list, it must be a list of strings.')
-        else: 
+        else:
             raise ValueError('input_data must be a string or a list of strings.')
         for f in self.filepaths:
             if not os.path.exists(f):
                 raise IOError('Cannot find file ' + f)
-        
+
         # load metadata from file
-        self.filetype = filetype        
+        self.filetype = filetype
         if self.filetype is 'uvh5':
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
             self.read(read_data=False)
             self.filepaths = temp_paths
-            
+
             if len(self.filepaths) > 1:  # save HERAData_metas in dicts
                 for meta in self.HERAData_metas:
                     setattr(self, meta, {})
@@ -195,28 +195,28 @@ class HERAData(UVData):
                 self.writers = {}
                 for key, value in self.get_metadata_dict().items():
                     setattr(self, key, value)
-                
+
         elif self.filetype in ['miriad', 'uvfits']:
             for meta in self.HERAData_metas:
                 setattr(self, meta, None)  # no pre-loading of metadata
         else:
             raise NotImplementedError('Filetype ' + self.filetype + ' has not been implemented.')
-    
+
     def reset(self):
         '''Resets all standard UVData attributes, potentially freeing memory.'''
         super(HERAData, self).__init__()
-    
+
     def get_metadata_dict(self):
         ''' Produces a dictionary of the most useful metadata. Used as object
         attributes and as metadata to store in DataContainers.
-        
+
         Returns:
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
         antpos, ants = self.get_ENU_antpos()
         ants = sorted(ants)
         antpos = dict(zip(ants, antpos))
-        
+
         freqs = np.unique(self.freq_array)
         times = np.unique(self.time_array)
         lst_indices = np.unique(self.lst_array.ravel(), return_index=True)[1]
@@ -224,11 +224,11 @@ class HERAData(UVData):
         pols = [polnum2str(polnum) for polnum in self.polarization_array]
         antpairs = self.get_antpairs()
         bls = [antpair + (pol,) for antpair in antpairs for pol in pols]
-        
-        times_by_bl = {antpair: np.array(self.time_array[self._blt_slices[antpair]]) 
-                                          for antpair in antpairs}
-        lsts_by_bl = {antpair: np.array(self.lst_array[self._blt_slices[antpair]]) 
-                                         for antpair in antpairs}
+
+        times_by_bl = {antpair: np.array(self.time_array[self._blt_slices[antpair]])
+                       for antpair in antpairs}
+        lsts_by_bl = {antpair: np.array(self.lst_array[self._blt_slices[antpair]])
+                      for antpair in antpairs}
 
         locs = locals()
         return {meta: eval(meta, {}, locs) for meta in self.HERAData_metas}
@@ -245,35 +245,33 @@ class HERAData(UVData):
                 raise NotImplementedError('UVData objects with non-regular spacing of ' +
                                           'baselines in its baseline-times are not supported.')
             else:
-                self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, 
+                self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1,
                                                        indices[1] - indices[0])
 
-            
     def _determine_pol_indexing(self):
         '''Determine the mapping between polnums and indices
         in the polarization axis of the data_array.'''
         self._polnum_indices = {}
         for i, polnum in enumerate(self.polarization_array):
-            self._polnum_indices[polnum] = i   
+            self._polnum_indices[polnum] = i
 
-            
     def _get_slice(self, data_array, key):
-        '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts 
+        '''Return a copy of the Nint by Nfreq waterfall or waterfalls for a given key. Abstracts
         away both baseline ordering (by applying complex conjugation) and polarization capitalization.
-        
+
         Arguments:
-            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol) 
+            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol)
             key: if of the form (0,1,'xx'), return anumpy array.
                  if of the form (0,1), return a dict mapping pol strings to waterfalls.
                  if of of the form 'xx', return a dict mapping ant-pair tuples to waterfalls.
-        '''        
+        '''
         if isinstance(key, tuple) and len(key) == 3:  # asking for bl-pol
             try:
-                return np.array(data_array[self._blt_slices[key[0:2]], 0, :, 
-                                self._polnum_indices[polstr2num(key[2])]])
+                return np.array(data_array[self._blt_slices[key[0:2]], 0, :,
+                                           self._polnum_indices[polstr2num(key[2])]])
             except KeyError:
-                return np.conj(data_array[self._blt_slices[key[1::-1]], 0, :, 
-                               self._polnum_indices[polstr2num(conj_pol(key[2]))]])
+                return np.conj(data_array[self._blt_slices[key[1::-1]], 0, :,
+                                          self._polnum_indices[polstr2num(conj_pol(key[2]))]])
 
         elif isinstance(key, tuple) and len(key) == 2:  # asking for antpair
             pols = np.array([polnum2str(polnum) for polnum in self.polarization_array])
@@ -284,11 +282,11 @@ class HERAData(UVData):
             raise KeyError('Unrecognized key type for slicing data.')
 
     def _set_slice(self, data_array, key, value):
-        '''Update data_array with Nint by Nfreq waterfall(s). Abstracts away both baseline 
+        '''Update data_array with Nint by Nfreq waterfall(s). Abstracts away both baseline
         ordering (by applying complex conjugation) and polarization capitalization.
-        
+
         Arguments:
-            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol) 
+            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol)
             key: baseline (e.g. (0,1,'xx)), ant-pair tuple (e.g. (0,1)), or pol str (e.g. 'xx')
             value: if key is a baseline, must be an (Nint, Nfreq) numpy array;
                    if key is an ant-pair tuple, must be a dict mapping pol strings to waterfalls;
@@ -296,10 +294,10 @@ class HERAData(UVData):
         '''
         if isinstance(key, tuple) and len(key) == 3:  # providing bl-pol
             try:
-                data_array[self._blt_slices[key[0:2]], 0, : , 
+                data_array[self._blt_slices[key[0:2]], 0, :,
                            self._polnum_indices[polstr2num(key[2])]] = value
             except(KeyError):
-                data_array[self._blt_slices[key[1::-1]], 0, : , 
+                data_array[self._blt_slices[key[1::-1]], 0, :,
                            self._polnum_indices[polstr2num(conj_pol(key[2]))]] = np.conj(value)
         elif isinstance(key, tuple) and len(key) == 2:  # providing antpair with all pols
             for pol in value.keys():
@@ -308,14 +306,14 @@ class HERAData(UVData):
             for antpair in value.keys():
                 self._set_slice(data_array, (antpair + (key,)), value[antpair])
         else:
-            raise KeyError('Unrecognized key type for slicing data.')            
-     
+            raise KeyError('Unrecognized key type for slicing data.')
+
     def build_datacontainers(self):
         '''Turns the data currently loaded into the HERAData object into DataContainers.
         Returned DataContainers include useful metadata specific to the data actually
         in the DataContainers (which may be a subset of the total data). This includes
         antenna positions, frequencies, all times, all lsts, and times and lsts by baseline.
-        
+
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls
             flags: DataContainer mapping baseline keys to boolean flag waterfalls
@@ -331,18 +329,18 @@ class HERAData(UVData):
         data = DataContainer(data)
         flags = DataContainer(flags)
         nsamples = DataContainer(nsamples)
-        
+
         # store useful metadata inside the DataContainers
         for dc in [data, flags, nsamples]:
             for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
                 setattr(dc, attr, meta[attr])
-            
+
         return data, flags, nsamples
-    
-    def read(self, bls=None,  polarizations=None, times=None,
+
+    def read(self, bls=None, polarizations=None, times=None,
              frequencies=None, freq_chans=None, read_data=True):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
-      
+
         Arguments:
             bls: A list of antenna number tuples (e.g. [(0,1), (3,2)]) or a list of
                 baseline 3-tuples (e.g. [(0,1,'xx'), (2,3,'yy')]) specifying baselines
@@ -354,14 +352,14 @@ class HERAData(UVData):
                 the object.  Ignored if read_data is False.
             times: The times to include when reading data into the object.
                 Ignored if read_data is False. Miriad will load then select on this axis.
-            frequencies: The frequencies to include when reading data. Ignored if read_data 
+            frequencies: The frequencies to include when reading data. Ignored if read_data
                 is False. Miriad will load then select on this axis.
-            freq_chans: The frequency channel numbers to include when reading data. Ignored 
+            freq_chans: The frequency channel numbers to include when reading data. Ignored
                 if read_data is False. Miriad will load then select on this axis.
-            read_data: Read in the visibility and flag data. If set to false, only the 
+            read_data: Read in the visibility and flag data. If set to false, only the
                 basic metadata will be read in and nothing will be returned. Results in an
                 incompletely defined object (check will not pass). Default True.
-        
+
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls
             flags: DataContainer mapping baseline keys to boolean flag waterfalls
@@ -371,7 +369,7 @@ class HERAData(UVData):
         locs = locals()
         partials = ['bls', 'polarizations', 'times', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: eval(p, {}, locs) for p in partials}
-        
+
         # load data
         if self.filetype is 'uvh5':
             self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
@@ -386,10 +384,10 @@ class HERAData(UVData):
                                   'Loading the file first and then performing select.')
                     self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
             if self.filetype is 'uvfits':
-                self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations, 
+                self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
                                  times=times, frequencies=frequencies, freq_chans=freq_chans)
                 self.unphase_to_drift()
-        
+
         # process data into DataContainers
         if read_data or self.filetype is 'uvh5':
             self._determine_blt_slicing()
@@ -403,7 +401,7 @@ class HERAData(UVData):
 
     def update(self, data=None, flags=None, nsamples=None):
         '''Update internal data arrays (data_array, flag_array, and nsample_array)
-        using DataContainers (if not left as None) in preparation for writing to disk. 
+        using DataContainers (if not left as None) in preparation for writing to disk.
 
         Arguments:
             data: Optional DataContainer mapping baselines to complex visibility waterfalls
@@ -419,12 +417,12 @@ class HERAData(UVData):
         if nsamples is not None:
             for bl in nsamples.keys():
                 self._set_slice(self.nsample_array, bl, nsamples[bl])
-                
+
     def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. Does not work for other filetypes or when the
-        HERAData object is initialized with a list of files. 
-        
+        HERAData object is initialized with a list of files.
+
         Arguments:
             output_path: path to file to write uvh5 file to
             data: Optional DataContainer mapping baselines to complex visibility waterfalls
@@ -439,7 +437,7 @@ class HERAData(UVData):
             raise NotImplementedError('Partial writing for list-loaded HERAData objects has not been implemented.')
         if not isinstance(output_path, str):
             raise ValueError('output_path must be a string path file to write.')
-        
+
         # get writer or initialize new writer if necessary
         if output_path in self.writers:
             hd_writer = self.writers[output_path]
@@ -447,17 +445,17 @@ class HERAData(UVData):
             hd_writer = HERAData(self.filepaths[0])
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)
             self.writers[output_path] = hd_writer
-        
+
         # make a copy of this object and then update the relevant arrays using DataContainers
         this = copy.deepcopy(self)
         this.update(data=data, flags=flags, nsamples=nsamples)
         hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
                                   this.nsample_array, **self.last_read_kwargs)
-        
+
     def iterate_over_bls(self, Nbls=1, bls=None):
-        '''Produces a generator that iteratively yields successive calls to 
+        '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by baseline or group of baselines.
-        
+
         Arguments:
             Nbls: number of baselines to load at once.
             bls: optional user-provided list of baselines to iterate over.
@@ -477,20 +475,19 @@ class HERAData(UVData):
         for i in range(0, len(bls), Nbls):
             yield self.read(bls=bls[i:i + Nbls])
 
-            
     def iterate_over_freqs(self, Nchans=1, freqs=None):
-        '''Produces a generator that iteratively yields successive calls to 
+        '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by frequency channel or group of contiguous channels.
-        
+
         Arguments:
-            Nchans: number of frequencies to load at once. 
+            Nchans: number of frequencies to load at once.
             freqs: optional user-provided list of frequencies to iterate over.
                 Default: use self.freqs (which only works for uvh5).
 
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
-        if freqs is None:          
+        if freqs is None:
             if self.filetype is not 'uvh5':
                 raise NotImplementedError('Frequency iteration for filetype ' + self.filetype +
                                           '  without setting freqs has not been implemented.')
@@ -501,11 +498,11 @@ class HERAData(UVData):
             yield self.read(frequencies=freqs[i:i + Nchans])
 
     def iterate_over_times(self, Nints=1, times=None):
-        '''Produces a generator that iteratively yields successive calls to 
+        '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by time or group of contiguous times.
-        
+
         Arguments:
-            Nints: number of integrations to load at once. 
+            Nints: number of integrations to load at once.
             times: optional user-provided list of times to iterate over.
                 Default: use self.times (which only works for uvh5).
 
@@ -581,10 +578,10 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
             hd._determine_pol_indexing()
             d, f, n = hd.build_datacontainers()
         else:
-            raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.') 
+            raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.')
     else:
         raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
-    
+
     # remove autos if requested
     if pop_autos:
         for k in d.keys():
@@ -816,7 +813,7 @@ def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
-    
+
     # perform update
     original_class = uvd.__class__
     uvd.__class__ = HERAData
@@ -904,7 +901,7 @@ def load_cal(input_cal, return_meta=False):
     if isinstance(input_cal, str):  # single calfits path
         hc = HERACal(input_cal)
         gains, flags, quals, total_qual = hc.read()
-    elif isinstance(input_cal, (UVCal,HERACal)):  # single UVCal/HERACal object
+    elif isinstance(input_cal, (UVCal, HERACal)):  # single UVCal/HERACal object
         hc = input_cal
         hc.__class__ = HERACal
         gains, flags, quals, total_qual = hc.build_cal_dicts()
@@ -973,7 +970,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     Nants_telescope = len(antenna_numbers)
 
     # get polarization info
-    pol_array = np.array(sorted(set(map(lambda k: k[1].lower(), gains.keys()))))
+    pol_array = np.array(sorted(set(map(lambda k: k[1], gains.keys()))))
     jones_array = np.array(map(lambda p: jstr2num(p), pol_array), np.int)
     Njones = len(jones_array)
 

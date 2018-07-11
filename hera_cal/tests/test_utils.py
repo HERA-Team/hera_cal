@@ -17,19 +17,19 @@ import hera_cal as hc
 
 class Test_Pol_Ops(object):
     def test_split_pol(self):
-        nt.assert_equal(utils.split_pol('xx'),('jxx','jxx'))
-        nt.assert_equal(utils.split_pol('xy'),('jxx','jyy'))
-        nt.assert_equal(utils.split_pol('XY'),('jxx','jyy'))
+        nt.assert_equal(utils.split_pol('xx'), ('jxx', 'jxx'))
+        nt.assert_equal(utils.split_pol('xy'), ('jxx', 'jyy'))
+        nt.assert_equal(utils.split_pol('XY'), ('jxx', 'jyy'))
         nt.assert_raises(ValueError, utils.split_pol, 'I')
         nt.assert_raises(ValueError, utils.split_pol, 'pV')
 
     def test_conj_pol(self):
-        nt.assert_equal(utils.conj_pol('xx'),'xx')
-        nt.assert_equal(utils.conj_pol('XX'),'XX')
-        nt.assert_equal(utils.conj_pol('XY'),'YX')
-        nt.assert_equal(utils.conj_pol('yx'),'xy')
-        nt.assert_equal(utils.conj_pol('Q'),'Q')
-        nt.assert_equal(utils.conj_pol('pU'),'pU')
+        nt.assert_equal(utils.conj_pol('xx'), 'xx')
+        nt.assert_equal(utils.conj_pol('XX'), 'XX')
+        nt.assert_equal(utils.conj_pol('XY'), 'YX')
+        nt.assert_equal(utils.conj_pol('yx'), 'xy')
+        nt.assert_equal(utils.conj_pol('Q'), 'Q')
+        nt.assert_equal(utils.conj_pol('pU'), 'pU')
 
 
 class TestAAFromCalfile(object):
@@ -273,7 +273,7 @@ def test_synthesize_ant_flags():
     ant_flags = utils.synthesize_ant_flags(flags, threshold=1.0)
     np.testing.assert_array_equal(ant_flags[(2, 'jxx')][:3, 4], True)
     np.testing.assert_array_equal(ant_flags[(2, 'jxx')][3:, 4], False)
-    
+
 
 def test_chisq():
     # test basic case
@@ -294,7 +294,7 @@ def test_chisq():
 
     # test with weights
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.zeros((5, 10), dtype=float)})
-    data_wgts[(0, 1, 'xx')][:,0] = 1.0
+    data_wgts[(0, 1, 'xx')][:, 0] = 1.0
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
     nt.assert_equal(np.sum(chisq), 5.0)
     nt.assert_equal(np.sum(nObs), 5)
@@ -304,7 +304,7 @@ def test_chisq():
     model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
-    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, chisq=chisq, nObs=nObs, 
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, chisq=chisq, nObs=nObs,
                                                            chisq_per_ant=chisq_per_ant, nObs_per_ant=nObs_per_ant)
     np.testing.assert_array_equal(chisq, 2.0)
     np.testing.assert_array_equal(nObs, 2)
@@ -314,9 +314,9 @@ def test_chisq():
     np.testing.assert_array_equal(nObs_per_ant[1, 'jxx'], 2)
 
     # test with gains and gain flags
-    gains = {(0, 'jxx'): .5**.5 * np.ones((5, 10), dtype=complex), 
+    gains = {(0, 'jxx'): .5**.5 * np.ones((5, 10), dtype=complex),
              (1, 'jxx'): .5**.5 * np.ones((5, 10), dtype=complex)}
-    gain_flags = {(0, 'jxx'): np.zeros((5, 10), dtype=bool), 
+    gain_flags = {(0, 'jxx'): np.zeros((5, 10), dtype=bool),
                   (1, 'jxx'): np.zeros((5, 10), dtype=bool)}
     gain_flags[0, 'jxx'][:, 0] = True
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, gains=gains, gain_flags=gain_flags)
@@ -343,7 +343,7 @@ def test_chisq():
     # test by_pol option
     data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
     model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
-    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})    
+    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, split_by_antpol=True)
     nt.assert_true(chisq.has_key('jxx'))
     nt.assert_true(nObs.has_key('jxx'))
