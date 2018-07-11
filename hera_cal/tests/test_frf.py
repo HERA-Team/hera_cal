@@ -90,9 +90,11 @@ class Test_FRFilter:
 
     def test_load_data(self):
         self.F.load_data(self.fname)
-        nt.assert_equal(self.F.input_uvdata, self.uvd)
+        hd = hc.io.HERAData(self.fname, filetype='miriad')
+        hd.read()
+        nt.assert_equal(self.F.input_data, hd)
         self.F.load_data(self.uvd)
-        nt.assert_equal(self.F.input_uvdata, self.uvd)
+        nt.assert_equal(self.F.input_data, hd)
 
     def test_timeavg_data(self):
         self.F.load_data(self.uvd)
@@ -110,9 +112,9 @@ class Test_FRFilter:
         self.F.timeavg_data(35, rephase=False, verbose=False)
         u = self.F.write_data("./out.uv", write_avg=True, filetype='miriad', overwrite=True)
         nt.assert_true(os.path.exists("./out.uv"))
-        uv = UVData()
-        uv.read_miriad('./out.uv')
-        nt.assert_equal(u, uv)
+        hd = hc.io.HERAData('./out.uv', filetype='miriad')
+        hd.read()
+        nt.assert_equal(u, hd)
 
         u = self.F.write_data("./out.uv", overwrite=False)
         nt.assert_equal(u, None)
