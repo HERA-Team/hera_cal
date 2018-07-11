@@ -16,7 +16,7 @@ from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
 
 def split_pol(pol):
     '''Splits visibility polarization string into anntenna polarizations.'''
-    if polstr2num(pol) > 0: # this includes Stokes and pseudo-Stokes visibilities
+    if polstr2num(pol) > 0:  # this includes Stokes and pseudo-Stokes visibilities
         raise ValueError('Unable to split Stokes or pseudo-Stokes polarization ' + pol)
     return jnum2str(jstr2num(pol[0])), jnum2str(jstr2num(pol[1]))
 
@@ -707,14 +707,14 @@ def synthesize_ant_flags(flags, threshold=0.0):
     Ntimes, Nfreqs = flags[flags.keys()[0]].shape
 
     # get antenna-pol keys
-    antpols = set([ap for (i, j, pol) in flags.keys() for ap in [(i, pol[0]), (j, pol[1])]])
+    antpols = set([ap for (i, j, pol) in flags.keys() for ap in [(i, split_pol(pol)[0]), (j, split_pol(pol)[1])]])
 
     # get dictionary of completely flagged ants to exclude
     is_excluded = {ap: True for ap in antpols}
     for (i, j, pol), flags_here in flags.items():
         if not np.all(flags_here):
-            is_excluded[(i, pol[0])] = False
-            is_excluded[(j, pol[1])] = False
+            is_excluded[(i, split_pol(pol)[0])] = False
+            is_excluded[(j, split_pol(pol)[1])] = False
 
     # construct dictionary of visibility count (number each antenna touches)
     # and dictionary of number of flagged visibilities each antenna has (excluding dead ants)
@@ -723,8 +723,8 @@ def synthesize_ant_flags(flags, threshold=0.0):
     ant_Nflag = {ap: np.zeros((Ntimes, Nfreqs), np.float) for ap in antpols}
     for (i, j, pol), flags_here in flags.items():
         # get antenna keys
-        ap1 = (i, pol[0])
-        ap2 = (j, pol[1])
+        ap1 = (i, split_pol(pol)[0])
+        ap2 = (j, split_pol(pol)[1])
         # only continue if not in is_excluded
         if not is_excluded[ap1] and not is_excluded[ap2]:
             # add to Nvis count

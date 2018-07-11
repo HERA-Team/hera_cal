@@ -259,20 +259,20 @@ def test_synthesize_ant_flags():
     flags[(2, 3, 'xx')][:, 4] = True
     # aggressive flagging
     ant_flags = utils.synthesize_ant_flags(flags, threshold=0.0)
-    np.testing.assert_array_equal(ant_flags[(0, 'x')], True)
-    np.testing.assert_array_equal(ant_flags[(1, 'x')], False)
-    np.testing.assert_array_equal(ant_flags[(2, 'x')][:, 0:4], False)
-    np.testing.assert_array_equal(ant_flags[(2, 'x')][:, 4], True)
-    np.testing.assert_array_equal(ant_flags[(3, 'x')][:, 0:4], False)
-    np.testing.assert_array_equal(ant_flags[(3, 'x')][:, 4], True)
+    np.testing.assert_array_equal(ant_flags[(0, 'jxx')], True)
+    np.testing.assert_array_equal(ant_flags[(1, 'jxx')], False)
+    np.testing.assert_array_equal(ant_flags[(2, 'jxx')][:, 0:4], False)
+    np.testing.assert_array_equal(ant_flags[(2, 'jxx')][:, 4], True)
+    np.testing.assert_array_equal(ant_flags[(3, 'jxx')][:, 0:4], False)
+    np.testing.assert_array_equal(ant_flags[(3, 'jxx')][:, 4], True)
     # conservative flagging
     ant_flags = utils.synthesize_ant_flags(flags, threshold=0.75)
-    np.testing.assert_array_equal(ant_flags[(2, 'x')][:, 4], False)
+    np.testing.assert_array_equal(ant_flags[(2, 'jxx')][:, 4], False)
     # very conservative flagging
     flags[(1, 2, 'xx')][:3, 4] = True
     ant_flags = utils.synthesize_ant_flags(flags, threshold=1.0)
-    np.testing.assert_array_equal(ant_flags[(2, 'x')][:3, 4], True)
-    np.testing.assert_array_equal(ant_flags[(2, 'x')][3:, 4], False)
+    np.testing.assert_array_equal(ant_flags[(2, 'jxx')][:3, 4], True)
+    np.testing.assert_array_equal(ant_flags[(2, 'jxx')][3:, 4], False)
     
 
 def test_chisq():
