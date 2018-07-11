@@ -165,44 +165,6 @@ class Test_FirstCal(object):
         nt.assert_equal(np.testing.assert_almost_equal(
             fcal.M.flatten(), solved_delays, decimal=16), None)
 
-    def test_UVData_to_dict(self):
-        str2pol = {'xx': -5, 'yy': -6, 'xy': -7, 'yy': -8}
-        filename = os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')
-        uvd = UVData()
-        uvd.read_miriad(filename)
-        if uvd.phase_type != 'drift':
-            uvd.unphase_to_drift()
-
-        d, f = firstcal.UVData_to_dict([uvd, uvd])
-        for i, j in d:
-            for pol in d[i, j]:
-                uvpol = list(uvd.polarization_array).index(str2pol[pol])
-                uvmask = np.all(
-                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
-                np.testing.assert_equal(d[i, j][pol], np.resize(
-                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
-                np.testing.assert_equal(f[i, j][pol], np.resize(
-                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
-
-        d, f = firstcal.UVData_to_dict([filename, filename])
-        for i, j in d:
-            for pol in d[i, j]:
-                uvpol = list(uvd.polarization_array).index(str2pol[pol])
-                uvmask = np.all(
-                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
-                np.testing.assert_equal(d[i, j][pol], np.resize(
-                    uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
-                np.testing.assert_equal(f[i, j][pol], np.resize(
-                    uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
-
-    def test_UVData_to_dict_keys(self):
-        uvd = UVData()
-        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA'))
-        nt.assert_equal(len(firstcal.UVData_to_dict([uvd])[0]), uvd.Nbls)
-        # reorder baseline array
-        uvd.baseline_array = uvd.baseline_array[np.argsort(uvd.baseline_array)]
-        nt.assert_equal(len(firstcal.UVData_to_dict([uvd])[0]), uvd.Nbls)
-
     def test_process_ubls(self):
         ubls = ''
         ubaselines = firstcal.process_ubls(ubls)
