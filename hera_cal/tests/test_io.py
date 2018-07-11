@@ -8,7 +8,7 @@ from collections import OrderedDict as odict
 from hera_cal.datacontainer import DataContainer
 import hera_cal.io as io
 from hera_cal.io import HERACal, HERAData
-from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
+from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num
 import os
 import warnings
 import shutil
@@ -109,7 +109,7 @@ class Test_HERAData(unittest.TestCase):
         self.assertEqual(len(hd.bls), 3)
         self.assertEqual(len(hd.times), 60)
         self.assertEqual(len(hd.lsts), 60)
-        self.assertEqual(hd.writers, {})
+        self.assertEqual(hd._writers, {})
 
         # multiple uvh5 files
         files = [self.uvh5_1, self.uvh5_2]
@@ -122,7 +122,7 @@ class Test_HERAData(unittest.TestCase):
             self.assertEqual(len(hd.bls[f]), 3)
             self.assertEqual(len(hd.times[f]), 60)
             self.assertEqual(len(hd.lsts[f]), 60)
-        self.assertFalse(hasattr(hd, 'writers'))
+        self.assertFalse(hasattr(hd, '_writers'))
 
         # miriad
         hd = HERAData(self.miriad_1, filetype='miriad')
@@ -160,7 +160,7 @@ class Test_HERAData(unittest.TestCase):
         self.assertEqual(len(hd.bls), 3)
         self.assertEqual(len(hd.times), 60)
         self.assertEqual(len(hd.lsts), 60)
-        self.assertEqual(hd.writers, {})
+        self.assertEqual(hd._writers, {})
 
     def test_get_metadata_dict(self):
         hd = HERAData(self.uvh5_1)
@@ -205,7 +205,7 @@ class Test_HERAData(unittest.TestCase):
         np.testing.assert_array_equal(hd._get_slice(hd.data_array, 'XX')[(53, 54)],
                                       hd.get_data((53, 54, 'XX')))
         with self.assertRaises(KeyError):
-            hd._get_slice(hd.data_array, None)
+            hd._get_slice(hd.data_array, (1, 2, 3, 4))
 
         hd = HERAData(self.four_pol, filetype='miriad')
         d, f, n = hd.read(bls=[(80, 81)])
@@ -239,7 +239,7 @@ class Test_HERAData(unittest.TestCase):
         np.testing.assert_array_almost_equal(new_vis, hd.get_data((53, 54, 'xx')))
 
         with self.assertRaises(KeyError):
-            hd._set_slice(hd.data_array, None, None)
+            hd._set_slice(hd.data_array, (1, 2, 3, 4), None)
 
     def test_build_datacontainers(self):
         hd = HERAData(self.uvh5_1)
@@ -320,21 +320,21 @@ class Test_HERAData(unittest.TestCase):
 
     def test_partial_write(self):
         hd = HERAData(self.uvh5_1)
-        self.assertEqual(hd.writers, {})
+        self.assertEqual(hd._writers, {})
         d, f, n = hd.read(bls=hd.bls[0])
         self.assertEqual(hd.last_read_kwargs['bls'], (53, 53, 'XX'))
         d[(53, 53, 'XX')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True)
-        self.assertTrue('out.h5' in hd.writers)
-        self.assertIsInstance(hd.writers['out.h5'], HERAData)
+        self.assertTrue('out.h5' in hd._writers)
+        self.assertIsInstance(hd._writers['out.h5'], HERAData)
         for meta in hd.HERAData_metas:
             try:
                 np.testing.assert_array_equal(getattr(hd, meta),
-                                              getattr(hd.writers['out.h5'], meta))
+                                              getattr(hd._writers['out.h5'], meta))
             except BaseException:
                 for k in getattr(hd, meta).keys():
                     np.testing.assert_array_equal(getattr(hd, meta)[k],
-                                                  getattr(hd.writers['out.h5'], meta)[k])
+                                                  getattr(hd._writers['out.h5'], meta)[k])
 
         d, f, n = hd.read(bls=hd.bls[1])
         self.assertEqual(hd.last_read_kwargs['bls'], (53, 54, 'XX'))
@@ -344,7 +344,9 @@ class Test_HERAData(unittest.TestCase):
         d, f, n = hd.read(bls=hd.bls[2])
         self.assertEqual(hd.last_read_kwargs['bls'], (54, 54, 'XX'))
         d[(54, 54, 'XX')] *= (2.0 + 1.0j)
-        hd.partial_write('out.h5', data=d, clobber=True)
+        hd.partial_write('out.h5', data=d, clobber=True, inplace=True)
+        d_after, _, _ = hd.build_datacontainers()
+        np.testing.assert_array_almost_equal(d[(54, 54, 'XX')], d_after[(54, 54, 'XX')])
 
         hd = HERAData(self.uvh5_1)
         d, f, n = hd.read()

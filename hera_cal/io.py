@@ -9,7 +9,7 @@ import os
 import copy
 import warnings
 from functools import reduce
-from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
+from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num
 from hera_cal.utils import split_pol, conj_pol
 import collections
 
@@ -52,10 +52,10 @@ class HERACal(UVCal):
         self.ants = [(ant, pol) for ant in self.ant_array for pol in self.pols]
         self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}
 
-    def build_cal_dicts(self):
+    def build_calcontainers(self):
         '''Turns the calibration information currently loaded into the HERACal object
-        into dictionaries that map antenna-pol tuples to calibration waterfalls. Computes
-        and stores internally useful metadata in the process.
+        into ordered dictionaries that map antenna-pol tuples to calibration waterfalls. 
+        Computes and stores internally useful metadata in the process.
 
         Returns:
             gains: dict mapping antenna-pol keys to (Nint, Nfreq) complex gains arrays
@@ -94,7 +94,7 @@ class HERACal(UVCal):
             total_qual: dict mapping polarization to (Nint, Nfreq) float total quality array
         '''
         self.read_calfits(self.filepaths)
-        return self.build_cal_dicts()
+        return self.build_calcontainers()
 
     def update(self, gains=None, flags=None, quals=None, total_qual=None):
         '''Update internal calibrations arrays (data_array, flag_array, and nsample_array)
@@ -192,7 +192,7 @@ class HERAData(UVData):
                     for meta in self.HERAData_metas:
                         getattr(self, meta)[path] = meta_dict[meta]
             else:  # save HERAData_metas as attributes
-                self.writers = {}
+                self._writers = {}
                 for key, value in self.get_metadata_dict().items():
                     setattr(self, key, value)
 
@@ -265,19 +265,18 @@ class HERAData(UVData):
                  if of the form (0,1), return a dict mapping pol strings to waterfalls.
                  if of of the form 'xx', return a dict mapping ant-pair tuples to waterfalls.
         '''
-        if isinstance(key, tuple) and len(key) == 3:  # asking for bl-pol
-            try:
-                return np.array(data_array[self._blt_slices[key[0:2]], 0, :,
-                                           self._polnum_indices[polstr2num(key[2])]])
-            except KeyError:
-                return np.conj(data_array[self._blt_slices[key[1::-1]], 0, :,
-                                          self._polnum_indices[polstr2num(conj_pol(key[2]))]])
-
-        elif isinstance(key, tuple) and len(key) == 2:  # asking for antpair
+        if isinstance(key, str):  # asking for a pol
+            return {antpair: self._get_slice(data_array, antpair + (key,)) for antpair in self.get_antpairs()}
+        elif len(key) == 2:  # asking for antpair
             pols = np.array([polnum2str(polnum) for polnum in self.polarization_array])
             return {pol: self._get_slice(data_array, key + (pol,)) for pol in pols}
-        elif isinstance(key, str):  # asking for a pol
-            return {antpair: self._get_slice(data_array, antpair + (key,)) for antpair in self.get_antpairs()}
+        elif len(key) == 3:  # asking for bl-pol
+            try:
+                return np.array(data_array[self._blt_slices[tuple(key[0:2])], 0, :,
+                                           self._polnum_indices[polstr2num(key[2])]])
+            except KeyError:
+                return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], 0, :,
+                                          self._polnum_indices[polstr2num(conj_pol(key[2]))]])
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -292,19 +291,19 @@ class HERAData(UVData):
                    if key is an ant-pair tuple, must be a dict mapping pol strings to waterfalls;
                    if key is a pol str, must be a dict mapping ant-pair tuples to waterfalls
         '''
-        if isinstance(key, tuple) and len(key) == 3:  # providing bl-pol
-            try:
-                data_array[self._blt_slices[key[0:2]], 0, :,
-                           self._polnum_indices[polstr2num(key[2])]] = value
-            except(KeyError):
-                data_array[self._blt_slices[key[1::-1]], 0, :,
-                           self._polnum_indices[polstr2num(conj_pol(key[2]))]] = np.conj(value)
-        elif isinstance(key, tuple) and len(key) == 2:  # providing antpair with all pols
-            for pol in value.keys():
-                self._set_slice(data_array, (key + (pol,)), value[pol])
-        elif isinstance(key, str):  # providing pol with all antpairs
+        if isinstance(key, str):  # providing pol with all antpairs
             for antpair in value.keys():
                 self._set_slice(data_array, (antpair + (key,)), value[antpair])
+        elif len(key) == 2:  # providing antpair with all pols
+            for pol in value.keys():
+                self._set_slice(data_array, (key + (pol,)), value[pol])
+        elif len(key) == 3:  # providing bl-pol
+            try:
+                data_array[self._blt_slices[tuple(key[0:2])], 0, :,
+                           self._polnum_indices[polstr2num(key[2])]] = value
+            except(KeyError):
+                data_array[self._blt_slices[tuple(key[1::-1])], 0, :,
+                           self._polnum_indices[polstr2num(conj_pol(key[2]))]] = np.conj(value)
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -383,7 +382,7 @@ class HERAData(UVData):
                     warnings.warn('miriad does not support partial loading for times and frequencies. '
                                   'Loading the file first and then performing select.')
                     self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
-            if self.filetype is 'uvfits':
+            elif self.filetype is 'uvfits':
                 self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
                                  times=times, frequencies=frequencies, freq_chans=freq_chans)
                 self.unphase_to_drift()
@@ -418,10 +417,11 @@ class HERAData(UVData):
             for bl in nsamples.keys():
                 self._set_slice(self.nsample_array, bl, nsamples[bl])
 
-    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False):
+    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
-        call to HERAData.read() in this object. Does not work for other filetypes or when the
-        HERAData object is initialized with a list of files.
+        call to HERAData.read() in this object. The overall file written matches the shape of the
+        input_data file called on __init__. Does not work for other filetypes or when the HERAData
+        object is initialized with a list of files.
 
         Arguments:
             output_path: path to file to write uvh5 file to
@@ -429,25 +429,27 @@ class HERAData(UVData):
             flags: Optional DataContainer mapping baselines to boolean flag waterfalls
             nsamples: Optional DataContainer mapping baselines to interger Nsamples waterfalls
             clobber: if True, overwrites existing file at output_path
+            inplace: update this object's data_array, flag_array, and nsamples_array.
+                This saves memory but alters the HERAData object.
         '''
         # Type verifications
         if self.filetype is not 'uvh5':
             raise NotImplementedError('Partial writing for filetype ' + self.filetype + ' has not been implemented.')
         if len(self.filepaths) > 1:
             raise NotImplementedError('Partial writing for list-loaded HERAData objects has not been implemented.')
-        if not isinstance(output_path, str):
-            raise ValueError('output_path must be a string path file to write.')
 
         # get writer or initialize new writer if necessary
-        if output_path in self.writers:
-            hd_writer = self.writers[output_path]
+        if output_path in self._writers:
+            hd_writer = self._writers[output_path]  # This hd_writer has metadata for the entire output file
         else:
             hd_writer = HERAData(self.filepaths[0])
-            hd_writer.initialize_uvh5_file(output_path, clobber=clobber)
-            self.writers[output_path] = hd_writer
+            hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
+            self._writers[output_path] = hd_writer
 
-        # make a copy of this object and then update the relevant arrays using DataContainers
-        this = copy.deepcopy(self)
+        if inplace: # update this objects's arrays using DataContainers
+            this = self
+        else:  # make a copy of this object and then update the relevant arrays using DataContainers
+            this = copy.deepcopy(self)
         this.update(data=data, flags=flags, nsamples=nsamples)
         hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
                                   this.nsample_array, **self.last_read_kwargs)
@@ -904,7 +906,7 @@ def load_cal(input_cal, return_meta=False):
     elif isinstance(input_cal, (UVCal, HERACal)):  # single UVCal/HERACal object
         hc = input_cal
         hc.__class__ = HERACal
-        gains, flags, quals, total_qual = hc.build_cal_dicts()
+        gains, flags, quals, total_qual = hc.build_calcontainers()
     elif isinstance(input_cal, collections.Iterable):  # List loading
         if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
             hc = HERACal(input_cal)
@@ -912,7 +914,7 @@ def load_cal(input_cal, return_meta=False):
         elif np.all([isinstance(ic, (UVCal, HERACal)) for ic in input_cal]):  # List of UVCal/HERACal objects
             hc = reduce(operator.add, input_cal)
             hc.__class__ = HERACal
-            gains, flags, quals, total_qual = hc.build_cal_dicts()
+            gains, flags, quals, total_qual = hc.build_calcontainers()
         else:
             raise TypeError('If input is a list, it must be only strings or only UVCal/HERACal objects.')
     else:
