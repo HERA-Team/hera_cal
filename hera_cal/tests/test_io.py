@@ -366,8 +366,6 @@ class Test_HERAData(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             hd.partial_write('out.h5')
         hd = HERAData(self.uvh5_1)
-        with self.assertRaises(ValueError):
-            hd.partial_write(None)
 
     def test_iterate_over_bls(self):
         hd = HERAData(self.uvh5_1)
