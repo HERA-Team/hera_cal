@@ -4,10 +4,8 @@ import copy
 import json
 import optparse
 import os
-
 import numpy as np
 import scipy.sparse as sps
-
 import aipy
 from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
@@ -463,6 +461,11 @@ def firstcal_run(files, opts, history):
 
         while niters == 0 or len(switched) > 0:
             datapack, flagpack = io.load_vis([uv], nested_dict=True)
+            # convert to lowercase, this is a hacky temporary fix until firstcal and omnical are updated
+            for bl in datapack.keys():
+                for pol in list(datapack[bl].keys()):
+                    datapack[bl][pol.lower()] = datapack[bl].pop(pol)
+                    flagpack[bl][pol.lower()] = flagpack[bl].pop(pol)
             datapack = _apply_pi_shift(datapack, switched)
             wgtpack = {k: {p: np.logical_not(flagpack[k][p]) for p in flagpack[k]} for k in flagpack}
 
