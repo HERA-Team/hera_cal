@@ -9,38 +9,38 @@ from hera_cal import abscal
 class TestDataContainer(unittest.TestCase):
 
     def setUp(self):
-        self.bls = [(1, 2), (2, 3), (3, 4), (1, 3), (2, 4)]  # not (1,4)
+        self.antpairs = [(1, 2), (2, 3), (3, 4), (1, 3), (2, 4)]  # not (1,4)
         self.pols = ['xx', 'yy']
         self.blpol = {}
-        for bl in self.bls:
+        for bl in self.antpairs:
             self.blpol[bl] = {}
             for pol in self.pols:
                 self.blpol[bl][pol] = 1j
         self.polbl = {}
         for pol in self.pols:
             self.polbl[pol] = {}
-            for bl in self.bls:
+            for bl in self.antpairs:
                 self.polbl[pol][bl] = 1j
         self.both = {}
         for pol in self.pols:
-            for bl in self.bls:
+            for bl in self.antpairs:
                 self.both[bl + (pol,)] = 1j
 
     def test_init(self):
         dc = datacontainer.DataContainer(self.blpol)
         for k in dc._data.keys():
             self.assertEqual(len(k), 3)
-        self.assertEqual(set(self.bls), dc._bls)
+        self.assertEqual(set(self.antpairs), dc._antpairs)
         self.assertEqual(set(self.pols), dc._pols)
         dc = datacontainer.DataContainer(self.polbl)
         for k in dc._data.keys():
             self.assertEqual(len(k), 3)
-        self.assertEqual(set(self.bls), dc._bls)
+        self.assertEqual(set(self.antpairs), dc._antpairs)
         self.assertEqual(set(self.pols), dc._pols)
         dc = datacontainer.DataContainer(self.both)
         for k in dc._data.keys():
             self.assertEqual(len(k), 3)
-        self.assertEqual(set(self.bls), dc._bls)
+        self.assertEqual(set(self.antpairs), dc._antpairs)
         self.assertEqual(set(self.pols), dc._pols)
         self.assertIsNone(dc.antpos)
         self.assertIsNone(dc.freqs)
@@ -51,19 +51,27 @@ class TestDataContainer(unittest.TestCase):
         self.assertRaises(
             AssertionError, datacontainer.DataContainer, {(1, 2, 3, 4): 2})
 
+    def test_antpairs(self):
+        dc = datacontainer.DataContainer(self.blpol)
+        self.assertEqual(set(self.antpairs), dc.antpairs())
+        self.assertEqual(set(self.antpairs), dc.antpairs('xx'))
+        self.assertEqual(set(self.antpairs), dc.antpairs('yy'))
+        dc = datacontainer.DataContainer(self.polbl)
+        self.assertEqual(set(self.antpairs), dc.antpairs())
+        self.assertEqual(set(self.antpairs), dc.antpairs('xx'))
+        self.assertEqual(set(self.antpairs), dc.antpairs('yy'))
+        dc = datacontainer.DataContainer(self.both)
+        self.assertEqual(set(self.antpairs), dc.antpairs())
+        self.assertEqual(set(self.antpairs), dc.antpairs('xx'))
+        self.assertEqual(set(self.antpairs), dc.antpairs('yy'))
+
     def test_bls(self):
         dc = datacontainer.DataContainer(self.blpol)
-        self.assertEqual(set(self.bls), dc.bls())
-        self.assertEqual(set(self.bls), dc.bls('xx'))
-        self.assertEqual(set(self.bls), dc.bls('yy'))
+        self.assertEqual(set(dc.keys()), dc.bls())
         dc = datacontainer.DataContainer(self.polbl)
-        self.assertEqual(set(self.bls), dc.bls())
-        self.assertEqual(set(self.bls), dc.bls('xx'))
-        self.assertEqual(set(self.bls), dc.bls('yy'))
+        self.assertEqual(set(dc.keys()), dc.bls())
         dc = datacontainer.DataContainer(self.both)
-        self.assertEqual(set(self.bls), dc.bls())
-        self.assertEqual(set(self.bls), dc.bls('xx'))
-        self.assertEqual(set(self.bls), dc.bls('yy'))
+        self.assertEqual(set(dc.keys()), dc.bls())
 
     def test_pols(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -79,43 +87,43 @@ class TestDataContainer(unittest.TestCase):
     def test_keys(self):
         dc = datacontainer.DataContainer(self.blpol)
         keys = dc.keys()
-        self.assertEqual(len(keys), len(self.pols) * len(self.bls))
+        self.assertEqual(len(keys), len(self.pols) * len(self.antpairs))
         dc = datacontainer.DataContainer(self.polbl)
         keys = dc.keys()
-        self.assertEqual(len(keys), len(self.pols) * len(self.bls))
+        self.assertEqual(len(keys), len(self.pols) * len(self.antpairs))
         dc = datacontainer.DataContainer(self.both)
         keys = dc.keys()
-        self.assertEqual(len(keys), len(self.pols) * len(self.bls))
+        self.assertEqual(len(keys), len(self.pols) * len(self.antpairs))
 
     def test_values(self):
         dc = datacontainer.DataContainer(self.blpol)
         values = dc.values()
-        self.assertEqual(len(values), len(self.pols) * len(self.bls))
+        self.assertEqual(len(values), len(self.pols) * len(self.antpairs))
         self.assertEqual(values[0], 1j)
         dc = datacontainer.DataContainer(self.polbl)
         values = dc.values()
-        self.assertEqual(len(values), len(self.pols) * len(self.bls))
+        self.assertEqual(len(values), len(self.pols) * len(self.antpairs))
         self.assertEqual(values[0], 1j)
         dc = datacontainer.DataContainer(self.both)
         values = dc.values()
-        self.assertEqual(len(values), len(self.pols) * len(self.bls))
+        self.assertEqual(len(values), len(self.pols) * len(self.antpairs))
         self.assertEqual(values[0], 1j)
 
     def test_items(self):
         dc = datacontainer.DataContainer(self.blpol)
         items = dc.items()
-        self.assertEqual(len(items), len(self.pols) * len(self.bls))
-        self.assertTrue(items[0][0][0:2] in self.bls)
+        self.assertEqual(len(items), len(self.pols) * len(self.antpairs))
+        self.assertTrue(items[0][0][0:2] in self.antpairs)
         self.assertTrue(items[0][0][2] in self.pols)
         self.assertEqual(items[0][1], 1j)
         dc = datacontainer.DataContainer(self.polbl)
         items = dc.items()
-        self.assertTrue(items[0][0][0:2] in self.bls)
+        self.assertTrue(items[0][0][0:2] in self.antpairs)
         self.assertTrue(items[0][0][2] in self.pols)
         self.assertEqual(items[0][1], 1j)
         dc = datacontainer.DataContainer(self.both)
         items = dc.items()
-        self.assertTrue(items[0][0][0:2] in self.bls)
+        self.assertTrue(items[0][0][0:2] in self.antpairs)
         self.assertTrue(items[0][0][2] in self.pols)
         self.assertEqual(items[0][1], 1j)
 
@@ -134,34 +142,34 @@ class TestDataContainer(unittest.TestCase):
         del dc[(1, 2, 'xx')]
         self.assertFalse((1, 2, 'xx') in dc)
         self.assertTrue('xx' in dc.pols())
-        self.assertTrue((1, 2) in dc.bls())
+        self.assertTrue((1, 2) in dc.antpairs())
         del dc[(1, 2, 'yy')]
-        self.assertFalse((1, 2) in dc.bls())
+        self.assertFalse((1, 2) in dc.antpairs())
         del dc[(2, 3, 'XX')]
         self.assertFalse((2, 3, 'xx') in dc)
         self.assertTrue('xx' in dc.pols())
-        self.assertTrue((2, 3) in dc.bls())
+        self.assertTrue((2, 3) in dc.antpairs())
 
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol)
         self.assertEqual(dc[(1, 2, 'xx')], 1j)
         self.assertEqual(dc[(2, 1, 'xx')], -1j)
         self.assertEqual(dc[(1, 2)], {'xx': 1j, 'yy': 1j})
-        self.assertEqual(set(dc['xx'].keys()), set(self.bls))
+        self.assertEqual(set(dc['xx'].keys()), set(self.antpairs))
         self.assertEqual(dc[(1, 2, 'xx')], dc.get_data((1, 2, 'xx')))
         self.assertEqual(dc[(1, 2, 'xx')], dc.get_data(1, 2, 'xx'))
         dc = datacontainer.DataContainer(self.polbl)
         self.assertEqual(dc[(1, 2, 'xx')], 1j)
         self.assertEqual(dc[(2, 1, 'xx')], -1j)
         self.assertEqual(dc[(1, 2)], {'xx': 1j, 'yy': 1j})
-        self.assertEqual(set(dc['xx'].keys()), set(self.bls))
+        self.assertEqual(set(dc['xx'].keys()), set(self.antpairs))
         self.assertEqual(dc[(2, 1, 'xx')], dc.get_data((2, 1, 'xx')))
         self.assertEqual(dc[(2, 1, 'xx')], dc.get_data(2, 1, 'xx'))
         dc = datacontainer.DataContainer(self.both)
         self.assertEqual(dc[(1, 2, 'xx')], 1j)
         self.assertEqual(dc[(2, 1, 'xx')], -1j)
         self.assertEqual(dc[(1, 2)], {'xx': 1j, 'yy': 1j})
-        self.assertEqual(set(dc['xx'].keys()), set(self.bls))
+        self.assertEqual(set(dc['xx'].keys()), set(self.antpairs))
         self.assertEqual(dc[(1, 2)], dc.get_data((1, 2)))
         self.assertEqual(dc[(1, 2)], dc.get_data(1, 2))
         self.assertEqual(dc[(1, 2, 'XX')], 1j)
@@ -203,19 +211,19 @@ class TestDataContainer(unittest.TestCase):
         dc[(1, 2, 'xy')] = 1j
         self.assertTrue((2, 1, 'yx') in dc)
 
-    def test_has_bl(self):
+    def test_has_antpair(self):
         dc = datacontainer.DataContainer(self.blpol)
-        self.assertTrue(dc.has_bl((2, 3)))
-        self.assertTrue(dc.has_bl((3, 2)))
-        self.assertFalse(dc.has_bl((0, 3)))
+        self.assertTrue(dc.has_antpair((2, 3)))
+        self.assertTrue(dc.has_antpair((3, 2)))
+        self.assertFalse(dc.has_antpair((0, 3)))
         dc = datacontainer.DataContainer(self.polbl)
-        self.assertTrue(dc.has_bl((2, 3)))
-        self.assertTrue(dc.has_bl((3, 2)))
-        self.assertFalse(dc.has_bl((0, 3)))
+        self.assertTrue(dc.has_antpair((2, 3)))
+        self.assertTrue(dc.has_antpair((3, 2)))
+        self.assertFalse(dc.has_antpair((0, 3)))
         dc = datacontainer.DataContainer(self.both)
-        self.assertTrue(dc.has_bl((2, 3)))
-        self.assertTrue(dc.has_bl((3, 2)))
-        self.assertFalse(dc.has_bl((0, 3)))
+        self.assertTrue(dc.has_antpair((2, 3)))
+        self.assertTrue(dc.has_antpair((3, 2)))
+        self.assertFalse(dc.has_antpair((0, 3)))
 
     def test_has_pol(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -256,7 +264,7 @@ class TestDataContainer(unittest.TestCase):
         self.assertAlmostEqual(dc[(100, 101, 'xy')][1], (1 + 1j))
         self.assertAlmostEqual(dc[(101, 100, 'yx')][1], (1 - 1j))
         self.assertEqual(len(dc.keys()), 11)
-        self.assertEqual((100, 101) in dc._bls, True)
+        self.assertEqual((100, 101) in dc._antpairs, True)
         self.assertEqual('xy' in dc._pols, True)
         # test error
         self.assertRaises(ValueError, dc.__setitem__, *((100, 101), 100j))
