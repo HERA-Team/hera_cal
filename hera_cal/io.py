@@ -242,7 +242,7 @@ class HERAData(UVData):
             if len(indices) == 1:
                 self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, self.Nblts)
             elif not (len(set(np.ediff1d(indices))) == 1):
-                raise NotImplementedError('UVData objects with non-regular spacing of ' +
+                raise NotImplementedError('UVData objects with non-regular spacing of '
                                           'baselines in its baseline-times are not supported.')
             else:
                 self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1,
@@ -466,8 +466,8 @@ class HERAData(UVData):
         '''
         if bls is None:
             if self.filetype is not 'uvh5':
-                raise NotImplementedError('Baseline iteration without explicitly setting bls for filetype ' + self.filetype +
-                                          '  without setting bls has not been implemented.')
+                raise NotImplementedError('Baseline iteration without explicitly setting bls for filetype ' + self.filetype
+                                          + ' without setting bls has not been implemented.')
             bls = self.bls
             if isinstance(bls, dict):  # multiple files
                 bls = list(set([bl for bls in bls.values() for bl in bls]))
@@ -489,8 +489,8 @@ class HERAData(UVData):
         '''
         if freqs is None:
             if self.filetype is not 'uvh5':
-                raise NotImplementedError('Frequency iteration for filetype ' + self.filetype +
-                                          '  without setting freqs has not been implemented.')
+                raise NotImplementedError('Frequency iteration for filetype ' + self.filetype
+                                          + ' without setting freqs has not been implemented.')
             freqs = self.freqs
             if isinstance(self.freqs, dict):  # multiple files
                 freqs = np.unique(self.freqs.values())
@@ -511,8 +511,8 @@ class HERAData(UVData):
         '''
         if times is None:
             if self.filetype is not 'uvh5':
-                raise NotImplementedError('Time iteration for filetype ' + self.filetype +
-                                          '  without setting times has not been implemented.')
+                raise NotImplementedError('Time iteration for filetype ' + self.filetype
+                                          + ' without setting times has not been implemented.')
             times = self.times
             if isinstance(times, dict):  # multiple files
                 times = np.unique(times.values())
@@ -556,7 +556,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         lsts: ndarray containing LST bins of data (radians)
         pol: ndarray containing list of polarization strings
     '''
-    if not filetype in ['miriad', 'uvfits', 'uvh5']:
+    if filetype not in ['miriad', 'uvfits', 'uvh5']:
         raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
     if isinstance(input_data, str):  # single visibility data path
         hd = HERAData(input_data, filetype=filetype)
