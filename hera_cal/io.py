@@ -54,7 +54,7 @@ class HERACal(UVCal):
 
     def build_calcontainers(self):
         '''Turns the calibration information currently loaded into the HERACal object
-        into ordered dictionaries that map antenna-pol tuples to calibration waterfalls. 
+        into ordered dictionaries that map antenna-pol tuples to calibration waterfalls.
         Computes and stores internally useful metadata in the process.
 
         Returns:
@@ -446,7 +446,7 @@ class HERAData(UVData):
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
 
-        if inplace: # update this objects's arrays using DataContainers
+        if inplace:  # update this objects's arrays using DataContainers
             this = self
         else:  # make a copy of this object and then update the relevant arrays using DataContainers
             this = copy.deepcopy(self)
