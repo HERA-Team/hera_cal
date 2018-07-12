@@ -420,8 +420,9 @@ class HERAData(UVData):
     def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
-        input_data file called on __init__. Does not work for other filetypes or when the HERAData
-        object is initialized with a list of files.
+        input_data file called on __init__. Any data/flags/nsamples left as None will be written
+        as was currently stored in the HERAData object. Does not work for other filetypes or when
+        the HERAData object is initialized with a list of files.
 
         Arguments:
             output_path: path to file to write uvh5 file to
