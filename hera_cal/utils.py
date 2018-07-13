@@ -11,6 +11,24 @@ import hera_cal
 import copy
 from scipy.interpolate import interp1d
 from collections import OrderedDict as odict
+from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
+
+
+def split_pol(pol):
+    '''Splits visibility polarization string into anntenna polarizations.'''
+    if polstr2num(pol) > 0:  # this includes Stokes and pseudo-Stokes visibilities
+        raise ValueError('Unable to split Stokes or pseudo-Stokes polarization ' + pol)
+    return jnum2str(jstr2num(pol[0])), jnum2str(jstr2num(pol[1]))
+
+
+def conj_pol(pol):
+    '''Given V_ij^(pol), return the polarization of V_ji^(conj pol) such
+    (V_ji^(conj pol))* = V_ij^(pol). This means xy -> yx and yx -> xy, but
+    psuedo-Stokes visibilities are unaffected. Case is left unmodified.'''
+    if polstr2num(pol) > 0:  # this includes Stokes and pseudo-Stokes visibilities
+        return pol
+    else:
+        return pol[::-1]
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -689,14 +707,14 @@ def synthesize_ant_flags(flags, threshold=0.0):
     Ntimes, Nfreqs = flags[flags.keys()[0]].shape
 
     # get antenna-pol keys
-    antpols = set([ap for (i, j, pol) in flags.keys() for ap in [(i, pol[0]), (j, pol[1])]])
+    antpols = set([ap for (i, j, pol) in flags.keys() for ap in [(i, split_pol(pol)[0]), (j, split_pol(pol)[1])]])
 
     # get dictionary of completely flagged ants to exclude
     is_excluded = {ap: True for ap in antpols}
     for (i, j, pol), flags_here in flags.items():
         if not np.all(flags_here):
-            is_excluded[(i, pol[0])] = False
-            is_excluded[(j, pol[1])] = False
+            is_excluded[(i, split_pol(pol)[0])] = False
+            is_excluded[(j, split_pol(pol)[1])] = False
 
     # construct dictionary of visibility count (number each antenna touches)
     # and dictionary of number of flagged visibilities each antenna has (excluding dead ants)
@@ -705,8 +723,8 @@ def synthesize_ant_flags(flags, threshold=0.0):
     ant_Nflag = {ap: np.zeros((Ntimes, Nfreqs), np.float) for ap in antpols}
     for (i, j, pol), flags_here in flags.items():
         # get antenna keys
-        ap1 = (i, pol[0])
-        ap2 = (j, pol[1])
+        ap1 = (i, split_pol(pol)[0])
+        ap2 = (j, split_pol(pol)[1])
         # only continue if not in is_excluded
         if not is_excluded[ap1] and not is_excluded[ap2]:
             # add to Nvis count
@@ -800,9 +818,10 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
         raise ValueError('Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be.')
 
     for bl in data.keys():
+        ap1, ap2 = split_pol(bl[2])
         # make that if split_by_antpol is true, the baseline is not cross-polarized
-        if model.has_key(bl) and data_wgts.has_key(bl) and (not split_by_antpol or bl[2][0] == bl[2][1]):
-            ant1, ant2 = (bl[0], bl[2][0]), (bl[1], bl[2][1])
+        if model.has_key(bl) and data_wgts.has_key(bl) and (not split_by_antpol or ap1 == ap2):
+            ant1, ant2 = (bl[0], ap1), (bl[1], ap2)
 
             # multiply model by gains if they are supplied
             if gains is not None:
@@ -820,14 +839,14 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
             # calculate chi^2
             chisq_here = np.asarray(np.abs(model_here - data[bl]) * wgts, dtype=np.float64)
             if split_by_antpol:
-                if chisq.has_key(bl[2][0]):
-                    assert nObs.has_key(bl[2][0])
-                    chisq[bl[2][0]] = chisq[bl[2][0]] + chisq_here
-                    nObs[bl[2][0]] = nObs[bl[2][0]] + (wgts > 0)
+                if chisq.has_key(ap1):
+                    assert nObs.has_key(ap1)
+                    chisq[ap1] = chisq[ap1] + chisq_here
+                    nObs[ap1] = nObs[ap1] + (wgts > 0)
                 else:
-                    assert not nObs.has_key(bl[2][0])
-                    chisq[bl[2][0]] = copy.deepcopy(chisq_here)
-                    nObs[bl[2][0]] = np.array(wgts > 0, dtype=int)
+                    assert not nObs.has_key(ap1)
+                    chisq[ap1] = copy.deepcopy(chisq_here)
+                    nObs[ap1] = np.array(wgts > 0, dtype=int)
             else:
                 chisq += chisq_here
                 nObs += (wgts > 0)

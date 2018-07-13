@@ -160,25 +160,21 @@ class AbsCal(object):
         else:
             self.Nfreqs = len(self.freqs)
 
-        # setup polarization
-        self.str2pol = {"xx": -5, "yy": -6, "xy": -7, "yx": -8}
-        self.pol2str = {-5: "xx", -6: "yy", -7: "xy", -8: "yx"}
-
         # get pols is not defined, if so, make sure they are string format
         if pols is None:
             pols = np.unique(map(lambda k: k[2], self.keys))
         elif isinstance(pols, np.ndarray) or isinstance(pols, list):
             if np.issubdtype(type(pols[0]), int):
-                pols = map(lambda p: self.pol2str[p], pols)
+                pols = map(lambda p: polnum2str(p), pols)
 
         # convert to integer format
         self.pols = pols
-        self.pols = map(lambda p: self.str2pol[p], self.pols)
+        self.pols = map(lambda p: polstr2num(p), self.pols)
         self.Npols = len(self.pols)
 
         # save pols in string format and get gain_pols
-        self.polstrings = np.array(map(lambda p: self.pol2str[p], self.pols))
-        self.gain_pols = np.unique(map(lambda p: [p[0], p[1]], self.polstrings))
+        self.polstrings = np.array(map(lambda p: polnum2str(p), self.pols))
+        self.gain_pols = np.unique(map(lambda p: list(utils.split_pol(p)), self.polstrings))
         self.Ngain_pols = len(self.gain_pols)
 
         # setup weights
@@ -1388,7 +1384,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     # make blank gains if no modelfiles
     else:
-        gain_pols = set(flatten(map(lambda p: [p[0], p[1]], data_pols)))
+        gain_pols = set(flatten(map(utils.split_pol, data_pols)))
         gain_keys = flatten(map(lambda p: map(lambda a: (a, p), data_ants), gain_pols))
         gain_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.complex)), gain_keys))
         flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_keys))

@@ -3,6 +3,7 @@ import hera_cal.io as io
 from pyuvdata import UVCal, UVData
 import argparse
 from hera_cal.datacontainer import DataContainer
+from hera_cal import utils
 
 
 def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None, gain_convention='divide'):
@@ -36,12 +37,13 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
 
     # loop over keys
     for (i, j, pol) in data.keys():
+        ap1, ap2 = utils.split_pol(pol)
         # Check to see that all necessary antennas are present in the gains
-        if (i, pol[0]) in new_gains and (j, pol[1]) in new_gains and (old_gains is None
-                                                                      or ((i, pol[0]) in old_gains and (j, pol[1]) in old_gains)):
-            gigj_new = new_gains[(i, pol[0])] * np.conj(new_gains[(j, pol[1])])
+        if (i, ap1) in new_gains and (j, ap2) in new_gains and (old_gains is None
+                                                                or ((i, ap1) in old_gains and (j, ap2) in old_gains)):
+            gigj_new = new_gains[(i, ap1)] * np.conj(new_gains[(j, ap2)])
             if old_gains is not None:
-                gigj_old = old_gains[(i, pol[0])] * np.conj(old_gains[(j, pol[1])])
+                gigj_old = old_gains[(i, ap1)] * np.conj(old_gains[(j, ap2)])
             else:
                 gigj_old = np.ones_like(gigj_new)
             # update all the data, even if it was flagged
@@ -54,12 +56,12 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
             # update data flags
             if bool_flags:
                 # treat as flags
-                data_flags[(i, j, pol)][cal_flags[(i, pol[0])]] = True
-                data_flags[(i, j, pol)][cal_flags[(j, pol[1])]] = True
+                data_flags[(i, j, pol)][cal_flags[(i, ap1)]] = True
+                data_flags[(i, j, pol)][cal_flags[(j, ap2)]] = True
             else:
                 # treat as data weights
-                wgts[(i, j, pol)][cal_flags[(i, pol[0])]] = 0.0
-                wgts[(i, j, pol)][cal_flags[(j, pol[1])]] = 0.0
+                wgts[(i, j, pol)][cal_flags[(i, ap1)]] = 0.0
+                wgts[(i, j, pol)][cal_flags[(j, ap2)]] = 0.0
         else:
             # If any antenna is missing from the gains, the data is flagged
             if bool_flags:
