@@ -296,7 +296,7 @@ class RedundantCalibrator:
             for ant_i, ant_j, pol in blgrp:
                 if (ant_i, ant_j, pol) in bls_in_data:
                     params = (ant_i, split_pol(pol)[0], ant_j, split_pol(pol)[1], ubl_index, blgrp[0][2])
-                    eqs['g%d%s * g%d%s_ * u%d%s' % params] = (ant_i, ant_j, pol)
+                    eqs['g_%d_%s * g_%d_%s_ * u_%d_%s' % params] = (ant_i, ant_j, pol)
         return eqs
 
     def _solver(self, solver, data, wgts={}, detrend_phs=False, sparse=False, **kwargs):
@@ -332,22 +332,21 @@ class RedundantCalibrator:
         return solver(data=d_ls, wgts=w_ls, sparse=sparse, **kwargs)
 
     def unpack_sol_key(self, k):
-        """Turn linsolve's internal variable string into antenna or baseline tuple (with polarization).
-        Assumes antenna polarizations are length 3 strings, i.e. 'jxx'."""
+        """Turn linsolve's internal variable string into antenna or baseline tuple (with polarization)."""
 
         if k.startswith('g'):  # 'g' = gain solution
-            return (int(k[1:-3]), k[-3:])
+            return (int(k.split('_')[1]), k.split('_')[2])
         else:  # 'u' = unique baseline solution
-            return self.reds[int(k[1:-2])][0]
+            return self.reds[int(k.split('_')[1])][0]
 
     def pack_sol_key(self, k):
         """Turn an antenna or baseline tuple (with polarization) into linsolve's internal variable string."""
 
         if len(k) == 2:  # 'g' = gain solution
-            return 'g%d%s' % k
+            return 'g_%d_%s' % k
         else:  # 'u' = unique baseline solution
             ubl_num = [cnt for cnt, blgrp in enumerate(self.reds) if blgrp[0] == k][0]
-            return 'u%d%s' % (ubl_num, k[-1])
+            return 'u_%d_%s' % (ubl_num, k[-1])
 
     def compute_ubls(self, data, gain_sols):
         """Given a set of guess gain solutions, return a dictionary of calibrated visbilities
