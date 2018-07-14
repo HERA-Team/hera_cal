@@ -592,7 +592,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
 
     Notes:
     ------
-    The rephasing uses aipy.coord.top2eq_m and aipy.coord.eq2top_m matrices to convert from
+    The rephasing uses top2eq_m and eq2top_m matrices (borrowed from pyuvdata and aipy) to convert from
     array TOPO frame to Equatorial frame, induces time rotation, converts back to TOPO frame,
     calculates new pointing vector s_prime and inserts a delay plane into the data for rephasing.
 
@@ -606,15 +606,14 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
     elif isinstance(dlst, np.ndarray):
         lat = np.ones_like(dlst) * lat
         zero = np.zeros_like(dlst)
-
     else:
         zero = 0
 
     # get top2eq matrix
-    top2eq = uvutils.top2eq_m(zero, lat * np.pi / 180)
+    top2eq = top2eq_m(zero, lat * np.pi / 180)
 
     # get eq2top matrix
-    eq2top = uvutils.eq2top_m(-dlst, lat * np.pi / 180)
+    eq2top = eq2top_m(-dlst, lat * np.pi / 180)
 
     # get full rotation matrix
     rot = np.einsum("...jk,...kl->...jl", eq2top, top2eq)
@@ -843,3 +842,34 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
                     chisq_per_ant[ant] = copy.deepcopy(chisq_here)
                     nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
     return chisq, nObs, chisq_per_ant, nObs_per_ant
+
+
+def eq2top_m(ha, dec):
+    """Return the 3x3 matrix converting equatorial coordinates to topocentric
+    at the given hour angle (ha) and declination (dec).
+    Borrowed from pyuvdata which borrowed from aipy"""
+    sin_H, cos_H = np.sin(ha), np.cos(ha)
+    sin_d, cos_d = np.sin(dec), np.cos(dec)
+    mat = np.array([[sin_H, cos_H, np.zeros_like(ha)],
+                    [-sin_d * cos_H, sin_d * sin_H, cos_d],
+                    [cos_d * cos_H, -cos_d * sin_H, sin_d]])
+    if len(mat.shape) == 3:
+        mat = mat.transpose([2, 0, 1])
+    return mat
+
+
+def top2eq_m(ha, dec):
+    """Return the 3x3 matrix converting topocentric coordinates to equatorial
+    at the given hour angle (ha) and declination (dec).
+    Slightly changed from aipy to simply write the matrix instead of inverting.
+    Borrowed from pyuvdata."""
+    sin_H, cos_H = np.sin(ha), np.cos(ha)
+    sin_d, cos_d = np.sin(dec), np.cos(dec)
+    mat = np.array([[sin_H, -cos_H * sin_d, cos_d * cos_H],
+                    [cos_H, sin_d * sin_H, -cos_d * sin_H],
+                    [np.zeros_like(ha), cos_d, sin_d]])
+    if len(mat.shape) == 3:
+        mat = mat.transpose([2, 0, 1])
+    return mat
+
+

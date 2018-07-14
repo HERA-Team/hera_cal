@@ -922,7 +922,3 @@ def switch_bl(key):
     """
     return (key[1], key[0], key[2][::-1])
 
-
-class LSTBINPHASED(Exception):
-    """ custom exception for lst_bin() """
-    pass
