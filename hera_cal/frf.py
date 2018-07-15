@@ -66,7 +66,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
 
     extra_arrays : dict, optional
         Dictionary of extra 1D arrays with shape=(Ntimes,) to push through
-        averaging windows. For example, a time_array, zenith_ra array, or
+        averaging windows. For example, a time_array, or
         anything that has length Ntimes.
 
     verbose : bool, optional
@@ -355,10 +355,6 @@ class FRFilter(object):
             new_uvd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
             new_uvd.time_array[blts_inds] = times
             new_uvd.lst_array[blts_inds] = lsts
-            new_uvd.zenith_ra[blts_inds] = utils.JD2RA(times, lon)
-            new_uvd.zenith_ra_degrees[blts_inds] = new_uvd.zenith_ra[blts_inds] * 180 / np.pi
-            new_uvd.zenith_dec[blts_inds] = lat * np.pi / 180
-            new_uvd.zenith_dec_degrees[blts_inds] = lat
 
         # write data
         if filetype == 'miriad':
