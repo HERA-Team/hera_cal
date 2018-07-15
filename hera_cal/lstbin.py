@@ -456,7 +456,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
         interp_data, interp_flgs, interp_lsts = lst_align(data, lsts, flags=flgs, dlst=dlst, **align_kwargs)
 
         # check output
-        output_fname = os.path.basename(f) + file_ext.format(interp_lsts[0])
+        output_fname = os.path.basename(f) + file_ext.format(interp_lsts[0] - dlst / 2.0)
 
         # write to miriad file
         if overwrite is not None:
@@ -663,12 +663,6 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     # get metadata from the zeroth data file
     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
 
-    # push time and lst arrays forward by half an integration
-    abscal.echo("pushing time and lst arrays forward by half an integration b/c pyuvdata "
-                "currently does not do this for us....", verbose=verbose)
-    if len(t) > 1:
-        t += np.median(np.diff(t)) / 2.0
-
     # get frequency, time and antenna position information
     freq_array = copy.copy(f)
     antpos = copy.deepcopy(ap)
@@ -709,12 +703,6 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
                     # unwrap li relative to itself
                     li[li < li[0]] += 2 * np.pi
-
-                    # push time and lst arrays forward by half an integration
-                    # b/c pyuvdata does not currently do this for us....
-                    if len(li) > 1:
-                        li += np.median(np.diff(li)) / 2.0
-                        t += np.median(np.diff(t)) / 2.0
 
                     # unwrap li relative to start_lst
                     li[li < start_lst - atol] += 2 * np.pi
@@ -765,18 +753,6 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                              lst_low=f_min, lst_hi=f_max, truncate_empty=False, sig_clip=sig_clip,
                              sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
-        # push lst_bins back to bin start rather than bin center
-        # b/c pyuvdata does not do this for us yet...
-        abscal.echo("pushing time and lst arrays backward by half an integration b/c pyuvdata "
-                    "currently does not do this for us....", verbose=verbose)
-        # unwrap bin_lst
-        bin_lst[bin_lst < bin_lst[0] - atol] += 2 * np.pi
-        # push back
-        if len(bin_lst) > 1:
-            bin_lst -= np.median(np.diff(bin_lst)) / 2.0
-        # re-wrap bin_lst
-        bin_lst = bin_lst % (2 * np.pi)
-
         # update history
         file_history = history + " Input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
         kwargs['history'] = file_history
@@ -792,8 +768,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         pols = bin_data.pols()
 
         # configure filenames
-        bin_file = "zen.{}".format(file_ext.format('.'.join(pols), "LST", bin_lst[0]))
-        std_file = "zen.{}".format(file_ext.format('.'.join(pols), "STD", bin_lst[0]))
+        bin_file = "zen.{}".format(file_ext.format('.'.join(pols), "LST", bin_lst[0] - dlst / 2.0))
+        std_file = "zen.{}".format(file_ext.format('.'.join(pols), "STD", bin_lst[0] - dlst / 2.0))
 
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
