@@ -871,4 +871,3 @@ def top2eq_m(ha, dec):
     if len(mat.shape) == 3:
         mat = mat.transpose([2, 0, 1])
     return mat
-
