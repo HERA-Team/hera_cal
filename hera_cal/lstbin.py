@@ -897,4 +897,3 @@ def switch_bl(key):
     Ex. (1, 2, 'xx')
     """
     return (key[1], key[0], key[2][::-1])
-

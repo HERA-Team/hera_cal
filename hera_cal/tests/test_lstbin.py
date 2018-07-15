@@ -121,9 +121,9 @@ class Test_lstbin:
     def test_lst_align_files(self):
         # basic execution
         hc.lstbin.lst_align_files(self.data_files[0][0], outdir="./", overwrite=True, verbose=False)
-        nt.assert_true(os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20164'))
-        if os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20085'):
-            shutil.rmtree('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20085')
+        nt.assert_true(os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'))
+        if os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'):
+            shutil.rmtree('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124')
 
     def test_lst_bin_files(self):
         # basic execution
