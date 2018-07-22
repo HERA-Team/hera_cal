@@ -15,7 +15,7 @@ import collections
 
 
 class HERACal(UVCal):
-    '''HERAData is a subclass of pyuvdata.UVCal meant to serve as an interface between
+    '''HERACal is a subclass of pyuvdata.UVCal meant to serve as an interface between
     pyuvdata-readable calfits files and dictionaries (the in-memory format for hera_cal)
     that map antennas and polarizations to gains, flags, and qualities. Supports standard
     UVCal functionality, along with read() and update() functionality for going back and
@@ -214,8 +214,7 @@ class HERAData(UVData):
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
         antpos, ants = self.get_ENU_antpos()
-        ants = sorted(ants)
-        antpos = dict(zip(ants, antpos))
+        antpos = odict(zip(ants, antpos))
 
         freqs = np.unique(self.freq_array)
         times = np.unique(self.time_array)
@@ -231,7 +230,7 @@ class HERAData(UVData):
                       for antpair in antpairs}
 
         locs = locals()
-        return {meta: eval(meta, {}, locs) for meta in self.HERAData_metas}
+        return {meta: locs[meta] for meta in self.HERAData_metas}
 
     def _determine_blt_slicing(self):
         '''Determine the mapping between antenna pairs and
@@ -239,9 +238,9 @@ class HERAData(UVData):
         self._blt_slices = {}
         for ant1, ant2 in self.get_antpairs():
             indices = self.antpair2ind(ant1, ant2)
-            if len(indices) == 1:
+            if len(indices) == 1:  # only one blt matches
                 self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, self.Nblts)
-            elif not (len(set(np.ediff1d(indices))) == 1):
+            elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
                 raise NotImplementedError('UVData objects with non-regular spacing of '
                                           'baselines in its baseline-times are not supported.')
             else:
@@ -260,7 +259,8 @@ class HERAData(UVData):
         away both baseline ordering (by applying complex conjugation) and polarization capitalization.
 
         Arguments:
-            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol)
+            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol), i.e. the size of the full data.
+                One generally uses this object's own self.data_array, self.flag_array, or self.nsample_array.
             key: if of the form (0,1,'xx'), return anumpy array.
                  if of the form (0,1), return a dict mapping pol strings to waterfalls.
                  if of of the form 'xx', return a dict mapping ant-pair tuples to waterfalls.
@@ -285,7 +285,8 @@ class HERAData(UVData):
         ordering (by applying complex conjugation) and polarization capitalization.
 
         Arguments:
-            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol)
+            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol), i.e. the size of the full data.
+                One generally uses this object's own self.data_array, self.flag_array, or self.nsample_array.
             key: baseline (e.g. (0,1,'xx)), ant-pair tuple (e.g. (0,1)), or pol str (e.g. 'xx')
             value: if key is a baseline, must be an (Nint, Nfreq) numpy array;
                    if key is an ant-pair tuple, must be a dict mapping pol strings to waterfalls;
@@ -367,7 +368,7 @@ class HERAData(UVData):
         # save last read parameters
         locs = locals()
         partials = ['bls', 'polarizations', 'times', 'frequencies', 'freq_chans']
-        self.last_read_kwargs = {p: eval(p, {}, locs) for p in partials}
+        self.last_read_kwargs = {p: locs[p] for p in partials}
 
         # load data
         if self.filetype is 'uvh5':
