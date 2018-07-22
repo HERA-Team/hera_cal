@@ -69,7 +69,7 @@ class Test_lstbin:
         nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[220, 30], 1)
         # check with large spacing lst_grid
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=.01, verbose=False)
-        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[10, 30], 39)
+        nt.assert_almost_equal(output[-1][(24, 25, 'xx')].real[10, 30], 38)
         # check flgs are propagated
         flgs1 = copy.deepcopy(self.flgs1)
         flgs1[(24, 25, 'xx')][:, 32] = True
@@ -108,9 +108,9 @@ class Test_lstbin:
         output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         nt.assert_equal(output[0][(24, 25, 'xx')].shape, (180, 64))
         nt.assert_equal(len(output[2]), 180)
-        nt.assert_almost_equal(output[2][0], 0.20085207269336539)
+        nt.assert_almost_equal(output[2][0], 0.20163512170971379)
         # test flag extrapolate
-        nt.assert_true(output[1][(24, 25, 'xx')][0].min())
+        nt.assert_true(output[1][(24, 25, 'xx')][-1].min())
         # test no dlst
         output = hc.lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         # test wrapped lsts
@@ -121,9 +121,9 @@ class Test_lstbin:
     def test_lst_align_files(self):
         # basic execution
         hc.lstbin.lst_align_files(self.data_files[0][0], outdir="./", overwrite=True, verbose=False)
-        nt.assert_true(os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20085'))
-        if os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20085'):
-            shutil.rmtree('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20085')
+        nt.assert_true(os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'))
+        if os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'):
+            shutil.rmtree('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124')
 
     def test_lst_bin_files(self):
         # basic execution

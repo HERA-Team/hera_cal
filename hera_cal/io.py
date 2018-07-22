@@ -758,10 +758,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     # get zenith location: can only write drift phase
     phase_type = 'drift'
-    zenith_dec_degrees = np.ones_like(baseline_array) * dec
-    zenith_ra_degrees = hc.utils.JD2RA(time_array, longitude)
-    zenith_dec = zenith_dec_degrees * np.pi / 180
-    zenith_ra = zenith_ra_degrees * np.pi / 180
 
     # instantiate object
     uvd = UVData()
@@ -772,7 +768,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'instrument',
               'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
               'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
-              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']
+              'uvw_array', 'vis_units', 'antenna_positions']
     local_params = locals()
 
     # overwrite paramters by kwargs

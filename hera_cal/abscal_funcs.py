@@ -1732,8 +1732,6 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         uvd.nsample_array = np.ones_like(uvd.data_array, dtype=np.float)
         uvd.Nbls = Nbls
         uvd.Nblts = Nblts
-        uvd.zenith_dec = uvd.zenith_dec[blts_select]
-        uvd.zenith_ra = uvd.zenith_ra[blts_select]
         uvd.write_miriad(output_fname, clobber=True)
 
     # output data

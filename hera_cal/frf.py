@@ -66,7 +66,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
 
     extra_arrays : dict, optional
         Dictionary of extra 1D arrays with shape=(Ntimes,) to push through
-        averaging windows. For example, a time_array, zenith_ra array, or
+        averaging windows. For example, a time_array, or
         anything that has length Ntimes.
 
     verbose : bool, optional
@@ -364,16 +364,12 @@ class FRFilter(object):
         for k in data.keys():
             blts_inds = new_hd.antpair2ind(*k[:2])
             p = uvutils.polstr2num(k[2])
-            pol_ind = np.argmax(p in new_hd.polarization_array)
-            new_hd.data_array[blts_inds, 0, :, pol_ind] = data[k]
-            new_hd.flag_array[blts_inds, 0, :, pol_ind] = flags[k]
-            new_hd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
-            new_hd.time_array[blts_inds] = times
-            new_hd.lst_array[blts_inds] = lsts
-            new_hd.zenith_ra[blts_inds] = utils.JD2RA(times, lon)
-            new_hd.zenith_ra_degrees[blts_inds] = new_hd.zenith_ra[blts_inds] * 180 / np.pi
-            new_hd.zenith_dec[blts_inds] = lat * np.pi / 180
-            new_hd.zenith_dec_degrees[blts_inds] = lat
+            pol_ind = np.argmax(p in new_uvd.polarization_array)
+            new_uvd.data_array[blts_inds, 0, :, pol_ind] = data[k]
+            new_uvd.flag_array[blts_inds, 0, :, pol_ind] = flags[k]
+            new_uvd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
+            new_uvd.time_array[blts_inds] = times
+            new_uvd.lst_array[blts_inds] = lsts
 
         # write data
         if filetype == 'miriad':
