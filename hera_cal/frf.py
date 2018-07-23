@@ -364,12 +364,12 @@ class FRFilter(object):
         for k in data.keys():
             blts_inds = new_hd.antpair2ind(*k[:2])
             p = uvutils.polstr2num(k[2])
-            pol_ind = np.argmax(p in new_uvd.polarization_array)
-            new_uvd.data_array[blts_inds, 0, :, pol_ind] = data[k]
-            new_uvd.flag_array[blts_inds, 0, :, pol_ind] = flags[k]
-            new_uvd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
-            new_uvd.time_array[blts_inds] = times
-            new_uvd.lst_array[blts_inds] = lsts
+            pol_ind = np.argmax(p in new_hd.polarization_array)
+            new_hd.data_array[blts_inds, 0, :, pol_ind] = data[k]
+            new_hd.flag_array[blts_inds, 0, :, pol_ind] = flags[k]
+            new_hd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
+            new_hd.time_array[blts_inds] = times
+            new_hd.lst_array[blts_inds] = lsts
 
         # write data
         if filetype == 'miriad':
