@@ -804,7 +804,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
     lst_grid : type=ndarray, dtype=float, uniform LST grid marking the center of each LST bin
     """
     # check 2pi is equally divisible by dlst
-    if (np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) is False) and (np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5) is False):
+    if not np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) and not np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5):
         # generate array of appropriate dlsts
         dlsts = 2 * np.pi / np.arange(1, 1000000).astype(np.float)
 

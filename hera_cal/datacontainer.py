@@ -1,5 +1,6 @@
 import numpy as np
 from collections import OrderedDict as odict
+from hera_cal.utils import conj_pol
 
 
 class DataContainer:
@@ -34,29 +35,37 @@ class DataContainer:
                 or nested dictions, e.g. data[(i,j)][pol] or data[pol][(i,j)].
         """
         self._data = odict()
-        if isinstance(data.keys()[0], str):  # Nested POL:{bls}
+        if isinstance(data.keys()[0], str):  # Nested POL:{antpairs}
             for pol in data.keys():
-                for bl in data[pol]:
-                    self._data[self.mk_key(bl, pol)] = data[pol][bl]
-        elif len(data.keys()[0]) == 2:  # Nested bl:{POL}
-            for bl in data.keys():
-                for pol in data[bl]:
-                    self._data[self.mk_key(bl, pol)] = data[bl][pol]
+                for antpair in data[pol]:
+                    self._data[self.mk_key(antpair, pol)] = data[pol][antpair]
+        elif len(data.keys()[0]) == 2:  # Nested antpair:{POL}
+            for antpair in data.keys():
+                for pol in data[antpair]:
+                    self._data[self.mk_key(antpair, pol)] = data[antpair][pol]
         else:
             assert(len(data.keys()[0]) == 3)
             self._data = odict(map(lambda k: (k, data[k]), sorted(data.keys())))
-        self._bls = set([k[:2] for k in self._data.keys()])
+        self._antpairs = set([k[:2] for k in self._data.keys()])
         self._pols = set([k[-1] for k in self._data.keys()])
 
-    def mk_key(self, bl, pol):
-        '''Combine a baseline pair tuple and a polarization into a 3-tuple key.'''
-        return bl + (pol,)
+        # placeholders for metadata
+        self.antpos = None
+        self.freqs = None
+        self.times = None
+        self.lsts = None
+        self.times_by_bl = None
+        self.lsts_by_bl = None
+
+    def mk_key(self, antpair, pol):
+        '''Combine a antenna pair tuple and a polarization into a 3-tuple key.'''
+        return antpair + (pol,)
 
     def _switch_bl(self, key):
         '''Switch the order of baselines in the key. Supports both 3-tuples
-        (correctly reversing polarization) and baseline pair 2-tuples.'''
+        (correctly reversing polarization) and antenna pair 2-tuples.'''
         if len(key) == 3:
-            return (key[1], key[0], key[2][::-1])
+            return (key[1], key[0], conj_pol(key[2]))
         else:
             return (key[1], key[0])
 
@@ -81,19 +90,23 @@ class DataContainer:
         elif len(key) == 3:
             return self.mk_key(key[0:2], pol)
 
-    def bls(self, pol=None):
-        '''Return a set of baselines pairs (with a specific pol or more generally).'''
+    def antpairs(self, pol=None):
+        '''Return a set of antenna pairs (with a specific pol or more generally).'''
         if pol is None:
-            return self._bls.copy()
+            return self._antpairs.copy()
         else:
-            return set([bl for bl in self._bls if self.has_key(bl, pol)])
+            return set([ap for ap in self._antpairs if self.has_key(ap, pol)])
 
-    def pols(self, bl=None):
-        '''Return a set of polarizations (with a specific bl or more generally).'''
-        if bl is None:
+    def pols(self, antpair=None):
+        '''Return a set of polarizations (with a specific antpair or more generally).'''
+        if antpair is None:
             return self._pols.copy()
         else:
-            return set([pol for pol in self._pols if self.has_key(bl, pol)])
+            return set([pol for pol in self._pols if self.has_key(antpair, pol)])
+
+    def bls(self):
+        '''Returns a set of baseline-pol tuples'''
+        return set(self._data.keys())
 
     def keys(self):
         '''Returns the keys of the data as a list.'''
@@ -119,7 +132,7 @@ class DataContainer:
         complex conjugate when appropriate) and polarization capitalization.'''
         key = self._convert_case(key)
         if isinstance(key, str):  # asking for a pol
-            return dict(zip(self._bls, [self[self.mk_key(bl, key)] for bl in self._bls]))
+            return dict(zip(self._antpairs, [self[self.mk_key(bl, key)] for bl in self._antpairs]))
         elif len(key) == 2:  # asking for a bl
             return dict(zip(self._pols, [self[self.mk_key(key, pol)] for pol in self._pols]))
         else:
@@ -143,7 +156,7 @@ class DataContainer:
                     self._data[self._switch_bl(key)] = np.conj(value)
             else:
                 self._data[key] = value
-                self._bls.update({tuple(key[:2])})
+                self._antpairs.update({tuple(key[:2])})
                 self._pols.update({key[2]})
         else:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
@@ -154,7 +167,7 @@ class DataContainer:
         key = self._convert_case(key)
         if len(key) == 3:
             del self._data[key]
-            self._bls = set([k[:2] for k in self._data.keys()])
+            self._antpairs = set([k[:2] for k in self._data.keys()])
             self._pols = set([k[-1] for k in self._data.keys()])
         else:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
@@ -247,14 +260,14 @@ class DataContainer:
         else:
             return self._convert_case(self.mk_key(args[0], args[1])) in self
 
-    def has_bl(self, bl):
+    def has_antpair(self, antpair):
         '''Returns True if baseline or its complex conjugate is in the data.'''
-        return bl in self._bls or self._switch_bl(bl) in self._bls
+        return antpair in self._antpairs or self._switch_bl(antpair) in self._antpairs
 
     def has_pol(self, pol):
         '''Returns True if polarization (with some capitalization) is in the data.'''
         return self._convert_case(pol) in self._pols
 
-    def get(self, bl, pol):
+    def get(self, antpair, pol):
         '''Interface to DataContainer.__getitem__(bl + (pol,)).'''
-        return self[self._convert_case(self.mk_key(bl, pol))]
+        return self[self._convert_case(self.mk_key(antpair, pol))]

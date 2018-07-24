@@ -14,6 +14,7 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
+from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
 from hera_cal import omni, utils, firstcal, cal_formats, redcal, io, apply_cal
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
@@ -77,7 +78,8 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
 
     # setup linsolve equations
     # a{} is a dummy variable to prevent linsolve from overwriting repeated measurements
-    eqns = odict([(k, "a{}*eta_{}+a{}*eta_{}".format(i, k[-1][0], i, k[-1][1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, "a{}*eta_{}+a{}*eta_{}".format(i, utils.split_pol(k[-1])[0],
+                                                     i, utils.split_pol(k[-1])[1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict([("a{}".format(i), 1.0) for i, k in enumerate(keys)])
 
     # setup linsolve dictionaries
@@ -181,10 +183,12 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     # setup linsolve equations
     if four_pol:
         eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
-                       "".format(k[2][0], k[2][1], r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
+                       "".format(utils.split_pol(k[2])[0], utils.split_pol(k[2])[1], r_ew[k[0]],
+                                 r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
     else:
         eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
-                       "".format(k[2][0], k[2][1], k[2][0], r_ew[k[0]], k[2][0], r_ns[k[0]], k[2][1],
+                       "".format(utils.split_pol(k[2])[0], utils.split_pol(k[2])[1], utils.split_pol(k[2])[0],
+                                 r_ew[k[0]], utils.split_pol(k[2])[0], r_ns[k[0]], utils.split_pol(k[2])[1],
                                  r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
     # set design matrix entries
@@ -258,7 +262,8 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
-    eqns = odict([(k, "eta_{}_{} + eta_{}_{}".format(k[0], k[-1][0], k[1], k[-1][1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, "eta_{}_{} + eta_{}_{}".format(k[0], utils.split_pol(k[-1])[0],
+                                                     k[1], utils.split_pol(k[-1])[1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict()
 
     # setup linsolve dictionaries
@@ -326,7 +331,8 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
 
     # setup linsolve equations
-    eqns = odict([(k, "phi_{}_{} - phi_{}_{}".format(k[0], k[2][0], k[1], k[2][1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, "phi_{}_{} - phi_{}_{}".format(k[0], utils.split_pol(k[2])[0],
+                                                     k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
     ls_design_matrix = odict()
 
     # setup linsolve dictionaries
@@ -334,7 +340,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
 
     # get unique gain polarizations
-    gain_pols = np.unique(map(lambda k: [k[2][0], k[2][1]], keys))
+    gain_pols = np.unique(map(lambda k: list(utils.split_pol(k[2])), keys))
 
     # set reference antenna phase to zero
     if refant is None:
@@ -467,7 +473,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     ywgts = odict(zip(keys, ratio_wgts))
 
     # setup linsolve equation dictionary
-    eqns = odict([(k, 'tau_{}_{} - tau_{}_{}'.format(k[0], k[2][0], k[1], k[2][1])) for i, k in enumerate(keys)])
+    eqns = odict([(k, 'tau_{}_{} - tau_{}_{}'.format(k[0], utils.split_pol(k[2])[0],
+                                                     k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
 
     # setup design matrix dictionary
     ls_design_matrix = odict()
@@ -477,7 +484,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
 
     # get unique gain polarizations
-    gain_pols = np.unique(map(lambda k: [k[2][0], k[2][1]], keys))
+    gain_pols = np.unique(map(lambda k: [utils.split_pol(k[2])[0], utils.split_pol(k[2])[1]], keys))
 
     # set reference antenna phase to zero
     if refant is None:
@@ -498,7 +505,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     if solve_offsets:
         # setup linsolve parameters
         ydata = odict(zip(keys, ratio_offsets))
-        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], k[2][0], k[1], k[2][1])) for i, k in enumerate(keys)])
+        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], utils.split_pol(k[2])[0],
+                                                         k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
         ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
         ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
         ls_design_matrix = odict()
@@ -637,7 +645,9 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
                        "".format(r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
     else:
         eqns = odict([(k, "T_ew_{}*{} + T_ns_{}*{} - T_ew_{}*{} - T_ns_{}*{}"
-                       "".format(k[2][0], r_ew[k[0]], k[2][0], r_ns[k[0]], k[2][1], r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
+                       "".format(utils.split_pol(k[2])[0], r_ew[k[0]], utils.split_pol(k[2])[0], r_ns[k[0]],
+                                 utils.split_pol(k[2])[1], r_ew[k[1]], utils.split_pol(k[2])[1], r_ns[k[1]]))
+                      for i, k in enumerate(keys)])
 
     # set design matrix entries
     ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))
@@ -734,8 +744,8 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
     for rk in red_keys:
         # build equation string
         eqn_str = '{}*Phi_ew_{} + {}*Phi_ns_{} - {}*Phi_ew_{} - {}*Phi_ns_{}'
-        eqn_str = eqn_str.format(antpos[rk[0]][0], rk[2][0], antpos[rk[0]][1], rk[2][0],
-                                 antpos[rk[1]][0], rk[2][1], antpos[rk[1]][1], rk[2][1])
+        eqn_str = eqn_str.format(antpos[rk[0]][0], utils.split_pol(rk[2])[0], antpos[rk[0]][1], utils.split_pol(rk[2])[0],
+                                 antpos[rk[1]][0], utils.split_pol(rk[2])[1], antpos[rk[1]][1], utils.split_pol(rk[2])[1])
 
         # calculate median of unflagged angle(data/model)
         # ls_weights are sum of non-binary weights
@@ -832,8 +842,8 @@ def apply_gains(data, gains, gain_convention='divide'):
     # iterate over keys:
     for i, k in enumerate(keys):
         # get gain keys
-        g1 = (k[0], k[-1][0])
-        g2 = (k[1], k[-1][1])
+        g1 = (k[0], utils.split_pol(k[-1])[0])
+        g2 = (k[1], utils.split_pol(k[-1])[1])
 
         # ensure keys are in gains
         if g1 not in gains or g2 not in gains:
@@ -1391,64 +1401,6 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=N
     else:
         new_model = utils.lst_rephase(new_model, bls, freqs, dlst, lat=latitude, inplace=False)
         return DataContainer(new_model), DataContainer(new_flags)
-
-
-def gains2calfits(calfits_fname, abscal_gains, freq_array, time_array, pol_array,
-                  overwrite=False, gain_convention='divide', cal_style='redundant',
-                  ref_antenna_name="unkwn", sky_field="unkwn", sky_catalog="unkwn", **kwargs):
-    """
-    Write out gain_array in calfits file format.
-
-    Parameters:
-    -----------
-    calfits_fname : type=string, path and filename to output calfits file
-
-    abscal_gains : type=dictionary, (ant, pol) as key, (Ntimes, Nfreqs) complex ndarray as value
-
-    freq_array : ndarray, frequency array of data in Hz
-
-    time_array : ndarray, time array of data in Julian Date
-
-    pol_array : ndarray, polarization array of data, in 'x' or 'y' form.
-
-    overwrite : type=boolean, if True overwrite output files if they already exist
-
-    Optional Parameters: See pyuvdata.UVCal documentation for details on optional parameters
-    -------------------
-    gain_convention : type=str, either multiply or divide in gain solutions
-                        options=['multiply', 'divide']
-
-    kwargs : additional parameters fed to cal_formats.HERACal(meta, gains, **kwargs)
-    """
-    # ensure pol is string
-    int2pol = {-5: 'x', -6: 'y'}
-    if pol_array.dtype == np.int:
-        pol_array = list(pol_array)
-        for i, p in enumerate(pol_array):
-            pol_array[i] = int2pol[p]
-
-    # reconfigure gain dictionary into HERACal gain dictionary
-    heracal_gains = {}
-    for i, p in enumerate(pol_array):
-        pol_dict = odict()
-        for j, k in enumerate(abscal_gains.keys()):
-            if p in k:
-                pol_dict[k[0]] = abscal_gains[k]
-        heracal_gains[p] = pol_dict
-
-    # configure meta
-    inttime = np.median(np.diff(time_array)) * 24. * 3600.
-    meta = {'times': time_array, 'freqs': freq_array, 'inttime': inttime}
-
-    # convert to UVCal
-    uvc = cal_formats.HERACal(meta, heracal_gains, **kwargs)
-
-    # write to file
-    if os.path.exists(calfits_fname) is True and overwrite is False:
-        echo("{} already exists, not overwriting...".format(calfits_fname))
-    else:
-        echo("saving {}".format(calfits_fname))
-        uvc.write_calfits(calfits_fname, clobber=overwrite)
 
 
 def fill_dict_nans(data, wgts=None, nan_fill=None, inf_fill=None, array=False):

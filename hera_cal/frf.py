@@ -206,35 +206,50 @@ class FRFilter(object):
 
         Parameters
         ----------
-        input_data : UVData or str
-            UVData object or string filepath to visibility data
+        input_data : HERAData object or str
+            HERAData object or string filepath to visibility data
 
         filetype : str
             File format of the data. Only miriad is currently supported.
         """
-        assert isinstance(input_data, (UVData, str, np.str)), "input_data must be fed as a UVData object or a string filepath"
+        assert isinstance(input_data, (UVData, str, np.str, io.HERAData)), "input_data must be fed as a HERAData, UVData object or a string filepath"
 
-        # load uvdata if fed as string
+        # load HERAData if fed as string
         if isinstance(input_data, (str, np.str)):
-            # TODO: Change to using hc.io.file_to_uvd
-            self.input_uvdata = UVData()
-            self.input_uvdata.read_miriad(input_data)
+            # TODO: Need HERAData to take UVData objects
+            self.input_data = io.HERAData(input_data, filetype=filetype)
+            self.input_data.read()
+        elif isinstance(input_data, UVData):
+            # promote UVData to HERAData
+            self.input_data = input_data
+            self.input_data.__class__ = io.HERAData
+            self.input_data._determine_blt_slicing()
+            self.input_data._determine_pol_indexing()
         else:
-            self.input_uvdata = input_data
+            self.input_data = input_data
 
         self.filetype = filetype
 
-        (self.data, self.flags, self.antpos, self.ants, self.freqs, self.times, self.lsts,
-         self.pols) = io.load_vis(self.input_uvdata, return_meta=True, filetype=filetype)
-        self.nsamples = odict([(k, self.input_uvdata.get_nsamples(k)) for k in self.data.keys()])
-        self.nsamples = datacontainer.DataContainer(self.nsamples)
+        # read all the data into datacontainers
+        self.data, self.flags, self.nsamples = self.input_data.build_datacontainers()
+
+        # read the metadata: assign individually to guard against code
+        # changes within hera_cal.io implicitly changing variable names
+        mdict = self.input_data.get_metadata_dict()
+        self.antpos = mdict['antpos']
+        self.ants = mdict['ants']
+        self.freqs = mdict['freqs']
+        self.times = mdict['times']
+        self.lsts = mdict['lsts']
+        self.pols = mdict['pols']
+
         self.Nfreqs = len(self.freqs)
         self.Ntimes = len(self.times)
         self.dlst = np.median(np.diff(self.lsts))
         self.dtime = np.median(np.diff(self.times))
         self.bls = sorted(set([k[:2] for k in self.data.keys()]))
         self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
-        self.lat = self.input_uvdata.telescope_location_lat_lon_alt[0] * 180 / np.pi
+        self.lat = self.input_data.telescope_location_lat_lon_alt[0] * 180 / np.pi
 
     def timeavg_data(self, t_avg, rephase=False, verbose=True):
         """
@@ -303,15 +318,15 @@ class FRFilter(object):
             Output file format. Currently only miriad is supported.
 
         add_to_history = str
-            History string to add to the UVData object before writing to disk.
+            History string to add to the HERAData object before writing to disk.
 
         overwrite: bool
             If True, overwrite output if it exists.
 
         Returns
         -------
-        new_uvd : UVData object
-            A copy of the input_UVData object, but with updated data
+        new_hd : HERAData object
+            A copy of the input_data object, but with updated data
             and relevant metadata.
         """
         # check output
@@ -319,8 +334,8 @@ class FRFilter(object):
             print "{} already exists, not overwriting...".format(outfilename)
             return
 
-        # create new UVData object
-        new_uvd = copy.deepcopy(self.input_uvdata)
+        # create new HERAData object
+        new_hd = copy.deepcopy(self.input_data)
 
         # set write data references
         if write_avg:
@@ -338,28 +353,28 @@ class FRFilter(object):
 
         # strip down to appropriate Ntimes
         Ntimes = len(times)
-        new_uvd.select(times=self.times[:Ntimes], inplace=True)
+        new_hd.select(times=self.times[:Ntimes], inplace=True)
 
         # get telescope coords
-        lat, lon, alt = new_uvd.telescope_location_lat_lon_alt
+        lat, lon, alt = new_hd.telescope_location_lat_lon_alt
         lat = lat * 180 / np.pi
         lon = lon * 180 / np.pi
 
         # Overwrite data
         for k in data.keys():
-            blts_inds = new_uvd.antpair2ind(*k[:2])
+            blts_inds = new_hd.antpair2ind(*k[:2])
             p = uvutils.polstr2num(k[2])
-            pol_ind = np.argmax(p in new_uvd.polarization_array)
-            new_uvd.data_array[blts_inds, 0, :, pol_ind] = data[k]
-            new_uvd.flag_array[blts_inds, 0, :, pol_ind] = flags[k]
-            new_uvd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
-            new_uvd.time_array[blts_inds] = times
-            new_uvd.lst_array[blts_inds] = lsts
+            pol_ind = np.argmax(p in new_hd.polarization_array)
+            new_hd.data_array[blts_inds, 0, :, pol_ind] = data[k]
+            new_hd.flag_array[blts_inds, 0, :, pol_ind] = flags[k]
+            new_hd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
+            new_hd.time_array[blts_inds] = times
+            new_hd.lst_array[blts_inds] = lsts
 
         # write data
         if filetype == 'miriad':
-            new_uvd.write_miriad(outfilename, clobber=True)
+            new_hd.write_miriad(outfilename, clobber=True)
         else:
             raise NotImplementedError("filetype {} not recognized".format(filetype))
 
-        return new_uvd
+        return new_hd

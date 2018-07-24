@@ -4,10 +4,8 @@ import copy
 import json
 import optparse
 import os
-
 import numpy as np
 import scipy.sparse as sps
-
 import aipy
 from aipy.miriad import pol2str
 from hera_cal.omni import Antpol
@@ -374,51 +372,6 @@ class FirstCal(object):
         return dict(zip(map(Antpol, self.info.subsetant, [self.info.nant] * len(self.info.subsetant)), self.xhat))
 
 
-def UVData_to_dict(uvdata_list, filetype='miriad'):
-    """ Turn a list of UVData objects or filenames in to a data and flag dictionary.
-
-        Make dictionary with blpair key first and pol second key from either a
-        list of UVData objects or a list of filenames with specific file_type.
-
-        Args:
-            uvdata_list: list of UVData objects or strings of filenames.
-            filetype (string, optional): type of file if uvdata_list is
-                a list of filenames
-
-        Return:
-            data (dict): dictionary of data indexed by pol and antenna pairs
-            flags (dict): dictionary of flags indexed by pol and antenna pairs
-        """
-
-    d, f = {}, {}
-    for uv_in in uvdata_list:
-        if isinstance(uv_in, str):
-            fname = uv_in
-            uv_in = UVData()
-            # read in file without multiple if statements
-            getattr(uv_in, 'read_' + filetype)(fname)
-
-        # iterate over unique baselines
-        for nbl, (i, j) in enumerate(map(uv_in.baseline_to_antnums, np.unique(uv_in.baseline_array))):
-            if (i, j) not in d:
-                d[i, j] = {}
-                f[i, j] = {}
-            for ip, pol in enumerate(uv_in.polarization_array):
-                pol = pol2str[pol]
-                new_data = copy.copy(uv_in.get_data((i, j, pol)))
-                new_flags = copy.copy(uv_in.get_flags((i, j, pol)))
-
-                if pol not in d[(i, j)]:
-                    d[(i, j)][pol] = new_data
-                    f[(i, j)][pol] = new_flags
-                else:
-                    d[(i, j)][pol] = np.concatenate(
-                        [d[(i, j)][pol], new_data])
-                    f[(i, j)][pol] = np.concatenate(
-                        [f[(i, j)][pol], new_flags])
-    return d, f
-
-
 def process_ubls(ubls):
     """
     Return list of tuples of unique-baseline pairs from command line argument.
@@ -508,6 +461,11 @@ def firstcal_run(files, opts, history):
 
         while niters == 0 or len(switched) > 0:
             datapack, flagpack = io.load_vis([uv], nested_dict=True)
+            # convert to lowercase, this is a hacky temporary fix until firstcal and omnical are updated
+            for bl in datapack.keys():
+                for pol in list(datapack[bl].keys()):
+                    datapack[bl][pol.lower()] = datapack[bl].pop(pol)
+                    flagpack[bl][pol.lower()] = flagpack[bl].pop(pol)
             datapack = _apply_pi_shift(datapack, switched)
             wgtpack = {k: {p: np.logical_not(flagpack[k][p]) for p in flagpack[k]} for k in flagpack}
 

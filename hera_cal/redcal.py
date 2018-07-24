@@ -2,6 +2,7 @@ import numpy as np
 import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
+from hera_cal.utils import split_pol, conj_pol, polnum2str, polstr2num, jnum2str, jstr2num
 
 
 def noise(size):
@@ -29,7 +30,8 @@ def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
     """
 
     data, true_vis = {}, {}
-    ants = list(set([ant for bls in reds for bl in bls for ant in [(bl[0], bl[2][0]), (bl[1], bl[2][1])]]))
+    ants = list(set([ant for bls in reds for bl in bls for ant in
+                    [(bl[0], split_pol(bl[2])[0]), (bl[1], split_pol(bl[2])[1])]]))
     if gains is None:
         gains = {}
     else:
@@ -39,7 +41,7 @@ def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
     for bls in reds:
         true_vis[bls[0]] = noise(shape)
         for (i, j, pol) in bls:
-            data[(i, j, pol)] = true_vis[bls[0]] * gains[(i, pol[0])] * gains[(j, pol[1])].conj()
+            data[(i, j, pol)] = true_vis[bls[0]] * gains[(i, split_pol(pol)[0])] * gains[(j, split_pol(pol)[1])].conj()
     return gains, true_vis, data
 
 
@@ -90,51 +92,51 @@ def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
         return [reds[delta] for delta in orderedDeltas]
 
 
-def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
+def add_pol_reds(reds, pols=['XX'], pol_mode='1pol', ex_ants=[]):
     """ Takes positonal reds (antenna indices only, no polarizations) and converts them
     into baseline tuples with polarization, depending on pols and pol_mode specified.
 
     Args:
         reds: list of list of antenna index tuples considered redundant
-        pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
+        pols: a list of polarizations e.g. ['XX', 'XY', 'YX', 'YY']
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'x' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'x','y' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'x','y' and 'xx','xy','yx','yy')
+            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'XX'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'XX','YY')
+            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'XX','XY','YX','YY')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
-        ex_ants: list of antennas to exclude in the [(1,'x'),(10,'y')] format
+        ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
 
     Returns:
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
     """
 
     def excluded(bl, pol):
-        return ((bl[0], pol[0]) in ex_ants) or ((bl[1], pol[1]) in ex_ants)
+        return ((bl[0], split_pol(pol)[0]) in ex_ants) or ((bl[1], split_pol(pol)[1]) in ex_ants)
 
     redsWithPols, didBothCrossPolsForMinV = [], False
     for pol in pols:
         if pol_mode is not '4pol_minV' or pol[0] == pol[1]:
             redsWithPols += [[bl + (pol,) for bl in bls if not excluded(bl, pol)] for bls in reds]
         elif pol_mode is '4pol_minV' and not didBothCrossPolsForMinV:
-            # Combine together e.g. 'xy' and 'yx' visibilities as redundant
+            # Combine together e.g. 'XY' and 'YX' visibilities as redundant
             redsWithPols += [([bl + (pol,) for bl in bls if not excluded(bl, pol)]
-                              + [bl + (pol[::-1],) for bl in bls if not excluded(bl, pol[::-1])]) for bls in reds]
+                              + [bl + (conj_pol(pol),) for bl in bls if not excluded(bl, conj_pol(pol))]) for bls in reds]
             didBothCrossPolsForMinV = True
     return redsWithPols
 
 
-def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0, low_hi=False):
+def get_reds(antpos, pols=['XX'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0, low_hi=False):
     """ Combines redcal.get_pos_reds() and redcal.add_pol_reds(). See their documentation.
 
     Args:
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
-        pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
+        pols: a list of polarizations e.g. ['XX', 'XY', 'YX', 'YY']
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'x' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'x','y' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'x','y' and 'xx','xy','yx','yy')
+            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'XX'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'XX','YY')
+            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'XX','XY','YX','YY')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
-        ex_ants: list of antennas to exclude in the [(1,'x'),(10,'y')] format
+        ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         low_hi: For all returned baseline index tuples (i,j) to have i < j
@@ -149,16 +151,16 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0,
 
 def check_polLists_minV(polLists):
     """Given a list of unique visibility polarizations (e.g. for each red group), returns whether
-    they are all either single identical polarizations (e.g. 'xx') or both cross polarizations
-    (e.g. ['xy','yx']) so that the 4pol_minV can be assumed."""
+    they are all either single identical polarizations (e.g. 'XX') or both cross polarizations
+    (e.g. ['XY','YX']) so that the 4pol_minV can be assumed."""
 
     for polList in polLists:
         ps = list()
         if len(polList) is 1:
-            if polList[0][0] != polList[0][1]:
+            if split_pol(polList[0])[0] != split_pol(polList[0])[1]:
                 return False
         elif len(polList) is 2:
-            if polList[0] != polList[1][::-1] or polList[0][0] == polList[0][1]:
+            if polList[0] != conj_pol(polList[1]) or split_pol(polList[0])[0] == split_pol(polList[0])[1]:
                 return False
         else:
             return False
@@ -173,18 +175,18 @@ def parse_pol_mode(reds):
 
     Returns:
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'x' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'x','y' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'x','y' and 'xx','xy','yx','yy')
+            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'XX'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'XX','YY')
+            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'XX','XY','YX','YY')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
             'unrecognized_pol_mode': something else
     """
 
     pols = list(set([bl[2] for bls in reds for bl in bls]))
-    antpols = list(set(''.join(pols)))
+    antpols = list(set([antpol for pol in pols for antpol in split_pol(pol)]))
     if len(pols) == 1 and len(antpols) == 1:
         return '1pol'
-    elif len(antpols) == 2 and set(pols) == set([2 * antpol for antpol in antpols]):
+    elif len(pols) == 2 and np.all([split_pol(pol)[0] == split_pol(pol)[1] for pol in pols]):
         return '2pol'
     elif len(pols) == 4 and len(antpols) == 2:
         polLists = [list(set([bl[2] for bl in bls])) for bls in reds]
@@ -217,11 +219,11 @@ def _apply_gains(target, gains, operation, target_type):
         # loop over len=3 keys in target
         for (ant1, ant2, pol) in [key for key in output.keys() if len(key) == 3]:
             try:
-                output[(ant1, ant2, pol)] = operation(output[(ant1, ant2, pol)], gains[(ant1, pol[0])])
+                output[(ant1, ant2, pol)] = operation(output[(ant1, ant2, pol)], gains[(ant1, split_pol(pol)[0])])
             except KeyError:
                 pass
             try:
-                output[(ant1, ant2, pol)] = operation(output[(ant1, ant2, pol)], np.conj(gains[(ant2, pol[1])]))
+                output[(ant1, ant2, pol)] = operation(output[(ant1, ant2, pol)], np.conj(gains[(ant2, split_pol(pol)[1])]))
             except KeyError:
                 pass
     elif target_type is 'gain':
@@ -286,15 +288,15 @@ class RedundantCalibrator:
 
     def build_eqs(self, bls_in_data):
         """Function for generating linsolve equation strings. Takes in a list of baselines that
-        occur in the data in the (ant1,ant2,pol) format and returns a dictionary that maps
+        occur in the data in the (ant1, ant2, pol) format and returns a dictionary that maps
         linsolve string to (ant1, ant2, pol) for all visibilities."""
 
         eqs = {}
         for ubl_index, blgrp in enumerate(self.reds):
             for ant_i, ant_j, pol in blgrp:
                 if (ant_i, ant_j, pol) in bls_in_data:
-                    params = (ant_i, pol[0], ant_j, pol[1], ubl_index, blgrp[0][2])
-                    eqs['g%d%s * g%d%s_ * u%d%s' % params] = (ant_i, ant_j, pol)
+                    params = (ant_i, split_pol(pol)[0], ant_j, split_pol(pol)[1], ubl_index, blgrp[0][2])
+                    eqs['g_%d_%s * g_%d_%s_ * u_%d_%s' % params] = (ant_i, ant_j, pol)
         return eqs
 
     def _solver(self, solver, data, wgts={}, detrend_phs=False, sparse=False, **kwargs):
@@ -333,18 +335,18 @@ class RedundantCalibrator:
         """Turn linsolve's internal variable string into antenna or baseline tuple (with polarization)."""
 
         if k.startswith('g'):  # 'g' = gain solution
-            return (int(k[1:-1]), k[-1])
+            return (int(k.split('_')[1]), k.split('_')[2])
         else:  # 'u' = unique baseline solution
-            return self.reds[int(k[1:-2])][0]
+            return self.reds[int(k.split('_')[1])][0]
 
     def pack_sol_key(self, k):
         """Turn an antenna or baseline tuple (with polarization) into linsolve's internal variable string."""
 
         if len(k) == 2:  # 'g' = gain solution
-            return 'g%d%s' % k
+            return 'g_%d_%s' % k
         else:  # 'u' = unique baseline solution
             ubl_num = [cnt for cnt, blgrp in enumerate(self.reds) if blgrp[0] == k][0]
-            return 'u%d%s' % (ubl_num, k[-1])
+            return 'u_%d_%s' % (ubl_num, k[-1])
 
     def compute_ubls(self, data, gain_sols):
         """Given a set of guess gain solutions, return a dictionary of calibrated visbilities
@@ -433,7 +435,7 @@ class RedundantCalibrator:
         antpols = list(set(gainPols))
         positions = np.array([antpos[ant[0]] for ant in ants])
         bl_pairs = v.keys()
-        visPols = np.array([[bl[2][0], bl[2][1]] for bl in bl_pairs])
+        visPols = np.array([split_pol(bl[2]) for bl in bl_pairs])
         # visPols is list of pol, one per baseline
         bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
         if self.pol_mode not in ['1pol', '2pol', '4pol', '4pol_minV']:
@@ -441,11 +443,17 @@ class RedundantCalibrator:
 
         # if mode is 2pol, run as two 1pol remove degens
         if self.pol_mode is '2pol':
+
+            def match_pol(key, antpol):
+                if len(key) == 2:
+                    return antpol == key[1]
+                else:
+                    return antpol in split_pol(key[2])
             self.pol_mode = '1pol'
             newSol = self.remove_degen(antpos, {key: val for key, val in sol.items()
-                                                if antpols[0] in key[-1]}, degen_sol=degen_sol)
+                                                if match_pol(key, antpols[0])}, degen_sol=degen_sol)
             newSol.update(self.remove_degen(antpos, {key: val for key, val in sol.items()
-                                                     if antpols[1] in key[-1]}, degen_sol=degen_sol))
+                                                     if match_pol(key, antpols[1])}, degen_sol=degen_sol))
             self.pol_mode = '2pol'
             return newSol
 
