@@ -418,7 +418,7 @@ class HERAData(UVData):
             for bl in nsamples.keys():
                 self._set_slice(self.nsample_array, bl, nsamples[bl])
 
-    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False):
+    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False, add_to_history=''):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
         input_data file called on __init__. Any data/flags/nsamples left as None will be written
@@ -433,6 +433,8 @@ class HERAData(UVData):
             clobber: if True, overwrites existing file at output_path
             inplace: update this object's data_array, flag_array, and nsamples_array.
                 This saves memory but alters the HERAData object.
+            add_to_history: string to append to history (only used on first call of
+                partial_write for a given output_path)
         '''
         # Type verifications
         if self.filetype is not 'uvh5':
@@ -445,6 +447,7 @@ class HERAData(UVData):
             hd_writer = self._writers[output_path]  # This hd_writer has metadata for the entire output file
         else:
             hd_writer = HERAData(self.filepaths[0])
+            hd_writer.history += add_to_history
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
 
