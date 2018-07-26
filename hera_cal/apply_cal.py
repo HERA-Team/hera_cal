@@ -1,5 +1,12 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
+"""Module for applying calibration solutions to visibility data, both in memory and on disk."""
+
+from __future__ import absolute_import, division, print_function
 import numpy as np
-import hera_cal.io as io
+from hera_cal import io
 from pyuvdata import UVCal, UVData
 import argparse
 from hera_cal.datacontainer import DataContainer
@@ -71,22 +78,26 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None,
-              flag_nchan_low=0, flag_nchan_high=0, filetype='miriad', gain_convention='divide',
-              add_to_history='', clobber=False, **kwargs):
+              flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
+              nbl_per_load=None, gain_convention='divide', add_to_history='', clobber=False, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
     Arguments:
-        data_infilename: filename (or UVData object) of the data file to be updated.
+        TODO: UPDATE PARTIAL LOAD
+        data_infilename: filename of the data to be calibrated.
         data_outfilename: filename of the resultant data file with the new calibration and flags.
-        new_calibration: filename of the calfits file (or a list of filenames) or UVCal object for the calibration
+        new_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be applied, along with its new flags (if any).
-        old_calibration: filename of the calfits file (or a list of filenames) or UVCal object for the calibration
+        old_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flags_npz: optional path to npz file containing just flags to be ORed with flags in input data
         flag_chan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_chan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        filetype: filename for the new file, either 'miriad' or 'uvfits'
+        filetype_in: type of data infile. Supports 'miriad', 'uvfits', and 'uvh5'.
+        filetype_out: type of data outfile. Supports 'miriad', 'uvfits', and 'uvh5'.
+        nbl_per_load: maximum number of baselines to load at once. Default (None) is to load the whole file at once.
+            Enables partial reading and writing, but only for uvh5 to uvh5.
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
@@ -95,54 +106,69 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         kwargs: dictionary mapping updated attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
-    # load data, flags, and (optionally) npz flags
-    uvd = UVData()
-    if filetype == 'miriad':
-        uvd.read_miriad(data_infilename)
-    else:
-        raise NotImplementedError('This function has not been implemented yet.')
+
+    # optionally load npz flags
     if flags_npz is not None:
         npz_flags = np.load(flags_npz)
-        uvd.flag_array = np.logical_or(npz_flags['flag_array'], uvd.flag_array)
         add_to_history += ' FLAGS_NPZ_HISTORY: ' + str(npz_flags['history']) + '\n'
-    data, data_flags = io.load_vis(uvd)
-
-    # apply band edge flags
-    for bl in data_flags.keys():
-        data_flags[bl][:, 0:flag_nchan_low] = True
-        data_flags[bl][:, data_flags[bl].shape[1] - flag_nchan_high:] = True
+        npz_flag_dc = io.load_npz_flags(flags_npz)
 
     # load new calibration solution
-    if new_calibration is None:
-        raise ValueError('Must provide a calibration solution to apply.')
-    if isinstance(new_calibration, UVCal):
-        uvc = new_calibration
-    else:
-        uvc = UVCal()
-        uvc.read_calfits(new_calibration)
-    add_to_history += ' NEW_CALFITS_HISTORY: ' + uvc.history + '\n'
-    new_gains, new_flags = io.load_cal(uvc)
+    hc = io.HERACal(new_calibration)
+    new_gains, new_flags, _, _ = hc.read()
+    add_to_history += ' NEW_CALFITS_HISTORY: ' + hc.history + '\n'
 
     # load old calibration solution
     if old_calibration is not None:
-        if isinstance(old_calibration, UVCal):
-            old_uvc = old_calibration
-        else:
-            old_uvc = UVCal()
-            old_uvc.read_calfits(old_calibration)
-        add_to_history += ' OLD_CALFITS_HISTORY: ' + old_uvc.history + '\n'
-        old_calibration, _ = io.load_cal(old_uvc)
+        old_hc = io.HERACal(old_calibration)
+        old_calibration, _, _, _ = old_hc.read()
+        add_to_history += ' OLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
 
-    recalibrate_in_place(data, data_flags, new_gains, new_flags, old_gains=old_calibration, gain_convention=gain_convention)
-    io.update_vis(data_infilename, data_outfilename, filetype_in=filetype, filetype_out=filetype, data=data,
-                  flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
+    # partial loading and writing using uvh5
+    if nbl_per_load is not None:
+        if not (filetype_in is 'uvh5') or not (filetype_out is 'uvh5'):
+            raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
+        hd = io.HERAData(data_infilename, filetype='uvh5')
+        for attribute, value in kwargs.items():
+            hd.__setattr__(attribute, value)
+        for data, data_flags, _ in hd.iterate_over_bls(Nbls=nbl_per_load):
+            for bl in data_flags.keys():
+                # apply band edge flags
+                data_flags[bl][:, 0:flag_nchan_low] = True
+                data_flags[bl][:, data_flags[bl].shape[1] - flag_nchan_high:] = True
+                # apply npz flags
+                if flags_npz is not None:
+                    data_flags[bl] = np.logical_or(data_flags[bl], npz_flag_dc[bl])
+            recalibrate_in_place(data, data_flags, new_gains, new_flags,
+                                 old_gains=old_calibration, gain_convention=gain_convention)
+            hd.partial_write(data_outfilename, data=data, flags=data_flags,
+                             inplace=True, clobber=clobber, add_to_history=add_to_history)
+
+    # full data loading and writing
+    else:
+        hd = io.HERAData(data_infilename, filetype=filetype_in)
+        hd.read()
+        # apply npz flags
+        if flags_npz is not None:
+            hd.flag_array = np.logical_or(npz_flags['flag_array'], hd.flag_array)
+        data, data_flags, _ = hd.build_datacontainers()
+        for bl in data_flags.keys():
+            # apply band edge flags
+            data_flags[bl][:, 0:flag_nchan_low] = True
+            data_flags[bl][:, data_flags[bl].shape[1] - flag_nchan_high:] = True
+            # apply npz flags
+            if flags_npz is not None:
+                data_flags[bl] = np.logical_or(data_flags[bl], npz_flag_dc[bl])
+        recalibrate_in_place(data, data_flags, new_gains, new_flags, old_gains=old_calibration, gain_convention=gain_convention)
+        io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
+                      data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
 
 
 def apply_cal_argparser():
     '''Arg parser for commandline operation of apply_cal.'''
     a = argparse.ArgumentParser(description="Apply (and optionally, also unapply) a calfits file to visibility file.")
-    a.add_argument("infile", type=str, help="path to visibility data file to calibrate")
-    a.add_argument("outfile", type=str, help="path to new visibility results file")
+    a.add_argument("infilename", type=str, help="path to visibility data file to calibrate")
+    a.add_argument("outfilename", type=str, help="path to new visibility results file")
     a.add_argument("--new_cal", type=str, default=None, nargs="+", help="path to new calibration calfits file (or files for cross-pol)")
     a.add_argument("--old_cal", type=str, default=None, nargs="+", help="path to old calibration calfits file to unapply (or files for cross-pol)")
     a.add_argument("--flags_npz", type=str, default=None, help="path to npz file of flags to OR with data flags")

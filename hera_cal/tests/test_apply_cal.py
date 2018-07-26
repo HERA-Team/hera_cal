@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the 2-clause BSD license (e.g.)
+
+"""Unit tests for the hera_cal.apply_cal module."""
+
+from __future__ import absolute_import, division, print_function
 from hera_cal import io
 from hera_cal import apply_cal as ac
 from hera_cal.datacontainer import DataContainer
@@ -80,57 +87,49 @@ class Test_Update_Cal(unittest.TestCase):
         self.assertAlmostEqual(wgts[(0, 1, 'xx')].max(), 0.0)
 
     def test_apply_cal(self):
-        fname = os.path.join(DATA_PATH, "zen.2457698.40355.xx.HH.uvcA")
-        outname = os.path.join(DATA_PATH, "test_output/zen.2457698.40355.xx.HH.applied.uvcA")
-        old_cal = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
-        new_cal = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
-        flags_npz = os.path.join(DATA_PATH, "zen.2457698.40355.xx.HH.uvcA.fake_flags.npz")
+        miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.h5OCR_53x_54x_only")
+        outname = os.path.join(DATA_PATH, "test_output/out.data")
+        calout = os.path.join(DATA_PATH, "test_output/out.cal")
+        old_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        flags_npz = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only.flags.applied.npz")
 
-        uvd = UVData()
-        uvd.read_miriad(fname)
-        uvd.flag_array = np.logical_or(uvd.flag_array, np.load(flags_npz)['flag_array'])
-        data, data_flags = io.load_vis(uvd)
+        hd_old = io.HERAData(miriad, filetype='miriad')
+        hd_old.read()
+        hd_old.flag_array = np.logical_or(hd_old.flag_array, np.load(flags_npz)['flag_array'])
+        data, data_flags, _ = hd_old.build_datacontainers()
+        
         new_gains, new_flags = io.load_cal(new_cal)
         uvc_old = UVCal()
         uvc_old.read_calfits(old_cal)
         uvc_old.gain_array *= (3.0 + 4.0j)
+        uvc_old.write_calfits(calout, clobber=True)
 
-        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention='divide',
-                     flags_npz=flags_npz, filetype='miriad', clobber=True, vis_units='Jy')
-        u = UVData()
-        u.read_miriad(outname)
-        self.assertEqual(u.vis_units, 'Jy')
-        new_data, new_flags = io.load_vis(outname)
+        ac.apply_cal(miriad, outname, new_cal, old_calibration=calout, gain_convention='divide',
+                     flag_nchan_low=450, flag_nchan_high=400, flags_npz=flags_npz, 
+                     filetype_in='miriad', filetype_out='miriad', clobber=True, vis_units='Jy')
+        hd = io.HERAData(outname, filetype='miriad')
+        new_data, new_flags, _ = hd.read()
+        self.assertEqual(hd.vis_units, 'Jy')
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):
                 for j in range(new_data[k].shape[1]):
                     if not new_flags[k][i, j]:
-                        self.assertAlmostEqual(new_data[k][i, j] / 25.0, data[k][i, j], 4)
-                    if j < 300 or j > 923:
-                        self.assertTrue(new_flags[k][i, j])
-
-        # test band edge flagging
-        ac.apply_cal(fname, outname, new_cal, old_calibration=uvc_old, gain_convention='divide',
-                     flag_nchan_low=450, flag_nchan_high=400, filetype='miriad', clobber=True)
-        new_data, new_flags = io.load_vis(outname)
-        for k in new_data.keys():
-            for i in range(new_data[k].shape[0]):
-                for j in range(new_data[k].shape[1]):
-                    if not new_flags[k][i, j]:
-                        self.assertAlmostEqual(new_data[k][i, j] / 25.0, data[k][i, j], 4)
+                        self.assertAlmostEqual(new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, 4)
                     if j < 450 or j > 623:
                         self.assertTrue(new_flags[k][i, j])
 
         with self.assertRaises(ValueError):
-            ac.apply_cal(fname, outname, None)
+            ac.apply_cal(miriad, outname, None)
         shutil.rmtree(outname)
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
         a = ac.apply_cal_argparser()
         args = a.parse_args()
-        self.assertEqual(args.infile, 'a')
-        self.assertEqual(args.outfile, 'b')
+        self.assertEqual(args.infilename, 'a')
+        self.assertEqual(args.outfilename, 'b')
         self.assertEqual(args.new_cal, ['d'])
 
 
