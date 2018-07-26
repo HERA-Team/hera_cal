@@ -89,7 +89,8 @@ class Test_Update_Cal(unittest.TestCase):
     def test_apply_cal(self):
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.h5OCR_53x_54x_only")
-        outname = os.path.join(DATA_PATH, "test_output/out.data")
+        outname_miriad = os.path.join(DATA_PATH, "test_output/out.uv")
+        outname_uvh5 = os.path.join(DATA_PATH, "test_output/out.h5")
         calout = os.path.join(DATA_PATH, "test_output/out.cal")
         old_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
@@ -106,10 +107,10 @@ class Test_Update_Cal(unittest.TestCase):
         uvc_old.gain_array *= (3.0 + 4.0j)
         uvc_old.write_calfits(calout, clobber=True)
 
-        ac.apply_cal(miriad, outname, new_cal, old_calibration=calout, gain_convention='divide',
+        ac.apply_cal(miriad, outname_miriad, new_cal, old_calibration=calout, gain_convention='divide',
                      flag_nchan_low=450, flag_nchan_high=400, flags_npz=flags_npz, 
                      filetype_in='miriad', filetype_out='miriad', clobber=True, vis_units='Jy')
-        hd = io.HERAData(outname, filetype='miriad')
+        hd = io.HERAData(outname_miriad, filetype='miriad')
         new_data, new_flags, _ = hd.read()
         self.assertEqual(hd.vis_units, 'Jy')
         for k in new_data.keys():
@@ -120,9 +121,29 @@ class Test_Update_Cal(unittest.TestCase):
                     if j < 450 or j > 623:
                         self.assertTrue(new_flags[k][i, j])
 
+        # test partial load
+        ac.apply_cal(uvh5, outname_uvh5, new_cal, old_calibration=calout, gain_convention='divide',
+                     flag_nchan_low=450, flag_nchan_high=400, flags_npz=flags_npz, nbl_per_load=1,
+                     filetype_in='uvh5', filetype_out='uvh5', clobber=True, vis_units='Jy')
+        hd = io.HERAData(outname_uvh5, filetype='uvh5')
+        new_data, new_flags, _ = hd.read()
+        self.assertEqual(hd.vis_units, 'Jy')
+        for k in new_data.keys():
+            for i in range(new_data[k].shape[0]):
+                for j in range(new_data[k].shape[1]):
+                    if not new_flags[k][i, j]:
+                        self.assertAlmostEqual(new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, 4)
+                    if j < 450 or j > 623:
+                        self.assertTrue(new_flags[k][i, j])
+        os.remove(outname_uvh5)
+
+        # test errors
         with self.assertRaises(ValueError):
-            ac.apply_cal(miriad, outname, None)
-        shutil.rmtree(outname)
+            ac.apply_cal(miriad, outname_miriad, None)
+        with self.assertRaises(NotImplementedError):
+            ac.apply_cal(miriad, outname_uvh5, new_cal, filetype_in='miriad', nbl_per_load=1)
+        shutil.rmtree(outname_miriad)
+
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
