@@ -1,7 +1,10 @@
 #! /usr/bin/env python
-"""
-abscal.AbsCal drive script assuming data is already omnicalibrated
-"""
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
+"""abscal.AbsCal drive script assuming data is already omnicalibrated"""
+
 from hera_cal import abscal
 import sys
 import os

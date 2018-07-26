@@ -1,4 +1,8 @@
 #! /usr/bin/env python
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 import os
 import argparse
 import pyuvdata

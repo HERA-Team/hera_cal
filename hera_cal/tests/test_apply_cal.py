@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 from hera_cal import io
 from hera_cal import apply_cal as ac
 from hera_cal.datacontainer import DataContainer

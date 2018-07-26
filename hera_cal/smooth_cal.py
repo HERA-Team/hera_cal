@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 import numpy as np
 import scipy
 from hera_cal import io, utils
