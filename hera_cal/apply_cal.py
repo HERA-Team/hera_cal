@@ -84,7 +84,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
     Arguments:
-        TODO: UPDATE PARTIAL LOAD
         data_infilename: filename of the data to be calibrated.
         data_outfilename: filename of the resultant data file with the new calibration and flags.
         new_calibration: filename of the calfits file (or a list of filenames) for the calibration
@@ -92,8 +91,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         old_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flags_npz: optional path to npz file containing just flags to be ORed with flags in input data
-        flag_chan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
-        flag_chan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
+        flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
+        flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         filetype_in: type of data infile. Supports 'miriad', 'uvfits', and 'uvh5'.
         filetype_out: type of data outfile. Supports 'miriad', 'uvfits', and 'uvh5'.
         nbl_per_load: maximum number of baselines to load at once. Default (None) is to load the whole file at once.
@@ -103,7 +102,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flags_npz (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
-        kwargs: dictionary mapping updated attributes to their new values.
+        kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
 
@@ -174,7 +173,8 @@ def apply_cal_argparser():
     a.add_argument("--flags_npz", type=str, default=None, help="path to npz file of flags to OR with data flags")
     a.add_argument("--flag_nchan_low", type=int, default=0, help="integer number of channels at the low frequency end of the band to always flag (default 0)")
     a.add_argument("--flag_nchan_high", type=int, default=0, help="integer number of channels at the high frequency end of the band to always flag (default 0)")
-    a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files')
+    a.add_argument("--filetype_in", type=str, default='miriad', help='filetype of input data files')
+    a.add_argument("--filetype_out", type=str, default='miriad', help='filetype of output data files')
     a.add_argument("--gain_convention", type=str, default='divide',
                    help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
