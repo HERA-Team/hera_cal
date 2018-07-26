@@ -1,5 +1,10 @@
 #!/usr/bin/env python2.7
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 """Command-line drive script for hera_cal.delay_filter"""
+
 from hera_cal.delay_filter import Delay_Filter, delay_filter_argparser
 import sys
 

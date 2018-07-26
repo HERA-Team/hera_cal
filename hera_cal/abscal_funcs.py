@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 """
 abscal_funcs.py
 ---------------
@@ -5,6 +9,7 @@ abscal_funcs.py
 Self contained routines
 used by abscal.py
 """
+
 import os
 import sys
 from collections import OrderedDict as odict

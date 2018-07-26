@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 """
 lstbin.py
 ---------
@@ -5,6 +9,7 @@ lstbin.py
 Routines for aligning and binning of visibility
 data onto a universal Local Sidereal Time (LST) grid.
 """
+
 import os
 import sys
 from collections import OrderedDict as odict

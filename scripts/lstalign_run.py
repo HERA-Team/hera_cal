@@ -1,7 +1,10 @@
 #!/usr/bin/env python2.7
-"""
-command-line drive script for lstbin.lst_align_files()
-"""
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
+"""command-line drive script for lstbin.lst_align_files()"""
+
 from hera_cal import lstbin
 import sys
 import os

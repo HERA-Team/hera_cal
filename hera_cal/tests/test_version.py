@@ -1,4 +1,9 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 """Tests for version.py."""
+
 import nose.tools as nt
 import sys
 import os
