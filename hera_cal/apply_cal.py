@@ -90,7 +90,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             to be applied, along with its new flags (if any).
         old_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
-        flags_npz: optional path to npz file containing just flags to be ORed with flags in input data
+        flags_npz: optional path to npz file containing just flags to be ORed with flags in input data. Must have
+            the same shape as the data.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         filetype_in: type of data infile. Supports 'miriad', 'uvfits', and 'uvh5'.
@@ -125,7 +126,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
 
     # partial loading and writing using uvh5
     if nbl_per_load is not None:
-        if not (filetype_in is 'uvh5') or not (filetype_out is 'uvh5'):
+        if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
         hd = io.HERAData(data_infilename, filetype='uvh5')
         for attribute, value in kwargs.items():

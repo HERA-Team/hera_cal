@@ -118,6 +118,7 @@ class Test_Update_Cal(unittest.TestCase):
                 for j in range(new_data[k].shape[1]):
                     if not new_flags[k][i, j]:
                         self.assertAlmostEqual(new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, 4)
+                    # from flag_nchan_low and flag_nchan_high above with 1024 total channels
                     if j < 450 or j > 623:
                         self.assertTrue(new_flags[k][i, j])
 
@@ -133,6 +134,7 @@ class Test_Update_Cal(unittest.TestCase):
                 for j in range(new_data[k].shape[1]):
                     if not new_flags[k][i, j]:
                         self.assertAlmostEqual(new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, 4)
+                    # from flag_nchan_low and flag_nchan_high above with 1024 total channels
                     if j < 450 or j > 623:
                         self.assertTrue(new_flags[k][i, j])
         os.remove(outname_uvh5)
