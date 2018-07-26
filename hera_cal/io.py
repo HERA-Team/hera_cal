@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils

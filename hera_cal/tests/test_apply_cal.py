@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
-# Licensed under the 2-clause BSD license (e.g.)
+# Licensed under the MIT License
 
 """Unit tests for the hera_cal.apply_cal module."""
 

@@ -1,4 +1,7 @@
 #!/usr/bin/env python2.7
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
 
 """Command-line drive script for hera_cal.smooth_cal. By default, this script
 1) loads in the calibration solutions and (optionally) the associated flagging npzs for (usually) a whole day

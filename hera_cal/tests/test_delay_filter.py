@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 import hera_cal.delay_filter as df
 from hera_cal import io
 import numpy as np

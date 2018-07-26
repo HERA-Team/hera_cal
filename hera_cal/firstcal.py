@@ -1,4 +1,9 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 '''Classes and Functions for running Firstcal.'''
+
 from __future__ import print_function, division, absolute_import
 import copy
 import json

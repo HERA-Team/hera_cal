@@ -1,4 +1,9 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 '''Tests for io.py'''
+
 import unittest
 import numpy as np
 import pyuvdata
