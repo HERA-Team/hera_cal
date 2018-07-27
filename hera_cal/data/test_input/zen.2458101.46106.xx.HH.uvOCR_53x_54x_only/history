@@ -1,0 +1,255 @@
+CORR-DACQ: created file.
+  Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.git.  Git hash: 2325220979539b351990bb5916e7dfd7246843c9.  Git branch: h1c.  Git description: v1.2-54-g2325220.  Downselected to specific antennas using pyuvdata. Hera Hex antennas selected with hera_cal/scripts/extract_hh.py, hera_cal version: {'git_hash': '5fb54895439cf3158c47209e2475b32dab67bdc8', 'version': '1.0', 'git_description': 'v1.0-21-g5fb5489', 'git_branch': 'h1c', 'git_origin': 'https://github.com/HERA-Team/hera_cal.git'}.
+  Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.git.  Git hash: a4e6fe2b695bc2d80d67c0ac7853ad17b1190f63.  Git branch: master.  Git description: v1.2-254-ga4e6fe2./users/heramgr/anaconda2/envs/hera/bin/apply_cal.py zen.2458101.46106.xx.HH.uv zen.2458101.46106.xx.HH.uvOC --new_cal zen.2458101.46106.xx.HH.uv.abs.calfits --flag_nchan_low=50 --flag_nchan_high=50 --clobber --filetype=miriad --gain_convention=divide --vis_units Jy NEW_CALFITS_HISTORY: OMNI_RUN: /users/heramgr/anaconda2/envs/hera/bin/omni_run.py --firstcal=
+zen.2458101.46106.xx.HH.uv.first.calfits,zen.2458101.46106.yy.HH.uv.firs
+t.calfits --overwrite --ex_ants=0,2,50,98,136 --metrics_json=zen.2458101
+.46106.HH.uv.ant_metrics.json -p xx zen.2458101.46106.xx.HH.uv redundant
+_baslines = [[(23, 71), (36, 87), (37, 88), (65, 122), (66, 123), (67, 1
+24), (82, 142), (83, 143)], [(55, 65), (123, 137), (124, 138), (71, 82)]
+, [(1, 71), (11, 86), (12, 87), (36, 121), (37, 122), (38, 123), (39, 12
+4), (51, 141), (52, 142), (53, 143), (13, 88)], [(11, 26), (23, 39), (24
+, 40), (25, 41), (37, 54), (38, 55), (51, 69), (52, 70), (65, 84), (66,
+85), (67, 86), (120, 142), (121, 143), (12, 27), (36, 53), (53, 71), (68
+, 87), (69, 88)], [(11, 40), (12, 41), (23, 54), (24, 55), (36, 69), (38
+, 71), (51, 86), (52, 87), (53, 88), (82, 121), (83, 122), (84, 123), (8
+5, 124), (37, 70)], [(11, 12), (12, 13), (13, 14), (23, 24), (24, 25), (
+25, 26), (26, 27), (36, 37), (37, 38), (38, 39), (39, 40), (40, 41), (51
+, 52), (52, 53), (53, 54), (54, 55), (65, 66), (66, 67), (67, 68), (68,
+69), (69, 70), (70, 71), (82, 83), (83, 84), (84, 85), (85, 86), (86, 87
+), (87, 88), (120, 121), (121, 122), (122, 123), (123, 124), (137, 138),
+ (138, 139), (139, 140), (140, 141), (141, 142), (142, 143)], [(1, 87),
+(23, 121), (24, 122), (25, 123), (26, 124), (36, 140), (37, 141), (38, 1
+42), (39, 143)], [(23, 41), (36, 55), (51, 71), (65, 86), (66, 87), (67,
+ 88)], [(14, 66), (26, 82), (27, 83), (69, 137), (70, 138), (71, 139), (
+13, 65)], [(14, 51), (25, 65), (26, 66), (27, 67), (39, 82), (40, 83), (
+41, 84), (71, 120), (85, 137), (86, 138), (87, 139), (88, 140)], [(1, 53
+), (11, 67), (12, 68), (13, 69), (14, 70), (23, 83), (24, 84), (25, 85),
+ (26, 86), (52, 120), (53, 121), (54, 122), (55, 123), (65, 137), (66, 1
+38), (67, 139), (68, 140), (69, 141), (70, 142), (27, 87), (71, 143)], [
+(1, 52), (11, 66), (12, 67), (13, 68), (23, 82), (53, 120), (54, 121), (
+55, 122), (66, 137), (67, 138), (68, 139), (69, 140), (70, 141), (14, 69
+), (24, 83), (25, 84), (26, 85), (27, 86), (71, 142)], [(1, 121), (11, 1
+39), (14, 142), (12, 140), (13, 141)], [(36, 71), (51, 88), (82, 123), (
+83, 124)], [(27, 65), (41, 82), (87, 137), (88, 138)], [(65, 71), (82, 8
+8), (137, 143)], [(1, 55), (11, 69), (12, 70), (23, 85), (24, 86), (25,
+87), (26, 88), (51, 121), (52, 122), (53, 123), (54, 124), (65, 139), (6
+6, 140), (67, 141), (68, 142), (69, 143), (13, 71)], [(1, 23), (12, 36),
+ (14, 38), (25, 51), (26, 52), (27, 53), (37, 65), (38, 66), (39, 67), (
+40, 68), (41, 69), (52, 82), (53, 83), (54, 84), (55, 85), (86, 120), (8
+7, 121), (88, 122), (13, 37)], [(11, 41), (23, 55), (36, 70), (37, 71),
+(51, 87), (52, 88), (82, 122), (83, 123), (84, 124)], [(24, 41), (37, 55
+), (65, 85), (66, 86), (11, 27), (23, 40), (36, 54), (51, 70), (52, 71),
+ (67, 87), (68, 88), (120, 143)], [(1, 88), (23, 122), (24, 123), (25, 1
+24), (36, 141), (37, 142), (38, 143)], [(11, 51), (14, 54), (23, 66), (2
+4, 67), (25, 68), (26, 69), (27, 70), (37, 83), (38, 84), (39, 85), (40,
+ 86), (71, 123), (82, 137), (83, 138), (84, 139), (88, 143), (1, 38), (1
+2, 52), (13, 53), (36, 82), (41, 87), (68, 120), (69, 121), (70, 122), (
+85, 140), (86, 141), (87, 142)], [(27, 36), (71, 83), (41, 51), (54, 65)
+, (55, 66), (70, 82), (122, 137), (123, 138), (124, 139)], [(1, 36), (14
+, 52), (24, 65), (25, 66), (26, 67), (27, 68), (38, 82), (39, 83), (40,
+84), (41, 85), (70, 120), (71, 121), (84, 137), (85, 138), (86, 139), (8
+7, 140), (88, 141), (13, 51)], [(36, 142), (23, 123), (24, 124), (37, 14
+3)], [(14, 82), (54, 137), (55, 138)], [(12, 26), (13, 27), (36, 52), (5
+4, 71), (70, 88), (1, 14), (11, 25), (23, 38), (24, 39), (25, 40), (26,
+41), (37, 53), (38, 54), (39, 55), (51, 68), (52, 69), (53, 70), (65, 83
+), (66, 84), (67, 85), (68, 86), (69, 87), (120, 141), (121, 142), (122,
+ 143)], [(40, 120), (52, 137), (1, 66), (12, 82), (13, 83), (14, 84), (4
+1, 121), (53, 138), (54, 139), (55, 140)], [(40, 65), (41, 66), (55, 82)
+], [(23, 124), (36, 143)], [(14, 36), (27, 51), (39, 65), (40, 66), (41,
+ 67), (54, 82), (55, 83), (88, 120)], [(1, 69), (11, 84), (12, 85), (13,
+ 86), (14, 87), (37, 120), (38, 121), (39, 122), (40, 123), (41, 124), (
+51, 139), (52, 140), (53, 141), (54, 142), (55, 143)], [(23, 68), (24, 6
+9), (37, 85), (38, 86), (1, 40), (11, 53), (12, 54), (13, 55), (25, 70),
+ (26, 71), (36, 84), (39, 87), (40, 88), (66, 120), (67, 121), (68, 122)
+, (69, 123), (70, 124), (82, 139), (83, 140), (84, 141), (85, 142), (86,
+ 143)], [(12, 122), (13, 123), (11, 121), (14, 124), (23, 140), (24, 141
+), (25, 142), (26, 143)], [(12, 141), (13, 142), (1, 122), (11, 140), (1
+4, 143)], [(13, 36), (14, 37), (26, 51), (27, 52), (38, 65), (39, 66), (
+40, 67), (41, 68), (53, 82), (54, 83), (55, 84), (87, 120), (88, 121)],
+[(13, 82), (41, 120), (55, 139), (1, 65), (14, 83), (53, 137), (54, 138)
+], [(1, 12), (11, 23), (12, 24), (14, 26), (23, 36), (24, 37), (25, 38),
+ (26, 39), (27, 40), (37, 51), (38, 52), (39, 53), (40, 54), (41, 55), (
+51, 66), (52, 67), (53, 68), (54, 69), (55, 70), (66, 82), (67, 83), (68
+, 84), (69, 85), (70, 86), (71, 87), (120, 139), (121, 140), (122, 141),
+ (123, 142), (124, 143), (13, 25)], [(27, 138), (26, 137)], [(69, 71), (
+11, 13), (12, 14), (23, 25), (24, 26), (25, 27), (36, 38), (37, 39), (38
+, 40), (39, 41), (51, 53), (52, 54), (53, 55), (65, 67), (66, 68), (67,
+69), (68, 70), (82, 84), (83, 85), (84, 86), (85, 87), (86, 88), (120, 1
+22), (121, 123), (122, 124), (137, 139), (138, 140), (139, 141), (140, 1
+42), (141, 143)], [(13, 23), (14, 24), (25, 36), (26, 37), (27, 38), (39
+, 51), (40, 52), (41, 53), (52, 65), (53, 66), (54, 67), (55, 68), (68,
+82), (69, 83), (70, 84), (71, 85), (120, 137), (121, 138), (122, 139), (
+123, 140), (124, 141)], [(65, 87), (66, 88)], [(12, 38), (13, 39), (41,
+71), (1, 25), (11, 37), (14, 40), (23, 51), (24, 52), (25, 53), (26, 54)
+, (27, 55), (36, 66), (37, 67), (38, 68), (39, 69), (40, 70), (51, 83),
+(52, 84), (53, 85), (54, 86), (55, 87), (84, 120), (85, 121), (86, 122),
+ (87, 123), (88, 124)], [(1, 70), (11, 85), (12, 86), (13, 87), (14, 88)
+, (36, 120), (37, 121), (38, 122), (39, 123), (40, 124), (51, 140), (52,
+ 141), (53, 142), (54, 143)], [(1, 13), (11, 24), (12, 25), (14, 27), (2
+3, 37), (24, 38), (25, 39), (26, 40), (27, 41), (36, 51), (37, 52), (38,
+ 53), (39, 54), (40, 55), (51, 67), (52, 68), (53, 69), (54, 70), (65, 8
+2), (66, 83), (67, 84), (68, 85), (69, 86), (70, 87), (71, 88), (120, 14
+0), (121, 141), (122, 142), (123, 143), (13, 26), (55, 71)], [(13, 122),
+ (11, 120), (12, 121), (14, 123), (23, 139), (24, 140), (25, 141), (26,
+142), (27, 143)], [(11, 122), (23, 141), (24, 142), (25, 143), (12, 123)
+, (13, 124)], [(40, 137), (41, 138)], [(12, 137), (13, 138), (14, 139)],
+ [(1, 37), (12, 51), (14, 53), (23, 65), (24, 66), (25, 67), (26, 68), (
+27, 69), (37, 82), (38, 83), (39, 84), (40, 85), (41, 86), (69, 120), (7
+0, 121), (71, 122), (83, 137), (84, 138), (85, 139), (86, 140), (87, 141
+), (88, 142), (13, 52)], [(1, 68), (11, 83), (12, 84), (13, 85), (14, 86
+), (38, 120), (39, 121), (40, 122), (41, 123), (51, 138), (52, 139), (53
+, 140), (54, 141), (55, 142)], [(1, 123), (11, 141), (12, 142), (13, 143
+)], [(1, 27), (11, 39), (12, 40), (13, 41), (23, 53), (24, 54), (39, 71)
+, (51, 85), (54, 88), (83, 121), (84, 122), (85, 123), (86, 124), (25, 5
+5), (36, 68), (37, 69), (38, 70), (52, 86), (53, 87), (82, 120)], [(25,
+137), (26, 138), (27, 139)], [(11, 123), (12, 124), (23, 142), (24, 143)
+], [(23, 27), (36, 40), (67, 71), (84, 88), (37, 41), (51, 55), (65, 69)
+, (66, 70), (82, 86), (83, 87), (120, 124), (137, 141), (138, 142), (139
+, 143)], [(14, 55), (23, 67), (24, 68), (25, 69), (37, 84), (38, 85), (3
+9, 86), (40, 87), (71, 124), (1, 39), (11, 52), (12, 53), (13, 54), (26,
+ 70), (27, 71), (36, 83), (41, 88), (67, 120), (68, 121), (69, 122), (70
+, 123), (82, 138), (83, 139), (84, 140), (85, 141), (86, 142), (87, 143)
+], [(36, 88), (65, 123), (66, 124), (82, 143)], [(14, 23), (26, 36), (27
+, 37), (40, 51), (41, 52), (53, 65), (54, 66), (55, 67), (69, 82), (70,
+83), (121, 137), (122, 138), (123, 139), (124, 140), (71, 84)], [(39, 13
+7), (40, 138), (41, 139)], [(1, 82), (38, 137), (39, 138), (40, 139), (4
+1, 140), (27, 120)], [(1, 85), (24, 120), (25, 121), (26, 122), (27, 123
+), (36, 138), (37, 139), (38, 140), (39, 141), (40, 142), (41, 143)], [(
+1, 124), (11, 142), (12, 143)], [(12, 66), (13, 67), (55, 121), (67, 137
+), (68, 138), (69, 139), (70, 140), (1, 51), (11, 65), (14, 68), (24, 82
+), (25, 83), (26, 84), (27, 85), (54, 120), (71, 141)], [(11, 14), (23,
+26), (36, 39), (37, 40), (38, 41), (51, 54), (52, 55), (65, 68), (66, 69
+), (67, 70), (82, 85), (83, 86), (84, 87), (120, 123), (121, 124), (137,
+ 140), (138, 141), (139, 142), (140, 143), (24, 27), (68, 71), (85, 88)]
+, [(13, 140), (1, 120), (11, 138), (12, 139), (14, 141)], [(1, 54), (11,
+ 68), (12, 69), (13, 70), (14, 71), (23, 84), (24, 85), (25, 86), (26, 8
+7), (27, 88), (51, 120), (52, 121), (53, 122), (54, 123), (55, 124), (65
+, 138), (66, 139), (67, 140), (68, 141), (69, 142), (70, 143)], [(12, 88
+), (11, 87), (36, 122), (37, 123), (38, 124), (51, 142), (52, 143)], [(1
+1, 124), (23, 143)], [(65, 70), (82, 87), (36, 41), (66, 71), (83, 88),
+(137, 142), (138, 143)], [(11, 71), (23, 87), (24, 88), (51, 123), (52,
+124), (65, 141), (66, 142), (67, 143)], [(13, 137), (14, 138)], [(1, 11)
+, (12, 23), (13, 24), (14, 25), (24, 36), (25, 37), (26, 38), (27, 39),
+(38, 51), (39, 52), (40, 53), (41, 54), (51, 65), (52, 66), (53, 67), (5
+4, 68), (55, 69), (67, 82), (68, 83), (69, 84), (70, 85), (71, 86), (120
+, 138), (121, 139), (122, 140), (123, 141), (124, 142)], [(1, 41), (11,
+54), (12, 55), (23, 69), (24, 70), (25, 71), (36, 85), (37, 86), (38, 87
+), (39, 88), (65, 120), (66, 121), (67, 122), (68, 123), (69, 124), (82,
+ 140), (83, 141), (84, 142), (85, 143)], [(11, 88), (36, 123), (37, 124)
+, (51, 143)], [(13, 120), (14, 121), (23, 137), (24, 138), (25, 139), (2
+6, 140), (27, 141)], [(11, 38), (12, 39), (13, 40), (23, 52), (40, 71),
+(55, 88), (85, 122), (86, 123), (87, 124), (1, 26), (14, 41), (24, 53),
+(25, 54), (26, 55), (36, 67), (37, 68), (38, 69), (39, 70), (51, 84), (5
+2, 85), (53, 86), (54, 87), (83, 120), (84, 121)], [(1, 86), (23, 120),
+(24, 121), (25, 122), (26, 123), (27, 124), (36, 139), (37, 140), (38, 1
+41), (39, 142), (40, 143)], [(14, 120), (24, 137), (25, 138), (26, 139),
+ (27, 140)], [(14, 65), (27, 82), (70, 137), (71, 138)], [(11, 70), (12,
+ 71), (23, 86), (24, 87), (25, 88), (51, 122), (52, 123), (53, 124), (65
+, 140), (66, 141), (67, 142), (68, 143)], [(26, 65), (27, 66), (40, 82),
+ (41, 83), (86, 137), (87, 138), (88, 139)], [(1, 84), (25, 120), (26, 1
+21), (27, 122), (36, 137), (37, 138), (38, 139), (39, 140), (40, 141), (
+41, 142)], [(1, 24), (11, 36), (14, 39), (24, 51), (25, 52), (26, 53), (
+27, 54), (36, 65), (37, 66), (38, 67), (39, 68), (40, 69), (41, 70), (51
+, 82), (52, 83), (53, 84), (54, 85), (55, 86), (85, 120), (86, 121), (87
+, 122), (88, 123), (12, 37), (13, 38)], [(11, 55), (23, 70), (24, 71), (
+36, 86), (37, 87), (38, 88), (65, 121), (66, 122), (67, 123), (68, 124),
+ (82, 141), (83, 142), (84, 143)], [(12, 120), (13, 121), (14, 122), (23
+, 138), (24, 139), (25, 140), (26, 141), (27, 142)], [(14, 67), (25, 82)
+, (26, 83), (27, 84), (55, 120), (69, 138), (70, 139), (71, 140), (12, 6
+5), (13, 66), (68, 137)], [(23, 88), (51, 124), (65, 142), (66, 143)], [
+(1, 83), (26, 120), (27, 121), (37, 137), (38, 138), (39, 139), (40, 140
+), (41, 141)], [(1, 67), (11, 82), (12, 83), (13, 84), (14, 85), (39, 12
+0), (40, 121), (41, 122), (51, 137), (52, 138), (53, 139), (54, 140), (5
+5, 141)], [(11, 137), (12, 138), (13, 139), (14, 140)]]
+  Read/written with pyuvdata version: 1.2.1.  Git origin: https://github
+.com/HERA-Team/pyuvdata.git.  Git hash: a4e6fe2b695bc2d80d67c0ac7853ad17
+b1190f63.  Git branch: master.  Git description: v1.2-254-ga4e6fe2./user
+s/heramgr/anaconda2/envs/hera/bin/omni_abscal_run.py --refant 53 --bl_cu
+t 100 --edge_cut 100 --solar_horizon 0.0 --antflag_thresh 0.0 --avg_dly_
+slope_cal --delay_slope_cal --phase_slope_cal --TT_phs_cal --abs_amp_cal
+ --phs_max_iter 100 --phs_conv_crit 1e-6 --overwrite --calfits_infile ze
+n.2458101.46106.xx.HH.uv.omni.calfits --output_calfits_fname zen.2458101
+.46106.xx.HH.uv.abs.calfits --data_file zen.2458101.46106.xx.HH.uvO --mo
+del_files /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.1
+2552.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2
+458116.13298.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_mode
+ls/zen.2458116.14043.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abs
+cal_models/zen.2458116.14789.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_
+IDR2/abscal_models/zen.2458116.15535.xx.HH.uvXRS2 /lustre/aoc/projects/h
+era/H1C_IDR2/abscal_models/zen.2458116.16280.xx.HH.uvXRS2 /lustre/aoc/pr
+ojects/hera/H1C_IDR2/abscal_models/zen.2458116.17026.xx.HH.uvXRS2 /lustr
+e/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.17772.xx.HH.uvXRS
+2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.18517.xx.
+HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.1
+9263.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2
+458116.20009.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_mode
+ls/zen.2458116.20754.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abs
+cal_models/zen.2458116.21500.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_
+IDR2/abscal_models/zen.2458116.22245.xx.HH.uvXRS2 /lustre/aoc/projects/h
+era/H1C_IDR2/abscal_models/zen.2458116.22991.xx.HH.uvXRS2 /lustre/aoc/pr
+ojects/hera/H1C_IDR2/abscal_models/zen.2458116.23737.xx.HH.uvXRS2 /lustr
+e/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.24482.xx.HH.uvXRS
+2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.25228.xx.
+HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.2
+5974.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2
+458116.26719.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_mode
+ls/zen.2458116.27465.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abs
+cal_models/zen.2458116.28211.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_
+IDR2/abscal_models/zen.2458116.28956.xx.HH.uvXRS2 /lustre/aoc/projects/h
+era/H1C_IDR2/abscal_models/zen.2458116.29702.xx.HH.uvXRS2 /lustre/aoc/pr
+ojects/hera/H1C_IDR2/abscal_models/zen.2458116.30448.xx.HH.uvXRS2 /lustr
+e/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.31193.xx.HH.uvXRS
+2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.31939.xx.
+HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.3
+2685.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2
+458116.33430.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_mode
+ls/zen.2458116.34176.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abs
+cal_models/zen.2458116.34922.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_
+IDR2/abscal_models/zen.2458116.35667.xx.HH.uvXRS2 /lustre/aoc/projects/h
+era/H1C_IDR2/abscal_models/zen.2458116.36413.xx.HH.uvXRS2 /lustre/aoc/pr
+ojects/hera/H1C_IDR2/abscal_models/zen.2458116.37159.xx.HH.uvXRS2 /lustr
+e/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.37904.xx.HH.uvXRS
+2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.38650.xx.
+HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.3
+9396.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2
+458116.40141.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_mode
+ls/zen.2458116.40887.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abs
+cal_models/zen.2458116.41632.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_
+IDR2/abscal_models/zen.2458116.42378.xx.HH.uvXRS2 /lustre/aoc/projects/h
+era/H1C_IDR2/abscal_models/zen.2458116.43124.xx.HH.uvXRS2 /lustre/aoc/pr
+ojects/hera/H1C_IDR2/abscal_models/zen.2458116.43869.xx.HH.uvXRS2 /lustr
+e/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.44615.xx.HH.uvXRS
+2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.45361.xx.
+HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.4
+6106.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2
+458116.46852.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_mode
+ls/zen.2458116.47598.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abs
+cal_models/zen.2458116.48343.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_
+IDR2/abscal_models/zen.2458116.49089.xx.HH.uvXRS2 /lustre/aoc/projects/h
+era/H1C_IDR2/abscal_models/zen.2458116.49835.xx.HH.uvXRS2 /lustre/aoc/pr
+ojects/hera/H1C_IDR2/abscal_models/zen.2458116.50580.xx.HH.uvXRS2 /lustr
+e/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.51326.xx.HH.uvXRS
+2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.52072.xx.
+HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.5
+2817.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2
+458116.53563.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_mode
+ls/zen.2458116.54309.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abs
+cal_models/zen.2458116.55054.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_
+IDR2/abscal_models/zen.2458116.55800.xx.HH.uvXRS2 /lustre/aoc/projects/h
+era/H1C_IDR2/abscal_models/zen.2458116.56546.xx.HH.uvXRS2 /lustre/aoc/pr
+ojects/hera/H1C_IDR2/abscal_models/zen.2458116.57291.xx.HH.uvXRS2 /lustr
+e/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.58037.xx.HH.uvXRS
+2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.58783.xx.
+HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.5
+9528.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2
+458116.60274.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_mode
+ls/zen.2458116.61019.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_IDR2/abs
+cal_models/zen.2458116.61765.xx.HH.uvXRS2 /lustre/aoc/projects/hera/H1C_
+IDR2/abscal_models/zen.2458116.62511.xx.HH.uvXRS2 /lustre/aoc/projects/h
+era/H1C_IDR2/abscal_models/zen.2458116.63256.xx.HH.uvXRS2 /lustre/aoc/pr
+ojects/hera/H1C_IDR2/abscal_models/zen.2458116.64002.xx.HH.uvXRS2 /lustr
+e/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.64748.xx.HH.uvXRS
+2 /lustre/aoc/projects/hera/H1C_IDR2/abscal_models/zen.2458116.65493.xx.
+HH.uvXRS2
+Flagging command: "/users/heramgr/anaconda2/envs/hera/bin/delay_xrfi_run.py --standoff=15 --horizon=1 --tol=1e-7 --window=tukey --skip_wgt=0.1 --maxiter=100 --alpha=.5 --kt_size=8 --kf_size=8 --sig_init=6 --sig_adj=2 --px_threshold=0.1 --freq_threshold=0.25 --time_threshold=0.05 --ex_ants=0,2,50,98,136 --infile_format=miriad --algorithm=xrfi --extension=.flags.npz --summary --waterfalls=zen.2458101.46106.xx.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.yy.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.g.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.g.flags.npz zen.2458101.46106.xx.HH.uvOC", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.git.  Git hash: ba3000b5a4325f22853ba5f7dbe587927d54438d.  Git branch: master.  Git description: v1.0-99-gba3000b.Flagging command: "/users/heramgr/anaconda2/envs/hera/bin/delay_xrfi_run.py --standoff=15 --horizon=1 --tol=1e-7 --window=tukey --skip_wgt=0.1 --maxiter=100 --alpha=.5 --kt_size=8 --kf_size=8 --sig_init=6 --sig_adj=2 --px_threshold=0.1 --freq_threshold=0.25 --time_threshold=0.05 --ex_ants=0,2,50,98,136 --infile_format=miriad --algorithm=xrfi --extension=.flags.npz --summary --waterfalls=zen.2458101.46106.xx.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.yy.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.g.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.g.flags.npz zen.2458101.46106.yy.HH.uvOC", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.git.  Git hash: ba3000b5a4325f22853ba5f7dbe587927d54438d.  Git branch: master.  Git description: v1.0-99-gba3000b.Flagging command: "/users/heramgr/anaconda2/envs/hera/bin/delay_xrfi_run.py --standoff=15 --horizon=1 --tol=1e-7 --window=tukey --skip_wgt=0.1 --maxiter=100 --alpha=.5 --kt_size=8 --kf_size=8 --sig_init=6 --sig_adj=2 --px_threshold=0.1 --freq_threshold=0.25 --time_threshold=0.05 --ex_ants=0,2,50,98,136 --infile_format=miriad --algorithm=xrfi --extension=.flags.npz --summary --waterfalls=zen.2458101.46106.xx.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.yy.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.g.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.g.flags.npz zen.2458101.46106.xy.HH.uvOC", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.git.  Git hash: ba3000b5a4325f22853ba5f7dbe587927d54438d.  Git branch: master.  Git description: v1.0-99-gba3000b.Flagging command: "/users/heramgr/anaconda2/envs/hera/bin/delay_xrfi_run.py --standoff=15 --horizon=1 --tol=1e-7 --window=tukey --skip_wgt=0.1 --maxiter=100 --alpha=.5 --kt_size=8 --kf_size=8 --sig_init=6 --sig_adj=2 --px_threshold=0.1 --freq_threshold=0.25 --time_threshold=0.05 --ex_ants=0,2,50,98,136 --infile_format=miriad --algorithm=xrfi --extension=.flags.npz --summary --waterfalls=zen.2458101.46106.xx.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.yy.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.g.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.g.flags.npz zen.2458101.46106.yx.HH.uvOC", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.git.  Git hash: ba3000b5a4325f22853ba5f7dbe587927d54438d.  Git branch: master.  Git description: v1.0-99-gba3000b.Flagging command: "/users/heramgr/anaconda2/envs/hera/bin/xrfi_run.py --kt_size=8 --kf_size=8 --sig_init=6 --sig_adj=2 --px_threshold=0.1 --freq_threshold=0.5 --time_threshold=0.05 --model_file=zen.2458101.46106.xx.HH.uv.vis.uvfits --model_file_format=uvfits --algorithm=xrfi --extension=.flags.npz", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.git.  Git hash: ba3000b5a4325f22853ba5f7dbe587927d54438d.  Git branch: master.  Git description: v1.0-99-gba3000b.Flagging command: "/users/heramgr/anaconda2/envs/hera/bin/xrfi_run.py --kt_size=8 --kf_size=8 --sig_init=6 --sig_adj=2 --px_threshold=0.1 --freq_threshold=0.5 --time_threshold=0.05 --model_file=zen.2458101.46106.yy.HH.uv.vis.uvfits --model_file_format=uvfits --algorithm=xrfi --extension=.flags.npz", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.git.  Git hash: ba3000b5a4325f22853ba5f7dbe587927d54438d.  Git branch: master.  Git description: v1.0-99-gba3000b.Flagging command: "/users/heramgr/anaconda2/envs/hera/bin/xrfi_run.py --kt_size=8 --kf_size=8 --sig_init=6 --sig_adj=2 --px_threshold=0.1 --freq_threshold=0.5 --time_threshold=0.05 --calfits_file=zen.2458101.46106.xx.HH.uv.abs.calfits --algorithm=xrfi --extension=.flags.npz", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.git.  Git hash: ba3000b5a4325f22853ba5f7dbe587927d54438d.  Git branch: master.  Git description: v1.0-99-gba3000b.Flagging command: "/users/heramgr/anaconda2/envs/hera/bin/xrfi_run.py --kt_size=8 --kf_size=8 --sig_init=6 --sig_adj=2 --px_threshold=0.1 --freq_threshold=0.5 --time_threshold=0.05 --calfits_file=zen.2458101.46106.yy.HH.uv.abs.calfits --algorithm=xrfi --extension=.flags.npz", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.git.  Git hash: ba3000b5a4325f22853ba5f7dbe587927d54438d.  Git branch: master.  Git description: v1.0-99-gba3000b./users/heramgr/anaconda2/envs/hera/bin/xrfi_apply.py --extension=R --overwrite --out_npz_ext=.flags.applied.npz --waterfalls=zen.2458101.46106.xx.HH.uvOC.flags.npz,zen.2458101.46106.yy.HH.uvOC.flags.npz,zen.2458101.46106.xy.HH.uvOC.flags.npz,zen.2458101.46106.yx.HH.uvOC.flags.npz,zen.2458101.46106.xx.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.yy.HH.uv.vis.uvfits.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.x.flags.npz,zen.2458101.46106.xx.HH.uv.abs.calfits.g.flags.npz,zen.2458101.46106.yy.HH.uv.abs.calfits.g.flags.npz zen.2458101.46106.xx.HH.uvOC
+  Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.git.  Git hash: ad775a2f429ac6397ce71d124b4931a820e45379.  Git branch: master.  Git description: v1.2-383-gad775a2.  Downselected to specific antennas using pyuvdata.
