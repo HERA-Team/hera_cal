@@ -542,7 +542,7 @@ def to_HERAData(input_data, filetype='miriad'):
 
     Arguments:
         input_data: data file path, or UVData/HERAData instance, or list of either strings of data
-            file paths or list of UVData/HERAData instances to concatenate into a single dictionary
+            file paths or list of UVData/HERAData instances to combine into a single HERAData object
         filetype: 'miriad', 'uvfits', or 'uvh5'. Ignored if input_data is UVData/HERAData objects
 
     Returns:
@@ -894,6 +894,36 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         raise TypeError("Input filetype must be either 'miriad', 'uvfits', or 'uvh5'.")
 
 
+def to_HERACal(input_cal):
+    '''Converts a string path, UVData, or HERAData object, or a list of any one of those, to a
+    single HERACal object without loading any new calibration solutions.
+
+    Arguments:
+        input_cal: path to calfits file, UVCal/HERACal object, or a list of either to combine
+            into a single HERACal object
+
+    Returns:
+        hc: HERACal object. Will not have calibration loaded if initialized from string(s).
+    '''
+    if isinstance(input_cal, str):  # single calfits path
+        return HERACal(input_cal)
+    elif isinstance(input_cal, (UVCal, HERACal)):  # single UVCal/HERACal object
+        input_cal.__class__ = HERACal
+        return input_cal
+    elif isinstance(input_cal, collections.Iterable):  # List loading
+        if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
+            return HERACal(input_cal)
+        elif np.all([isinstance(ic, (UVCal, HERACal)) for ic in input_cal]):  # List of UVCal/HERACal objects
+            hc = reduce(operator.add, input_cal)
+            hc.__class__ = HERACal
+            return hc
+        else:
+            raise TypeError('If input is a list, it must be only strings or only UVCal/HERACal objects.')
+    else:
+        raise TypeError('Input must be a UVCal/HERACal object, a string, or a list of either.')
+
+
+
 def load_cal(input_cal, return_meta=False):
     '''LEGACY CODE TO BE DEPRECATED!
     Load calfits files or UVCal/HERACal objects into dictionaries, optionally
@@ -922,25 +952,11 @@ def load_cal(input_cal, return_meta=False):
         pols: list of antenna polarization strings
     '''
     # load HERACal object and extract gains, data, etc.
-    if isinstance(input_cal, str):  # single calfits path
-        hc = HERACal(input_cal)
-        gains, flags, quals, total_qual = hc.read()
-    elif isinstance(input_cal, (UVCal, HERACal)):  # single UVCal/HERACal object
-        hc = input_cal
-        hc.__class__ = HERACal
+    hc = to_HERACal(input_cal)
+    if hc.gain_array is not None:
         gains, flags, quals, total_qual = hc.build_calcontainers()
-    elif isinstance(input_cal, collections.Iterable):  # List loading
-        if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
-            hc = HERACal(input_cal)
-            gains, flags, quals, total_qual = hc.read()
-        elif np.all([isinstance(ic, (UVCal, HERACal)) for ic in input_cal]):  # List of UVCal/HERACal objects
-            hc = reduce(operator.add, input_cal)
-            hc.__class__ = HERACal
-            gains, flags, quals, total_qual = hc.build_calcontainers()
-        else:
-            raise TypeError('If input is a list, it must be only strings or only UVCal/HERACal objects.')
     else:
-        raise TypeError('Input must be a UVCal/HERACal object, a string, or a list of either.')
+        gains, flags, quals, total_qual = hc.read()
 
     # return quantities
     if return_meta:
