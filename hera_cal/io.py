@@ -536,6 +536,44 @@ class HERAData(UVData):
 #######################################################################
 
 
+def to_HERAData(input_data, filetype='miriad'):
+    '''Converts a string path, UVData, or HERAData object, or a list of any one of those, to a
+    single HERAData object without loading any new data.
+
+    Arguments:
+        input_data: data file path, or UVData/HERAData instance, or list of either strings of data
+            file paths or list of UVData/HERAData instances to concatenate into a single dictionary
+        filetype: 'miriad', 'uvfits', or 'uvh5'. Ignored if input_data is UVData/HERAData objects
+
+    Returns:
+        hd: HERAData object. Will not have data loaded if initialized from string(s).
+    '''
+
+    if filetype not in ['miriad', 'uvfits', 'uvh5']:
+        raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
+    if isinstance(input_data, str):  # single visibility data path
+        return HERAData(input_data, filetype=filetype)
+    elif isinstance(input_data, (UVData, HERAData)):  # single UVData object
+        hd = input_data
+        hd.__class__ = HERAData
+        hd._determine_blt_slicing()
+        hd._determine_pol_indexing()
+        return hd
+    elif isinstance(input_data, collections.Iterable):  # List loading
+        if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
+            return HERAData(input_data, filetype=filetype)
+        elif np.all([isinstance(i, (UVData, HERAData)) for i in input_data]):  # List of uvdata objects
+            hd = reduce(operator.add, input_data)
+            hd.__class__ = HERAData
+            hd._determine_blt_slicing()
+            hd._determine_pol_indexing()
+            return hd
+        else:
+            raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.')
+    else:
+        raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
+
+
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData/HERAData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
@@ -545,7 +583,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         input_data: data file path, or UVData/HERAData instance, or list of either strings of data
             file paths or list of UVData/HERAData instances to concatenate into a single dictionary
         return_meta:  boolean, if True: also return antpos, ants, freqs, times, lsts, and pols
-        filetype: either 'miriad' or 'uvfits', can be ignored if input_data is UVData/HERAData objects
+        filetype: 'miriad', 'uvfits', or 'uvh5'. Ignored if input_data is UVData/HERAData objects
         pop_autos: boolean, if True: remove autocorrelations
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
@@ -567,31 +605,12 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         lsts: ndarray containing LST bins of data (radians)
         pol: ndarray containing list of polarization strings
     '''
-    if filetype not in ['miriad', 'uvfits', 'uvh5']:
-        raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
-    if isinstance(input_data, str):  # single visibility data path
-        hd = HERAData(input_data, filetype=filetype)
-        d, f, n = hd.read()
-    elif isinstance(input_data, (UVData, HERAData)):  # single UVData object
-        hd = input_data
-        hd.__class__ = HERAData
-        hd._determine_blt_slicing()
-        hd._determine_pol_indexing()
+
+    hd = to_HERAData(input_data, filetype=filetype)
+    if hd.data_array is not None:
         d, f, n = hd.build_datacontainers()
-    elif isinstance(input_data, collections.Iterable):  # List loading
-        if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
-            hd = HERAData(input_data, filetype=filetype)
-            d, f, n = hd.read()
-        elif np.all([isinstance(i, (UVData, HERAData)) for i in input_data]):  # List of uvdata objects
-            hd = reduce(operator.add, input_data)
-            hd.__class__ = HERAData
-            hd._determine_blt_slicing()
-            hd._determine_pol_indexing()
-            d, f, n = hd.build_datacontainers()
-        else:
-            raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.')
     else:
-        raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
+        d, f, n = hd.read()
 
     # remove autos if requested
     if pop_autos:
@@ -823,9 +842,7 @@ def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
 
     # perform update
     original_class = uvd.__class__
-    uvd.__class__ = HERAData
-    uvd._determine_blt_slicing()
-    uvd._determine_pol_indexing()
+    uvd = to_HERAData(uvd)
     uvd.update(data=data, flags=flags)
     uvd.__class__ = original_class
 
