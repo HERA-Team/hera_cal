@@ -35,7 +35,7 @@ install:
 
 script:
   - nosetests hera_cal --with-coverage --cover-package=hera_cal
-  - pycodestyle */*.py --ignore=E501,W503,W601
+  - pycodestyle */*.py --ignore=E501,W291,W293,W503,W601
 
 after_success:
   - coveralls
