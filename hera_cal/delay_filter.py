@@ -102,7 +102,7 @@ class Delay_Filter():
             self.info: Dictionary of info from uvtools.dspec.delay_filter with the same keys as self.data
         '''
         self.filtered_residuals = deepcopy(self.data)
-        self.CLEAN_models = DataContainer({k: np.zeros_like(self.data.values()[0]) for k in self.data.keys()})
+        self.CLEAN_models = DataContainer({k: np.zeros_like(list(self.data.values())[0]) for k in self.data.keys()})
         self.info = odict()
         if to_filter == []:
             to_filter = self.data.keys()
