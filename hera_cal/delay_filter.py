@@ -51,7 +51,7 @@ class Delay_Filter():
 
         # save metadata
         self.antpos = deepcopy(self.data.antpos)
-        self.freqs  = deepcopy(self.data.freqs)
+        self.freqs = deepcopy(self.data.freqs)
         self.Nfreqs = len(self.freqs)
         self.writable = True
 
@@ -195,11 +195,11 @@ class Delay_Filter():
                         data_out, flags_out = self.get_filled_data()
                     if partial_write:
                         if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
-                            raise Not NotImplementedError('Partial writing requires input and output types to be "uvh5".')
-                        hc.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber, 
+                            raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
+                        hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber, 
                                          add_to_history=add_to_history, **kwargs)
                     else:
-                        io.update_vis(self.hc, outfilename, filetype_out=filetype, data=data_out, flags=flags_out, 
+                        io.update_vis(self.hd, outfilename, filetype_out=filetype, data=data_out, flags=flags_out, 
                                       add_to_history=add_to_history, clobber=clobber, **kwargs)
 
 
