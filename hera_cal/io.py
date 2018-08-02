@@ -927,7 +927,6 @@ def to_HERACal(input_cal):
         raise TypeError('Input must be a UVCal/HERACal object, a string, or a list of either.')
 
 
-
 def load_cal(input_cal, return_meta=False):
     '''Load calfits files or UVCal/HERACal objects into dictionaries, optionally
     returning the most useful metadata. More than one spectral window is not supported.
