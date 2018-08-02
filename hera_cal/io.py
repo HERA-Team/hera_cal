@@ -422,7 +422,7 @@ class HERAData(UVData):
             for bl in nsamples.keys():
                 self._set_slice(self.nsample_array, bl, nsamples[bl])
 
-    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False, add_to_history=''):
+    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False, add_to_history='', **kwargs):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
         input_data file called on __init__. Any data/flags/nsamples left as None will be written
@@ -439,6 +439,8 @@ class HERAData(UVData):
                 This saves memory but alters the HERAData object.
             add_to_history: string to append to history (only used on first call of
                 partial_write for a given output_path)
+            kwargs: addtional keyword arguments update UVData attributes. (Only used on
+                first call of partial write for a given output_path).
         '''
         # Type verifications
         if self.filetype is not 'uvh5':
@@ -452,6 +454,8 @@ class HERAData(UVData):
         else:
             hd_writer = HERAData(self.filepaths[0])
             hd_writer.history += add_to_history
+            for attribute, value in kwargs.items():
+                hd_writer.__setattr__(attribute, value)
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
 
@@ -925,8 +929,7 @@ def to_HERACal(input_cal):
 
 
 def load_cal(input_cal, return_meta=False):
-    '''LEGACY CODE TO BE DEPRECATED!
-    Load calfits files or UVCal/HERACal objects into dictionaries, optionally
+    '''Load calfits files or UVCal/HERACal objects into dictionaries, optionally
     returning the most useful metadata. More than one spectral window is not supported.
 
     Arguments:
