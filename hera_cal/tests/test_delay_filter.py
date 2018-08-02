@@ -25,11 +25,10 @@ class Test_Delay_Filter(unittest.TestCase):
     def test_load_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         dfil = df.Delay_Filter()
-        dfil.load_data(fname)
+        dfil.load_data(fname, filetype='miriad')
         self.assertEqual(dfil.data[(24, 25, 'xx')].shape, (60, 64))
         self.assertEqual(dfil.flags[(24, 25, 'xx')].shape, (60, 64))
-        self.assertEqual(len(dfil.times), 60)
-        self.assertEqual(len(dfil.antpos), 7)
+        self.assertEqual(len(dfil.antpos), 47)
         self.assertEqual(type(dfil.antpos[24]), np.ndarray)
         self.assertEqual(len(dfil.antpos[24]), 3)
         self.assertEqual(len(dfil.freqs), 64)
@@ -39,11 +38,10 @@ class Test_Delay_Filter(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(fname)
         dfil = df.Delay_Filter()
-        dfil.load_data(uvd)
+        dfil.load_data(uvd, filetype='miriad')
         self.assertEqual(dfil.data[(24, 25, 'xx')].shape, (60, 64))
         self.assertEqual(dfil.flags[(24, 25, 'xx')].shape, (60, 64))
-        self.assertEqual(len(dfil.times), 60)
-        self.assertEqual(len(dfil.antpos), 7)
+        self.assertEqual(len(dfil.antpos), 47)
         self.assertEqual(type(dfil.antpos[24]), np.ndarray)
         self.assertEqual(len(dfil.antpos[24]), 3)
         self.assertEqual(len(dfil.freqs), 64)
@@ -52,8 +50,8 @@ class Test_Delay_Filter(unittest.TestCase):
         filename1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
         filename2 = os.path.join(DATA_PATH, 'zen.2458043.13298.xx.HH.uvORA')
         dfil = df.Delay_Filter()
-        dfil.load_data([filename1, filename2])
-        self.assertFalse(dfil.writable)
+        dfil.load_data([filename1, filename2], filetype='miriad')
+        self.assertTrue(dfil.writable)
 
     def test_load_data_as_dicts(self):
         dfil = df.Delay_Filter()
@@ -68,7 +66,7 @@ class Test_Delay_Filter(unittest.TestCase):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'xx')
         dfil = df.Delay_Filter()
-        dfil.load_data(fname)
+        dfil.load_data(fname, filetype='miriad')
         bl = np.linalg.norm(dfil.antpos[24] - dfil.antpos[25]) / constants.c * 1e9
         sdf = (dfil.freqs[1] - dfil.freqs[0]) / 1e9
 
@@ -90,7 +88,7 @@ class Test_Delay_Filter(unittest.TestCase):
 
         # test skip_wgt imposition of flags
         dfil = df.Delay_Filter()
-        dfil.load_data(fname)
+        dfil.load_data(fname, filetype='miriad')
         wgts = {k: np.ones_like(dfil.flags[k])}
         wgts[k][0, :] = 0.0
         dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.5, maxiter=100)
@@ -101,43 +99,43 @@ class Test_Delay_Filter(unittest.TestCase):
 
     def test_write_filtered_data(self):
         dfil = df.Delay_Filter()
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(ValueError):
             dfil.write_filtered_data('')
 
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         dfil = df.Delay_Filter()
-        dfil.load_data(fname)
+        dfil.load_data(fname, filetype='miriad')
         data = dfil.data
         dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, flag_nchan_low=5, flag_nchan_high=5)
         outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.uvORAD')
-        dfil.write_filtered_data(outfilename, add_to_history='Hello_world.', clobber=True, telescope_name='PAPER')
+        dfil.write_filtered_data(res_outfilename=outfilename, add_to_history='Hello_world.', clobber=True, telescope_name='PAPER')
 
         uvd = UVData()
-        uvd.read_miriad(outfilename)
+        uvd.read_uvh5(outfilename)
         self.assertEqual(uvd.history.replace('\n', '').replace(' ', '')[-12:], 'Hello_world.')
         self.assertEqual(uvd.telescope_name, 'PAPER')
 
         filtered_residuals, flags = io.load_vis(uvd)
 
-        dfil.write_filtered_data(outfilename, write_CLEAN_models=True, clobber=True)
-        CLEAN_models, flags = io.load_vis(outfilename)
+        dfil.write_filtered_data(CLEAN_outfilename=outfilename, clobber=True)
+        CLEAN_models, flags = io.load_vis(outfilename, filetype='uvh5')
 
-        dfil.write_filtered_data(outfilename, write_filled_data=True, clobber=True)
-        filled_data, filled_flags = io.load_vis(outfilename)
+        dfil.write_filtered_data(filled_outfilename=outfilename, clobber=True)
+        filled_data, filled_flags = io.load_vis(outfilename, filetype='uvh5')
 
         for k in data.keys():
             np.testing.assert_array_almost_equal(filled_data[k][~flags[k]], data[k][~flags[k]])
             np.testing.assert_array_almost_equal(dfil.CLEAN_models[k], CLEAN_models[k])
             np.testing.assert_array_almost_equal(dfil.filtered_residuals[k], filtered_residuals[k])
             np.testing.assert_array_almost_equal(data[k][~flags[k]], (CLEAN_models[k] + filtered_residuals[k])[~flags[k]], 5)
-        shutil.rmtree(outfilename)
+        os.remove(outfilename)
 
     def test_delay_filter_argparser(self):
-        sys.argv = [sys.argv[0], 'a', 'b']
+        sys.argv = [sys.argv[0], 'a', '--clobber']
         parser = df.delay_filter_argparser()
         a = parser.parse_args()
-        self.assertEqual(a.infile, 'a')
-        self.assertEqual(a.outfile, 'b')
+        self.assertEqual(a.infilename, 'a')
+        self.assertTrue(a.clobber)
 
 
 if __name__ == '__main__':
