@@ -210,7 +210,7 @@ def partial_load_delay_filter_and_write(self, infilename, calfile=None, Nbls=1,
 
     Arguments:
         infilename: string path to data to uvh5 file to load
-        cal: string path to calibration file to apply to data before delay filtering
+        cal: optional string path to calibration file to apply to data before delay filtering
         Nbls: the number of baselines to load at once.
         res_outfilename: path for writing the filtered visibilities with flags 
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
@@ -221,12 +221,13 @@ def partial_load_delay_filter_and_write(self, infilename, calfile=None, Nbls=1,
         filter_kwargs: additional keyword arguments to be passed to Delay_Filter.run_filter()
     '''
     hd = HERAData(infilename, filetype='uvh5')
-    hc = HERACal(calfile)
-    hc.read()
+    if calfile is not None:
+        calfile = HERACal(calfile)
+        calfile.read()
     # loop over all baselines in increments of Nbls
     for i in range(0, len(hd.bls), Nbls):
         df = Delay_Filter()
-        df.load_data(hd, input_cal=hc, bls=bls[i:i + Nbls])
+        df.load_data(hd, input_cal=calfile, bls=bls[i:i + Nbls])
         df.run_filter(**filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=True,
@@ -237,20 +238,14 @@ def partial_load_delay_filter_and_write(self, infilename, calfile=None, Nbls=1,
 def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
-    a.add_argument("infile", type=str, help="path to visibility data file to delay filter")
-    a.add_argument("outfile", nargs='?', default=None, type=str, help="path to new visibility results file. "
-                   "Note that if outfile is not supplied, the parser defaults to None, but delay_filter_run.py "
-                   "will override this default, and instead sets outfile to infile + 'D'.")
-    a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files (default "miriad")')
-    a.add_argument("--write_model", default=False, action="store_true", help="Write the low-pass filtered CLEAN model rather"
-                   "than the high-pass filtered residual or the flag-filled data.")
-    a.add_argument("--write_filled", default=False, action='store_true', help='Write the original data with its flags filled with '
-                   "the CLEAN model instead of residual or CLEAN model.")
-    a.add_argument("--write_all", default=False, action='store_true', help="Write the high-pass residual, the low-pass "
-                   "CLEAN model and the flag-filled original data. The residual gets the outfile name (or default 'D' extension), "
-                   "and the model and original data get the 'M' and 'F' extension on top of the residual filename respectively.")
-    a.add_argument("--flag_nchan_low", default=0, type=int, help="Number of channels to flag on lower band edge before filtering.")
-    a.add_argument("--flag_nchan_high", default=0, type=int, help="Number of channels to flag on upper band edge before filtering.")
+    a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
+    a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
+    a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
+    a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
+    a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
+    a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
+    a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the CLEAN model visibilities (with the same flags)")
+    a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with CLEAN models wherever possible")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
 
     filt_options = a.add_argument_group(title='Options for the delay filter')
@@ -263,6 +258,8 @@ def delay_filter_argparser():
                               see aipy.dsp.gen_window for options')
     filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    filt_options.add_argument("--flag_nchan_low", default=0, type=int, help="Number of channels to flag on lower band edge before filtering.")
+    filt_options.add_argument("--flag_nchan_high", default=0, type=int, help="Number of channels to flag on upper band edge before filtering.")
     filt_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     filt_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
 
