@@ -32,7 +32,7 @@ class Delay_Filter():
         Arguments:
             input_data: data file path, or UVData/HERAData instance, or list of either strings of data file
                 paths or list of UVData/HERAData instances to concatenate into a single internal DataContainer
-            filetype: file format of data. Default 'miriad.' Ignored if input_data is UVData object(s).
+            filetype: file format of data. Default 'uvh5.' Ignored if input_data is UVData/HERAData object(s).
             input_cal: calibration to apply to data before delay filtering. Could be a string path to a calfits file,
                 a UVCal/HERACal object, or a list of either.
             read_kwargs: kwargs to be passed into HERAData.read() for partial data loading
@@ -169,7 +169,8 @@ class Delay_Filter():
         Arguments:
             res_outfilename: path for writing the filtered visibilities with flags 
             CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
-            filled_outfilename: path for writing 
+            filled_outfilename: path for writing the original data but with flags unflagged and replaced
+                with CLEAN models wherever possible
             filetype: file format of output result. Default 'uvh5.' Also supports 'miriad' and 'uvfits'.
             partial_write: use uvh5 partial writing capability (only works when going from uvh5 to uvh5)
             clobber: if True, overwrites existing file at the outfilename
@@ -179,7 +180,10 @@ class Delay_Filter():
         '''
         if not self.writable:
             raise ValueError('Writing functionality only enabled by running Delay_Filter.load_data()')
+        if (res_outfilename is None) and (CLEAN_outfilename is None) and (filled_outfilename is None):
+            raise ValueError('You must specifiy at least one outfilename.')
         else:
+            # loop over the three output modes if a corresponding outfilename is supplied
             for mode, outfilename in zip(['residual', 'CLEAN', 'filled'], 
                                          [res_outfilename, CLEAN_outfilename, filled_outfilename]):
                 if outfilename is not None:
@@ -191,13 +195,43 @@ class Delay_Filter():
                         data_out, flags_out = self.get_filled_data()
                     if partial_write:
                         if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
-                            raise Not NotImplementedError('Partial writing requires input and output types to be uvh5.')
+                            raise Not NotImplementedError('Partial writing requires input and output types to be "uvh5".')
                         hc.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber, 
                                          add_to_history=add_to_history, **kwargs)
                     else:
                         io.update_vis(self.hc, outfilename, filetype_out=filetype, data=data_out, flags=flags_out, 
                                       add_to_history=add_to_history, clobber=clobber, **kwargs)
 
+
+def partial_load_delay_filter_and_write(self, infilename, calfile=None, Nbls=1,
+                                        res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+                                        clobber=False, add_to_history='', **filter_kwargs):
+    '''Function using partial data loading and writing to perform delay filtering.
+
+    Arguments:
+        infilename: string path to data to uvh5 file to load
+        cal: string path to calibration file to apply to data before delay filtering
+        Nbls: the number of baselines to load at once.
+        res_outfilename: path for writing the filtered visibilities with flags 
+        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+        filled_outfilename: path for writing the original data but with flags unflagged and replaced
+            with CLEAN models wherever possible
+        clobber: if True, overwrites existing file at the outfilename
+        add_to_history: string appended to the history of the output file
+        filter_kwargs: additional keyword arguments to be passed to Delay_Filter.run_filter()
+    '''
+    hd = HERAData(infilename, filetype='uvh5')
+    hc = HERACal(calfile)
+    hc.read()
+    # loop over all baselines in increments of Nbls
+    for i in range(0, len(hd.bls), Nbls):
+        df = Delay_Filter()
+        df.load_data(hd, input_cal=hc, bls=bls[i:i + Nbls])
+        df.run_filter(**filter_kwargs)
+        df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                               filled_outfilename=filled_outfilename, partial_write=True,
+                               clobber=clobber, add_to_history=add_to_history)
+        del df.hd.data_array  # this forces a reload in the next loop
 
 
 def delay_filter_argparser():
