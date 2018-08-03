@@ -899,7 +899,7 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
 
 
 def to_HERACal(input_cal):
-    '''Converts a string path, UVData, or HERAData object, or a list of any one of those, to a
+    '''Converts a string path, UVCal, or HERACal object, or a list of any one of those, to a
     single HERACal object without loading any new calibration solutions.
 
     Arguments:
