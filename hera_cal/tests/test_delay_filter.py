@@ -131,6 +131,10 @@ class Test_Delay_Filter(unittest.TestCase):
         data = dfil.data
         dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, flag_nchan_low=5, flag_nchan_high=5)
         outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.h5ORAD')
+        with self.assertRaises(ValueError):
+            dfil.write_filtered_data()
+        with self.assertRaises(NotImplementedError):
+            dfil.write_filtered_data(res_outfilename=outfilename, partial_write=True)
         dfil.write_filtered_data(res_outfilename=outfilename, add_to_history='Hello_world.', clobber=True, telescope_name='PAPER')
 
         uvd = UVData()
@@ -162,9 +166,16 @@ class Test_Delay_Filter(unittest.TestCase):
 
         dfil = df.Delay_Filter()
         dfil.load_data(uvh5, filetype='uvh5')
-        dfil.run_filter(to_filter=[(53, 54, 'XX')])
+        dfil.run_filter(to_filter=[(53, 54, 'XX')], verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'XX')], dfil.filtered_residuals[(53, 54, 'XX')])
         np.testing.assert_array_equal(f[(53, 54, 'XX')], dfil.flags[(53, 54, 'XX')])
+        
+        cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        df.partial_load_delay_filter_and_write(uvh5, calfile=cal, res_outfilename=outfilename, Nbls=2, clobber=True)
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'XX')])
+        np.testing.assert_array_equal(f[(53, 54, 'XX')], True)
         os.remove(outfilename)
 
     def test_delay_filter_argparser(self):
