@@ -548,28 +548,28 @@ class Test_AbsCal:
         hc.abscal.fill_dict_nans(vis, nan_fill=0.0, inf_fill=0.0, array=True)
         df = np.median(np.diff(self.AC.freqs))
         # basic execution
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=False, solve_phase=False)
+        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=False, solve_phase=False)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset, None)
         # median filtering
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=True, solve_phase=False)
+        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=True, solve_phase=False)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset, None)
         # solve phase
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=True, solve_phase=True)
+        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=True, solve_phase=True)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset.shape, (60, 1))
         # test windows and edgecut
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=False, solve_phase=False, edge_cut=2, window='hann')
-        dly, offset = hc.abscal.fft_dly(vis, df=df, medfilt=False, solve_phase=False, window='blackmanharris')
-        nt.assert_raises(ValueError, hc.abscal.fft_dly, vis, window='foo')
-        nt.assert_raises(AssertionError, hc.abscal.fft_dly, vis, edge_cut=1000)
+        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=False, solve_phase=False, edge_cut=2, window='hann')
+        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=False, solve_phase=False, window='blackmanharris')
+        nt.assert_raises(ValueError, hc.abscal.fft_dly, vis, df, window='foo')
+        nt.assert_raises(AssertionError, hc.abscal.fft_dly, vis, df, edge_cut=1000)
         # test mock data
         tau = np.array([1.5e-8]).reshape(1, -1)  # 15 nanoseconds
         f = np.linspace(0, 100e6, 1024)
         df = np.median(np.diff(f))
         r = np.exp(1j * 2 * np.pi * f * tau)
-        dly, offset = hc.abscal.fft_dly(r, df=df, medfilt=True, kernel=(1, 5))
+        dly, offset = hc.abscal.fft_dly(r, df, medfilt=True, kernel=(1, 5), solve_phase=False)
         nt.assert_almost_equal(float(dly), 1.5e-8, delta=1e-9)
 
     def test_abscal_arg_parser(self):
@@ -644,7 +644,7 @@ class Test_AbsCal:
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
         nt.assert_true(uvc.total_quality_array is not None)
-        nt.assert_almost_equal(uvc.quality_array[1, 0, 32, 0, 0], 6378.8367138680978, places=4)
+        nt.assert_almost_equal(uvc.quality_array[1, 0, 32, 0, 0], 6378.8367138680978, places=3)
         nt.assert_true(uvc.flag_array[0].min())
         nt.assert_true(len(uvc.history) > 1000)
         # assert refant phase is zero
