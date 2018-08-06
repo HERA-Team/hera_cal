@@ -524,7 +524,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True,
-                    kernel=(1, 5), verbose=True, four_pol=False, window=None, edge_cut=0):
+                       kernel=(1, 5), verbose=True, four_pol=False, window=None, edge_cut=0):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -610,7 +610,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
         # get delays
         dly, _ = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel,
-                              window=window, edge_cut=edge_cut)
+                         window=window, edge_cut=edge_cut)
 
         # set nans to zero
         rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
@@ -1035,8 +1035,8 @@ def fft_dly(data, df, wgts=None, window=None, medfilt=False, kernel=(1, 11),
     # use parabolic peak interpolation: https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
     for i in range(Ntimes):
         a, b, c, = amp[i][(argmaxes[i] - 1) % len(amp[i])], amp[i][argmaxes[i]], amp[i][(argmaxes[i] + 1) % len(amp[i])]
-        if (np.abs(a - 2*b + c) > 0) and (np.abs(a - c) > 0):
-            peak_shifts[i] = .5 * (a - c) / (a - 2*b + c)
+        if (np.abs(a - 2 * b + c) > 0) and (np.abs(a - c) > 0):
+            peak_shifts[i] = .5 * (a - c) / (a - 2 * b + c)
         else:
             peak_shifts[i] = 0
         # use peak shift to linearly interpolate to get appropriate delay
