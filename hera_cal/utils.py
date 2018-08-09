@@ -758,7 +758,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
           chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
     """Computes chi^2 defined as:
 
-    chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)| * wgts_ij)
+    chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
 
     and also a chisq_per_antenna which is the same sum but with fixed i. Also keeps track of the
     number of unflagged observations that go into each chi^2 waterfal, both overall and per-antenna.
