@@ -1028,7 +1028,7 @@ def fft_dly(data, df, wgts=None, window=None, medfilt=False, kernel=(1, 11),
 
     # fft w/ window and find argmax
     vfft = np.fft.fft(data * win * wgts, axis=1)
-    amp = np.abs(np.fft.fftshift(vfft))
+    amp = np.abs(np.fft.fftshift(vfft, axes=1))
     argmaxes = np.argmax(amp, axis=1)
     fftfreqs = np.fft.fftshift(np.fft.fftfreq(Nfreqs, df))
     dlys, peak_shifts = np.zeros((Ntimes, 1)), np.zeros((Ntimes, 1))
