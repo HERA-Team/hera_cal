@@ -63,12 +63,12 @@ def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None,
             # update data flags
             if bool_flags:
                 # treat as flags
-                data_flags[(i, j, pol)][cal_flags[(i, ap1)]] = True
-                data_flags[(i, j, pol)][cal_flags[(j, ap2)]] = True
+                data_flags[(i, j, pol)] += cal_flags[(i, ap1)]
+                data_flags[(i, j, pol)] += cal_flags[(j, ap2)]
             else:
                 # treat as data weights
-                wgts[(i, j, pol)][cal_flags[(i, ap1)]] = 0.0
-                wgts[(i, j, pol)][cal_flags[(j, ap2)]] = 0.0
+                wgts[(i, j, pol)] *= (~cal_flags[(i, ap1)]).astype(np.float)
+                wgts[(i, j, pol)] *= (~cal_flags[(j, ap2)]).astype(np.float)
         else:
             # If any antenna is missing from the gains, the data is flagged
             if bool_flags:
@@ -106,7 +106,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
-
     # optionally load npz flags
     if flags_npz is not None:
         npz_flags = np.load(flags_npz)

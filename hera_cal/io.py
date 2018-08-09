@@ -153,7 +153,7 @@ class HERAData(UVData):
                       'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
 
     def __init__(self, input_data, filetype='uvh5'):
-        '''Instantiate a HERAData object. If the filetype is uvh5, read in and store
+        '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
 
@@ -180,7 +180,7 @@ class HERAData(UVData):
 
         # load metadata from file
         self.filetype = filetype
-        if self.filetype is 'uvh5':
+        if self.filetype == 'uvh5':
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
@@ -375,25 +375,25 @@ class HERAData(UVData):
         self.last_read_kwargs = {p: locs[p] for p in partials}
 
         # load data
-        if self.filetype is 'uvh5':
+        if self.filetype == 'uvh5':
             self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
                            frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
         else:
             if not read_data:
                 raise NotImplementedError('reading only metadata is not implemented for' + self.filetype)
-            if self.filetype is 'miriad':
+            if self.filetype == 'miriad':
                 self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
                 if any([times is not None, frequencies is not None, freq_chans is not None]):
                     warnings.warn('miriad does not support partial loading for times and frequencies. '
                                   'Loading the file first and then performing select.')
                     self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
-            elif self.filetype is 'uvfits':
+            elif self.filetype == 'uvfits':
                 self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
                                  times=times, frequencies=frequencies, freq_chans=freq_chans)
                 self.unphase_to_drift()
 
         # process data into DataContainers
-        if read_data or self.filetype is 'uvh5':
+        if read_data or self.filetype == 'uvh5':
             self._determine_blt_slicing()
             self._determine_pol_indexing()
         if read_data:
@@ -443,7 +443,7 @@ class HERAData(UVData):
                 first call of partial write for a given output_path).
         '''
         # Type verifications
-        if self.filetype is not 'uvh5':
+        if self.filetype != 'uvh5':
             raise NotImplementedError('Partial writing for filetype ' + self.filetype + ' has not been implemented.')
         if len(self.filepaths) > 1:
             raise NotImplementedError('Partial writing for list-loaded HERAData objects has not been implemented.')
@@ -480,7 +480,7 @@ class HERAData(UVData):
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
         if bls is None:
-            if self.filetype is not 'uvh5':
+            if self.filetype != 'uvh5':
                 raise NotImplementedError('Baseline iteration without explicitly setting bls for filetype ' + self.filetype
                                           + ' without setting bls has not been implemented.')
             bls = self.bls
@@ -503,7 +503,7 @@ class HERAData(UVData):
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
         if freqs is None:
-            if self.filetype is not 'uvh5':
+            if self.filetype != 'uvh5':
                 raise NotImplementedError('Frequency iteration for filetype ' + self.filetype
                                           + ' without setting freqs has not been implemented.')
             freqs = self.freqs
@@ -525,7 +525,7 @@ class HERAData(UVData):
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
         if times is None:
-            if self.filetype is not 'uvh5':
+            if self.filetype != 'uvh5':
                 raise NotImplementedError('Time iteration for filetype ' + self.filetype
                                           + ' without setting times has not been implemented.')
             times = self.times
