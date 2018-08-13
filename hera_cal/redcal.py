@@ -319,17 +319,17 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 new_chisq_u = sum([np.abs(self.data[k][update]-dmdl_u[k])**2 * self.wgts[k]**2 for k in self.keys])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
-                deltas_u = [v-sol[k][update] for k,v in new_sol_u.items()]
+                chisq[update] = np.where(gotbetter_u, new_chisq_u, chisq_u)
+                iters[update] = np.where(gotbetter_u, i, iters[update])
                 for k,v in new_sol_u.items():
                     sol[k][update] = np.where(gotbetter_u, v, sol[k][update])
+                deltas_u = [v-sol[k][update] for k,v in new_sol_u.items()]
                 conv_u = np.linalg.norm(deltas_u, axis=0) / np.linalg.norm(list(new_sol_u.values()),axis=0)
-                conv[update] = conv_u
-                iters[update] = np.where(gotbetter_u, i, iters[update])
+                conv[update] = np.where(gotbetter_u, conv_u, conv[update])
                 update_u = np.where((conv_u > conv_crit) & gotbetter_u)
                 sol_sum_u = {k:v[update_u] for k,v in sol_sum_u.items()}
                 dconj_u = {k:v[update_u] for k,v in dconj_u.items()}
                 dmdl_u = {k:v[update_u] for k,v in dmdl_u.items()}
-                chisq[update] = np.where(gotbetter_u, new_chisq_u, chisq_u)
                 update = (update[0][update_u], update[1][update_u])
             else:
                 for k,v in new_sol_u.items():
