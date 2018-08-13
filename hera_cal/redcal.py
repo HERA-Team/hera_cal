@@ -288,57 +288,54 @@ class OmnicalSolver(linsolve.LinProductSolver):
 
     def solve_iteratively(self, conv_crit=1e-10, maxiter=100, check_after=40, check_every=4, verbose=False):
         sol = self.sol0
-        sol_sum = {}
-        for k,term in zip(self.keys, self.all_terms):
-            val = np.abs(self.data[k])**2 * self.wgts[k]
-            gi,gj,uij = term[0]
-            gj = gj[:-1] # XXX relies on conj being a trailing '_'
-            sol_sum[gi] = sol_sum.get(gi,0) + val
-            sol_sum[gj] = sol_sum.get(gj,0) + val
-            sol_sum[uij] = sol_sum.get(uij,0) + val
-        dconj = {k:np.conj(v) * self.wgts[k] for k,v in self.data.items()}
-        dmdl = self._get_ans0(sol)
-        chisq = self.chisq(dmdl)
+        sol_sum_u = {}
+        terms = [(linsolve.get_name(gi),linsolve.get_name(gj),linsolve.get_name(uij)) 
+            for term in self.all_terms for (gi,gj,uij) in term]
+        for k,(gi,gj,uij) in zip(self.keys, terms):
+            val = (np.abs(self.data[k])**2 * self.wgts[k]).flatten()
+            sol_sum_u[gi] = sol_sum_u.get(gi,0) + val
+            sol_sum_u[gj] = sol_sum_u.get(gj,0) + val
+            sol_sum_u[uij] = sol_sum_u.get(uij,0) + val
+        dconj_u = {k:(np.conj(v) * self.wgts[k]).flatten() for k,v in self.data.items()}
+        dmdl_u = self._get_ans0(sol)
+        chisq = self.chisq(dmdl_u)
+        dmdl_u = {k:v.flatten() for k,v in dmdl_u.items()}
         conv = np.ones_like(chisq)
         update = np.where(chisq > 0)
-        new_sol_u = {k:v[update] for k,v in sol.items()}
         iters = np.zeros(chisq.shape, dtype=np.int)
         for i in range(1,maxiter+1):
             if verbose: print('Beginning iteration %d/%d' % (i,maxiter))
-            sol_wgt = {}
-            for k,term in zip(self.keys, self.all_terms):
-                denominator = dmdl[k][update] * dconj[k][update]
-                gi,gj,uij = term[0]
-                gj = gj[:-1] # XXX relies on conj being a trailing '_'
-                sol_wgt[gi] = sol_wgt.get(gi,0) + denominator
-                sol_wgt[gj] = sol_wgt.get(gj,0) + denominator.conj()
-                sol_wgt[uij] = sol_wgt.get(uij,0) + denominator
-            new_sol_u = {k: v[update] * ((1 - self.gain) + self.gain * sol_sum[k][update]/sol_wgt[k]) 
+            sol_wgt_u = {k:0 for k in sol_sum_u.keys()}
+            for k,(gi,gj,uij) in zip(self.keys, terms):
+                denominator = dmdl_u[k] * dconj_u[k]
+                sol_wgt_u[gi] += denominator
+                sol_wgt_u[gj] += denominator.conj()
+                sol_wgt_u[uij] += denominator
+            new_sol_u = {k: v[update] * ((1 - self.gain) + self.gain * sol_sum_u[k]/sol_wgt_u[k]) 
                             for k,v in sol.items()}
-            new_dmdl_u = self._get_ans0(new_sol_u)
+            dmdl_u = self._get_ans0(new_sol_u)
             # XXX wgts or wgts**2? and deal with non-scalar wgts
             if i == maxiter or (i > check_after and (i % check_every) == 0):
-                new_chisq_u = sum([np.abs(self.data[k][update]-new_dmdl_u[k])**2 * self.wgts[k]**2 for k in self.keys])
+                new_chisq_u = sum([np.abs(self.data[k][update]-dmdl_u[k])**2 * self.wgts[k]**2 for k in self.keys])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
                 deltas_u = [v-sol[k][update] for k,v in new_sol_u.items()]
                 for k,v in new_sol_u.items():
                     sol[k][update] = np.where(gotbetter_u, v, sol[k][update])
-                for k,v in new_dmdl_u.items():
-                    dmdl[k][update] = np.where(gotbetter_u, v, dmdl[k][update])
                 conv_u = np.linalg.norm(deltas_u, axis=0) / np.linalg.norm(list(new_sol_u.values()),axis=0)
                 conv[update] = conv_u
-                iters[update] = i # XXX is timing right if not got_better?
+                iters[update] = np.where(gotbetter_u, i, iters[update])
                 update_u = np.where((conv_u > conv_crit) & gotbetter_u)
+                sol_sum_u = {k:v[update_u] for k,v in sol_sum_u.items()}
+                dconj_u = {k:v[update_u] for k,v in dconj_u.items()}
+                dmdl_u = {k:v[update_u] for k,v in dmdl_u.items()}
                 chisq[update] = np.where(gotbetter_u, new_chisq_u, chisq_u)
                 update = (update[0][update_u], update[1][update_u])
             else:
                 for k,v in new_sol_u.items():
                     sol[k][update] = v
-                for k,v in new_dmdl_u.items():
-                    dmdl[k][update] = v
                 iters[update] = i
-            #print(i, np.mean(chisq), np.mean(conv), update[0].size)
+            print(i, np.mean(chisq), np.mean(conv), update[0].size)
             if update[0].size == 0 or i == maxiter:
                 meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
                 return meta, sol
