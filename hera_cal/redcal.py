@@ -4,6 +4,7 @@ from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 
 
+# XXX I think this should be superceded by hera_sim
 def noise(size):
     """Return complex random gaussian array with given size and variance = 1."""
 
@@ -11,6 +12,7 @@ def noise(size):
     return np.random.normal(scale=sig, size=size) + 1j * np.random.normal(scale=sig, size=size)
 
 
+# XXX I think this should be superceded by hera_sim
 def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
     """ Simulate noise-free random but redundant (up to differing gains) visibilities.
 
@@ -269,6 +271,78 @@ def multiply_by_gains(target, gains, target_type='vis'):
 
     return _apply_gains(target, gains, (lambda x, y: x * y), target_type)
 
+class OmnicalSolver(linsolve.LinProductSolver):
+    def __init__(self, data, sol0, wgts={}, sparse=False, gain=.3, **kwargs):
+        linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, sparse=sparse, **kwargs)
+        self.gain = gain
+
+    def chisq(self, dmdl):
+        return sum([np.abs(self.data[k]-dmdl[k])**2 for k in self.keys])
+
+    def _get_ans0(self, sol, keys=None):
+        if keys is None:
+            keys = self.keys
+        _sol = {k+'_':v.conj() for k,v in sol.items() if k.startswith('g')}
+        _sol.update(sol)
+        return {k: eval(k, _sol) for k in keys}
+
+    def solve_iteratively(self, conv_crit=1e-10, maxiter=100, check_after=40, check_every=4, verbose=False):
+        sol = self.sol0
+        sol_sum = {}
+        for k,term in zip(self.keys, self.all_terms):
+            val = np.abs(self.data[k])**2 * self.wgts[k]
+            gi,gj,uij = term[0]
+            gj = gj[:-1] # XXX relies on conj being a trailing '_'
+            sol_sum[gi] = sol_sum.get(gi,0) + val
+            sol_sum[gj] = sol_sum.get(gj,0) + val
+            sol_sum[uij] = sol_sum.get(uij,0) + val
+        dconj = {k:np.conj(v) * self.wgts[k] for k,v in self.data.items()}
+        dmdl = self._get_ans0(sol)
+        chisq = self.chisq(dmdl)
+        conv = np.ones_like(chisq)
+        update = np.where(chisq > 0)
+        new_sol_u = {k:v[update] for k,v in sol.items()}
+        iters = np.zeros(chisq.shape, dtype=np.int)
+        for i in range(1,maxiter+1):
+            if verbose: print('Beginning iteration %d/%d' % (i,maxiter))
+            sol_wgt = {}
+            for k,term in zip(self.keys, self.all_terms):
+                denominator = dmdl[k][update] * dconj[k][update]
+                gi,gj,uij = term[0]
+                gj = gj[:-1] # XXX relies on conj being a trailing '_'
+                sol_wgt[gi] = sol_wgt.get(gi,0) + denominator
+                sol_wgt[gj] = sol_wgt.get(gj,0) + denominator.conj()
+                sol_wgt[uij] = sol_wgt.get(uij,0) + denominator
+            new_sol_u = {k: v[update] * ((1 - self.gain) + self.gain * sol_sum[k][update]/sol_wgt[k]) 
+                            for k,v in sol.items()}
+            new_dmdl_u = self._get_ans0(new_sol_u)
+            # XXX wgts or wgts**2? and deal with non-scalar wgts
+            if i == maxiter or (i > check_after and (i % check_every) == 0):
+                new_chisq_u = sum([np.abs(self.data[k][update]-new_dmdl_u[k])**2 * self.wgts[k]**2 for k in self.keys])
+                chisq_u = chisq[update]
+                gotbetter_u = (chisq_u > new_chisq_u)
+                deltas_u = [v-sol[k][update] for k,v in new_sol_u.items()]
+                for k,v in new_sol_u.items():
+                    sol[k][update] = np.where(gotbetter_u, v, sol[k][update])
+                for k,v in new_dmdl_u.items():
+                    dmdl[k][update] = np.where(gotbetter_u, v, dmdl[k][update])
+                conv_u = np.linalg.norm(deltas_u, axis=0) / np.linalg.norm(list(new_sol_u.values()),axis=0)
+                conv[update] = conv_u
+                iters[update] = i # XXX is timing right if not got_better?
+                update_u = np.where((conv_u > conv_crit) & gotbetter_u)
+                chisq[update] = np.where(gotbetter_u, new_chisq_u, chisq_u)
+                update = (update[0][update_u], update[1][update_u])
+            else:
+                for k,v in new_sol_u.items():
+                    sol[k][update] = v
+                for k,v in new_dmdl_u.items():
+                    dmdl[k][update] = v
+                iters[update] = i
+            #print(i, np.mean(chisq), np.mean(conv), update[0].size)
+            if update[0].size == 0 or i == maxiter:
+                meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
+                return meta, sol
+
 
 class RedundantCalibrator:
 
@@ -403,6 +477,30 @@ class RedundantCalibrator:
 
         sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
+        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
+        sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
+        return meta, sol
+
+    def lincal_quickndirty(self, data, sol0, wgts={}, sparse=False, gain=.3, conv_crit=1e-10, maxiter=50):
+        """Taylor expands to linearize redcal equations and iteratively minimizes chi^2.
+
+        Args:
+            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+            sol0: dictionary of guess gains and unique model visibilities, keyed by antenna tuples
+                like (ant,antpol) or baseline tuples like. Gains should include firstcal gains.
+            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
+            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
+            conv_crit: maximum allowed relative change in solutions to be considered converged
+            max_iter: maximum number of lincal iterations allowed before it gives up
+
+        Returns:
+            meta: dictionary of information about the convergence and chi^2 of the solution
+            sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
+                and {(ind1,ind2,pol): np.array} formats respectively
+        """
+
+        sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
+        ls = self._solver(OmnicalSolver, data, sol0=sol0, wgts=wgts, sparse=sparse, gain=gain)
         meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol

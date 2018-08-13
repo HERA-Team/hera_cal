@@ -18,11 +18,13 @@ with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
 
+# XXX switch to hera_cal.utils.polnum2str/jnum2str
 POL_TYPES = 'xylrabne'
 # XXX this can't support restarts or changing # pols between runs
 POLNUM = {}  # factor to multiply ant index for internal ordering
 NUMPOL = {}
 
+# XXX switch to hera_cal.utils.polnum2str/jnum2str
 # dict for converting to polarizations
 jonesLookup = {
     -5: (-5, -5),
