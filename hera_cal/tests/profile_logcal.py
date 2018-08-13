@@ -123,6 +123,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
+        sol0 = {k:v.astype(np.complex64) for k,v in sol0.items()}
         #sol0 = info.logcal(d)
         #for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
         meta, sol = info.lincal(d, sol0)
@@ -137,20 +138,19 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 5)
                 np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 5)
 
-    def test_lincal_quick(self):
+    def test_omnical(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
         #gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=.0099999)
         #d = {key:value.astype(np.complex64) for key,value in d.items()}
-        #w = dict([(k, 1.) for k in d.keys()])
+        w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
-        #sol0 = info.logcal(d)
-        #for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
-        #meta, sol = info.lincal_quickndirty(d, sol0, gain=.3, maxiter=50)
-        meta, sol = info.lincal_quickndirty(d, sol0, gain=.5, maxiter=500)
+        sol0 = {k:v.astype(np.complex64) for k,v in sol0.items()}
+        meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=50, check_every=6)
+        #meta, sol = info.omnical(d, sol0, gain=.5, maxiter=50, check_after=1, check_every=1)
         #print(meta)
         for i in xrange(NANTS):
             self.assertEqual(sol[(i, 'x')].shape, SHAPE)
@@ -163,7 +163,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 5)
                 np.testing.assert_almost_equal(np.angle(d_bl*mdl.conj()), 0, 5)
 
-    def test_omnilincal(self):
+    def test_omnical_original(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
         hcreds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')

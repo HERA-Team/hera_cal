@@ -272,37 +272,82 @@ def multiply_by_gains(target, gains, target_type='vis'):
     return _apply_gains(target, gains, (lambda x, y: x * y), target_type)
 
 class OmnicalSolver(linsolve.LinProductSolver):
-    def __init__(self, data, sol0, wgts={}, sparse=False, gain=.3, **kwargs):
-        linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, sparse=sparse, **kwargs)
-        self.gain = gain
+    def __init__(self, data, sol0, wgts={}, gain=.3, **kwargs):
+        """Set up a nonlinear system of equations of the form g_i * g_j.conj() * V_mdl = V_ij
+        to linearize via the Omnical algorithm from Liu et al. 2010.
 
-    def chisq(self, dmdl):
-        return sum([np.abs(self.data[k]-dmdl[k])**2 for k in self.keys])
+        Args:
+            data: Dictionary that maps nonlinear product equations, written as valid python-interpetable 
+                strings that include the variables in question, to (complex) numbers or numpy arrarys. 
+                Variables with trailing underscores '_' are interpreted as complex conjugates (e.g. x*y_ 
+                parses as x * y.conj()).
+            sol0: Dictionary mapping all variables (as keyword strings) to their starting guess values.
+                This is the point that is Taylor expanded around, so it must be relatively close to the
+                true chi^2 minimizing solution. In the same format as that produced by 
+                linsolve.LogProductSolver.solve() or linsolve.LinProductSolver.solve().
+            wgts: Dictionary that maps equation strings from data to real weights to apply to each 
+                equation. Weights are treated as 1/sigma^2. All equations in the data must have a weight 
+                if wgts is not the default, {}, which means all 1.0s.
+            gain: The fractional step made toward the new solution each iteration.
+            **kwargs: keyword arguments of constants (python variables in keys of data that 
+                are not to be solved for)
+
+        Returns:
+            None
+        """
+        linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, **kwargs)
+        self.gain = np.float32(gain) # float32 to avoid accidentally promoting data to doubles.
+
+    def chisq(self, mdl):
+        '''Compute Chi^2 = |obs - mdl|^2 / sigma^2 for the specified solution. Weights are treated as 1/sigma^2. 
+        wgts = {} means sigma = 1. Uses the stored data and weights.'''
+        return sum([np.abs(self.data[k]-mdl[k])**2 * self.wgts[k] for k in self.keys])
 
     def _get_ans0(self, sol, keys=None):
+        '''Evaluate the system of equations given input sol. 
+        Specify keys to evaluate only a subset of the equations.'''
         if keys is None:
             keys = self.keys
         _sol = {k+'_':v.conj() for k,v in sol.items() if k.startswith('g')}
         _sol.update(sol)
         return {k: eval(k, _sol) for k in keys}
 
-    def solve_iteratively(self, conv_crit=1e-10, maxiter=100, check_after=40, check_every=4, verbose=False):
+    def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, verbose=False):
+        """Repeatedly solves and updates solution until convergence or maxiter is reached. 
+        Returns a meta object containing the number of iterations, chisq, and convergence criterion.
+
+        Args:
+            conv_crit: A convergence criterion (default 1e-10) below which to stop iterating. 
+                Converegence is measured L2-norm of the change in the solution of all the variables
+                divided by the L2-norm of the solution itself.
+            maxiter: An integer maximum number of iterations to perform before quitting. Default 50.
+            check_every: Compute convergence every Nth iteration (saves computation).  Default 4.
+            check_after: Start computing convergence only after N iterations.  Default 1.
+
+        Returns: meta, sol
+            meta: a dictionary with metadata about the solution, including
+                iter: the number of iterations taken to reach convergence (or maxiter)
+                chisq: the chi^2 of the solution produced by the final iteration
+                conv_crit: the convergence criterion evaluated at the final iteration
+            sol: a dictionary of complex solutions with variables as keys
+        """
         sol = self.sol0
         sol_sum_u = {}
         terms = [(linsolve.get_name(gi),linsolve.get_name(gj),linsolve.get_name(uij)) 
             for term in self.all_terms for (gi,gj,uij) in term]
         for k,(gi,gj,uij) in zip(self.keys, terms):
-            val = (np.abs(self.data[k])**2 * self.wgts[k]).flatten()
+            val = (np.abs(self.data[k])**2 * np.sqrt(self.wgts[k])).flatten()
             sol_sum_u[gi] = sol_sum_u.get(gi,0) + val
             sol_sum_u[gj] = sol_sum_u.get(gj,0) + val
             sol_sum_u[uij] = sol_sum_u.get(uij,0) + val
-        dconj_u = {k:(np.conj(v) * self.wgts[k]).flatten() for k,v in self.data.items()}
+        dconj_u = {k:(np.conj(v) * np.sqrt(self.wgts[k])).flatten() for k,v in self.data.items()}
         dmdl_u = self._get_ans0(sol)
         chisq = self.chisq(dmdl_u)
         dmdl_u = {k:v.flatten() for k,v in dmdl_u.items()}
+        sol_u = {k:v.flatten() for k,v in sol.items()}
+        iters = np.zeros(chisq.shape, dtype=np.int)
         conv = np.ones_like(chisq)
         update = np.where(chisq > 0)
-        iters = np.zeros(chisq.shape, dtype=np.int)
         for i in range(1,maxiter+1):
             if verbose: print('Beginning iteration %d/%d' % (i,maxiter))
             sol_wgt_u = {k:0 for k in sol_sum_u.keys()}
@@ -311,34 +356,39 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_wgt_u[gi] += denominator
                 sol_wgt_u[gj] += denominator.conj()
                 sol_wgt_u[uij] += denominator
-            new_sol_u = {k: v[update] * ((1 - self.gain) + self.gain * sol_sum_u[k]/sol_wgt_u[k]) 
-                            for k,v in sol.items()}
+            new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k]/sol_wgt_u[k]) 
+                            for k,v in sol_u.items()}
             dmdl_u = self._get_ans0(new_sol_u)
             # XXX wgts or wgts**2? and deal with non-scalar wgts
-            if i == maxiter or (i > check_after and (i % check_every) == 0):
-                new_chisq_u = sum([np.abs(self.data[k][update]-dmdl_u[k])**2 * self.wgts[k]**2 for k in self.keys])
+            if i < maxiter and (i < check_after or (i % check_every) != 0):
+                # Fast branch when we aren't expensively computing convergence/chisq
+                sol_u = new_sol_u
+            else:
+                # Slow branch when we compute convergence/chisq
+                new_chisq_u = sum([np.abs(self.data[k][update]-dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
-                chisq[update] = np.where(gotbetter_u, new_chisq_u, chisq_u)
-                iters[update] = np.where(gotbetter_u, i, iters[update])
+                where_gotbetter_u = np.where(gotbetter_u)
+                update_where = (update[0][where_gotbetter_u], update[1][where_gotbetter_u])
+                chisq[update_where] = new_chisq_u[where_gotbetter_u]
+                iters[update_where] = i
+                new_sol_u = {k: np.where(gotbetter_u, v, sol_u[k]) for k,v in new_sol_u.items()}
+                deltas_u = [v-sol_u[k] for k,v in new_sol_u.items()]
+                conv_u = np.sqrt(sum([(v*v.conj()).real for v in deltas_u]) \
+                            / sum([(v*v.conj()).real for v in new_sol_u.values()]))
+                conv[update_where] = conv_u[where_gotbetter_u]
                 for k,v in new_sol_u.items():
-                    sol[k][update] = np.where(gotbetter_u, v, sol[k][update])
-                deltas_u = [v-sol[k][update] for k,v in new_sol_u.items()]
-                conv_u = np.linalg.norm(deltas_u, axis=0) / np.linalg.norm(list(new_sol_u.values()),axis=0)
-                conv[update] = np.where(gotbetter_u, conv_u, conv[update])
+                    sol[k][update] = v
                 update_u = np.where((conv_u > conv_crit) & gotbetter_u)
+                if update_u[0].size == 0 or i == maxiter:
+                    meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
+                    return meta, sol
+                sol_u = {k: v[update_u] for k,v in new_sol_u.items()}
                 sol_sum_u = {k:v[update_u] for k,v in sol_sum_u.items()}
                 dconj_u = {k:v[update_u] for k,v in dconj_u.items()}
                 dmdl_u = {k:v[update_u] for k,v in dmdl_u.items()}
                 update = (update[0][update_u], update[1][update_u])
-            else:
-                for k,v in new_sol_u.items():
-                    sol[k][update] = v
-                iters[update] = i
-            print(i, np.mean(chisq), np.mean(conv), update[0].size)
-            if update[0].size == 0 or i == maxiter:
-                meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
-                return meta, sol
+            #print(i, np.mean(chisq), np.mean(conv), update[0].size)
 
 
 class RedundantCalibrator:
@@ -478,8 +528,8 @@ class RedundantCalibrator:
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
-    def lincal_quickndirty(self, data, sol0, wgts={}, sparse=False, gain=.3, conv_crit=1e-10, maxiter=50):
-        """Taylor expands to linearize redcal equations and iteratively minimizes chi^2.
+    def omnical(self, data, sol0, wgts={}, gain=.3, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1):
+        """Use the Liu et al 2010 Omnical algorithm to linearize equations and iteratively minimize chi^2.
 
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
@@ -489,6 +539,8 @@ class RedundantCalibrator:
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             conv_crit: maximum allowed relative change in solutions to be considered converged
             max_iter: maximum number of lincal iterations allowed before it gives up
+            check_every: Compute convergence every Nth iteration (saves computation).  Default 4.
+            check_after: Start computing convergence only after N iterations.  Default 1.
 
         Returns:
             meta: dictionary of information about the convergence and chi^2 of the solution
@@ -497,8 +549,8 @@ class RedundantCalibrator:
         """
 
         sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
-        ls = self._solver(OmnicalSolver, data, sol0=sol0, wgts=wgts, sparse=sparse, gain=gain)
-        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
+        ls = self._solver(OmnicalSolver, data, sol0=sol0, wgts=wgts, gain=gain)
+        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after)
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
