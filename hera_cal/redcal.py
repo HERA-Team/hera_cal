@@ -298,11 +298,6 @@ class OmnicalSolver(linsolve.LinProductSolver):
         linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, **kwargs)
         self.gain = np.float32(gain) # float32 to avoid accidentally promoting data to doubles.
 
-    def chisq(self, mdl):
-        '''Compute Chi^2 = |obs - mdl|^2 / sigma^2 for the specified solution. Weights are treated as 1/sigma^2. 
-        wgts = {} means sigma = 1. Uses the stored data and weights.'''
-        return sum([np.abs(self.data[k]-mdl[k])**2 * self.wgts[k] for k in self.keys])
-
     def _get_ans0(self, sol, keys=None):
         '''Evaluate the system of equations given input sol. 
         Specify keys to evaluate only a subset of the equations.'''
@@ -332,34 +327,33 @@ class OmnicalSolver(linsolve.LinProductSolver):
             sol: a dictionary of complex solutions with variables as keys
         """
         sol = self.sol0
-        sol_sum_u = {}
         terms = [(linsolve.get_name(gi),linsolve.get_name(gj),linsolve.get_name(uij)) 
             for term in self.all_terms for (gi,gj,uij) in term]
-        for k,(gi,gj,uij) in zip(self.keys, terms):
-            val = (np.abs(self.data[k])**2 * np.sqrt(self.wgts[k])).flatten()
-            sol_sum_u[gi] = sol_sum_u.get(gi,0) + val
-            sol_sum_u[gj] = sol_sum_u.get(gj,0) + val
-            sol_sum_u[uij] = sol_sum_u.get(uij,0) + val
-        dconj_u = {k:(np.conj(v) * np.sqrt(self.wgts[k])).flatten() for k,v in self.data.items()}
         dmdl_u = self._get_ans0(sol)
-        chisq = self.chisq(dmdl_u)
+        chisq = sum([np.abs(self.data[k]-dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
         dmdl_u = {k:v.flatten() for k,v in dmdl_u.items()}
         sol_u = {k:v.flatten() for k,v in sol.items()}
+        data_u = {k:v.flatten() for k,v in self.data.items()}
         iters = np.zeros(chisq.shape, dtype=np.int)
         conv = np.ones_like(chisq)
         update = np.where(chisq > 0)
         for i in range(1,maxiter+1):
             if verbose: print('Beginning iteration %d/%d' % (i,maxiter))
-            sol_wgt_u = {k:0 for k in sol_sum_u.keys()}
+            sol_sum_u = {k:0 for k in sol_u.keys()}
+            sol_wgt_u = {k:0 for k in sol_u.keys()}
             for k,(gi,gj,uij) in zip(self.keys, terms):
-                denominator = dmdl_u[k] * dconj_u[k]
+                dmdl_u_conj_wgt = dmdl_u[k].conj() * self.wgts[k] # XXX non-scalar wgts
+                denominator = dmdl_u[k] * dmdl_u_conj_wgt
                 sol_wgt_u[gi] += denominator
-                sol_wgt_u[gj] += denominator.conj()
+                sol_wgt_u[gj] += denominator
                 sol_wgt_u[uij] += denominator
+                numerator = data_u[k] * dmdl_u_conj_wgt
+                sol_sum_u[gi] += numerator
+                sol_sum_u[gj] += numerator.conj()
+                sol_sum_u[uij] += numerator
             new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k]/sol_wgt_u[k]) 
                             for k,v in sol_u.items()}
             dmdl_u = self._get_ans0(new_sol_u)
-            # XXX wgts or wgts**2? and deal with non-scalar wgts
             if i < maxiter and (i < check_after or (i % check_every) != 0):
                 # Fast branch when we aren't expensively computing convergence/chisq
                 sol_u = new_sol_u
@@ -369,7 +363,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
                 where_gotbetter_u = np.where(gotbetter_u)
-                update_where = (update[0][where_gotbetter_u], update[1][where_gotbetter_u])
+                update_where = tuple(u[where_gotbetter_u] for u in update)
                 chisq[update_where] = new_chisq_u[where_gotbetter_u]
                 iters[update_where] = i
                 new_sol_u = {k: np.where(gotbetter_u, v, sol_u[k]) for k,v in new_sol_u.items()}
@@ -384,11 +378,10 @@ class OmnicalSolver(linsolve.LinProductSolver):
                     meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
                     return meta, sol
                 sol_u = {k: v[update_u] for k,v in new_sol_u.items()}
-                sol_sum_u = {k:v[update_u] for k,v in sol_sum_u.items()}
-                dconj_u = {k:v[update_u] for k,v in dconj_u.items()}
+                data_u = {k:v[update_u] for k,v in data_u.items()}
                 dmdl_u = {k:v[update_u] for k,v in dmdl_u.items()}
-                update = (update[0][update_u], update[1][update_u])
-            #print(i, np.mean(chisq), np.mean(conv), update[0].size)
+                update = tuple(u[update_u] for u in update)
+            print(i, np.mean(chisq), np.mean(conv), update[0].size)
 
 
 class RedundantCalibrator:
