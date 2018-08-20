@@ -9,6 +9,7 @@ from hera_cal.datacontainer import DataContainer
 from hera_cal.utils import split_pol, conj_pol, polnum2str, polstr2num, jnum2str, jstr2num
 from hera_cal.apply_cal import recalibrate_in_place
 
+
 def noise(size):
     """Return complex random gaussian array with given size and variance = 1."""
 
@@ -233,7 +234,7 @@ def divide_by_gains(data, gains):
     for (i, j, pol) in data.keys():
         ap1, ap2 = split_pol(pol)
         for key in [(i, ap1), (j, ap2)]:
-            if not key in full_gains:
+            if key not in full_gains:
                 if key in gains:
                     full_gains[key] = deepcopy(gains[key])
                 else:  # recalibrate_in_place requires all gains to be present, or else it'll flag
@@ -243,7 +244,6 @@ def divide_by_gains(data, gains):
     output = deepcopy(data)
     recalibrate_in_place(output, data_flags, full_gains, gain_flags)
     return output
-
 
 
 class RedundantCalibrator:
