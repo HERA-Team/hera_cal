@@ -7,7 +7,7 @@ import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 from hera_cal.utils import split_pol, conj_pol, polnum2str, polstr2num, jnum2str, jstr2num
-
+from hera_cal.apply_cal import recalibrate_in_place
 
 def noise(size):
     """Return complex random gaussian array with given size and variance = 1."""
@@ -214,66 +214,36 @@ def get_gains_and_vis_from_sol(sol):
     return g, v
 
 
-def _apply_gains(target, gains, operation, target_type):
-    """Helper function designed to be used with divide_by_gains and multiply_by_gains."""
+def divide_by_gains(data, gains):
+    """Helper function for applying gains to visibilities or other gains, e.g. for firstcal. Uses 
+    hera_cal.apply_cal.recalibrate_in_place under the hood. Unlike that function, all data is assumed to be
+    unflagged and missing gains are considered treated as 1.0.
 
-    assert(target_type in ['vis', 'gain'])
-    output = deepcopy(target)
-    if target_type is 'vis':
-        # loop over len=3 keys in target
-        for (ant1, ant2, pol) in [key for key in output.keys() if len(key) == 3]:
-            try:
-                output[(ant1, ant2, pol)] = operation(output[(ant1, ant2, pol)], gains[(ant1, split_pol(pol)[0])])
-            except KeyError:
-                pass
-            try:
-                output[(ant1, ant2, pol)] = operation(output[(ant1, ant2, pol)], np.conj(gains[(ant2, split_pol(pol)[1])]))
-            except KeyError:
-                pass
-    elif target_type is 'gain':
-        # loop over len=2 keys in target
-        for ant in [key for key in output.keys() if len(key) == 2]:
-            try:
-                output[ant] = operation(output[ant], gains[ant])
-            except KeyError:
-                pass
+    Args:
+        data: dictionary of visibilities in the {(ant1,ant2,pol): np.array} format. It is copied, not modified.
+        gains: dictionary of gains in the {(ant,antpol): np.array} to apply. Missing gains will be treated as
+        ones. Extraneous keys are ignored (e.g. visibility solutions). 
+
+    Returns:
+        output: copy of data with gains divided out.
+    """
+    # recalibrate_in_place requires flags to operate
+    data_flags = {key: np.zeros_like(data[key], dtype=bool) for key in data.keys()}
+    full_gains, gain_flags = {}, {}
+    for (i, j, pol) in data.keys():
+        ap1, ap2 = split_pol(pol)
+        for key in [(i, ap1), (j, ap2)]:
+            if not key in full_gains:
+                if key in gains:
+                    full_gains[key] = deepcopy(gains[key])
+                else:  # recalibrate_in_place requires all gains to be present, or else it'll flag
+                    full_gains[key] = np.ones_like(data[(i, j, pol)]) 
+                gain_flags[key] = np.zeros_like(full_gains[key], dtype=bool)
+
+    output = deepcopy(data)
+    recalibrate_in_place(output, data_flags, full_gains, gain_flags)
     return output
 
-
-def divide_by_gains(target, gains, target_type='vis'):
-    """Helper function for applying gains to visibilities or other gains, e.g. for firstcal.
-
-    Args:
-        target: dictionary of gains in the {(ant,antpol): np.array} or visibilities in the
-            {(ant1,ant2,pol): np.array} format. Target is copied and the original is untouched.
-        gains: dictionary of gains in the {(ant,antpol): np.array} to apply . It can be a full
-            'sol' dictionary with both gains and visibilities, but only the gains are used.
-        target_type: either 'vis' (default) or 'gain'. For 'vis', only len=3 keys in the target
-            are modified. For 'gain', only len=2 keys are modified.
-
-    Returns:
-        output: copy of target with gains divided out.
-    """
-
-    return _apply_gains(target, gains, (lambda x, y: x / y), target_type)
-
-
-def multiply_by_gains(target, gains, target_type='vis'):
-    """Helper function for removing gains from visibilities or other gains, e.g. for firstcal.
-
-    Args:
-        target: dictionary of gains in the {(ant,antpol): np.array} or visibilities in the
-            {(ant1,ant2,pol): np.array} format. Target is copied and the original is untouched.
-        gains: dictionary of gains in the {(ant,antpol): np.array} to remove. It can be a full
-            'sol' dictionary with both gains and visibilities, but only the gains are used.
-        target_type: either 'vis' (default) or 'gain'. For 'vis', only len=3 keys in the target
-            are modified. For 'gain', only len=2 keys are modified.
-
-    Returns:
-        output: copy of target with gains multiplied back in.
-    """
-
-    return _apply_gains(target, gains, (lambda x, y: x * y), target_type)
 
 
 class RedundantCalibrator:
@@ -371,7 +341,7 @@ class RedundantCalibrator:
             sol0: dictionary that includes all starting (e.g. firstcal) gains in the
                 {(ant,antpol): np.array} format. These are divided out of the data before
                 logcal and then multiplied back into the returned gains in the solution.
-                Default empty dictionary does nothing.
+                Missing gains are treated as 1.0s.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
 
@@ -380,13 +350,13 @@ class RedundantCalibrator:
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
 
-        fc_data = divide_by_gains(data, sol0, target_type='vis')
+        fc_data = divide_by_gains(data, sol0)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve()
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         for ubl_key in [k for k in sol.keys() if len(k) == 3]:
             sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
-        sol_with_fc = multiply_by_gains(sol, sol0, target_type='gain')
+        sol_with_fc = {key: (sol[key] * sol0[key] if (key in sol0 and len(key) == 2) else sol[key]) for key in sol.keys()}
         return sol_with_fc
 
     def lincal(self, data, sol0, wgts={}, sparse=False, conv_crit=1e-10, maxiter=50):
