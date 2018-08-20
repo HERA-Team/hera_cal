@@ -233,7 +233,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         w = {}
         w = dict([(k, 1.) for k in d.keys()])
 
-        def solver(data, wgts, sparse, **kwargs):
+        def solver(data, wgts, **kwargs):
             np.testing.assert_equal(data['g0x * g1x_ * u0xx'], d[0, 1, 'xx'])
             np.testing.assert_equal(data['g1x * g2x_ * u0xx'], d[1, 2, 'xx'])
             np.testing.assert_equal(data['g0x * g2x_ * u1xx'], d[0, 2, 'xx'])
@@ -331,9 +331,10 @@ class TestRedundantCalibrator(unittest.TestCase):
     def test_svd_convergence(self):
         for hexnum in (2,3,4):
             for dtype in (np.complex64, np.complex128):
-                reds, antpos = build_reds_hex(hexnum)
-                rc = om.RedundantCalibrator(reds, antpos)
-                gains, _, d = om.sim_red_data(reds, ['xx'], gain_scatter=.01)
+                antpos = build_hex_array(hexnum)
+                reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+                rc = om.RedundantCalibrator(reds)
+                gains, _, d = om.sim_red_data(reds, shape=(2,1), gain_scatter=.01)
                 d = {k:dk.astype(dtype) for k,dk in d.items()}
                 w = {k:1. for k in d.keys()}
                 gains = {k:gk.astype(dtype) for k,gk in gains.items()}
