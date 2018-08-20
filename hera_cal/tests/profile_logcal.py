@@ -35,8 +35,8 @@ antpos = build_linear_array(NANTS)
 reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
 info = om.RedundantCalibrator(reds)
 gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=.0099999)
-#d = {key:value.astype(np.complex64) + 0.1 * om.noise(value.shape) for key,value in d.items()}
-d = {key:value.astype(np.complex64) + 0. * om.noise(value.shape) for key,value in d.items()}
+d = {key: value + 1e-3 * om.noise(value.shape) for key,value in d.items()}
+d = {key:value.astype(np.complex64) for key,value in d.items()}
 w = dict([(k, 1.) for k in d.keys()])
 
 class TestRedundantCalibrator(unittest.TestCase):
@@ -150,7 +150,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
         sol0 = {k:v.astype(np.complex64) for k,v in sol0.items()}
-        meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=40, check_every=4)
+        meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=30, check_every=6)
         #meta, sol = info.omnical(d, sol0, gain=.5, maxiter=50, check_after=1, check_every=1)
         #print(meta)
         for i in xrange(NANTS):

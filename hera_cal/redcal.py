@@ -331,35 +331,44 @@ class OmnicalSolver(linsolve.LinProductSolver):
             for term in self.all_terms for (gi,gj,uij) in term]
         dmdl_u = self._get_ans0(sol)
         chisq = sum([np.abs(self.data[k]-dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
+        # variables with '_u' are flattened and only include pixels that need updating
         dmdl_u = {k:v.flatten() for k,v in dmdl_u.items()}
+        # wgts_u hold the wgts the user provides.  dwgts_u is what is actually used to wgt the data
+        wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32)).flatten() for k,v in self.wgts.items()}
         sol_u = {k:v.flatten() for k,v in sol.items()}
-        data_u = {k:v.flatten() for k,v in self.data.items()}
         iters = np.zeros(chisq.shape, dtype=np.int)
         conv = np.ones_like(chisq)
         update = np.where(chisq > 0)
         for i in range(1,maxiter+1):
             if verbose: print('Beginning iteration %d/%d' % (i,maxiter))
+            if (i % check_every) == 1:
+                # compute data wgts: dwgts = sum(V_mdl^2 / n^2) = sum(V_mdl^2 * wgts)
+                # don't need to update data weighting with every iteration
+                dwgts_u = {k: dmdl_u[k] * dmdl_u[k].conj() * wgts_u[k] for k in self.keys}
+                sol_wgt_u = {k:0 for k in sol.keys()}
+                for k,(gi,gj,uij) in zip(self.keys, terms):
+                    w = dwgts_u[k]
+                    sol_wgt_u[gi] += w
+                    sol_wgt_u[gj] += w
+                    sol_wgt_u[uij] += w
+                dw_u = {k:v[update] * dwgts_u[k] for k,v in self.data.items()}
             sol_sum_u = {k:0 for k in sol_u.keys()}
-            sol_wgt_u = {k:0 for k in sol_u.keys()}
             for k,(gi,gj,uij) in zip(self.keys, terms):
-                dmdl_u_conj_wgt = dmdl_u[k].conj() * self.wgts[k] # XXX non-scalar wgts
-                denominator = dmdl_u[k] * dmdl_u_conj_wgt
-                sol_wgt_u[gi] += denominator
-                sol_wgt_u[gj] += denominator
-                sol_wgt_u[uij] += denominator
-                numerator = data_u[k] * dmdl_u_conj_wgt
+                # compute sum(wgts * V_meas / V_mdl)
+                numerator = dw_u[k] / dmdl_u[k]
                 sol_sum_u[gi] += numerator
                 sol_sum_u[gj] += numerator.conj()
                 sol_sum_u[uij] += numerator
             new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k]/sol_wgt_u[k]) 
                             for k,v in sol_u.items()}
             dmdl_u = self._get_ans0(new_sol_u)
+            # check if i % check_every is 0, which is purposely one less than the '1' up at the top of the loop
             if i < maxiter and (i < check_after or (i % check_every) != 0):
                 # Fast branch when we aren't expensively computing convergence/chisq
                 sol_u = new_sol_u
             else:
                 # Slow branch when we compute convergence/chisq
-                new_chisq_u = sum([np.abs(self.data[k][update]-dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
+                new_chisq_u = sum([np.abs(v[update]-dmdl_u[k])**2 * wgts_u[k] for k,v in self.data.items()])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
                 where_gotbetter_u = np.where(gotbetter_u)
@@ -377,11 +386,11 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 if update_u[0].size == 0 or i == maxiter:
                     meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
                     return meta, sol
-                sol_u = {k: v[update_u] for k,v in new_sol_u.items()}
-                data_u = {k:v[update_u] for k,v in data_u.items()}
                 dmdl_u = {k:v[update_u] for k,v in dmdl_u.items()}
+                wgts_u = {k:v[update_u] for k,v in wgts_u.items()}
+                sol_u = {k: v[update_u] for k,v in new_sol_u.items()}
                 update = tuple(u[update_u] for u in update)
-            print(i, np.mean(chisq), np.mean(conv), update[0].size)
+            if verbose: print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
 
 
 class RedundantCalibrator:
@@ -411,7 +420,7 @@ class RedundantCalibrator:
                     eqs['g%d%s * g%d%s_ * u%d%s' % params] = (ant_i, ant_j, pol)
         return eqs
 
-    def _solver(self, solver, data, wgts={}, detrend_phs=False, sparse=False, **kwargs):
+    def _solver(self, solver, data, wgts={}, detrend_phs=False, **kwargs):
         """Instantiates a linsolve solver for performing redcal.
 
         Args:
@@ -419,29 +428,29 @@ class RedundantCalibrator:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             detrend_phs: takes out average phase, useful for logcal
-            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             **kwargs: other keyword arguments passed into the solver for use by linsolve
 
         Returns:
             solver: instantiated solver with redcal equations and weights
         """
         # XXX ARP: concerned about detrend_phs.  Why is it necessary?
+        dtype = data.values()[0].dtype
         dc = DataContainer(data)
         eqs = self.build_eqs(dc.keys())
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
         if detrend_phs:
             for blgrp in self.reds:
-                self.phs_avg[blgrp[0]] = np.exp(-1j * np.median(np.unwrap([np.log(dc[bl]).imag for bl in blgrp], axis=0), axis=0))
+                self.phs_avg[blgrp[0]] = np.exp(-np.complex64(1j) * np.median(np.unwrap([np.log(dc[bl]).imag for bl in blgrp], axis=0), axis=0))
                 for bl in blgrp:
                     self.phs_avg[bl] = self.phs_avg[blgrp[0]]
         d_ls, w_ls = {}, {}
         for eq, key in eqs.items():
-            d_ls[eq] = dc[key] * self.phs_avg.get(key, 1)
+            d_ls[eq] = dc[key] * self.phs_avg.get(key, np.float32(1))
         if len(wgts) > 0:
             wc = DataContainer(wgts)
             for eq, key in eqs.items():
                 w_ls[eq] = wc[key]
-        return solver(data=d_ls, wgts=w_ls, sparse=sparse, **kwargs)
+        return solver(data=d_ls, wgts=w_ls, **kwargs)
 
     def unpack_sol_key(self, k):
         """Turn linsolve's internal variable string into antenna or baseline tuple (with polarization)."""
@@ -471,7 +480,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def logcal(self, data, sol0={}, wgts={}, sparse=False):
+    def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
 
         Args:
@@ -490,14 +499,14 @@ class RedundantCalibrator:
 
         fc_data = divide_by_gains(data, sol0, target_type='vis')
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
-        sol = ls.solve()
+        sol = ls.solve(mode=mode)
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         for ubl_key in [k for k in sol.keys() if len(k) == 3]:
             sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
         sol_with_fc = multiply_by_gains(sol, sol0, target_type='gain')
         return sol_with_fc
 
-    def lincal(self, data, sol0, wgts={}, sparse=False, conv_crit=1e-10, maxiter=50):
+    def lincal(self, data, sol0, wgts={}, sparse=False, mode='default', conv_crit=1e-10, maxiter=50, verbose=False):
         """Taylor expands to linearize redcal equations and iteratively minimizes chi^2.
 
         Args:
@@ -508,6 +517,7 @@ class RedundantCalibrator:
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             conv_crit: maximum allowed relative change in solutions to be considered converged
             max_iter: maximum number of lincal iterations allowed before it gives up
+            verbose: print stuff
 
         Returns:
             meta: dictionary of information about the convergence and chi^2 of the solution
@@ -517,7 +527,7 @@ class RedundantCalibrator:
 
         sol0 = {self.pack_sol_key(k): sol0[k] for k in sol0.keys()}
         ls = self._solver(linsolve.LinProductSolver, data, sol0=sol0, wgts=wgts, sparse=sparse)
-        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
+        meta, sol = ls.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter, verbose=verbose, mode=mode)
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
@@ -529,7 +539,6 @@ class RedundantCalibrator:
             sol0: dictionary of guess gains and unique model visibilities, keyed by antenna tuples
                 like (ant,antpol) or baseline tuples like. Gains should include firstcal gains.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
-            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             conv_crit: maximum allowed relative change in solutions to be considered converged
             max_iter: maximum number of lincal iterations allowed before it gives up
             check_every: Compute convergence every Nth iteration (saves computation).  Default 4.
@@ -625,8 +634,8 @@ class RedundantCalibrator:
         # degenToRemove is the amount we need to move in the degenerate subspace
         degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
         # Now correct gains and visibilities while preserving chi^2
-        gainSols *= np.exp(-1.0j * np.einsum('ij,jkl', Rgains, degenToRemove))
-        visSols *= np.exp(-1.0j * np.einsum('ij,jkl', Rvis, degenToRemove))
+        gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
+        visSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rvis, degenToRemove))
 
         # Create new solutions dictionary
         newSol = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
@@ -657,6 +666,7 @@ def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
     return len(AtA) + len(BtB) - np.linalg.matrix_rank(AtA) - np.linalg.matrix_rank(BtB)
 
 
+# XXX return_extra_degens is unused
 def is_redundantly_calibratable(antpos, bl_error_tol=1.0, return_extra_degens=False):
     """Figures out whether an array is redundantly calibratable.
 
