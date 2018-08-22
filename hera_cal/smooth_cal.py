@@ -2,6 +2,7 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import absolute_import, division, print_function
 import numpy as np
 import scipy
 from hera_cal import io, utils
@@ -262,7 +263,6 @@ class CalibrationSmoother():
         '''Reset gain smoothing to the original input gains.'''
         self.filtered_gain_grids = deepcopy(self.gain_grids)
         self.filtered_flag_grids = deepcopy(self.flag_grids)
-        self.freq_filtered, self.time_filtered = False, False
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
@@ -274,11 +274,6 @@ class CalibrationSmoother():
             mirror_kernel_min_sigmas: Number of stdev into the Gaussian kernel one must go before edge
                 effects can be ignored.
         '''
-        print 'Now performing time filtering...'
-        if self.freq_filtered:
-            warnings.warn('It is usually better to time-filter first, then frequency-filter.')
-        self.time_filtered = True
-
         # Make sure that the gain_grid will be sufficiently padded on each side to avoid edge effects
         needed_buffer = filter_scale / (2 * (2 * np.log(2))**.5) * mirror_kernel_min_sigmas
         duration = self.dt * len(self.time_grid) * 24 * 60 * 60
@@ -310,10 +305,6 @@ class CalibrationSmoother():
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                     Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
         '''
-        print 'Now performing frequency filtering...'
-        if not self.time_filtered:
-            warnings.warn('It is usually better to time-filter first, then frequency-filter.')
-        self.freq_filtered = True
 
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.filtered_gain_grids.items():
@@ -336,7 +327,6 @@ class CalibrationSmoother():
             kwargs: dictionary mapping updated attributes to their new values.
                 See pyuvdata.UVCal documentation for more info.
         '''
-        print 'Now writing smoothed calibration solutions...'
         for cal in self.cals:
             outfilename = cal.replace(output_replace[0], output_replace[1])
             out_gains = {ant: self.filtered_gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
