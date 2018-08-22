@@ -106,7 +106,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0, 
-                        tol=1e-09, mode='rect', maxiter=100, window='tukey', **win_kwargs):
+                        tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-smoothed delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -121,7 +121,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             space, symmetric about 0, that is filtered out.
         time_scale: time scale in seconds. Defined analogously to freq_scale.
         tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-        mode: either 'rect' or 'plus':
+        filter_mode: either 'rect' or 'plus':
             'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0 
                     and fringe rate = 0
             'plus': produce a separable calibration solution by only keeping modes with 0 delay,
@@ -155,15 +155,15 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     kernel = np.fft.ifft2(wgts * window)
     
     # set up "area", the set of Fourier modes that are allowed to be non-zero in the CLEAN
-    if mode == 'rect':
+    if filter_mode == 'rect':
         area = np.outer(np.where(np.abs(fringes) < fringe_scale, 1, 0), 
                         np.where(np.abs(delays) < delay_scale, 1, 0))
-    elif mode == 'plus':
+    elif filter_mode == 'plus':
         area = np.zeros(image.shape, dtype=int)
         area[0] = np.where(np.abs(delays) < delay_scale, 1, 0)
         area[:,0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
     else:
-        raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.")
+        raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
 
     # perform deconvolution
     CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, verbose=True, maxiter=maxiter)
@@ -316,6 +316,37 @@ class CalibrationSmoother():
             for i, info_dict in enumerate(info):
                 if info_dict.get('skipped', False):
                     self.filtered_flag_grids[ant][i, :] = np.ones_like(self.filtered_flag_grids[ant][i, :])
+
+
+    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, 
+                            filter_mode='rect', window='tukey', maxiter=100, **win_kwargs):
+        '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
+
+        Arguments:
+            freq_scale: frequency scale in MHz to use for the low-pass filter. freq_scale^-1 corresponds
+                to the half-width (i.e. the width of the positive part) of the region in fourier
+                space, symmetric about 0, that is filtered out.
+            time_scale: time scale in seconds. Defined analogously to freq_scale.
+            tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+            filter_mode: either 'rect' or 'plus':
+                'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0 
+                        and fringe rate = 0
+                'plus': produce a separable calibration solution by only keeping modes with 0 delay,
+                        0 fringe rate, or both
+            window: window function for filtering applied to the filtered axis.
+                See aipy.dsp.gen_window for options.
+            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+            win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
+                Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
+        '''
+        # loop over all antennas that are not completely flagged and filter
+        for ant, gain_grid in self.filtered_gain_grids.items():
+            if not np.all(self.filtered_flag_grids[ant]):
+                wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
+                filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
+                                                     time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
+                                                     window=window, **win_kwargs)[0]
+                self.filtered_flag_grids[ant] = filtered
 
     def write_smoothed_cal(self, output_replace=('.abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
