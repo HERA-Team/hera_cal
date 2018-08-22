@@ -346,7 +346,7 @@ class CalibrationSmoother():
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, **win_kwargs)[0]
-                self.filtered_flag_grids[ant] = filtered
+                self.filtered_gain_grids[ant] = filtered
 
     def write_smoothed_cal(self, output_replace=('.abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
@@ -367,7 +367,7 @@ class CalibrationSmoother():
 
 
 def smooth_cal_argparser():
-    '''Arg parser for commandline operation of calibration smoothing.'''
+    '''Arg parser for commandline operation of 2D calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
     a.add_argument("calfits_list", type=str, nargs='+', help="list of paths to chronologically sortable calfits files (usually a full day)")
     a.add_argument("--flags_npz_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
@@ -380,23 +380,19 @@ def smooth_cal_argparser():
                    conservative flag broadcasting.")
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
-    # Options relating to smoothing in time
-    time_options = a.add_argument_group(title='Time smoothing options')
-    time_options.add_argument("--disable_time", default=False, action="store_true", help="turn off time smoothing")
-    time_options.add_argument("--time_scale", type=float, default=1800.0, help="FWHM in seconds of time smoothing Gaussian kernel (default 1800 s)")
-    time_options.add_argument("--mirror_sigmas", type=float, default=5.0, help="number of stdev into the Gaussian kernel\
-                              one must go before edge effects can be ignored (default 5)")
-
-    # Options relating to smoothing in frequency
-    freq_options = a.add_argument_group(title='Frequency smoothing options')
-    freq_options.add_argument("--disable_freq", default=False, action="store_true", help="turn off frequency smoothing")
-    freq_options.add_argument("--freq_scale", type=float, default=10.0, help="frequency scale in MHz for the low-pass filter\
+    
+    # Options relating to performing the filter in time and frequency
+    filter_options = a.add_argument_group(title='Filtering options.')
+    filter_options.add_argument("--freq_scale", type=float, default=10.0, help="frequency scale in MHz for the low-pass filter\
                               (default 10.0 MHz, i.e. a 100 ns delay filter)")
-    freq_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
-    freq_options.add_argument("--window", type=str, default="tukey", help='window function for frequency filtering (default "tukey",\
-                              see aipy.dsp.gen_window for options')
-    freq_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
-    freq_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
-    freq_options.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
+    filter_options.add_argument("--time_scale", type=float, default=1800.0, help="time scale in seconds, defined analogously to freq_scale (default 1800 s).")
+    filter_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
+    filter_options.add_argument("--filter_mode", type=str, default="rect", help='Mode for CLEAN algorithm that defines the shape of the area that can have\
+                                non-zero CLEAN components. Default "rect". "plus" creates calibration solutions that are separable in time and frequency.')
+    filter_options.add_argument("--window", type=str, default="tukey", help='window function for frequency filtering (default "tukey",\
+                                see aipy.dsp.gen_window for options')
+    filter_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    filter_options.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
+
     args = a.parse_args()
     return args
