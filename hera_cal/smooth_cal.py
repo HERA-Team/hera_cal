@@ -85,7 +85,6 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
     Returns:
         conv_gains: gains conolved with a Gaussian kernel in time
     '''
-
     padded_gains, padded_wgts = deepcopy(gains), deepcopy(wgts)
     nBefore = 0
     for n in range(nMirrors):
@@ -103,6 +102,73 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
     conv_gains /= conv_weights
     conv_gains[np.logical_not(np.isfinite(conv_gains))] = 0
     return conv_gains[nBefore: nBefore + len(times), :]
+
+
+def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0, 
+                        tol=1e-09, mode='rect', maxiter=100, window='tukey', **win_kwargs):
+    '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
+    a time-smoothed delay from the gains, then performs the low-pass 2D filter in time and frequency,
+    then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
+
+    Arguments:
+        gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter
+        wgts: ndarray of shape=(Ntimes,Nfreqs) of real linear multiplicative weights
+        freqs: ndarray of frequency channels in Hz
+        times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
+        freq_scale: frequency scale in MHz to use for the low-pass filter. freq_scale^-1 corresponds
+            to the half-width (i.e. the width of the positive part) of the region in fourier
+            space, symmetric about 0, that is filtered out.
+        time_scale: time scale in seconds. Defined analogously to freq_scale.
+        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+        mode: either 'rect' or 'plus':
+            'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0 
+                    and fringe rate = 0
+            'plus': produce a separable calibration solution by only keeping modes with 0 delay,
+                    0 fringe rate, or both
+        window: window function for filtering applied to the filtered axis.
+            See aipy.dsp.gen_window for options.
+        maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+        win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
+            Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
+
+    Returns:
+        filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
+        info: dictionary of metadata from aipy.deconv.clean
+    '''
+    df = np.median(np.diff(freqs))
+    dt = np.median(np.diff(times)) * 24.0 * 3600.0 # in seconds
+    delays = np.fft.fftfreq(freqs.size, df)
+    fringes = np.fft.fftfreq(times.size, dt)
+    delay_scale = (freq_scale * 1e6)**-1  # Puts it in seconds
+    fringe_scale = (time_scale)**-1  # in Hz
+
+    # find per-integration delays, smooth on the time_scale of gain smoothing, and rephase 
+    taus, _ = fft_dly(gains, df, wgts, medfilt=False, solve_phase=False) # delays are in seconds
+    smooth_taus = uvtools.dspec.high_pass_fourier_filter(taus.T, np.sum(wgts, axis=1, keepdims=True).T,
+                                                         fringe_scale, dt, tol=tol, maxiter=maxiter)[0].T
+    rephasor = np.exp(-2.0j * np.pi * np.outer(smooth_taus, freqs))
+    
+    # Build fourier space image and kernel for deconvolution
+    window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
+    image = np.fft.ifft2(gains * rephasor * wgts * window)
+    kernel = np.fft.ifft2(wgts * window)
+    
+    # set up "area", the set of Fourier modes that are allowed to be non-zero in the CLEAN
+    if mode == 'rect':
+        area = np.outer(np.where(np.abs(fringes) < fringe_scale, 1, 0), 
+                        np.where(np.abs(delays) < delay_scale, 1, 0))
+    elif mode == 'plus':
+        area = np.zeros(image.shape, dtype=int)
+        area[0] = np.where(np.abs(delays) < delay_scale, 1, 0)
+        area[:,0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
+    else:
+        raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.")
+
+    # perform deconvolution
+    CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, verbose=True, maxiter=maxiter)
+    filtered = np.fft.fft2(CLEAN + info['res'] * area)
+    del info['res']  # this matches the convention in uvtools.dspec.high_pass_fourier_filter
+    return filtered / rephasor, info
 
 
 class CalibrationSmoother():
