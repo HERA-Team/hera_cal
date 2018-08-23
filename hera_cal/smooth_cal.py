@@ -194,10 +194,11 @@ class CalibrationSmoother():
         '''
         # load calibration files
         self.cals = calfits_list
-        self.gains, self.cal_flags, self.cal_freqs, self.cal_times = odict(), odict(), odict(), odict()
+        gains, cal_flags, self.cal_freqs, self.cal_times = odict(), odict(), odict(), odict()
         for cal in self.cals:
-            (self.gains[cal], self.cal_flags[cal], _, _, _, self.cal_freqs[cal],
-             self.cal_times[cal], _) = io.load_cal(cal, return_meta=True)
+            hc = io.HERACal(cal)
+            gains[cal], cal_flags[cal], _, _ = hc.read()
+            self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
 
         # load flags files
         self.npzs = flags_npz_list
@@ -220,16 +221,16 @@ class CalibrationSmoother():
 
         # build multi-file grids for each antenna's gains and flags
         self.freqs = self.cal_freqs[self.cals[0]]
-        self.ants = sorted(list(set([k for gain in self.gains.values() for k in gain.keys()])))
+        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
         self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)),
                                         dtype=np.complex) for ant in self.ants}
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)),
                                         dtype=bool) for ant in self.ants}
         for ant in self.ants:
             for cal in self.cals:
-                if ant in self.gains[cal]:
-                    self.gain_grids[ant][self.time_indices[cal], :] = self.gains[cal][ant]
-                    self.flag_grids[ant][self.time_indices[cal], :] = self.cal_flags[cal][ant]
+                if ant in gains[cal]:
+                    self.gain_grids[ant][self.time_indices[cal], :] = gains[cal][ant]
+                    self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
             if len(self.npzs) > 0:
                 for npz in self.npzs:
                     if ant in self.npz_flags[npz]:
@@ -300,7 +301,7 @@ class CalibrationSmoother():
             window: window function for filtering applied to the filtered axis. Default tukey has alpha=0.5.
                 See aipy.dsp.gen_window for options.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-                filtered_gains are left unchanged and self.wgts and self.cal_flags are set to 0 and True,
+                filtered_gains are left unchanged and self.wgts and self.filtered_flag_grids are set to 0 and True,
                 respectively. Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
