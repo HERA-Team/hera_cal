@@ -5,6 +5,7 @@
 from __future__ import absolute_import, division, print_function
 import numpy as np
 import scipy
+import aipy
 from hera_cal import io, utils
 from collections import OrderedDict as odict
 from copy import deepcopy
@@ -144,10 +145,10 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     fringe_scale = (time_scale)**-1  # in Hz
 
     # find per-integration delays, smooth on the time_scale of gain smoothing, and rephase 
-    taus, _ = fft_dly(gains, df, wgts, medfilt=False, solve_phase=False) # delays are in seconds
+    taus = fft_dly(gains, df, wgts, medfilt=False, solve_phase=False)[0].astype(np.complex) # delays are in seconds
     smooth_taus = uvtools.dspec.high_pass_fourier_filter(taus.T, np.sum(wgts, axis=1, keepdims=True).T,
                                                          fringe_scale, dt, tol=tol, maxiter=maxiter)[0].T
-    rephasor = np.exp(-2.0j * np.pi * np.outer(smooth_taus, freqs))
+    rephasor = np.exp(-2.0j * np.pi * np.outer(np.abs(smooth_taus), freqs))
     
     # Build fourier space image and kernel for deconvolution
     window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
@@ -166,7 +167,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
 
     # perform deconvolution
-    CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, verbose=True, maxiter=maxiter)
+    CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, maxiter=maxiter)
     filtered = np.fft.fft2(CLEAN + info['res'] * area)
     del info['res']  # this matches the convention in uvtools.dspec.high_pass_fourier_filter
     return filtered / rephasor, info
@@ -345,7 +346,7 @@ class CalibrationSmoother():
                 wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
-                                                     window=window, **win_kwargs)[0]
+                                                     window=window, **win_kwargs)
                 self.filtered_gain_grids[ant] = filtered
 
     def write_smoothed_cal(self, output_replace=('.abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
