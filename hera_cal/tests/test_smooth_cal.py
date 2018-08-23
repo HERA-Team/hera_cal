@@ -107,22 +107,19 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.assertEqual(len(self.cs.freqs), 1024)
         self.assertEqual(len(self.cs.time_grid), 180)
         self.assertAlmostEqual(self.cs.dt, 10.737419128417969 / 24 / 60 / 60)
-        self.assertFalse(self.cs.freq_filtered)
-        self.assertFalse(self.cs.time_filtered)
         self.assertTrue((54, 'jxx') in self.cs.gain_grids)
         self.assertTrue((54, 'jxx') in self.cs.flag_grids)
         self.assertEqual(self.cs.gain_grids[54, 'jxx'].shape, (180, 1024))
         self.assertEqual(self.cs.flag_grids[54, 'jxx'].shape, (180, 1024))
         np.testing.assert_array_equal(self.cs.flag_grids[54, 'jxx'][60:120, :], True)
 
-    def test_filtering(self):
+    def test_1D_filtering(self):
         g = deepcopy(self.cs.filtered_gain_grids[54, 'jxx'])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.cs.freq_filter(window='tukey', alpha=.45)
         g2 = deepcopy(self.cs.filtered_gain_grids[54, 'jxx'])
         self.assertFalse(np.all(g == g2))
-        self.assertTrue(self.cs.freq_filtered)
         self.assertEqual(g2.shape, g.shape)
 
         with warnings.catch_warnings():
@@ -130,7 +127,6 @@ class Test_Calibration_Smoother(unittest.TestCase):
             self.cs.time_filter()
         g3 = deepcopy(self.cs.filtered_gain_grids[54, 'jxx'])
         self.assertFalse(np.all(g == g3))
-        self.assertTrue(self.cs.time_filtered)
         self.assertEqual(g3.shape, g.shape)
 
         with warnings.catch_warnings():
@@ -138,7 +134,6 @@ class Test_Calibration_Smoother(unittest.TestCase):
             self.cs.time_filter()
         g4 = deepcopy(self.cs.filtered_gain_grids[54, 'jxx'])
         self.assertFalse(np.all(g3 == g4))
-        self.assertTrue(self.cs.time_filtered)
         self.assertEqual(g4.shape, g.shape)
 
         self.cs.reset_filtering()
