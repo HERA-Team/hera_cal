@@ -27,7 +27,7 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
             to the half-width (i.e. the width of the positive part) of the region in fourier
             space, symmetric about 0, that is filtered out.
         tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-        window: window function for filtering applied to the filtered axis.
+        window: window function for filtering applied to the frequency axis.
             See aipy.dsp.gen_window for options.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
             filtered is left unchanged and info is {'skipped': True} for that time.
@@ -333,7 +333,7 @@ class CalibrationSmoother():
                         and fringe rate = 0
                 'plus': produce a separable calibration solution by only keeping modes with 0 delay,
                         0 fringe rate, or both
-            window: window function for filtering applied to the filtered axis.
+            window: window function for filtering applied to the frequency axis.
                 See aipy.dsp.gen_window for options.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
