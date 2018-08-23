@@ -2,6 +2,7 @@ import numpy as np
 import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
+from hera_cal.utils import split_pol, split_bl, join_bl, reverse_bl
 
 
 # XXX I think this should be superceded by hera_sim
@@ -147,6 +148,71 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0,
     """
     pos_reds = get_pos_reds(antpos, bl_error_tol=bl_error_tol, low_hi=low_hi)
     return add_pol_reds(pos_reds, pols=pols, pol_mode=pol_mode, ex_ants=ex_ants)
+
+
+def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, pols=None, ex_pols=None):
+    '''
+    Filter redundancies to include/exclude the specified bls, antennas, unique bl groups and polarizations.
+    Assumes reds indices are Antpol objects.
+    Args:
+        reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
+        bls (optional): baselines as antenna pair tuples (i,j) to include in reds.
+        ex_bls (optional): baselines as antenna pair tuples (i,j) to exclude in reds.
+        ants (optional): antenna numbers (as int's) to include in reds.
+        ex_ants (optional): antenna numbers (as int's) to exclude in reds.
+        ubls (optional): baselines representing their redundant group to include in reds.
+        ex_ubls (optional): baselines representing their redundant group to exclude in reds.
+        pols (optional): polarizations to include in reds. e.g. 'xy' or 'yx'.
+        ex_pols (optional): polarizations to exclude in reds. e.g. 'xy' or 'yx'.
+    Return:
+        reds: list of lists of redundant baselines as antenna pair tuples.
+    '''
+    if pols is None: # if no pols are provided, deduce them from the reds
+        pols = set(gp[0][2] for gp in reds)
+    if ex_pols:
+        pols = set(p for p in pols if p not in ex_pols)
+    reds = [gp for gp in reds if gp[0][2] in pols]
+    def expand_bls(gp):
+        gp3 = [(g[0],g[1],p) for g in gp if len(g) == 2 for p in pols]
+        return gp3 + [g for g in gp if len(g) == 3]
+    antpols = set(sum([list(split_pol(p)) for p in pols],[]))
+    def expand_ants(gp):
+        gp2 = [(g,p) for g in gp if not hasattr(g,'__len__') for p in antpols]
+        return gp2 + [g for g in gp if hasattr(g,'__len__')]
+    def split_bls(bls):
+        return [split_bl(bl) for bl in bls]
+    if ubls or ex_ubls:
+        bl2gp = {}
+        for i,gp in enumerate(reds):
+            for key in gp:
+                bl2gp[key] = bl2gp[reverse_bl(key)] = i
+        if ubls:
+            ubls = expand_bls(ubls)
+            ubls = set(bl2gp[key] for key in ubls if key in bl2gp)
+        else:
+            ubls = set(range(len(reds)))
+        if ex_ubls:
+            ex_ubls = expand_bls(ex_ubls)
+            ex_ubls = set(bl2gp[bl] for bl in ex_ubls if bl in bl2gp)
+        else:
+            ex_ubls = set()
+        reds = [gp for i,gp in enumerate(reds) if i in ubls and i not in ex_ubls]
+    if bls:
+        bls = set(expand_bls(bls))
+    else: # default to set of all baselines
+        bls = set(key for gp in reds for key in gp)
+    if ex_bls:
+        ex_bls = expand_bls(ex_bls)
+        bls = set(k for k in bls if k not in ex_bls and reverse_bl(k) not in ex_bls)
+    if ants:
+        ants = expand_ants(ants)
+        bls = set(join_bl(i,j) for i,j in split_bls(bls) if i in ants and j in ants)
+    if ex_ants:
+        ex_ants = expand_ants(ex_ants)
+        bls = set(join_bl(i,j) for i,j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
+    bls.union(set(reverse_bl(k) for k in bls)) # put in reverse baselines, just in case
+    reds = [[key for key in gp if key in bls] for gp in reds]
+    return [gp for gp in reds if len(gp) > 1] # XXX do we want to filter off length one reds?
 
 
 def check_polLists_minV(polLists):

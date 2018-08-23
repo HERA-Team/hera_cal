@@ -165,6 +165,57 @@ class TestMethods(unittest.TestCase):
         polReds = om.add_pol_reds(reds, pols=['xx', 'xy', 'yx', 'yy'], pol_mode='4pol_minV', ex_ants=[(2, 'y')])
         self.assertEqual(polReds, [[(1, 2, 'xx')], [(1, 2, 'yx')], []])
 
+    def test_filter_reds(self):
+        antpos = build_linear_array(7)
+        reds = om.get_reds(antpos, pols=['XX'], pol_mode='1pol')
+        # exclude ants
+        r = om.filter_reds(reds, ex_ants=[0, 4])
+        self.assertEqual(r, [[(1, 2, 'XX'), (2, 3, 'XX'), (5, 6, 'XX')], [(1, 3, 'XX'), (3, 5, 'XX')], [(2, 5, 'XX'), (3, 6, 'XX')], [(1, 5, 'XX'), (2, 6, 'XX')]])
+        # include ants
+        r = om.filter_reds(reds, ants=[0, 1, 4, 5, 6])
+        self.assertEqual(r, [[(0, 1, 'XX'), (4, 5, 'XX'), (5, 6, 'XX')], [(0, 4, 'XX'), (1, 5, 'XX')], [(0, 5, 'XX'), (1, 6, 'XX')]])
+        # exclued bls
+        r = om.filter_reds(reds, ex_bls=[(0, 2), (1, 2)])
+        self.assertEqual(r, [[(0, 1, 'XX'), (2, 3, 'XX'), (3, 4, 'XX'), (4, 5, 'XX'), (5, 6, 'XX')], [(1, 3, 'XX'), (2, 4, 'XX'), (3, 5, 'XX'), (4, 6, 'XX')], [(0, 3, 'XX'), (1, 4, 'XX'), (2, 5, 'XX'), (3, 6, 'XX')], [(0, 4, 'XX'), (1, 5, 'XX'), (2, 6, 'XX')], [(0, 5, 'XX'), (1, 6, 'XX')]])
+        # include bls
+        r = om.filter_reds(reds, bls=[(0, 1), (1, 2)])
+        self.assertEqual(r, [[(0,1,'XX'),(1,2,'XX')]])
+        # include ubls
+        r = om.filter_reds(reds, ubls=[(0, 2), (1, 4)])
+        self.assertEqual(r, [[(0, 2, 'XX'), (1, 3, 'XX'), (2, 4, 'XX'), (3, 5, 'XX'), (4, 6, 'XX')], [(0, 3, 'XX'), (1, 4, 'XX'), (2, 5, 'XX'), (3, 6, 'XX')]])
+        # exclude ubls
+        r = om.filter_reds(reds, ex_ubls=[(0,2), (1,4), (4,5), (0,5), (2,3)])
+        self.assertEqual(r, [[(0, 4, 'XX'), (1, 5, 'XX'), (2, 6, 'XX')]])
+        # exclude crosspols
+        # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
+    def test_filter_reds_2pol(self):
+        antpos = build_linear_array(4)
+        reds = om.get_reds(antpos, pols=['XX','YY'], pol_mode='1pol')
+        print(reds)
+        # include pols
+        r = om.filter_reds(reds, pols=['XX'])
+        self.assertEqual(r, [[(0, 1, 'XX'), (1, 2, 'XX'), (2, 3, 'XX')], [(0, 2, 'XX'), (1, 3, 'XX')]])
+        # exclude pols
+        r = om.filter_reds(reds, ex_pols=['YY'])
+        self.assertEqual(r, [[(0, 1, 'XX'), (1, 2, 'XX'), (2, 3, 'XX')], [(0, 2, 'XX'), (1, 3, 'XX')]])
+        # exclude ants
+        r = om.filter_reds(reds, ex_ants=[0])
+        self.assertEqual(r, [[(1, 2, 'XX'), (2, 3, 'XX')], [(1, 2, 'YY'), (2, 3, 'YY')]])
+        # include ants
+        r = om.filter_reds(reds, ants=[1, 2, 3])
+        r = om.filter_reds(reds, ex_ants=[0])
+        # exclued bls
+        r = om.filter_reds(reds, ex_bls=[(1, 2)])
+        self.assertEqual(r, [[(0, 1, 'XX'), (2, 3, 'XX')], [(0, 2, 'XX'), (1, 3, 'XX')], [(0, 1, 'YY'), (2, 3, 'YY')], [(0, 2, 'YY'), (1, 3, 'YY')]])
+        # include bls
+        r = om.filter_reds(reds, bls=[(0, 1), (1, 2)])
+        self.assertEqual(r, [[(0,1,'XX'),(1,2,'XX')], [(0,1,'YY'),(1,2,'YY')]])
+        # include ubls
+        r = om.filter_reds(reds, ubls=[(0, 2)])
+        self.assertEqual(r, [[(0, 2, 'XX'), (1, 3, 'XX')], [(0, 2, 'YY'), (1, 3, 'YY')]])
+        # exclude ubls
+        r = om.filter_reds(reds, ex_ubls=[(2,3)])
+        self.assertEqual(r, [[(0, 2, 'XX'), (1, 3, 'XX')], [(0, 2, 'YY'), (1, 3, 'YY')]])
     def test_multiply_by_gains(self):
         vis_in = {(1, 2, 'xx'): 1.6 + 2.3j}
         gains = {(1, 'x'): .3 + 2.6j, (2, 'x'): -1.2 - 7.3j}

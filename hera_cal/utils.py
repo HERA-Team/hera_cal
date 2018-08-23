@@ -11,24 +11,43 @@ import hera_cal
 import copy
 from scipy.interpolate import interp1d
 from collections import OrderedDict as odict
-from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
+from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
+from pyuvdata.utils import POLSTR_LIST, JSTR_LIST, CPOL_DICT, POLSTR_DICT
+# POLSTR_LIST = ['YX', 'XY', 'YY', 'XX', 'LR', 'RL', 'LL', 'RR', '', 'pI', 'pQ', 'pU', 'pV']
+# JSTR_LIST = ['jyx', 'jxy', 'jyy', 'jxx', 'jlr', 'jrl', 'jll', 'jrr']
 
+
+_VISPOLS = [pol.upper() for pol in POLSTR_LIST]
+_VISPOLS = [pol for pol in _VISPOLS if POLSTR_DICT.has_key(pol) and polstr2num(pol) < 0]
+SPLIT_POL = {pol:(jnum2str(jstr2num(pol[0])), jnum2str(jstr2num(pol[1]))) for pol in _VISPOLS}
+JOIN_POL = {v:k for k,v in SPLIT_POL.items()}
 
 def split_pol(pol):
-    '''Splits visibility polarization string into anntenna polarizations.'''
-    if polstr2num(pol) > 0:  # this includes Stokes and pseudo-Stokes visibilities
-        raise ValueError('Unable to split Stokes or pseudo-Stokes polarization ' + pol)
-    return jnum2str(jstr2num(pol[0])), jnum2str(jstr2num(pol[1]))
+    '''Splits visibility polarization string (pyuvdata's polstr) into 
+    antenna polarization strings (pyuvdata's jstr).'''
+    pol = pol.upper()
+    assert(pol in SPLIT_POL) # Cannot split Stokes or pseudo-Stokes polarization
+    return SPLIT_POL[pol]
 
+def join_pol(p1,p2):
+    '''Joins antenna polarization strings (pyuvdata's jstr) into
+    visibility polarization string (pyuvdata's polstr).'''
+    '''Joins antenna polarizations into visibility polarization string.'''
+    return JOIN_POL[(jnum2str(jstr2num(p1)),jnum2str(jstr2num(p2)))]
 
-def conj_pol(pol):
-    '''Given V_ij^(pol), return the polarization of V_ji^(conj pol) such
-    (V_ji^(conj pol))* = V_ij^(pol). This means xy -> yx and yx -> xy, but
-    psuedo-Stokes visibilities are unaffected. Case is left unmodified.'''
-    if polstr2num(pol) > 0:  # this includes Stokes and pseudo-Stokes visibilities
-        return pol
-    else:
-        return pol[::-1]
+def split_bl(bl):
+    '''Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj.'''
+    pi,pj = split_pol(bl[2])
+    return ((bl[0],pi),(bl[1],pj))
+
+def join_bl(ai,aj):
+    '''Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key.'''
+    return (ai[0], aj[0], join_pol(ai[1],aj[1]))
+
+def reverse_bl(bl):
+    '''Reverses a (i,j,pol) baseline key to make (j,i,pol[::-1])'''
+    i,j = bl[:2]
+    return (j,i,conj_pol(bl[2]))
 
 
 class AntennaArray(aipy.pol.AntennaArray):
