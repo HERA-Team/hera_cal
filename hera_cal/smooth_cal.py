@@ -173,9 +173,23 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     return filtered / rephasor, info
 
 
+def pick_reference_antenna(flags):
+    '''Pick a refrence antenna that has the minimum number of per-antenna flags.
+    
+    Arguments:
+        flags: dictionary mapping antenna keys to flag waterfall where True means flagged
+
+    Returns:
+        refant: key of the antenna with the minimum number of flags. Tie goes to the first in a sorted list of keys.
+    '''
+    flags_per_ant = {ant: np.sum(f) for ant, f in flags.items()}
+    refant = sorted([ant for ant, nflags in flags_per_ant.items() if nflags == np.min(flags_per_ant.values())])[0]
+    return refant
+
+
 class CalibrationSmoother():
 
-    def __init__(self, calfits_list, flags_npz_list=[], antflag_thresh=0.0):
+    def __init__(self, calfits_list, flags_npz_list=[], pick_refant=False, antflag_thresh=0.0):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag npz files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -236,6 +250,11 @@ class CalibrationSmoother():
                     if ant in self.npz_flags[npz]:
                         self.flag_grids[ant][self.npz_time_indices[npz], :] += self.npz_flags[npz][ant]
 
+        # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
+        if pick_refant:
+            self.refant = pick_reference_antenna(self.flag_grids)
+            self.rephase_to_refant()
+
         # perform data quality checks
         self.check_consistency()
         self.reset_filtering()
@@ -265,6 +284,16 @@ class CalibrationSmoother():
         '''Reset gain smoothing to the original input gains.'''
         self.filtered_gain_grids = deepcopy(self.gain_grids)
         self.filtered_flag_grids = deepcopy(self.flag_grids)
+
+    def rephase_to_refant(self):
+        '''Rephase all gains so that the phase of the reference antenna in self.refant is all 0s.'''
+        refant_phasor = self.gain_grids[self.refant] / np.abs(self.gain_grids[self.refant])
+        for ant in self.ants:
+            if np.any(self.flag_grids[self.refant][np.logical_not(self.flag_grids[ant])]):
+                raise ValueError('The chosen reference antenna', self.refant, 'is flagged in at least one place where antenna',
+                                 ant, 'is not, so automatic reference antenna selection has failed.')
+            else:
+                self.gain_grids[ant] /= refant_phasor
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
@@ -380,6 +409,7 @@ def smooth_cal_argparser():
     a.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged pixels across all visibilities (with a common antenna) \
                    needed to flag that antenna gain at a particular time and frequency. 0.0 is aggressive flag broadcasting, while 1.0 is \
                    conservative flag broadcasting.")
+    a.add_argument("--pick_refant", default=False, action="store_true", help="TODO: write this")
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
     
