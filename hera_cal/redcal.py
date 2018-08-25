@@ -7,7 +7,7 @@ import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 from hera_cal.utils import split_pol, conj_pol, polnum2str, polstr2num, jnum2str, jstr2num
-from hera_cal.apply_cal import recalibrate_in_place
+from hera_cal.apply_cal import calibrate_in_place
 
 
 def noise(size):
@@ -215,37 +215,6 @@ def get_gains_and_vis_from_sol(sol):
     return g, v
 
 
-def divide_by_gains(data, gains):
-    """Helper function for applying gains to visibilities or other gains, e.g. for firstcal. Uses 
-    hera_cal.apply_cal.recalibrate_in_place under the hood. Unlike that function, all data is assumed to be
-    unflagged and missing gains are considered treated as 1.0.
-
-    Args:
-        data: dictionary of visibilities in the {(ant1,ant2,pol): np.array} format. It is copied, not modified.
-        gains: dictionary of gains in the {(ant,antpol): np.array} to apply. Missing gains will be treated as
-        ones. Extraneous keys are ignored (e.g. visibility solutions). 
-
-    Returns:
-        output: copy of data with gains divided out.
-    """
-    # recalibrate_in_place requires flags to operate
-    data_flags = {key: np.zeros_like(data[key], dtype=bool) for key in data.keys()}
-    full_gains, gain_flags = {}, {}
-    for (i, j, pol) in data.keys():
-        ap1, ap2 = split_pol(pol)
-        for key in [(i, ap1), (j, ap2)]:
-            if key not in full_gains:
-                if key in gains:
-                    full_gains[key] = deepcopy(gains[key])
-                else:  # recalibrate_in_place requires all gains to be present, or else it'll flag
-                    full_gains[key] = np.ones_like(data[(i, j, pol)]) 
-                gain_flags[key] = np.zeros_like(full_gains[key], dtype=bool)
-
-    output = deepcopy(data)
-    recalibrate_in_place(output, data_flags, full_gains, gain_flags)
-    return output
-
-
 class RedundantCalibrator:
 
     def __init__(self, reds):
@@ -349,8 +318,8 @@ class RedundantCalibrator:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
-
-        fc_data = divide_by_gains(data, sol0)
+        fc_data = deepcopy(data)
+        calibrate_in_place(fc_data, sol0)
         ls = self._solver(linsolve.LogProductSolver, fc_data, wgts=wgts, detrend_phs=True, sparse=sparse)
         sol = ls.solve()
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
