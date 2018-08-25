@@ -149,7 +149,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 if flags_npz is not None:
                     data_flags[bl] = np.logical_or(data_flags[bl], npz_flag_dc[bl])
             calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
-                                 old_gains=old_calibration, gain_convention=gain_convention)
+                               old_gains=old_calibration, gain_convention=gain_convention)
             hd.partial_write(data_outfilename, data=data, flags=data_flags,
                              inplace=True, clobber=clobber, add_to_history=add_to_history)
 
