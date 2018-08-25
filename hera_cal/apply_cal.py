@@ -55,19 +55,19 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
             except KeyError:
                 flag_all = True
             try:
-                data[(i, j, pol)] *= (old_gains[(j, ap2)])**exponent
+                data[(i, j, pol)] *= np.conj(old_gains[(j, ap2)])**exponent
             except KeyError:
                 flag_all = True
 
         # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
-        if np.all([np.issubdtype(df.dtype, np.bool) for df in data_flags.values()]):
+        if np.all([np.issubdtype(df.dtype, np.bool_) for df in data_flags.values()]):
             try:
                 data_flags[(i, j, pol)] += cal_flags[(i, ap1)]
                 data_flags[(i, j, pol)] += cal_flags[(j, ap2)]
             except KeyError:
                 flag_all = True
         # update data_flags in the case where flags are weights, flag all if cal_flags are missing
-        if np.all([np.issubdtype(df.dtype, np.floating) for df in data_flags.values()]):
+        elif np.all([np.issubdtype(df.dtype, np.floating) for df in data_flags.values()]):
             try:
                 data_flags[(i, j, pol)] *= (~cal_flags[(i, ap1)]).astype(np.float)
                 data_flags[(i, j, pol)] *= (~cal_flags[(j, ap2)]).astype(np.float)
@@ -77,10 +77,10 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
             raise ValueError("didn't recognize dtype of data_flags")
 
         # if the flag object is given, update it for this baseline to be totally flagged
-        if flag_all and (flags is not None):
-            if np.all([np.issubdtype(df.dtype, np.bool) for df in data_flags.values()]):  # boolean flags
+        if flag_all and (data_flags is not None):
+            if np.all([np.issubdtype(df.dtype, np.bool_) for df in data_flags.values()]):  # boolean flags
                 data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
-            if np.all([np.issubdtype(df.dtype, np.floating) for df in data_flags.values()]):  # weights
+            elif np.all([np.issubdtype(df.dtype, np.floating) for df in data_flags.values()]):  # weights
                 data_flags[(i, j, pol)] = np.zeros_like(data[(i, j, pol)], dtype=np.float)
             else:
                 raise ValueError("didn't recognize dtype of data_flags")
