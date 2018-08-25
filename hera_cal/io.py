@@ -147,7 +147,6 @@ class HERAData(UVData):
     Assumes a single spectral window. Assumes that data for a given baseline is regularly
     spaced in the underlying data_array.
     '''
-
     # static list of useful metadata to calculate and save
     HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols',
                       'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
@@ -380,7 +379,7 @@ class HERAData(UVData):
                            frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
         else:
             if not read_data:
-                raise NotImplementedError('reading only metadata is not implemented for' + self.filetype)
+                raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
             if self.filetype == 'miriad':
                 self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
                 if any([times is not None, frequencies is not None, freq_chans is not None]):
@@ -552,7 +551,6 @@ def to_HERAData(input_data, filetype='miriad'):
     Returns:
         hd: HERAData object. Will not have data loaded if initialized from string(s).
     '''
-
     if filetype not in ['miriad', 'uvfits', 'uvh5']:
         raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
     if isinstance(input_data, str):  # single visibility data path
@@ -609,7 +607,6 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         lsts: ndarray containing LST bins of data (radians)
         pol: ndarray containing list of polarization strings
     '''
-
     hd = to_HERAData(input_data, filetype=filetype)
     if hd.data_array is not None:
         d, f, n = hd.build_datacontainers()
@@ -700,10 +697,11 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
 
-    integration_time : type=float or ndarray, integration duration in seconds for data_array. This does not necessarily have
-        to be equal to the diff(time_array): for the case of LST-binning, this is not the duration of the LST-bin
-        but the integration time of the pre-binned data. If None, will use diff(time_array) by default.
-        
+    integration_time : type=float or ndarray, integration duration in seconds for data_array.
+        This does not necessarily have to be equal to the diff(time_array): for the case of
+        LST-binning, this is not the duration of the LST-bin but the integration time of the
+        pre-binned data. Default is median(diff(time_array)) in seconds.
+
     kwargs : type=dictionary, additional parameters to set in UVData object.
 
     Output:
@@ -739,9 +737,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
     lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
 
-    # configure integration time, converting from days (the unit of time_array) to seconds (the unit of integration_time)
+    # configure integration time, converting from days (the unit of time_array)
+    # to seconds (the unit of integration_time)
     if integration_time is None:
-        integration_time = np.ones_like(time_array, dtype=np.float) * np.median(np.diff(time_array)) * 24 * 3600.
+        integration_time = np.ones_like(time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
 
     # get data array
     data_array = np.moveaxis(map(lambda p: map(lambda ap: data[str(p)][ap], antpairs), pols), 0, -1)
