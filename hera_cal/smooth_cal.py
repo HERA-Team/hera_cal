@@ -187,6 +187,24 @@ def pick_reference_antenna(flags):
     return refant
 
 
+def rephase_to_refant(gains, refant, flags=None):
+    '''Rephase all gains in place so that the phase of the reference antenna is 0 for all times and frequencies.
+
+    Arguments:
+        gains: Dictionary mapping antenna keys to gain waterfalls. Modified in place.
+        refant: Antenna key of antenna to make the reference antenna
+        flags: Optional dictionary mapping antenna keys to flag waterfall.
+            Used only to verify that all gains are flagged where the refant is flagged.
+    '''
+    refant_phasor = gains[refant] / np.abs(gains[refant])
+    for ant in gains.keys():
+        if flags is not None and np.any(flags[refant][np.logical_not(flag_grids[ant])]):
+            raise ValueError('The chosen reference antenna', refant, 'is flagged in at least one place where antenna',
+                             ant, 'is not, so automatic reference antenna selection has failed.')
+        else:
+            gains[ant] /= refant_phasor
+
+
 class CalibrationSmoother():
 
     def __init__(self, calfits_list, flags_npz_list=[], pick_refant=False, antflag_thresh=0.0):
@@ -286,14 +304,9 @@ class CalibrationSmoother():
         self.filtered_flag_grids = deepcopy(self.flag_grids)
 
     def rephase_to_refant(self):
-        '''Rephase all gains so that the phase of the reference antenna in self.refant is all 0s.'''
-        refant_phasor = self.gain_grids[self.refant] / np.abs(self.gain_grids[self.refant])
-        for ant in self.ants:
-            if np.any(self.flag_grids[self.refant][np.logical_not(self.flag_grids[ant])]):
-                raise ValueError('The chosen reference antenna', self.refant, 'is flagged in at least one place where antenna',
-                                 ant, 'is not, so automatic reference antenna selection has failed.')
-            else:
-                self.gain_grids[ant] /= refant_phasor
+        '''If the object has a refant selected, this function rephases to it.'''
+        if hasattr(self, refant):
+            rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
@@ -347,7 +360,7 @@ class CalibrationSmoother():
             for i, info_dict in enumerate(info):
                 if info_dict.get('skipped', False):
                     self.filtered_flag_grids[ant][i, :] = np.ones_like(self.filtered_flag_grids[ant][i, :])
-
+        self.rephase_to_refant()
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, 
                             filter_mode='rect', window='tukey', maxiter=100, **win_kwargs):
@@ -378,6 +391,7 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, **win_kwargs)
                 self.filtered_gain_grids[ant] = filtered
+        self.rephase_to_refant()
 
     def write_smoothed_cal(self, output_replace=('.abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
