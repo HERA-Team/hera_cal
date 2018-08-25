@@ -1,15 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
-
-"""
-lstbin.py
----------
-
-Routines for aligning and binning of visibility
-data onto a universal Local Sidereal Time (LST) grid.
-"""
-
 import os
 import sys
 from collections import OrderedDict as odict
@@ -478,7 +469,6 @@ def lst_bin_arg_parser():
     glob-parsable search strings to nightly data. For example:
 
     '2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv'
-
     """
     a = argparse.ArgumentParser(description="drive script for lstbin.lst_bin_files(). "
                                 "data_files argument must be quotation-bounded "

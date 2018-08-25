@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
-
-'''Tests for lstbin.py'''
-
 import nose.tools as nt
 import os
 import shutil
