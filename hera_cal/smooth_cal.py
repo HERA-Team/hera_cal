@@ -304,8 +304,8 @@ class CalibrationSmoother():
         self.filtered_flag_grids = deepcopy(self.flag_grids)
 
     def rephase_to_refant(self):
-        '''If the object has a refant selected, this function rephases to it.'''
-        if hasattr(self, refant):
+        '''If the CalibrationSmoother object has a refant attribute, this function rephases to it.'''
+        if hasattr(self, 'refant'):
             rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
