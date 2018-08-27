@@ -732,8 +732,7 @@ def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
     return len(AtA) + len(BtB) - np.linalg.matrix_rank(AtA) - np.linalg.matrix_rank(BtB)
 
 
-# XXX return_extra_degens is unused
-def is_redundantly_calibratable(antpos, bl_error_tol=1.0, return_extra_degens=False):
+def is_redundantly_calibratable(antpos, bl_error_tol=1.0):
     """Figures out whether an array is redundantly calibratable.
 
     Args:
