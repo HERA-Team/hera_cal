@@ -679,7 +679,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     start_jd = np.floor(t)[0]
     kwargs['start_jd'] = start_jd
     integration_time = np.median(np.diff(t)) * 24 * 3600.
-    assert np.all(np.diff(t) == np.median(np.diff(t))), 'All integrations must be of equal length (BDA not supported).'
+    assert np.all(np.abs(np.diff(t) - np.median(np.diff(t))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
     del d, fl, ap, a, f, t, l, p
     garbage_collector.collect()
 
