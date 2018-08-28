@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
@@ -15,7 +19,7 @@ import collections
 
 
 class HERACal(UVCal):
-    '''HERAData is a subclass of pyuvdata.UVCal meant to serve as an interface between
+    '''HERACal is a subclass of pyuvdata.UVCal meant to serve as an interface between
     pyuvdata-readable calfits files and dictionaries (the in-memory format for hera_cal)
     that map antennas and polarizations to gains, flags, and qualities. Supports standard
     UVCal functionality, along with read() and update() functionality for going back and
@@ -149,7 +153,7 @@ class HERAData(UVData):
                       'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
 
     def __init__(self, input_data, filetype='uvh5'):
-        '''Instantiate a HERAData object. If the filetype is uvh5, read in and store
+        '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
 
@@ -176,7 +180,7 @@ class HERAData(UVData):
 
         # load metadata from file
         self.filetype = filetype
-        if self.filetype is 'uvh5':
+        if self.filetype == 'uvh5':
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
@@ -214,8 +218,7 @@ class HERAData(UVData):
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
         antpos, ants = self.get_ENU_antpos()
-        ants = sorted(ants)
-        antpos = dict(zip(ants, antpos))
+        antpos = odict(zip(ants, antpos))
 
         freqs = np.unique(self.freq_array)
         times = np.unique(self.time_array)
@@ -231,7 +234,7 @@ class HERAData(UVData):
                       for antpair in antpairs}
 
         locs = locals()
-        return {meta: eval(meta, {}, locs) for meta in self.HERAData_metas}
+        return {meta: locs[meta] for meta in self.HERAData_metas}
 
     def _determine_blt_slicing(self):
         '''Determine the mapping between antenna pairs and
@@ -239,9 +242,9 @@ class HERAData(UVData):
         self._blt_slices = {}
         for ant1, ant2 in self.get_antpairs():
             indices = self.antpair2ind(ant1, ant2)
-            if len(indices) == 1:
+            if len(indices) == 1:  # only one blt matches
                 self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, self.Nblts)
-            elif not (len(set(np.ediff1d(indices))) == 1):
+            elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
                 raise NotImplementedError('UVData objects with non-regular spacing of '
                                           'baselines in its baseline-times are not supported.')
             else:
@@ -260,7 +263,8 @@ class HERAData(UVData):
         away both baseline ordering (by applying complex conjugation) and polarization capitalization.
 
         Arguments:
-            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol)
+            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol), i.e. the size of the full data.
+                One generally uses this object's own self.data_array, self.flag_array, or self.nsample_array.
             key: if of the form (0,1,'xx'), return anumpy array.
                  if of the form (0,1), return a dict mapping pol strings to waterfalls.
                  if of of the form 'xx', return a dict mapping ant-pair tuples to waterfalls.
@@ -285,7 +289,8 @@ class HERAData(UVData):
         ordering (by applying complex conjugation) and polarization capitalization.
 
         Arguments:
-            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol)
+            data_array: numpy array of shape (Nblts, 1, Nfreq, Npol), i.e. the size of the full data.
+                One generally uses this object's own self.data_array, self.flag_array, or self.nsample_array.
             key: baseline (e.g. (0,1,'xx)), ant-pair tuple (e.g. (0,1)), or pol str (e.g. 'xx')
             value: if key is a baseline, must be an (Nint, Nfreq) numpy array;
                    if key is an ant-pair tuple, must be a dict mapping pol strings to waterfalls;
@@ -367,28 +372,28 @@ class HERAData(UVData):
         # save last read parameters
         locs = locals()
         partials = ['bls', 'polarizations', 'times', 'frequencies', 'freq_chans']
-        self.last_read_kwargs = {p: eval(p, {}, locs) for p in partials}
+        self.last_read_kwargs = {p: locs[p] for p in partials}
 
         # load data
-        if self.filetype is 'uvh5':
+        if self.filetype == 'uvh5':
             self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
                            frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
         else:
             if not read_data:
                 raise NotImplementedError('reading only metadata is not implemented for' + self.filetype)
-            if self.filetype is 'miriad':
+            if self.filetype == 'miriad':
                 self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
                 if any([times is not None, frequencies is not None, freq_chans is not None]):
                     warnings.warn('miriad does not support partial loading for times and frequencies. '
                                   'Loading the file first and then performing select.')
                     self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
-            elif self.filetype is 'uvfits':
+            elif self.filetype == 'uvfits':
                 self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
                                  times=times, frequencies=frequencies, freq_chans=freq_chans)
                 self.unphase_to_drift()
 
         # process data into DataContainers
-        if read_data or self.filetype is 'uvh5':
+        if read_data or self.filetype == 'uvh5':
             self._determine_blt_slicing()
             self._determine_pol_indexing()
         if read_data:
@@ -417,7 +422,7 @@ class HERAData(UVData):
             for bl in nsamples.keys():
                 self._set_slice(self.nsample_array, bl, nsamples[bl])
 
-    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False):
+    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False, add_to_history='', **kwargs):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
         input_data file called on __init__. Any data/flags/nsamples left as None will be written
@@ -432,9 +437,13 @@ class HERAData(UVData):
             clobber: if True, overwrites existing file at output_path
             inplace: update this object's data_array, flag_array, and nsamples_array.
                 This saves memory but alters the HERAData object.
+            add_to_history: string to append to history (only used on first call of
+                partial_write for a given output_path)
+            kwargs: addtional keyword arguments update UVData attributes. (Only used on
+                first call of partial write for a given output_path).
         '''
         # Type verifications
-        if self.filetype is not 'uvh5':
+        if self.filetype != 'uvh5':
             raise NotImplementedError('Partial writing for filetype ' + self.filetype + ' has not been implemented.')
         if len(self.filepaths) > 1:
             raise NotImplementedError('Partial writing for list-loaded HERAData objects has not been implemented.')
@@ -444,6 +453,9 @@ class HERAData(UVData):
             hd_writer = self._writers[output_path]  # This hd_writer has metadata for the entire output file
         else:
             hd_writer = HERAData(self.filepaths[0])
+            hd_writer.history += add_to_history
+            for attribute, value in kwargs.items():
+                hd_writer.__setattr__(attribute, value)
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
 
@@ -468,7 +480,7 @@ class HERAData(UVData):
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
         if bls is None:
-            if self.filetype is not 'uvh5':
+            if self.filetype != 'uvh5':
                 raise NotImplementedError('Baseline iteration without explicitly setting bls for filetype ' + self.filetype
                                           + ' without setting bls has not been implemented.')
             bls = self.bls
@@ -491,7 +503,7 @@ class HERAData(UVData):
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
         if freqs is None:
-            if self.filetype is not 'uvh5':
+            if self.filetype != 'uvh5':
                 raise NotImplementedError('Frequency iteration for filetype ' + self.filetype
                                           + ' without setting freqs has not been implemented.')
             freqs = self.freqs
@@ -513,7 +525,7 @@ class HERAData(UVData):
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
         if times is None:
-            if self.filetype is not 'uvh5':
+            if self.filetype != 'uvh5':
                 raise NotImplementedError('Time iteration for filetype ' + self.filetype
                                           + ' without setting times has not been implemented.')
             times = self.times
@@ -528,6 +540,44 @@ class HERAData(UVData):
 #######################################################################
 
 
+def to_HERAData(input_data, filetype='miriad'):
+    '''Converts a string path, UVData, or HERAData object, or a list of any one of those, to a
+    single HERAData object without loading any new data.
+
+    Arguments:
+        input_data: data file path, or UVData/HERAData instance, or list of either strings of data
+            file paths or list of UVData/HERAData instances to combine into a single HERAData object
+        filetype: 'miriad', 'uvfits', or 'uvh5'. Ignored if input_data is UVData/HERAData objects
+
+    Returns:
+        hd: HERAData object. Will not have data loaded if initialized from string(s).
+    '''
+
+    if filetype not in ['miriad', 'uvfits', 'uvh5']:
+        raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
+    if isinstance(input_data, str):  # single visibility data path
+        return HERAData(input_data, filetype=filetype)
+    elif isinstance(input_data, (UVData, HERAData)):  # single UVData object
+        hd = input_data
+        hd.__class__ = HERAData
+        hd._determine_blt_slicing()
+        hd._determine_pol_indexing()
+        return hd
+    elif isinstance(input_data, collections.Iterable):  # List loading
+        if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
+            return HERAData(input_data, filetype=filetype)
+        elif np.all([isinstance(i, (UVData, HERAData)) for i in input_data]):  # List of uvdata objects
+            hd = reduce(operator.add, input_data)
+            hd.__class__ = HERAData
+            hd._determine_blt_slicing()
+            hd._determine_pol_indexing()
+            return hd
+        else:
+            raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.')
+    else:
+        raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
+
+
 def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
     '''Load miriad or uvfits files or UVData/HERAData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
@@ -537,7 +587,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         input_data: data file path, or UVData/HERAData instance, or list of either strings of data
             file paths or list of UVData/HERAData instances to concatenate into a single dictionary
         return_meta:  boolean, if True: also return antpos, ants, freqs, times, lsts, and pols
-        filetype: either 'miriad' or 'uvfits', can be ignored if input_data is UVData/HERAData objects
+        filetype: 'miriad', 'uvfits', or 'uvh5'. Ignored if input_data is UVData/HERAData objects
         pop_autos: boolean, if True: remove autocorrelations
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
@@ -559,31 +609,12 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         lsts: ndarray containing LST bins of data (radians)
         pol: ndarray containing list of polarization strings
     '''
-    if filetype not in ['miriad', 'uvfits', 'uvh5']:
-        raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
-    if isinstance(input_data, str):  # single visibility data path
-        hd = HERAData(input_data, filetype=filetype)
-        d, f, n = hd.read()
-    elif isinstance(input_data, (UVData, HERAData)):  # single UVData object
-        hd = input_data
-        hd.__class__ = HERAData
-        hd._determine_blt_slicing()
-        hd._determine_pol_indexing()
+
+    hd = to_HERAData(input_data, filetype=filetype)
+    if hd.data_array is not None:
         d, f, n = hd.build_datacontainers()
-    elif isinstance(input_data, collections.Iterable):  # List loading
-        if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
-            hd = HERAData(input_data, filetype=filetype)
-            d, f, n = hd.read()
-        elif np.all([isinstance(i, (UVData, HERAData)) for i in input_data]):  # List of uvdata objects
-            hd = reduce(operator.add, input_data)
-            hd.__class__ = HERAData
-            hd._determine_blt_slicing()
-            hd._determine_pol_indexing()
-            d, f, n = hd.build_datacontainers()
-        else:
-            raise TypeError('If input is a list, it must be only strings or only UVData/HERAData objects.')
     else:
-        raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
+        d, f, n = hd.read()
 
     # remove autos if requested
     if pop_autos:
@@ -669,10 +700,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
 
-    integration_time : type=float, integration duration in seconds for data_array. This does not necessarily have
+    integration_time : type=float or ndarray, integration duration in seconds for data_array. This does not necessarily have
         to be equal to the diff(time_array): for the case of LST-binning, this is not the duration of the LST-bin
-        but the integration time of the pre-binned data.
-
+        but the integration time of the pre-binned data. If None, will use diff(time_array) by default.
+        
     kwargs : type=dictionary, additional parameters to set in UVData object.
 
     Output:
@@ -691,8 +722,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
             raise AttributeError("if time_array is not fed, start_jd must be fed")
         time_array = hc.utils.LST2JD(lst_array, start_jd, longitude=longitude)
     Ntimes = len(time_array)
-    if integration_time is None:
-        integration_time = np.median(np.diff(time_array)) * 24 * 3600.
 
     # get freqs
     Nfreqs = len(freq_array)
@@ -709,6 +738,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # reconfigure time_array and lst_array
     time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
     lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
+
+    # configure integration time, converting from days (the unit of time_array) to seconds (the unit of integration_time)
+    if integration_time is None:
+        integration_time = np.ones_like(time_array, dtype=np.float) * np.median(np.diff(time_array)) * 24 * 3600.
 
     # get data array
     data_array = np.moveaxis(map(lambda p: map(lambda ap: data[str(p)][ap], antpairs), pols), 0, -1)
@@ -757,10 +790,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     # get zenith location: can only write drift phase
     phase_type = 'drift'
-    zenith_dec_degrees = np.ones_like(baseline_array) * dec
-    zenith_ra_degrees = hc.utils.JD2RA(time_array, longitude)
-    zenith_dec = zenith_dec_degrees * np.pi / 180
-    zenith_ra = zenith_ra_degrees * np.pi / 180
 
     # instantiate object
     uvd = UVData()
@@ -771,7 +800,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               'channel_width', 'data_array', 'flag_array', 'freq_array', 'history', 'instrument',
               'integration_time', 'lst_array', 'nsample_array', 'object_name', 'phase_type',
               'polarization_array', 'spw_array', 'telescope_location', 'telescope_name', 'time_array',
-              'uvw_array', 'vis_units', 'antenna_positions', 'zenith_dec', 'zenith_ra']
+              'uvw_array', 'vis_units', 'antenna_positions']
     local_params = locals()
 
     # overwrite paramters by kwargs
@@ -819,9 +848,7 @@ def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
 
     # perform update
     original_class = uvd.__class__
-    uvd.__class__ = HERAData
-    uvd._determine_blt_slicing()
-    uvd._determine_pol_indexing()
+    uvd = to_HERAData(uvd)
     uvd.update(data=data, flags=flags)
     uvd.__class__ = original_class
 
@@ -873,9 +900,37 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         raise TypeError("Input filetype must be either 'miriad', 'uvfits', or 'uvh5'.")
 
 
+def to_HERACal(input_cal):
+    '''Converts a string path, UVCal, or HERACal object, or a list of any one of those, to a
+    single HERACal object without loading any new calibration solutions.
+
+    Arguments:
+        input_cal: path to calfits file, UVCal/HERACal object, or a list of either to combine
+            into a single HERACal object
+
+    Returns:
+        hc: HERACal object. Will not have calibration loaded if initialized from string(s).
+    '''
+    if isinstance(input_cal, str):  # single calfits path
+        return HERACal(input_cal)
+    elif isinstance(input_cal, (UVCal, HERACal)):  # single UVCal/HERACal object
+        input_cal.__class__ = HERACal
+        return input_cal
+    elif isinstance(input_cal, collections.Iterable):  # List loading
+        if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
+            return HERACal(input_cal)
+        elif np.all([isinstance(ic, (UVCal, HERACal)) for ic in input_cal]):  # List of UVCal/HERACal objects
+            hc = reduce(operator.add, input_cal)
+            hc.__class__ = HERACal
+            return hc
+        else:
+            raise TypeError('If input is a list, it must be only strings or only UVCal/HERACal objects.')
+    else:
+        raise TypeError('Input must be a UVCal/HERACal object, a string, or a list of either.')
+
+
 def load_cal(input_cal, return_meta=False):
-    '''LEGACY CODE TO BE DEPRECATED!
-    Load calfits files or UVCal/HERACal objects into dictionaries, optionally
+    '''Load calfits files or UVCal/HERACal objects into dictionaries, optionally
     returning the most useful metadata. More than one spectral window is not supported.
 
     Arguments:
@@ -901,25 +956,11 @@ def load_cal(input_cal, return_meta=False):
         pols: list of antenna polarization strings
     '''
     # load HERACal object and extract gains, data, etc.
-    if isinstance(input_cal, str):  # single calfits path
-        hc = HERACal(input_cal)
-        gains, flags, quals, total_qual = hc.read()
-    elif isinstance(input_cal, (UVCal, HERACal)):  # single UVCal/HERACal object
-        hc = input_cal
-        hc.__class__ = HERACal
+    hc = to_HERACal(input_cal)
+    if hc.gain_array is not None:
         gains, flags, quals, total_qual = hc.build_calcontainers()
-    elif isinstance(input_cal, collections.Iterable):  # List loading
-        if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
-            hc = HERACal(input_cal)
-            gains, flags, quals, total_qual = hc.read()
-        elif np.all([isinstance(ic, (UVCal, HERACal)) for ic in input_cal]):  # List of UVCal/HERACal objects
-            hc = reduce(operator.add, input_cal)
-            hc.__class__ = HERACal
-            gains, flags, quals, total_qual = hc.build_calcontainers()
-        else:
-            raise TypeError('If input is a list, it must be only strings or only UVCal/HERACal objects.')
     else:
-        raise TypeError('Input must be a UVCal/HERACal object, a string, or a list of either.')
+        gains, flags, quals, total_qual = hc.read()
 
     # return quantities
     if return_meta:

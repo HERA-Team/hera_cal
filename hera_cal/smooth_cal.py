@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 import numpy as np
 import scipy
 from hera_cal import io, utils
@@ -37,7 +41,7 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
     '''
     sdf = np.median(np.diff(freqs)) / 1e9  # in GHz
     filter_size = (filter_scale / 1e3)**-1  # Puts it in ns
-    (dlys, phi) = fft_dly(gains, wgts, df=sdf * 1e9, medfilt=False)  # delays are in seconds
+    (dlys, phi) = fft_dly(gains, sdf * 1e9, wgts, medfilt=False, solve_phase=False)  # delays are in seconds
     rephasor = np.exp(-2.0j * np.pi * np.outer(dlys, freqs))
     filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, sdf, tol=tol, window=window,
                                                                  skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)

@@ -1,4 +1,8 @@
 #!/usr/bin/env python2.7
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 """
 command-line drive script for lstbin.lst_bin_files()
 Assume our current working directory is data/, which looks like
@@ -26,6 +30,7 @@ lstbin_run.py --lst_init np.pi --dlst 0.001 --align --outdir './' \
               '2485044/zen.2485044.*.xx.HH.uv'
 Note: make sure the search strings are bounded by quotations!
 """
+
 from hera_cal import lstbin
 import sys
 import os

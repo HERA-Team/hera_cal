@@ -17,7 +17,7 @@ install:
   - export PATH="$HOME/miniconda/bin:$PATH"
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
-  - conda install -q conda=4.3.25
+  - conda install -q conda
   # Useful for debugging any issues with conda
   - conda info -a
 
@@ -26,7 +26,7 @@ install:
   - source activate test-environment
   - conda install -c conda-forge aipy pycodestyle
   - pip install coveralls
-  - pip install git+https://github.com/HERA-Team/pyuvdata.git@d717c761ce05a37c760f876f956545239647d6d0
+  - pip install git+https://github.com/HERA-Team/pyuvdata.git
   - pip install git+https://github.com/HERA-Team/omnical.git
   - pip install git+https://github.com/HERA-Team/linsolve.git
   - pip install git+https://github.com/HERA-Team/hera_qm.git
@@ -35,7 +35,7 @@ install:
 
 script:
   - nosetests hera_cal --with-coverage --cover-package=hera_cal
-  - pycodestyle */*.py --ignore=E501,W503,W601
+  - pycodestyle */*.py --ignore=E501,W291,W293,W503,W601
 
 after_success:
   - coveralls

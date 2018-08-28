@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 import numpy as np
 from collections import OrderedDict as odict
 from hera_cal.utils import conj_pol

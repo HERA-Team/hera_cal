@@ -1,4 +1,9 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 '''Tests for io.py'''
+
 import unittest
 import numpy as np
 import pyuvdata
@@ -9,6 +14,7 @@ from hera_cal.datacontainer import DataContainer
 import hera_cal.io as io
 from hera_cal.io import HERACal, HERAData
 from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num
+from pyuvdata.utils import parse_polstr, parse_jpolstr
 import os
 import warnings
 import shutil
@@ -40,13 +46,13 @@ class Test_HERACal(unittest.TestCase):
         gains, flags, quals, total_qual = hc.read()
         uvc = UVCal()
         uvc.read_calfits(self.fname_both)
-        np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, 'jxx'])
-        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, 'jxx'])
-        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, 'jxx'])
-        np.testing.assert_array_equal(uvc.total_quality_array[0, :, :, 0].T, total_qual['jxx'])
+        np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, parse_jpolstr('jxx')])
+        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, parse_jpolstr('jxx')])
+        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, parse_jpolstr('jxx')])
+        np.testing.assert_array_equal(uvc.total_quality_array[0, :, :, 0].T, total_qual[parse_jpolstr('jxx')])
         np.testing.assert_array_equal(np.unique(uvc.freq_array), hc.freqs)
         np.testing.assert_array_equal(np.unique(uvc.time_array), hc.times)
-        self.assertEqual(hc.pols, ['jxx', 'jyy'])
+        self.assertEqual(hc.pols, [parse_jpolstr('jxx'), parse_jpolstr('jyy')])
         self.assertEqual(set([ant[0] for ant in hc.ants]), set(uvc.ant_array))
 
         # test list loading
@@ -57,7 +63,7 @@ class Test_HERACal(unittest.TestCase):
         self.assertEqual(len(quals.keys()), 36)
         self.assertEqual(hc.freqs.shape, (1024,))
         self.assertEqual(hc.times.shape, (3,))
-        self.assertEqual(sorted(hc.pols), ['jxx', 'jyy'])
+        self.assertEqual(sorted(hc.pols), [parse_jpolstr('jxx'), parse_jpolstr('jyy')])
 
     def test_write(self):
         hc = HERACal(self.fname_both)
@@ -200,7 +206,7 @@ class Test_HERAData(unittest.TestCase):
             np.testing.assert_array_equal(hd._get_slice(hd.data_array, bl), hd.get_data(bl))
         np.testing.assert_array_equal(hd._get_slice(hd.data_array, (54, 53, 'XX')),
                                       hd.get_data((54, 53, 'XX')))
-        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (53, 54))['XX'],
+        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (53, 54))[parse_polstr('XX')],
                                       hd.get_data((53, 54, 'XX')))
         np.testing.assert_array_equal(hd._get_slice(hd.data_array, 'XX')[(53, 54)],
                                       hd.get_data((53, 54, 'XX')))
@@ -212,12 +218,8 @@ class Test_HERAData(unittest.TestCase):
         for p in d.pols():
             np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (80, 81, p)),
                                                  hd.get_data((80, 81, p)))
-            try:
-                np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (81, 80, p)),
-                                                     hd.get_data((81, 80, p)))
-            except: # this is only here until pyuvdata fixes issue #398
-                np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (81, 80, p)),
-                                                     hd.get_data((81, 80, p[::-1])))
+            np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (81, 80, p)),
+                                                 hd.get_data((81, 80, p)))
 
     def test_set_slice(self):
         hd = HERAData(self.uvh5_1)
@@ -267,11 +269,11 @@ class Test_HERAData(unittest.TestCase):
         # uvh5
         hd = HERAData(self.uvh5_1)
         d, f, n = hd.read(bls=(53, 54, 'xx'), frequencies=hd.freqs[0:100], times=hd.times[0:10])
-        self.assertEqual(hd.last_read_kwargs['bls'], (53, 54, 'xx'))
+        self.assertEqual(hd.last_read_kwargs['bls'], (53, 54, parse_polstr('XX')))
         self.assertEqual(hd.last_read_kwargs['polarizations'], None)
         for dc in [d, f, n]:
             self.assertEqual(len(dc), 1)
-            self.assertEqual(dc.keys(), [(53, 54, 'XX')])
+            self.assertEqual(dc.keys(), [(53, 54, parse_polstr('XX'))])
             self.assertEqual(dc[53, 54, 'xx'].shape, (10, 100))
         with self.assertRaises(ValueError):
             d, f, n = hd.read(polarizations=['xy'])
@@ -286,7 +288,7 @@ class Test_HERAData(unittest.TestCase):
         self.assertEqual(hd.last_read_kwargs['polarizations'], ['XX'])
         for dc in [d, f, n]:
             self.assertEqual(len(dc), 1)
-            self.assertEqual(dc.keys(), [(52, 53, 'XX')])
+            self.assertEqual(dc.keys(), [(52, 53, parse_polstr('XX'))])
             self.assertEqual(dc[52, 53, 'xx'].shape, (10, 30))
         with self.assertRaises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
@@ -297,7 +299,7 @@ class Test_HERAData(unittest.TestCase):
         self.assertEqual(hd.last_read_kwargs['freq_chans'], range(10))
         for dc in [d, f, n]:
             self.assertEqual(len(dc), 1)
-            self.assertEqual(dc.keys(), [(0, 1, 'XX')])
+            self.assertEqual(dc.keys(), [(0, 1, parse_polstr('XX'))])
             self.assertEqual(dc[0, 1, 'xx'].shape, (60, 10))
         with self.assertRaises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
@@ -326,7 +328,7 @@ class Test_HERAData(unittest.TestCase):
         hd = HERAData(self.uvh5_1)
         self.assertEqual(hd._writers, {})
         d, f, n = hd.read(bls=hd.bls[0])
-        self.assertEqual(hd.last_read_kwargs['bls'], (53, 53, 'XX'))
+        self.assertEqual(hd.last_read_kwargs['bls'], (53, 53, parse_polstr('XX')))
         d[(53, 53, 'XX')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True)
         self.assertTrue('out.h5' in hd._writers)
@@ -341,12 +343,12 @@ class Test_HERAData(unittest.TestCase):
                                                   getattr(hd._writers['out.h5'], meta)[k])
 
         d, f, n = hd.read(bls=hd.bls[1])
-        self.assertEqual(hd.last_read_kwargs['bls'], (53, 54, 'XX'))
+        self.assertEqual(hd.last_read_kwargs['bls'], (53, 54, parse_polstr('XX')))
         d[(53, 54, 'XX')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True)
 
         d, f, n = hd.read(bls=hd.bls[2])
-        self.assertEqual(hd.last_read_kwargs['bls'], (54, 54, 'XX'))
+        self.assertEqual(hd.last_read_kwargs['bls'], (54, 54, parse_polstr('XX')))
         d[(54, 54, 'XX')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True, inplace=True)
         d_after, _, _ = hd.build_datacontainers()
@@ -386,7 +388,7 @@ class Test_HERAData(unittest.TestCase):
 
         hd = HERAData(self.miriad_1, filetype='miriad')
         d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')]))
-        self.assertEqual(d.keys(), [(52, 53, 'XX')])
+        self.assertEqual(d.keys(), [(52, 53, parse_polstr('XX'))])
         with self.assertRaises(NotImplementedError):
             next(hd.iterate_over_bls())
 
@@ -457,13 +459,13 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
         data, flags = io.load_vis(fname, pop_autos=False)
         self.assertEqual(data[(24, 25, 'xx')].shape, (60, 64))
         self.assertEqual(flags[(24, 25, 'xx')].shape, (60, 64))
-        self.assertEqual((24, 24, 'xx') in data, True)
+        self.assertEqual((24, 24, parse_polstr('XX')) in data, True)
         data, flags = io.load_vis([fname])
         self.assertEqual(data[(24, 25, 'xx')].shape, (60, 64))
 
         # test pop autos
         data, flags = io.load_vis(fname, pop_autos=True)
-        self.assertEqual((24, 24, 'xx') in data, False)
+        self.assertEqual((24, 24, parse_polstr('XX')) in data, False)
 
         # test uvd object
         uvd = UVData()
@@ -649,7 +651,7 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
         self.assertEqual(len(quals.keys()), 36)
         self.assertEqual(freqs.shape, (1024,))
         self.assertEqual(times.shape, (3,))
-        self.assertEqual(sorted(pols), ['jxx', 'jyy'])
+        self.assertEqual(sorted(pols), [parse_jpolstr('jxx'), parse_jpolstr('jyy')])
 
         cal_xx, cal_yy = UVCal(), UVCal()
         cal_xx.read_calfits(fname_xx)
@@ -660,7 +662,7 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
         self.assertEqual(len(quals.keys()), 36)
         self.assertEqual(freqs.shape, (1024,))
         self.assertEqual(times.shape, (3,))
-        self.assertEqual(sorted(pols), ['jxx', 'jyy'])
+        self.assertEqual(sorted(pols), [parse_jpolstr('jxx'), parse_jpolstr('jyy')])
 
     def test_write_cal(self):
         # create fake data
@@ -759,7 +761,7 @@ class Test_Flags_NPZ_IO(unittest.TestCase):
     def test_load_npz_flags(self):
         npzfile = os.path.join(DATA_PATH, "test_input/zen.2458101.45361.xx.HH.uvOCR_53x_54x_only.flags.applied.npz")
         flags = io.load_npz_flags(npzfile)
-        self.assertTrue((53, 54, 'xx') in flags)
+        self.assertTrue((53, 54, parse_polstr('XX')) in flags)
         for f in flags.values():
             self.assertEqual(f.shape, (60, 1024))
             np.testing.assert_array_equal(f[:, 0:50], True)

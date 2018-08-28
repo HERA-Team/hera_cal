@@ -1,43 +1,34 @@
 #!/usr/bin/env python2.7
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 """Command-line drive script for hera_cal.delay_filter"""
-from hera_cal.delay_filter import Delay_Filter, delay_filter_argparser
+
+from __future__ import absolute_import, division, print_function
+from hera_cal import delay_filter
 import sys
 
-parser = delay_filter_argparser()
+parser = delay_filter.delay_filter_argparser()
 a = parser.parse_args()
 
-# set outfile
-if a.outfile is None:
-    # If outfile is not supplied, append 'D' to infile.
-    a.outfile = a.infile + 'D'
-
 # set kwargs
-kwargs = {}
+filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol, 'window': a.window,
+                 'skip_wgt': a.skip_wgt, 'maxiter': a.maxiter, 'flag_nchan_low': a.flag_nchan_low,
+                 'flag_nchan_high': a.flag_nchan_high, 'min_dly': a.min_dly, 'gain': a.gain}
 if a.window == 'tukey':
-    kwargs['alpha'] = a.alpha
-
+    filter_kwargs['alpha'] = a.alpha
+    
 # Run Delay Filter
-df = Delay_Filter()
-df.load_data(a.infile, filetype=a.filetype)
-df.run_filter(standoff=a.standoff, horizon=a.horizon, tol=a.tol, window=a.window,
-              skip_wgt=a.skip_wgt, maxiter=a.maxiter, flag_nchan_low=a.flag_nchan_low,
-              flag_nchan_high=a.flag_nchan_high, min_dly=a.min_dly, gain=a.gain, **kwargs)
-
-# Write high-pass residual
-if not a.write_model or a.write_all:
-    df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history=' '.join(sys.argv),
-                           clobber=a.clobber, write_CLEAN_models=False, write_filled_data=False)
-
-# Write low-pass model if desired
-if a.write_model or a.write_all:
-    if a.write_all:
-        a.outfile += 'M'
-    df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history=' '.join(sys.argv),
-                           clobber=a.clobber, write_CLEAN_models=True, write_filled_data=False)
-
-# Write flag-filled original data if desired
-if a.write_filled or a.write_all:
-    if a.write_all:
-        a.outfile = a.outfile[:-1] + 'F'
-    df.write_filtered_data(a.outfile, filetype_out=a.filetype, add_to_history=' '.join(sys.argv),
-                           clobber=a.clobber, write_CLEAN_models=False, write_filled_data=True)
+if a.partial_load_Nbls is not None:  # partial loading
+    delay_filter.partial_load_delay_filter_and_write(a.infilename, calfile=a.calfile, Nbls=a.partial_load_Nbls,
+                                                     res_outfilename=a.res_outfilename, CLEAN_outfilename=a.CLEAN_outfilename, 
+                                                     filled_outfilename=a.filled_outfilename, clobber=a.clobber, 
+                                                     add_to_history=' '.join(sys.argv), **filter_kwargs)
+else:
+    df = delay_filter.Delay_Filter()
+    df.load_data(a.infilename, filetype=a.filetype_in, input_cal=a.calfile)
+    df.run_filter(**filter_kwargs)
+    df.write_filtered_data(res_outfilename=a.res_outfilename, CLEAN_outfilename=a.CLEAN_outfilename, 
+                           filled_outfilename=a.filled_outfilename, filetype=a.filetype_out, 
+                           clobber=a.clobber, add_to_history=' '.join(sys.argv))

@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 """
 abscal.py
 ---------
@@ -106,8 +110,8 @@ class AbsCal(object):
 
         antpos : type=dictionary, dict of antenna position vectors in ENU (topo) frame in meters.
                  origin of coordinates does not matter, but preferably are centered in the array.
-                 keys are antenna integers and values are 2D ndarray position vectors,
-                 with [0] index containing East-West distance, and [1] index North-South distance.
+                 keys are antenna integers and values are ndarray position vectors,
+                 containing [East, North, Up] coordinates.
                  Can be generated from a pyuvdata.UVData instance via
                  ----
                  #!/usr/bin/env python
@@ -295,7 +299,7 @@ class AbsCal(object):
             self._ant_phi = odict(map(lambda k: (k, np.ones_like(self._ant_phi[k]) * np.angle(np.median(np.real(np.exp(1j * self._ant_phi[k]))) + 1j * np.median(np.imag(np.exp(1j * self._ant_phi[k]))))), flatten(self._gain_keys)))
             self._ant_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys), 0, -1)
 
-    def delay_lincal(self, medfilt=True, kernel=(1, 11), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
+    def delay_lincal(self, medfilt=True, kernel=(1, 11), verbose=True, time_avg=False,
                      solve_offsets=True, window=None, edge_cut=0):
         """
         Solve for per-antenna delay according to the equation
@@ -342,24 +346,24 @@ class AbsCal(object):
 
         # run delay_lincal
         fit = delay_lincal(model, data, wgts=wgts, refant=self.refant, solve_offsets=solve_offsets,
-                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax,
+                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose, 
                            window=window, edge_cut=edge_cut)
 
         # time average
         if time_avg:
             k = flatten(self._gain_keys)[0]
-            Ntimes = fit["tau_{}_{}".format(k[0], k[1])].shape[time_ax]
+            Ntimes = fit["tau_{}_{}".format(k[0], k[1])].shape[0]
             for i, k in enumerate(flatten(self._gain_keys)):
                 tau_key = "tau_{}_{}".format(k[0], k[1])
-                tau_avg = np.moveaxis(np.median(fit[tau_key], axis=time_ax)[np.newaxis], 0, time_ax)
-                fit[tau_key] = np.repeat(tau_avg, Ntimes, axis=time_ax)
+                tau_avg = np.moveaxis(np.median(fit[tau_key], axis=0)[np.newaxis], 0, 0)
+                fit[tau_key] = np.repeat(tau_avg, Ntimes, axis=0)
                 if solve_offsets:
                     phi_key = "phi_{}_{}".format(k[0], k[1])
                     gain = np.exp(1j * fit[phi_key])
-                    real_avg = np.median(np.real(gain), axis=time_ax)
-                    imag_avg = np.median(np.imag(gain), axis=time_ax)
-                    phi_avg = np.moveaxis(np.angle(real_avg + 1j * imag_avg)[np.newaxis], 0, time_ax)
-                    fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=time_ax)
+                    real_avg = np.median(np.real(gain), axis=0)
+                    imag_avg = np.median(np.imag(gain), axis=0)
+                    phi_avg = np.moveaxis(np.angle(real_avg + 1j * imag_avg)[np.newaxis], 0, 0)
+                    fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=0)
 
         # form result
         self._ant_dly = odict(map(lambda k: (k, copy.copy(fit["tau_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
@@ -369,7 +373,7 @@ class AbsCal(object):
             self._ant_dly_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
             self._ant_dly_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_dly_phi[k], pk), self._gain_keys), 0, -1)
 
-    def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), time_ax=0, freq_ax=1, verbose=True, time_avg=False,
+    def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), verbose=True, time_avg=False,
                            four_pol=False, window=None, edge_cut=0):
         """
         Solve for an array-wide delay slope (a subset of the omnical degeneracies) by calling
@@ -380,10 +384,6 @@ class AbsCal(object):
         medfilt : boolean, if True median filter data before fft
 
         kernel : size of median filter across (time, freq) axes, type=(int, int)
-
-        time_ax : the time axis index of the data
-
-        freq_ax : the freq axis index of the data
 
         verbose : type=boolean, if True print feedback to stdout
 
@@ -420,7 +420,7 @@ class AbsCal(object):
 
         # run delay_slope_lincal
         fit = delay_slope_lincal(model, data, antpos, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df,
-                                 kernel=kernel, verbose=verbose, time_ax=time_ax, freq_ax=freq_ax, four_pol=four_pol,
+                                 kernel=kernel, verbose=verbose, four_pol=four_pol,
                                  window=window, edge_cut=edge_cut)
 
         # separate pols if four_pol
@@ -434,14 +434,14 @@ class AbsCal(object):
         # time average
         if time_avg:
             k = flatten(self._gain_keys)[0]
-            Ntimes = fit["T_ew_{}".format(k[1])].shape[time_ax]
+            Ntimes = fit["T_ew_{}".format(k[1])].shape[0]
             for i, k in enumerate(flatten(self._gain_keys)):
                 ew_key = "T_ew_{}".format(k[1])
                 ns_key = "T_ns_{}".format(k[1])
-                ew_avg = np.moveaxis(np.median(fit[ew_key], axis=time_ax)[np.newaxis], 0, time_ax)
-                ns_avg = np.moveaxis(np.median(fit[ns_key], axis=time_ax)[np.newaxis], 0, time_ax)
-                fit[ew_key] = np.repeat(ew_avg, Ntimes, axis=time_ax)
-                fit[ns_key] = np.repeat(ns_avg, Ntimes, axis=time_ax)
+                ew_avg = np.moveaxis(np.median(fit[ew_key], axis=0)[np.newaxis], 0, 0)
+                ns_avg = np.moveaxis(np.median(fit[ns_key], axis=0)[np.newaxis], 0, 0)
+                fit[ew_key] = np.repeat(ew_avg, Ntimes, axis=0)
+                fit[ns_key] = np.repeat(ns_avg, Ntimes, axis=0)
 
         # form result
         self._dly_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
@@ -1253,7 +1253,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             AC.delay_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
             result_gains = merge_gains((AC.ant_dly_gain, AC.ant_dly_phi_gain))
             cal_flags = odict(map(lambda k: (k, np.zeros_like(result_gains[k], np.bool)), result_gains.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, result_gains, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, result_gains, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_dly_gain)
             merged_gains.append(AC.ant_dly_phi_gain)
             merged_gains = [merge_gains(merged_gains)]
@@ -1265,14 +1265,14 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                 raise ValueError("can't run avg_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(avg=True, verbose=verbose)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.ant_phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_phi_gain)
             merged_gains = [merge_gains(merged_gains)]
 
         if avg_dly_slope_cal:
             AC.delay_slope_lincal(verbose=verbose, time_avg=True, window=window, edge_cut=edge_cut)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.dly_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
             else:
@@ -1282,7 +1282,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if delay_slope_cal:
             AC.delay_slope_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.dly_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
             else:
@@ -1295,7 +1295,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             for i in range(phs_max_iter):
                 AC.global_phase_slope_logcal(tol=tol, edge_cut=edge_cut, verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.phs_slope_gain, cal_flags, gain_convention='divide')
+                apply_cal.calibrate_in_place(AC.data, AC.phs_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
                 if all_antenna_gains:
                     merged_gains.append(AC.custom_phs_slope_gain(total_gain_keys, total_data_antpos))
                 else:
@@ -1316,7 +1316,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if abs_amp_cal:
             AC.abs_amp_logcal(verbose=verbose)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.abs_eta_gain[k], np.bool)), AC.abs_eta_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.abs_eta_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.abs_eta_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_abs_eta_gain(total_gain_keys))
             else:
@@ -1329,7 +1329,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             for i in range(phs_max_iter):
                 AC.TT_phs_logcal(verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.TT_Phi_gain[k], np.bool)), AC.TT_Phi_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.TT_Phi_gain, cal_flags, gain_convention='divide')
+                apply_cal.calibrate_in_place(AC.data, AC.TT_Phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
                 if all_antenna_gains:
                     merged_gains.append(AC.custom_TT_Phi_gain(total_gain_keys, total_data_antpos))
                     merged_gains.append(AC.custom_abs_psi_gain(total_gain_keys))
@@ -1354,7 +1354,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                 raise ValueError("can't run gen_amp_cal when all_antenna_gains is True")
             AC.amp_logcal(verbose=verbose)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_eta_gain[k], np.bool)), AC.ant_eta_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_eta_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.ant_eta_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_eta_gain)
             merged_gains = [merge_gains(merged_gains)]
 
@@ -1365,7 +1365,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                 raise ValueError("can't run gen_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(verbose=verbose)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.ant_phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_phi_gain)
             merged_gains = [merge_gains(merged_gains)]
 

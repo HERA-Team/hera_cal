@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 """
 lstbin.py
 ---------
@@ -5,6 +9,7 @@ lstbin.py
 Routines for aligning and binning of visibility
 data onto a universal Local Sidereal Time (LST) grid.
 """
+
 import os
 import sys
 from collections import OrderedDict as odict
@@ -456,7 +461,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
         interp_data, interp_flgs, interp_lsts = lst_align(data, lsts, flags=flgs, dlst=dlst, **align_kwargs)
 
         # check output
-        output_fname = os.path.basename(f) + file_ext.format(interp_lsts[0])
+        output_fname = os.path.basename(f) + file_ext.format(interp_lsts[0] - dlst / 2.0)
 
         # write to miriad file
         if overwrite is not None:
@@ -594,6 +599,11 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
     are taken from the first file in data_files.
 
+    Note: Only supports input data files that have nsample_array == 1, and a single
+    integration_time equal to np.diff(time_array), i.e. doesn't support baseline-dependent
+    averaging yet. Also, all input files must have the same integration_time, as this
+    metadata is taken from zeroth file but applied to all files.
+
     Parameters:
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
@@ -663,18 +673,13 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     # get metadata from the zeroth data file
     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
 
-    # push time and lst arrays forward by half an integration
-    abscal.echo("pushing time and lst arrays forward by half an integration b/c pyuvdata "
-                "currently does not do this for us....", verbose=verbose)
-    if len(t) > 1:
-        t += np.median(np.diff(t)) / 2.0
-
-    # get frequency, time and antenna position information
+    # get frequency, time (converting times in days to integration times in seconds) and antenna position information
     freq_array = copy.copy(f)
     antpos = copy.deepcopy(ap)
     start_jd = np.floor(t)[0]
     kwargs['start_jd'] = start_jd
-    kwargs['integration_time'] = np.median(np.diff(t)) * 24 * 3600.
+    integration_time = np.median(np.diff(t)) * 24 * 3600.
+    assert np.all(np.abs(np.diff(t) - np.median(np.diff(t))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
     del d, fl, ap, a, f, t, l, p
     garbage_collector.collect()
 
@@ -709,12 +714,6 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
                     # unwrap li relative to itself
                     li[li < li[0]] += 2 * np.pi
-
-                    # push time and lst arrays forward by half an integration
-                    # b/c pyuvdata does not currently do this for us....
-                    if len(li) > 1:
-                        li += np.median(np.diff(li)) / 2.0
-                        t += np.median(np.diff(t)) / 2.0
 
                     # unwrap li relative to start_lst
                     li[li < start_lst - atol] += 2 * np.pi
@@ -765,21 +764,12 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                              lst_low=f_min, lst_hi=f_max, truncate_empty=False, sig_clip=sig_clip,
                              sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
-        # push lst_bins back to bin start rather than bin center
-        # b/c pyuvdata does not do this for us yet...
-        abscal.echo("pushing time and lst arrays backward by half an integration b/c pyuvdata "
-                    "currently does not do this for us....", verbose=verbose)
-        # unwrap bin_lst
-        bin_lst[bin_lst < bin_lst[0] - atol] += 2 * np.pi
-        # push back
-        if len(bin_lst) > 1:
-            bin_lst -= np.median(np.diff(bin_lst)) / 2.0
-        # re-wrap bin_lst
-        bin_lst = bin_lst % (2 * np.pi)
-
         # update history
         file_history = history + " Input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
         kwargs['history'] = file_history
+
+        # form integration time array
+        kwargs['integration_time'] = np.ones(len(bin_lst) * len(bin_data.keys()), dtype=np.float64) * integration_time
 
         # erase data references
         del file_list, data_list, flgs_list, lst_list
@@ -792,8 +782,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         pols = bin_data.pols()
 
         # configure filenames
-        bin_file = "zen.{}".format(file_ext.format('.'.join(pols), "LST", bin_lst[0]))
-        std_file = "zen.{}".format(file_ext.format('.'.join(pols), "STD", bin_lst[0]))
+        bin_file = "zen.{}".format(file_ext.format('.'.join(pols), "LST", bin_lst[0] - dlst / 2.0))
+        std_file = "zen.{}".format(file_ext.format('.'.join(pols), "STD", bin_lst[0] - dlst / 2.0))
 
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
@@ -828,7 +818,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
     lst_grid : type=ndarray, dtype=float, uniform LST grid marking the center of each LST bin
     """
     # check 2pi is equally divisible by dlst
-    if (np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) is False) and (np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5) is False):
+    if not np.isclose((2 * np.pi / dlst) % 1, 0.0, atol=1e-5) and not np.isclose((2 * np.pi / dlst) % 1, 1.0, atol=1e-5):
         # generate array of appropriate dlsts
         dlsts = 2 * np.pi / np.arange(1, 1000000).astype(np.float)
 
@@ -921,8 +911,3 @@ def switch_bl(key):
     Ex. (1, 2, 'xx')
     """
     return (key[1], key[0], key[2][::-1])
-
-
-class LSTBINPHASED(Exception):
-    """ custom exception for lst_bin() """
-    pass

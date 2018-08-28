@@ -1,5 +1,12 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
+"""Module for delay filtering data and related operations."""
+
+from __future__ import absolute_import, division, print_function
 import numpy as np
-from hera_cal import io
+from hera_cal import io, apply_cal
 from pyuvdata import UVData
 from hera_cal.datacontainer import DataContainer
 from collections import OrderedDict as odict
@@ -14,24 +21,39 @@ class Delay_Filter():
 
     def __init__(self):
         '''Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.
-        To use, run either self.load_data() or self.load_dicts(), then self.run_filter(). If data is loaded with a single
-        string path or a single UVData object, it can be written to a new file using self.write_filtered_data().
+        To use, run either self.load_data() or self.load_dicts(), then self.run_filter(). If data is loaded from
+        disk or with a UVData/HERAData object(s), it can be written to a new file using self.write_filtered_data().
         '''
         self.writable = False
 
-    def load_data(self, input_data, filetype='miriad'):
+    def load_data(self, input_data, filetype='uvh5', input_cal=None, **read_kwargs):
         '''Loads in and stores data for delay filtering.
 
         Arguments:
-            input_data: data file path, or UVData instance, or list of either strings of data file paths
-                or list of UVData instances to concatenate into a single internal DataContainer
-            filetype: file format of data. Default 'miriad.' Ignored if input_data is UVData object(s).
+            input_data: data file path, or UVData/HERAData instance, or list of either strings of data file
+                paths or list of UVData/HERAData instances to concatenate into a single internal DataContainer
+            filetype: file format of data. Default 'uvh5.' Ignored if input_data is UVData/HERAData object(s).
+            input_cal: calibration to apply to data before delay filtering. Could be a string path to a calfits file,
+                a UVCal/HERACal object, or a list of either.
+            read_kwargs: kwargs to be passed into HERAData.read() for partial data loading
         '''
-        if isinstance(input_data, (str, UVData)):
-            self.writable = True
-            self.input_data, self.filetype = input_data, filetype
-        self.data, self.flags, self.antpos, _, self.freqs, self.times, _, _ = io.load_vis(input_data, return_meta=True, filetype=filetype)
+        # load data into data containers
+        self.hd = io.to_HERAData(input_data, filetype=filetype)
+        if self.hd.data_array is not None:
+            self.data, self.flags, _ = self.hd.build_datacontainers()
+        else:
+            self.data, self.flags, _ = self.hd.read(**read_kwargs)
+
+        # optionally apply calibration and calibration flags
+        if input_cal is not None:
+            g, f = io.load_cal(input_cal)
+            apply_cal.calibrate_in_place(self.data, g, data_flags=self.flags, cal_flags=f)
+
+        # save metadata
+        self.antpos = deepcopy(self.data.antpos)
+        self.freqs = deepcopy(self.data.freqs)
         self.Nfreqs = len(self.freqs)
+        self.writable = True
 
     def load_data_as_dicts(self, data, flags, freqs, antpos):
         '''Loads in data manually as a dictionary, an ordered dictionary, or a DataContainer.
@@ -80,14 +102,14 @@ class Delay_Filter():
             self.info: Dictionary of info from uvtools.dspec.delay_filter with the same keys as self.data
         '''
         self.filtered_residuals = deepcopy(self.data)
-        self.CLEAN_models = DataContainer({k: np.zeros_like(self.data.values()[0]) for k in self.data.keys()})
+        self.CLEAN_models = DataContainer({k: np.zeros_like(list(self.data.values())[0]) for k in self.data.keys()})
         self.info = odict()
         if to_filter == []:
             to_filter = self.data.keys()
 
         for k in to_filter:
             if verbose:
-                print "\nStarting filter on {} at {}".format(k, str(datetime.datetime.now()))
+                print("\nStarting filter on {} at {}".format(k, str(datetime.datetime.now())))
             bl_len = np.linalg.norm(self.antpos[k[0]] - self.antpos[k[1]]) / constants.c * 1e9  # in ns
             sdf = np.median(np.diff(self.freqs)) / 1e9  # in GHz
             if weight_dict is not None:
@@ -139,60 +161,91 @@ class Delay_Filter():
 
         return filled_data, filled_flgs
 
-    def write_filtered_data(self, outfilename, filetype_out='miriad', add_to_history='',
-                            clobber=False, write_CLEAN_models=False, write_filled_data=False,
-                            **kwargs):
-        '''Writes high-pass filtered data to disk, using input (which must be either
-        a single path or a single UVData object) as a template.
+    def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
+                            partial_write=False, clobber=False, add_to_history='', **kwargs):
+        '''Method for writing filtered residuals, CLEAN models, and/or original data with flags filled
+        by CLEAN models where possible. Uses input_data from Delay_Filter.load_data() as a template.
 
         Arguments:
-            outfilename: filename of the filtered visibility file to be written to disk
-            filetype_out: file format of output result. Default 'miriad.'
+            res_outfilename: path for writing the filtered visibilities with flags 
+            CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+            filled_outfilename: path for writing the original data but with flags unflagged and replaced
+                with CLEAN models wherever possible
+            filetype: file format of output result. Default 'uvh5.' Also supports 'miriad' and 'uvfits'.
+            partial_write: use uvh5 partial writing capability (only works when going from uvh5 to uvh5)
+            clobber: if True, overwrites existing file at the outfilename
             add_to_history: string appended to the history of the output file
-            clobber: if True, overwrites existing file at outfilename
-            write_CLEAN_models: if True, save the low-pass filtered CLEAN model rather
-                than the high-pass filtered residual
-            write_filled_data: if True, save the original data with its flags filled in
-                with the CLEAN model rather writing the high-pass filtered residual.
-            kwargs: addtional keyword arguments update the UVData object before saving.
+            kwargs: addtional UVData keyword arguments update the before saving.
                 Must be valid UVData object attributes.
         '''
         if not self.writable:
-            raise NotImplementedError('Writing functionality requires that the input be a single file path string or a single UVData object.')
+            raise ValueError('Writing functionality only enabled by running Delay_Filter.load_data()')
+        if (res_outfilename is None) and (CLEAN_outfilename is None) and (filled_outfilename is None):
+            raise ValueError('You must specifiy at least one outfilename.')
         else:
-            if write_CLEAN_models:
-                assert not write_filled_data, "cannot choose both write_CLEAN_models and write_filled_data"
-                data_out = self.CLEAN_models
-                flags_out = self.flags
-            elif write_filled_data:
-                assert not write_CLEAN_models, "cannot choose both write_CLEAN_models and write_filled_data"
-                # construct filled data and filled flags
-                data_out, flags_out = self.get_filled_data()
-            else:
-                data_out = self.filtered_residuals
-                flags_out = self.flags
-            io.update_vis(self.input_data, outfilename, filetype_in=self.filetype, filetype_out=filetype_out,
-                          data=data_out, flags=flags_out, add_to_history=add_to_history, clobber=clobber,
-                          **kwargs)
+            # loop over the three output modes if a corresponding outfilename is supplied
+            for mode, outfilename in zip(['residual', 'CLEAN', 'filled'], 
+                                         [res_outfilename, CLEAN_outfilename, filled_outfilename]):
+                if outfilename is not None:
+                    if mode == 'residual':
+                        data_out, flags_out = self.filtered_residuals, self.flags
+                    elif mode == 'CLEAN':
+                        data_out, flags_out = self.CLEAN_models, self.flags
+                    elif mode == 'filled':
+                        data_out, flags_out = self.get_filled_data()
+                    if partial_write:
+                        if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
+                            raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
+                        self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber, 
+                                              add_to_history=add_to_history, **kwargs)
+                    else:
+                        io.update_vis(self.hd, outfilename, filetype_out=filetype, data=data_out, flags=flags_out, 
+                                      add_to_history=add_to_history, clobber=clobber, **kwargs)
+
+
+def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
+                                        res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+                                        clobber=False, add_to_history='', **filter_kwargs):
+    '''Function using partial data loading and writing to perform delay filtering.
+
+    Arguments:
+        infilename: string path to data to uvh5 file to load
+        cal: optional string path to calibration file to apply to data before delay filtering
+        Nbls: the number of baselines to load at once.
+        res_outfilename: path for writing the filtered visibilities with flags 
+        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+        filled_outfilename: path for writing the original data but with flags unflagged and replaced
+            with CLEAN models wherever possible
+        clobber: if True, overwrites existing file at the outfilename
+        add_to_history: string appended to the history of the output file
+        filter_kwargs: additional keyword arguments to be passed to Delay_Filter.run_filter()
+    '''
+    hd = io.HERAData(infilename, filetype='uvh5')
+    if calfile is not None:
+        calfile = io.HERACal(calfile)
+        calfile.read()
+    # loop over all baselines in increments of Nbls
+    for i in range(0, len(hd.bls), Nbls):
+        df = Delay_Filter()
+        df.load_data(hd, input_cal=calfile, bls=hd.bls[i:i + Nbls])
+        df.run_filter(**filter_kwargs)
+        df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                               filled_outfilename=filled_outfilename, partial_write=True,
+                               clobber=clobber, add_to_history=add_to_history)
+        df.hd.data_array = None  # this forces a reload in the next loop
 
 
 def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
-    a.add_argument("infile", type=str, help="path to visibility data file to delay filter")
-    a.add_argument("outfile", nargs='?', default=None, type=str, help="path to new visibility results file. "
-                   "Note that if outfile is not supplied, the parser defaults to None, but delay_filter_run.py "
-                   "will override this default, and instead sets outfile to infile + 'D'.")
-    a.add_argument("--filetype", type=str, default='miriad', help='filetype of input and output data files (default "miriad")')
-    a.add_argument("--write_model", default=False, action="store_true", help="Write the low-pass filtered CLEAN model rather"
-                   "than the high-pass filtered residual or the flag-filled data.")
-    a.add_argument("--write_filled", default=False, action='store_true', help='Write the original data with its flags filled with '
-                   "the CLEAN model instead of residual or CLEAN model.")
-    a.add_argument("--write_all", default=False, action='store_true', help="Write the high-pass residual, the low-pass "
-                   "CLEAN model and the flag-filled original data. The residual gets the outfile name (or default 'D' extension), "
-                   "and the model and original data get the 'M' and 'F' extension on top of the residual filename respectively.")
-    a.add_argument("--flag_nchan_low", default=0, type=int, help="Number of channels to flag on lower band edge before filtering.")
-    a.add_argument("--flag_nchan_high", default=0, type=int, help="Number of channels to flag on upper band edge before filtering.")
+    a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
+    a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
+    a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
+    a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
+    a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
+    a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
+    a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the CLEAN model visibilities (with the same flags)")
+    a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with CLEAN models wherever possible")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
 
     filt_options = a.add_argument_group(title='Options for the delay filter')
@@ -205,6 +258,8 @@ def delay_filter_argparser():
                               see aipy.dsp.gen_window for options')
     filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    filt_options.add_argument("--flag_nchan_low", default=0, type=int, help="Number of channels to flag on lower band edge before filtering.")
+    filt_options.add_argument("--flag_nchan_high", default=0, type=int, help="Number of channels to flag on upper band edge before filtering.")
     filt_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     filt_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
 

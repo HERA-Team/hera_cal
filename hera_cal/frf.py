@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# Copyright 2018 the HERA Project
+# Licensed under the MIT License
+
 import numpy as np
 from hera_cal import io, utils, datacontainer
 from pyuvdata import UVData
@@ -66,7 +70,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
 
     extra_arrays : dict, optional
         Dictionary of extra 1D arrays with shape=(Ntimes,) to push through
-        averaging windows. For example, a time_array, zenith_ra array, or
+        averaging windows. For example, a time_array, or
         anything that has length Ntimes.
 
     verbose : bool, optional
@@ -370,10 +374,6 @@ class FRFilter(object):
             new_hd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
             new_hd.time_array[blts_inds] = times
             new_hd.lst_array[blts_inds] = lsts
-            new_hd.zenith_ra[blts_inds] = utils.JD2RA(times, lon)
-            new_hd.zenith_ra_degrees[blts_inds] = new_hd.zenith_ra[blts_inds] * 180 / np.pi
-            new_hd.zenith_dec[blts_inds] = lat * np.pi / 180
-            new_hd.zenith_dec_degrees[blts_inds] = lat
 
         # write data
         if filetype == 'miriad':
