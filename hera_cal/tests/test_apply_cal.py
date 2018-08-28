@@ -23,7 +23,7 @@ import warnings
 
 class Test_Update_Cal(unittest.TestCase):
 
-    def test_recalibrate_in_place(self):
+    def test_calibrate_in_place(self):
         np.random.seed(21)
         vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
@@ -37,7 +37,7 @@ class Test_Update_Cal(unittest.TestCase):
         g_old = {(0, 'Jxx'): g0_old, (1, 'Jxx'): g1_old}
         cal_flags = {(0, 'Jxx'): np.random.randn(10, 10) > 0, (1, 'Jxx'): np.random.randn(10, 10) > 0}
         # test standard operation
-        ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='divide')
+        ac.calibrate_in_place(dc, g_new, flags, cal_flags, old_gains=g_old, gain_convention='divide')
         for i in range(10):
             for j in range(10):
                 self.assertAlmostEqual(dc[(0, 1, 'xx')][i, j], vis[i, j] * g0_old[i, j] * np.conj(g1_old[i, j]) / g0_new[i, j] / np.conj(g1_new[i, j]))
@@ -49,7 +49,7 @@ class Test_Update_Cal(unittest.TestCase):
         # test without old cal
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
-        ac.recalibrate_in_place(dc, flags, g_new, cal_flags, gain_convention='divide')
+        ac.calibrate_in_place(dc, g_new, flags, cal_flags, gain_convention='divide')
         for i in range(10):
             for j in range(10):
                 self.assertAlmostEqual(dc[(0, 1, 'xx')][i, j], vis[i, j] / g0_new[i, j] / np.conj(g1_new[i, j]))
@@ -57,7 +57,7 @@ class Test_Update_Cal(unittest.TestCase):
         # test multiply
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
-        ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='multiply')
+        ac.calibrate_in_place(dc, g_new, flags, cal_flags, old_gains=g_old, gain_convention='multiply')
         for i in range(10):
             for j in range(10):
                 self.assertAlmostEqual(dc[(0, 1, 'xx')][i, j], vis[i, j] / g0_old[i, j] / np.conj(g1_old[i, j]) * g0_new[i, j] * np.conj(g1_new[i, j]))
@@ -65,25 +65,25 @@ class Test_Update_Cal(unittest.TestCase):
         # test flag propagation when missing antennas in gains
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
-        ac.recalibrate_in_place(dc, flags, {}, cal_flags, gain_convention='divide')
+        ac.calibrate_in_place(dc, {}, flags, cal_flags, gain_convention='divide')
         np.testing.assert_array_equal(flags[(0, 1, 'xx')], True)
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
-        ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains={}, gain_convention='divide')
+        ac.calibrate_in_place(dc, g_new, flags, cal_flags, old_gains={}, gain_convention='divide')
         np.testing.assert_array_equal(flags[(0, 1, 'xx')], True)
 
         # test error
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         with self.assertRaises(KeyError):
-            ac.recalibrate_in_place(dc, flags, g_new, cal_flags, old_gains=g_old, gain_convention='blah')
+            ac.calibrate_in_place(dc, g_new, flags, cal_flags, old_gains=g_old, gain_convention='blah')
 
         # test w/ data weights
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         wgts = DataContainer(dict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
         del g_new[(0, 'Jxx')]
-        ac.recalibrate_in_place(dc, wgts, g_new, cal_flags, gain_convention='divide')
+        ac.calibrate_in_place(dc, g_new, wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
         self.assertAlmostEqual(wgts[(0, 1, 'xx')].max(), 0.0)
 
     def test_apply_cal(self):

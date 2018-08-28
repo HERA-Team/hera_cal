@@ -47,7 +47,7 @@ class Delay_Filter():
         # optionally apply calibration and calibration flags
         if input_cal is not None:
             g, f = io.load_cal(input_cal)
-            apply_cal.recalibrate_in_place(self.data, self.flags, g, f)
+            apply_cal.calibrate_in_place(self.data, g, data_flags=self.flags, cal_flags=f)
 
         # save metadata
         self.antpos = deepcopy(self.data.antpos)

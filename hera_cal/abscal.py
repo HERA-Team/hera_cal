@@ -1253,7 +1253,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             AC.delay_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
             result_gains = merge_gains((AC.ant_dly_gain, AC.ant_dly_phi_gain))
             cal_flags = odict(map(lambda k: (k, np.zeros_like(result_gains[k], np.bool)), result_gains.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, result_gains, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, result_gains, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_dly_gain)
             merged_gains.append(AC.ant_dly_phi_gain)
             merged_gains = [merge_gains(merged_gains)]
@@ -1265,14 +1265,14 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                 raise ValueError("can't run avg_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(avg=True, verbose=verbose)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.ant_phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_phi_gain)
             merged_gains = [merge_gains(merged_gains)]
 
         if avg_dly_slope_cal:
             AC.delay_slope_lincal(verbose=verbose, time_avg=True, window=window, edge_cut=edge_cut)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.dly_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
             else:
@@ -1282,7 +1282,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if delay_slope_cal:
             AC.delay_slope_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.dly_slope_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.dly_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
             else:
@@ -1295,7 +1295,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             for i in range(phs_max_iter):
                 AC.global_phase_slope_logcal(tol=tol, edge_cut=edge_cut, verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.phs_slope_gain, cal_flags, gain_convention='divide')
+                apply_cal.calibrate_in_place(AC.data, AC.phs_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
                 if all_antenna_gains:
                     merged_gains.append(AC.custom_phs_slope_gain(total_gain_keys, total_data_antpos))
                 else:
@@ -1316,7 +1316,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         if abs_amp_cal:
             AC.abs_amp_logcal(verbose=verbose)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.abs_eta_gain[k], np.bool)), AC.abs_eta_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.abs_eta_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.abs_eta_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_abs_eta_gain(total_gain_keys))
             else:
@@ -1329,7 +1329,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             for i in range(phs_max_iter):
                 AC.TT_phs_logcal(verbose=verbose)
                 cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.TT_Phi_gain[k], np.bool)), AC.TT_Phi_gain.keys()))
-                apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.TT_Phi_gain, cal_flags, gain_convention='divide')
+                apply_cal.calibrate_in_place(AC.data, AC.TT_Phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
                 if all_antenna_gains:
                     merged_gains.append(AC.custom_TT_Phi_gain(total_gain_keys, total_data_antpos))
                     merged_gains.append(AC.custom_abs_psi_gain(total_gain_keys))
@@ -1354,7 +1354,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                 raise ValueError("can't run gen_amp_cal when all_antenna_gains is True")
             AC.amp_logcal(verbose=verbose)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_eta_gain[k], np.bool)), AC.ant_eta_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_eta_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.ant_eta_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_eta_gain)
             merged_gains = [merge_gains(merged_gains)]
 
@@ -1365,7 +1365,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
                 raise ValueError("can't run gen_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(verbose=verbose)
             cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
-            apply_cal.recalibrate_in_place(AC.data, AC.wgts, AC.ant_phi_gain, cal_flags, gain_convention='divide')
+            apply_cal.calibrate_in_place(AC.data, AC.ant_phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_phi_gain)
             merged_gains = [merge_gains(merged_gains)]
 
