@@ -134,8 +134,8 @@ class Test_lstbin:
         # basic execution
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False)
-        output_lst_file = "./zen.XX.LST.0.20124.uv"
-        output_std_file = "./zen.XX.STD.0.20124.uv"
+        output_lst_file = "./zen.xx.LST.0.20124.uv"
+        output_std_file = "./zen.xx.STD.0.20124.uv"
         nt.assert_true(os.path.exists(output_lst_file))
         nt.assert_true(os.path.exists(output_std_file))
         shutil.rmtree(output_lst_file)
@@ -143,8 +143,8 @@ class Test_lstbin:
         # test rephase
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False, rephase=True)
-        output_lst_file = "./zen.XX.LST.0.20124.uv"
-        output_std_file = "./zen.XX.STD.0.20124.uv"
+        output_lst_file = "./zen.xx.LST.0.20124.uv"
+        output_std_file = "./zen.xx.STD.0.20124.uv"
         nt.assert_true(os.path.exists(output_lst_file))
         nt.assert_true(os.path.exists(output_std_file))
         shutil.rmtree(output_lst_file)
@@ -155,12 +155,12 @@ class Test_lstbin:
         # test data_list is empty
         hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
                                 verbose=False)
-        output_lst_files = ['./zen.XX.LST.0.20124.uv', './zen.XX.LST.0.31870.uv', './zen.XX.LST.0.36568.uv']
+        output_lst_files = ['./zen.xx.LST.0.20124.uv', './zen.xx.LST.0.31870.uv', './zen.xx.LST.0.36568.uv']
         nt.assert_true(os.path.exists(output_lst_files[0]))
         nt.assert_true(os.path.exists(output_lst_files[1]))
         nt.assert_true(os.path.exists(output_lst_files[2]))
-        output_files = np.concatenate([glob.glob("./zen.XX.LST*"),
-                                       glob.glob("./zen.XX.STD*")])
+        output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
+                                       glob.glob("./zen.xx.STD*")])
         for of in output_files:
             if os.path.exists(of):
                 shutil.rmtree(of)
