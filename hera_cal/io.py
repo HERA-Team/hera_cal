@@ -739,7 +739,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
     lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
 
-    # configure integration time
+    # configure integration time, converting from days (the unit of time_array) to seconds (the unit of integration_time)
     if integration_time is None:
         integration_time = np.ones_like(time_array, dtype=np.float) * np.median(np.diff(time_array)) * 24 * 3600.
 

@@ -673,12 +673,13 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     # get metadata from the zeroth data file
     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
 
-    # get frequency, time and antenna position information
+    # get frequency, time (converting times in days to integration times in seconds) and antenna position information
     freq_array = copy.copy(f)
     antpos = copy.deepcopy(ap)
     start_jd = np.floor(t)[0]
     kwargs['start_jd'] = start_jd
     integration_time = np.median(np.diff(t)) * 24 * 3600.
+    assert np.all(np.diff(t) == np.median(np.diff(t))), 'All integrations must be of equal length (BDA not supported).'
     del d, fl, ap, a, f, t, l, p
     garbage_collector.collect()
 
