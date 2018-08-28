@@ -13,7 +13,8 @@ from hera_cal.datacontainer import DataContainer
 from hera_cal import utils
 
 
-def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None, gain_convention='divide'):
+def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None, 
+                       gain_convention='divide', flags_are_wgts=False):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in new calibration
     solutions, and updating flags from those calibration solutions. Previously flagged data is modified, but
     left flagged. Missing antennas from either the new gains, the cal_flags, or (if it's not None) the old
@@ -22,9 +23,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
         new_gains: Dictionary of complex calibration gains to apply with keys like (1,'x')
-        data_flags: DataContainer containing data flags. This is modified in place if its not None. Can 
-            also be fed as a data weights dictionary with np.float dtype. In this case, wgts of 0 are
-            treated as flagged data and non-zero wgts are unflagged data.
+        data_flags: DataContainer containing data flags. This is modified in place if its not None. 
         cal_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
             if either antenna in a visibility is flagged. Any missing antennas are assumed to be totally
             flagged, so leaving this as None will result in input data_flags becoming totally flagged.
@@ -32,6 +31,8 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
             Default of None implies that the data is raw (i.e. uncalibrated).
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
+        flags_are_weights: bool, if True, treat data_flags as weights where 0s represent flags and
+            non-zero weights are unflagged data.
     '''
     exponent = {'divide': 1, 'multiply': -1}[gain_convention]
     # loop over baselines in data
@@ -60,31 +61,27 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                 flag_all = True
 
         if data_flags is not None:
-            # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
-            if np.all([np.issubdtype(df.dtype, np.bool_) for df in data_flags.values()]):
-                try:
-                    data_flags[(i, j, pol)] += cal_flags[(i, ap1)]
-                    data_flags[(i, j, pol)] += cal_flags[(j, ap2)]
-                except KeyError:
-                    flag_all = True
             # update data_flags in the case where flags are weights, flag all if cal_flags are missing
-            elif np.all([np.issubdtype(df.dtype, np.floating) for df in data_flags.values()]):
+            if flags_are_wgts: 
                 try:
                     data_flags[(i, j, pol)] *= (~cal_flags[(i, ap1)]).astype(np.float)
                     data_flags[(i, j, pol)] *= (~cal_flags[(j, ap2)]).astype(np.float)
                 except KeyError:
                     flag_all = True
+            # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
             else:
-                raise ValueError("didn't recognize dtype of data_flags")
+                try:
+                    data_flags[(i, j, pol)] += cal_flags[(i, ap1)]
+                    data_flags[(i, j, pol)] += cal_flags[(j, ap2)]
+                except KeyError:
+                    flag_all = True
 
             # if the flag object is given, update it for this baseline to be totally flagged
             if flag_all:
-                if np.all([np.issubdtype(df.dtype, np.bool_) for df in data_flags.values()]):  # boolean flags
-                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
-                elif np.all([np.issubdtype(df.dtype, np.floating) for df in data_flags.values()]):  # weights
+                if flags_are_wgts:
                     data_flags[(i, j, pol)] = np.zeros_like(data[(i, j, pol)], dtype=np.float)
                 else:
-                    raise ValueError("didn't recognize dtype of data_flags")
+                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None,

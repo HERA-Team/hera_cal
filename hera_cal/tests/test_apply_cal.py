@@ -83,7 +83,7 @@ class Test_Update_Cal(unittest.TestCase):
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         wgts = DataContainer(dict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
         del g_new[(0, 'jxx')]
-        ac.calibrate_in_place(dc, g_new, wgts, cal_flags, gain_convention='divide')
+        ac.calibrate_in_place(dc, g_new, wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
         self.assertAlmostEqual(wgts[(0, 1, 'xx')].max(), 0.0)
 
     def test_apply_cal(self):
