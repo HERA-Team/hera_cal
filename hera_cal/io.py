@@ -700,10 +700,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     telescope_location : type=ndarray, telescope location in xyz in ITRF (earth-centered frame).
 
-    integration_time : type=float, integration duration in seconds for data_array. This does not necessarily have
+    integration_time : type=float or ndarray, integration duration in seconds for data_array. This does not necessarily have
         to be equal to the diff(time_array): for the case of LST-binning, this is not the duration of the LST-bin
-        but the integration time of the pre-binned data.
-
+        but the integration time of the pre-binned data. If None, will use diff(time_array) by default.
+        
     kwargs : type=dictionary, additional parameters to set in UVData object.
 
     Output:
@@ -722,8 +722,6 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
             raise AttributeError("if time_array is not fed, start_jd must be fed")
         time_array = hc.utils.LST2JD(lst_array, start_jd, longitude=longitude)
     Ntimes = len(time_array)
-    if integration_time is None:
-        integration_time = np.median(np.diff(time_array)) * 24 * 3600.
 
     # get freqs
     Nfreqs = len(freq_array)
@@ -740,6 +738,10 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # reconfigure time_array and lst_array
     time_array = np.repeat(time_array[np.newaxis], Nbls, axis=0).ravel()
     lst_array = np.repeat(lst_array[np.newaxis], Nbls, axis=0).ravel()
+
+    # configure integration time
+    if integration_time is None:
+        integration_time = np.ones_like(time_array, dtype=np.float) * np.median(np.diff(time_array)) * 24 * 3600.
 
     # get data array
     data_array = np.moveaxis(map(lambda p: map(lambda ap: data[str(p)][ap], antpairs), pols), 0, -1)

@@ -110,8 +110,8 @@ class AbsCal(object):
 
         antpos : type=dictionary, dict of antenna position vectors in ENU (topo) frame in meters.
                  origin of coordinates does not matter, but preferably are centered in the array.
-                 keys are antenna integers and values are 2D ndarray position vectors,
-                 with [0] index containing East-West distance, and [1] index North-South distance.
+                 keys are antenna integers and values are ndarray position vectors,
+                 containing [East, North, Up] coordinates.
                  Can be generated from a pyuvdata.UVData instance via
                  ----
                  #!/usr/bin/env python

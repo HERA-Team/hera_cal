@@ -168,7 +168,7 @@ class Test_lstbin:
         # test smaller ntimes file output, sweeping through f_select
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True,
                                 verbose=False, vis_units='Jy')
-        output_files = sorted(glob.glob("./zen.XX.LST*") + glob.glob("./zen.XX.STD*"))
+        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
         # load a file
         uvd1 = UVData()
         uvd1.read_miriad(output_files[1])
@@ -183,7 +183,7 @@ class Test_lstbin:
         # test output_file_select
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=1,
                                 verbose=False, vis_units='Jy')
-        output_files = sorted(glob.glob("./zen.XX.LST*") + glob.glob("./zen.XX.STD*"))
+        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
         # load a file
         uvd2 = UVData()
         uvd2.read_miriad(output_files[0])
@@ -196,13 +196,13 @@ class Test_lstbin:
         # assert bad output_file_select produces no files
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=100,
                                 verbose=False)
-        output_files = sorted(glob.glob("./zen.XX.LST*") + glob.glob("./zen.XX.STD*"))
+        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
 
         # test fixed start
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False, lst_start=0.18, fixed_lst_start=True)
-        output_lst_file = "./zen.XX.LST.0.17932.uv"
-        output_std_file = "./zen.XX.STD.0.17932.uv"
+        output_lst_file = "./zen.xx.LST.0.17932.uv"
+        output_std_file = "./zen.xx.STD.0.17932.uv"
         nt.assert_true(os.path.exists(output_lst_file))
         nt.assert_true(os.path.exists(output_std_file))
         shutil.rmtree(output_lst_file)
