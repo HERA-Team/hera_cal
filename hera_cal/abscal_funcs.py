@@ -1676,19 +1676,11 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
 
     # write to file
     if write_miriad:
-        echo("saving {}".format(output_fname), type=1, verbose=verbose)
-        uvd.data_array = uvd_data
-        uvd.flag_array = uvd_flags
-        uvd.time_array = uvd.time_array[blts_select]
-        uvd.lst_array = uvd.lst_array[blts_select]
-        uvd.baseline_array = uvd.baseline_array[blts_select]
-        uvd.ant_1_array = uvd_bls[:, 0]
-        uvd.ant_2_array = uvd_bls[:, 1]
-        uvd.uvw_array = uvd.uvw_array[blts_select, :]
-        uvd.nsample_array = np.ones_like(uvd.data_array, dtype=np.float)
-        uvd.Nbls = Nbls
-        uvd.Nblts = Nblts
-        uvd.write_miriad(output_fname, clobber=True)
+        raise NotImplementedError("Correct averaging of integration_time and nsample not yet implemented")
+        # echo("saving {}".format(output_fname), type=1, verbose=verbose)
+        # TODO: Perform the proper summing of integration_time and nsample in
+        # avg_data_across_red_bls given wgts and input arrays and use io.write_vis
+        # to write to file
 
     # output data
     if output_data:

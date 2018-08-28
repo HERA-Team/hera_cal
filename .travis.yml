@@ -26,7 +26,7 @@ install:
   - source activate test-environment
   - conda install -c conda-forge aipy pycodestyle
   - pip install coveralls
-  - pip install git+https://github.com/HERA-Team/pyuvdata.git@v1.3
+  - pip install git+https://github.com/HERA-Team/pyuvdata.git@parse_polstr
   - pip install git+https://github.com/HERA-Team/omnical.git
   - pip install git+https://github.com/HERA-Team/linsolve.git
   - pip install git+https://github.com/HERA-Team/hera_qm.git
