@@ -16,28 +16,24 @@ import copy
 from scipy.interpolate import interp1d
 from collections import OrderedDict as odict
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
-from pyuvdata.utils import POLSTR_LIST, JSTR_LIST, CPOL_DICT, POLSTR_DICT
-# POLSTR_LIST = ['YX', 'XY', 'YY', 'XX', 'LR', 'RL', 'LL', 'RR', '', 'pI', 'pQ', 'pU', 'pV']
-# JSTR_LIST = ['jyx', 'jxy', 'jyy', 'jxx', 'jlr', 'jrl', 'jll', 'jrr']
+from pyuvdata.utils import POL_STR2NUM_DICT
 
-
-_VISPOLS = [pol.upper() for pol in POLSTR_LIST]
-_VISPOLS = [pol for pol in _VISPOLS if POLSTR_DICT.has_key(pol) and polstr2num(pol) < 0]
-SPLIT_POL = {pol:(jnum2str(jstr2num(pol[0])), jnum2str(jstr2num(pol[1]))) for pol in _VISPOLS}
-JOIN_POL = {v:k for k,v in SPLIT_POL.items()}
+_VISPOLS = [pol for pol in POL_STR2NUM_DICT.keys() if polstr2num(pol) < 0]
+SPLIT_POL = {pol: (jnum2str(jstr2num(pol[0])), jnum2str(jstr2num(pol[1]))) for pol in _VISPOLS}
+JOIN_POL = {v: k for k,v in SPLIT_POL.items()}
 
 def split_pol(pol):
     '''Splits visibility polarization string (pyuvdata's polstr) into 
     antenna polarization strings (pyuvdata's jstr).'''
-    pol = pol.upper()
-    assert(pol in SPLIT_POL) # Cannot split Stokes or pseudo-Stokes polarization
+    pol = pol.lower()
+    assert pol in SPLIT_POL, 'Cannot split Stokes or pseudo-Stokes polarization'
     return SPLIT_POL[pol]
 
 def join_pol(p1,p2):
     '''Joins antenna polarization strings (pyuvdata's jstr) into
     visibility polarization string (pyuvdata's polstr).'''
     '''Joins antenna polarizations into visibility polarization string.'''
-    return JOIN_POL[(jnum2str(jstr2num(p1)),jnum2str(jstr2num(p2)))]
+    return JOIN_POL[(jnum2str(jstr2num(p1)), jnum2str(jstr2num(p2)))]
 
 def split_bl(bl):
     '''Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj.'''
