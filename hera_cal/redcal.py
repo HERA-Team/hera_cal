@@ -294,7 +294,8 @@ def get_gains_and_vis_from_sol(sol):
 class OmnicalSolver(linsolve.LinProductSolver):
     def __init__(self, data, sol0, wgts={}, gain=.3, **kwargs):
         """Set up a nonlinear system of equations of the form g_i * g_j.conj() * V_mdl = V_ij
-        to linearize via the Omnical algorithm from Liu et al. 2010.
+        to linearize via the Omnical algorithm described in HERA Memo 50 
+        (scripts/notebook/omnical_convergence.ipynb).
 
         Args:
             data: Dictionary that maps nonlinear product equations, written as valid python-interpetable 
@@ -308,12 +309,11 @@ class OmnicalSolver(linsolve.LinProductSolver):
             wgts: Dictionary that maps equation strings from data to real weights to apply to each 
                 equation. Weights are treated as 1/sigma^2. All equations in the data must have a weight 
                 if wgts is not the default, {}, which means all 1.0s.
-            gain: The fractional step made toward the new solution each iteration.
+            gain: The fractional step made toward the new solution each iteration.  Default is 0.3.
+                Values in the range 0.1 to 0.5 are generally safe.  Increasing values trade speed
+                for stability.
             **kwargs: keyword arguments of constants (python variables in keys of data that 
-                are not to be solved for)
-
-        Returns:
-            None
+                are not to be solved for) which are passed to linsolve.LinProductSolver.
         """
         linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, **kwargs)
         self.gain = np.float32(gain)  # float32 to avoid accidentally promoting data to doubles.
@@ -329,22 +329,22 @@ class OmnicalSolver(linsolve.LinProductSolver):
 
     def solve_iteratively(self, conv_crit=1e-10, maxiter=50, check_every=4, check_after=1, verbose=False):
         """Repeatedly solves and updates solution until convergence or maxiter is reached. 
-        Returns a meta object containing the number of iterations, chisq, and convergence criterion.
+        Returns a meta-data about the solution and the solution itself.
 
         Args:
             conv_crit: A convergence criterion (default 1e-10) below which to stop iterating. 
                 Converegence is measured L2-norm of the change in the solution of all the variables
                 divided by the L2-norm of the solution itself.
             maxiter: An integer maximum number of iterations to perform before quitting. Default 50.
-            check_every: Compute convergence every Nth iteration (saves computation).  Default 4.
-            check_after: Start computing convergence only after N iterations.  Default 1.
+            check_every: Compute convergence and updates weights every Nth iteration (saves computation). Default 4.
+            check_after: Start computing convergence and updating weights after the first N iterations.  Default 1.
 
         Returns: meta, sol
             meta: a dictionary with metadata about the solution, including
-                iter: the number of iterations taken to reach convergence (or maxiter)
-                chisq: the chi^2 of the solution produced by the final iteration
-                conv_crit: the convergence criterion evaluated at the final iteration
-            sol: a dictionary of complex solutions with variables as keys
+                iter: the number of iterations taken to reach convergence (or maxiter), with dimensions of the data.
+                chisq: the chi^2 of the solution produced by the final iteration, with dimensions of the data.
+                conv_crit: the convergence criterion evaluated at the final iteration, with dimensions of the data.
+            sol: a dictionary of complex solutions with variables as keys, with dimensions of the data.
         """
         sol = self.sol0
         terms = [(linsolve.get_name(gi), linsolve.get_name(gj), linsolve.get_name(uij)) 
@@ -450,7 +450,8 @@ class RedundantCalibrator:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             detrend_phs: takes out average phase, useful for logcal
-            **kwargs: other keyword arguments passed into the solver for use by linsolve
+            **kwargs: other keyword arguments passed into the solver for use by linsolve, e.g.
+                sparse (use sparse matrices to represent system of equations).
 
         Returns:
             solver: instantiated solver with redcal equations and weights
@@ -513,6 +514,9 @@ class RedundantCalibrator:
                 Missing gains are treated as 1.0s.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
+            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
+                Suggest using 'default' unless solver is having stability (convergence) problems.
+                More documentation of modes in linsolve.LinearSolver.solve().
 
         Returns:
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
@@ -540,6 +544,9 @@ class RedundantCalibrator:
             conv_crit: maximum allowed relative change in solutions to be considered converged
             max_iter: maximum number of lincal iterations allowed before it gives up
             verbose: print stuff
+            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
+                Suggest using 'default' unless solver is having stability (convergence) problems.
+                More documentation of modes in linsolve.LinearSolver.solve().
 
         Returns:
             meta: dictionary of information about the convergence and chi^2 of the solution
@@ -565,6 +572,9 @@ class RedundantCalibrator:
             max_iter: maximum number of lincal iterations allowed before it gives up
             check_every: Compute convergence every Nth iteration (saves computation).  Default 4.
             check_after: Start computing convergence only after N iterations.  Default 1.
+            gain: The fractional step made toward the new solution each iteration.  Default is 0.3.
+                Values in the range 0.1 to 0.5 are generally safe.  Increasing values trade speed
+                for stability.
 
         Returns:
             meta: dictionary of information about the convergence and chi^2 of the solution
