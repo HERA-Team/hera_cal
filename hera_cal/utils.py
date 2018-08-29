@@ -69,14 +69,19 @@ def reverse_bl(bl):
         return (j, i, conj_pol(_comply_vispol(bl[2])))
 
 def comply_bl(bl):
-    '''Translates an input (i,j,pol) baseline to ensure pol is
-    compliant with pyuvdata and hera_cal.'''
-    i, j, p = bl
-    return (i, j, _comply_vispol(p))
+    '''Translates an input (i,j,pol) baseline to ensure pol is compliant with
+    pyuvdata and hera_cal. Inputs of length 2, e.g. (i,j) are unmodified.'''
+    if len(bl) == 2:
+        return bl
+    else:
+        i, j, p = bl
+        return (i, j, _comply_vispol(p))
 
 def make_bl(*args):
     '''Create an (i,j,pol) baseline key that is compliant with pyuvdata
     and hera_cal.  Accepts (bl, pol) or (i, j, pol) as input.'''
+    if len(args) == 1:
+        args = args[0]  # this handles the case where the input is a tuple
     if len(args) == 2:
         (i, j), pol = args
     else:
