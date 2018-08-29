@@ -507,6 +507,72 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
+    def firstcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
+        """Solves for a per-antenna delay by fitting a line to the phase difference between
+        nominally redundant measurements.
+
+        Args:
+            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+            sol0: dictionary that includes all starting (e.g. firstcal) gains in the
+                {(ant,antpol): np.array} format. These are divided out of the data before
+                logcal and then multiplied back into the returned gains in the solution.
+                Default empty dictionary does nothing.
+            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
+            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
+
+        Returns:
+            sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
+                and {(ind1,ind2,pol): np.array} formats respectively
+        """
+        fc_data = divide_by_gains(data, sol0, target_type='vis')
+        dlys = np.fft.fftfreq(fqs.size, fqs[1]-fqs[0])
+        WINDOW = 'hamming'
+        window = aipy.dsp.gen_window(fqs.size, window=WINDOW)
+
+        taus = {}
+        for bls in reds:
+          for i,bl1 in enumerate(bls):
+            try: d1 = data[bl1][POL]
+            except(KeyError): d1 = data[bl1[::-1]][POL[::-1]].conj()
+            for bl2 in bls[i+1:]:
+                try: d2 = data[bl2][POL]
+                except(KeyError): d2 = data[bl2[::-1]][POL[::-1]].conj()
+                d12 = d1 * np.conj(d2)
+                ad12 = np.abs(d12)
+                d12 = d12 / np.where(ad12 > 0, ad12, 1) 
+                _d12 = np.abs(np.fft.fft(window*d12, axis=-1))**2
+                mxs = np.argmax(_d12, axis=-1)
+                mxs = np.array([[m-1,m,m+1] for m in mxs]) % fqs.size
+                inds = np.arange(_d12.shape[0],dtype=int).reshape(-1,1)
+                taus[(bl1,bl2)] = np.sum(dlys[mxs]*_d12[inds,mxs], axis=-1) / np.sum(_d12[inds,mxs], axis=-1)
+                dd12 = d12*np.exp(-2j*np.pi*taus[(bl1,bl2)].reshape(-1,1)*fqs.reshape(1,-1))
+                for cnt in xrange(2):        
+                    taus[(bl1,bl2)] += np.median(np.angle(dd12)/(2*np.pi*fqs.reshape(1,-1)), axis=-1)
+                    dd12 = d12*np.exp(-2j*np.pi*taus[(bl1,bl2)].reshape(-1,1)*fqs.reshape(1,-1))
+        
+        # XXX polarizations?
+        d_ls = {}
+        for (i,j),(m,n) in taus:
+            d_ls['t%d-t%d-t%d+t%d' % (i,j,m,n)] = taus[((i,j),(m,n))]
+        ls = capo.linsolve.LinearSolver(d_ls)
+        ls = self._solver(linsolve.LinearSolver, d_ls, wgts=wgts, sparse=sparse)
+        sol = ls.solve(mode=mode)
+        sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
+        for ubl_key in [k for k in sol.keys() if len(k) == 3]:
+            sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
+        sol_with_fc = multiply_by_gains(sol, sol0, target_type='gain')
+        return sol_with_fc
+        sol = ls.solve()
+        so
+        g0 = {'y':{}}
+        for k in sol:
+            g0['y'][int(k[1:])] = np.exp(2j*np.pi*sol[k].reshape(-1,1)*fqs.reshape(1,-1))
+            print k, np.median(sol[k])
+            plt.plot(sol[k] - np.median(sol[k]), label=k)
+        plt.legend()
+        plt.show()
+
+
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
 
