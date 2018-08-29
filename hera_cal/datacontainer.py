@@ -215,7 +215,7 @@ class DataContainer:
         '''Returns True if the key is in the data, abstracting away case and baseline order.'''
         try:
             return comply_bl(key) in self.keys() or reverse_bl(key) in self.keys()
-        except:  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
+        except(BaseException):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
             return False
 
     def get_data(self, *args):
