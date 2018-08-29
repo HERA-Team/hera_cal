@@ -20,7 +20,8 @@ from pyuvdata.utils import POL_STR2NUM_DICT
 
 _VISPOLS = [pol for pol in POL_STR2NUM_DICT.keys() if polstr2num(pol) < 0]
 SPLIT_POL = {pol: (jnum2str(jstr2num(pol[0])), jnum2str(jstr2num(pol[1]))) for pol in _VISPOLS}
-JOIN_POL = {v: k for k,v in SPLIT_POL.items()}
+JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
+
 
 def split_pol(pol):
     '''Splits visibility polarization string (pyuvdata's polstr) into 
@@ -29,25 +30,29 @@ def split_pol(pol):
     assert pol in SPLIT_POL, 'Cannot split Stokes or pseudo-Stokes polarization'
     return SPLIT_POL[pol]
 
-def join_pol(p1,p2):
+
+def join_pol(p1, p2):
     '''Joins antenna polarization strings (pyuvdata's jstr) into
     visibility polarization string (pyuvdata's polstr).'''
     '''Joins antenna polarizations into visibility polarization string.'''
     return JOIN_POL[(jnum2str(jstr2num(p1)), jnum2str(jstr2num(p2)))]
 
+
 def split_bl(bl):
     '''Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj.'''
-    pi,pj = split_pol(bl[2])
-    return ((bl[0],pi),(bl[1],pj))
+    pi, pj = split_pol(bl[2])
+    return ((bl[0], pi), (bl[1], pj))
 
-def join_bl(ai,aj):
+
+def join_bl(ai, aj):
     '''Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key.'''
-    return (ai[0], aj[0], join_pol(ai[1],aj[1]))
+    return (ai[0], aj[0], join_pol(ai[1], aj[1]))
+
 
 def reverse_bl(bl):
     '''Reverses a (i,j,pol) baseline key to make (j,i,pol[::-1])'''
-    i,j = bl[:2]
-    return (j,i,conj_pol(bl[2]))
+    i, j = bl[:2]
+    return (j, i, conj_pol(bl[2]))
 
 
 class AntennaArray(aipy.pol.AntennaArray):
