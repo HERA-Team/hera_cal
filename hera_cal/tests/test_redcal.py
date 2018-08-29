@@ -157,12 +157,12 @@ class TestMethods(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         # exclude ants
         r = om.filter_reds(reds, ex_ants=[0, 4])
-        self.assertEqual(r, [[(1, 2, 'xx'), (2, 3, 'xx'), (5, 6, 'xx')], [(1, 3, 'xx'), (3, 5, 'xx')], [(2, 5, 'xx'), (3, 6, 'xx')], [(1, 5, 'xx'), (2, 6, 'xx')]])
+        self.assertEqual(r, [[(1, 2, 'xx'), (2, 3, 'xx'), (5, 6, 'xx')], [(1, 3, 'xx'), (3, 5, 'xx')], [(2, 5, 'xx'), (3, 6, 'xx')], [(1, 5, 'xx'), (2, 6, 'xx')], [(1, 6, 'xx')]])
         # include ants
         r = om.filter_reds(reds, ants=[0, 1, 4, 5, 6])
-        self.assertEqual(r, [[(0, 1, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')], [(0, 4, 'xx'), (1, 5, 'xx')], [(0, 5, 'xx'), (1, 6, 'xx')]])
+        self.assertEqual(r, [[(0, 1, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')], [(4, 6, 'xx')], [(1, 4, 'xx')], [(0, 4, 'xx'), (1, 5, 'xx')], [(0, 5, 'xx'), (1, 6, 'xx')], [(0, 6, 'xx')]])
         # exclued bls
-        r = om.filter_reds(reds, ex_bls=[(0, 2), (1, 2)])
+        r = om.filter_reds(reds, ex_bls=[(0, 2), (1, 2), (0, 6)])
         self.assertEqual(r, [[(0, 1, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')], [(1, 3, 'xx'), (2, 4, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')], [(0, 3, 'xx'), (1, 4, 'xx'), (2, 5, 'xx'), (3, 6, 'xx')], [(0, 4, 'xx'), (1, 5, 'xx'), (2, 6, 'xx')], [(0, 5, 'xx'), (1, 6, 'xx')]])
         # include bls
         r = om.filter_reds(reds, bls=[(0, 1), (1, 2)])
@@ -171,7 +171,7 @@ class TestMethods(unittest.TestCase):
         r = om.filter_reds(reds, ubls=[(0, 2), (1, 4)])
         self.assertEqual(r, [[(0, 2, 'xx'), (1, 3, 'xx'), (2, 4, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')], [(0, 3, 'xx'), (1, 4, 'xx'), (2, 5, 'xx'), (3, 6, 'xx')]])
         # exclude ubls
-        r = om.filter_reds(reds, ex_ubls=[(0, 2), (1, 4), (4, 5), (0, 5), (2, 3)])
+        r = om.filter_reds(reds, ex_ubls=[(0, 2), (1, 4), (4, 5), (0, 5), (2, 3), (0, 6)])
         self.assertEqual(r, [[(0, 4, 'xx'), (1, 5, 'xx'), (2, 6, 'xx')]])
         # exclude crosspols
         # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
@@ -181,18 +181,18 @@ class TestMethods(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='1pol')
         # include pols
         r = om.filter_reds(reds, pols=['xx'])
-        self.assertEqual(r, [[(0, 1, 'xx'), (1, 2, 'xx'), (2, 3, 'xx')], [(0, 2, 'xx'), (1, 3, 'xx')]])
+        self.assertEqual(r, [[(0, 1, 'xx'), (1, 2, 'xx'), (2, 3, 'xx')], [(0, 2, 'xx'), (1, 3, 'xx')], [(0, 3, 'xx')]])
         # exclude pols
         r = om.filter_reds(reds, ex_pols=['yy'])
-        self.assertEqual(r, [[(0, 1, 'xx'), (1, 2, 'xx'), (2, 3, 'xx')], [(0, 2, 'xx'), (1, 3, 'xx')]])
+        self.assertEqual(r, [[(0, 1, 'xx'), (1, 2, 'xx'), (2, 3, 'xx')], [(0, 2, 'xx'), (1, 3, 'xx')], [(0, 3, 'xx')]])
         # exclude ants
         r = om.filter_reds(reds, ex_ants=[0])
-        self.assertEqual(r, [[(1, 2, 'xx'), (2, 3, 'xx')], [(1, 2, 'yy'), (2, 3, 'yy')]])
+        self.assertEqual(r, [[(1, 2, 'xx'), (2, 3, 'xx')], [(1, 3, 'xx')], [(1, 2, 'yy'), (2, 3, 'yy')], [(1, 3, 'yy')]])
         # include ants
         r = om.filter_reds(reds, ants=[1, 2, 3])
         r = om.filter_reds(reds, ex_ants=[0])
         # exclued bls
-        r = om.filter_reds(reds, ex_bls=[(1, 2)])
+        r = om.filter_reds(reds, ex_bls=[(1, 2), (0, 3)])
         self.assertEqual(r, [[(0, 1, 'xx'), (2, 3, 'xx')], [(0, 2, 'xx'), (1, 3, 'xx')], [(0, 1, 'yy'), (2, 3, 'yy')], [(0, 2, 'yy'), (1, 3, 'yy')]])
         # include bls
         r = om.filter_reds(reds, bls=[(0, 1), (1, 2)])
@@ -201,7 +201,7 @@ class TestMethods(unittest.TestCase):
         r = om.filter_reds(reds, ubls=[(0, 2)])
         self.assertEqual(r, [[(0, 2, 'xx'), (1, 3, 'xx')], [(0, 2, 'yy'), (1, 3, 'yy')]])
         # exclude ubls
-        r = om.filter_reds(reds, ex_ubls=[(2, 3)])
+        r = om.filter_reds(reds, ex_ubls=[(2, 3), (0, 3)])
         self.assertEqual(r, [[(0, 2, 'xx'), (1, 3, 'xx')], [(0, 2, 'yy'), (1, 3, 'yy')]])
 
     def test_add_pol_reds(self):
