@@ -6,7 +6,7 @@ import numpy as np
 import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
-from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl
+from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, comply_pol
 from hera_cal.apply_cal import calibrate_in_place
 
 
@@ -116,6 +116,8 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
     """
 
+    # pre-process to ensure pols complies w/ hera_cal polarization convention
+    pols = [comply_pol(p) for p in pols]
     def excluded(bl, pol):
         return ((bl[0], split_pol(pol)[0]) in ex_ants) or ((bl[1], split_pol(pol)[1]) in ex_ants)
 
@@ -179,6 +181,8 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     Return:
         reds: list of lists of redundant baselines in the same form as input reds.
     '''
+    # pre-processing step to ensure that reds complies with hera_cal polarization conventions
+    reds = [[(i, j, comply_pol(p)) for (i, j, p) in gp] for gp in reds]
     if pols is None:  # if no pols are provided, deduce them from the red
         pols = set(gp[0][2] for gp in reds)
     if ex_pols:
