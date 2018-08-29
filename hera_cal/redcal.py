@@ -6,20 +6,21 @@ import numpy as np
 import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
-from hera_cal.utils import split_pol, conj_pol, polnum2str, polstr2num
+from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl
 from hera_cal.apply_cal import calibrate_in_place
 
-# XXX I think this should be superceded by hera_sim
+
 def noise(size):
     """Return complex random gaussian array with given size and variance = 1."""
-
+        # XXX I think this should be superceded by hera_sim
     sig = 1. / np.sqrt(2)
     return np.random.normal(scale=sig, size=size) + 1j * np.random.normal(scale=sig, size=size)
 
 
-# XXX I think this should be superceded by hera_sim
+
 def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
     """ Simulate noise-free random but redundant (up to differing gains) visibilities.
+        # XXX I think this should be superceded by hera_sim
 
         Args:
             reds: list of lists of baseline-pol tuples where each sublist has only
@@ -98,17 +99,17 @@ def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
         return [reds[delta] for delta in orderedDeltas]
 
 
-def add_pol_reds(reds, pols=['XX'], pol_mode='1pol', ex_ants=[]):
+def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
     """ Takes positonal reds (antenna indices only, no polarizations) and converts them
     into baseline tuples with polarization, depending on pols and pol_mode specified.
 
     Args:
         reds: list of list of antenna index tuples considered redundant
-        pols: a list of polarizations e.g. ['XX', 'XY', 'YX', 'YY']
+        pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'XX'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'XX','YY')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'XX','XY','YX','YY')
+            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
+            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
         ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
 
@@ -124,23 +125,23 @@ def add_pol_reds(reds, pols=['XX'], pol_mode='1pol', ex_ants=[]):
         if pol_mode is not '4pol_minV' or pol[0] == pol[1]:
             redsWithPols += [[bl + (pol,) for bl in bls if not excluded(bl, pol)] for bls in reds]
         elif pol_mode is '4pol_minV' and not didBothCrossPolsForMinV:
-            # Combine together e.g. 'XY' and 'YX' visibilities as redundant
+            # Combine together e.g. 'xy' and 'yx' visibilities as redundant
             redsWithPols += [([bl + (pol,) for bl in bls if not excluded(bl, pol)]
                               + [bl + (conj_pol(pol),) for bl in bls if not excluded(bl, conj_pol(pol))]) for bls in reds]
             didBothCrossPolsForMinV = True
     return redsWithPols
 
 
-def get_reds(antpos, pols=['XX'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0, low_hi=False):
+def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0, low_hi=False):
     """ Combines redcal.get_pos_reds() and redcal.add_pol_reds(). See their documentation.
 
     Args:
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
-        pols: a list of polarizations e.g. ['XX', 'XY', 'YX', 'YY']
+        pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'XX'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'XX','YY')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'XX','XY','YX','YY')
+            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
+            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
         ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
         bl_error_tol: the largest allowable difference between baselines in a redundant group
@@ -172,23 +173,26 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     Return:
         reds: list of lists of redundant baselines as antenna pair tuples.
     '''
-    if pols is None: # if no pols are provided, deduce them from the reds
+    if pols is None:  # if no pols are provided, deduce them from the reds
         pols = set(gp[0][2] for gp in reds)
     if ex_pols:
         pols = set(p for p in pols if p not in ex_pols)
     reds = [gp for gp in reds if gp[0][2] in pols]
+
     def expand_bls(gp):
-        gp3 = [(g[0],g[1],p) for g in gp if len(g) == 2 for p in pols]
+        gp3 = [(g[0], g[1], p) for g in gp if len(g) == 2 for p in pols]
         return gp3 + [g for g in gp if len(g) == 3]
-    antpols = set(sum([list(split_pol(p)) for p in pols],[]))
+    antpols = set(sum([list(split_pol(p)) for p in pols], []))
+
     def expand_ants(gp):
-        gp2 = [(g,p) for g in gp if not hasattr(g,'__len__') for p in antpols]
-        return gp2 + [g for g in gp if hasattr(g,'__len__')]
+        gp2 = [(g, p) for g in gp if not hasattr(g, '__len__') for p in antpols]
+        return gp2 + [g for g in gp if hasattr(g, '__len__')]
+
     def split_bls(bls):
         return [split_bl(bl) for bl in bls]
     if ubls or ex_ubls:
         bl2gp = {}
-        for i,gp in enumerate(reds):
+        for i, gp in enumerate(reds):
             for key in gp:
                 bl2gp[key] = bl2gp[reverse_bl(key)] = i
         if ubls:
@@ -201,29 +205,29 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             ex_ubls = set(bl2gp[bl] for bl in ex_ubls if bl in bl2gp)
         else:
             ex_ubls = set()
-        reds = [gp for i,gp in enumerate(reds) if i in ubls and i not in ex_ubls]
+        reds = [gp for i, gp in enumerate(reds) if i in ubls and i not in ex_ubls]
     if bls:
         bls = set(expand_bls(bls))
-    else: # default to set of all baselines
+    else:  # default to set of all baselines
         bls = set(key for gp in reds for key in gp)
     if ex_bls:
         ex_bls = expand_bls(ex_bls)
         bls = set(k for k in bls if k not in ex_bls and reverse_bl(k) not in ex_bls)
     if ants:
         ants = expand_ants(ants)
-        bls = set(join_bl(i,j) for i,j in split_bls(bls) if i in ants and j in ants)
+        bls = set(join_bl(i, j) for i, j in split_bls(bls) if i in ants and j in ants)
     if ex_ants:
         ex_ants = expand_ants(ex_ants)
-        bls = set(join_bl(i,j) for i,j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
-    bls.union(set(reverse_bl(k) for k in bls)) # put in reverse baselines, just in case
+        bls = set(join_bl(i, j) for i, j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
+    bls.union(set(reverse_bl(k) for k in bls))  # put in reverse baselines, just in case
     reds = [[key for key in gp if key in bls] for gp in reds]
-    return [gp for gp in reds if len(gp) > 1] # XXX do we want to filter off length one reds?
+    return [gp for gp in reds if len(gp) > 1]  # XXX do we want to filter off length one reds?
 
 
 def check_polLists_minV(polLists):
     """Given a list of unique visibility polarizations (e.g. for each red group), returns whether
-    they are all either single identical polarizations (e.g. 'XX') or both cross polarizations
-    (e.g. ['XY','YX']) so that the 4pol_minV can be assumed."""
+    they are all either single identical polarizations (e.g. 'xx') or both cross polarizations
+    (e.g. ['xy','yx']) so that the 4pol_minV can be assumed."""
 
     for polList in polLists:
         ps = list()
@@ -246,9 +250,9 @@ def parse_pol_mode(reds):
 
     Returns:
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'XX'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'XX','YY')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'XX','XY','YX','YY')
+            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
+            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
             'unrecognized_pol_mode': something else
     """
@@ -306,14 +310,14 @@ class OmnicalSolver(linsolve.LinProductSolver):
             None
         """
         linsolve.LinProductSolver.__init__(self, data, sol0, wgts=wgts, **kwargs)
-        self.gain = np.float32(gain) # float32 to avoid accidentally promoting data to doubles.
+        self.gain = np.float32(gain)  # float32 to avoid accidentally promoting data to doubles.
 
     def _get_ans0(self, sol, keys=None):
         '''Evaluate the system of equations given input sol. 
         Specify keys to evaluate only a subset of the equations.'''
         if keys is None:
             keys = self.keys
-        _sol = {k+'_':v.conj() for k,v in sol.items() if k.startswith('g')}
+        _sol = {k + '_': v.conj() for k, v in sol.items() if k.startswith('g')}
         _sol.update(sol)
         return {k: eval(k, _sol) for k in keys}
 
@@ -337,40 +341,41 @@ class OmnicalSolver(linsolve.LinProductSolver):
             sol: a dictionary of complex solutions with variables as keys
         """
         sol = self.sol0
-        terms = [(linsolve.get_name(gi),linsolve.get_name(gj),linsolve.get_name(uij)) 
-            for term in self.all_terms for (gi,gj,uij) in term]
+        terms = [(linsolve.get_name(gi), linsolve.get_name(gj), linsolve.get_name(uij)) 
+                 for term in self.all_terms for (gi, gj, uij) in term]
         dmdl_u = self._get_ans0(sol)
-        chisq = sum([np.abs(self.data[k]-dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
+        chisq = sum([np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
         # variables with '_u' are flattened and only include pixels that need updating
-        dmdl_u = {k:v.flatten() for k,v in dmdl_u.items()}
+        dmdl_u = {k: v.flatten() for k, v in dmdl_u.items()}
         # wgts_u hold the wgts the user provides.  dwgts_u is what is actually used to wgt the data
-        wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32)).flatten() for k,v in self.wgts.items()}
-        sol_u = {k:v.flatten() for k,v in sol.items()}
+        wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32)).flatten() for k, v in self.wgts.items()}
+        sol_u = {k: v.flatten() for k, v in sol.items()}
         iters = np.zeros(chisq.shape, dtype=np.int)
         conv = np.ones_like(chisq)
         update = np.where(chisq > 0)
-        for i in range(1,maxiter+1):
-            if verbose: print('Beginning iteration %d/%d' % (i,maxiter))
+        for i in range(1, maxiter + 1):
+            if verbose: 
+                print('Beginning iteration %d/%d' % (i, maxiter))
             if (i % check_every) == 1:
                 # compute data wgts: dwgts = sum(V_mdl^2 / n^2) = sum(V_mdl^2 * wgts)
                 # don't need to update data weighting with every iteration
                 dwgts_u = {k: dmdl_u[k] * dmdl_u[k].conj() * wgts_u[k] for k in self.keys}
-                sol_wgt_u = {k:0 for k in sol.keys()}
-                for k,(gi,gj,uij) in zip(self.keys, terms):
+                sol_wgt_u = {k: 0 for k in sol.keys()}
+                for k, (gi, gj, uij) in zip(self.keys, terms):
                     w = dwgts_u[k]
                     sol_wgt_u[gi] += w
                     sol_wgt_u[gj] += w
                     sol_wgt_u[uij] += w
-                dw_u = {k:v[update] * dwgts_u[k] for k,v in self.data.items()}
-            sol_sum_u = {k:0 for k in sol_u.keys()}
-            for k,(gi,gj,uij) in zip(self.keys, terms):
+                dw_u = {k: v[update] * dwgts_u[k] for k, v in self.data.items()}
+            sol_sum_u = {k: 0 for k in sol_u.keys()}
+            for k, (gi, gj, uij) in zip(self.keys, terms):
                 # compute sum(wgts * V_meas / V_mdl)
                 numerator = dw_u[k] / dmdl_u[k]
                 sol_sum_u[gi] += numerator
                 sol_sum_u[gj] += numerator.conj()
                 sol_sum_u[uij] += numerator
-            new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k]/sol_wgt_u[k]) 
-                            for k,v in sol_u.items()}
+            new_sol_u = {k: v * ((1 - self.gain) + self.gain * sol_sum_u[k] / sol_wgt_u[k]) 
+                         for k, v in sol_u.items()}
             dmdl_u = self._get_ans0(new_sol_u)
             # check if i % check_every is 0, which is purposely one less than the '1' up at the top of the loop
             if i < maxiter and (i < check_after or (i % check_every) != 0):
@@ -378,29 +383,30 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 sol_u = new_sol_u
             else:
                 # Slow branch when we compute convergence/chisq
-                new_chisq_u = sum([np.abs(v[update]-dmdl_u[k])**2 * wgts_u[k] for k,v in self.data.items()])
+                new_chisq_u = sum([np.abs(v[update] - dmdl_u[k])**2 * wgts_u[k] for k, v in self.data.items()])
                 chisq_u = chisq[update]
                 gotbetter_u = (chisq_u > new_chisq_u)
                 where_gotbetter_u = np.where(gotbetter_u)
                 update_where = tuple(u[where_gotbetter_u] for u in update)
                 chisq[update_where] = new_chisq_u[where_gotbetter_u]
                 iters[update_where] = i
-                new_sol_u = {k: np.where(gotbetter_u, v, sol_u[k]) for k,v in new_sol_u.items()}
-                deltas_u = [v-sol_u[k] for k,v in new_sol_u.items()]
-                conv_u = np.sqrt(sum([(v*v.conj()).real for v in deltas_u]) \
-                            / sum([(v*v.conj()).real for v in new_sol_u.values()]))
+                new_sol_u = {k: np.where(gotbetter_u, v, sol_u[k]) for k, v in new_sol_u.items()}
+                deltas_u = [v - sol_u[k] for k, v in new_sol_u.items()]
+                conv_u = np.sqrt(sum([(v * v.conj()).real for v in deltas_u])
+                                 / sum([(v * v.conj()).real for v in new_sol_u.values()]))
                 conv[update_where] = conv_u[where_gotbetter_u]
-                for k,v in new_sol_u.items():
+                for k, v in new_sol_u.items():
                     sol[k][update] = v
                 update_u = np.where((conv_u > conv_crit) & gotbetter_u)
                 if update_u[0].size == 0 or i == maxiter:
                     meta = {'iter': iters, 'chisq': chisq, 'conv_crit': conv}
                     return meta, sol
-                dmdl_u = {k:v[update_u] for k,v in dmdl_u.items()}
-                wgts_u = {k:v[update_u] for k,v in wgts_u.items()}
-                sol_u = {k: v[update_u] for k,v in new_sol_u.items()}
+                dmdl_u = {k: v[update_u] for k, v in dmdl_u.items()}
+                wgts_u = {k: v[update_u] for k, v in wgts_u.items()}
+                sol_u = {k: v[update_u] for k, v in new_sol_u.items()}
                 update = tuple(u[update_u] for u in update)
-            if verbose: print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
+            if verbose:
+                print('    <CHISQ> = %f, <CONV> = %f, CNT = %d', (np.mean(chisq), np.mean(conv), update[0].size))
 
 
 class RedundantCalibrator:
