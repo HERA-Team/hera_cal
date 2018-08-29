@@ -71,7 +71,7 @@ class TestMethods(unittest.TestCase):
                 np.testing.assert_almost_equal(ans0yx, ans_yx, 7)
                 np.testing.assert_almost_equal(ans0yy, ans_yy, 7)
 
-        reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yX'], pol_mode='4pol_minV')
+        reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV')
         gains, true_vis, data = om.sim_red_data(reds)
         self.assertEqual(len(gains), 20)
         self.assertEqual(len(data), 4 * (45))
@@ -221,7 +221,6 @@ class TestMethods(unittest.TestCase):
         self.assertEqual(polReds, [[(1, 2, 'xx')], [], [(1, 2, 'yx')], []])
         polReds = om.add_pol_reds(reds, pols=['xx', 'xy', 'yx', 'yy'], pol_mode='4pol_minV', ex_ants=[(2, 'Jyy')])
         self.assertEqual(polReds, [[(1, 2, 'xx')], [(1, 2, 'yx')], []])
-
 
 
 class TestRedundantCalibrator(unittest.TestCase):
