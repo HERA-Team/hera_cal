@@ -24,8 +24,8 @@ class Test_Pol_Ops(object):
         nt.assert_equal(utils.split_pol('xx'), ('Jxx', 'Jxx'))
         nt.assert_equal(utils.split_pol('xy'), ('Jxx', 'Jyy'))
         nt.assert_equal(utils.split_pol('XY'), ('Jxx', 'Jyy'))
-        nt.assert_raises(AssertionError, utils.split_pol, 'I')
-        nt.assert_raises(AssertionError, utils.split_pol, 'pV')
+        nt.assert_raises(KeyError, utils.split_pol, 'I')
+        nt.assert_raises(KeyError, utils.split_pol, 'pV')
 
     def test_join_pol(self):
         nt.assert_equal(utils.join_pol('Jxx', 'Jxx'), 'xx')
@@ -35,8 +35,8 @@ class Test_Pol_Ops(object):
         nt.assert_equal(utils.split_bl((1, 2, 'xx')), ((1, 'Jxx'), (2, 'Jxx')))
         nt.assert_equal(utils.split_bl((1, 2, 'xy')), ((1, 'Jxx'), (2, 'Jyy')))
         nt.assert_equal(utils.split_bl((1, 2, 'XX')), ((1, 'Jxx'), (2, 'Jxx')))
-        nt.assert_raises(AssertionError, utils.split_bl, (1, 2, 'pQ'))
-        nt.assert_raises(AssertionError, utils.split_bl, (1, 2, 'U'))
+        nt.assert_raises(KeyError, utils.split_bl, (1, 2, 'pQ'))
+        nt.assert_raises(KeyError, utils.split_bl, (1, 2, 'U'))
 
     def test_join_bl(self):
         nt.assert_equal(utils.join_bl((1, 'Jxx'), (2, 'Jxx')), (1, 2, 'xx'))
