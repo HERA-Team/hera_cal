@@ -158,21 +158,28 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0,
 def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, pols=None, ex_pols=None):
     '''
     Filter redundancies to include/exclude the specified bls, antennas, unique bl groups and polarizations.
-    Assumes reds indices are Antpol objects.
+    Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, ubls, ex_ubls, bls, ex_bls,
+    ants, ex_ants).
     Args:
-        reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
-        bls (optional): baselines as antenna pair tuples (i,j) to include in reds.
-        ex_bls (optional): baselines as antenna pair tuples (i,j) to exclude in reds.
-        ants (optional): antenna numbers (as int's) to include in reds.
-        ex_ants (optional): antenna numbers (as int's) to exclude in reds.
-        ubls (optional): baselines representing their redundant group to include in reds.
-        ex_ubls (optional): baselines representing their redundant group to exclude in reds.
-        pols (optional): polarizations to include in reds. e.g. 'xy' or 'yx'.
-        ex_pols (optional): polarizations to exclude in reds. e.g. 'xy' or 'yx'.
+        reds: list of lists of redundant (i,j,pol) baseline tuples, e.g. the output of get_reds()
+        bls (optional): baselines to include.  Baselines of the form (i,j,pol) include that specific
+            visibility.  Baselines of the form (i,j) are broadcast across all polarizations present in reds.
+        ex_bls (optional): same as bls, but excludes baselines. 
+        ants (optional): antennas to include.  Only baselines where both antenna indices are in ants
+            are included.  Antennas of the form (i,pol) include that antenna/pol.  Antennas of the form i are
+            broadcast across all polarizations present in reds.
+        ex_ants (optional): same as ants, but excludes antennas.
+        ubls (optional): redundant (unique baseline) groups to include.  Each baseline in ubls is taken to
+            represent the redundant group containing it.  Baselines of the form (i,j) are broadcast across all
+            polarizations, otherwise (i,j,pol) selects a specific redundant group.
+        ex_ubls (optional): same as ubls, but excludes groups.
+        pols (optional): polarizations to include in reds. e.g. ['XX','YY','XY','YX'].  Default includes all
+            polarizations in reds.
+        ex_pols (optional): same as pols, but excludes polarizations.
     Return:
-        reds: list of lists of redundant baselines as antenna pair tuples.
+        reds: list of lists of redundant baselines in the same form as input reds.
     '''
-    if pols is None:  # if no pols are provided, deduce them from the reds
+    if pols is None:  # if no pols are provided, deduce them from the red
         pols = set(gp[0][2] for gp in reds)
     if ex_pols:
         pols = set(p for p in pols if p not in ex_pols)
@@ -220,7 +227,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
     bls.union(set(reverse_bl(k) for k in bls))  # put in reverse baselines, just in case
     reds = [[key for key in gp if key in bls] for gp in reds]
-    return [gp for gp in reds if len(gp) > 1]  # XXX do we want to filter off length one reds?
+    return reds
 
 
 def check_polLists_minV(polLists):
