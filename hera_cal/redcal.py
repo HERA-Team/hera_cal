@@ -12,10 +12,9 @@ from hera_cal.apply_cal import calibrate_in_place
 
 def noise(size):
     """Return complex random gaussian array with given size and variance = 1."""
-        # XXX I think this should be superceded by hera_sim
+    # XXX I think this should be superceded by hera_sim
     sig = 1. / np.sqrt(2)
     return np.random.normal(scale=sig, size=size) + 1j * np.random.normal(scale=sig, size=size)
-
 
 
 def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
