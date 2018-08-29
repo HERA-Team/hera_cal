@@ -55,17 +55,33 @@ def split_bl(bl):
     pi, pj = split_pol(bl[2])
     return ((bl[0], pi), (bl[1], pj))
 
-
 def join_bl(ai, aj):
     '''Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key.'''
     return (ai[0], aj[0], join_pol(ai[1], aj[1]))
 
-
 def reverse_bl(bl):
-    '''Reverses a (i,j,pol) baseline key to make (j,i,pol[::-1])'''
+    '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i) 
+    or (j,i,pol[::-1]), respectively.'''
     i, j = bl[:2]
-    return (j, i, conj_pol(bl[2]))
+    if len(bl) == 2:
+        return (j, i)
+    else:
+        return (j, i, conj_pol(_comply_vispol(bl[2])))
 
+def comply_bl(bl):
+    '''Translates an input (i,j,pol) baseline to ensure pol is
+    compliant with pyuvdata and hera_cal.'''
+    i, j, p = bl
+    return (i, j, _comply_vispol(p))
+
+def make_bl(*args):
+    '''Create an (i,j,pol) baseline key that is compliant with pyuvdata
+    and hera_cal.  Accepts (bl, pol) or (i, j, pol) as input.'''
+    if len(args) == 2:
+        (i, j), pol = args
+    else:
+        i, j, pol = args
+    return (i, j, _comply_vispol(pol))
 
 class AntennaArray(aipy.pol.AntennaArray):
     def __init__(self, *args, **kwargs):

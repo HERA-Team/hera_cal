@@ -4,7 +4,7 @@
 
 import numpy as np
 from collections import OrderedDict as odict
-from hera_cal.utils import conj_pol
+from hera_cal.utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
 
 
 class DataContainer:
@@ -33,7 +33,7 @@ class DataContainer:
         """Create a DataContainer object from a dictionary of data. Assumes that all
         keys have the same format and that polarization case is internally consistent.
 
-        Arguements:
+        Arguments:
             data: dictionary of visibilities with keywords of pol/ant pair
                 in any order. Supports both three element keys, e.g. data[(i,j,pol)],
                 or nested dictions, e.g. data[(i,j)][pol] or data[pol][(i,j)].
@@ -42,11 +42,11 @@ class DataContainer:
         if isinstance(data.keys()[0], str):  # Nested POL:{antpairs}
             for pol in data.keys():
                 for antpair in data[pol]:
-                    self._data[self.mk_key(antpair, pol)] = data[pol][antpair]
+                    self._data[make_bl(antpair, pol)] = data[pol][antpair]
         elif len(data.keys()[0]) == 2:  # Nested antpair:{POL}
             for antpair in data.keys():
                 for pol in data[antpair]:
-                    self._data[self.mk_key(antpair, pol)] = data[antpair][pol]
+                    self._data[make_bl(antpair, pol)] = data[antpair][pol]
         else:
             assert(len(data.keys()[0]) == 3)
             self._data = odict(map(lambda k: (k, data[k]), sorted(data.keys())))
@@ -60,39 +60,6 @@ class DataContainer:
         self.lsts = None
         self.times_by_bl = None
         self.lsts_by_bl = None
-
-    def mk_key(self, antpair, pol):
-        '''Combine a antenna pair tuple and a polarization into a 3-tuple key.'''
-        return antpair + (pol,)
-
-    def _switch_bl(self, key):
-        '''Switch the order of baselines in the key. Supports both 3-tuples
-        (correctly reversing polarization) and antenna pair 2-tuples.'''
-        if len(key) == 3:
-            return (key[1], key[0], conj_pol(key[2]))
-        else:
-            return (key[1], key[0])
-
-    def _convert_case(self, key):
-        '''Convert the case of the polarization string in the key to match existing
-        to match existing polarizations in the DataContainer (e.g. 'xx' vs. 'XX').'''
-        if isinstance(key, str):
-            pol = key
-        elif len(key) == 3:
-            pol = key[-1]
-        else:
-            return key
-
-        # convert the key's pol to whatever matches the current set of pols
-        if pol.lower() in self._pols:
-            pol = pol.lower()
-        elif pol.upper() in self._pols:
-            pol = pol.upper()
-
-        if isinstance(key, str):
-            return pol
-        elif len(key) == 3:
-            return self.mk_key(key[0:2], pol)
 
     def antpairs(self, pol=None):
         '''Return a set of antenna pairs (with a specific pol or more generally).'''
@@ -134,30 +101,29 @@ class DataContainer:
         returns all polarizations for that baseline. If the key is of the form (0,1,'xx'),
         returns the associated entry. Abstracts away both baseline ordering (applying the
         complex conjugate when appropriate) and polarization capitalization.'''
-        key = self._convert_case(key)
         if isinstance(key, str):  # asking for a pol
-            return dict(zip(self._antpairs, [self[self.mk_key(bl, key)] for bl in self._antpairs]))
+            return dict(zip(self._antpairs, [self[make_bl(bl, key)] for bl in self._antpairs]))
         elif len(key) == 2:  # asking for a bl
-            return dict(zip(self._pols, [self[self.mk_key(key, pol)] for pol in self._pols]))
+            return dict(zip(self._pols, [self[make_bl(key, pol)] for pol in self._pols]))
         else:
             try:
-                return self._data[key]
+                return self._data[comply_bl(key)]
             except(KeyError):
-                return np.conj(self._data[self._switch_bl(key)])
+                return np.conj(self._data[reverse_bl(key)])
 
     def __setitem__(self, key, value):
         '''Sets the data corresponding to the key. Only supports the form (0,1,'xx').
         Abstracts away both baseline ordering (applying the complex conjugate when
         appropriate) and polarization capitalization.'''
-        key = self._convert_case(key)
         if len(key) == 3:
+            key = comply_bl(key)
             # check given bl ordering
-            if key in self.keys() or self._switch_bl(key) in self.keys():
+            if key in self.keys() or reverse_bl(key) in self.keys():
                 # key already exists
                 if key in self.keys():
                     self._data[key] = value
                 else:
-                    self._data[self._switch_bl(key)] = np.conj(value)
+                    self._data[reverse_bl(key)] = np.conj(value)
             else:
                 self._data[key] = value
                 self._antpairs.update({tuple(key[:2])})
@@ -168,8 +134,8 @@ class DataContainer:
     def __delitem__(self, key):
         '''Deletes the input key and corresponding data. Only supports the form (0,1,'xx').
         Abstracts away both baseline ordering and polarization capitalization.'''
-        key = self._convert_case(key)
         if len(key) == 3:
+            key = comply_bl(key)
             del self._data[key]
             self._antpairs = set([k[:2] for k in self._data.keys()])
             self._pols = set([k[-1] for k in self._data.keys()])
@@ -247,7 +213,7 @@ class DataContainer:
 
     def __contains__(self, key):
         '''Returns True if the key is in the data, abstracting away case and baseline order.'''
-        return self._convert_case(key) in self.keys() or self._switch_bl(self._convert_case(key)) in self.keys()
+        return comply_bl(key) in self.keys() or reverse_bl(key) in self.keys()
 
     def get_data(self, *args):
         '''Interface to DataContainer.__getitem__(key).'''
@@ -259,19 +225,19 @@ class DataContainer:
     def has_key(self, *args):
         '''Interface to DataContainer.__contains__(key).'''
         if len(args) == 1:
-            return (self._convert_case(args[0]) in self._data
-                    or self._convert_case(self._switch_bl(args[0])) in self._data)
+            return (comply_bl(args[0]) in self._data
+                    or reverse_bl(args[0]) in self._data)
         else:
-            return self._convert_case(self.mk_key(args[0], args[1])) in self
+            return make_bl(args[0], args[1]) in self
 
     def has_antpair(self, antpair):
         '''Returns True if baseline or its complex conjugate is in the data.'''
-        return antpair in self._antpairs or self._switch_bl(antpair) in self._antpairs
+        return antpair in self._antpairs or reverse_bl(antpair) in self._antpairs
 
     def has_pol(self, pol):
         '''Returns True if polarization (with some capitalization) is in the data.'''
-        return self._convert_case(pol) in self._pols
+        return comply_pol(pol) in self._pols
 
     def get(self, antpair, pol):
         '''Interface to DataContainer.__getitem__(bl + (pol,)).'''
-        return self[self._convert_case(self.mk_key(antpair, pol))]
+        return self[make_bl(antpair, pol)]

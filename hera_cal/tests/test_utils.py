@@ -47,7 +47,23 @@ class Test_Pol_Ops(object):
         nt.assert_equal(utils.reverse_bl((1, 2, 'xy')), (2, 1, 'yx'))
         nt.assert_equal(utils.reverse_bl((1, 2, 'XX')), (2, 1, 'xx'))
         nt.assert_equal(utils.reverse_bl((1, 2, 'pI')), (2, 1, 'pI'))
+        nt.assert_equal(utils.reverse_bl((1, 2)), (2, 1))
 
+    def test_comply_bl(self):
+        nt.assert_equal(utils.comply_bl((1, 2, 'xx')), (1, 2, 'xx'))
+        nt.assert_equal(utils.comply_bl((1, 2, 'xy')), (1, 2, 'xy'))
+        nt.assert_equal(utils.comply_bl((1, 2, 'XX')), (1, 2, 'xx'))
+        nt.assert_equal(utils.comply_bl((1, 2, 'pI')), (1, 2, 'pI'))
+
+    def test_make_bl(self):
+        nt.assert_equal(utils.make_bl((1, 2, 'xx')), (1, 2, 'xx'))
+        nt.assert_equal(utils.make_bl((1, 2), 'xx'), (1, 2, 'xx'))
+        nt.assert_equal(utils.make_bl((1, 2, 'xy')), (1, 2, 'xy'))
+        nt.assert_equal(utils.make_bl((1, 2), 'xy'), (1, 2, 'xy'))
+        nt.assert_equal(utils.make_bl((1, 2, 'XX')), (1, 2, 'xx'))
+        nt.assert_equal(utils.make_bl((1, 2), 'XX'), (1, 2, 'xx'))
+        nt.assert_equal(utils.make_bl((1, 2, 'pI')), (1, 2, 'pI'))
+        nt.assert_equal(utils.make_bl((1, 2), 'pI'), (1, 2, 'pI'))
 
 class TestAAFromCalfile(object):
     def setUp(self):
