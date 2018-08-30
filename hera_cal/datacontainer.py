@@ -39,17 +39,18 @@ class DataContainer:
                 or nested dictions, e.g. data[(i,j)][pol] or data[pol][(i,j)].
         """
         self._data = odict()
-        if isinstance(data.keys()[0], str):  # Nested POL:{antpairs}
+        if np.all([isinstance(k, (str, np.str)) for k in data.keys()]):  # Nested POL:{antpairs}
             for pol in data.keys():
                 for antpair in data[pol]:
                     self._data[make_bl(antpair, pol)] = data[pol][antpair]
-        elif len(data.keys()[0]) == 2:  # Nested antpair:{POL}
+        elif np.all([len(k) == 2 for k in data.keys()]):  # Nested antpair:{POL}
             for antpair in data.keys():
                 for pol in data[antpair]:
                     self._data[make_bl(antpair, pol)] = data[antpair][pol]
+        elif np.all([len(k) == 3 for k in data.keys()]):
+            self._data = odict([(comply_bl(k), data[k]) for k in sorted(data.keys())])
         else:
-            assert(len(data.keys()[0]) == 3)
-            self._data = odict(map(lambda k: (k, data[k]), sorted(data.keys())))
+            raise KeyError('Unrecognized key type or mix of key types in data dictionary.')
         self._antpairs = set([k[:2] for k in self._data.keys()])
         self._pols = set([k[-1] for k in self._data.keys()])
 
