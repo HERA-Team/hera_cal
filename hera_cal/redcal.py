@@ -6,14 +6,9 @@ import numpy as np
 import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
-<<<<<<< HEAD
-from hera_cal.utils import split_pol, conj_pol, polnum2str, polstr2num, jnum2str, jstr2num
-from hera_cal.apply_cal import recalibrate_in_place
-=======
 from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, comply_pol
 from hera_cal.apply_cal import calibrate_in_place
 
->>>>>>> master
 
 def noise(size):
     """Return complex random gaussian array with given size and variance = 1."""
