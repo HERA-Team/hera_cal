@@ -115,9 +115,9 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
     Returns:
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
     """
-
     # pre-process to ensure pols complies w/ hera_cal polarization convention
     pols = [comply_pol(p) for p in pols]
+
     def excluded(bl, pol):
         return ((bl[0], split_pol(pol)[0]) in ex_ants) or ((bl[1], split_pol(pol)[1]) in ex_ants)
 

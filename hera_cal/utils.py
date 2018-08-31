@@ -18,46 +18,55 @@ from collections import OrderedDict as odict
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT
 
+
 def _comply_antpol(antpol):
     '''Maps an input antenna polarization string onto a string compliant with pyuvdata
     and hera_cal.'''
     return jnum2str(jstr2num(antpol))
+
 
 def _comply_vispol(pol):
     '''Maps an input visibility polarization string onto a string compliant with pyuvdata
     and hera_cal.'''
     return polnum2str(polstr2num(pol))
 
+
 _VISPOLS = [pol for pol in POL_STR2NUM_DICT.keys() if polstr2num(pol) < 0]
 SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _VISPOLS}
 JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
+
 
 def split_pol(pol):
     '''Splits visibility polarization string (pyuvdata's polstr) into 
     antenna polarization strings (pyuvdata's jstr).'''
     return SPLIT_POL[_comply_vispol(pol)]
 
+
 def join_pol(p1, p2):
     '''Joins antenna polarization strings (pyuvdata's jstr) into
     visibility polarization string (pyuvdata's polstr).'''
     return JOIN_POL[(_comply_antpol(p1), _comply_antpol(p2))]
+
 
 def comply_pol(pol):
     '''Maps an input (visibility or antenna) polarization string onto a string 
     compliant with pyuvdata and hera_cal.'''
     try:
         return _comply_vispol(pol)
-    except(ValueError): # happens if we have an antpol, not vispol
+    except(ValueError):  # happens if we have an antpol, not vispol
         return _comply_antpol(pol)
+
 
 def split_bl(bl):
     '''Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj.'''
     pi, pj = split_pol(bl[2])
     return ((bl[0], pi), (bl[1], pj))
 
+
 def join_bl(ai, aj):
     '''Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key.'''
     return (ai[0], aj[0], join_pol(ai[1], aj[1]))
+
 
 def reverse_bl(bl):
     '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i) 
@@ -68,20 +77,28 @@ def reverse_bl(bl):
     else:
         return (j, i, conj_pol(_comply_vispol(bl[2])))
 
+
 def comply_bl(bl):
-    '''Translates an input (i,j,pol) baseline to ensure pol is
-    compliant with pyuvdata and hera_cal.'''
-    i, j, p = bl
-    return (i, j, _comply_vispol(p))
+    '''Translates an input (i,j,pol) baseline to ensure pol is compliant with
+    pyuvdata and hera_cal. Inputs of length 2, e.g. (i,j) are unmodified.'''
+    if len(bl) == 2:
+        return bl
+    else:
+        i, j, p = bl
+        return (i, j, _comply_vispol(p))
+
 
 def make_bl(*args):
     '''Create an (i,j,pol) baseline key that is compliant with pyuvdata
     and hera_cal.  Accepts (bl, pol) or (i, j, pol) as input.'''
+    if len(args) == 1:
+        args = args[0]  # this handles the case where the input is a tuple
     if len(args) == 2:
         (i, j), pol = args
     else:
         i, j, pol = args
     return (i, j, _comply_vispol(pol))
+
 
 class AntennaArray(aipy.pol.AntennaArray):
     def __init__(self, *args, **kwargs):
