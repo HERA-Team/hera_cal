@@ -19,7 +19,7 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num
+from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl
 from hera_cal import omni, utils, firstcal, cal_formats, redcal, io, apply_cal
 from hera_cal.datacontainer import DataContainer
 from scipy import signal
@@ -1729,7 +1729,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
 
         # find which bl_group this key belongs to
         match = np.array(map(lambda r: k in r, reds))
-        conj_match = np.array(map(lambda r: data._switch_bl(k) in r, reds))
+        conj_match = np.array(map(lambda r: reverse_bl(k) in r, reds))
 
         # if no match, just copy data over to red_data
         if True not in match and True not in conj_match:

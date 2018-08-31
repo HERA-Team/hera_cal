@@ -24,17 +24,46 @@ class Test_Pol_Ops(object):
         nt.assert_equal(utils.split_pol('xx'), ('Jxx', 'Jxx'))
         nt.assert_equal(utils.split_pol('xy'), ('Jxx', 'Jyy'))
         nt.assert_equal(utils.split_pol('XY'), ('Jxx', 'Jyy'))
-        nt.assert_raises(ValueError, utils.split_pol, 'I')
-        nt.assert_raises(ValueError, utils.split_pol, 'pV')
+        nt.assert_raises(KeyError, utils.split_pol, 'I')
+        nt.assert_raises(KeyError, utils.split_pol, 'pV')
 
-    def test_conj_pol(self):
-        nt.assert_equal(utils.conj_pol('xx'), 'xx')
-        nt.assert_equal(utils.conj_pol('XX'), 'XX')
-        nt.assert_equal(utils.conj_pol('XY'), 'YX')
-        nt.assert_equal(utils.conj_pol('yx'), 'xy')
-        nt.assert_equal(utils.conj_pol('Q'), 'Q')
-        nt.assert_equal(utils.conj_pol('pU'), 'pU')
+    def test_join_pol(self):
+        nt.assert_equal(utils.join_pol('Jxx', 'Jxx'), 'xx')
+        nt.assert_equal(utils.join_pol('Jxx', 'Jyy'), 'xy')
 
+    def test_split_bl(self):
+        nt.assert_equal(utils.split_bl((1, 2, 'xx')), ((1, 'Jxx'), (2, 'Jxx')))
+        nt.assert_equal(utils.split_bl((1, 2, 'xy')), ((1, 'Jxx'), (2, 'Jyy')))
+        nt.assert_equal(utils.split_bl((1, 2, 'XX')), ((1, 'Jxx'), (2, 'Jxx')))
+        nt.assert_raises(KeyError, utils.split_bl, (1, 2, 'pQ'))
+        nt.assert_raises(KeyError, utils.split_bl, (1, 2, 'U'))
+
+    def test_join_bl(self):
+        nt.assert_equal(utils.join_bl((1, 'Jxx'), (2, 'Jxx')), (1, 2, 'xx'))
+        nt.assert_equal(utils.join_bl((1, 'Jxx'), (2, 'Jyy')), (1, 2, 'xy'))
+
+    def test_reverse_bl(self):
+        nt.assert_equal(utils.reverse_bl((1, 2, 'xx')), (2, 1, 'xx'))
+        nt.assert_equal(utils.reverse_bl((1, 2, 'xy')), (2, 1, 'yx'))
+        nt.assert_equal(utils.reverse_bl((1, 2, 'XX')), (2, 1, 'xx'))
+        nt.assert_equal(utils.reverse_bl((1, 2, 'pI')), (2, 1, 'pI'))
+        nt.assert_equal(utils.reverse_bl((1, 2)), (2, 1))
+
+    def test_comply_bl(self):
+        nt.assert_equal(utils.comply_bl((1, 2, 'xx')), (1, 2, 'xx'))
+        nt.assert_equal(utils.comply_bl((1, 2, 'xy')), (1, 2, 'xy'))
+        nt.assert_equal(utils.comply_bl((1, 2, 'XX')), (1, 2, 'xx'))
+        nt.assert_equal(utils.comply_bl((1, 2, 'pI')), (1, 2, 'pI'))
+
+    def test_make_bl(self):
+        nt.assert_equal(utils.make_bl((1, 2, 'xx')), (1, 2, 'xx'))
+        nt.assert_equal(utils.make_bl((1, 2), 'xx'), (1, 2, 'xx'))
+        nt.assert_equal(utils.make_bl((1, 2, 'xy')), (1, 2, 'xy'))
+        nt.assert_equal(utils.make_bl((1, 2), 'xy'), (1, 2, 'xy'))
+        nt.assert_equal(utils.make_bl((1, 2, 'XX')), (1, 2, 'xx'))
+        nt.assert_equal(utils.make_bl((1, 2), 'XX'), (1, 2, 'xx'))
+        nt.assert_equal(utils.make_bl((1, 2, 'pI')), (1, 2, 'pI'))
+        nt.assert_equal(utils.make_bl((1, 2), 'pI'), (1, 2, 'pI'))
 
 class TestAAFromCalfile(object):
     def setUp(self):

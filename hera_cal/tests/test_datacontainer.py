@@ -52,8 +52,7 @@ class TestDataContainer(unittest.TestCase):
         self.assertIsNone(dc.lsts)
         self.assertIsNone(dc.times_by_bl)
         self.assertIsNone(dc.lsts_by_bl)
-        self.assertRaises(
-            AssertionError, datacontainer.DataContainer, {(1, 2, 3, 4): 2})
+        self.assertRaises(KeyError, datacontainer.DataContainer, {(1, 2, 3, 4): 2})
 
     def test_antpairs(self):
         dc = datacontainer.DataContainer(self.blpol)
