@@ -231,9 +231,11 @@ class AbsCal(object):
         # enact a baseline weighting taper
         if bl_taper_fwhm is not None:
             assert self.antpos is not None, "can't request a baseline taper if antpos is not fed"
+
             # make gaussian taper func
             def taper(ratio):
                 return np.exp(-0.5 * ratio**2)
+                
             # iterate over baselines
             for k in self.wgts.keys():
                 self.wgts[k] *= taper(np.linalg.norm(self.bls[k]) / bl_taper_fwhm)
