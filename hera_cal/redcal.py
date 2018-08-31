@@ -104,13 +104,13 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
 
     Args:
         reds: list of list of antenna index tuples considered redundant
-        pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
+        pols: a list of polarizations e.g. ['xx', 'XY', 'YX', 'YY']
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
+            '1pol': 1 antpol and 1 vispol (e.g. 'Jxx' and 'xx'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'Jxx','Jyy' and 'xx','YY')
+            '4pol': 2 antpols, 4 vispols (e.g. 'Jxx','Jyy' and 'xx','XY','YX','YY')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
-        ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
+        ex_ants: list of antennas to exclude in the [(1,'Jxx'),(10,'Jyy')] format
 
     Returns:
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
@@ -138,13 +138,13 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0,
 
     Args:
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
-        pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
+        pols: a list of polarizations e.g. ['xx', 'XY', 'YX', 'YY']
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
+            '1pol': 1 antpol and 1 vispol (e.g. 'Jxx' and 'xx'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'Jxx','Jyy' and 'xx','YY')
+            '4pol': 2 antpols, 4 vispols (e.g. 'Jxx','Jyy' and 'xx','XY','YX','YY')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
-        ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
+        ex_ants: list of antennas to exclude in the [(1,'Jxx'),(10,'Jyy')] format
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         low_hi: For all returned baseline index tuples (i,j) to have i < j
@@ -260,9 +260,9 @@ def parse_pol_mode(reds):
 
     Returns:
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
+            '1pol': 1 antpol and 1 vispol (e.g. 'Jxx' and 'xx'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'Jxx','Jyy' and 'xx','YY')
+            '4pol': 2 antpols, 4 vispols (e.g. 'Jxx','Jyy' and 'xx','XY','YX','YY')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
             'unrecognized_pol_mode': something else
     """
