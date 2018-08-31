@@ -138,14 +138,14 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         info: dictionary of metadata from aipy.deconv.clean
     '''
     df = np.median(np.diff(freqs))
-    dt = np.median(np.diff(times)) * 24.0 * 3600.0 # in seconds
+    dt = np.median(np.diff(times)) * 24.0 * 3600.0  # in seconds
     delays = np.fft.fftfreq(freqs.size, df)
     fringes = np.fft.fftfreq(times.size, dt)
     delay_scale = (freq_scale * 1e6)**-1  # Puts it in seconds
     fringe_scale = (time_scale)**-1  # in Hz
 
     # find per-integration delays, smooth on the time_scale of gain smoothing, and rephase 
-    taus = fft_dly(gains, df, wgts, medfilt=False, solve_phase=False)[0].astype(np.complex) # delays are in seconds
+    taus = fft_dly(gains, df, wgts, medfilt=False, solve_phase=False)[0].astype(np.complex)  # delays are in seconds
     smooth_taus = uvtools.dspec.high_pass_fourier_filter(taus.T, np.sum(wgts, axis=1, keepdims=True).T,
                                                          fringe_scale, dt, tol=tol, maxiter=maxiter)[0].T
     rephasor = np.exp(-2.0j * np.pi * np.outer(np.abs(smooth_taus), freqs))
@@ -162,7 +162,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     elif filter_mode == 'plus':
         area = np.zeros(image.shape, dtype=int)
         area[0] = np.where(np.abs(delays) < delay_scale, 1, 0)
-        area[:,0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
+        area[:, 0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
     else:
         raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
 
