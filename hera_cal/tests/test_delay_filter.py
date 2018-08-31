@@ -63,17 +63,17 @@ class Test_Delay_Filter(unittest.TestCase):
         
         dfil = df.Delay_Filter()
         dfil.load_data(hd, filetype='uvh5', input_cal=hc)
-        flag_sum = flags[54, 54, 'XX'] + calflags[54, 'jxx']
-        np.testing.assert_array_equal(flag_sum, dfil.flags[54, 54, 'XX'])
-        calibrated = (data[54, 54, 'XX'] / gains[54, 'jxx'] / np.conj(gains[54, 'jxx']))[~flag_sum]
-        np.testing.assert_array_almost_equal(dfil.data[54, 54, 'XX'][~flag_sum] / calibrated, 1.0 + 0.0j, decimal=5)
+        flag_sum = flags[54, 54, 'xx'] + calflags[54, 'Jxx']
+        np.testing.assert_array_equal(flag_sum, dfil.flags[54, 54, 'xx'])
+        calibrated = (data[54, 54, 'xx'] / gains[54, 'Jxx'] / np.conj(gains[54, 'Jxx']))[~flag_sum]
+        np.testing.assert_array_almost_equal(dfil.data[54, 54, 'xx'][~flag_sum] / calibrated, 1.0 + 0.0j, decimal=5)
 
         dfil = df.Delay_Filter()
         dfil.load_data(uvh5, filetype='uvh5', input_cal=cal)
-        flag_sum = flags[54, 54, 'XX'] + calflags[54, 'jxx']
-        np.testing.assert_array_equal(flag_sum, dfil.flags[54, 54, 'XX'])
-        calibrated = (data[54, 54, 'XX'] / gains[54, 'jxx'] / np.conj(gains[54, 'jxx']))[~flag_sum]
-        np.testing.assert_array_almost_equal(dfil.data[54, 54, 'XX'][~flag_sum] / calibrated, 1.0 + 0.0j, decimal=5)
+        flag_sum = flags[54, 54, 'xx'] + calflags[54, 'Jxx']
+        np.testing.assert_array_equal(flag_sum, dfil.flags[54, 54, 'xx'])
+        calibrated = (data[54, 54, 'xx'] / gains[54, 'Jxx'] / np.conj(gains[54, 'Jxx']))[~flag_sum]
+        np.testing.assert_array_almost_equal(dfil.data[54, 54, 'xx'][~flag_sum] / calibrated, 1.0 + 0.0j, decimal=5)
 
 
     def test_load_data_as_dicts(self):
@@ -162,20 +162,20 @@ class Test_Delay_Filter(unittest.TestCase):
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         df.partial_load_delay_filter_and_write(uvh5, res_outfilename=outfilename, Nbls=2, clobber=True)
         hd = io.HERAData(outfilename)
-        d, f, n = hd.read(bls=[(53, 54, 'XX')])
+        d, f, n = hd.read(bls=[(53, 54, 'xx')])
 
         dfil = df.Delay_Filter()
         dfil.load_data(uvh5, filetype='uvh5')
-        dfil.run_filter(to_filter=[(53, 54, 'XX')], verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'XX')], dfil.filtered_residuals[(53, 54, 'XX')])
-        np.testing.assert_array_equal(f[(53, 54, 'XX')], dfil.flags[(53, 54, 'XX')])
+        dfil.run_filter(to_filter=[(53, 54, 'xx')], verbose=True)
+        np.testing.assert_almost_equal(d[(53, 54, 'xx')], dfil.filtered_residuals[(53, 54, 'xx')])
+        np.testing.assert_array_equal(f[(53, 54, 'xx')], dfil.flags[(53, 54, 'xx')])
         
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         df.partial_load_delay_filter_and_write(uvh5, calfile=cal, res_outfilename=outfilename, Nbls=2, clobber=True)
         hd = io.HERAData(outfilename)
-        d, f, n = hd.read(bls=[(53, 54, 'XX')])
-        np.testing.assert_array_equal(f[(53, 54, 'XX')], True)
+        d, f, n = hd.read(bls=[(53, 54, 'xx')])
+        np.testing.assert_array_equal(f[(53, 54, 'xx')], True)
         os.remove(outfilename)
 
     def test_delay_filter_argparser(self):

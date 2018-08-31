@@ -599,6 +599,11 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
     are taken from the first file in data_files.
 
+    Note: Only supports input data files that have nsample_array == 1, and a single
+    integration_time equal to np.diff(time_array), i.e. doesn't support baseline-dependent
+    averaging yet. Also, all input files must have the same integration_time, as this
+    metadata is taken from zeroth file but applied to all files.
+
     Parameters:
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
@@ -668,12 +673,13 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     # get metadata from the zeroth data file
     d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
 
-    # get frequency, time and antenna position information
+    # get frequency, time (converting times in days to integration times in seconds) and antenna position information
     freq_array = copy.copy(f)
     antpos = copy.deepcopy(ap)
     start_jd = np.floor(t)[0]
     kwargs['start_jd'] = start_jd
-    kwargs['integration_time'] = np.median(np.diff(t)) * 24 * 3600.
+    integration_time = np.median(np.diff(t)) * 24 * 3600.
+    assert np.all(np.abs(np.diff(t) - np.median(np.diff(t))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
     del d, fl, ap, a, f, t, l, p
     garbage_collector.collect()
 
@@ -761,6 +767,9 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # update history
         file_history = history + " Input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
         kwargs['history'] = file_history
+
+        # form integration time array
+        kwargs['integration_time'] = np.ones(len(bin_lst) * len(bin_data.keys()), dtype=np.float64) * integration_time
 
         # erase data references
         del file_list, data_list, flgs_list, lst_list

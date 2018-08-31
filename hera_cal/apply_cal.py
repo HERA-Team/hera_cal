@@ -13,68 +13,75 @@ from hera_cal.datacontainer import DataContainer
 from hera_cal import utils
 
 
-def recalibrate_in_place(data, data_flags, new_gains, cal_flags, old_gains=None, gain_convention='divide'):
-    '''Update data and data_flags in place, taking out old calibration solutions, putting in
-    new calibration solutions, and updating flags from those calibration solutions. Previously
-    flagged data is modified, but left flagged. Missing antennas from either the new gains or (if it's not None),
-    the old gains are automatically flagged in the data's visibilities that involves those antennas.
+def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None, 
+                       gain_convention='divide', flags_are_wgts=False):
+    '''Update data and data_flags in place, taking out old calibration solutions, putting in new calibration
+    solutions, and updating flags from those calibration solutions. Previously flagged data is modified, but
+    left flagged. Missing antennas from either the new gains, the cal_flags, or (if it's not None) the old
+    gains are automatically flagged in the data's visibilities that involves those antennas.
 
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
-        data_flags: DataContainer containing data flags. This is modified in place. Can also be fed as a
-            data weights dictionary with float dtype. In this case, wgts of 0 are treated as flagged
-            data and non-zero wgts are unflagged data.
         new_gains: Dictionary of complex calibration gains to apply with keys like (1,'x')
+        data_flags: DataContainer containing data flags. This is modified in place if its not None. 
         cal_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
-            if either antenna in a visibility is flagged.
+            if either antenna in a visibility is flagged. Any missing antennas are assumed to be totally
+            flagged, so leaving this as None will result in input data_flags becoming totally flagged.
         old_gains: Dictionary of complex calibration gains to take out with keys like (1,'x').
             Default of None implies that the data is raw (i.e. uncalibrated).
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
+        flags_are_weights: bool, if True, treat data_flags as weights where 0s represent flags and
+            non-zero weights are unflagged data.
     '''
-    # get datatype of data_flags to determine if flags or wgts
-    if np.all([(df.dtype == np.bool) for df in data_flags.values()]):
-        bool_flags = True
-    elif np.all([(df.dtype == np.float) for df in data_flags.values()]):
-        bool_flags = False
-        wgts = data_flags
-        data_flags = DataContainer(dict(map(lambda k: (k, ~wgts[k].astype(np.bool)), wgts.keys())))
-    else:
-        raise ValueError("didn't recognize dtype of data_flags")
-
-    # loop over keys
+    exponent = {'divide': 1, 'multiply': -1}[gain_convention]
+    # loop over baselines in data
     for (i, j, pol) in data.keys():
         ap1, ap2 = utils.split_pol(pol)
-        # Check to see that all necessary antennas are present in the gains
-        if (i, ap1) in new_gains and (j, ap2) in new_gains and (old_gains is None
-                                                                or ((i, ap1) in old_gains and (j, ap2) in old_gains)):
-            gigj_new = new_gains[(i, ap1)] * np.conj(new_gains[(j, ap2)])
-            if old_gains is not None:
-                gigj_old = old_gains[(i, ap1)] * np.conj(old_gains[(j, ap2)])
+        flag_all = False
+        
+        # apply new gains for antennas i and j. If either is missing, flag the whole baseline
+        try:
+            data[(i, j, pol)] /= (new_gains[(i, ap1)])**exponent
+        except KeyError:
+            flag_all = True
+        try:
+            data[(i, j, pol)] /= np.conj(new_gains[(j, ap2)])**exponent
+        except KeyError:
+            flag_all = True
+        # unapply old gains for antennas i and j. If either is missing, flag the whole baseline
+        if old_gains is not None:
+            try:
+                data[(i, j, pol)] *= (old_gains[(i, ap1)])**exponent
+            except KeyError:
+                flag_all = True
+            try:
+                data[(i, j, pol)] *= np.conj(old_gains[(j, ap2)])**exponent
+            except KeyError:
+                flag_all = True
+
+        if data_flags is not None:
+            # update data_flags in the case where flags are weights, flag all if cal_flags are missing
+            if flags_are_wgts: 
+                try:
+                    data_flags[(i, j, pol)] *= (~cal_flags[(i, ap1)]).astype(np.float)
+                    data_flags[(i, j, pol)] *= (~cal_flags[(j, ap2)]).astype(np.float)
+                except KeyError:
+                    flag_all = True
+            # update data_flags in the case where flags are booleans, flag all if cal_flags are missing
             else:
-                gigj_old = np.ones_like(gigj_new)
-            # update all the data, even if it was flagged
-            if gain_convention == 'divide':
-                data[(i, j, pol)] *= (gigj_old / gigj_new)
-            elif gain_convention == 'multiply':
-                data[(i, j, pol)] *= (gigj_new / gigj_old)
-            else:
-                raise KeyError("gain_convention must be either 'divide' or 'multiply'.")
-            # update data flags
-            if bool_flags:
-                # treat as flags
-                data_flags[(i, j, pol)] += cal_flags[(i, ap1)]
-                data_flags[(i, j, pol)] += cal_flags[(j, ap2)]
-            else:
-                # treat as data weights
-                wgts[(i, j, pol)] *= (~cal_flags[(i, ap1)]).astype(np.float)
-                wgts[(i, j, pol)] *= (~cal_flags[(j, ap2)]).astype(np.float)
-        else:
-            # If any antenna is missing from the gains, the data is flagged
-            if bool_flags:
-                data_flags[(i, j, pol)] = np.ones_like(data_flags[(i, j, pol)], dtype=np.bool)
-            else:
-                wgts[(i, j, pol)] = np.zeros_like(wgts[(i, j, pol)], dtype=np.float)
+                try:
+                    data_flags[(i, j, pol)] += cal_flags[(i, ap1)]
+                    data_flags[(i, j, pol)] += cal_flags[(j, ap2)]
+                except KeyError:
+                    flag_all = True
+
+            # if the flag object is given, update it for this baseline to be totally flagged
+            if flag_all:
+                if flags_are_wgts:
+                    data_flags[(i, j, pol)] = np.zeros_like(data[(i, j, pol)], dtype=np.float)
+                else:
+                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None,
@@ -138,8 +145,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 # apply npz flags
                 if flags_npz is not None:
                     data_flags[bl] = np.logical_or(data_flags[bl], npz_flag_dc[bl])
-            recalibrate_in_place(data, data_flags, new_gains, new_flags,
-                                 old_gains=old_calibration, gain_convention=gain_convention)
+            calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
+                               old_gains=old_calibration, gain_convention=gain_convention)
             hd.partial_write(data_outfilename, data=data, flags=data_flags,
                              inplace=True, clobber=clobber, add_to_history=add_to_history)
 
@@ -158,7 +165,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # apply npz flags
             if flags_npz is not None:
                 data_flags[bl] = np.logical_or(data_flags[bl], npz_flag_dc[bl])
-        recalibrate_in_place(data, data_flags, new_gains, new_flags, old_gains=old_calibration, gain_convention=gain_convention)
+        calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
+                           old_gains=old_calibration, gain_convention=gain_convention)
         io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
                       data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
 

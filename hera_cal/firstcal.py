@@ -584,7 +584,7 @@ def firstcal_run(files, opts, history):
         meta['times'] = uv_in.time_array.reshape(
             uv_in.Ntimes, uv_in.Nbls)[:, 0]
         meta['freqs'] = uv_in.freq_array[0]  # in Hz
-        meta['inttime'] = uv_in.integration_time  # in sec
+        meta['inttime'] = np.median(uv_in.integration_time)  # in sec
         meta['chwidth'] = uv_in.channel_width  # in Hz
 
         gains = {}

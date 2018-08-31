@@ -22,11 +22,13 @@ with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import scipy.sparse as sps
 
+# XXX switch to hera_cal.utils.polnum2str/jnum2str
 POL_TYPES = 'xylrabne'
 # XXX this can't support restarts or changing # pols between runs
 POLNUM = {}  # factor to multiply ant index for internal ordering
 NUMPOL = {}
 
+# XXX switch to hera_cal.utils.polnum2str/jnum2str
 # dict for converting to polarizations
 jonesLookup = {
     -5: (-5, -5),
@@ -819,9 +821,9 @@ def make_uvdata_vis(aa, m, v, xtalk=False):
     uv.polarization_array = np.array([poldict[p] for p in pols])
     if xtalk:
         # xtalk integration time is averaged over the whole file
-        uv.integration_time = m['inttime'] * len(m['times'])
+        uv.integration_time = np.ones_like(uv.time_array, dtype=np.float) * m['inttime'] * len(m['times'])
     else:
-        uv.integration_time = m['inttime']
+        uv.integration_time = np.ones_like(uv.time_array, dtype=np.float) * m['inttime']
     uv.channel_width = np.float(np.diff(uv.freq_array[0])[0])
 
     # observation parameters
@@ -1167,7 +1169,7 @@ def omni_run(files, opts, history):
             uvd.phase_to_drift()
         t_jd = uvd.time_array.reshape(uvd.Ntimes, uvd.Nbls)[:, 0]
         t_lst = uvd.lst_array.reshape(uvd.Ntimes, uvd.Nbls)[:, 0]
-        t_int = uvd.integration_time
+        t_int = np.median(uvd.integration_time)
         freqs = uvd.freq_array[0]
         # shape of file data (ex: (19,203))
         SH = (uvd.Ntimes, uvd.Nfreqs)
