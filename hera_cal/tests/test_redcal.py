@@ -301,6 +301,71 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
+    def test_omnical(self):
+        NANTS = 18
+        antpos = build_linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.0099999)
+        w = dict([(k, 1.) for k in d.keys()])
+        sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
+        sol0.update(info.compute_ubls(d, sol0))
+        #sol0 = info.logcal(d)
+        #for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
+        meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6)
+        for i in xrange(NANTS):
+            self.assertEqual(sol[(i, 'Jxx')].shape, (10, 10))
+        for bls in reds:
+            ubl = sol[bls[0]]
+            self.assertEqual(ubl.shape, (10, 10))
+            for bl in bls:
+                d_bl = d[bl]
+                mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
+
+    def test_omnical64(self):
+        NANTS = 18
+        antpos = build_linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
+        w = dict([(k, 1.) for k in d.keys()])
+        sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
+        sol0.update(info.compute_ubls(d, sol0))
+        d = {k: v.astype(np.complex64) for k, v in d.items()}
+        sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
+        meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=30, check_every=6)
+        for bls in reds:
+            ubl = sol[bls[0]]
+            self.assertEqual(ubl.dtype, np.complex64)
+            for bl in bls:
+                d_bl = d[bl]
+                mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 6)
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 6)
+
+    def test_omnical128(self):
+        NANTS = 18
+        antpos = build_linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        gains, true_vis, d = om.sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
+        w = dict([(k, 1.) for k in d.keys()])
+        sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
+        sol0.update(info.compute_ubls(d, sol0))
+        d = {k: v.astype(np.complex128) for k, v in d.items()}
+        sol0 = {k: v.astype(np.complex128) for k, v in sol0.items()}
+        meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6)
+        for bls in reds:
+            ubl = sol[bls[0]]
+            self.assertEqual(ubl.dtype, np.complex128)
+            for bl in bls:
+                d_bl = d[bl]
+                mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
+                np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
+
     def test_lincal(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
@@ -323,6 +388,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
+
     def test_lincal64(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
@@ -343,6 +409,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 6)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 6)
+
     def test_lincal128(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
