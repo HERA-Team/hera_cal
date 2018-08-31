@@ -146,9 +146,10 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
 
     # find per-integration delays, smooth on the time_scale of gain smoothing, and rephase 
     taus = fft_dly(gains, df, wgts, medfilt=False, solve_phase=False)[0].astype(np.complex)  # delays are in seconds
-    smooth_taus = uvtools.dspec.high_pass_fourier_filter(taus.T, np.sum(wgts, axis=1, keepdims=True).T,
-                                                         fringe_scale, dt, tol=tol, maxiter=maxiter)[0].T
-    rephasor = np.exp(-2.0j * np.pi * np.outer(np.abs(smooth_taus), freqs))
+    if not np.all(taus == 0):  # this breaks CLEAN, but it means we don't need smoothing anyway
+        taus = uvtools.dspec.high_pass_fourier_filter(taus.T, np.sum(wgts, axis=1, keepdims=True).T,
+                                                      fringe_scale, dt, tol=tol, maxiter=maxiter)[0].T
+    rephasor = np.exp(-2.0j * np.pi * np.outer(np.abs(taus), freqs))
     
     # Build fourier space image and kernel for deconvolution
     window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
@@ -198,11 +199,11 @@ def rephase_to_refant(gains, refant, flags=None):
     '''
     refant_phasor = gains[refant] / np.abs(gains[refant])
     for ant in gains.keys():
-        if flags is not None and np.any(flags[refant][np.logical_not(flag_grids[ant])]):
+        if flags is not None and np.any(flags[refant][np.logical_not(flags[ant])]):
             raise ValueError('The chosen reference antenna', refant, 'is flagged in at least one place where antenna',
                              ant, 'is not, so automatic reference antenna selection has failed.')
         else:
-            gains[ant] /= refant_phasor
+            gains[ant] = gains[ant] / refant_phasor
 
 
 class CalibrationSmoother():
@@ -268,14 +269,14 @@ class CalibrationSmoother():
                     if ant in self.npz_flags[npz]:
                         self.flag_grids[ant][self.npz_time_indices[npz], :] += self.npz_flags[npz][ant]
 
+        # perform data quality checks
+        self.check_consistency()
+        self.reset_filtering()
+        
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
             self.refant = pick_reference_antenna(self.flag_grids)
             self.rephase_to_refant()
-
-        # perform data quality checks
-        self.check_consistency()
-        self.reset_filtering()
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag npzs).
@@ -306,7 +307,7 @@ class CalibrationSmoother():
     def rephase_to_refant(self):
         '''If the CalibrationSmoother object has a refant attribute, this function rephases to it.'''
         if hasattr(self, 'refant'):
-            rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
+            rephase_to_refant(self.filtered_gain_grids, self.refant, flags=self.flag_grids)
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
