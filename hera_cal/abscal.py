@@ -81,7 +81,7 @@ class AbsCal(object):
 
         Parameters:
         -----------
-        model : Visibility data of refence model, type=dictionary
+        model : Visibility data of refence model, type=dictionary or DataContainer
                 keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
                 values are complex ndarray visibilities.
                 these must be 2D arrays, with [0] axis indexing time
@@ -91,7 +91,7 @@ class AbsCal(object):
                 pyuvdata.UVData object or hera_cal.HERAData object,
                 or a list of either.
 
-        data :  Visibility data, type=dictionary
+        data :  Visibility data, type=dictionary or DataContainer
                 keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
                 values are complex ndarray visibilities.
                 these must be 2D arrays, with [0] axis indexing time
@@ -106,7 +106,7 @@ class AbsCal(object):
             The refence antenna is used in the phase solvers, where an absolute phase is applied to all
             antennas such that the refant's phase is set to identically zero.
 
-        wgts : weights of the data, type=dictionary, [default=None]
+        wgts : weights of the data, type=dictionary or DataContainer, [default=None]
                keys are antenna pair + pol tuples (must match model), values are real floats
                matching shape of model and data
 
@@ -141,12 +141,12 @@ class AbsCal(object):
         pols = None
 
         # load model if necessary
-        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or isinstance(model, UVData):
+        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or issubclass(model, UVData):
             (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
              model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True)
 
         # load data if necessary
-        if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or isinstance(data, UVData):
+        if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data, UVData):
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
              data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True)
             wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
@@ -1450,35 +1450,42 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         return return_obj
 
 
-def cut_bls(datacontainer, bls, min_bl_cut=None, max_bl_cut=None):
+def cut_bls(datacontainer, bls, min_bl_cut=None, max_bl_cut=None, inplace=False):
     """
-    Cut visibility data based on min and max baseline length. Note
-    that this directly overwrites the data in these containers (i.e. inplace).
+    Cut visibility data based on min and max baseline length.
 
     Parameters
     ----------
     datacontainer : DataContainer object to perform baseline cut on
 
-    bls : dictionary, keys are antenna-pair tuples and values are baseline vectors in meters
+    bls : dictionary, holding baseline position vectors.
+        keys are antenna-pair tuples and values are baseline vectors in meters
 
     min_bl_cut : float, minimum baseline separation [meters] to keep in data
 
     max_bl_cut : float, maximum baseline separation [meters] to keep in data    
 
+    inplace : bool, if True edit data in input object, else make a copy.
+
     Output
     ------
-    cut_datacontainer : DataContainer object with bl cut enacted
+    datacontainer : DataContainer object with bl cut enacted
+        only returned if not inplace
     """
+    if inplace:
+        datacontainer = copy.deepcopy(datacontainer)
     if min_bl_cut is None:
         min_bl_cut = 0.0
     if max_bl_cut is None:
         max_bl_cut = 1e10
-    cut_datacontainer = odict()
     for k in datacontainer.keys():
         bl_len = np.linalg.norm(bls[k])
-        if k in bls and bl_len <= max_bl_cut and bl_len >= min_bl_cut:
-            cut_datacontainer[k] = datacontainer[k]
+        if k not in bls:
+            continue
+        if bl_len > max_bl_cut or bl_len < min_bl_cut:
+            del datacontainer[k]
 
-    assert len(cut_datacontainer) > 0, "no baselines were kept after baseline cut..."
+    assert len(datacontainer) > 0, "no baselines were kept after baseline cut..."
 
-    return DataContainer(cut_datacontainer)
+    if not inplace:
+        return datacontainer
