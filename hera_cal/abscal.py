@@ -141,12 +141,12 @@ class AbsCal(object):
         pols = None
 
         # load model if necessary
-        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or issubclass(model, UVData):
+        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or issubclass(model.__class__, UVData):
             (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
              model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True)
 
         # load data if necessary
-        if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data, UVData):
+        if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data.__class__, UVData):
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
              data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True)
             wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
