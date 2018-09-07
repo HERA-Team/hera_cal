@@ -9,6 +9,7 @@ import os
 import shutil
 from pyuvdata import UVData
 from hera_cal import utils, abscal, datacontainer
+from hera_cal.redcal import noise
 from hera_cal.calibrations import CAL_PATH
 from hera_cal.data import DATA_PATH
 from hera_cal import io
@@ -64,6 +65,63 @@ class Test_Pol_Ops(object):
         nt.assert_equal(utils.make_bl((1, 2), 'XX'), (1, 2, 'xx'))
         nt.assert_equal(utils.make_bl((1, 2, 'pI')), (1, 2, 'pI'))
         nt.assert_equal(utils.make_bl((1, 2), 'pI'), (1, 2, 'pI'))
+
+class TestFftDly(object):
+
+    def setUp(self):
+        np.random.seed(0)
+        self.freqs = np.linspace(.1, .2, 1024)
+
+    def test_ideal(self):
+        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys.shape = (60,1)
+        data = np.exp(2j * np.pi * self.freqs.reshape((1,-1)) * true_dlys)
+        df = np.median(np.diff(self.freqs))
+        dlys = utils.fft_dly(data, df)
+        np.testing.assert_almost_equal(5*dlys, 5*true_dlys, -1) # accuracy of 2 ns
+        dlys = utils.fft_dly(data, df, medfilt=True)
+        np.testing.assert_almost_equal(5*dlys, 5*true_dlys, -1) # accuracy of 2 ns
+
+    def test_noisy(self):
+        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys.shape = (60,1)
+        data = np.exp(2j * np.pi * self.freqs.reshape((1,-1)) * true_dlys) + 5*noise((60,1024))
+        df = np.median(np.diff(self.freqs))
+        dlys = utils.fft_dly(data, df)
+        np.testing.assert_almost_equal(1.*dlys, 1.*true_dlys, -1) # accuracy of 10 ns
+        dlys = utils.fft_dly(data, df, medfilt=True)
+        np.testing.assert_almost_equal(1.*dlys, 1.*true_dlys, -1) # accuracy of 10 ns
+
+    def test_rfi(self):
+        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys.shape = (60,1)
+        data = np.exp(2j * np.pi * self.freqs.reshape((1,-1)) * true_dlys)
+        data[:,::16] = 1000.
+        df = np.median(np.diff(self.freqs))
+        dlys = utils.fft_dly(data, df, medfilt=True)
+        np.testing.assert_almost_equal(5.*dlys, 5.*true_dlys, -1) # accuracy of 2 ns
+
+    def test_realistic(self):
+        # load into pyuvdata object
+        data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
+        # make custom gain keys
+        d, fl, antpos, a, freqs, t, l, p = hc.io.load_vis(data_fname, return_meta=True, pick_data_ants=False)
+        freqs /= 1e9
+        # test basic execution
+        k1 = (24, 25, 'xx')
+        k2 = (37, 38, 'xx')
+        flat_phs = d[k1] * d[k2].conj()
+        df = np.median(np.diff(freqs))
+        # basic execution
+        dlys = utils.fft_dly(flat_phs, df, medfilt=True)
+        nt.assert_equal(dlys.shape, (60, 1))
+        np.testing.assert_almost_equal(dlys, .25, 1)
+        true_dlys = np.random.uniform(-20, 20, size=60)
+        true_dlys.shape = (60,1)
+        phs = np.exp(2j * np.pi * freqs.reshape((1,-1)) * (true_dlys-.25))
+        dlys = utils.fft_dly(flat_phs * phs, df, medfilt=True)
+        np.testing.assert_almost_equal(5.*dlys, 5.*true_dlys, -1)
 
 class TestAAFromCalfile(object):
     def setUp(self):

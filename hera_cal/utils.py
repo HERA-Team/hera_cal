@@ -14,6 +14,7 @@ import os
 import hera_cal
 import copy
 from scipy.interpolate import interp1d
+from scipy import signal
 from collections import OrderedDict as odict
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT
@@ -98,6 +99,43 @@ def make_bl(*args):
     else:
         i, j, pol = args
     return (i, j, _comply_vispol(pol))
+
+def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
+    """Get delay of visibility across band using FFT and quadratic fit to delay peak.
+    Arguments:
+        data : ndarray of complex data (e.g. gains or visibilities) of shape (Ntimes, Nfreqs)
+        df : frequency channel width in Hz
+        wgts : multiplicative wgts of the same shape as the data
+        medfilt : boolean, median filter data before fft
+        kernel : size of median filter kernel along (time, freq) axes
+    Returns:
+        dlys : (Ntimes, 1) ndarray containing delay for each integration
+    """
+    Ntimes, Nfreqs = data.shape
+    if wgts is None:
+        wgts = np.ones_like(data, dtype=np.float)
+    # smooth via median filter
+    if medfilt:
+        data.real = signal.medfilt(data.real, kernel_size=kernel)
+        data.imag = signal.medfilt(data.imag, kernel_size=kernel)
+    # fft w/ window and find argmax
+    vfft = np.fft.fft(data * wgts, axis=1)
+    amp = np.abs(vfft)
+    argmaxes = np.argmax(amp, axis=1)
+    fftfreqs = np.fft.fftfreq(Nfreqs, df)
+    dtau = fftfreqs[1] - fftfreqs[0]
+    dlys = np.zeros((Ntimes, 1))
+    # use parabolic peak interpolation: https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
+    for i,mx in enumerate(argmaxes):
+        a, b, c = amp[i,mx-1], amp[i,mx], amp[i,(mx+1) % Nfreqs]
+        if np.abs(a - 2 * b + c) > 0 and np.abs(a - c) > 0:
+            shift = .5 * (a - c) / (a - 2 * b + c)
+        else:
+            shift = 0
+        # use peak shift to linearly interpolate to get appropriate delay
+        dlys[i] = (1.0 - np.abs(shift)) * fftfreqs[mx] + \
+                    np.abs(shift) * (fftfreqs[mx] + np.sign(shift) * dtau)
+    return dlys
 
 
 class AntennaArray(aipy.pol.AntennaArray):
