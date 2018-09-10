@@ -48,7 +48,7 @@ def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
         true_vis[bls[0]] = noise(shape)
         for (i, j, pol) in bls:
             data[(i, j, pol)] = true_vis[bls[0]] * gains[(i, split_pol(pol)[0])] * gains[(j, split_pol(pol)[1])].conj()
-    return gains, true_vis, data
+    return gains, DataContainer(true_vis), DataContainer(data)
 
 
 def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
@@ -444,15 +444,15 @@ class RedundantCalibrator:
         self.reds = reds
         self.pol_mode = parse_pol_mode(self.reds)
 
-    def build_eqs(self, bls_in_data):
-        """Function for generating linsolve equation strings. Takes in a list of baselines that
-        occur in the data in the (ant1, ant2, pol) format and returns a dictionary that maps
-        linsolve string to (ant1, ant2, pol) for all visibilities."""
+    def build_eqs(self, dc):
+        """Function for generating linsolve equation strings. Takes in a DataContainer to check whether 
+        baselines in self.reds (or their complex conjugates) occur in the data. Returns a dictionary 
+        that maps linsolve string to (ant1, ant2, pol) for all visibilities."""
 
         eqs = {}
         for ubl_index, blgrp in enumerate(self.reds):
             for ant_i, ant_j, pol in blgrp:
-                if (ant_i, ant_j, pol) in bls_in_data:
+                if (ant_i, ant_j, pol) in dc:
                     params = (ant_i, split_pol(pol)[0], ant_j, split_pol(pol)[1], ubl_index, blgrp[0][2])
                     eqs['g_%d_%s * g_%d_%s_ * u_%d_%s' % params] = (ant_i, ant_j, pol)
         return eqs
@@ -474,7 +474,7 @@ class RedundantCalibrator:
         # XXX ARP: concerned about detrend_phs.  Why is it necessary?
         dtype = data.values()[0].dtype #TODO: fix this for python 3
         dc = DataContainer(data)
-        eqs = self.build_eqs(dc.keys())
+        eqs = self.build_eqs(dc)
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
         if detrend_phs:
             for blgrp in self.reds:
