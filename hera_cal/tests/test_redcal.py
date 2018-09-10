@@ -7,6 +7,7 @@ import numpy as np
 import unittest
 from copy import deepcopy
 from hera_cal.utils import split_pol, conj_pol
+import warnings
 
 np.random.seed(0)
 
@@ -300,6 +301,17 @@ class TestRedundantCalibrator(unittest.TestCase):
                 mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
+
+        for k in d.keys():
+            d[k] = np.zeros_like(d[k])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sol = info.logcal(d)
+        om.make_sol_finite(sol)
+        for red in reds:
+            np.testing.assert_array_equal(sol[red[0]], 0.0)
+        for ant in gains.keys():
+            np.testing.assert_array_equal(sol[ant], 1.0)
 
     def test_omnical(self):
         NANTS = 18
