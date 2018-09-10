@@ -295,6 +295,17 @@ def get_gains_and_vis_from_sol(sol):
     return g, v
 
 
+def make_sol_finite(sol):
+    '''Replaces nans and infs in solutions, which are usually the result of visibilities that are
+    identically equal to 0. Modifies sol (which is a dictionary with gains and visibilities) in place,
+    replacing visibilities with 0.0s and gains with 1.0s'''
+    for k in sol.keys():
+        if len(k) == 3:  # visibilities
+            sol[k][~np.isfinite(sol[k])] = np.zeros_like(sol[k][~np.isfinite(sol[k])])
+        elif len(k) == 2:  # gains
+            sol[k][~np.isfinite(sol[k])] = np.ones_like(sol[k][~np.isfinite(sol[k])])
+
+
 class OmnicalSolver(linsolve.LinProductSolver):
     def __init__(self, data, sol0, wgts={}, gain=.3, **kwargs):
         """Set up a nonlinear system of equations of the form g_i * g_j.conj() * V_mdl = V_ij
@@ -461,7 +472,7 @@ class RedundantCalibrator:
             solver: instantiated solver with redcal equations and weights
         """
         # XXX ARP: concerned about detrend_phs.  Why is it necessary?
-        dtype = data.values()[0].dtype
+        dtype = data.values()[0].dtype #TODO: fix this for python 3
         dc = DataContainer(data)
         eqs = self.build_eqs(dc.keys())
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
