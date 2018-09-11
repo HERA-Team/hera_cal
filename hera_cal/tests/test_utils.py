@@ -312,8 +312,7 @@ def test_chisq():
     # test basic case
     data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
     model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
-    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
-    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model)
     nt.assert_true(chisq.shape == (5, 10))
     nt.assert_true(nObs.shape == (5, 10))
     nt.assert_true(chisq.dtype == float)
@@ -325,7 +324,18 @@ def test_chisq():
     np.testing.assert_array_equal(nObs_per_ant[0, 'Jxx'], 1)
     np.testing.assert_array_equal(nObs_per_ant[1, 'Jxx'], 1)
 
+    # test with reds
+    data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex),
+                                        (1, 2, 'xx'): np.ones((5, 10), dtype=complex)})
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, reds=[[(0, 1, 'xx'), (1, 2, 'xx')]])
+    np.testing.assert_array_equal(chisq, 2.0)
+    np.testing.assert_array_equal(nObs, 2)
+    nt.assert_false((1, 2, 'xx') in model)
+
     # test with weights
+    data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})    
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.zeros((5, 10), dtype=float)})
     data_wgts[(0, 1, 'xx')][:, 0] = 1.0
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
