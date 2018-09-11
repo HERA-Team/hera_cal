@@ -819,14 +819,14 @@ def synthesize_ant_flags(flags, threshold=0.0):
     return ant_flags
 
 
-def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=False,
-          chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
+def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_antpol=False,
+          reds=None, chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
     """Computes chi^2 defined as:
 
     chi^2 = sum_ij(|data_ij - model_ij * g_i conj(g_j)|^2 * wgts_ij)
 
     and also a chisq_per_antenna which is the same sum but with fixed i. Also keeps track of the
-    number of unflagged observations that go into each chi^2 waterfal, both overall and per-antenna.
+    number of unflagged observations that go into each chi^2 waterfall, both overall and per-antenna.
 
     Arguments:
         data: dictionary or DataContainer mapping baseline-pol keys like (1,2,'xx') to complex 2D
@@ -838,13 +838,17 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
             weights with [0] axis time and [1] axis frequency. Weights are interpeted as 1/sigma^2
             where sigma is the noise on the data (but not necessarily the model if gains are provided).
             Flags are be expressed as data_wgts equal to 0, so (~flags) produces binary weights.
+            If None, assumed to be all 1.0s with the same keys as data.
         gains: optional dictionary mapping ant-pol keys like (1,'x') to a waterfall of complex gains to
             be multiplied into the model (or, equivalently, divided out from the data). Default: None,
             which is interpreted as all gains are 1.0 (ie..e the data is already calibrated)
         gain_flags: optional dictionary mapping ant-pol keys like (1,'x') to a boolean flags waterfall
             with the same shape as the data. Default: None, which means no per-antenna flagging.
-        split_by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy arrays.
-            Additionally, if split_by_antpol is True, cross-polarized visibilities are ignored.
+        split_by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy
+            arrays. Additionally, if split_by_antpol is True, cross-polarized visibilities are ignored.
+        reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol). Requires that the model
+            contains visibilities for the first baseline in each redundant group. Any other baselines 
+            in those redundant groups are overwritten in the model, which is copied not modified.
         chisq: optional chisq to update (see below)
         nObs: optional nObs to update (see below). Must be specified if chisq is specified and must be
             left as None if chisq is left as None.
@@ -884,6 +888,17 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
         nObs_per_ant = {}
     elif (chisq_per_ant is None) ^ (nObs_per_ant is None):
         raise ValueError('Both chisq_per_ant and nObs_per_ant must be specified or nor neither can be.')
+
+    # if data_wgts is unspecified, make it all 1.0s.
+    if data_wgts is None:
+        data_wgts = {bl: np.ones_like(data[bl], dtype=float) for bl in data.keys()}
+
+    # Expand model to include all bl in reds, assuming that model has the first bl in the redundant group
+    if reds is not None:
+        model = copy.deepcopy(model)
+        for red in reds:
+            for bl in red:
+                model[bl] = model[red[0]]
 
     for bl in data.keys():
         ap1, ap2 = split_pol(bl[2])
@@ -929,6 +944,7 @@ def chisq(data, model, data_wgts, gains=None, gain_flags=None, split_by_antpol=F
                     assert not nObs_per_ant.has_key(ant)
                     chisq_per_ant[ant] = copy.deepcopy(chisq_here)
                     nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
+
     return chisq, nObs, chisq_per_ant, nObs_per_ant
 
 
