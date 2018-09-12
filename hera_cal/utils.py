@@ -135,7 +135,12 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
         # use peak shift to linearly interpolate to get appropriate delay
         dlys[i] = (1.0 - np.abs(shift)) * fftfreqs[mx] + \
                     np.abs(shift) * (fftfreqs[mx] + np.sign(shift) * dtau)
-    return dlys
+    # Now that we know the slope, estimate the remaining phase offset
+    freqs = np.arange(Nfreqs) * df
+    freqs.shape = (1,-1)
+    offset = np.angle(np.mean(data * np.exp(-2j * np.pi * dlys * freqs), axis=1))
+    offset.shape = (-1,1)
+    return dlys, offset
 
 
 class AntennaArray(aipy.pol.AntennaArray):
