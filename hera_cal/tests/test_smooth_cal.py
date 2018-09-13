@@ -22,6 +22,9 @@ import warnings
 
 class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
 
+    def setUp(self):
+        np.random.seed(21)
+
     def test_time_kernel(self):
         kernel = smooth_cal.time_kernel(100, 10.0, filter_scale=1.0)
         self.assertAlmostEqual(np.sum(kernel), 1.0)
