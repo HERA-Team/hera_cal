@@ -92,10 +92,11 @@ def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
                 reds[delta] = [bl_pair]
 
     orderedDeltas = [delta for (length, delta) in sorted(zip([np.linalg.norm(delta) for delta in reds.keys()], reds.keys()))]
-    if low_hi:
-        return [[tuple(sorted(bl)) for bl in reds[delta]] for delta in orderedDeltas]
-    else:
-        return [reds[delta] for delta in orderedDeltas]
+    if low_hi: # sort each group after sorting each 
+        return [sorted([tuple(sorted(bl)) for bl in reds[delta]]) for delta in orderedDeltas]
+    else:  # sort each red and make sure the first antenna of the first bl in each group is the lowest antenna number
+        return [sorted(reds[delta]) if sorted(reds[delta])[0][0] == np.min(reds[delta])
+                else sorted([reverse_bl(bl) for bl in reds[delta]]) for delta in orderedDeltas]
 
 
 def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
