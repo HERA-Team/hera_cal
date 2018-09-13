@@ -223,7 +223,6 @@ class TestMethods(unittest.TestCase):
         self.assertEqual(polReds, [[(1, 2, 'xx')], [(1, 2, 'yx')], []])
 
 
-
 class TestRedundantCalibrator(unittest.TestCase):
 
     def test_build_eq(self):
