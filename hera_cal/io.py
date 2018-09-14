@@ -700,7 +700,8 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     integration_time : type=float or ndarray, integration duration in seconds for data_array.
         This does not necessarily have to be equal to the diff(time_array): for the case of
         LST-binning, this is not the duration of the LST-bin but the integration time of the
-        pre-binned data. Default is median(diff(time_array)) in seconds.
+        pre-binned data. Default is median(diff(time_array)) in seconds. Note: the _total_
+        integration time in a visibility is integration_time * nsamples.
 
     kwargs : type=dictionary, additional parameters to set in UVData object.
 

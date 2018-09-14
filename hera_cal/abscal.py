@@ -71,7 +71,8 @@ class AbsCal(object):
     phs_logcal or a TT_phs_logcal bandpass routine.
     """
     def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None,
-                 min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, verbose=True):
+                 min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, verbose=True,
+                 filetype='miriad'):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -87,7 +88,7 @@ class AbsCal(object):
                 these must be 2D arrays, with [0] axis indexing time
                 and [1] axis indexing frequency.
 
-                Optionally, model can be a path to a miriad file, a
+                Optionally, model can be a path to a pyuvdata-supported file, a
                 pyuvdata.UVData object or hera_cal.HERAData object,
                 or a list of either.
 
@@ -97,7 +98,7 @@ class AbsCal(object):
                 these must be 2D arrays, with [0] axis indexing time
                 and [1] axis indexing frequency.
 
-                Optionally, data can be a path to a miriad file, a
+                Optionally, data can be a path to a pyuvdata-supported file, a
                 pyuvdata.UVData object or hera_cal.HERAData object,
                 or a list of either. In this case, antpos, freqs
                 and wgts are overwritten from arrays in data.
@@ -136,6 +137,8 @@ class AbsCal(object):
 
         bl_taper_fwhm : float, impose a gaussian taper on the data weights as a function of
             bl separation length, with a specified fwhm [meters]
+
+        filetype : str, if data and/or model are fed as strings, this is their filetype
         """
         # set pols to None
         pols = None
@@ -143,12 +146,12 @@ class AbsCal(object):
         # load model if necessary
         if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or issubclass(model.__class__, UVData):
             (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
-             model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True)
+             model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True, filetype=filetype)
 
         # load data if necessary
         if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data.__class__, UVData):
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
-             data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True)
+             data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True, filetype=filetype)
             wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
             pols = data_pols
             freqs = data_freqs
@@ -1037,7 +1040,7 @@ def omni_abscal_arg_parser():
     return a
 
 
-def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
+def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
                min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
@@ -1067,9 +1070,11 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     Parameters:
     -----------
-    data_file : type=str, path to data miriad file containing complex visibility data
+    data_file : type=str, path to data file containing complex visibility data
 
-    model_files : type=list of strings, paths to model miriad files containing complex visibility data
+    model_files : type=list of strings, paths to model files containing complex visibility data
+
+    filetype : str, filetype of input data and models
 
     calfits_infile : type=str, path to calfits files containing gain solutions
                      to multiply with abscal gain solution before writing to file.
@@ -1168,7 +1173,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     if not nomodelfiles:
         echo("loading model file(s)", type=1, verbose=verbose)
         (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
-            model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
+            model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True, filetype=filetype)
         antpos = model_antpos
         model_lsts[model_lsts < model_lsts[0]] += 2 * np.pi
 
@@ -1188,7 +1193,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     # load data and configure weights
     echo("loading {}".format(data_file), type=1, verbose=verbose)
     (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
-        data_pols) = io.load_vis(data_file, pop_autos=True, return_meta=True, pick_data_ants=False)
+        data_pols) = io.load_vis(data_file, pop_autos=True, return_meta=True, pick_data_ants=False, filetype=filetype)
     bls = odict(map(lambda k: (k, data_antpos[k[0]] - data_antpos[k[1]]), data.keys()))
     Ntimes = len(data_times)
     Nfreqs = len(data_freqs)
@@ -1470,9 +1475,8 @@ def cut_bls(datacontainer, bls, min_bl_cut=None, max_bl_cut=None, inplace=False)
     Output
     ------
     datacontainer : DataContainer object with bl cut enacted
-        only returned if not inplace
     """
-    if inplace:
+    if not inplace:
         datacontainer = copy.deepcopy(datacontainer)
     if min_bl_cut is None:
         min_bl_cut = 0.0
@@ -1487,5 +1491,4 @@ def cut_bls(datacontainer, bls, min_bl_cut=None, max_bl_cut=None, inplace=False)
 
     assert len(datacontainer) > 0, "no baselines were kept after baseline cut..."
 
-    if not inplace:
-        return datacontainer
+    return datacontainer
