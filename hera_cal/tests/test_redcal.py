@@ -150,7 +150,7 @@ class TestMethods(unittest.TestCase):
 
         pos = {0: np.array([0, 0, 0]), 1: np.array([20, 0, 0]), 2: np.array([10, 0, 0])}
         self.assertEqual(om.get_pos_reds(pos), [[(0, 2), (2, 1)], [(0, 1)]])
-        self.assertEqual(om.get_pos_reds(pos, low_hi=True), [[(0, 2), (1, 2)], [(0, 1)]])
+        self.assertEqual(om.get_pos_reds(pos, low_hi=True), [[(0, 2), (2, 1)], [(0, 1)]])
 
     def test_filter_reds(self):
         antpos = build_linear_array(7)
