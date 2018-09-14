@@ -479,9 +479,9 @@ class RedundantCalibrator:
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
         if detrend_phs:
             for blgrp in self.reds:
-                self.phs_avg[blgrp[0]] = np.exp(-np.complex64(1j) * np.median(np.unwrap([np.log(dc[bl]).imag for bl in blgrp], axis=0), axis=0))
+                self.phs_avg[blgrp[0]] = np.exp(-1j * np.median(np.unwrap([np.log(dc[bl]).imag for bl in blgrp], axis=0), axis=0))
                 for bl in blgrp:
-                    self.phs_avg[bl] = self.phs_avg[blgrp[0]]
+                    self.phs_avg[bl] = self.phs_avg[blgrp[0]].astype(dc[bl].dtype)
         d_ls, w_ls = {}, {}
         for eq, key in eqs.items():
             d_ls[eq] = dc[key] * self.phs_avg.get(key, np.float32(1))
