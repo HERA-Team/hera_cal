@@ -60,12 +60,12 @@ def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
             bl_error_tol: the largest allowable difference between baselines in a redundant group
                 (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
-            low_hi: For all returned baseline index tuples (i,j) to have i < j.
+            low_hi: Check to make sure the first bl (i,j) in each bl group has i < j, otherwise conjugate all bls
+                in the group.
 
         Returns:
             reds: list of lists of redundant tuples of antenna indices (no polarizations).
     """
-
     keys = antpos.keys()
     reds = {}
     array_is_flat = np.all(np.abs(np.array(antpos.values())[:, 2] - np.mean(antpos.values(), axis=0)[2]) < bl_error_tol / 4.0)
@@ -92,10 +92,12 @@ def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
                 reds[delta] = [bl_pair]
 
     orderedDeltas = [delta for (length, delta) in sorted(zip([np.linalg.norm(delta) for delta in reds.keys()], reds.keys()))]
+    red_groups = [reds[delta] for delta in orderedDeltas]
+
     if low_hi:
-        return [[tuple(sorted(bl)) for bl in reds[delta]] for delta in orderedDeltas]
-    else:
-        return [reds[delta] for delta in orderedDeltas]
+        red_groups = [[bl[::-1] for bl in r] if r[0][0] > r[0][1] else r for r in red_groups]
+
+    return red_groups
 
 
 def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
