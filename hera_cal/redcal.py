@@ -526,33 +526,33 @@ class RedundantCalibrator:
         """
         fc_data = DataContainer(deepcopy(data))
         calibrate_in_place(fc_data, sol0)
-        Nfreqs = fc_data.values()[0].shape[1] # hardcode freq is axis 1 (time is axis 0)
+        Nfreqs = fc_data.values()[0].shape[1]  # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
-            wgts = {k:1. for k in data}
+            wgts = {k: 1. for k in data}
         wgts = DataContainer(wgts)
         taus, twgts = {}, {}
         for bls in self.reds:
-          for i,bl1 in enumerate(bls):
-            d1, w1 = data[bl1], wgts[bl1]
-            for bl2 in bls[i+1:]:
-                d12 = d1 * np.conj(data[bl2])
-                w12 = w1 * wgts[bl2]
-                taus[(bl1,bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
-                twgts[(bl1,bl2)] = np.sum(w12)
+            for i, bl1 in enumerate(bls):
+                d1, w1 = data[bl1], wgts[bl1]
+                for bl2 in bls[i + 1:]:
+                    d12 = d1 * np.conj(data[bl2])
+                    w12 = w1 * wgts[bl2]
+                    taus[(bl1, bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
+                    twgts[(bl1, bl2)] = np.sum(w12)
         d_ls, w_ls = {}, {}
-        for (bl1,bl2),tau_ij in taus.items():
-            ai,aj = split_bl(bl1)
-            am,an = split_bl(bl2)
-            i,j,m,n = (self.pack_sol_key(k) for k in (ai,aj,am,an))
-            eq_key = '%s-%s-%s+%s' % (i,j,m,n)
+        for (bl1, bl2), tau_ij in taus.items():
+            ai, aj = split_bl(bl1)
+            am, an = split_bl(bl2)
+            i, j, m, n = (self.pack_sol_key(k) for k in (ai, aj, am, an))
+            eq_key = '%s-%s-%s+%s' % (i, j, m, n)
             d_ls[eq_key] = np.array(tau_ij)
-            w_ls[eq_key] = twgts[(bl1,bl2)]
+            w_ls[eq_key] = twgts[(bl1, bl2)]
         ls = linsolve.LinearSolver(d_ls, wgts=w_ls, sparse=sparse)
         sol = ls.solve(mode=mode)
         freqs = np.arange(Nfreqs) * df
         # XXX does solving for offset help at all?
-        #sol = {self.unpack_sol_key(k): np.exp(2j * np.pi * v[0] * freqs + 1j * v[1]) for k,v in sol.items()}
-        sol = {self.unpack_sol_key(k): v[0] for k,v in sol.items()}
+        # sol = {self.unpack_sol_key(k): np.exp(2j * np.pi * v[0] * freqs + 1j * v[1]) for k,v in sol.items()}
+        sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
         return sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
@@ -660,25 +660,22 @@ class RedundantCalibrator:
         """
 
         # Check supported pol modes
-        assert self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], \
-                'Unrecognized pol_mode: %s' % self.pol_mode
-        assert mode in ('phase', 'complex'), \
-                'Unrecognized mode: %s' % mode
+        assert self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], 'Unrecognized pol_mode: %s' % self.pol_mode
+        assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
         if degen_gains is None:
             if mode == 'phase':
                 degen_gains = {key: np.zeros_like(val) for key, val in gains.items()}
-            else: # complex
+            else:  # complex
                 degen_gains = {key: np.ones_like(val) for key, val in gains.items()}
         ants = gains.keys()
-        gainPols = np.array([ant[1] for ant in gains]) # gainPols is list of antpols, one per antenna
+        gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
         antpols = list(set(gainPols))
-
 
         # if mode is 2pol, run as two 1pol remove degens
         if self.pol_mode is '2pol':
             self.pol_mode = '1pol'
-            pol0_gains = {k:v for k,v in gains.items() if k[1] == antpols[0]}
-            pol1_gains = {k:v for k,v in gains.items() if k[1] == antpols[1]}
+            pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
+            pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
             newSol = self.remove_degen_gains(antpos, pol0_gains, degen_gains=degen_gains, mode=mode)
             newSol.update(self.remove_degen_gains(antpos, pol1_gains, degen_gains=degen_gains, mode=mode))
             self.pol_mode = '2pol'
@@ -706,14 +703,14 @@ class RedundantCalibrator:
             # Fix phase terms only
             degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
             gainSols -= np.einsum('ij,jkl', Rgains, degenToRemove)
-        else: # working on complex data
+        else:  # working on complex data
             # Fix phase terms
             degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
             gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
             # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
             for pol in antpols:
-                meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1,p1), g1 in gains.items()
-                                           for (a2,p2), g2 in gains.items() 
+                meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
+                                           for (a2, p2), g2 in gains.items() 
                                            if p1 == pol and p2 == pol and a1 != a2], axis=0)
                 degenMeanSqAmplitude = np.mean([np.abs(degen_gains[k1] * degen_gains[k2]) for k1 in gains.keys()
                                                 for k2 in gains.keys() 
@@ -750,6 +747,7 @@ class RedundantCalibrator:
         calibrate_in_place(new_sol, new_gains, old_gains=gains)
         new_sol.update(new_gains)
         return new_sol
+
 
 def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
     """Figures out whether an array is redundantly calibratable.
