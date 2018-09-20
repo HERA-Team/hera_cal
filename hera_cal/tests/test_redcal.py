@@ -293,22 +293,17 @@ class TestRedundantCalibrator(unittest.TestCase):
         g, true_vis, d = om.sim_red_data(reds, shape=(1,NFREQ), gain_scatter=0)
         delays = {k: np.random.randn() * 30 for k in g.keys()} # in ns
         fc_gains = {k: np.exp(2j * np.pi * v * fqs) for k,v in delays.items()}
+        delays = {k:np.array([[v]]) for k,v in delays.items()}
         fc_gains = {i: v.reshape(1,NFREQ) for i,v in fc_gains.items()}
         gains = {k: v * fc_gains[k] for k,v in g.items()}
         calibrate_in_place(d, gains, old_gains=g, gain_convention='multiply')
         w = dict([(k, 1.) for k in d.keys()])
-        sol = info.firstcal(d, medfilt=False)
+        sol = info.firstcal(d, df=fqs[1]-fqs[0], medfilt=False)
+        sol_degen = info.remove_degen_gains(antpos, sol, degen_gains=delays, mode='phase')
         for i in xrange(NANTS):
-            self.assertEqual(sol[(i, 'Jxx')].shape, (1, NFREQ))
-        import IPython; IPython.embed()
-        for bls in reds:
-            ubl = sol[bls[0]]
-            self.assertEqual(ubl.shape, (1, NFREQ))
-            for bl in bls:
-                d_bl = d[bl]
-                mdl = sol[(bl[0], 'Jxx')] * sol[(bl[1], 'Jxx')].conj() * ubl
-                #np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
-                np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
+            #self.assertEqual(sol[(i, 'Jxx')].shape, (1, NFREQ))
+            self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
+            self.assertAlmostEqual(2*sol_degen[(i, 'Jxx')], 2*delays[(i,'Jxx')], 0)
 
     def test_logcal(self):
         NANTS = 18

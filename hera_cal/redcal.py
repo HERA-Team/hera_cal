@@ -509,29 +509,23 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def firstcal(self, data, sol0={}, wgts={}, sparse=False, mode='default', medfilt=True, kernel=(1, 11)):
+    def firstcal(self, data, wgts={}, df=1., sparse=False, mode='default', medfilt=True, kernel=(1, 11)):
         """Solves for a per-antenna delay by fitting a line to the phase difference between
         nominally redundant measurements.
 
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
-            sol0: dictionary that includes all starting (e.g. firstcal) gains in the
-                {(ant,antpol): np.array} format. These are divided out of the data before
-                logcal and then multiplied back into the returned gains in the solution.
-                Default empty dictionary does nothing.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
+            df: frequency change between data bins, determines scale of delays returned.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             medfilt : boolean, median filter data before fft
             kernel : size of median filter kernel along (time, freq) axes
 
         Returns:
-            sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
-                and {(ind1,ind2,pol): np.array} formats respectively
+            sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array} format.
         """
         fc_data = DataContainer(deepcopy(data))
         calibrate_in_place(fc_data, sol0)
-        #WINDOW = 'hamming'
-        #window = aipy.dsp.gen_window(fqs.size, window=WINDOW)
         Nfreqs = fc_data.values()[0].shape[1] # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
             wgts = {k:1. for k in data}
@@ -543,7 +537,7 @@ class RedundantCalibrator:
             for bl2 in bls[i+1:]:
                 d12 = d1 * np.conj(data[bl2])
                 w12 = w1 * wgts[bl2]
-                taus[(bl1,bl2)] = fft_dly(d12, 1., wgts=w12, medfilt=medfilt, kernel=kernel)
+                taus[(bl1,bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
                 twgts[(bl1,bl2)] = np.sum(w12)
         d_ls, w_ls = {}, {}
         for (bl1,bl2),tau_ij in taus.items():
@@ -555,29 +549,11 @@ class RedundantCalibrator:
             w_ls[eq_key] = twgts[(bl1,bl2)]
         ls = linsolve.LinearSolver(d_ls, wgts=w_ls, sparse=sparse)
         sol = ls.solve(mode=mode)
-        freqs = np.arange(Nfreqs)
+        freqs = np.arange(Nfreqs) * df
         # XXX does solving for offset help at all?
-        sol = {self.unpack_sol_key(k): np.exp(2j * np.pi * v[0] * freqs + 1j * v[1]) for k,v in sol.items()}
-        # XXX should sol include an estimate of the ubl?
-        #for ubl_key in [k for k in sol.keys() if len(k) == 3]:
-        #    sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
-        sol_with_fc = {key: (sol[key] * sol0[key] if (key in sol0 and len(key) == 2) else sol[key]) for key in sol.keys()}
-        return sol_with_fc
-
-        #sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
-        #for ubl_key in [k for k in sol.keys() if len(k) == 3]:
-        #    sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
-        #sol_with_fc = multiply_by_gains(sol, sol0, target_type='gain')
-        #return sol_with_fc
-        #sol = ls.solve()
-        #g0 = {'y':{}}
-        #for k in sol:
-        #    g0['y'][int(k[1:])] = np.exp(2j*np.pi*sol[k].reshape(-1,1)*fqs.reshape(1,-1))
-        #    print k, np.median(sol[k])
-        #    plt.plot(sol[k] - np.median(sol[k]), label=k)
-        #plt.legend()
-        #plt.show()
-
+        #sol = {self.unpack_sol_key(k): np.exp(2j * np.pi * v[0] * freqs + 1j * v[1]) for k,v in sol.items()}
+        sol = {self.unpack_sol_key(k): v[0] for k,v in sol.items()}
+        return sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
@@ -665,7 +641,9 @@ class RedundantCalibrator:
         return meta, sol
 
     def remove_degen_gains(self, antpos, gains, degen_gains=None, mode='phase'):
-        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).
+        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
+        function in nominally intended for use with firstcal, which returns (phase/delay) solutions
+        for antennas only.
 
         Args:
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
@@ -674,20 +652,27 @@ class RedundantCalibrator:
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
                 left as None, average gain amplitudes will be 1 and average phase terms will be 0.
                 Putting in firstcal solutions here can help avoid phasewrapping issues.
-            mode: 'phase' or 'complex', indicating whether the gains are passed as phases (e.g. phi 
-                in e^(i*phi)), or as the complex number itself.  If 'phase', only phase degeneracies
+            mode: 'phase' or 'complex', indicating whether the gains are passed as phases (e.g. delay 
+                or phi in e^(i*phi)), or as the complex number itself.  If 'phase', only phase degeneracies
                 removed.  If 'complex', both phase and amplitude degeneracies are removed.
         Returns:
             newSol: gains with degeneracy removal/replacement performed
         """
 
+        # Check supported pol modes
+        assert self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], \
+                'Unrecognized pol_mode: %s' % self.pol_mode
+        assert mode in ('phase', 'complex'), \
+                'Unrecognized mode: %s' % mode
         if degen_gains is None:
-            degen_gains = {key: np.zeros_like(val) for key, val in gains.items()}
+            if mode == 'phase':
+                degen_gains = {key: np.zeros_like(val) for key, val in gains.items()}
+            else: # complex
+                degen_gains = {key: np.ones_like(val) for key, val in gains.items()}
         ants = gains.keys()
         gainPols = np.array([ant[1] for ant in gains]) # gainPols is list of antpols, one per antenna
         antpols = list(set(gainPols))
 
-        assert(self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV']) # these are the only supported pol_modes
 
         # if mode is 2pol, run as two 1pol remove degens
         if self.pol_mode is '2pol':
@@ -717,7 +702,6 @@ class RedundantCalibrator:
         Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
 
         # degenToRemove is the amount we need to move in the degenerate subspace
-        assert(mode in ('phase', 'complex'))
         if mode == 'phase':
             # Fix phase terms only
             degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
@@ -741,7 +725,9 @@ class RedundantCalibrator:
         return newSol
 
     def remove_degen(self, antpos, sol, degen_sol=None):
-        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).
+        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
+        function is nominally intended for use with solutions from logcal, omnical, or lincal, which
+        return complex solutions for antennas and visibilities. 
 
         Args:
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
