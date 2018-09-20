@@ -219,6 +219,10 @@ class DataContainer:
         except(BaseException):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
             return False
 
+    def __iter__(self):
+        '''Iterates over keys, just like a standard dictionary.'''
+        return iter(self._data.keys())
+
     def get_data(self, *args):
         '''Interface to DataContainer.__getitem__(key).'''
         if len(args) > 1:
