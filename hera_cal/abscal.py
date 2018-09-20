@@ -1455,7 +1455,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
         return return_obj
 
 
-def cut_bls(datacontainer, bls, min_bl_cut=None, max_bl_cut=None, inplace=False):
+def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=False):
     """
     Cut visibility data based on min and max baseline length.
 
@@ -1464,7 +1464,8 @@ def cut_bls(datacontainer, bls, min_bl_cut=None, max_bl_cut=None, inplace=False)
     datacontainer : DataContainer object to perform baseline cut on
 
     bls : dictionary, holding baseline position vectors.
-        keys are antenna-pair tuples and values are baseline vectors in meters
+        keys are antenna-pair tuples and values are baseline vectors in meters.
+        If bls is None, will look for antpos attr in datacontainer.
 
     min_bl_cut : float, minimum baseline separation [meters] to keep in data
 
@@ -1482,6 +1483,16 @@ def cut_bls(datacontainer, bls, min_bl_cut=None, max_bl_cut=None, inplace=False)
         min_bl_cut = 0.0
     if max_bl_cut is None:
         max_bl_cut = 1e10
+    if bls is None:
+        # look for antpos in dc
+        if not hasattr(datacontainer, 'antpos'):
+            raise ValueError("If bls is not fed, datacontainer must have antpos attribute.")
+        bls = odict()
+        ap = datacontainer.antpos
+        for bl in datacontainer.keys():
+            if bl[0] not in ap or bl[1] not in ap:
+                continue
+            bls[bl] = ap[bl[1]] - ap[bl[0]]
     for k in datacontainer.keys():
         bl_len = np.linalg.norm(bls[k])
         if k not in bls:

@@ -224,11 +224,14 @@ class Test_AbsCal_Funcs:
 
     def test_cut_bl(self):
         Nbls = len(self.data)
-        _data = hc.abscal.cut_bls(self.data, self.bls, 20.0, inplace=False)
+        _data = hc.abscal.cut_bls(self.data, bls=self.bls, min_bl_cut=20.0, inplace=False)
         nt.assert_true(Nbls, 21)
         nt.assert_true(len(_data), 12)
         _data2 = copy.deepcopy(self.data)
-        hc.abscal.cut_bls(_data2, self.bls, 20.0, inplace=True)
+        hc.abscal.cut_bls(_data2, bls=self.bls, min_bl_cut=20.0, inplace=True)
+        nt.assert_true(len(_data2), 12)
+        _data = hc.abscal.cut_bls(self.data, bls=self.bls, min_bl_cut=20.0, inplace=False)
+        hc.abscal.cut_bls(_data2, min_bl_cut=20.0, inplace=True)
         nt.assert_true(len(_data2), 12)
 
 
