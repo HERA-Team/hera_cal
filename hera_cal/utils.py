@@ -100,6 +100,7 @@ def make_bl(*args):
         i, j, pol = args
     return (i, j, _comply_vispol(pol))
 
+
 def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
     """Get delay of visibility across band using FFT and quadratic fit to delay peak.
     Arguments:
@@ -126,20 +127,19 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
     dtau = fftfreqs[1] - fftfreqs[0]
     dlys = np.zeros((Ntimes, 1))
     # use parabolic peak interpolation: https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-    for i,mx in enumerate(argmaxes):
-        a, b, c = amp[i,mx-1], amp[i,mx], amp[i,(mx+1) % Nfreqs]
+    for i, mx in enumerate(argmaxes):
+        a, b, c = amp[i, mx - 1], amp[i, mx], amp[i, (mx + 1) % Nfreqs]
         if np.abs(a - 2 * b + c) > 0 and np.abs(a - c) > 0:
             shift = .5 * (a - c) / (a - 2 * b + c)
         else:
             shift = 0
         # use peak shift to linearly interpolate to get appropriate delay
-        dlys[i] = (1.0 - np.abs(shift)) * fftfreqs[mx] + \
-                    np.abs(shift) * (fftfreqs[mx] + np.sign(shift) * dtau)
+        dlys[i] = (1.0 - np.abs(shift)) * fftfreqs[mx] + np.abs(shift) * (fftfreqs[mx] + np.sign(shift) * dtau)
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs) * df
-    freqs.shape = (1,-1)
+    freqs.shape = (1, -1)
     offset = np.angle(np.mean(data * np.exp(-2j * np.pi * dlys * freqs), axis=1))
-    offset.shape = (-1,1)
+    offset.shape = (-1, 1)
     return dlys, offset
 
 
