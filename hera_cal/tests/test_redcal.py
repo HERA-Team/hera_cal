@@ -297,12 +297,13 @@ class TestRedundantCalibrator(unittest.TestCase):
         delays = {k: np.array([[v]]) for k, v in delays.items()}
         fc_gains = {i: v.reshape(1, NFREQ) for i, v in fc_gains.items()}
         gains = {k: v * fc_gains[k] for k, v in g.items()}
+        gains = {k: v.astype(np.complex64) for k, v in gains.items()}
         calibrate_in_place(d, gains, old_gains=g, gain_convention='multiply')
-        w = dict([(k, 1.) for k in d.keys()])
+        d = {k: v.astype(np.complex64) for k, v in d.items()}
         sol = info.firstcal(d, df=fqs[1] - fqs[0], medfilt=False)
         sol_degen = info.remove_degen_gains(antpos, sol, degen_gains=delays, mode='phase')
         for i in xrange(NANTS):
-            #self.assertEqual(sol[(i, 'Jxx')].shape, (1, NFREQ))
+            self.assertEqual(sol[(i, 'Jxx')].dtype, np.float32)
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
             self.assertAlmostEqual(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0, 0)
 

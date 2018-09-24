@@ -107,22 +107,13 @@ class TestFftDly(object):
         dlys, offs = utils.fft_dly(data, df, medfilt = True)
         np.testing.assert_almost_equal(1. * dlys, 1. * true_dlys, -1)  # accuracy of 10 ns
 
-    def test_rfi_norm(self):
+    def test_rfi(self):
         true_dlys = np.random.uniform(-200, 200, size = 60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         data[:, ::16] = 1000.
         df = np.median(np.diff(self.freqs))
-        dlys, offs = utils.fft_dly(data, df, norm = True)
-        np.testing.assert_almost_equal(5. * dlys, 5. * true_dlys, -1)  # accuracy of 2 ns
-
-    def test_rfi_medfilt(self):
-        true_dlys = np.random.uniform(-200, 200, size = 60)
-        true_dlys.shape = (60, 1)
-        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
-        data[:, ::16] = 1000.
-        df = np.median(np.diff(self.freqs))
-        dlys, offs = utils.fft_dly(data, df, norm = False, medfilt = True)
+        dlys, offs = utils.fft_dly(data, df, medfilt = True)
         np.testing.assert_almost_equal(5. * dlys, 5. * true_dlys, -1)  # accuracy of 2 ns
 
     def test_nan(self):
