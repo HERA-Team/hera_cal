@@ -98,6 +98,9 @@ class TestDataContainer(unittest.TestCase):
         keys = dc.keys()
         self.assertEqual(len(keys), len(self.pols) * len(self.antpairs))
 
+        for key1, key2 in zip(dc.keys(), dc):
+            self.assertEqual(key1, key2)
+
     def test_values(self):
         dc = datacontainer.DataContainer(self.blpol)
         values = dc.values()
