@@ -303,7 +303,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         for i in xrange(NANTS):
             #self.assertEqual(sol[(i, 'Jxx')].shape, (1, NFREQ))
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
-            self.assertAlmostEqual(2 * sol_degen[(i, 'Jxx')], 2 * delays[(i, 'Jxx')], 0)
+            self.assertAlmostEqual(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0, 0)
 
     def test_logcal(self):
         NANTS = 18
@@ -480,6 +480,9 @@ class TestRedundantCalibrator(unittest.TestCase):
         dlys = rc.remove_degen_gains(antpos, true_dlys, mode='phase')
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], 0, 10)
+        dlys = rc.remove_degen_gains(antpos, true_dlys, degen_gains=true_dlys, mode='phase')
+        for k in dlys:
+            np.testing.assert_almost_equal(dlys[k], true_dlys[k], 10)
 
     def test_remove_degen_firstcal_2D(self):
         pol = 'xx'
