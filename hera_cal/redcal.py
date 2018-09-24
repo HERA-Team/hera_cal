@@ -511,7 +511,8 @@ class RedundantCalibrator:
 
     def firstcal(self, data, wgts={}, df=1., sparse=False, mode='default', medfilt=True, kernel=(1, 11)):
         """Solves for a per-antenna delay by fitting a line to the phase difference between
-        nominally redundant measurements.
+        nominally redundant measurements.  To turn these delays into gains, you need to do:
+        np.exp(2j * np.pi * delay * freqs)
 
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
