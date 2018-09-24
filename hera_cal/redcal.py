@@ -532,7 +532,7 @@ class RedundantCalibrator:
         """
         Nfreqs = six.next(six.itervalues(data)).shape[1]  # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
-            wgts = {k: np.float32(1.) for k in data}
+            wgts = {k: np.float32(1) for k in data}
         wgts = DataContainer(wgts)
         taus, twgts = {}, {}
         for bls in self.reds:
@@ -542,7 +542,7 @@ class RedundantCalibrator:
                     d12 = d1 * np.conj(data[bl2])
                     if norm:
                         ad12 = np.abs(d12)
-                        d12 /= np.where(ad12 == 0, 1, ad12)
+                        d12 /= np.where(ad12 == 0, np.float32(1), ad12)
                     w12 = w1 * wgts[bl2]
                     taus[(bl1, bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
                     twgts[(bl1, bl2)] = np.sum(w12)

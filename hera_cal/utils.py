@@ -127,7 +127,7 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
     argmaxes = np.argmax(amp, axis=1)
     fftfreqs = np.fft.fftfreq(Nfreqs, df)
     dtau = fftfreqs[1] - fftfreqs[0]
-    dlys = np.zeros((Ntimes, 1))
+    dlys = np.zeros((Ntimes, 1), dtype=data.real.dtype)
     # use parabolic peak interpolation: https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
     for i, mx in enumerate(argmaxes):
         a, b, c = amp[i, mx - 1], amp[i, mx], amp[i, (mx + 1) % Nfreqs]
@@ -138,9 +138,9 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
         # use peak shift to linearly interpolate to get appropriate delay
         dlys[i] = (1.0 - np.abs(shift)) * fftfreqs[mx] + np.abs(shift) * (fftfreqs[mx] + np.sign(shift) * dtau)
     # Now that we know the slope, estimate the remaining phase offset
-    freqs = np.arange(Nfreqs) * df
+    freqs = np.arange(Nfreqs, dtype=data.dtype) * df
     freqs.shape = (1, -1)
-    offset = np.angle(np.mean(data * np.exp(-2j * np.pi * dlys * freqs), axis=1))
+    offset = np.angle(np.mean(data * np.exp(-np.complex64(2j * np.pi) * dlys * freqs), axis=1))
     offset.shape = (-1, 1)
     return dlys, offset
 
