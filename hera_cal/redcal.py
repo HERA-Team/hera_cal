@@ -534,7 +534,7 @@ class RedundantCalibrator:
         if len(wgts) == 0:
             wgts = {k: np.float32(1) for k in data}
         wgts = DataContainer(wgts)
-        taus, twgts = {}, {}
+        taus_offs, twgts = {}, {}
         for bls in self.reds:
             for i, bl1 in enumerate(bls):
                 d1, w1 = data[bl1], wgts[bl1]
@@ -544,15 +544,15 @@ class RedundantCalibrator:
                         ad12 = np.abs(d12)
                         d12 /= np.where(ad12 == 0, np.float32(1), ad12)
                     w12 = w1 * wgts[bl2]
-                    taus[(bl1, bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
+                    taus_offs[(bl1, bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
                     twgts[(bl1, bl2)] = np.sum(w12)
         d_ls, w_ls = {}, {}
-        for (bl1, bl2), tau_ij in taus.items():
+        for (bl1, bl2), tau_off_ij in taus_offs.items():
             ai, aj = split_bl(bl1)
             am, an = split_bl(bl2)
             i, j, m, n = (self.pack_sol_key(k) for k in (ai, aj, am, an))
             eq_key = '%s-%s-%s+%s' % (i, j, m, n)
-            d_ls[eq_key] = np.array(tau_ij)
+            d_ls[eq_key] = np.array(tau_off_ij)
             w_ls[eq_key] = twgts[(bl1, bl2)]
         ls = linsolve.LinearSolver(d_ls, wgts=w_ls, sparse=sparse)
         sol = ls.solve(mode=mode)
