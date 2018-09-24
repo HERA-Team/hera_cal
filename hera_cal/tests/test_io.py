@@ -3,7 +3,6 @@
 # Licensed under the MIT License
 
 '''Tests for io.py'''
-
 import unittest
 import numpy as np
 import pyuvdata
@@ -707,11 +706,19 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
         # test single integration write
-        gains = odict(map(lambda k: (k, gains[k][:1]), gains.keys()))
-        uvc = io.write_cal("ex.calfits", gains, freqs, times[:1], return_uvc=True, outdir='./')
+        gains2 = odict(map(lambda k: (k, gains[k][:1]), gains.keys()))
+        uvc = io.write_cal("ex.calfits", gains2, freqs, times[:1], return_uvc=True, outdir='./')
         self.assertAlmostEqual(uvc.integration_time, 0.0)
         self.assertEqual(uvc.Ntimes, 1)
         self.assertTrue(os.path.exists('ex.calfits'))
+        os.remove('ex.calfits')
+
+        # test multiple pol
+        for k in gains.keys():
+            gains[(k[0], 'y')] = gains[k].conj()
+        uvc = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, outdir='./')
+        self.assertEqual(uvc.gain_array.shape, (10, 1, 64, 100, 2))
+        self.assertTrue(np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0], uvc.gain_array[0, 0, :, :, 1].conj()))
         os.remove('ex.calfits')
 
     def test_update_cal(self):
