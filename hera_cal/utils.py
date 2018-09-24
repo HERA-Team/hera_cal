@@ -114,13 +114,15 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
     """
     Ntimes, Nfreqs = data.shape
     if wgts is None:
-        wgts = np.ones_like(data, dtype=np.float)
+        wgts = np.float32(1)
     # smooth via median filter
     if medfilt:
         data.real = signal.medfilt(data.real, kernel_size=kernel)
         data.imag = signal.medfilt(data.imag, kernel_size=kernel)
     # fft w/ window and find argmax
-    vfft = np.fft.fft(data * wgts, axis=1)
+    dw = data * wgts
+    dw[np.isnan(dw)] = 0
+    vfft = np.fft.fft(dw, axis=1)
     amp = np.abs(vfft)
     argmaxes = np.argmax(amp, axis=1)
     fftfreqs = np.fft.fftfreq(Nfreqs, df)

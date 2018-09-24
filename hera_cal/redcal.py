@@ -8,6 +8,7 @@ from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, comply_pol, fft_dly
 from hera_cal.apply_cal import calibrate_in_place
+import six
 
 
 def noise(size):
@@ -507,27 +508,29 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def firstcal(self, data, wgts={}, df=1., sparse=False, mode='default', medfilt=True, kernel=(1, 11)):
+    def firstcal(self, data, df, wgts={}, sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
         """Solves for a per-antenna delay by fitting a line to the phase difference between
         nominally redundant measurements.  To turn these delays into gains, you need to do:
         np.exp(2j * np.pi * delay * freqs)
 
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+            df: frequency change between data bins, scales returned delays by 1/df.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
-            df: frequency change between data bins, determines scale of delays returned.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
-            medfilt : boolean, median filter data before fft
+            norm: calculate delays from just the phase information (not the amplitude) of the data.
+                This is a pretty effective way to get reliable delay even in the presence of RFI.
+            medfilt : boolean, median filter data before fft.  This can work for data containing
+                unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
             kernel : size of median filter kernel along (time, freq) axes
 
         Returns:
-            sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array} format.
+            sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
+                format.  All delays are multiplied by 1/df, so use that to set physical scale.
         """
-        fc_data = DataContainer(deepcopy(data))
-        calibrate_in_place(fc_data, sol0)
-        Nfreqs = fc_data.values()[0].shape[1]  # hardcode freq is axis 1 (time is axis 0)
+        Nfreqs = six.next(six.itervalues(data)).shape[1]  # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
-            wgts = {k: 1. for k in data}
+            wgts = {k: np.float32(1.) for k in data}
         wgts = DataContainer(wgts)
         taus, twgts = {}, {}
         for bls in self.reds:
@@ -535,6 +538,9 @@ class RedundantCalibrator:
                 d1, w1 = data[bl1], wgts[bl1]
                 for bl2 in bls[i + 1:]:
                     d12 = d1 * np.conj(data[bl2])
+                    if norm:
+                        ad12 = np.abs(d12)
+                        d12 /= np.where(ad12 == 0, 1, ad12)
                     w12 = w1 * wgts[bl2]
                     taus[(bl1, bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
                     twgts[(bl1, bl2)] = np.sum(w12)
@@ -548,10 +554,7 @@ class RedundantCalibrator:
             w_ls[eq_key] = twgts[(bl1, bl2)]
         ls = linsolve.LinearSolver(d_ls, wgts=w_ls, sparse=sparse)
         sol = ls.solve(mode=mode)
-        freqs = np.arange(Nfreqs) * df
-        # XXX does solving for offset help at all?
-        # sol = {self.unpack_sol_key(k): np.exp(2j * np.pi * v[0] * freqs + 1j * v[1]) for k,v in sol.items()}
-        sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
+        sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}  # ignoring offset
         return sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
@@ -650,12 +653,13 @@ class RedundantCalibrator:
             degen_gains: Optional dictionary in the same format as gains. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
                 left as None, average gain amplitudes will be 1 and average phase terms will be 0.
-                Putting in firstcal solutions here can help avoid phasewrapping issues.
+                For logcal/lincal/omnical, putting firstcal solutions in here can help avoid structure
+                associated with phase-wrapping issues.
             mode: 'phase' or 'complex', indicating whether the gains are passed as phases (e.g. delay 
                 or phi in e^(i*phi)), or as the complex number itself.  If 'phase', only phase degeneracies
                 removed.  If 'complex', both phase and amplitude degeneracies are removed.
         Returns:
-            newSol: gains with degeneracy removal/replacement performed
+            new_gains: gains with degeneracy removal/replacement performed
         """
 
         # Check supported pol modes
@@ -675,10 +679,10 @@ class RedundantCalibrator:
             self.pol_mode = '1pol'
             pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
             pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
-            newSol = self.remove_degen_gains(antpos, pol0_gains, degen_gains=degen_gains, mode=mode)
-            newSol.update(self.remove_degen_gains(antpos, pol1_gains, degen_gains=degen_gains, mode=mode))
+            new_gains = self.remove_degen_gains(antpos, pol0_gains, degen_gains=degen_gains, mode=mode)
+            new_gains.update(self.remove_degen_gains(antpos, pol1_gains, degen_gains=degen_gains, mode=mode))
             self.pol_mode = '2pol'
-            return newSol
+            return new_gains
 
         # Extract gain and model visibiltiy solutions
         gainSols = np.array([gains[ant] for ant in ants])
@@ -717,8 +721,8 @@ class RedundantCalibrator:
                 gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
 
         # Create new solutions dictionary
-        newSol = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
-        return newSol
+        new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
+        return new_gains
 
     def remove_degen(self, antpos, sol, degen_sol=None):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
@@ -732,10 +736,10 @@ class RedundantCalibrator:
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
                 left as None, average gain amplitudes will be 1 and average phase terms will be 0.
-                Visibilties in degen_sol are ignored. Putting in firstcal solutions here can
-                help avoid phasewrapping issues.
+                Visibilties in degen_sol are ignored.  For logcal/lincal/omnical, putting firstcal 
+                solutions in here can help avoid structure associated with phase-wrapping issues.
         Returns:
-            newSol: sol with degeneracy removal/replacement performed
+            new_sol: sol with degeneracy removal/replacement performed
         """
 
         gains, vis = get_gains_and_vis_from_sol(sol)
