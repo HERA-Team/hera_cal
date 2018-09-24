@@ -1007,7 +1007,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     '''
 
     # get antenna info
-    ant_array = np.array(sorted(map(lambda k: k[0], gains.keys())), np.int)
+    ant_array = np.unique(map(lambda k: k[0], gains.keys())).astype(np.int)
     antenna_numbers = copy.copy(ant_array)
     antenna_names = np.array(map(lambda a: "ant{}".format(a), antenna_numbers))
     Nants_data = len(ant_array)
