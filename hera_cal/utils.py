@@ -139,8 +139,8 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
         dlys[i] = (1.0 - np.abs(shift)) * fftfreqs[mx] + np.abs(shift) * (fftfreqs[mx] + np.sign(shift) * dtau)
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df
-    offset = np.angle(np.mean(data * np.exp(-np.complex64(2j * np.pi) * dlys * freqs.reshape(1,-1)), axis=1))
-    return dlys, offset.reshape(-1,1)
+    offset = np.angle(np.mean(data * np.exp(-np.complex64(2j * np.pi) * dlys * freqs.reshape(1, -1)), axis=1))
+    return dlys, offset.reshape(-1, 1)
 
 
 class AntennaArray(aipy.pol.AntennaArray):
