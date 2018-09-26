@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
-
 """
 abscal.py
 ---------
@@ -71,9 +70,9 @@ class AbsCal(object):
     pathologies, meaning that a delay calibration should generally precede a
     phs_logcal or a TT_phs_logcal bandpass routine.
     """
-
     def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None,
-                 bl_cut=None, bl_taper_fwhm=None, verbose=True):
+                 min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, verbose=True,
+                 filetype='miriad'):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -83,28 +82,32 @@ class AbsCal(object):
 
         Parameters:
         -----------
-        model : visibility data of refence model, type=DataContainer
+        model : Visibility data of refence model, type=dictionary or DataContainer
                 keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
                 values are complex ndarray visibilities.
                 these must be 2D arrays, with [0] axis indexing time
                 and [1] axis indexing frequency.
 
-                Optionally, model can be a path to a miriad or uvfits file, or a
-                pyuvdata.UVData object, or a list of either.
+                Optionally, model can be a path to a pyuvdata-supported file, a
+                pyuvdata.UVData object or hera_cal.HERAData object,
+                or a list of either.
 
-        data : visibility data of measurements, type=DataContainer
-               keys are antenna pair + pol tuples (must match model), values are
-               complex ndarray visibilities matching shape of model
+        data :  Visibility data, type=dictionary or DataContainer
+                keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+                values are complex ndarray visibilities.
+                these must be 2D arrays, with [0] axis indexing time
+                and [1] axis indexing frequency.
 
-                Optionally, model can be a path to a miriad or uvfits file, or a
-                pyuvdata.UVData object, or a list of either. In this case, wgts, antpos,
-                freqs, times and pols are overwritten with equivalent information from data object.
+                Optionally, data can be a path to a pyuvdata-supported file, a
+                pyuvdata.UVData object or hera_cal.HERAData object,
+                or a list of either. In this case, antpos, freqs
+                and wgts are overwritten from arrays in data.
 
         refant : antenna number integer for reference antenna
             The refence antenna is used in the phase solvers, where an absolute phase is applied to all
             antennas such that the refant's phase is set to identically zero.
 
-        wgts : weights of data, type=DataContainer, [default=None]
+        wgts : weights of the data, type=dictionary or DataContainer, [default=None]
                keys are antenna pair + pol tuples (must match model), values are real floats
                matching shape of model and data
 
@@ -122,28 +125,33 @@ class AbsCal(object):
                  ----
                  This is needed only for Tip Tilt, phase slope, and delay slope calibration.
 
-        freqs : ndarray of frequency array, type=ndarray, dtype=float
+        freqs : ndarray of frequency array, type=ndarray
                 1d array containing visibility frequencies in Hz.
                 Needed for delay calibration.
 
-        bl_cut : float, eliminate all visibilities with baseline separation lengths
-            larger than bl_cut. This is assumed to be in ENU coordinates with units of meters.
+        min_bl_cut : float, eliminate all visibilities with baseline separation lengths
+            smaller than min_bl_cut. This is assumed to be in ENU coordinates with units of meters.
+
+        max_bl_cut : float, eliminate all visibilities with baseline separation lengths
+            larger than max_bl_cut. This is assumed to be in ENU coordinates with units of meters.
 
         bl_taper_fwhm : float, impose a gaussian taper on the data weights as a function of
             bl separation length, with a specified fwhm [meters]
+
+        filetype : str, if data and/or model are fed as strings, this is their filetype
         """
         # set pols to None
         pols = None
 
-        # check format of model if model is not a dictionary
-        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or isinstance(model, UVData):
+        # load model if necessary
+        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or issubclass(model.__class__, UVData):
             (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
-             model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True)
+             model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True, filetype=filetype)
 
-        # check format of data if data is not a dictionary
-        if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or isinstance(data, UVData):
+        # load data if necessary
+        if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data.__class__, UVData):
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
-             data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True)
+             data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True, filetype=filetype)
             wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
             pols = data_pols
             freqs = data_freqs
@@ -193,7 +201,7 @@ class AbsCal(object):
         self.Nants = len(self.ants)
         if refant is None:
             refant = self.keys[0][0]
-            print "using {} for reference antenna".format(refant)
+            print("using {} for reference antenna".format(refant))
         else:
             assert refant in self.ants, "refant {} not found in self.ants".format(refant)
         self.refant = refant
@@ -213,12 +221,12 @@ class AbsCal(object):
         self._gain_keys = map(lambda p: map(lambda a: (a, p), self.ants), self.gain_pols)
 
         # perform baseline cut
-        if bl_cut is not None:
+        if min_bl_cut is not None or max_bl_cut is not None:
             assert self.antpos is not None, "can't request a bl_cut if antpos is not fed"
 
-            _model = cut_bls(self.model, self.bls, bl_cut)
-            _data = cut_bls(self.data, self.bls, bl_cut)
-            _wgts = cut_bls(self.wgts, self.bls, bl_cut)
+            _model = cut_bls(self.model, self.bls, min_bl_cut, max_bl_cut)
+            _data = cut_bls(self.data, self.bls, min_bl_cut, max_bl_cut)
+            _wgts = cut_bls(self.wgts, self.bls, min_bl_cut, max_bl_cut)
 
             # re-init
             self.__init__(_model, _data, refant=self.refant, wgts=_wgts, antpos=self.antpos, freqs=self.freqs, verbose=verbose)
@@ -226,17 +234,18 @@ class AbsCal(object):
         # enact a baseline weighting taper
         if bl_taper_fwhm is not None:
             assert self.antpos is not None, "can't request a baseline taper if antpos is not fed"
-            # make gaussian taper func
 
+            # make gaussian taper func
             def taper(ratio):
                 return np.exp(-0.5 * ratio**2)
+                
             # iterate over baselines
             for k in self.wgts.keys():
                 self.wgts[k] *= taper(np.linalg.norm(self.bls[k]) / bl_taper_fwhm)
 
     def amp_logcal(self, verbose=True):
         """
-        call abscal_funcs.amp_logcal() method. see its docstring for more details.
+        Call abscal_funcs.amp_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
@@ -564,7 +573,6 @@ class AbsCal(object):
         self._TT_Phi_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]), pk), self._gain_keys), 0, -1)
 
     # amp_logcal results
-
     @property
     def ant_eta(self):
         """ return _ant_eta dict, containing per-antenna amplitude solution """
@@ -599,7 +607,6 @@ class AbsCal(object):
             return None
 
     # phs_logcal results
-
     @property
     def ant_phi(self):
         """ return _ant_phi dict, containing per-antenna phase solution """
@@ -634,7 +641,6 @@ class AbsCal(object):
             return None
 
     # delay_lincal results
-
     @property
     def ant_dly(self):
         """ return _ant_dly dict, containing per-antenna delay solution """
@@ -702,7 +708,6 @@ class AbsCal(object):
             return None
 
     # delay_slope_lincal results
-
     @property
     def dly_slope(self):
         """ return _dly_slope dict, containing the delay slope across the array """
@@ -762,7 +767,6 @@ class AbsCal(object):
             return None
 
     # global_phase_slope_logcal results
-
     @property
     def phs_slope(self):
         """ return _phs_slope dict, containing the frequency-indpendent phase slope across the array """
@@ -822,7 +826,6 @@ class AbsCal(object):
             return None
 
     # abs_amp_logcal results
-
     @property
     def abs_eta(self):
         """return _abs_eta dict"""
@@ -869,7 +872,6 @@ class AbsCal(object):
             return None
 
     # TT_phs_logcal results
-
     @property
     def abs_psi(self):
         """return _abs_psi dict"""
@@ -993,7 +995,8 @@ def abscal_arg_parser():
     a.add_argument("--gen_phs_cal", default=False, action='store_true', help='perform general antenna phase bandpass calibration')
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
-    a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
+    a.add_argument("--min_bl_cut", default=None, type=float, help="cut visibilities w/ baseline length smaller than min_bl_cut [meters].")
+    a.add_argument("--max_bl_cut", default=None, type=float, help="cut visibilities w/ baseline length larger than max_bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
     a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
@@ -1027,7 +1030,8 @@ def omni_abscal_arg_parser():
     a.add_argument("--phs_conv_crit", type=float, default=1e-6, help="convergence criterion in Delta g / g for stopping iterative phase_slope_cal or TT_phs_cal")
     a.add_argument("--max_dlst", default=0.005, type=float, help="maximum allowed LST difference in model rephasing, otherwies model is flagged.")
     a.add_argument("--refant", default=None, type=int, help="antenna number integer to use as reference antenna.")
-    a.add_argument("--bl_cut", default=None, type=float, help="cut visibilities w/ baseline length large than bl_cut [meters].")
+    a.add_argument("--min_bl_cut", default=None, type=float, help="cut visibilities w/ baseline length smaller than min_bl_cut [meters].")
+    a.add_argument("--max_bl_cut", default=None, type=float, help="cut visibilities w/ baseline length larger than max_bl_cut [meters].")
     a.add_argument("--bl_taper_fwhm", default=None, type=float, help="enact gaussian weight tapering based on baseline length [meters] with specified FWHM.")
     a.add_argument("--window", default=None, type=str, help="window to enact on data before FFT in delay solvers, options=[None, 'blackmanharris', 'hann']")
     a.add_argument("--edge_cut", default=0, type=int, help="number of channels to flag on each band-edge in delay and global phase solvers.")
@@ -1036,19 +1040,20 @@ def omni_abscal_arg_parser():
     return a
 
 
-def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
-               bl_cut=None, bl_taper_fwhm=None, output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
+def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
+               min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
                TT_phs_cal=False, phs_max_iter=100, phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False,
                latitude=-30.72152, max_dlst=0.005, solar_horizon=90.0, antflag_thresh=0.2, history=''):
     """
-    run AbsCal on a set of time-contiguous data files, using time-contiguous model files that cover
+    Run abscal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
 
     Parameters that control calibration steps are:
 
-    delay_cal -> avg_phs_cal -> delay_slope_cal -> abs_amp_cal -> TT_phs_cal - > gen_amp_cal -> gen_phs_cal
+    delay_cal -> avg_phs_cal -> delay_slope_cal -> abs_amp_cal
+    -> TT_phs_cal - > gen_amp_cal -> gen_phs_cal
 
     which are run in that order if any of these parameters are set to True. Calibration steps are
     run and then directly applied to the data before proceeding to the next calibration step. To
@@ -1065,15 +1070,17 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     Parameters:
     -----------
-    data_file : type=str, path to data miriad file containing complex visibility data
+    data_file : type=str, path to data file containing complex visibility data
 
-    model_files : type=list of strings, paths to model miriad files containing complex visibility data
+    model_files : type=list of strings, paths to model files containing complex visibility data
+
+    filetype : str, filetype of input data and models
 
     calfits_infile : type=str, path to calfits files containing gain solutions
                      to multiply with abscal gain solution before writing to file.
                      History, quality and flags are also propagated to final output calfits file.
 
-    refant : antenna number integer to use as reference antenna.
+    refant : type=int, antenna number integer to use as reference antenna.
 
     verbose : type=boolean, if True print output to stdout
 
@@ -1089,8 +1096,9 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
 
     return_object : type=boolean, if True, return AbsCal object
 
-    bl_cut : float, eliminate all visibilities with baseline separation lengths
-        larger than bl_cut. This is assumed to be in ENU coordinates with units of meters.
+    min_bl_cut : float, minimum baseline separation [meters] to keep in data
+
+    max_bl_cut : float, maximum baseline separation [meters] to keep in data    
 
     bl_taper_fwhm : float, impose a gaussian taper on the data weights as a function of
         bl separation length, with a specified fwhm [meters]
@@ -1165,7 +1173,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     if not nomodelfiles:
         echo("loading model file(s)", type=1, verbose=verbose)
         (model, model_flags, model_antpos, model_ants, model_freqs, model_times, model_lsts,
-            model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True)
+            model_pols) = io.load_vis(model_files, pop_autos=True, return_meta=True, filetype=filetype)
         antpos = model_antpos
         model_lsts[model_lsts < model_lsts[0]] += 2 * np.pi
 
@@ -1185,7 +1193,7 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
     # load data and configure weights
     echo("loading {}".format(data_file), type=1, verbose=verbose)
     (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
-        data_pols) = io.load_vis(data_file, pop_autos=True, return_meta=True, pick_data_ants=False)
+        data_pols) = io.load_vis(data_file, pop_autos=True, return_meta=True, pick_data_ants=False, filetype=filetype)
     bls = odict(map(lambda k: (k, data_antpos[k[0]] - data_antpos[k[1]]), data.keys()))
     Ntimes = len(data_times)
     Nfreqs = len(data_freqs)
@@ -1228,7 +1236,8 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
             wgts = mirror_data_to_red_bls(wgts, model_antpos, tol=tol, weights=True)
 
         # instantiate class
-        AC = AbsCal(new_model, data, wgts=wgts, refant=refant, antpos=antpos, freqs=data_freqs, bl_cut=bl_cut, bl_taper_fwhm=bl_taper_fwhm)
+        AC = AbsCal(new_model, data, wgts=wgts, refant=refant, antpos=antpos, freqs=data_freqs,
+                    min_bl_cut=min_bl_cut, max_bl_cut=min_bl_cut, bl_taper_fwhm=bl_taper_fwhm)
         refant = AC.refant
 
         # center total_data_antpos w/ refant
@@ -1446,28 +1455,51 @@ def abscal_run(data_file, model_files, refant=None, calfits_infile=None, verbose
         return return_obj
 
 
-def cut_bls(datacontainer, bls, bl_cut):
+def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=False):
     """
-    Cut visibility data based on maximum baseline length. Note
-    that this directly overwrites the data in these containers (i.e. inplace).
+    Cut visibility data based on min and max baseline length.
 
     Parameters
     ----------
     datacontainer : DataContainer object to perform baseline cut on
 
-    bls : dictionary, keys are antenna-pair tuples and values are baseline vectors in meters
+    bls : dictionary, holding baseline position vectors.
+        keys are antenna-pair tuples and values are baseline vectors in meters.
+        If bls is None, will look for antpos attr in datacontainer.
 
-    bl_cut : float, maximum baseline separation [meters] to keep in data
+    min_bl_cut : float, minimum baseline separation [meters] to keep in data
 
-    Output (cut_datacontainers)
+    max_bl_cut : float, maximum baseline separation [meters] to keep in data    
+
+    inplace : bool, if True edit data in input object, else make a copy.
+
+    Output
     ------
-    cut_datacontainer : DataContainer object with bl cut enacted
+    datacontainer : DataContainer object with bl cut enacted
     """
-    cut_datacontainer = odict()
+    if not inplace:
+        datacontainer = copy.deepcopy(datacontainer)
+    if min_bl_cut is None:
+        min_bl_cut = 0.0
+    if max_bl_cut is None:
+        max_bl_cut = 1e10
+    if bls is None:
+        # look for antpos in dc
+        if not hasattr(datacontainer, 'antpos'):
+            raise ValueError("If bls is not fed, datacontainer must have antpos attribute.")
+        bls = odict()
+        ap = datacontainer.antpos
+        for bl in datacontainer.keys():
+            if bl[0] not in ap or bl[1] not in ap:
+                continue
+            bls[bl] = ap[bl[1]] - ap[bl[0]]
     for k in datacontainer.keys():
-        if k in bls and np.linalg.norm(bls[k]) <= bl_cut:
-            cut_datacontainer[k] = datacontainer[k]
+        bl_len = np.linalg.norm(bls[k])
+        if k not in bls:
+            continue
+        if bl_len > max_bl_cut or bl_len < min_bl_cut:
+            del datacontainer[k]
 
-    assert len(cut_datacontainer) > 0, "no baselines were kept after baseline cut..."
+    assert len(datacontainer) > 0, "no baselines were kept after baseline cut..."
 
-    return DataContainer(cut_datacontainer)
+    return datacontainer

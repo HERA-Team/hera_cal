@@ -6,8 +6,9 @@ import numpy as np
 import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
-from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, comply_pol
+from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, comply_pol, fft_dly
 from hera_cal.apply_cal import calibrate_in_place
+import six
 
 
 def noise(size):
@@ -60,12 +61,12 @@ def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
             bl_error_tol: the largest allowable difference between baselines in a redundant group
                 (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
-            low_hi: For all returned baseline index tuples (i,j) to have i < j.
+            low_hi: Check to make sure the first bl (i,j) in each bl group has i < j, otherwise conjugate all bls
+                in the group.
 
         Returns:
             reds: list of lists of redundant tuples of antenna indices (no polarizations).
     """
-
     keys = antpos.keys()
     reds = {}
     array_is_flat = np.all(np.abs(np.array(antpos.values())[:, 2] - np.mean(antpos.values(), axis=0)[2]) < bl_error_tol / 4.0)
@@ -519,6 +520,55 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
+    def firstcal(self, data, df, wgts={}, sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
+        """Solves for a per-antenna delay by fitting a line to the phase difference between
+        nominally redundant measurements.  To turn these delays into gains, you need to do:
+        np.exp(2j * np.pi * delay * freqs)
+
+        Args:
+            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+            df: frequency change between data bins, scales returned delays by 1/df.
+            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
+            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
+            norm: calculate delays from just the phase information (not the amplitude) of the data.
+                This is a pretty effective way to get reliable delay even in the presence of RFI.
+            medfilt : boolean, median filter data before fft.  This can work for data containing
+                unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
+            kernel : size of median filter kernel along (time, freq) axes
+
+        Returns:
+            sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
+                format.  All delays are multiplied by 1/df, so use that to set physical scale.
+        """
+        Nfreqs = six.next(six.itervalues(data)).shape[1]  # hardcode freq is axis 1 (time is axis 0)
+        if len(wgts) == 0:
+            wgts = {k: np.float32(1) for k in data}
+        wgts = DataContainer(wgts)
+        taus_offs, twgts = {}, {}
+        for bls in self.reds:
+            for i, bl1 in enumerate(bls):
+                d1, w1 = data[bl1], wgts[bl1]
+                for bl2 in bls[i + 1:]:
+                    d12 = d1 * np.conj(data[bl2])
+                    if norm:
+                        ad12 = np.abs(d12)
+                        d12 /= np.where(ad12 == 0, np.float32(1), ad12)
+                    w12 = w1 * wgts[bl2]
+                    taus_offs[(bl1, bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
+                    twgts[(bl1, bl2)] = np.sum(w12)
+        d_ls, w_ls = {}, {}
+        for (bl1, bl2), tau_off_ij in taus_offs.items():
+            ai, aj = split_bl(bl1)
+            am, an = split_bl(bl2)
+            i, j, m, n = (self.pack_sol_key(k) for k in (ai, aj, am, an))
+            eq_key = '%s-%s-%s+%s' % (i, j, m, n)
+            d_ls[eq_key] = np.array(tau_off_ij)
+            w_ls[eq_key] = twgts[(bl1, bl2)]
+        ls = linsolve.LinearSolver(d_ls, wgts=w_ls, sparse=sparse)
+        sol = ls.solve(mode=mode)
+        sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}  # ignoring offset
+        return sol
+
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
 
@@ -604,8 +654,92 @@ class RedundantCalibrator:
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
+    def remove_degen_gains(self, antpos, gains, degen_gains=None, mode='phase'):
+        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
+        function in nominally intended for use with firstcal, which returns (phase/delay) solutions
+        for antennas only.
+
+        Args:
+            antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
+            gains: dictionary that contains gain solutions in the {(index,antpol): np.array} format.
+            degen_gains: Optional dictionary in the same format as gains. Gain amplitudes and phases
+                in degen_sol replace the values of sol in the degenerate subspace of redcal. If
+                left as None, average gain amplitudes will be 1 and average phase terms will be 0.
+                For logcal/lincal/omnical, putting firstcal solutions in here can help avoid structure
+                associated with phase-wrapping issues.
+            mode: 'phase' or 'complex', indicating whether the gains are passed as phases (e.g. delay 
+                or phi in e^(i*phi)), or as the complex number itself.  If 'phase', only phase degeneracies
+                removed.  If 'complex', both phase and amplitude degeneracies are removed.
+        Returns:
+            new_gains: gains with degeneracy removal/replacement performed
+        """
+
+        # Check supported pol modes
+        assert self.pol_mode in ['1pol', '2pol', '4pol', '4pol_minV'], 'Unrecognized pol_mode: %s' % self.pol_mode
+        assert mode in ('phase', 'complex'), 'Unrecognized mode: %s' % mode
+        if degen_gains is None:
+            if mode == 'phase':
+                degen_gains = {key: np.zeros_like(val) for key, val in gains.items()}
+            else:  # complex
+                degen_gains = {key: np.ones_like(val) for key, val in gains.items()}
+        ants = gains.keys()
+        gainPols = np.array([ant[1] for ant in gains])  # gainPols is list of antpols, one per antenna
+        antpols = list(set(gainPols))
+
+        # if mode is 2pol, run as two 1pol remove degens
+        if self.pol_mode is '2pol':
+            self.pol_mode = '1pol'
+            pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
+            pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
+            new_gains = self.remove_degen_gains(antpos, pol0_gains, degen_gains=degen_gains, mode=mode)
+            new_gains.update(self.remove_degen_gains(antpos, pol1_gains, degen_gains=degen_gains, mode=mode))
+            self.pol_mode = '2pol'
+            return new_gains
+
+        # Extract gain and model visibiltiy solutions
+        gainSols = np.array([gains[ant] for ant in ants])
+        degenGains = np.array([degen_gains[ant] for ant in ants])
+
+        # Build matrices for projecting gain degeneracies
+        positions = np.array([antpos[ant[0]] for ant in gains])
+        if self.pol_mode is '1pol' or self.pol_mode is '4pol_minV':
+            # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
+            # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
+            Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
+        else:  # pol_mode is '4pol'
+            # two columns give sums for two different polarizations
+            phasePols = np.vstack((gainPols == antpols[0], gainPols == antpols[1])).T
+            Rgains = np.hstack((positions, phasePols))
+        # Mgains is like (AtA)^-1 At in linear estimator formalism. It's a normalized estimator of degeneracies
+        Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
+
+        # degenToRemove is the amount we need to move in the degenerate subspace
+        if mode == 'phase':
+            # Fix phase terms only
+            degenToRemove = np.einsum('ij,jkl', Mgains, gainSols - degenGains)
+            gainSols -= np.einsum('ij,jkl', Rgains, degenToRemove)
+        else:  # working on complex data
+            # Fix phase terms
+            degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
+            gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
+            # Fix abs terms: fixes the mean abs product of gains (as they appear in visibilities)
+            for pol in antpols:
+                meanSqAmplitude = np.mean([np.abs(g1 * g2) for (a1, p1), g1 in gains.items()
+                                           for (a2, p2), g2 in gains.items() 
+                                           if p1 == pol and p2 == pol and a1 != a2], axis=0)
+                degenMeanSqAmplitude = np.mean([np.abs(degen_gains[k1] * degen_gains[k2]) for k1 in gains.keys()
+                                                for k2 in gains.keys() 
+                                                if k1[1] == pol and k2[1] == pol and k1[0] != k2[0]], axis=0)
+                gainSols[gainPols == pol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
+
+        # Create new solutions dictionary
+        new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
+        return new_gains
+
     def remove_degen(self, antpos, sol, degen_sol=None):
-        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).
+        """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
+        function is nominally intended for use with solutions from logcal, omnical, or lincal, which
+        return complex solutions for antennas and visibilities. 
 
         Args:
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
@@ -614,88 +748,20 @@ class RedundantCalibrator:
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
                 left as None, average gain amplitudes will be 1 and average phase terms will be 0.
-                Visibilties in degen_sol are ignored. Putting in firstcal solutions here can
-                help avoid phasewrapping issues.
+                Visibilties in degen_sol are ignored.  For logcal/lincal/omnical, putting firstcal 
+                solutions in here can help avoid structure associated with phase-wrapping issues.
         Returns:
-            newSol: sol with degeneracy removal/replacement performed
+            new_sol: sol with degeneracy removal/replacement performed
         """
 
-        g, v = get_gains_and_vis_from_sol(sol)
+        gains, vis = get_gains_and_vis_from_sol(sol)
         if degen_sol is None:
-            degen_sol = {key: np.ones_like(val) for key, val in g.items()}
-        ants = g.keys()
-
-        gainPols = np.array([ant[1] for ant in ants])
-        # gainPols is list of antpols, one per antenna
-        antpols = list(set(gainPols))
-        positions = np.array([antpos[ant[0]] for ant in ants])
-        bl_pairs = v.keys()
-        visPols = np.array([split_pol(bl[2]) for bl in bl_pairs])
-        # visPols is list of pol, one per baseline
-        bl_vecs = np.array([antpos[bl_pair[0]] - antpos[bl_pair[1]] for bl_pair in bl_pairs])
-        if self.pol_mode not in ['1pol', '2pol', '4pol', '4pol_minV']:
-            raise ValueError('Remove_degen cannot operate on pol_mode determined from reds')
-
-        # if mode is 2pol, run as two 1pol remove degens
-        if self.pol_mode is '2pol':
-
-            def match_pol(key, antpol):
-                if len(key) == 2:
-                    return antpol == key[1]
-                else:
-                    return antpol in split_pol(key[2])
-            self.pol_mode = '1pol'
-            newSol = self.remove_degen(antpos, {key: val for key, val in sol.items()
-                                                if match_pol(key, antpols[0])}, degen_sol=degen_sol)
-            newSol.update(self.remove_degen(antpos, {key: val for key, val in sol.items()
-                                                     if match_pol(key, antpols[1])}, degen_sol=degen_sol))
-            self.pol_mode = '2pol'
-            return newSol
-
-        # Extract gain and model visibiltiy solutions
-        gainSols = np.array([sol[ant] for ant in ants])
-        visSols = np.array([sol[bl_pair] for bl_pair in bl_pairs])
-        degenGains = np.array([degen_sol[ant] for ant in ants])
-
-        # Amplitude renormalization: fixes the mean abs product of gains (as they appear in visibilities)
-        for antpol in antpols:
-            meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
-                                       for key2 in g.keys() if key1[1] == antpol and key2[1] == antpol and key1[0] != key2[0]], axis=0)
-            degenMeanSqAmplitude = np.mean([np.abs(degen_sol[key1] * degen_sol[key2]) for key1 in g.keys()
-                                            for key2 in g.keys() if key1[1] == antpol and key2[1] == antpol and key1[0] != key2[0]], axis=0)
-            gainSols[gainPols == antpol] *= (degenMeanSqAmplitude / meanSqAmplitude)**.5
-            visSols[visPols[:, 0] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
-            visSols[visPols[:, 1] == antpol] *= (meanSqAmplitude / degenMeanSqAmplitude)**.5
-
-        # Fix phase terms
-        if self.pol_mode is '1pol' or self.pol_mode is '4pol_minV':
-            # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
-            # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
-            Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
-            # Rvis maps visibility phases to the same set of degenerate parameters, keeping chi^2 constant
-            Rvis = np.hstack((-bl_vecs, np.zeros((len(bl_vecs), 1))))
-        else:  # pole_mode is '4pol'
-            # two columns give sums for two different polarizations
-            phasePols = np.vstack((gainPols == antpols[0], gainPols == antpols[1])).T
-            Rgains = np.hstack((positions, phasePols))
-            # These terms detect cross terms only, which pick up overall phase terms in 4pol (see HERA memo #30)
-            is_ab = np.array((visPols[:, 0] == antpols[0]) * (visPols[:, 1] == antpols[1]), dtype=float)
-            is_ba = np.array((visPols[:, 0] == antpols[1]) * (visPols[:, 1] == antpols[0]), dtype=float)
-            visPhaseSigns = np.vstack((is_ab - is_ba, is_ba - is_ab)).T
-            Rvis = np.hstack((-bl_vecs, -visPhaseSigns))
-        # Mgains is like (AtA)^-1 At in linear estimator formalism. It's a normalized estimator of degeneracies
-        Mgains = np.linalg.pinv(Rgains.T.dot(Rgains)).dot(Rgains.T)
-        # degenToRemove is the amount we need to move in the degenerate subspace
-        degenToRemove = np.einsum('ij,jkl', Mgains, np.angle(gainSols * np.conj(degenGains)))
-        # Now correct gains and visibilities while preserving chi^2
-        gainSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rgains, degenToRemove))
-        visSols *= np.exp(np.complex64(-1j) * np.einsum('ij,jkl', Rvis, degenToRemove))
-
-        # Create new solutions dictionary
-        newSol = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
-        newSol.update({bl_pair: visSol for bl_pair, visSol in zip(bl_pairs, visSols)})
-
-        return newSol
+            degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
+        new_gains = self.remove_degen_gains(antpos, gains, degen_gains=degen_sol, mode='complex')
+        new_sol = deepcopy(vis)
+        calibrate_in_place(new_sol, new_gains, old_gains=gains)
+        new_sol.update(new_gains)
+        return new_sol
 
 
 def count_redcal_degeneracies(antpos, bl_error_tol=1.0):

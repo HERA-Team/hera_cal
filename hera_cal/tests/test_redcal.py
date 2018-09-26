@@ -8,6 +8,7 @@ import unittest
 from copy import deepcopy
 from hera_cal.utils import split_pol, conj_pol
 import warnings
+from hera_cal.apply_cal import calibrate_in_place
 
 np.random.seed(0)
 
@@ -151,7 +152,7 @@ class TestMethods(unittest.TestCase):
 
         pos = {0: np.array([0, 0, 0]), 1: np.array([20, 0, 0]), 2: np.array([10, 0, 0])}
         self.assertEqual(om.get_pos_reds(pos), [[(0, 2), (2, 1)], [(0, 1)]])
-        self.assertEqual(om.get_pos_reds(pos, low_hi=True), [[(0, 2), (1, 2)], [(0, 1)]])
+        self.assertEqual(om.get_pos_reds(pos, low_hi=True), [[(0, 2), (2, 1)], [(0, 1)]])
 
     def test_filter_reds(self):
         antpos = build_linear_array(7)
@@ -224,7 +225,6 @@ class TestMethods(unittest.TestCase):
         self.assertEqual(polReds, [[(1, 2, 'xx')], [(1, 2, 'yx')], []])
 
 
-
 class TestRedundantCalibrator(unittest.TestCase):
 
     def test_build_eq(self):
@@ -282,6 +282,30 @@ class TestRedundantCalibrator(unittest.TestCase):
             return
         info._solver(solver, d)
         info._solver(solver, d, w)
+
+    def test_firstcal(self):
+        NANTS = 18
+        NFREQ = 64
+        antpos = build_linear_array(NANTS)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        info = om.RedundantCalibrator(reds)
+        fqs = np.linspace(.1, .2, NFREQ)
+        #g, true_vis, d = om.sim_red_data(reds, shape=(1,NFREQ), gain_scatter=.1)
+        g, true_vis, d = om.sim_red_data(reds, shape=(1, NFREQ), gain_scatter=0)
+        delays = {k: np.random.randn() * 30 for k in g.keys()}  # in ns
+        fc_gains = {k: np.exp(2j * np.pi * v * fqs) for k, v in delays.items()}
+        delays = {k: np.array([[v]]) for k, v in delays.items()}
+        fc_gains = {i: v.reshape(1, NFREQ) for i, v in fc_gains.items()}
+        gains = {k: v * fc_gains[k] for k, v in g.items()}
+        gains = {k: v.astype(np.complex64) for k, v in gains.items()}
+        calibrate_in_place(d, gains, old_gains=g, gain_convention='multiply')
+        d = {k: v.astype(np.complex64) for k, v in d.items()}
+        sol = info.firstcal(d, df=fqs[1] - fqs[0], medfilt=False)
+        sol_degen = info.remove_degen_gains(antpos, sol, degen_gains=delays, mode='phase')
+        for i in xrange(NANTS):
+            self.assertEqual(sol[(i, 'Jxx')].dtype, np.float32)
+            self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
+            self.assertAlmostEqual(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0, 0)
 
     def test_logcal(self):
         NANTS = 18
@@ -457,6 +481,38 @@ class TestRedundantCalibrator(unittest.TestCase):
                 sol0.update(rc.compute_ubls(d, sol0))
                 meta, sol = rc.lincal(d, sol0)  # should not raise 'np.linalg.linalg.LinAlgError: SVD did not converge'
     
+    def test_remove_degen_firstcal_1D(self):
+        pol = 'xx'
+        xhat = np.array([1., 0, 0])
+        dtau_dx = 10.
+        antpos = build_linear_array(10)
+        reds = om.get_reds(antpos, pols=[pol], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        # put in a linear slope in delays, see that it is taken out
+        true_dlys = {(i, split_pol(pol)[0]): np.array([[np.dot(xhat, antpos[i]) * dtau_dx]]) for i in range(len(antpos))}
+        dlys = rc.remove_degen_gains(antpos, true_dlys, mode='phase')
+        for k in dlys:
+            np.testing.assert_almost_equal(dlys[k], 0, 10)
+        dlys = rc.remove_degen_gains(antpos, true_dlys, degen_gains=true_dlys, mode='phase')
+        for k in dlys:
+            np.testing.assert_almost_equal(dlys[k], true_dlys[k], 10)
+
+    def test_remove_degen_firstcal_2D(self):
+        pol = 'xx'
+        xhat = np.array([1., 0, 0])
+        yhat = np.array([0., 1, 0])
+        dtau_dx = 10.
+        dtau_dy = -5.
+        antpos = build_hex_array(5)
+        reds = om.get_reds(antpos, pols=[pol], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        # put in a linear slope in delays, see that it is taken out
+        true_dlys = {(i, split_pol(pol)[0]): 
+                        np.array([[np.dot(xhat, antpos[i]) * dtau_dx + np.dot(yhat, antpos[i]) * dtau_dy]]) 
+                        for i in range(len(antpos))}
+        dlys = rc.remove_degen_gains(antpos, true_dlys, mode='phase')
+        for k in dlys:
+            np.testing.assert_almost_equal(dlys[k], 0, 10)
 
     def test_lincal_hex_end_to_end_1pol_with_remove_degen_and_firstcal(self):
         antpos = build_hex_array(3)
@@ -524,7 +580,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(val, true_vis[key], 10)
 
         rc.pol_mode = 'unrecognized_pol_mode'
-        with self.assertRaises(ValueError):
+        with self.assertRaises(AssertionError):
             sol_rd = rc.remove_degen(antpos, sol)
 
     def test_lincal_hex_end_to_end_4pol_with_remove_degen_and_firstcal(self):

@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
-
-'''Tests for abscal.py'''
-
 import nose.tools as nt
 import os
 import shutil
@@ -192,7 +189,7 @@ class Test_AbsCal_Funcs:
 
     def test_avg_file_across_red_bls(self):
         rd, rf, rk = hc.abscal.avg_file_across_red_bls(self.data_file, write_miriad=False, output_data=True)
-        nt.assert_raises(NotImplementedError, hc.abscal.avg_file_across_red_bls, self.data_file, outdir='.', output_fname='ex', write_miriad=True, output_data=False)
+        nt.assert_raises(NotImplementedError, hc.abscal.avg_file_across_red_bls, self.data_file, write_miriad=True)
 
     def test_match_times(self):
         dfiles = map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458043.12552.xx.HH.uvORA',
@@ -227,9 +224,15 @@ class Test_AbsCal_Funcs:
 
     def test_cut_bl(self):
         Nbls = len(self.data)
-        _data = hc.abscal.cut_bls(self.data, self.bls, 20.0)
+        _data = hc.abscal.cut_bls(self.data, bls=self.bls, min_bl_cut=20.0, inplace=False)
         nt.assert_true(Nbls, 21)
         nt.assert_true(len(_data), 12)
+        _data2 = copy.deepcopy(self.data)
+        hc.abscal.cut_bls(_data2, bls=self.bls, min_bl_cut=20.0, inplace=True)
+        nt.assert_true(len(_data2), 12)
+        _data = hc.abscal.cut_bls(self.data, bls=self.bls, min_bl_cut=20.0, inplace=False)
+        hc.abscal.cut_bls(_data2, min_bl_cut=20.0, inplace=True)
+        nt.assert_true(len(_data2), 12)
 
 
 class Test_AbsCal:
@@ -261,7 +264,7 @@ class Test_AbsCal:
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
         # test feeding file and refant and bl_cut and bl_taper
         AC = hc.abscal.AbsCal(self.model_fname, self.data_fname, refant=24, antpos=self.AC.antpos,
-                              bl_cut=26.0, bl_taper_fwhm=15.0)
+                              max_bl_cut=26.0, bl_taper_fwhm=15.0)
         # test ref ant
         nt.assert_equal(AC.refant, 24)
         nt.assert_almost_equal(np.linalg.norm(AC.antpos[24]), 0.0)
