@@ -28,6 +28,54 @@ def build_hex_array(hexNum, sep=14.7):
             i += 1
     return antpos
 
+def build_split_hex_array_with_outriggers(sep = 14.6, hexNum = 11, splitCore = True, splitCoreOutriggers = 4):
+    '''Default parameter produce the planned HERA configuration with its outriggers.'''
+    #Main Hex
+    positions = []
+    for row in range(hexNum-1,-(hexNum)+splitCore,-1):
+        for col in range(0,2*hexNum-abs(row)-1):
+            xPos = ((-(2*hexNum-abs(row))+2)/2.0 + col)*sep
+            yPos = row*sep*3**.5/2
+            positions.append([xPos, yPos, 0])
+            
+    right = sep*np.asarray([1,0,0])
+    up = sep*np.asarray([0,1,0])
+    upRight = sep*np.asarray([.5,3**.5/2,0])
+    upLeft = sep*np.asarray([-.5,3**.5/2,0])
+    
+    #Split the core into 3 pieces
+    if splitCore:
+        newPos = []
+        for i,pos in enumerate(positions):          
+            theta = np.arctan2(pos[1],pos[0])
+            if (pos[0]==0 and pos[1]==0):
+                newPos.append(pos)
+            elif (theta > -np.pi/3 and theta < np.pi/3):
+                newPos.append(np.asarray(pos) + (upRight + upLeft)/3)                    
+            elif (theta >= np.pi/3 and theta < np.pi):
+                newPos.append(np.asarray(pos) +upLeft  - (upRight + upLeft)/3)
+            else:
+                newPos.append(pos)
+        positions = newPos
+
+    # Add outriggers
+    if splitCoreOutriggers:
+        exteriorHexNum = splitCoreOutriggers
+        for row in range(exteriorHexNum-1,-(exteriorHexNum),-1):
+            for col in range(2*exteriorHexNum-abs(row)-1):
+                xPos = ((-(2*exteriorHexNum-abs(row))+2)/2.0 + col)*sep*(hexNum-1)
+                yPos = row*sep*(hexNum-1)*3**.5/2
+                theta = np.arctan2(yPos,xPos)       
+                if ((xPos**2 + yPos**2)**.5 > sep*(hexNum+1)):
+                    if (theta > 0 and theta <= 2*np.pi/3+.01):
+                        positions.append(np.asarray([xPos, yPos, 0]) - 4*(upRight + upLeft)/3)
+                    elif (theta <= 0 and theta > -2*np.pi/3):
+                        positions.append(np.asarray([xPos, yPos, 0])- 2*(upRight + upLeft)/3)
+                    else:
+                        positions.append(np.asarray([xPos, yPos, 0]) - 3*(upRight + upLeft)/3)
+                        
+    return {i: pos for i,pos in enumerate(np.array(positions))}
+
 
 class TestMethods(unittest.TestCase):
 
