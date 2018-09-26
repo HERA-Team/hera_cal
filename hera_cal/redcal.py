@@ -233,6 +233,33 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     return [gp for gp in reds if len(gp) > 0]
 
 
+def reds_to_antpos(reds, tol=1e-10):
+    '''Computes a set of antenna positions consistent with the given redundancies.
+    Useful for projecting out phase slope degeneracies, see https://arxiv.org/abs/1712.07212
+    
+    Arguments:
+        reds: list of lists of redundant baseline tuples, either (i,j,pol) or (i,j)
+        tol: level for two vectors to be considered equal (enabling dimensionality reduction)
+    Returns:
+        antpos: dictionary of antenna positions in the form {ant_index: np.ndarray}.
+            These positions may differ from the true positions of antennas by an arbitrary
+            linear transformation. The dimensionality of the positions will be the minimum
+            necessary to describe all redundancies (non-redundancy introduces extra dimensions.)
+    '''
+    ants = set([ant for red in reds for bl in red for ant in bl[:2]])
+    # start with all antennas having their own dimension, then iterativley reduce the dimensionality
+    antpos = {ant: np.array([1. if d == i else 0. for d in range(len(ants))]) 
+                   for i, ant in enumerate(ants)}
+    for red in reds:
+        for (ant1, ant2, pol) in red[1:]:
+            delta = (antpos[red[0][1]] - antpos[red[0][0]]) - (antpos[ant2] - antpos[ant1])
+            if np.linalg.norm(delta) > tol:  # this baseline is inconsistent with its redundant group
+                dim_to_elim = np.max(np.arange(len(delta))[np.abs(delta) > tol])
+                antpos = {ant: np.delete(pos - pos[dim_to_elim] / delta[dim_to_elim] * delta, dim_to_elim) 
+                          for ant, pos in antpos.items()} 
+    return antpos
+
+
 def check_polLists_minV(polLists):
     """Given a list of unique visibility polarizations (e.g. for each red group), returns whether
     they are all either single identical polarizations (e.g. 'xx') or both cross polarizations
