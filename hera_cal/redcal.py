@@ -92,7 +92,7 @@ def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
                 reds[delta] = [bl_pair]
 
     orderedDeltas = [delta for (length, delta) in sorted(zip([np.linalg.norm(delta) for delta in reds.keys()], reds.keys()))]
-    if low_hi: # sort each group after sorting each 
+    if low_hi:  # sort each group after sorting each
         return [sorted([tuple(sorted(bl)) for bl in reds[delta]]) for delta in orderedDeltas]
     else:  # sort each red and make sure the first antenna of the first bl in each group is the lowest antenna number
         return [sorted(reds[delta]) if sorted(reds[delta])[0][0] == np.min(reds[delta])
@@ -473,7 +473,7 @@ class RedundantCalibrator:
             solver: instantiated solver with redcal equations and weights
         """
         # XXX ARP: concerned about detrend_phs.  Why is it necessary?
-        dtype = data.values()[0].dtype #TODO: fix this for python 3
+        dtype = data.values()[0].dtype  # TODO: fix this for python 3
         dc = DataContainer(data)
         eqs = self.build_eqs(dc)
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
