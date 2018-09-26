@@ -52,20 +52,19 @@ def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
     return gains, DataContainer(true_vis), DataContainer(data)
 
 
-def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
+def get_pos_reds(antpos, bl_error_tol=1.0):
     """ Figure out and return list of lists of redundant baseline pairs. Ordered by length. All baselines
         in a group have the same orientation with a preference for positive b_y and, when b_y==0, positive
-        b_x where b((i,j)) = pos(j) - pos(i). This yields HERA baselines in i < j order.
+        b_x where b((i,j)) = pos(j) - pos(i).
 
         Args:
             antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
             bl_error_tol: the largest allowable difference between baselines in a redundant group
                 (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
-            low_hi: Check to make sure the first bl (i,j) in each bl group has i < j, otherwise conjugate all bls
-                in the group.
 
         Returns:
-            reds: list of lists of redundant tuples of antenna indices (no polarizations).
+            reds: list (sorted by baseline legnth) of lists of redundant tuples of antenna indices (no polarizations),
+            sorted by index with the first index of the first baseline the lowest in the group.
     """
     keys = antpos.keys()
     reds = {}
@@ -92,12 +91,10 @@ def get_pos_reds(antpos, bl_error_tol=1.0, low_hi=False):
             if newKey not in reds:
                 reds[delta] = [bl_pair]
 
+    # sort reds by length and each red to make sure the first antenna of the first bl in each group is the lowest antenna number
     orderedDeltas = [delta for (length, delta) in sorted(zip([np.linalg.norm(delta) for delta in reds.keys()], reds.keys()))]
-    if low_hi:  # sort each group after sorting each
-        return [sorted([tuple(sorted(bl)) for bl in reds[delta]]) for delta in orderedDeltas]
-    else:  # sort each red and make sure the first antenna of the first bl in each group is the lowest antenna number
-        return [sorted(reds[delta]) if sorted(reds[delta])[0][0] == np.min(reds[delta])
-                else sorted([reverse_bl(bl) for bl in reds[delta]]) for delta in orderedDeltas]
+    return [sorted(reds[delta]) if sorted(reds[delta])[0][0] == np.min(reds[delta])
+            else sorted([reverse_bl(bl) for bl in reds[delta]]) for delta in orderedDeltas]
 
 
 def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
@@ -135,7 +132,7 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
     return redsWithPols
 
 
-def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0, low_hi=False):
+def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0):
     """ Combines redcal.get_pos_reds() and redcal.add_pol_reds(). See their documentation.
 
     Args:
@@ -149,13 +146,13 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0,
         ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
-        low_hi: For all returned baseline index tuples (i,j) to have i < j
 
     Returns:
-        reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
+        reds: list (sorted by baseline length) of lists of redundant baseline tuples, e.g. (ind1,ind2,pol). 
+            Each interior list is sorted so that the lowest index is first in the first baseline.
 
     """
-    pos_reds = get_pos_reds(antpos, bl_error_tol=bl_error_tol, low_hi=low_hi)
+    pos_reds = get_pos_reds(antpos, bl_error_tol=bl_error_tol)
     return add_pol_reds(pos_reds, pols=pols, pol_mode=pol_mode, ex_ants=ex_ants)
 
 

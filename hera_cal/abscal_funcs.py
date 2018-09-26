@@ -713,7 +713,7 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
     antpos = odict(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys()))
 
     # average data over baselines
-    _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols(), low_hi=True)
+    _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
     reds = []
     for _red in _reds:
         red = [bl for bl in _red if bl in keys]
@@ -1560,7 +1560,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
 
     # get redundant baselines if not provided
     if reds is None:
-        reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=pols, low_hi=True)
+        reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=pols)
 
     # strip reds of keys not in data
     stripped_reds = []
