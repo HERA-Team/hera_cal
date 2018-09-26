@@ -311,16 +311,16 @@ def test_synthesize_ant_flags():
 def test_chisq():
     # test basic case
     data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 3 * np.ones((5, 10), dtype=complex)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model)
     nt.assert_true(chisq.shape == (5, 10))
     nt.assert_true(nObs.shape == (5, 10))
     nt.assert_true(chisq.dtype == float)
     nt.assert_true(nObs.dtype == int)
-    np.testing.assert_array_equal(chisq, 1.0)
+    np.testing.assert_array_equal(chisq, 4.0)
     np.testing.assert_array_equal(nObs, 1)
-    np.testing.assert_array_equal(chisq_per_ant[0, 'Jxx'], 1.0)
-    np.testing.assert_array_equal(chisq_per_ant[1, 'Jxx'], 1.0)
+    np.testing.assert_array_equal(chisq_per_ant[0, 'Jxx'], 4.0)
+    np.testing.assert_array_equal(chisq_per_ant[1, 'Jxx'], 4.0)
     np.testing.assert_array_equal(nObs_per_ant[0, 'Jxx'], 1)
     np.testing.assert_array_equal(nObs_per_ant[1, 'Jxx'], 1)
 

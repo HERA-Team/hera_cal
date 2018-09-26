@@ -920,7 +920,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                 wgts = copy.deepcopy(data_wgts[bl])
 
             # calculate chi^2
-            chisq_here = np.asarray(np.abs(model_here - data[bl]) * wgts, dtype=np.float64)
+            chisq_here = np.asarray(np.abs(model_here - data[bl])**2 * wgts, dtype=np.float64)
             if split_by_antpol:
                 if chisq.has_key(ap1):
                     assert nObs.has_key(ap1)
