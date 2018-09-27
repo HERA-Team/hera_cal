@@ -570,7 +570,7 @@ class RedundantCalibrator:
             sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
                 format.  All delays are multiplied by 1/df, so use that to set physical scale.
         """
-        Nfreqs = six.next(six.itervalues(data)).shape[1]  # hardcode freq is axis 1 (time is axis 0)
+        Nfreqs = data[next(iter(data))].shape[1]  # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
             wgts = {k: np.float32(1) for k in data}
         wgts = DataContainer(wgts)
