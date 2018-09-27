@@ -271,6 +271,69 @@ class TestMethods(unittest.TestCase):
         polReds = om.add_pol_reds(reds, pols=['xx', 'xy', 'yx', 'yy'], pol_mode='4pol_minV', ex_ants=[(2, 'Jyy')])
         self.assertEqual(polReds, [[(1, 2, 'xx')], [(1, 2, 'yx')], []])
 
+    def test_reds_to_antpos(self):
+        # Test 1D
+        true_antpos = build_linear_array(10)
+        reds = om.get_reds(true_antpos, pols=['xx','yy'], pol_mode='2pol', bl_error_tol=1e-10)
+        inferred_antpos = om.reds_to_antpos(reds,)
+        for pos in inferred_antpos.values():
+            self.assertEqual(len(pos), 1)
+        new_reds = om.get_reds(inferred_antpos, pols=['xx','yy'], pol_mode='2pol', bl_error_tol=1e-10)
+        for nred in new_reds:
+            for red in reds:
+                if nred[0] in red:
+                    found_match = True
+                    self.assertEqual(len(set(nred).difference(set(red))), 0)
+            self.assertTrue(found_match)
+            found_match = False
+
+        # Test 2D 
+        true_antpos = build_hex_array(5)
+        reds = om.get_reds(true_antpos, pols=['xx'], pol_mode='1pol', bl_error_tol=1e-10)
+        inferred_antpos = om.reds_to_antpos(reds)
+        for pos in inferred_antpos.values():
+            self.assertEqual(len(pos), 2)
+        new_reds = om.get_reds(inferred_antpos, pols=['xx'], pol_mode='1pol', bl_error_tol=1e-10)
+        for nred in new_reds:
+            for red in reds:
+                if nred[0] in red:
+                    found_match = True
+                    self.assertEqual(len(set(nred).difference(set(red))), 0)
+            self.assertTrue(found_match)
+            found_match = False
+
+        # Test 2D with split
+        true_antpos = build_split_hex_array_with_outriggers(hexNum = 5, splitCore = True, splitCoreOutriggers = 0)
+        reds = om.get_pos_reds(true_antpos, bl_error_tol=1e-10)
+        inferred_antpos = om.reds_to_antpos(reds)
+        for pos in inferred_antpos.values():
+            self.assertEqual(len(pos), 2)
+        new_reds = om.get_pos_reds(inferred_antpos, bl_error_tol=1e-10)
+        for nred in new_reds:
+            for red in reds:
+                if nred[0] in red:
+                    found_match = True
+                    self.assertEqual(len(set(nred).difference(set(red))), 0)
+            self.assertTrue(found_match)
+            found_match = False
+
+        # Test 2D with additional degeneracy
+        true_antpos = {0: [0, 0], 1: [1, 0], 2: [0, 1], 3: [1, 1],
+                       4: [100,100], 5: [101, 100], 6: [100, 101], 7: [101, 101]}
+        reds = om.get_pos_reds(true_antpos, bl_error_tol=1e-10)
+        inferred_antpos = om.reds_to_antpos(reds)
+        print inferred_antpos
+        for pos in inferred_antpos.values():
+            self.assertEqual(len(pos), 3)
+        new_reds = om.get_pos_reds(inferred_antpos, bl_error_tol=1e-10)
+        for nred in new_reds:
+            for red in reds:
+                if nred[0] in red:
+                    found_match = True
+                    self.assertEqual(len(set(nred).difference(set(red))), 0)
+            self.assertTrue(found_match)
+            found_match = False
+
 
 class TestRedundantCalibrator(unittest.TestCase):
 
