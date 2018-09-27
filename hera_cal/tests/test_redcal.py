@@ -411,7 +411,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         calibrate_in_place(d, gains, old_gains=g, gain_convention='multiply')
         d = {k: v.astype(np.complex64) for k, v in d.items()}
         sol = info.firstcal(d, df=fqs[1] - fqs[0], medfilt=False)
-        sol_degen = info.remove_degen_gains(antpos, sol, degen_gains=delays, mode='phase')
+        sol_degen = info.remove_degen_gains(sol, degen_gains=delays, mode='phase')
         for i in xrange(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].dtype, np.float32)
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
@@ -600,10 +600,10 @@ class TestRedundantCalibrator(unittest.TestCase):
         rc = om.RedundantCalibrator(reds)
         # put in a linear slope in delays, see that it is taken out
         true_dlys = {(i, split_pol(pol)[0]): np.array([[np.dot(xhat, antpos[i]) * dtau_dx]]) for i in range(len(antpos))}
-        dlys = rc.remove_degen_gains(antpos, true_dlys, mode='phase')
+        dlys = rc.remove_degen_gains(true_dlys, mode='phase')
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], 0, 10)
-        dlys = rc.remove_degen_gains(antpos, true_dlys, degen_gains=true_dlys, mode='phase')
+        dlys = rc.remove_degen_gains(true_dlys, degen_gains=true_dlys, mode='phase')
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], true_dlys[k], 10)
 
@@ -620,7 +620,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         true_dlys = {(i, split_pol(pol)[0]): 
                         np.array([[np.dot(xhat, antpos[i]) * dtau_dx + np.dot(yhat, antpos[i]) * dtau_dy]]) 
                         for i in range(len(antpos))}
-        dlys = rc.remove_degen_gains(antpos, true_dlys, mode='phase')
+        dlys = rc.remove_degen_gains(true_dlys, mode='phase')
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], 0, 10)
 
@@ -656,7 +656,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(antpos, sol)
+        sol_rd = rc.remove_degen(sol)
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainSols = np.array([sol_rd[ant] for ant in ants])
@@ -674,7 +674,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
+        sol_rd = rc.remove_degen(sol, degen_sol=gains)
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jxx' and key2[1] == 'Jxx' and key1[0] != key2[0]], axis=0)
@@ -691,7 +691,7 @@ class TestRedundantCalibrator(unittest.TestCase):
 
         rc.pol_mode = 'unrecognized_pol_mode'
         with self.assertRaises(AssertionError):
-            sol_rd = rc.remove_degen(antpos, sol)
+            sol_rd = rc.remove_degen(sol)
 
     def test_lincal_hex_end_to_end_4pol_with_remove_degen_and_firstcal(self):
         antpos = build_hex_array(3)
@@ -726,7 +726,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(antpos, sol)
+        sol_rd = rc.remove_degen(sol)
 
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainPols = np.array([ant[1] for ant in ants])
@@ -753,7 +753,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
+        sol_rd = rc.remove_degen(sol, degen_sol=gains)
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jxx' and key2[1] == 'Jxx' and key1[0] != key2[0]], axis=0)
@@ -813,7 +813,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(antpos, sol)
+        sol_rd = rc.remove_degen(sol)
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainPols = np.array([ant[1] for ant in ants])
@@ -839,7 +839,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
+        sol_rd = rc.remove_degen(sol, degen_sol=gains)
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
 
         for bls in reds:
@@ -912,7 +912,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(antpos, sol)
+        sol_rd = rc.remove_degen(sol)
 
         ants = [key for key in sol_rd.keys() if len(key) == 2]
         gainPols = np.array([ant[1] for ant in ants])
@@ -940,7 +940,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
 
-        sol_rd = rc.remove_degen(antpos, sol, degen_sol=gains)
+        sol_rd = rc.remove_degen(sol, degen_sol=gains)
         g, v = om.get_gains_and_vis_from_sol(sol_rd)
         gainSols = np.array([sol_rd[ant] for ant in ants])
         degenGains = np.array([gains[ant] for ant in ants])

@@ -684,13 +684,12 @@ class RedundantCalibrator:
         sol = {self.unpack_sol_key(k): sol[k] for k in sol.keys()}
         return meta, sol
 
-    def remove_degen_gains(self, antpos, gains, degen_gains=None, mode='phase'):
+    def remove_degen_gains(self, gains, degen_gains=None, mode='phase'):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
         function in nominally intended for use with firstcal, which returns (phase/delay) solutions
         for antennas only.
 
         Args:
-            antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
             gains: dictionary that contains gain solutions in the {(index,antpol): np.array} format.
             degen_gains: Optional dictionary in the same format as gains. Gain amplitudes and phases
                 in degen_sol replace the values of sol in the degenerate subspace of redcal. If
@@ -721,8 +720,8 @@ class RedundantCalibrator:
             self.pol_mode = '1pol'
             pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
             pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
-            new_gains = self.remove_degen_gains(antpos, pol0_gains, degen_gains=degen_gains, mode=mode)
-            new_gains.update(self.remove_degen_gains(antpos, pol1_gains, degen_gains=degen_gains, mode=mode))
+            new_gains = self.remove_degen_gains(pol0_gains, degen_gains=degen_gains, mode=mode)
+            new_gains.update(self.remove_degen_gains(pol1_gains, degen_gains=degen_gains, mode=mode))
             self.pol_mode = '2pol'
             return new_gains
 
@@ -731,6 +730,7 @@ class RedundantCalibrator:
         degenGains = np.array([degen_gains[ant] for ant in ants])
 
         # Build matrices for projecting gain degeneracies
+        antpos = reds_to_antpos(self.reds)
         positions = np.array([antpos[ant[0]] for ant in gains])
         if self.pol_mode is '1pol' or self.pol_mode is '4pol_minV':
             # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
@@ -766,13 +766,12 @@ class RedundantCalibrator:
         new_gains = {ant: gainSol for ant, gainSol in zip(ants, gainSols)}
         return new_gains
 
-    def remove_degen(self, antpos, sol, degen_sol=None):
+    def remove_degen(self, sol, degen_sol=None):
         """ Removes degeneracies from solutions (or replaces them with those in degen_sol).  This
         function is nominally intended for use with solutions from logcal, omnical, or lincal, which
         return complex solutions for antennas and visibilities. 
 
         Args:
-            antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
             sol: dictionary that contains both visibility and gain solutions in the
                 {(ind1,ind2,pol): np.array} and {(index,antpol): np.array} formats respectively
             degen_sol: Optional dictionary in the same format as sol. Gain amplitudes and phases
@@ -787,7 +786,7 @@ class RedundantCalibrator:
         gains, vis = get_gains_and_vis_from_sol(sol)
         if degen_sol is None:
             degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
-        new_gains = self.remove_degen_gains(antpos, gains, degen_gains=degen_sol, mode='complex')
+        new_gains = self.remove_degen_gains(gains, degen_gains=degen_sol, mode='complex')
         new_sol = deepcopy(vis)
         calibrate_in_place(new_sol, new_gains, old_gains=gains)
         new_sol.update(new_gains)
