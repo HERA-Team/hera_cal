@@ -386,25 +386,20 @@ def remove_degen(info, g, v, g0, minV=False):
     ants = [(ant, antpol) for antpol in antpols for ant in g[antpol].keys()]
     bl_pairs = [(i, j, pol) for pol in pols for (i, j) in v[pol].keys()]
 
-    # Taking polarization non-aware stuff from omnical and reextracting the relevant info for remove_degen
-    info_antpos = info.get_antpos()
-    antpos = dict(zip([ant[0] for ant in ants],
-                      [np.append(info_antpos[ant[0], 0:2], [0]) for ant in ants]))
-
     # Put sols into properly formatted dictionaries and remove degeneracies
-    sol = {(i, antpol): g[antpol][i] for (i, antpol) in ants}
-    sol.update({(i, j, pol): v[pol][(i, j)] for (i, j, pol) in bl_pairs})
-    sol0 = {(i, antpol): g0[antpol][i] for (i, antpol) in ants}
+    sol = {(i % info.nant, antpol): g[antpol][i] for (i, antpol) in ants}
+    sol.update({(i % info.nant, j % info.nant, pol): v[pol][(i, j)] for (i, j, pol) in bl_pairs})
+    sol0 = {(i % info.nant, antpol): g0[antpol][i] for (i, antpol) in ants}
     rc = redcal.RedundantCalibrator(info_reds_to_redcal_reds(info.get_reds(), info.nant, pol_to_factor=POLNUM))
-    newSol = rc.remove_degen(antpos, sol, degen_sol=sol0)
+    newSol = rc.remove_degen(sol, degen_sol=sol0)
 
     # Put back into omnical format dictionaires
     g3 = {antpol: {} for antpol in antpols}
     v3 = {pol: {} for pol in pols}
     for (i, antpol) in ants:
-        g3[antpol][i] = newSol[(i, antpol)]
+        g3[antpol][i] = newSol[(i % info.nant, antpol)]
     for (i, j, pol) in bl_pairs:
-        v3[pol][(i, j)] = newSol[(i, j, pol)]
+        v3[pol][(i, j)] = newSol[(i % info.nant, j % info.nant, pol)]
     return g3, v3
 
 
