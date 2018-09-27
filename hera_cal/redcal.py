@@ -793,6 +793,19 @@ class RedundantCalibrator:
         return new_sol
 
 
+def get_pol_load_list(pols, pol_mode='1pol'):
+    '''Get a list of lists of polarizations to load simultaneously, depending on the polarizations
+    in the data and the pol_mode (which can be 1pol, 2pol, 4pol, or 4pol_minV)'''
+    if pol_mode in ['1pol', '2pol']:
+        pol_load_list = [[pol] for pol in pols if split_pol(pol)[0] == split_pol(pol)[1]]
+    elif pol_mode in ['4pol', '4pol_minV']:
+        assert len(pols) == 4, 'For 4pol calibration, there must be four polarizations in the data file.'
+        pol_load_list = [pols]
+    else:
+        raise ValueError('Unrecognized pol_mode: {}'.format(pol_mode))
+    return pol_load_list
+
+
 def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
     """Figures out whether an array is redundantly calibratable.
 

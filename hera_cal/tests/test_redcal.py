@@ -322,7 +322,6 @@ class TestMethods(unittest.TestCase):
                        4: [100,100], 5: [101, 100], 6: [100, 101], 7: [101, 101]}
         reds = om.get_pos_reds(true_antpos, bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds)
-        print inferred_antpos
         for pos in inferred_antpos.values():
             self.assertEqual(len(pos), 3)
         new_reds = om.get_pos_reds(inferred_antpos, bl_error_tol=1e-10)
@@ -981,6 +980,18 @@ class TestRedundantCalibrator(unittest.TestCase):
         self.assertFalse(om.is_redundantly_calibratable(pos, bl_error_tol=.1))
         self.assertTrue(om.is_redundantly_calibratable(pos, bl_error_tol=1))
 
+
+class TestRunMethods(unittest.TestCase):
+
+    def test_get_pol_load_list(self):
+        self.assertEqual(om.get_pol_load_list(['xx'], pol_mode='1pol'), [['xx']])
+        self.assertEqual(om.get_pol_load_list(['xx', 'yy'], pol_mode='2pol'), [['xx'], ['yy']])
+        self.assertEqual(om.get_pol_load_list(['xx', 'yy', 'xy', 'yx'], pol_mode='4pol'), [['xx', 'yy', 'xy', 'yx']])
+        self.assertEqual(om.get_pol_load_list(['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV'), [['xx', 'yy', 'xy', 'yx']])
+        with self.assertRaises(AssertionError):
+            om.get_pol_load_list(['xx'], pol_mode='4pol')
+        with self.assertRaises(ValueError):
+            om.get_pol_load_list(['xx'], pol_mode='10pol')
 
 if __name__ == '__main__':
     unittest.main()
