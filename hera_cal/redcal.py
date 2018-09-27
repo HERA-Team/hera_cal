@@ -58,7 +58,7 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
         b_x where b((i,j)) = pos(j) - pos(i).
 
         Args:
-            antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
+            antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}. 1D and 2D also OK.
             bl_error_tol: the largest allowable difference between baselines in a redundant group
                 (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
 
@@ -68,10 +68,12 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
     """
     keys = antpos.keys()
     reds = {}
-    array_is_flat = np.all(np.abs(np.array(antpos.values())[:, 2] - np.mean(antpos.values(), axis=0)[2]) < bl_error_tol / 4.0)
+    assert np.all([len(pos) <= 3 for pos in antpos.values()]), 'Get_pos_reds only works in up to 3 dimensions.'
+    ap = {ant: np.pad(pos, (0, 3 - len(pos)), mode='constant') for ant, pos in antpos.items()}  # increase dimensionality
+    array_is_flat = np.all(np.abs(np.array(ap.values())[:, 2] - np.mean(ap.values(), axis=0)[2]) < bl_error_tol / 4.0)
     for i, ant1 in enumerate(keys):
         for ant2 in keys[i + 1:]:
-            delta = tuple(np.round(1.0 * (np.array(antpos[ant2]) - np.array(antpos[ant1])) / bl_error_tol).astype(int))
+            delta = tuple(np.round(1.0 * (np.array(ap[ant2]) - np.array(ap[ant1])) / bl_error_tol).astype(int))
             if delta[0] > 0 or (delta[0] == 0 and delta[1] > 0) or (delta[0] == 0 and delta[1] == 0 and delta[2] > 0):
                 bl_pair = (ant1, ant2)
             else:
