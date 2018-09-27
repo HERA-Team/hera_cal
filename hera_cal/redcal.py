@@ -247,16 +247,20 @@ def reds_to_antpos(reds, tol=1e-10):
             necessary to describe all redundancies (non-redundancy introduces extra dimensions.)
     '''
     ants = set([ant for red in reds for bl in red for ant in bl[:2]])
-    # start with all antennas having their own dimension, then iterativley reduce the dimensionality
-    antpos = {ant: np.array([1. if d == i else 0. for d in range(len(ants))]) 
+    # start with all antennas (except the first) having their own dimension, then reduce the dimensionality
+    antpos = {ant: np.array([1. if d + 1 == i else 0. for d in range(len(ants) - 1)]) 
                    for i, ant in enumerate(ants)}
     for red in reds:
-        for (ant1, ant2, pol) in red[1:]:
-            delta = (antpos[red[0][1]] - antpos[red[0][0]]) - (antpos[ant2] - antpos[ant1])
-            if np.linalg.norm(delta) > tol:  # this baseline is inconsistent with its redundant group
+        for bl in red:
+            # look for vectors in the higher dimensional space that are equal to 0
+            delta = (antpos[bl[1]] - antpos[bl[0]]) - (antpos[red[0][1]] - antpos[red[0][0]])
+            if np.linalg.norm(delta) > tol:  # this baseline can help us reduce the dimensionality
                 dim_to_elim = np.max(np.arange(len(delta))[np.abs(delta) > tol])
                 antpos = {ant: np.delete(pos - pos[dim_to_elim] / delta[dim_to_elim] * delta, dim_to_elim) 
-                          for ant, pos in antpos.items()} 
+                          for ant, pos in antpos.items()}
+    # remove any all-zero dimensions
+    dim_to_elim = np.argwhere(np.sum(np.abs(antpos.values()), axis=0) == 0).flatten()
+    antpos = {ant: np.delete(pos, dim_to_elim) for ant, pos in antpos.items()}
     return antpos
 
 
