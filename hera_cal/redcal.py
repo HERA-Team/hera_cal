@@ -251,7 +251,7 @@ def reds_to_antpos(reds, tol=1e-10):
     ants = set([ant for red in reds for bl in red for ant in bl[:2]])
     # start with all antennas (except the first) having their own dimension, then reduce the dimensionality
     antpos = {ant: np.array([1. if d + 1 == i else 0. for d in range(len(ants) - 1)]) 
-                   for i, ant in enumerate(ants)}
+              for i, ant in enumerate(ants)}
     for red in reds:
         for bl in red:
             # look for vectors in the higher dimensional space that are equal to 0
