@@ -718,7 +718,7 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
             gains[(k[0], 'y')] = gains[k].conj()
         uvc = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, outdir='./')
         self.assertEqual(uvc.gain_array.shape, (10, 1, 64, 100, 2))
-        self.assertTrue(np.testing.assert_array_almost_equal(uvc.gain_array[0, 0, :, :, 0], uvc.gain_array[0, 0, :, :, 1].conj()))
+        np.testing.assert_array_almost_equal(uvc.gain_array[0, 0, :, :, 0], uvc.gain_array[0, 0, :, :, 1].conj())
         os.remove('ex.calfits')
 
     def test_update_cal(self):
