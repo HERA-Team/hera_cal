@@ -972,7 +972,7 @@ def load_cal(input_cal, return_meta=False):
 def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=None, write_file=True,
               return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
               history=' ', x_orientation="east", telescope_name='HERA', cal_style='redundant',
-              **kwargs):
+              zero_check=True, **kwargs):
     '''Format gain solution dictionary into pyuvdata.UVCal and write to file
 
     Arguments:
@@ -1000,6 +1000,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         telescope_name : type=str, name of telescope
         cal_style : type=str, style of calibration solutions, options=['redundant', 'sky']. If
                     cal_style == sky, additional params are required. See pyuvdata.UVCal doc.
+        zero_check : type=bool, if True, for gain values near zero, set to one and flag them.
         kwargs : additional atrributes to set in pyuvdata.UVCal
     Returns:
         if return_uvc: returns UVCal object
@@ -1063,12 +1064,16 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     if total_qual is None:
         total_quality_array = None
 
-    # Check gain_array for values close to zero, if so, set to 1
-    zero_check = np.isclose(gain_array, 0, rtol=1e-10, atol=1e-10)
-    gain_array[zero_check] = 1.0 + 0j
-    flag_array[zero_check] += True
-    if zero_check.max() is True:
-        print("Some of values in self.gain_array were zero and are flagged and set to 1.")
+    if zero_check:
+        # Check gain_array for values close to zero, if so, set to 1
+        zero_check_arr = np.isclose(gain_array, 0, rtol=1e-10, atol=1e-10)
+        # copy arrays b/c they are still references to the input gain dictionaries
+        gain_array = gain_array.copy()
+        flag_array = flag_array.copy()
+        gain_array[zero_check_arr] = 1.0 + 0j
+        flag_array[zero_check_arr] += True
+        if zero_check_arr.max() is True:
+            print("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
     # instantiate UVCal
     uvc = UVCal()
