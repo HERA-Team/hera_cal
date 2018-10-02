@@ -721,6 +721,13 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
         np.testing.assert_array_almost_equal(uvc.gain_array[0, 0, :, :, 0], uvc.gain_array[0, 0, :, :, 1].conj())
         os.remove('ex.calfits')
 
+        # test zero check
+        gains[(0, 'x')][:] = 0.0
+        uvc1 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False ,outdir='./', zero_check=True)
+        uvc2 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False, outdir='./', zero_check=False)
+        self.assertTrue(np.isclose(uvc1.gain_array[0, 0, :, :, 0], 1.0).all())
+        self.assertTrue(np.isclose(uvc2.gain_array[0, 0, :, :, 0], 0.0).all())
+
     def test_update_cal(self):
         # load in cal
         fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
