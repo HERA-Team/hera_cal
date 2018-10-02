@@ -560,6 +560,9 @@ class RedundantCalibrator:
             df: frequency change between data bins, scales returned delays by 1/df.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
+            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
+                Suggest using 'default' unless solver is having stability (convergence) problems.
+                More documentation of modes in linsolve.LinearSolver.solve().
             norm: calculate delays from just the phase information (not the amplitude) of the data.
                 This is a pretty effective way to get reliable delay even in the presence of RFI.
             medfilt : boolean, median filter data before fft.  This can work for data containing
@@ -665,7 +668,7 @@ class RedundantCalibrator:
                 like (ant,antpol) or baseline tuples like. Gains should include firstcal gains.
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             conv_crit: maximum allowed relative change in solutions to be considered converged
-            max_iter: maximum number of lincal iterations allowed before it gives up
+            maxiter: maximum number of omnical iterations allowed before it gives up
             check_every: Compute convergence every Nth iteration (saves computation).  Default 4.
             check_after: Start computing convergence only after N iterations.  Default 1.
             gain: The fractional step made toward the new solution each iteration.  Default is 0.3.
