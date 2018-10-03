@@ -6,9 +6,9 @@ import numpy as np
 import linsolve
 from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
-from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, comply_pol, fft_dly
+from hera_cal import utils
+from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, fft_dly
 from hera_cal.apply_cal import calibrate_in_place
-import six
 
 
 def noise(size):
@@ -866,13 +866,13 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
     rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, conv_crit=conv_crit, maxiter=maxiter, 
-                                     check_every=check_every, check_after=check_after, gain=gain)
+                                           check_every=check_every, check_after=check_after, gain=gain)
 
     # update omnical flags and then remove degeneracies
     rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
     rv['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in rv['g_omnical'].items()}
     rv['vf_omnical'] = {bl: ~np.isfinite(v) for bl, v in rv['v_omnical'].items()}
-    redcal.make_sol_finite(omni_sol)
+    make_sol_finite(omni_sol)
     rd_sol = rc.remove_degen(omni_sol, degen_sol=rv['g_firstcal'])
     rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(rd_sol) 
 
@@ -880,8 +880,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     data_wgts = {bl: utils.predict_noise_variance_from_autos(bl, data, 
                  dt=(np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.))**-1 for bl in data.keys()}
     rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts, 
-                                                           gains=rv['g_omnical'], reds=reds, 
-                                                           split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
+                                                                       gains=rv['g_omnical'], reds=reds, 
+                                                                       split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
     rv['chisq_per_ant'] = {ant: cs / nObs_per_ant[ant] for ant, cs in rv['chisq_per_ant'].items()}
     if rc.pol_mode in ['1pol', '2pol']:  # in this case, chisq is split by antpol
         for antpol in rv['chisq'].keys():
