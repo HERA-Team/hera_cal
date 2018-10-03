@@ -176,7 +176,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             represent the redundant group containing it.  Baselines of the form (i,j) are broadcast across all
             polarizations, otherwise (i,j,pol) selects a specific redundant group.
         ex_ubls (optional): same as ubls, but excludes groups.
-        pols (optional): polarizations to include in reds. e.g. ['XX','YY','XY','YX'].  Default includes all
+        pols (optional): polarizations to include in reds. e.g. ['xx','yy','xy','yx'].  Default includes all
             polarizations in reds.
         ex_pols (optional): same as pols, but excludes polarizations.
     Return:
@@ -398,14 +398,14 @@ class OmnicalSolver(linsolve.LinProductSolver):
                  for term in self.all_terms for (gi, gj, uij) in term]
         dmdl_u = self._get_ans0(sol)
         chisq = sum([np.abs(self.data[k] - dmdl_u[k])**2 * self.wgts[k] for k in self.keys])
+        update = np.where(chisq > 0)
         # variables with '_u' are flattened and only include pixels that need updating
-        dmdl_u = {k: v.flatten() for k, v in dmdl_u.items()}
+        dmdl_u = {k: v[update].flatten() for k, v in dmdl_u.items()}
         # wgts_u hold the wgts the user provides.  dwgts_u is what is actually used to wgt the data
-        wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32)).flatten() for k, v in self.wgts.items()}
-        sol_u = {k: v.flatten() for k, v in sol.items()}
+        wgts_u = {k: (v * np.ones(chisq.shape, dtype=np.float32))[update].flatten() for k, v in self.wgts.items()}
+        sol_u = {k: v[update].flatten() for k, v in sol.items()}
         iters = np.zeros(chisq.shape, dtype=np.int)
         conv = np.ones_like(chisq)
-        update = np.where(chisq > 0)
         for i in range(1, maxiter + 1):
             if verbose: 
                 print('Beginning iteration %d/%d' % (i, maxiter))
