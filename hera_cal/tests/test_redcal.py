@@ -9,9 +9,11 @@ from copy import deepcopy
 from hera_cal.utils import split_pol, conj_pol
 import warnings
 from hera_cal.apply_cal import calibrate_in_place
+from hera_cal.data import DATA_PATH
+from hera_cal import io
+import os
 
 np.random.seed(0)
-
 
 def build_linear_array(nants, sep=14.7):
     antpos = {i: np.array([sep * i, 0, 0]) for i in range(nants)}
@@ -992,6 +994,44 @@ class TestRunMethods(unittest.TestCase):
             om.get_pol_load_list(['xx'], pol_mode='4pol')
         with self.assertRaises(ValueError):
             om.get_pol_load_list(['xx'], pol_mode='10pol')
+
+    def test_redundantly_calibrate(self):
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
+        data, flags, nsamples = hd.read()
+        nTimes, nFreqs = len(hd.times), len(hd.freqs)
+
+        for pol_mode in ['2pol', '4pol']:
+            pol_load_list = om.get_pol_load_list(hd.pols, pol_mode=pol_mode)
+            ant_nums = np.unique(np.append(hd.ant_1_array, hd.ant_2_array))
+            all_reds = om.get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
+                                   pols=set([pol for pols in pol_load_list for pol in pols]))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                rv = om.redundantly_calibrate(data, all_reds)
+                for r in ['v_omnical', 'chisq_per_ant', 'omni_meta', 'g_firstcal', 'chisq', 'gf_firstcal', 'g_omnical', 'gf_omnical', 'vf_omnical']:
+                    self.assertTrue(r in rv)
+                for r in ['v_omnical', 'g_firstcal', 'gf_firstcal', 'g_omnical', 'gf_omnical', 'vf_omnical', 'chisq_per_ant']:
+                    for val in rv[r].values():
+                        self.assertEqual(val.shape, (nTimes, nFreqs))
+                        if r in ['v_omnical', 'g_firstcal', 'g_omnical']:
+                            self.assertEqual(val.dtype, np.complex64)
+                        elif r in ['vf_omnical', 'gf_firstcal', 'gf_omnical']:
+                            self.assertEqual(val.dtype, bool)
+
+                for flag in rv['gf_firstcal'].values():
+                    np.testing.assert_array_equal(flag, 0)
+                for k, flag in rv['gf_omnical'].items():
+                    np.testing.assert_array_equal(rv['g_omnical'][k][flag], 1.)
+                for k, flag in rv['vf_omnical'].items():
+                    np.testing.assert_array_equal(rv['v_omnical'][k][flag], 0)
+
+        if pol_mode == '4pol':
+            self.assertEqual(rv['chisq'].shape, (nTimes, nFreqs))
+        else:
+            self.assertEqual(len(rv['chisq']), 2)
+            for val in assertEqual(rv['chisq'].values()):
+                self.assertEqual(val.shape, (nTimes, nFreqs))
+
 
 if __name__ == '__main__':
     unittest.main()
