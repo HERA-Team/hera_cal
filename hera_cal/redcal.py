@@ -836,9 +836,10 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
                 Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
             'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
             'g_omnical': full omnical gain dictionary (which include firstcal gains) in the same format.
+                Flagged gains will be 1.0s.
             'gf_omnical': omnical flag dictionary in the same format. Flags arise from NaNs in log/omnical.
             'v_omnical': omnical visibility solutions dictionary with baseline-pol tuple keys that are the
-                first elements in each of the sub-lists of reds.
+                first elements in each of the sub-lists of reds. Flagged visibilities will be 0.0s.
             'vf_omnical': omnical visibility flag dictionary in the same format. Flags arise from NaNs.
             'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
                 from autocorrelations. If the inferred pol_mode from reds (see redcal.parse_pol_mode) is
@@ -874,7 +875,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     rv['vf_omnical'] = {bl: ~np.isfinite(v) for bl, v in rv['v_omnical'].items()}
     make_sol_finite(omni_sol)
     rd_sol = rc.remove_degen(omni_sol, degen_sol=rv['g_firstcal'])
-    rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(rd_sol) 
+    rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(rd_sol)
+    rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
     data_wgts = {bl: utils.predict_noise_variance_from_autos(bl, data, 
