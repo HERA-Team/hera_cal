@@ -1012,7 +1012,8 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None):
         assert(len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
         df = np.median(np.ediff1d(data.freqs))
 
-    return np.abs(data[bl[0], bl[0], bl[2]] * data[bl[1], bl[1], bl[2]] / dt / df)
+    ap1, ap2 = split_pol(bl[2])
+    return np.abs(data[bl[0], bl[0], join_pol(ap1, ap1)] * data[bl[1], bl[1], join_pol(ap2, ap2)] / dt / df)
 
 
 def eq2top_m(ha, dec):

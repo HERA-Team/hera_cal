@@ -489,7 +489,7 @@ def test_chisq():
 
 def test_predict_noise_variance_from_autos():
     hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5'))
-    data, flags, nsamples = hd.read(polarizations=['xx', 'yy'])
+    data, flags, nsamples = hd.read()
     for k in data.keys():
         if k[0] != k[1]:
             sigmasq = utils.predict_noise_variance_from_autos(k, data)
