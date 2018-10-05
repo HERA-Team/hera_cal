@@ -1035,10 +1035,11 @@ def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
                 for bl in cal['v_omnical'].keys():
                     rv['v_omnical'][bl][tinds, :] = cal['v_omnical'][bl]
                     rv['vf_omnical'][bl][tinds, :] = cal['vf_omnical'][bl]
-                for antpol in cal['chisq'].keys():
-                    if pol_mode in ['1pol', '2pol']:
+                if pol_mode in ['1pol', '2pol']:
+                    for antpol in cal['chisq'].keys():
                         rv['chisq'][antpol][tinds, :] = cal['chisq'][antpol]
-                    else:  # duplicate chi^2 into both antenna polarizations
+                else:  # duplicate chi^2 into both antenna polarizations
+                    for antpol in rv['chisq'].keys():
                         rv['chisq'][antpol][tinds, :] = cal['chisq']
 
     return rv
