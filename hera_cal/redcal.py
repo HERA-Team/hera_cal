@@ -796,6 +796,43 @@ class RedundantCalibrator:
         return new_sol
 
 
+def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
+    """Figures out whether an array is redundantly calibratable.
+
+    Args:
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
+        bl_error_tol: the largest allowable difference between baselines in a redundant group
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+
+    Returns:
+        int: the number of 1-pol redundant baseline calibration degeneracies (4 means redundantly calibratable)
+    """
+
+    reds = get_reds(antpos, bl_error_tol=bl_error_tol)
+    gains, true_vis, data = sim_red_data(reds, shape=(1, 1))
+    cal = RedundantCalibrator(reds)
+    ls = cal._solver(linsolve.LogProductSolver, data, wgts={})
+
+    A, B = ls.ls_amp.get_A()[:, :, 0], ls.ls_phs.get_A()[:, :, 0]
+    AtA, BtB = np.conj(A.T).dot(A), np.conj(B.T).dot(B)
+    return len(AtA) + len(BtB) - np.linalg.matrix_rank(AtA) - np.linalg.matrix_rank(BtB)
+
+
+def is_redundantly_calibratable(antpos, bl_error_tol=1.0):
+    """Figures out whether an array is redundantly calibratable.
+
+    Args:
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
+        bl_error_tol: the largest allowable difference between baselines in a redundant group
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+
+    Returns:
+        boolean: true if the number of 1pol degeneracies is 4 and thus the array is redundantly calibratable
+    """
+
+    return count_redcal_degeneracies(antpos, bl_error_tol=bl_error_tol) == 4
+
+
 def get_pol_load_list(pols, pol_mode='1pol'):
     '''Get a list of lists of polarizations to load simultaneously, depending on the polarizations
     in the data and the pol_mode (which can be 1pol, 2pol, 4pol, or 4pol_minV)'''
@@ -813,41 +850,41 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
                           maxiter=500, check_every=10, check_after=50, gain=.4):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
     
-        Arguments:
-            data: dictionary or DataContainer mapping baseline-pol tuples like (0,1,'xx') to 
-                complex data of shape 
-            reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
-                item in each list will be treated as the key for the unique baseline.
-            freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
-                but must be provided if data is a dictionary, if it doesn't have .freqs, or if the
-                length of data.freqs is 1.
-            times_by_bl: dictionary mapping antenna pairs like (0,1) to times in days. Optional if
-                inferable from data DataContainer, but must be provided if data is a dictionary, 
-                if it doesn't have .times_by_bl, or if the length of any list of times is 1.
-            conv_crit: maximum allowed relative change in omnical solutions for convergence
-            maxiter: maximum number of omnical iterations allowed before it gives up
-            check_every: compute omnical convergence every Nth iteration (saves computation).
-            check_after: start computing omnical convergence only after N iterations (saves computation).
-            gain: The fractional step made toward the new solution each omnical iteration. Values in the
-                range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
+    Arguments:
+        data: dictionary or DataContainer mapping baseline-pol tuples like (0,1,'xx') to 
+            complex data of shape 
+        reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+            item in each list will be treated as the key for the unique baseline.
+        freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
+            but must be provided if data is a dictionary, if it doesn't have .freqs, or if the
+            length of data.freqs is 1.
+        times_by_bl: dictionary mapping antenna pairs like (0,1) to times in days. Optional if
+            inferable from data DataContainer, but must be provided if data is a dictionary, 
+            if it doesn't have .times_by_bl, or if the length of any list of times is 1.
+        conv_crit: maximum allowed relative change in omnical solutions for convergence
+        maxiter: maximum number of omnical iterations allowed before it gives up
+        check_every: compute omnical convergence every Nth iteration (saves computation).
+        check_after: start computing omnical convergence only after N iterations (saves computation).
+        gain: The fractional step made toward the new solution each omnical iteration. Values in the
+            range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
 
-        Returns a dictionary of results with the following keywords:
-            'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jxx').
-                Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
-            'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
-            'g_omnical': full omnical gain dictionary (which include firstcal gains) in the same format.
-                Flagged gains will be 1.0s.
-            'gf_omnical': omnical flag dictionary in the same format. Flags arise from NaNs in log/omnical.
-            'v_omnical': omnical visibility solutions dictionary with baseline-pol tuple keys that are the
-                first elements in each of the sub-lists of reds. Flagged visibilities will be 0.0s.
-            'vf_omnical': omnical visibility flag dictionary in the same format. Flags arise from NaNs.
-            'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
-                from autocorrelations. If the inferred pol_mode from reds (see redcal.parse_pol_mode) is
-                '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jxx') to chi^2.
-                Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
-            'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jxx') to the average chisq
-                for all visibilities that an antenna participates in.
-            'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
+    Returns a dictionary of results with the following keywords:
+        'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jxx').
+            Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
+        'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
+        'g_omnical': full omnical gain dictionary (which include firstcal gains) in the same format.
+            Flagged gains will be 1.0s.
+        'gf_omnical': omnical flag dictionary in the same format. Flags arise from NaNs in log/omnical.
+        'v_omnical': omnical visibility solutions dictionary with baseline-pol tuple keys that are the
+            first elements in each of the sub-lists of reds. Flagged visibilities will be 0.0s.
+        'vf_omnical': omnical visibility flag dictionary in the same format. Flags arise from NaNs.
+        'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
+            from autocorrelations. If the inferred pol_mode from reds (see redcal.parse_pol_mode) is
+            '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jxx') to chi^2.
+            Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
+        'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jxx') to the average chisq
+            for all visibilities that an antenna participates in.
+        'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''  
     rv = {}  # dictionary of return values
     rc = RedundantCalibrator(reds)
@@ -896,38 +933,112 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     return rv
 
 
-def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
-    """Figures out whether an array is redundantly calibratable.
+def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[], 
+                                solar_horizon=0.0, conv_crit=1e-10, maxiter=500, 
+                                check_every=10, check_after=50, gain=.4, verbose=False):
+    '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only 
+    nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
+    
+    Arguments:
+        hd: HERAData object, instantiated with the datafile or files to calibrate. Must be loaded using uvh5.
+        nInt_to_load: number of integrations to load and calibrate simultaneously. Lower numbers save memory, 
+            but incur a CPU overhead.
+        pol_mode: polarization mode of calibration. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
+            See recal.get_reds for more information.
+        ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
+            antenna-polarization tuples. In the former case, all pols for an antenna will be excluded.
+        solar_horizon: float, Solar altitude flagging threshold [degrees]. When the Sun is above
+            this altitude, calibration is skipped and the integrations are flagged.
+        freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
+            but must be provided if data is a dictionary, if it doesn't have .freqs, or if the
+            length of data.freqs is 1.
+        times_by_bl: dictionary mapping antenna pairs like (0,1) to times in days. Optional if
+            inferable from data DataContainer, but must be provided if data is a dictionary, 
+            if it doesn't have .times_by_bl, or if the length of any list of times is 1.
+        conv_crit: maximum allowed relative change in omnical solutions for convergence
+        maxiter: maximum number of omnical iterations allowed before it gives up
+        check_every: compute omnical convergence every Nth iteration (saves computation).
+        check_after: start computing omnical convergence only after N iterations (saves computation).
+        gain: The fractional step made toward the new solution each omnical iteration. Values in the
+            range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
 
-    Args:
-        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
-        bl_error_tol: the largest allowable difference between baselines in a redundant group
-            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+    Returns a dictionary of results with the following keywords:
+        'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jxx').
+            Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
+        'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
+        'g_omnical': full omnical gain dictionary (which include firstcal gains) in the same format.
+            Flagged gains will be 1.0s.
+        'gf_omnical': omnical flag dictionary in the same format. Flags arise from NaNs in log/omnical.
+        'v_omnical': omnical visibility solutions dictionary with baseline-pol tuple keys that are the
+            first elements in each of the sub-lists of reds. Flagged visibilities will be 0.0s.
+        'vf_omnical': omnical visibility flag dictionary in the same format. Flags arise from NaNs.
+        'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
+            from autocorrelations. If the inferred pol_mode from reds (see redcal.parse_pol_mode) is
+            '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jxx') to chi^2.
+            Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
+        'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jxx') to the average chisq
+            for all visibilities that an antenna participates in.
+    '''    
+    assert hd.filetype == 'uvh5', 'Input HERAData object must be created with a uvh5 visibility object.'
+    
+    # get basic antenna, polarization, and observation info
+    nTimes, nFreqs = len(hd.times), len(hd.freqs)
+    antpols = list(set([ap for pol in hd.pols for ap in split_pol(pol)]))
+    ant_nums = np.unique(np.append(hd.ant_1_array, hd.ant_2_array))
+    ants = [(ant, antpol) for ant in ant_nums for antpol in antpols]
+    pol_load_list = get_pol_load_list(hd.pols, pol_mode=pol_mode)
 
-    Returns:
-        int: the number of 1-pol redundant baseline calibration degeneracies (4 means redundantly calibratable)
-    """
+    # initialize gains to 1s, gain flags to True, and chisq to 0s
+    rv = {}  # dictionary of return values
+    rv['g_firstcal'] = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
+    rv['gf_firstcal'] = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
+    rv['g_omnical'] = {ant: np.ones((nTimes, nFreqs), dtype=np.complex64) for ant in ants}
+    rv['gf_omnical'] = {ant: np.ones((nTimes, nFreqs), dtype=bool) for ant in ants}
+    rv['chisq'] = {antpol: np.zeros((nTimes, nFreqs), dtype=np.float32) for antpol in antpols}
+    rv['chisq_per_ant'] = {ant: np.zeros((nTimes, nFreqs), dtype=np.float32) for ant in ants}
 
-    reds = get_reds(antpos, bl_error_tol=bl_error_tol)
-    gains, true_vis, data = sim_red_data(reds, shape=(1, 1))
-    cal = RedundantCalibrator(reds)
-    ls = cal._solver(linsolve.LogProductSolver, data, wgts={})
+    # get reds and then intitialize omnical visibility solutions to all 1s and all flagged
+    all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
+                        pols=set([pol for pols in pol_load_list for pol in pols]))
+    all_reds = filter_reds(all_reds, ex_ants=ex_ants)
+    rv['v_omnical'] = {red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds}
+    rv['vf_omnical'] = {red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds}
 
-    A, B = ls.ls_amp.get_A()[:, :, 0], ls.ls_phs.get_A()[:, :, 0]
-    AtA, BtB = np.conj(A.T).dot(A), np.conj(B.T).dot(B)
-    return len(AtA) + len(BtB) - np.linalg.matrix_rank(AtA) - np.linalg.matrix_rank(BtB)
+    # solar flagging
+    lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
+    solar_alts = utils.get_sun_alt(hd.times, latitude=lat, longitude=lon)
+    solar_flagged = solar_alts > solar_horizon
+    if verbose and np.any(solar_flagged):
+        print len(hd.times[solar_flagged]), 'integrations flagged due to sun above', solar_horizon, 'degrees.'
+    
+    # loop over data, performing partial loading 
+    for pols in pol_load_list:
+        if verbose:
+            print 'Now calibrating', pols, 'polarization(s)...'
+        reds = filter_reds(all_reds, ex_ants=ex_ants, pols=pols)
+        for tinds in np.split(np.arange(nTimes)[~solar_flagged], 
+                              np.arange(nInt_to_load, len(hd.times[~solar_flagged]), nInt_to_load)):
+            if len(tinds) > 0:
+                if verbose:
+                    print '    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...'
+                data, _, _ = hd.read(times=hd.times[tinds], polarizations=pols)
+                cal = redundantly_calibrate(data, reds, freqs=hd.freqs, times_by_bl=hd.times_by_bl, 
+                                            conv_crit=conv_crit, maxiter=maxiter, 
+                                            check_every=check_every, check_after=check_after, gain=gain)
+                # gather results 
+                for ant in cal['g_omnical'].keys():
+                    rv['g_firstcal'][ant][tinds, :] = cal['g_firstcal'][ant]
+                    rv['gf_firstcal'][ant][tinds, :] = cal['g_firstcal'][ant]
+                    rv['g_omnical'][ant][tinds, :] = cal['g_omnical'][ant]
+                    rv['gf_omnical'][ant][tinds, :] = cal['gf_omnical'][ant]
+                    rv['chisq_per_ant'][ant][tinds, :] = cal['chisq_per_ant'][ant]
+                for bl in cal['v_omnical'].keys():
+                    rv['v_omnical'][bl][tinds, :] = cal['v_omnical'][bl]
+                    rv['vf_omnical'][bl][tinds, :] = cal['vf_omnical'][bl]
+                for antpol in cal['chisq'].keys():
+                    if pol_mode in ['1pol', '2pol']:
+                        rv['chisq'][antpol][tinds, :] = cal['chisq'][antpol]
+                    else:  # duplicate chi^2 into both antenna polarizations
+                        rv['chisq'][antpol][tinds, :] = cal['chisq']
 
-
-def is_redundantly_calibratable(antpos, bl_error_tol=1.0):
-    """Figures out whether an array is redundantly calibratable.
-
-    Args:
-        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
-        bl_error_tol: the largest allowable difference between baselines in a redundant group
-            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
-
-    Returns:
-        boolean: true if the number of 1pol degeneracies is 4 and thus the array is redundantly calibratable
-    """
-
-    return count_redcal_degeneracies(antpos, bl_error_tol=bl_error_tol) == 4
+    return rv
