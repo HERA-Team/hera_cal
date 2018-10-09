@@ -8,7 +8,11 @@ from copy import deepcopy
 from hera_cal.datacontainer import DataContainer
 from hera_cal import utils
 from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, fft_dly
+from hera_cal.io import HERAData, HERACal, write_cal, write_vis
 from hera_cal.apply_cal import calibrate_in_place
+from hera_qm.ant_metrics import per_antenna_modified_z_scores
+from hera_qm.metrics_io import load_metric_file
+import os
 
 
 def noise(size):
@@ -949,18 +953,13 @@ def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
             antenna-polarization tuples. In the former case, all pols for an antenna will be excluded.
         solar_horizon: float, Solar altitude flagging threshold [degrees]. When the Sun is above
             this altitude, calibration is skipped and the integrations are flagged.
-        freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
-            but must be provided if data is a dictionary, if it doesn't have .freqs, or if the
-            length of data.freqs is 1.
-        times_by_bl: dictionary mapping antenna pairs like (0,1) to times in days. Optional if
-            inferable from data DataContainer, but must be provided if data is a dictionary, 
-            if it doesn't have .times_by_bl, or if the length of any list of times is 1.
         conv_crit: maximum allowed relative change in omnical solutions for convergence
         maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
+        verbose: print calibration progress updates
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jxx').
@@ -1043,3 +1042,92 @@ def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
                         rv['chisq'][antpol][tinds, :] = cal['chisq']
 
     return rv
+
+
+def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.omni.calfits', omnivis_suffix='.omni.vis',
+               ant_metrics_file=None, clobber=False, nInt_to_load=8, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
+               solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
+               append_to_history='', verbose=False):
+    '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only 
+    nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
+    
+    Arguments:
+        input_data: path to uvh5 visibility data file to calibrate or list of paths
+        firstcal_suffix: string to append to input_data path for firstcal calfits file to save
+        omnical_suffix: string to append to input_data path for omnical calfits file to save
+        omnivis_suffix: string to append to input_data path for omnical visibility solutions to save as uvh5
+        ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
+            Used for finding ex_ants and is combined with antennas excluded via ex_ants.
+        clobber: if True, overwrites existing files for the firstcal and omnical results
+        nInt_to_load: number of integrations to load and calibrate simultaneously. Lower numbers save memory,
+            but incur a CPU overhead.
+        pol_mode: polarization mode of calibration. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
+            See recal.get_reds for more information.
+        ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
+            antenna-polarization tuples. In the former case, all pols for an antenna will be excluded.
+        ant_z_thresh: threshold of modified z-score (like number of sigmas but with medians) for chi^2 per 
+            antenna above which antennas are thrown away and calibration is re-run iteratively. Z-scores are
+            computed independently for each antenna polarization, but either polarization being excluded
+            triggers the entire antenna to get flagged (when multiple polarizations are calibrated)
+        solar_horizon: float, Solar altitude flagging threshold [degrees]. When the Sun is above
+            this altitude, calibration is skipped and the integrations are flagged.
+        conv_crit: maximum allowed relative change in omnical solutions for convergence
+        maxiter: maximum number of omnical iterations allowed before it gives up
+        check_every: compute omnical convergence every Nth iteration (saves computation).
+        check_after: start computing omnical convergence only after N iterations (saves computation).
+        gain: The fractional step made toward the new solution each omnical iteration. Values in the
+            range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
+        append_to_history: string to add to history of output firstcal and omnical files
+        verbose: print calibration progress updates
+
+    Returns:
+        cal: the dictionary result of the final run of redcal_partial_io_iteration (see above for details)
+    '''
+    hd = HERAData(input_data)
+    ex_ants = set(ex_ants)
+    if ant_metrics_file is not None:
+        for ant in load_metric_file(ant_metrics_file)['xants']:
+            ex_ants.add(ant)
+
+    # loop over calibration, removing bad antennas and re-running if necessary
+    while True:
+        # Run redundant calibration
+        if verbose:
+            print '\nNow running redundant calibration without antennas', list(ex_ants), '...'
+        cal = redcal_partial_io_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, ex_ants=ex_ants, 
+                                          solar_horizon=solar_horizon, conv_crit=conv_crit, maxiter=maxiter, 
+                                          check_every=check_every, check_after=check_after, gain=gain, verbose=verbose)
+        
+        # Determine whether to add additional antennas to exclude
+        z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items() 
+                                                  if not np.all(cspa == 0)})
+        n_ex = len(ex_ants)
+        for ant, score in z_scores.items():
+            if (score >= ant_z_thresh):
+                ex_ants.add(ant[0])
+                if verbose:
+                    print 'Throwing out antenna', ant[0], 'for a z-score', score, 'on polarization', ant[1]
+        if len(ex_ants) == n_ex:
+            break
+
+    # output results files
+    if verbose:
+        print '\nNow saving firstcal gains to', input_data + firstcal_suffix
+    write_cal(os.path.basename(input_data) + firstcal_suffix, cal['g_firstcal'], hd.freqs, hd.times, 
+              flags=cal['gf_firstcal'], outdir=os.path.dirname(input_data), overwrite=clobber, history=append_to_history)
+    
+    if verbose:
+        print 'Now saving omnical gains to', input_data + omnical_suffix
+    write_cal(os.path.basename(input_data) + omnical_suffix, cal['g_omnical'], hd.freqs, hd.times, 
+              flags=cal['gf_omnical'], quality=cal['chisq_per_ant'], total_qual=cal['chisq'], 
+              outdir=os.path.dirname(input_data), overwrite=clobber, history=append_to_history)
+
+    if verbose:
+        print 'Now saving omnical visibilities to', input_data + omnivis_suffix
+    hd.read(bls=cal['v_omnical'].keys())
+    hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'])
+    hd.history += append_to_history
+    hd.write_uvh5(input_data + omnivis_suffix, clobber=True)
+
+    return cal
+
