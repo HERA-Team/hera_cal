@@ -1052,7 +1052,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
     
     Arguments:
-        input_data: path to uvh5 visibility data file to calibrate or list of paths
+        input_data: path to uvh5 visibility data file to calibrate.
         firstcal_suffix: string to append to input_data path for firstcal calfits file to save
         omnical_suffix: string to append to input_data path for omnical calfits file to save
         omnivis_suffix: string to append to input_data path for omnical visibility solutions to save as uvh5
@@ -1084,6 +1084,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
     Returns:
         cal: the dictionary result of the final run of redcal_partial_io_iteration (see above for details)
     '''
+    assert isinstance(input_data, str), 'input_data must be a single string path to a uvh5 visibility data file.'
     hd = HERAData(input_data)
     ex_ants = set(ex_ants)
     if ant_metrics_file is not None:
