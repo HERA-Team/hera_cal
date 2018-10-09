@@ -2,6 +2,7 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import absolute_import, division, print_function
 import hera_cal.redcal as om
 import numpy as np
 import unittest
@@ -48,12 +49,12 @@ def build_split_hex_array_with_outriggers(sep = 14.6, hexNum = 11, splitCore = T
     #Split the core into 3 pieces
     if splitCore:
         newPos = []
-        for i,pos in enumerate(positions):          
+        for i,pos in enumerate(positions):
             theta = np.arctan2(pos[1],pos[0])
             if (pos[0]==0 and pos[1]==0):
                 newPos.append(pos)
             elif (theta > -np.pi/3 and theta < np.pi/3):
-                newPos.append(np.asarray(pos) + (upRight + upLeft)/3)                    
+                newPos.append(np.asarray(pos) + (upRight + upLeft)/3)
             elif (theta >= np.pi/3 and theta < np.pi):
                 newPos.append(np.asarray(pos) +upLeft  - (upRight + upLeft)/3)
             else:
@@ -67,7 +68,7 @@ def build_split_hex_array_with_outriggers(sep = 14.6, hexNum = 11, splitCore = T
             for col in range(2*exteriorHexNum-abs(row)-1):
                 xPos = ((-(2*exteriorHexNum-abs(row))+2)/2.0 + col)*sep*(hexNum-1)
                 yPos = row*sep*(hexNum-1)*3**.5/2
-                theta = np.arctan2(yPos,xPos)       
+                theta = np.arctan2(yPos,xPos)
                 if ((xPos**2 + yPos**2)**.5 > sep*(hexNum+1)):
                     if (theta > 0 and theta <= 2*np.pi/3+.01):
                         positions.append(np.asarray([xPos, yPos, 0]) - 4*(upRight + upLeft)/3)

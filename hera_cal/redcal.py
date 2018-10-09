@@ -2,6 +2,7 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import absolute_import, division, print_function
 import numpy as np
 import linsolve
 from copy import deepcopy
@@ -1009,18 +1010,18 @@ def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
     solar_alts = utils.get_sun_alt(hd.times, latitude=lat, longitude=lon)
     solar_flagged = solar_alts > solar_horizon
     if verbose and np.any(solar_flagged):
-        print len(hd.times[solar_flagged]), 'integrations flagged due to sun above', solar_horizon, 'degrees.'
+        print(len(hd.times[solar_flagged]), 'integrations flagged due to sun above', solar_horizon, 'degrees.')
     
     # loop over data, performing partial loading 
     for pols in pol_load_list:
         if verbose:
-            print 'Now calibrating', pols, 'polarization(s)...'
+            print('Now calibrating', pols, 'polarization(s)...')
         reds = filter_reds(all_reds, ex_ants=ex_ants, pols=pols)
         for tinds in np.split(np.arange(nTimes)[~solar_flagged], 
                               np.arange(nInt_to_load, len(hd.times[~solar_flagged]), nInt_to_load)):
             if len(tinds) > 0:
                 if verbose:
-                    print '    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...'
+                    print('    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...')
                 data, _, _ = hd.read(times=hd.times[tinds], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs, times_by_bl=hd.times_by_bl, 
                                             conv_crit=conv_crit, maxiter=maxiter, 
@@ -1096,7 +1097,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
     while True:
         # Run redundant calibration
         if verbose:
-            print '\nNow running redundant calibration without antennas', list(ex_ants), '...'
+            print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
         cal = redcal_partial_io_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, ex_ants=ex_ants, 
                                           solar_horizon=solar_horizon, conv_crit=conv_crit, maxiter=maxiter, 
                                           check_every=check_every, check_after=check_after, gain=gain, verbose=verbose)
@@ -1109,7 +1110,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
             if (score >= ant_z_thresh):
                 ex_ants.add(ant[0])
                 if verbose:
-                    print 'Throwing out antenna', ant[0], 'for a z-score', score, 'on polarization', ant[1]
+                    print('Throwing out antenna', ant[0], 'for a z-score', score, 'on polarization', ant[1])
         if len(ex_ants) == n_ex:
             break
 
@@ -1118,18 +1119,18 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
         outdir = os.path.dirname(input_data)
 
     if verbose:
-        print '\nNow saving firstcal gains to', input_data + firstcal_suffix
+        print('\nNow saving firstcal gains to', input_data + firstcal_suffix)
     write_cal(os.path.basename(input_data) + firstcal_suffix, cal['g_firstcal'], hd.freqs, hd.times, 
               flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, history=append_to_history)
     
     if verbose:
-        print 'Now saving omnical gains to', input_data + omnical_suffix
+        print('Now saving omnical gains to', input_data + omnical_suffix)
     write_cal(os.path.basename(input_data) + omnical_suffix, cal['g_omnical'], hd.freqs, hd.times, 
               flags=cal['gf_omnical'], quality=cal['chisq_per_ant'], total_qual=cal['chisq'], 
               outdir=outdir, overwrite=clobber, history=append_to_history)
 
     if verbose:
-        print 'Now saving omnical visibilities to', input_data + omnivis_suffix
+        print('Now saving omnical visibilities to', input_data + omnivis_suffix)
     hd.read(bls=cal['v_omnical'].keys())
     hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'])
     hd.history += append_to_history
