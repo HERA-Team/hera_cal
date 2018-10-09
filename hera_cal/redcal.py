@@ -947,7 +947,7 @@ def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
         hd: HERAData object, instantiated with the datafile or files to calibrate. Must be loaded using uvh5.
         nInt_to_load: number of integrations to load and calibrate simultaneously. Lower numbers save memory, 
             but incur a CPU overhead.
-        pol_mode: polarization mode of calibration. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
+        pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
         ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
             antenna-polarization tuples. In the former case, all pols for an antenna will be excluded.
@@ -1062,7 +1062,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
         clobber: if True, overwrites existing files for the firstcal and omnical results
         nInt_to_load: number of integrations to load and calibrate simultaneously. Lower numbers save memory,
             but incur a CPU overhead.
-        pol_mode: polarization mode of calibration. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
+        pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
         ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
             antenna-polarization tuples. In the former case, all pols for an antenna will be excluded.
@@ -1136,3 +1136,34 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
 
     return cal
 
+
+def redcal_argparser():
+    '''Arg parser for commandline operation of redcal_run'''
+    a = argparse.ArgumentParser(description="Redundantly calibrate a file using hera_cal.redcal. This includes firstcal, logcal, and omnical. \
+                                Iteratively re-runs by flagging antennas with large chi^2. Saves the result to calfits and uvh5 files.")
+    a.add_argument("input_data", type=str, help="path to uvh5 visibility data file to calibrate.")
+    a.add_argument("--firstcal_suffix", default='.first.calfits', type=str, help="string to append to input_data path for firstcal calfits file to save")
+    a.add_argument("--omnical_suffix", default='.omni.calfits', type=str, help="string to append to input_data path for omnical calfits file to save")
+    a.add_argument("--omnivis_suffix", default='.omni.vis', type=str, help="string to append to input_data path for omnical visibility solutions to save as uvh5")
+    a.add_argument("--outdir", default=None, type=str, help="folder to save data products. Default is the same as the folder containing input_data")
+    a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing files for the firstcal and omnical results")
+    a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
+
+    redcal_opts = a.add_argument_group(title='Runtime Options for Redcal')
+    redcal_opts.add_argument("--ant_metrics_file", type=str, default=None, help="path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file. \
+                             Used for finding ex_ants and is combined with antennas excluded via ex_ants.")
+    redcal_opts.add_argument("--ex_ants", type=int, nargs='*', default=[], help='space-delimited list of antennas to exclude from calibration and flag. All pols for an antenna will be excluded.')
+    redcal_opts.add_argument("--ant_z_thresh", type=float, default=4.0, help="Threshold of modified z-score for chi^2 per antenna above which antennas are thrown away and calibration is re-run iteratively.")
+    redcal_opts.add_argument("--solar_horizon", type=float, default=0.0, help="When the Sun is above this altitude in degrees, calibration is skipped and the integrations are flagged.")
+    redcal_opts.add_argument("--nInt_to_load", type=int, default=8, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead.")
+    redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
+    
+    omni_opts = a.add_argument_group(title='Omnical-Specific Options')
+    omni_opts.add_argument("--conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
+    omni_opts.add_argument("--maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
+    omni_opts.add_argument("--check_every", type=int, default=10, help="compute omnical convergence every Nth iteration (saves computation).")
+    omni_opts.add_argument("--check_after", type=int, default=50, help="start computing omnical convergence only after N iterations (saves computation).")
+    omni_opts.add_argument("--gain", type=float, default=.4, help="The fractional step made toward the new solution each omnical iteration. Values in the range 0.1 to 0.5 are generally safe.")
+
+    args = a.parse_args()
+    return args
