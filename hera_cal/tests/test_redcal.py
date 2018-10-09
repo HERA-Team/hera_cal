@@ -11,7 +11,7 @@ import warnings
 from hera_cal.apply_cal import calibrate_in_place
 from hera_cal.data import DATA_PATH
 from hera_cal import io
-import os
+import os, sys
 
 np.random.seed(0)
 
@@ -1055,7 +1055,51 @@ class TestRunMethods(unittest.TestCase):
         for flag in rv['vf_omnical'].values():
             np.testing.assert_array_equal(flag, True)
 
+    def test_redcal_run(self):
+        input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
+        ant_metrics_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.43124.HH.uv.ant_metrics.json')
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sys.stdout = open(os.devnull, 'w')
+            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.0, append_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
+            sys.stdout = sys.__stdout__
 
+        bad_ants = [25, 11, 12, 14]  # this is based on experiments with this particular file
+        hc = io.HERACal(input_data + '.first.calfits')
+        gains, flags, quals, total_qual = hc.read()
+        for ant in gains.keys():
+            np.testing.assert_array_almost_equal(gains[ant], cal['g_firstcal'][ant])
+            np.testing.assert_array_almost_equal(flags[ant], cal['gf_firstcal'][ant])
+            if ant[0] in bad_ants:
+                np.testing.assert_array_equal(gains[ant], 1.0)
+                np.testing.assert_array_equal(flags[ant], True)
+        self.assertEqual(hc.history[0:7], 'testing')
+
+        hc = io.HERACal(input_data + '.omni.calfits')
+        gains, flags, quals, total_qual = hc.read()
+        for ant in gains.keys():
+            np.testing.assert_array_almost_equal(gains[ant], cal['g_omnical'][ant])
+            np.testing.assert_array_almost_equal(flags[ant], cal['gf_omnical'][ant])
+            np.testing.assert_array_almost_equal(quals[ant], cal['chisq_per_ant'][ant])
+            if ant[0] in bad_ants:
+                np.testing.assert_array_equal(gains[ant], 1.0)
+                np.testing.assert_array_equal(flags[ant], True)
+        for antpol in total_qual.keys():
+            np.testing.assert_array_almost_equal(total_qual[antpol], cal['chisq'][antpol])
+        self.assertEqual(hc.history[0:7], 'testing')
+
+        hd = io.HERAData(input_data + '.omni.vis')
+        data, flags, nsamples = hd.read()
+        for bl in data.keys():
+            np.testing.assert_array_almost_equal(data[bl], cal['v_omnical'][bl])
+            np.testing.assert_array_almost_equal(flags[bl], cal['vf_omnical'][bl])
+            self.assertFalse(bl[0] in bad_ants)
+            self.assertFalse(bl[1] in bad_ants)
+        self.assertEqual(hd.history[-7:], 'testing')
+
+        os.remove(input_data + '.first.calfits')
+        os.remove(input_data + '.omni.calfits')
+        os.remove(input_data + '.omni.vis')
 
 
 if __name__ == '__main__':
