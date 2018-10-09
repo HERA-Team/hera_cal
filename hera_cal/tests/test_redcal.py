@@ -1101,6 +1101,15 @@ class TestRunMethods(unittest.TestCase):
         os.remove(input_data + '.omni.calfits')
         os.remove(input_data + '.omni.vis')
 
+    def test_redcal_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--ant_metrics_file', 'b', '--ex_ants', '5', '6', '--verbose']
+        a = om.redcal_argparser()
+        self.assertEqual(a.input_data, 'a')
+        self.assertEqual(a.ant_metrics_file, 'b')
+        self.assertEqual(a.ex_ants, [5, 6])
+        self.assertEqual(a.gain, .4)
+        self.assertTrue(a.verbose)
+
 
 if __name__ == '__main__':
     unittest.main()
