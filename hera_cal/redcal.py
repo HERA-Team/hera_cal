@@ -1044,8 +1044,8 @@ def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
     return rv
 
 
-def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.omni.calfits', omnivis_suffix='.omni.vis',
-               ant_metrics_file=None, clobber=False, nInt_to_load=8, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
+def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.omni.calfits', omnivis_suffix='.omni.vis', 
+               outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=8, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
                solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
                append_to_history='', verbose=False):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only 
@@ -1056,6 +1056,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
         firstcal_suffix: string to append to input_data path for firstcal calfits file to save
         omnical_suffix: string to append to input_data path for omnical calfits file to save
         omnivis_suffix: string to append to input_data path for omnical visibility solutions to save as uvh5
+        outdir: folder to save data products. If None, will be the same as the folder containing input_data
         ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
             Used for finding ex_ants and is combined with antennas excluded via ex_ants.
         clobber: if True, overwrites existing files for the firstcal and omnical results
@@ -1111,23 +1112,26 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
             break
 
     # output results files
+    if outdir is None:
+        outdir = os.path.dirname(input_data)
+
     if verbose:
         print '\nNow saving firstcal gains to', input_data + firstcal_suffix
     write_cal(os.path.basename(input_data) + firstcal_suffix, cal['g_firstcal'], hd.freqs, hd.times, 
-              flags=cal['gf_firstcal'], outdir=os.path.dirname(input_data), overwrite=clobber, history=append_to_history)
+              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, history=append_to_history)
     
     if verbose:
         print 'Now saving omnical gains to', input_data + omnical_suffix
     write_cal(os.path.basename(input_data) + omnical_suffix, cal['g_omnical'], hd.freqs, hd.times, 
               flags=cal['gf_omnical'], quality=cal['chisq_per_ant'], total_qual=cal['chisq'], 
-              outdir=os.path.dirname(input_data), overwrite=clobber, history=append_to_history)
+              outdir=outdir, overwrite=clobber, history=append_to_history)
 
     if verbose:
         print 'Now saving omnical visibilities to', input_data + omnivis_suffix
     hd.read(bls=cal['v_omnical'].keys())
     hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'])
     hd.history += append_to_history
-    hd.write_uvh5(input_data + omnivis_suffix, clobber=True)
+    hd.write_uvh5(os.path.join(outdir, os.path.basename(input_data) + omnivis_suffix), clobber=True)
 
     return cal
 
