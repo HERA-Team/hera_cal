@@ -4,7 +4,6 @@
 
 import utils
 import redcal
-import cal_formats
 import version
 import io
 import delay_filter
