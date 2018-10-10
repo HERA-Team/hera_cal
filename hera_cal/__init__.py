@@ -3,8 +3,6 @@
 # Licensed under the MIT License
 
 import utils
-import omni
-import firstcal
 import redcal
 import cal_formats
 import version
