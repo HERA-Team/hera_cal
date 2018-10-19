@@ -1096,6 +1096,18 @@ class TestRunMethods(unittest.TestCase):
             self.assertFalse(bl[1] in bad_ants)
         self.assertEqual(hd.history[-7:], 'testing')
 
+        hd = io.HERAData(input_data)
+        hd.read()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sys.stdout = open(os.devnull, 'w')
+            cal = om.redcal_run(hd, ant_metrics_file=ant_metrics_file, clobber=True)
+            sys.stdout = sys.__stdout__
+        self.assertTrue(len(cal) != 0)
+
+        with self.assertRaises(TypeError):
+            cal = om.redcal_run({})
+
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
