@@ -16,6 +16,7 @@ from hera_qm.metrics_io import load_metric_file
 import argparse
 import os
 
+SEC_PER_DAY = 86400.
 
 def noise(size):
     """Return complex random gaussian array with given size and variance = 1."""
@@ -917,7 +918,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
 
     # compute chisqs
     data_wgts = {bl: utils.predict_noise_variance_from_autos(bl, data, 
-                 dt=(np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.))**-1 for bl in data.keys()}
+                 dt=(np.median(np.ediff1d(times_by_bl[bl[:2]])) * SEC_PER_DAY))**-1 for bl in data.keys()}
     rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts, 
                                                                        gains=rv['g_omnical'], reds=reds, 
                                                                        split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
