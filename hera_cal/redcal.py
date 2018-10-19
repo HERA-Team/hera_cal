@@ -1043,7 +1043,7 @@ def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
 
 def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.omni.calfits', omnivis_suffix='.omni.vis', 
                outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=8, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
-               solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
+               max_rerun=5, solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
                append_to_history='', verbose=False):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io, performs solar flagging, and iteratively removes antennas with 
@@ -1068,6 +1068,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
             antenna above which antennas are thrown away and calibration is re-run iteratively. Z-scores are
             computed independently for each antenna polarization, but either polarization being excluded
             triggers the entire antenna to get flagged (when multiple polarizations are calibrated)
+        max_rerun: maximum number of times to run redundant calibration
         solar_horizon: float, Solar altitude flagging threshold [degrees]. When the Sun is above
             this altitude, calibration is skipped and the integrations are flagged.
         conv_crit: maximum allowed relative change in omnical solutions for convergence
@@ -1091,6 +1092,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
     high_z_ant_hist = ''
 
     # loop over calibration, removing bad antennas and re-running if necessary
+    run_number = 0
     while True:
         # Run redundant calibration
         if verbose:
@@ -1110,7 +1112,8 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
                 high_z_ant_hist += bad_ant_str
                 if verbose:
                     print(bad_ant_str)
-        if len(ex_ants) == n_ex:
+        run_number += 1
+        if len(ex_ants) == n_ex or run_number >= max_rerun:
             break
 
     # output results files
@@ -1155,6 +1158,7 @@ def redcal_argparser():
                              Used for finding ex_ants and is combined with antennas excluded via ex_ants.")
     redcal_opts.add_argument("--ex_ants", type=int, nargs='*', default=[], help='space-delimited list of antennas to exclude from calibration and flag. All pols for an antenna will be excluded.')
     redcal_opts.add_argument("--ant_z_thresh", type=float, default=4.0, help="Threshold of modified z-score for chi^2 per antenna above which antennas are thrown away and calibration is re-run iteratively.")
+    redcal_opts.add_argument("--max_rerun", type=int, default=5, help="Maximum number of times to re-run redundant calibration.")
     redcal_opts.add_argument("--solar_horizon", type=float, default=0.0, help="When the Sun is above this altitude in degrees, calibration is skipped and the integrations are flagged.")
     redcal_opts.add_argument("--nInt_to_load", type=int, default=8, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead.")
     redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
