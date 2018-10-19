@@ -1038,6 +1038,7 @@ class TestRunMethods(unittest.TestCase):
             for flag in rv['gf_omnical'].values():
                 self.assertFalse(np.all(flag[t,:]))
 
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             rv = om.redcal_iteration(hd, pol_mode='4pol')
