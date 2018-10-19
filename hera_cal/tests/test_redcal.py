@@ -149,13 +149,13 @@ class TestMethods(unittest.TestCase):
 
     def test_check_polLists_minV(self):
         polLists = [['xy']]
-        self.assertFalse(om.check_polLists_minV(polLists))
+        self.assertFalse(om._check_polLists_minV(polLists))
         polLists = [['xx', 'xy']]
-        self.assertFalse(om.check_polLists_minV(polLists))
+        self.assertFalse(om._check_polLists_minV(polLists))
         polLists = [['xx', 'xy', 'yx']]
-        self.assertFalse(om.check_polLists_minV(polLists))
+        self.assertFalse(om._check_polLists_minV(polLists))
         polLists = [['xy', 'yx'], ['xx'], ['yy'], ['xx'], ['yx', 'xy'], ['yy']]
-        self.assertTrue(om.check_polLists_minV(polLists))
+        self.assertTrue(om._check_polLists_minV(polLists))
 
     def test_parse_pol_mode(self):
         reds = [[(0, 1, 'xx')]]
@@ -983,14 +983,14 @@ class TestRedundantCalibrator(unittest.TestCase):
 class TestRunMethods(unittest.TestCase):
 
     def test_get_pol_load_list(self):
-        self.assertEqual(om.get_pol_load_list(['xx'], pol_mode='1pol'), [['xx']])
-        self.assertEqual(om.get_pol_load_list(['xx', 'yy'], pol_mode='2pol'), [['xx'], ['yy']])
-        self.assertEqual(om.get_pol_load_list(['xx', 'yy', 'xy', 'yx'], pol_mode='4pol'), [['xx', 'yy', 'xy', 'yx']])
-        self.assertEqual(om.get_pol_load_list(['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV'), [['xx', 'yy', 'xy', 'yx']])
+        self.assertEqual(om._get_pol_load_list(['xx'], pol_mode='1pol'), [['xx']])
+        self.assertEqual(om._get_pol_load_list(['xx', 'yy'], pol_mode='2pol'), [['xx'], ['yy']])
+        self.assertEqual(om._get_pol_load_list(['xx', 'yy', 'xy', 'yx'], pol_mode='4pol'), [['xx', 'yy', 'xy', 'yx']])
+        self.assertEqual(om._get_pol_load_list(['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV'), [['xx', 'yy', 'xy', 'yx']])
         with self.assertRaises(AssertionError):
-            om.get_pol_load_list(['xx'], pol_mode='4pol')
+            om._get_pol_load_list(['xx'], pol_mode='4pol')
         with self.assertRaises(ValueError):
-            om.get_pol_load_list(['xx'], pol_mode='10pol')
+            om._get_pol_load_list(['xx'], pol_mode='10pol')
 
     def test_redundantly_calibrate(self):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
@@ -998,7 +998,7 @@ class TestRunMethods(unittest.TestCase):
         nTimes, nFreqs = len(hd.times), len(hd.freqs)
 
         for pol_mode in ['2pol', '4pol']:
-            pol_load_list = om.get_pol_load_list(hd.pols, pol_mode=pol_mode)
+            pol_load_list = om._get_pol_load_list(hd.pols, pol_mode=pol_mode)
             ant_nums = np.unique(np.append(hd.ant_1_array, hd.ant_2_array))
             all_reds = om.get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
                                    pols=set([pol for pols in pol_load_list for pol in pols]))
