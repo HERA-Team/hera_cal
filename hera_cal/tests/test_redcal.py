@@ -1029,22 +1029,22 @@ class TestRunMethods(unittest.TestCase):
             for val in assertEqual(rv['chisq'].values()):
                 self.assertEqual(val.shape, (nTimes, nFreqs))
 
-    def test_redcal_partial_io_iteration(self):
+    def test_redcal_iteration(self):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redcal_partial_io_iteration(hd, nInt_to_load=1)
+            rv = om.redcal_iteration(hd, nInt_to_load=1)
         for t in range(len(hd.times)):
             for flag in rv['gf_omnical'].values():
                 self.assertFalse(np.all(flag[t,:]))
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redcal_partial_io_iteration(hd, pol_mode='4pol')
+            rv = om.redcal_iteration(hd, pol_mode='4pol')
         np.testing.assert_array_equal(rv['chisq']['Jxx'], rv['chisq']['Jyy'])
 
         hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  #move array longitude
-        rv = om.redcal_partial_io_iteration(hd, solar_horizon=0.0)
+        rv = om.redcal_iteration(hd, solar_horizon=0.0)
         for flag in rv['gf_firstcal'].values():
             np.testing.assert_array_equal(flag, True)
         for flag in rv['gf_omnical'].values():
