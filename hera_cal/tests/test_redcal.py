@@ -267,13 +267,6 @@ class TestMethods(unittest.TestCase):
         polReds = om.add_pol_reds(reds, pols=['xx', 'xy', 'yx', 'yy'], pol_mode='4pol_minV')
         self.assertEqual(polReds, [[(1, 2, 'xx')], [(1, 2, 'xy'), (1, 2, 'yx')], [(1, 2, 'yy')]])
 
-        polReds = om.add_pol_reds(reds, pols=['xx', 'yy'], pol_mode='2pol', ex_ants=[(2, 'Jyy')])
-        self.assertEqual(polReds, [[(1, 2, 'xx')], []])
-        polReds = om.add_pol_reds(reds, pols=['xx', 'xy', 'yx', 'yy'], pol_mode='4pol', ex_ants=[(2, 'Jyy')])
-        self.assertEqual(polReds, [[(1, 2, 'xx')], [], [(1, 2, 'yx')], []])
-        polReds = om.add_pol_reds(reds, pols=['xx', 'xy', 'yx', 'yy'], pol_mode='4pol_minV', ex_ants=[(2, 'Jyy')])
-        self.assertEqual(polReds, [[(1, 2, 'xx')], [(1, 2, 'yx')], []])
-
     def test_reds_to_antpos(self):
         # Test 1D
         true_antpos = build_linear_array(10)
