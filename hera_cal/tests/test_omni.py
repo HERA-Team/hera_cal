@@ -14,7 +14,8 @@ import re
 from copy import deepcopy
 import aipy
 from omnical.calib import RedundantInfo
-from pyuvdata import UVCal, UVData, UVFITS
+from pyuvdata import UVCal, UVData
+from pyuvdata.uvfits import UVFITS
 import hera_cal.omni as omni
 from hera_cal.data import DATA_PATH
 from hera_cal.calibrations import CAL_PATH

@@ -5,7 +5,8 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 import omnical
-from pyuvdata import UVCal, UVData, uvtel
+from pyuvdata import UVCal, UVData
+from pyuvdata import telescopes as uvtel
 import pyuvdata.utils as uvutils
 import aipy
 from aipy.miriad import pol2str
