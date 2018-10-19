@@ -859,7 +859,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
         freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
             but must be provided if data is a dictionary, if it doesn't have .freqs, or if the
             length of data.freqs is 1.
-        times_by_bl: dictionary mapping antenna pairs like (0,1) to times in days. Optional if
+        times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data DataContainer, but must be provided if data is a dictionary, 
             if it doesn't have .times_by_bl, or if the length of any list of times is 1.
         conv_crit: maximum allowed relative change in omnical solutions for convergence
@@ -1045,8 +1045,9 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
                outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=8, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
                solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
                append_to_history='', verbose=False):
-    '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only 
-    nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
+    '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
+    results to calfits and uvh5. Uses partial io, performs solar flagging, and iteratively removes antennas with 
+    high chi^2, rerunning calibration as necessary.
     
     Arguments:
         input_data: path to uvh5 visibility data file to calibrate.
