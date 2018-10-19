@@ -933,16 +933,16 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     return rv
 
 
-def redcal_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[], 
-                                solar_horizon=0.0, conv_crit=1e-10, maxiter=500, 
-                                check_every=10, check_after=50, gain=.4, verbose=False):
+def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], 
+                     solar_horizon=0.0, conv_crit=1e-10, maxiter=500, 
+                     check_every=10, check_after=50, gain=.4, verbose=False):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only 
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
     
     Arguments:
         hd: HERAData object, instantiated with the datafile or files to calibrate. Must be loaded using uvh5.
-        nInt_to_load: number of integrations to load and calibrate simultaneously. Lower numbers save memory, 
-            but incur a CPU overhead.
+        nInt_to_load: number of integrations to load and calibrate simultaneously. Default -1 loads all integrations.
+            Partial io requires 'uvh5' filetype for hd. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
         ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
@@ -974,8 +974,12 @@ def redcal_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
         'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jxx') to the average chisq
             for all visibilities that an antenna participates in.
     '''    
-    assert hd.filetype == 'uvh5', 'Input HERAData object must be created with a uvh5 visibility object.'
-    
+    if nInt_to_load > 0: 
+        assert hd.filetype == 'uvh5', 'Partial loading only available for uvh5 filetype.'
+    else:
+        if hd.data_array is None:  # if data loading hasn't happened yet, load the whole file
+            hd.read()
+
     # get basic antenna, polarization, and observation info
     nTimes, nFreqs = len(hd.times), len(hd.freqs)
     antpols = list(set([ap for pol in hd.pols for ap in split_pol(pol)]))
@@ -1006,17 +1010,28 @@ def redcal_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
     if verbose and np.any(solar_flagged):
         print(len(hd.times[solar_flagged]), 'integrations flagged due to sun above', solar_horizon, 'degrees.')
     
-    # loop over data, performing partial loading 
+    # loop over data, performing partial loading if desired
     for pols in pol_load_list:
         if verbose:
             print('Now calibrating', pols, 'polarization(s)...')
         reds = filter_reds(all_reds, ex_ants=ex_ants, pols=pols)
-        for tinds in np.split(np.arange(nTimes)[~solar_flagged], 
-                              np.arange(nInt_to_load, len(hd.times[~solar_flagged]), nInt_to_load)):
+        if nInt_to_load > 0:  # split up the integrations to load nInt_to_load at a time
+            tind_groups = np.split(np.arange(nTimes)[~solar_flagged], 
+                                   np.arange(nInt_to_load, len(hd.times[~solar_flagged]), nInt_to_load))
+        else:
+            tind_groups = [np.arange(nTimes)[~solar_flagged]]  # just load a single group 
+        for tinds in tind_groups:
             if len(tinds) > 0:
                 if verbose:
                     print('    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...')
-                data, _, _ = hd.read(times=hd.times[tinds], polarizations=pols)
+                if nInt_to_load == -1:  # don't perform partial I/O
+                    data, _, _ = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
+                    print(tind_groups, tinds)
+                    for bl in data:
+                        print(bl, data[bl].shape)
+                        data[bl] = data[bl][tinds, :]  # cut down size of data containers to match unflagged indices
+                else:  # perform partial i/o
+                    data, _, _ = hd.read(times=hd.times[tinds], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs, times_by_bl=hd.times_by_bl, 
                                             conv_crit=conv_crit, maxiter=maxiter, 
                                             check_every=check_every, check_after=check_after, gain=gain)
@@ -1041,7 +1056,7 @@ def redcal_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
 
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', omnivis_ext='.omni_vis.uvh5', 
-               outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=8, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
+               outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
                max_rerun=5, solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
                append_to_history='', verbose=False):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
@@ -1058,8 +1073,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
             Used for finding ex_ants and is combined with antennas excluded via ex_ants.
         clobber: if True, overwrites existing files for the firstcal and omnical results
-        nInt_to_load: number of integrations to load and calibrate simultaneously. Lower numbers save memory,
-            but incur a CPU overhead.
+        nInt_to_load: number of integrations to load and calibrate simultaneously. Default -1 loads all integrations.
+            Partial io requires 'uvh5' filetype. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
         ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
@@ -1085,6 +1100,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     '''
     if isinstance(input_data, str):
         hd = HERAData(input_data, filetype=filetype)
+        if filetype != 'uvh5' or nInt_to_load == -1:
+            hd.read()
     elif isinstance(input_data, HERAData):
         hd = input_data
         input_data = hd.filepaths[0]
