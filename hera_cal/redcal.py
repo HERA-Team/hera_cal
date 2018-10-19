@@ -105,7 +105,7 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
             else sorted([reverse_bl(bl) for bl in reds[delta]]) for delta in orderedDeltas]
 
 
-def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
+def add_pol_reds(reds, pols=['xx'], pol_mode='1pol'):
     """ Takes positonal reds (antenna indices only, no polarizations) and converts them
     into baseline tuples with polarization, depending on pols and pol_mode specified.
 
@@ -117,7 +117,6 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
             '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
             '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
-        ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
 
     Returns:
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
@@ -125,22 +124,19 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol', ex_ants=[]):
     # pre-process to ensure pols complies w/ hera_cal polarization convention
     pols = [comply_pol(p) for p in pols]
 
-    def excluded(bl, pol):
-        return ((bl[0], split_pol(pol)[0]) in ex_ants) or ((bl[1], split_pol(pol)[1]) in ex_ants)
-
     redsWithPols, didBothCrossPolsForMinV = [], False
     for pol in pols:
         if pol_mode is not '4pol_minV' or pol[0] == pol[1]:
-            redsWithPols += [[bl + (pol,) for bl in bls if not excluded(bl, pol)] for bls in reds]
+            redsWithPols += [[bl + (pol,) for bl in bls] for bls in reds]
         elif pol_mode is '4pol_minV' and not didBothCrossPolsForMinV:
             # Combine together e.g. 'xy' and 'yx' visibilities as redundant
-            redsWithPols += [([bl + (pol,) for bl in bls if not excluded(bl, pol)]
-                              + [bl + (conj_pol(pol),) for bl in bls if not excluded(bl, conj_pol(pol))]) for bls in reds]
+            redsWithPols += [([bl + (pol,) for bl in bls]
+                              + [bl + (conj_pol(pol),) for bl in bls]) for bls in reds]
             didBothCrossPolsForMinV = True
     return redsWithPols
 
 
-def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0):
+def get_reds(antpos, pols=['xx'], pol_mode='1pol', bl_error_tol=1.0):
     """ Combines redcal.get_pos_reds() and redcal.add_pol_reds(). See their documentation.
 
     Args:
@@ -151,7 +147,6 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0)
             '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
             '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
             '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
-        ex_ants: list of antennas to exclude in the [(1,'jxx'),(10,'jyy')] format
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
 
@@ -161,7 +156,7 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', ex_ants=[], bl_error_tol=1.0)
 
     """
     pos_reds = get_pos_reds(antpos, bl_error_tol=bl_error_tol)
-    return add_pol_reds(pos_reds, pols=pols, pol_mode=pol_mode, ex_ants=ex_ants)
+    return add_pol_reds(pos_reds, pols=pols, pol_mode=pol_mode)
 
 
 def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, pols=None, ex_pols=None):
