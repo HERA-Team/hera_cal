@@ -1062,7 +1062,7 @@ class TestRunMethods(unittest.TestCase):
             sys.stdout = sys.__stdout__
 
         bad_ants = [25, 11, 12, 14]  # this is based on experiments with this particular file
-        hc = io.HERACal(input_data + '.first.calfits')
+        hc = io.HERACal(os.path.splitext(input_data)[0] + '.first.calfits')
         gains, flags, quals, total_qual = hc.read()
         for ant in gains.keys():
             np.testing.assert_array_almost_equal(gains[ant], cal['g_firstcal'][ant])
@@ -1072,7 +1072,7 @@ class TestRunMethods(unittest.TestCase):
                 np.testing.assert_array_equal(flags[ant], True)
         self.assertEqual(hc.history[0:7], 'testing')
 
-        hc = io.HERACal(input_data + '.omni.calfits')
+        hc = io.HERACal(os.path.splitext(input_data)[0] + '.omni.calfits')
         gains, flags, quals, total_qual = hc.read()
         for ant in gains.keys():
             np.testing.assert_array_almost_equal(gains[ant], cal['g_omnical'][ant])
@@ -1086,7 +1086,7 @@ class TestRunMethods(unittest.TestCase):
         self.assertTrue('testing' in hc.history)
         self.assertTrue('Throwing out antenna 14' in hc.history)
 
-        hd = io.HERAData(input_data + '.omni.vis')
+        hd = io.HERAData(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
         data, flags, nsamples = hd.read()
         for bl in data.keys():
             np.testing.assert_array_almost_equal(data[bl], cal['v_omnical'][bl])
@@ -1095,9 +1095,9 @@ class TestRunMethods(unittest.TestCase):
             self.assertFalse(bl[1] in bad_ants)
         self.assertEqual(hd.history[-7:], 'testing')
 
-        os.remove(input_data + '.first.calfits')
-        os.remove(input_data + '.omni.calfits')
-        os.remove(input_data + '.omni.vis')
+        os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
+        os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
+        os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
 
     def test_redcal_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--ant_metrics_file', 'b', '--ex_ants', '5', '6', '--verbose']

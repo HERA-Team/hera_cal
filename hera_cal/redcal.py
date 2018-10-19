@@ -1040,7 +1040,7 @@ def redcal_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
     return rv
 
 
-def redcal_run(input_data, filetype='uvh5', firstcal_suffix='.first.calfits', omnical_suffix='.omni.calfits', omnivis_suffix='.omni_vis.uvh5', 
+def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', omnivis_ext='.omni_vis.uvh5', 
                outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=8, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
                max_rerun=5, solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
                append_to_history='', verbose=False):
@@ -1051,9 +1051,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_suffix='.first.calfits', om
     Arguments:
         input_data: path to uvh5 visibility data file to calibrate.
         filetype: filetype of input_data. Supports 'uvh5' (defualt), 'miriad', 'uvfits'
-        firstcal_suffix: string to replace file extension of input_data for saving firstcal calfits
-        omnical_suffix: string to replace file extension of input_data for saving omnical calfits
-        omnivis_suffix: string to replace file extension of input_data for saving omnical visibilities as uvh5
+        firstcal_ext: string to replace file extension of input_data for saving firstcal calfits
+        omnical_ext: string to replace file extension of input_data for saving omnical calfits
+        omnivis_ext: string to replace file extension of input_data for saving omnical visibilities as uvh5
         outdir: folder to save data products. If None, will be the same as the folder containing input_data
         ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
             Used for finding ex_ants and is combined with antennas excluded via ex_ants.
@@ -1128,22 +1128,22 @@ def redcal_run(input_data, filetype='uvh5', firstcal_suffix='.first.calfits', om
         outdir = os.path.dirname(input_data)
 
     if verbose:
-        print('\nNow saving firstcal gains to', os.path.join(outdir, filename_no_ext + firstcal_suffix))
-    write_cal(filename_no_ext + firstcal_suffix, cal['g_firstcal'], hd.freqs, hd.times, 
+        print('\nNow saving firstcal gains to', os.path.join(outdir, filename_no_ext + firstcal_ext))
+    write_cal(filename_no_ext + firstcal_ext, cal['g_firstcal'], hd.freqs, hd.times, 
               flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, history=append_to_history)
     
     if verbose:
-        print('Now saving omnical gains to', os.path.join(outdir, filename_no_ext + omnical_suffix))
-    write_cal(os.path.basename(input_data) + omnical_suffix, cal['g_omnical'], hd.freqs, hd.times, 
+        print('Now saving omnical gains to', os.path.join(outdir, filename_no_ext + omnical_ext))
+    write_cal(filename_no_ext + omnical_ext, cal['g_omnical'], hd.freqs, hd.times, 
               flags=cal['gf_omnical'], quality=cal['chisq_per_ant'], total_qual=cal['chisq'], 
               outdir=outdir, overwrite=clobber, history=(high_z_ant_hist + append_to_history))
 
     if verbose:
-        print('Now saving omnical visibilities to', os.path.join(outdir, filename_no_ext + omnivis_suffix))
+        print('Now saving omnical visibilities to', os.path.join(outdir, filename_no_ext + omnivis_ext))
     hd.read(bls=cal['v_omnical'].keys())
     hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'])
     hd.history += append_to_history
-    hd.write_uvh5(os.path.join(outdir, filename_no_ext + omnivis_suffix), clobber=True)
+    hd.write_uvh5(os.path.join(outdir, filename_no_ext + omnivis_ext), clobber=True)
 
     return cal
 
@@ -1153,9 +1153,9 @@ def redcal_argparser():
     a = argparse.ArgumentParser(description="Redundantly calibrate a file using hera_cal.redcal. This includes firstcal, logcal, and omnical. \
                                 Iteratively re-runs by flagging antennas with large chi^2. Saves the result to calfits and uvh5 files.")
     a.add_argument("input_data", type=str, help="path to uvh5 visibility data file to calibrate.")
-    a.add_argument("--firstcal_suffix", default='.first.calfits', type=str, help="string to replace file extension of input_data for saving firstcal calfits")
-    a.add_argument("--omnical_suffix", default='.omni.calfits', type=str, help="string to replace file extension of input_data for saving omnical calfits")
-    a.add_argument("--omnivis_suffix", default='.omni_vis.uvh5', type=str, help="string to replace file extension of input_data for saving omnical visibilities as uvh5")
+    a.add_argument("--firstcal_ext", default='.first.calfits', type=str, help="string to replace file extension of input_data for saving firstcal calfits")
+    a.add_argument("--omnical_ext", default='.omni.calfits', type=str, help="string to replace file extension of input_data for saving omnical calfits")
+    a.add_argument("--omnivis_ext", default='.omni_vis.uvh5', type=str, help="string to replace file extension of input_data for saving omnical visibilities as uvh5")
     a.add_argument("--outdir", default=None, type=str, help="folder to save data products. Default is the same as the folder containing input_data")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing files for the firstcal and omnical results")
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
