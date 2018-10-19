@@ -367,6 +367,9 @@ class TestRedundantCalibrator(unittest.TestCase):
         self.assertEqual(eqs['g_1_Jyy * g_2_Jxx_ * u_4_xy'], (1, 2, 'yx'))
         self.assertEqual(eqs['g_0_Jyy * g_2_Jxx_ * u_5_xy'], (0, 2, 'yx'))
 
+        with self.assertRaises(KeyError):
+            info.build_eqs({})
+
     def test_solver(self):
         antpos = build_linear_array(3)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')

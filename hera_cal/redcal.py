@@ -477,17 +477,17 @@ class RedundantCalibrator:
         self.reds = reds
         self.pol_mode = parse_pol_mode(self.reds)
 
-    def build_eqs(self, dc):
-        """Function for generating linsolve equation strings. Takes in a DataContainer to check whether 
-        baselines in self.reds (or their complex conjugates) occur in the data. Returns a dictionary 
+    def build_eqs(self, dc=None):
+        """Function for generating linsolve equation strings. Optionally takes in a DataContainer to check
+        whether baselines in self.reds (or their complex conjugates) occur in the data. Returns a dictionary 
         that maps linsolve string to (ant1, ant2, pol) for all visibilities."""
-
         eqs = {}
         for ubl_index, blgrp in enumerate(self.reds):
             for ant_i, ant_j, pol in blgrp:
-                if (ant_i, ant_j, pol) in dc:
-                    params = (ant_i, split_pol(pol)[0], ant_j, split_pol(pol)[1], ubl_index, blgrp[0][2])
-                    eqs['g_%d_%s * g_%d_%s_ * u_%d_%s' % params] = (ant_i, ant_j, pol)
+                if dc is not None and (ant_i, ant_j, pol) not in dc:
+                    raise KeyError('Baseline {} not in provided DataContainer'.format((ant_i, ant_j, pol)))
+                params = (ant_i, split_pol(pol)[0], ant_j, split_pol(pol)[1], ubl_index, blgrp[0][2])
+                eqs['g_%d_%s * g_%d_%s_ * u_%d_%s' % params] = (ant_i, ant_j, pol)
         return eqs
 
     def _solver(self, solver, data, wgts={}, detrend_phs=False, **kwargs):
