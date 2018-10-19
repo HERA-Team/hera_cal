@@ -1027,7 +1027,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[],
                 if nInt_to_load == -1:  # don't perform partial I/O
                     data, _, _ = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
                     for bl in data:
-                        data[bl] = data[bl][tinds, :]  # cut down size of data containers to match unflagged indices
+                        data[bl] = data[bl][tinds, :]  # cut down size of DataContainers to match unflagged indices
                 else:  # perform partial i/o
                     data, _, _ = hd.read(times=hd.times[tinds], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs, times_by_bl=hd.times_by_bl, 
@@ -1058,8 +1058,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                max_rerun=5, solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
                append_to_history='', verbose=False):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
-    results to calfits and uvh5. Uses partial io, performs solar flagging, and iteratively removes antennas with 
-    high chi^2, rerunning calibration as necessary.
+    results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
+    with high chi^2, rerunning calibration as necessary.
     
     Arguments:
         input_data: path to uvh5 visibility data file to calibrate.
