@@ -504,7 +504,6 @@ class RedundantCalibrator:
         Returns:
             solver: instantiated solver with redcal equations and weights
         """
-        # XXX ARP: concerned about detrend_phs.  Why is it necessary?
         dtype = data.values()[0].dtype  # TODO: fix this for python 3
         dc = DataContainer(data)
         eqs = self.build_eqs(dc)
