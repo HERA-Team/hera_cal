@@ -1010,7 +1010,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[],
     if verbose and np.any(solar_flagged):
         print(len(hd.times[solar_flagged]), 'integrations flagged due to sun above', solar_horizon, 'degrees.')
     
-    # loop over data, performing partial loading if desired
+    # loop over polarizations and times, performing partial loading if desired
     for pols in pol_load_list:
         if verbose:
             print('Now calibrating', pols, 'polarization(s)...')
@@ -1026,9 +1026,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[],
                     print('    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...')
                 if nInt_to_load == -1:  # don't perform partial I/O
                     data, _, _ = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
-                    print(tind_groups, tinds)
                     for bl in data:
-                        print(bl, data[bl].shape)
                         data[bl] = data[bl][tinds, :]  # cut down size of data containers to match unflagged indices
                 else:  # perform partial i/o
                     data, _, _ = hd.read(times=hd.times[tinds], polarizations=pols)
