@@ -1087,7 +1087,8 @@ class TestRunMethods(unittest.TestCase):
                 np.testing.assert_array_equal(flags[ant], True)
         for antpol in total_qual.keys():
             np.testing.assert_array_almost_equal(total_qual[antpol], cal['chisq'][antpol])
-        self.assertEqual(hc.history[0:7], 'testing')
+        self.assertTrue('testing' in hc.history)
+        self.assertTrue('Throwing out antenna 14' in hc.history)
 
         hd = io.HERAData(input_data + '.omni.vis')
         data, flags, nsamples = hd.read()

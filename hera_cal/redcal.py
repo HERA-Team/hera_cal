@@ -1092,6 +1092,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
     if ant_metrics_file is not None:
         for ant in load_metric_file(ant_metrics_file)['xants']:
             ex_ants.add(ant)
+    high_z_ant_hist = ''
 
     # loop over calibration, removing bad antennas and re-running if necessary
     while True:
@@ -1109,8 +1110,10 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
         for ant, score in z_scores.items():
             if (score >= ant_z_thresh):
                 ex_ants.add(ant[0])
+                bad_ant_str = 'Throwing out antenna ' + str(ant[0]) + ' for a z-score of ' + str(score) + ' on polarization ' + str(ant[1]) + '. '
+                high_z_ant_hist += bad_ant_str
                 if verbose:
-                    print('Throwing out antenna', ant[0], 'for a z-score', score, 'on polarization', ant[1])
+                    print(bad_ant_str)
         if len(ex_ants) == n_ex:
             break
 
@@ -1127,7 +1130,7 @@ def redcal_run(input_data, firstcal_suffix='.first.calfits', omnical_suffix='.om
         print('Now saving omnical gains to', input_data + omnical_suffix)
     write_cal(os.path.basename(input_data) + omnical_suffix, cal['g_omnical'], hd.freqs, hd.times, 
               flags=cal['gf_omnical'], quality=cal['chisq_per_ant'], total_qual=cal['chisq'], 
-              outdir=outdir, overwrite=clobber, history=append_to_history)
+              outdir=outdir, overwrite=clobber, history=(high_z_ant_hist + append_to_history))
 
     if verbose:
         print('Now saving omnical visibilities to', input_data + omnivis_suffix)
