@@ -267,7 +267,7 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
-def check_polLists_minV(polLists):
+def _check_polLists_minV(polLists):
     """Given a list of unique visibility polarizations (e.g. for each red group), returns whether
     they are all either single identical polarizations (e.g. 'xx') or both cross polarizations
     (e.g. ['xy','yx']) so that the 4pol_minV can be assumed."""
@@ -311,7 +311,7 @@ def parse_pol_mode(reds):
         polListLens = np.array([len(polList) for polList in polLists])
         if np.all(polListLens == 1) and len(pols) == 4 and len(antpols) == 2:
             return '4pol'
-        elif check_polLists_minV(polLists) and len(pols) == 4 and len(antpols) == 2:
+        elif _check_polLists_minV(polLists) and len(pols) == 4 and len(antpols) == 2:
             return '4pol_minV'
         else:
             return 'unrecognized_pol_mode'
@@ -834,7 +834,7 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0):
     return count_redcal_degeneracies(antpos, bl_error_tol=bl_error_tol) == 4
 
 
-def get_pol_load_list(pols, pol_mode='1pol'):
+def _get_pol_load_list(pols, pol_mode='1pol'):
     '''Get a list of lists of polarizations to load simultaneously, depending on the polarizations
     in the data and the pol_mode (which can be 1pol, 2pol, 4pol, or 4pol_minV)'''
     if pol_mode in ['1pol', '2pol']:
@@ -982,7 +982,7 @@ def redcal_partial_io_iteration(hd, nInt_to_load=8, pol_mode='2pol', ex_ants=[],
     antpols = list(set([ap for pol in hd.pols for ap in split_pol(pol)]))
     ant_nums = np.unique(np.append(hd.ant_1_array, hd.ant_2_array))
     ants = [(ant, antpol) for ant in ant_nums for antpol in antpols]
-    pol_load_list = get_pol_load_list(hd.pols, pol_mode=pol_mode)
+    pol_load_list = _get_pol_load_list(hd.pols, pol_mode=pol_mode)
 
     # initialize gains to 1s, gain flags to True, and chisq to 0s
     rv = {}  # dictionary of return values
