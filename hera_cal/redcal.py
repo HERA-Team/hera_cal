@@ -18,6 +18,7 @@ import os
 
 SEC_PER_DAY = 86400.
 
+
 def noise(size):
     """Return complex random gaussian array with given size and variance = 1."""
     # XXX I think this should be superceded by hera_sim
@@ -983,7 +984,6 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[],
         if hd.times is None:  # load metadata into HERAData object if necessary
             for key, value in hd.get_metadata_dict().items():
                 setattr(hd, key, value)
-
 
     # get basic antenna, polarization, and observation info
     nTimes, nFreqs = len(hd.times), len(hd.freqs)
