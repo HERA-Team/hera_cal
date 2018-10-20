@@ -12,7 +12,7 @@ import warnings
 from hera_cal.apply_cal import calibrate_in_place
 from hera_cal.data import DATA_PATH
 from hera_cal import io
-import os, sys
+import os, sys, shutil
 
 np.random.seed(0)
 
@@ -1095,8 +1095,16 @@ class TestRunMethods(unittest.TestCase):
             self.assertFalse(bl[0] in bad_ants)
             self.assertFalse(bl[1] in bad_ants)
         self.assertEqual(hd.history[-7:], 'testing')
+        os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
+        os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
+        os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
+
 
         hd = io.HERAData(input_data)
+        hd.read()
+        hd.channel_width = np.median(np.diff(hd.freqs))
+        hd.write_miriad(os.path.join(DATA_PATH, 'test_output/temp.uv'))
+        hd = io.HERAData(os.path.join(DATA_PATH, 'test_output/temp.uv'), filetype='miriad')
         hd.read()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -1104,13 +1112,14 @@ class TestRunMethods(unittest.TestCase):
             cal = om.redcal_run(hd, ant_metrics_file=ant_metrics_file, clobber=True)
             sys.stdout = sys.__stdout__
         self.assertTrue(len(cal) != 0)
+        shutil.rmtree(os.path.join(DATA_PATH, 'test_output/temp.uv'))
+        os.remove(os.path.join(DATA_PATH, 'test_output/temp.first.calfits'))
+        os.remove(os.path.join(DATA_PATH, 'test_output/temp.omni.calfits'))
+        os.remove(os.path.join(DATA_PATH, 'test_output/temp.omni_vis.uvh5'))
 
         with self.assertRaises(TypeError):
             cal = om.redcal_run({})
 
-        os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
-        os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
-        os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
 
     def test_redcal_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--ant_metrics_file', 'b', '--ex_ants', '5', '6', '--verbose']
