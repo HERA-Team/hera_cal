@@ -935,9 +935,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     return rv
 
 
-def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], 
-                     solar_horizon=0.0, conv_crit=1e-10, maxiter=500, 
-                     check_every=10, check_after=50, gain=.4, verbose=False):
+def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_horizon=0.0, conv_crit=1e-10, 
+                     maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only 
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
     
@@ -958,6 +957,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[],
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
         verbose: print calibration progress updates
+        filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jxx').
@@ -1004,7 +1004,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[],
     # get reds and then intitialize omnical visibility solutions to all 1s and all flagged
     all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
                         pols=set([pol for pols in pol_load_list for pol in pols]))
-    all_reds = filter_reds(all_reds, ex_ants=ex_ants)
+    all_reds = filter_reds(all_reds, ex_ants=ex_ants, **filter_reds_kwargs)
     rv['v_omnical'] = {red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds}
     rv['vf_omnical'] = {red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds}
 
@@ -1061,7 +1061,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[],
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', omnivis_ext='.omni_vis.uvh5', 
                outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0, 
                max_rerun=5, solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
-               append_to_history='', verbose=False):
+               append_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1097,6 +1097,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
         append_to_history: string to add to history of output firstcal and omnical files
         verbose: print calibration progress updates
+        filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
     Returns:
         cal: the dictionary result of the final run of redcal_iteration (see above for details)
@@ -1124,9 +1125,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         # Run redundant calibration
         if verbose:
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
-        cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, ex_ants=ex_ants, 
-                               solar_horizon=solar_horizon, conv_crit=conv_crit, maxiter=maxiter, 
-                               check_every=check_every, check_after=check_after, gain=gain, verbose=verbose)
+        cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, ex_ants=ex_ants, solar_horizon=solar_horizon, 
+                               conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after, 
+                               gain=gain, verbose=verbose, **filter_reds_kwargs)
         
         # Determine whether to add additional antennas to exclude
         z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items() 
