@@ -980,6 +980,10 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[],
     else:
         if hd.data_array is None:  # if data loading hasn't happened yet, load the whole file
             hd.read()
+        if hd.times is None:  # load metadata into HERAData object if necessary
+            for key, value in hd.get_metadata_dict().items():
+                setattr(hd, key, value)
+
 
     # get basic antenna, polarization, and observation info
     nTimes, nFreqs = len(hd.times), len(hd.freqs)
@@ -1063,8 +1067,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     with high chi^2, rerunning calibration as necessary.
     
     Arguments:
-        input_data: path to uvh5 visibility data file to calibrate.
-        filetype: filetype of input_data. Supports 'uvh5' (defualt), 'miriad', 'uvfits'
+        input_data: path to visibility data file to calibrate or HERAData object
+        filetype: filetype of input_data (if it's a path). Supports 'uvh5' (defualt), 'miriad', 'uvfits'
         firstcal_ext: string to replace file extension of input_data for saving firstcal calfits
         omnical_ext: string to replace file extension of input_data for saving omnical calfits
         omnivis_ext: string to replace file extension of input_data for saving omnical visibilities as uvh5
@@ -1101,6 +1105,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         hd = HERAData(input_data, filetype=filetype)
         if filetype != 'uvh5' or nInt_to_load == -1:
             hd.read()
+
     elif isinstance(input_data, HERAData):
         hd = input_data
         input_data = hd.filepaths[0]
