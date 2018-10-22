@@ -16,5 +16,7 @@ import smooth_cal
 import apply_cal
 import frf
 from frf import FRFilter
+import reflections
+from reflections import Reflection_Fitter
 
 __version__ = version.version
