@@ -14,7 +14,8 @@ import re
 from copy import deepcopy
 import aipy
 from omnical.calib import RedundantInfo
-from pyuvdata import UVCal, UVData, UVFITS
+from pyuvdata import UVCal, UVData
+from pyuvdata.uvfits import UVFITS
 import hera_cal.omni as omni
 from hera_cal.data import DATA_PATH
 from hera_cal.calibrations import CAL_PATH
@@ -694,14 +695,14 @@ class Test_4pol_remove_degen(object):
         gains_y = np.array([g3['y'][ant] for ant in self.info.subsetant])
         meanSqAmplitude = np.mean([np.abs(g3['x'][ant1] * g3['x'][ant2])
                                    for ant1 in g3['x'].keys() for ant2 in g3['x'].keys() if ant1 != ant2], axis=0)
-        np.testing.assert_almost_equal(meanSqAmplitude, 1.0)
+        np.testing.assert_almost_equal(meanSqAmplitude, 1.0, 5)
         meanSqAmplitude = np.mean([np.abs(g3['y'][ant1] * g3['y'][ant2])
                                    for ant1 in g3['x'].keys() for ant2 in g3['x'].keys() if ant1 != ant2], axis=0)
-        np.testing.assert_almost_equal(meanSqAmplitude, 1.0)
-        np.testing.assert_almost_equal(np.mean(np.angle(gains_x), axis=0), 0.0)
-        np.testing.assert_almost_equal(np.mean(np.angle(gains_y), axis=0), 0.0)
+        np.testing.assert_almost_equal(meanSqAmplitude, 1.0, 5)
+        np.testing.assert_almost_equal(np.mean(np.angle(gains_x), axis=0), 0.0, 5)
+        np.testing.assert_almost_equal(np.mean(np.angle(gains_y), axis=0), 0.0, 5)
         degenRemoved = np.einsum('ij,jkl', self.Mgains, np.angle(gains))
-        np.testing.assert_almost_equal(degenRemoved, 0.0)
+        np.testing.assert_almost_equal(degenRemoved, 0.0, 5)
 
     def test_remove_degen_minV(self):
         pols = ['xx', 'xy', 'yy']
@@ -719,13 +720,13 @@ class Test_4pol_remove_degen(object):
                           for ant in self.info.subsetant])
         meanSqAmplitude = np.mean([np.abs(g3['x'][ant1] * g3['x'][ant2])
                                    for ant1 in g3['x'].keys() for ant2 in g3['x'].keys() if ant1 != ant2], axis=0)
-        np.testing.assert_almost_equal(meanSqAmplitude, 1.0)
+        np.testing.assert_almost_equal(meanSqAmplitude, 1.0, 5)
         meanSqAmplitude = np.mean([np.abs(g3['y'][ant1] * g3['y'][ant2])
                                    for ant1 in g3['x'].keys() for ant2 in g3['x'].keys() if ant1 != ant2], axis=0)
-        np.testing.assert_almost_equal(meanSqAmplitude, 1.0)
-        np.testing.assert_almost_equal(np.mean(np.angle(gains), axis=0), 0.0)
+        np.testing.assert_almost_equal(meanSqAmplitude, 1.0, 5)
+        np.testing.assert_almost_equal(np.mean(np.angle(gains), axis=0), 0.0, 5)
         degenRemoved = np.einsum('ij,jkl', self.Mgains, np.angle(gains))
-        np.testing.assert_almost_equal(degenRemoved, 0.0)
+        np.testing.assert_almost_equal(degenRemoved, 0.0, 5)
         np.testing.assert_equal(len(g3.keys()), 2)
         np.testing.assert_equal(len(v3.keys()), 4)
 

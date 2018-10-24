@@ -1108,7 +1108,6 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         if os.path.exists(fname) and overwrite is False:
             print("{} exists, not overwriting...".format(fname))
         else:
-            print "saving {}".format(fname)
             uvc.write_calfits(fname, clobber=True)
 
     # return object

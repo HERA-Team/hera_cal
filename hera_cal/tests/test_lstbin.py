@@ -241,3 +241,9 @@ class Test_lstbin:
         key = (1, 2, 'xx')
         sw_k = hc.lstbin.switch_bl(key)
         nt.assert_equal(sw_k, (2, 1, 'xx'))
+
+    def tearDown(self):
+        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
+        for of in output_files:
+            if os.path.exists(of):
+                shutil.rmtree(of)

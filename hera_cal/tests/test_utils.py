@@ -18,6 +18,7 @@ import glob
 from collections import OrderedDict as odict
 import copy
 import hera_cal as hc
+import scipy
 
 
 class Test_Pol_Ops(object):
@@ -393,21 +394,31 @@ def test_synthesize_ant_flags():
 def test_chisq():
     # test basic case
     data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
-    data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
-    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 3 * np.ones((5, 10), dtype=complex)})
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model)
     nt.assert_true(chisq.shape == (5, 10))
     nt.assert_true(nObs.shape == (5, 10))
     nt.assert_true(chisq.dtype == float)
     nt.assert_true(nObs.dtype == int)
-    np.testing.assert_array_equal(chisq, 1.0)
+    np.testing.assert_array_equal(chisq, 4.0)
     np.testing.assert_array_equal(nObs, 1)
-    np.testing.assert_array_equal(chisq_per_ant[0, 'Jxx'], 1.0)
-    np.testing.assert_array_equal(chisq_per_ant[1, 'Jxx'], 1.0)
+    np.testing.assert_array_equal(chisq_per_ant[0, 'Jxx'], 4.0)
+    np.testing.assert_array_equal(chisq_per_ant[1, 'Jxx'], 4.0)
     np.testing.assert_array_equal(nObs_per_ant[0, 'Jxx'], 1)
     np.testing.assert_array_equal(nObs_per_ant[1, 'Jxx'], 1)
 
+    # test with reds
+    data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex),
+                                        (1, 2, 'xx'): np.ones((5, 10), dtype=complex)})
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
+    chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, reds=[[(0, 1, 'xx'), (1, 2, 'xx')]])
+    np.testing.assert_array_equal(chisq, 2.0)
+    np.testing.assert_array_equal(nObs, 2)
+    nt.assert_false((1, 2, 'xx') in model)
+
     # test with weights
+    data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})    
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.zeros((5, 10), dtype=float)})
     data_wgts[(0, 1, 'xx')][:, 0] = 1.0
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
@@ -474,3 +485,18 @@ def test_chisq():
     nt.assert_true(len(nObs) == 0)
     nt.assert_true(len(chisq_per_ant) == 0)
     nt.assert_true(len(chisq_per_ant) == 0)
+
+
+def test_predict_noise_variance_from_autos():
+    hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5'))
+    data, flags, nsamples = hd.read()
+    for k in data.keys():
+        if k[0] != k[1]:
+            sigmasq = utils.predict_noise_variance_from_autos(k, data)
+            kernel = [[1,-2,1],[-2,4,-2],[1,-2,1]]
+            sigma = scipy.signal.convolve2d(data[k], kernel, mode='same', boundary='wrap')
+            sigma /= np.sum(np.array(kernel)**2)**.5
+            np.testing.assert_array_equal(np.abs(np.mean(np.mean(np.abs(sigma)**2, axis=0) / np.mean(sigmasq, axis=0)) - 1) <= .1, True)
+            times = hd.times_by_bl[k[:2]]
+            sigmasq2 = utils.predict_noise_variance_from_autos(k, data, df=(hd.freqs[1] - hd.freqs[0]), dt=((times[1] - times[0]) * 24. * 3600.))
+            np.testing.assert_array_equal(sigmasq, sigmasq2)
