@@ -4,13 +4,14 @@
 
 """Module for applying calibration solutions to visibility data, both in memory and on disk."""
 
-from __future__ import absolute_import, division, print_function
+from __future__ import print_function, division, absolute_import
 import numpy as np
-from hera_cal import io
 from pyuvdata import UVCal, UVData
 import argparse
-from hera_cal.datacontainer import DataContainer
-from hera_cal import utils
+
+from . import io
+from .datacontainer import DataContainer
+from . import utils
 
 
 def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None, 

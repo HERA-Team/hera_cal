@@ -4,17 +4,18 @@
 
 """Module for delay filtering data and related operations."""
 
-from __future__ import absolute_import, division, print_function
+from __future__ import print_function, division, absolute_import
 import numpy as np
-from hera_cal import io, apply_cal
 from pyuvdata import UVData
-from hera_cal.datacontainer import DataContainer
 from collections import OrderedDict as odict
 from uvtools.dspec import delay_filter
 from copy import deepcopy
 from scipy import constants
 import argparse
 import datetime
+
+from . import io, apply_cal
+from .datacontainer import DataContainer
 
 
 class Delay_Filter():

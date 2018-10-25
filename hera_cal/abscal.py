@@ -22,7 +22,8 @@ V_ij,xy^data = exp(eta_ij,xy^data + i * phi_ij,xy^data)
 where {i,j} index antennas and {x,y} are the polarization of
 the i-th and j-th antenna respectively.
 """
-from abscal_funcs import *
+from __future__ import print_function, division, absolute_import
+from .abscal_funcs import *
 import gc as garbage_collector
 
 

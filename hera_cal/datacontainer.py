@@ -2,9 +2,11 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
-from hera_cal.utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
+
+from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
 
 
 class DataContainer:

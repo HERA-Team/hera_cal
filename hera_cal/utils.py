@@ -2,6 +2,7 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import print_function, division, absolute_import
 import numpy as np
 import aipy
 import astropy.constants as const
@@ -11,7 +12,6 @@ from astropy import units as unt
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 import os
-import hera_cal
 import copy
 from scipy.interpolate import interp1d
 from scipy import signal
@@ -19,6 +19,7 @@ from collections import OrderedDict as odict
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT
 
+from . import datacontainer, abscal_funcs
 
 def _comply_antpol(antpol):
     '''Maps an input antenna polarization string onto a string compliant with pyuvdata
@@ -528,7 +529,7 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     flags : solar-applied flags, same format as input
     """
     # type check
-    if isinstance(flags, hera_cal.datacontainer.DataContainer):
+    if isinstance(flags, datacontainer.DataContainer):
         dtype = 'DC'
     elif isinstance(flags, np.ndarray):
         dtype = 'ndarr'
@@ -599,7 +600,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     # iterate over files
     for i, f in enumerate(files):
         if i == 0:
-            hera_cal.abscal_funcs.echo("...loading {}".format(f), verbose=verbose)
+            abscal_funcs.echo("...loading {}".format(f), verbose=verbose)
             uvc = UVCal()
             uvc.read_calfits(f)
             f1 = copy.copy(f)
@@ -809,7 +810,7 @@ def synthesize_ant_flags(flags, threshold=0.0):
         ant_flags: dictionary mapping antenna-pol keys like (1,'x') to boolean flag waterfalls
     '''
     # type check
-    assert isinstance(flags, hera_cal.datacontainer.DataContainer), "flags must be fed as a datacontainer"
+    assert isinstance(flags, datacontainer.DataContainer), "flags must be fed as a datacontainer"
     assert threshold >= 0.0 and threshold <= 1.0, "threshold must be 0.0 <= threshold <= 1.0"
     if np.isclose(threshold, 1.0):
         threshold = threshold - 1e-10

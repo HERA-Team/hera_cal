@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
+
+from __future__ import print_function, division, absolute_import
 import nose.tools as nt
 import os
 import shutil
@@ -460,7 +462,6 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.phs_slope_ant_phs_arr.shape, (7, 60, 1, 1))
         nt.assert_true(np.isclose(np.angle(self.AC.phs_slope_gain[(24, 'Jxx')]), 0.0).all())
         g = self.AC.custom_phs_slope_gain(self.gk, self.ap)
-        print g.keys()
         nt.assert_equal(g[(0, 'Jxx')].shape, (60, 64))
         # test Nones
         AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
