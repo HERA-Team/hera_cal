@@ -3,18 +3,17 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
-import utils
-import redcal
-import version
-import io
-import delay_filter
-import abscal
-import lstbin
-import smooth_cal
-import apply_cal
-import frf
-from frf import FRFilter
-import reflections
-from reflections import Reflection_Fitter
+from . import utils
+from . import redcal
+from . import version
+from . import io
+from . import delay_filter
+from . import abscal
+from . import lstbin
+from . import smooth_cal
+from . import apply_cal
+from . import frf
+from . import flag_utils
+from . import reflections
 
 __version__ = version.version
