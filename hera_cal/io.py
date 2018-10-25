@@ -2,20 +2,21 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import print_function, division, absolute_import
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from collections import OrderedDict as odict
-from hera_cal.datacontainer import DataContainer
-import hera_cal as hc
 import operator
 import os
 import copy
 import warnings
 from functools import reduce
-from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num
-from hera_cal.utils import split_pol, conj_pol
 import collections
+
+from .datacontainer import DataContainer
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num
+from .utils import split_pol, conj_pol, LST2JD
 
 
 class HERACal(UVCal):
@@ -719,7 +720,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = hc.utils.LST2JD(lst_array, start_jd, longitude=longitude)
+        time_array = LST2JD(lst_array, start_jd, longitude=longitude)
     Ntimes = len(time_array)
 
     # get freqs
@@ -1073,7 +1074,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         gain_array[zero_check_arr] = 1.0 + 0j
         flag_array[zero_check_arr] += True
         if zero_check_arr.max() is True:
-            print("Some of values in self.gain_array were zero and are flagged and set to 1.")
+            warnings.warn("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
     # instantiate UVCal
     uvc = UVCal()
@@ -1141,7 +1142,7 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
     cal.gain_array[zero_check] = 1.0 + 0j
     cal.flag_array[zero_check] += True
     if zero_check.max() is True:
-        print("Some of values in self.gain_array were zero and are flagged and set to 1.")
+        warnings.warn("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
     # Set additional attributes
     cal.history += add_to_history

@@ -2,6 +2,7 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import print_function, division, absolute_import
 import nose.tools as nt
 import numpy as np
 import sys
@@ -195,10 +196,8 @@ class TestAA(object):
         params = aa.get_params()
         for key in antpos.keys():
             params['0'][key] = antpos[key]
-        print params['0']
         aa.set_params(params)
         new_params = aa.get_params()
-        print new_params['0']
         new_top = [new_params['0'][key] for key in antpos.keys()]
         old_top = [antpos[key] for key in antpos.keys()]
         nt.assert_true(np.allclose(old_top, new_top))

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
+
+from __future__ import print_function, division, absolute_import
 import os
 import sys
 from collections import OrderedDict as odict
@@ -10,8 +12,6 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal import utils, abscal, redcal, io
-from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
 from scipy import spatial
@@ -21,6 +21,9 @@ from astropy import stats as astats
 import gc as garbage_collector
 import datetime
 import aipy
+
+from . import utils, abscal, redcal, io
+from .datacontainer import DataContainer
 
 
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst_low=None,
@@ -646,7 +649,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         try:
             file_lsts = map(lambda i: file_lsts[i], output_file_select)
         except IndexError:
-            print "Warning: one or more indices in output_file_select {} caused an index error with length {} file_lsts list, exiting...".format(output_file_select, nfiles)
+            print("Warning: one or more indices in output_file_select {} caused an index error with length {} "
+                  "file_lsts list, exiting...".format(output_file_select, nfiles))
             return
 
     # create data file status: None if not opened, data objects if opened

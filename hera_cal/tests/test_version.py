@@ -4,6 +4,7 @@
 
 """Tests for version.py."""
 
+from __future__ import print_function, division, absolute_import
 import nose.tools as nt
 import sys
 import os

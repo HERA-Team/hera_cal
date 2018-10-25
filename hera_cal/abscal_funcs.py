@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
+
+from __future__ import print_function, division, absolute_import
 import os
 import sys
 from collections import OrderedDict as odict
@@ -10,9 +12,6 @@ import functools
 import numpy as np
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl
-from hera_cal import utils, redcal, io, apply_cal
-from hera_cal.datacontainer import DataContainer
 from scipy import signal
 from scipy import interpolate
 from scipy import spatial
@@ -20,6 +19,10 @@ import linsolve
 import itertools
 import operator
 from functools import reduce
+
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl
+from . import utils, redcal, io, apply_cal
+from .datacontainer import DataContainer
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):

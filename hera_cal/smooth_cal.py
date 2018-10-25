@@ -6,13 +6,14 @@ from __future__ import absolute_import, division, print_function
 import numpy as np
 import scipy
 import aipy
-from hera_cal import io, utils
 from collections import OrderedDict as odict
 from copy import deepcopy
 import warnings
 import uvtools
 import argparse
-from hera_cal.abscal import fft_dly
+
+from . import io, utils
+from .abscal import fft_dly
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,

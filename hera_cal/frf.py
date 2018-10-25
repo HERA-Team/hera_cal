@@ -2,13 +2,15 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import print_function, division, absolute_import
 import numpy as np
-from hera_cal import io, utils, datacontainer
 from pyuvdata import UVData
 import pyuvdata.utils as uvutils
 from collections import OrderedDict as odict
 import copy
 import os
+
+from . import io, utils, datacontainer
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts=None,
@@ -130,9 +132,9 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     Navg_times = float(Ntimes) / Navg
     if Navg_times % 1 > 1e-10:
         if verbose:
-            print "Warning: Ntimes is not evenly divisible by Navg, " \
-                "meaning the last output time sample will be noisier " \
-                "than the others."
+            print("Warning: Ntimes is not evenly divisible by Navg, "
+                  "meaning the last output time sample will be noisier "
+                  "than the others.")
     Navg_times = int(np.ceil(Navg_times))
 
     # form output avg list
@@ -279,7 +281,8 @@ class FRFilter(object):
         t_avg = Navg * self.dtime * 3600.0 * 24
 
         if verbose:
-            print "The t_avg provided of {:.1f} has been shifted to {:.1f} to make Navg = {:d}".format(old_t_avg, t_avg, Navg)
+            print("The t_avg provided of {:.1f} has been shifted to {:.1f} to make Navg = {:d}".format(
+                old_t_avg, t_avg, Navg))
 
         # setup lists
         avg_data = odict()
@@ -335,7 +338,7 @@ class FRFilter(object):
         """
         # check output
         if os.path.exists(outfilename) and not overwrite:
-            print "{} already exists, not overwriting...".format(outfilename)
+            print("{} already exists, not overwriting...".format(outfilename))
             return
 
         # create new HERAData object

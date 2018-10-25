@@ -6,13 +6,17 @@ from __future__ import absolute_import, division, print_function
 import numpy as np
 import linsolve
 from copy import deepcopy
-from hera_cal.datacontainer import DataContainer
-from hera_cal import utils
-from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, fft_dly
-from hera_cal.io import HERAData, HERACal, write_cal, write_vis
-from hera_cal.apply_cal import calibrate_in_place
+from hera_qm.ant_metrics import per_antenna_modified_z_scores
+from hera_qm.metrics_io import load_metric_file
 import argparse
 import os
+
+from . import utils
+from .datacontainer import DataContainer
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, fft_dly
+from .io import HERAData, HERACal, write_cal, write_vis
+from .apply_cal import calibrate_in_place
+
 
 SEC_PER_DAY = 86400.
 
@@ -917,7 +921,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
 
     # compute chisqs
     data_wgts = {bl: utils.predict_noise_variance_from_autos(bl, data, 
-                 dt=(np.median(np.ediff1d(times_by_bl[bl[:2]])) * SEC_PER_DAY))**-1 for bl in data.keys()}
+                                                             dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
+                                                                 * SEC_PER_DAY))**-1 for bl in data.keys()}
     rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts, 
                                                                        gains=rv['g_omnical'], reds=reds, 
                                                                        split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
