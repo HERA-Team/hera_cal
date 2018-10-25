@@ -1799,3 +1799,60 @@ def match_times(datafile, modelfiles, atol=1e-5):
                                               & (model_times[1] > data_time[0] - atol)]
 
     return matched_modelfiles
+
+
+def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
+    """
+    multiply together multiple calfits gain solutions (overlapping in time and frequency)
+
+    Parameters:
+    -----------
+    files : type=list, dtype=str, list of files to multiply together
+
+    fname : type=str, path to output filename
+
+    outdir : type=str, path to output directory
+
+    overwrite : type=bool, overwrite output file
+
+    broadcast_flags : type=bool, if True, broadcast flags from each calfits to final solution
+    """
+    # get io params
+    if outdir is None:
+        outdir = "./"
+
+    output_fname = os.path.join(outdir, fname)
+    if os.path.exists(fname) and overwrite is False:
+        raise IOError("{} exists, not overwriting".format(output_fname))
+
+    # iterate over files
+    for i, f in enumerate(files):
+        if i == 0:
+            echo("...loading {}".format(f), verbose=verbose)
+            uvc = UVCal()
+            uvc.read_calfits(f)
+            f1 = copy.copy(f)
+
+            # set flagged data to unity
+            uvc.gain_array[uvc.flag_array] /= uvc.gain_array[uvc.flag_array]
+
+        else:
+            uvc2 = UVCal()
+            uvc2.read_calfits(f)
+
+            # set flagged data to unity
+            gain_array = uvc2.gain_array
+            gain_array[uvc2.flag_array] /= gain_array[uvc2.flag_array]
+
+            # multiply gain solutions in
+            uvc.gain_array *= uvc2.gain_array
+
+            # pass flags
+            if broadcast_flags:
+                uvc.flag_array += uvc2.flag_array
+            else:
+                uvc.flag_array = uvc.flag_array * uvc2.flag_array
+
+    # write to file
+    echo("...saving {}".format(output_fname), verbose=verbose)
+    uvc.write_calfits(output_fname, clobber=True)
