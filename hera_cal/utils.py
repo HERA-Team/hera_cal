@@ -37,7 +37,7 @@ JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
 
 def split_pol(pol):
-    '''Splits visibility polarization string (pyuvdata's polstr) into 
+    '''Splits visibility polarization string (pyuvdata's polstr) into
     antenna polarization strings (pyuvdata's jstr).'''
     return SPLIT_POL[_comply_vispol(pol)]
 
@@ -49,7 +49,7 @@ def join_pol(p1, p2):
 
 
 def comply_pol(pol):
-    '''Maps an input (visibility or antenna) polarization string onto a string 
+    '''Maps an input (visibility or antenna) polarization string onto a string
     compliant with pyuvdata and hera_cal.'''
     try:
         return _comply_vispol(pol)
@@ -69,7 +69,7 @@ def join_bl(ai, aj):
 
 
 def reverse_bl(bl):
-    '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i) 
+    '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i)
     or (j,i,pol[::-1]), respectively.'''
     i, j = bl[:2]
     if len(bl) == 2:
@@ -674,7 +674,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
         split_by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy
             arrays. Additionally, if split_by_antpol is True, cross-polarized visibilities are ignored.
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol). Requires that the model
-            contains visibilities for the first baseline in each redundant group. Any other baselines 
+            contains visibilities for the first baseline in each redundant group. Any other baselines
             in those redundant groups are overwritten in the model, which is copied not modified.
         chisq: optional chisq to update (see below)
         nObs: optional nObs to update (see below). Must be specified if chisq is specified and must be
@@ -777,21 +777,21 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
 
 def predict_noise_variance_from_autos(bl, data, dt=None, df=None):
     '''Predict the noise variance on a baseline using autocorrelation data.
-    
+
     Arguments:
         bl: baseline tuple of the form (0, 1, 'xx')
         data: DataContainer containing autocorrelation data
-        dt: integration time in seconds. If None, will try infer this 
-            from the times stored in the DataContainer. 
+        dt: integration time in seconds. If None, will try infer this
+            from the times stored in the DataContainer.
         df: channel width in Hz. If None, will try to infer this from
             from the frequencies stored in the DataContainer
-            
+
     Returns:
         Noise variance predicted on baseline bl in units of data squared
     '''
     if dt is None:
         assert(len(data.times_by_bl[bl[0:2]]) > 1)  # cannot infer integration time if only one integration is given
-        dt = np.median(np.ediff1d(data.times_by_bl[bl[0:2]])) * 24. * 3600.       
+        dt = np.median(np.ediff1d(data.times_by_bl[bl[0:2]])) * 24. * 3600.
     if df is None:
         assert(len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
         df = np.median(np.ediff1d(data.freqs))

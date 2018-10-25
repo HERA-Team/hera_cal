@@ -980,7 +980,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def fft_dly(data, df, wgts=None, window=None, medfilt=False, kernel=(1, 11), 
+def fft_dly(data, df, wgts=None, window=None, medfilt=False, kernel=(1, 11),
             solve_phase=False, edge_cut=0):
     """Get delay of visibility across band using FFT and quadratic fit to delay peak.
 
