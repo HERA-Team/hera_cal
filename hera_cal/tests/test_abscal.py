@@ -13,12 +13,13 @@ import optparse
 import sys
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-import hera_cal as hc
-from hera_cal.data import DATA_PATH
 from collections import OrderedDict as odict
 import copy
-from hera_cal.datacontainer import DataContainer
 import glob
+
+from hera_cal import io, abscal, redcal
+from hera_cal.data import DATA_PATH
+from hera_cal.datacontainer import DataContainer
 from hera_cal.utils import split_pol
 
 
@@ -37,11 +38,11 @@ class Test_AbsCal_Funcs:
         self.time_array = np.unique(self.uvd.time_array)
 
         # configure data into dictionaries
-        data, flgs = hc.io.load_vis(self.uvd, pop_autos=True)
+        data, flgs = io.load_vis(self.uvd, pop_autos=True)
         wgts = odict()
         for k in flgs.keys():
             wgts[k] = (~flgs[k]).astype(np.float)
-        wgts = hc.datacontainer.DataContainer(wgts)
+        wgts = DataContainer(wgts)
 
         # configure baselines
         bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in data.keys()])
@@ -60,56 +61,56 @@ class Test_AbsCal_Funcs:
         self.wgts = wgts
 
     def test_data_key_to_array_axis(self):
-        m, pk = hc.abscal.data_key_to_array_axis(self.model, 2)
+        m, pk = abscal.data_key_to_array_axis(self.model, 2)
         nt.assert_equal(m[(24, 25)].shape, (60, 64, 1))
         nt.assert_equal('xx' in pk, True)
         # test w/ avg_dict
-        m, ad, pk = hc.abscal.data_key_to_array_axis(self.model, 2, avg_dict=self.bls)
+        m, ad, pk = abscal.data_key_to_array_axis(self.model, 2, avg_dict=self.bls)
         nt.assert_equal(m[(24, 25)].shape, (60, 64, 1))
         nt.assert_equal(ad[(24, 25)].shape, (3,))
         nt.assert_equal('xx' in pk, True)
 
     def test_array_axis_to_data_key(self):
-        m, pk = hc.abscal.data_key_to_array_axis(self.model, 2)
-        m2 = hc.abscal.array_axis_to_data_key(m, 2, ['xx'])
+        m, pk = abscal.data_key_to_array_axis(self.model, 2)
+        m2 = abscal.array_axis_to_data_key(m, 2, ['xx'])
         nt.assert_equal(m2[(24, 25, 'xx')].shape, (60, 64))
         # copy dict
-        m, ad, pk = hc.abscal.data_key_to_array_axis(self.model, 2, avg_dict=self.bls)
-        m2, cd = hc.abscal.array_axis_to_data_key(m, 2, ['xx'], copy_dict=ad)
+        m, ad, pk = abscal.data_key_to_array_axis(self.model, 2, avg_dict=self.bls)
+        m2, cd = abscal.array_axis_to_data_key(m, 2, ['xx'], copy_dict=ad)
         nt.assert_equal(m2[(24, 25, 'xx')].shape, (60, 64))
         nt.assert_equal(cd[(24, 25, 'xx')].shape, (3,))
 
     def test_interp2d(self):
         # test interpolation w/ warning
-        m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
+        m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                        self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=False)
         nt.assert_equal(m[(24, 25, 'xx')].shape, (60, 64))
         # downsampling w/ no flags
-        m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
+        m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                        self.time_array[::2], self.freq_array[::2])
         nt.assert_equal(m[(24, 25, 'xx')].shape, (30, 32))
         # test flag propagation
-        m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
+        m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                        self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=True)
         nt.assert_true(mf[(24, 25, 'xx')][10, 0])
         # test flag extrapolation
-        m, mf = hc.abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
+        m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                        self.time_array + .0001, self.freq_array, flags=self.wgts, flag_extrapolate=True)
         nt.assert_true(mf[(24, 25, 'xx')][-1].min())
 
     def test_wiener(self):
         # test smoothing
-        d = hc.abscal.wiener(self.data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1, 13))
+        d = abscal.wiener(self.data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1, 13))
         nt.assert_equal(d[(24, 37, 'xx')].shape, (60, 64))
         nt.assert_equal(d[(24, 37, 'xx')].dtype, np.complex)
         # test w/ noise
-        d = hc.abscal.wiener(self.data, window=(5, 15), noise=0.1, medfilt=True, medfilt_kernel=(1, 13))
+        d = abscal.wiener(self.data, window=(5, 15), noise=0.1, medfilt=True, medfilt_kernel=(1, 13))
         nt.assert_equal(d[(24, 37, 'xx')].shape, (60, 64))
         # test w/o medfilt
-        d = hc.abscal.wiener(self.data, window=(5, 15), medfilt=False)
+        d = abscal.wiener(self.data, window=(5, 15), medfilt=False)
         nt.assert_equal(d[(24, 37, 'xx')].shape, (60, 64))
         # test as array
-        d = hc.abscal.wiener(self.data[(24, 37, 'xx')], window=(5, 15), medfilt=False, array=True)
+        d = abscal.wiener(self.data[(24, 37, 'xx')], window=(5, 15), medfilt=False, array=True)
         nt.assert_equal(d.shape, (60, 64))
         nt.assert_equal(d.dtype, np.complex)
 
@@ -122,15 +123,15 @@ class Test_AbsCal_Funcs:
         i2 = keys.index(k2)
         k3 = (52, 53, 'xx')   # 14.6 m E-W
         i3 = keys.index(k3)
-        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), keys)
-        bls_conj = map(lambda k: hc.abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), keys)
+        bls = map(lambda k: abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), keys)
+        bls_conj = map(lambda k: abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), keys)
         nt.assert_equal(bls[i1], bls[i1])
         nt.assert_false(bls[i1] == bls[i2])
         nt.assert_equal(bls[i1] == bls_conj[i1], 'conjugated')
         # test different yet redundant baselines still agree
         nt.assert_equal(bls[i1], bls[i3])
         # test tolerance works as expected
-        bls = map(lambda k: hc.abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), keys)
+        bls = map(lambda k: abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=1e-4), keys)
         nt.assert_not_equal(bls[i1], bls[i3])
 
     def test_match_red_baselines(self):
@@ -138,60 +139,60 @@ class Test_AbsCal_Funcs:
         model = DataContainer(odict([((k[0] + 1, k[1] + 1, k[2]), model[k]) for i, k in enumerate(model.keys())]))
         del model[(25, 54, 'xx')]
         model_antpos = odict([(k + 1, self.antpos[k]) for i, k in enumerate(self.antpos.keys())])
-        new_model = hc.abscal.match_red_baselines(model, model_antpos, self.data, self.antpos, tol=2.0, verbose=False)
+        new_model = abscal.match_red_baselines(model, model_antpos, self.data, self.antpos, tol=2.0, verbose=False)
         nt.assert_equal(len(new_model.keys()), 8)
         nt.assert_true((24, 37, 'xx') in new_model)
         nt.assert_false((24, 53, 'xx') in new_model)
 
     def test_mirror_data_to_red_bls(self):
         # make fake data
-        reds = hc.redcal.get_reds(self.antpos, pols=['xx'])
+        reds = redcal.get_reds(self.antpos, pols=['xx'])
         data = DataContainer(odict(map(lambda k: (k[0], self.data[k[0]]), reds[:5])))
         # test execuation
-        d = hc.abscal.mirror_data_to_red_bls(data, self.antpos)
+        d = abscal.mirror_data_to_red_bls(data, self.antpos)
         nt.assert_equal(len(d.keys()), 16)
         nt.assert_true((24, 25, 'xx') in d)
         # test correct value is propagated
         nt.assert_almost_equal(data[(24, 25, 'xx')][30, 30], d[(38, 39, 'xx')][30, 30])
         # test reweighting
-        w = hc.abscal.mirror_data_to_red_bls(self.wgts, self.antpos, weights=True)
+        w = abscal.mirror_data_to_red_bls(self.wgts, self.antpos, weights=True)
         nt.assert_equal(w[(24, 25, 'xx')].dtype, np.float)
         nt.assert_almost_equal(w[(24, 25, 'xx')].max(), 16.0)
 
     def test_echo(self):
-        hc.abscal.echo('hi', verbose=True)
-        hc.abscal.echo('hi', type=1, verbose=True)
+        abscal.echo('hi', verbose=True)
+        abscal.echo('hi', type=1, verbose=True)
 
     def test_flatten(self):
-        l = hc.abscal.flatten([['hi']])
+        l = abscal.flatten([['hi']])
         nt.assert_equal(np.array(l).ndim, 1)
 
     def test_avg_data_across_red_bls(self):
         # test basic execution
         wgts = copy.deepcopy(self.wgts)
         wgts[(24, 25, 'xx')][45, 45] = 0.0
-        data, flags, antpos, ants, freqs, times, lsts, pols = hc.io.load_vis(self.data_file, return_meta=True)
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, wgts=wgts, tol=2.0, broadcast_wgts=False)
+        data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(self.data_file, return_meta=True)
+        rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, wgts=wgts, tol=2.0, broadcast_wgts=False)
         nt.assert_equal(rd[(24, 25, 'xx')].shape, (60, 64))
         nt.assert_true(rf[(24, 25, 'xx')][45, 45] > 0.0)
         # test various kwargs
         wgts[(24, 25, 'xx')][45, 45] = 0.0
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, wgts=wgts, broadcast_wgts=True)
+        rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, tol=2.0, wgts=wgts, broadcast_wgts=True)
         nt.assert_equal(len(rd.keys()), 9)
         nt.assert_equal(len(rf.keys()), 9)
         nt.assert_almost_equal(rf[(24, 25, 'xx')][45, 45], 0.0)
         # test averaging worked
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=False)
+        rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=False)
         v = np.mean([data[(52, 53, 'xx')], data[(37, 38, 'xx')], data[(24, 25, 'xx')], data[(38, 39, 'xx')]], axis=0)
         nt.assert_true(np.isclose(rd[(24, 25, 'xx')], v).min())
         # test mirror_red_data
-        rd, rf, rk = hc.abscal.avg_data_across_red_bls(data, antpos, wgts=self.wgts, tol=2.0, mirror_red_data=True)
+        rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, wgts=self.wgts, tol=2.0, mirror_red_data=True)
         nt.assert_equal(len(rd.keys()), 21)
         nt.assert_equal(len(rf.keys()), 21)
 
     def test_avg_file_across_red_bls(self):
-        rd, rf, rk = hc.abscal.avg_file_across_red_bls(self.data_file, write_miriad=False, output_data=True)
-        nt.assert_raises(NotImplementedError, hc.abscal.avg_file_across_red_bls, self.data_file, write_miriad=True)
+        rd, rf, rk = abscal.avg_file_across_red_bls(self.data_file, write_miriad=False, output_data=True)
+        nt.assert_raises(NotImplementedError, abscal.avg_file_across_red_bls, self.data_file, write_miriad=True)
 
     def test_match_times(self):
         dfiles = map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458043.12552.xx.HH.uvORA',
@@ -199,25 +200,25 @@ class Test_AbsCal_Funcs:
         mfiles = map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458042.12552.xx.HH.uvXA',
                                                             'zen.2458042.13298.xx.HH.uvXA'])
         # test basic execution
-        relevant_mfiles = hc.abscal.match_times(dfiles[0], mfiles)
+        relevant_mfiles = abscal.match_times(dfiles[0], mfiles)
         nt.assert_equal(len(relevant_mfiles), 2)
         # test basic execution
-        relevant_mfiles = hc.abscal.match_times(dfiles[1], mfiles)
+        relevant_mfiles = abscal.match_times(dfiles[1], mfiles)
         nt.assert_equal(len(relevant_mfiles), 1)
         # test exception
         mfiles = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2458045.*.xx.HH.uvXRAA')))
-        relevant_mfiles = hc.abscal.match_times(dfiles[0], mfiles)
+        relevant_mfiles = abscal.match_times(dfiles[0], mfiles)
         nt.assert_equal(len(relevant_mfiles), 0)
 
     def test_rephase_vis(self):
         dfile = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
         mfiles = map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458042.12552.xx.HH.uvXA'])
-        m, mf, mantp, mant, mfr, mt, ml, mp = hc.io.load_vis(mfiles, return_meta=True)
-        d, df, dantp, dant, dfr, dt, dl, dp = hc.io.load_vis(dfile, return_meta=True)
+        m, mf, mantp, mant, mfr, mt, ml, mp = io.load_vis(mfiles, return_meta=True)
+        d, df, dantp, dant, dfr, dt, dl, dp = io.load_vis(dfile, return_meta=True)
         bls = odict(map(lambda k: (k, dantp[k[0]] - dantp[k[1]]), d.keys()))
 
         # basic execution
-        new_m, new_f = hc.abscal.rephase_vis(m, ml, dl, bls, dfr)
+        new_m, new_f = abscal.rephase_vis(m, ml, dl, bls, dfr)
 
         k = new_m.keys()[0]
         nt.assert_equal(new_m[k].shape, d[k].shape)
@@ -226,14 +227,14 @@ class Test_AbsCal_Funcs:
 
     def test_cut_bl(self):
         Nbls = len(self.data)
-        _data = hc.abscal.cut_bls(self.data, bls=self.bls, min_bl_cut=20.0, inplace=False)
+        _data = abscal.cut_bls(self.data, bls=self.bls, min_bl_cut=20.0, inplace=False)
         nt.assert_true(Nbls, 21)
         nt.assert_true(len(_data), 12)
         _data2 = copy.deepcopy(self.data)
-        hc.abscal.cut_bls(_data2, bls=self.bls, min_bl_cut=20.0, inplace=True)
+        abscal.cut_bls(_data2, bls=self.bls, min_bl_cut=20.0, inplace=True)
         nt.assert_true(len(_data2), 12)
-        _data = hc.abscal.cut_bls(self.data, bls=self.bls, min_bl_cut=20.0, inplace=False)
-        hc.abscal.cut_bls(_data2, min_bl_cut=20.0, inplace=True)
+        _data = abscal.cut_bls(self.data, bls=self.bls, min_bl_cut=20.0, inplace=False)
+        abscal.cut_bls(_data2, min_bl_cut=20.0, inplace=True)
         nt.assert_true(len(_data2), 12)
 
     def test_combine_calfits(self):
@@ -242,7 +243,7 @@ class Test_AbsCal_Funcs:
         # test basic execution
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
-        hc.abscal_funcs.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = True)
+        abscal_funcs.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = True)
         # test it exists
         nt.assert_true(os.path.exists('ex.calfits'))
         # test antenna number
@@ -259,7 +260,7 @@ class Test_AbsCal_Funcs:
         nt.assert_almost_equal(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
-        hc.abscal_funcs.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = False)
+        abscal_funcs.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = False)
         nt.assert_true(os.path.exists('ex.calfits'))
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
@@ -272,28 +273,28 @@ class Test_AbsCal:
         # load into pyuvdata object
         self.data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
-        self.AC = hc.abscal.AbsCal(self.data_fname, self.model_fname, refant=24)
+        self.AC = abscal.AbsCal(self.data_fname, self.model_fname, refant=24)
 
         # make custom gain keys
-        d, fl, ap, a, f, t, l, p = hc.io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
+        d, fl, ap, a, f, t, l, p = io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
         self.freq_array = f
         self.antpos = ap
         gain_pols = np.unique(map(split_pol, p))
         self.ap = ap
-        self.gk = hc.abscal.flatten(map(lambda p: map(lambda k: (k, p), a), gain_pols))
+        self.gk = abscal.flatten(map(lambda p: map(lambda k: (k, p), a), gain_pols))
         self.freqs = f
 
     def test_init(self):
         # init with no meta
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_almost_equal(AC.bls, None)
         # init with meta
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.AC.antpos, freqs=self.AC.freqs)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.AC.antpos, freqs=self.AC.freqs)
         nt.assert_almost_equal(AC.bls[(24, 25, 'xx')][0], -14.607842046642745)
         # init with meta
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data)
         # test feeding file and refant and bl_cut and bl_taper
-        AC = hc.abscal.AbsCal(self.model_fname, self.data_fname, refant=24, antpos=self.AC.antpos,
+        AC = abscal.AbsCal(self.model_fname, self.data_fname, refant=24, antpos=self.AC.antpos,
                               max_bl_cut=26.0, bl_taper_fwhm=15.0)
         # test ref ant
         nt.assert_equal(AC.refant, 24)
@@ -311,7 +312,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.abs_eta_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.abs_eta_gain_arr.shape, (7, 60, 64, 1))
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_equal(AC.abs_eta, None)
         nt.assert_equal(AC.abs_eta_arr, None)
         nt.assert_equal(AC.abs_eta_gain, None)
@@ -344,7 +345,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.TT_Phi_arr.shape, (7, 2, 60, 64, 1))
         nt.assert_equal(self.AC.abs_psi_arr.shape, (7, 60, 64, 1))
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos)
         nt.assert_equal(AC.abs_psi_arr, None)
         nt.assert_equal(AC.abs_psi_gain_arr, None)
         nt.assert_equal(AC.TT_Phi_arr, None)
@@ -371,7 +372,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.ant_eta_gain_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.ant_eta_gain_arr.dtype, np.complex)
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_equal(AC.ant_eta, None)
         nt.assert_equal(AC.ant_eta_gain, None)
         nt.assert_equal(AC.ant_eta_arr, None)
@@ -390,7 +391,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.ant_phi_gain_arr.dtype, np.complex)
         nt.assert_true(np.isclose(np.angle(self.AC.ant_phi_gain[(24, 'Jxx')]), 0.0).all())
         self.AC.phs_logcal(verbose=False, avg=True)
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_equal(AC.ant_phi, None)
         nt.assert_equal(AC.ant_phi_gain, None)
         nt.assert_equal(AC.ant_phi_arr, None)
@@ -419,10 +420,10 @@ class Test_AbsCal:
         nt.assert_true(np.isclose(np.angle(self.AC.ant_dly_gain[(24, 'Jxx')]), 0.0).all())
         nt.assert_true(np.isclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'Jxx')]), 0.0).all())
         # test exception
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_raises(AttributeError, AC.delay_lincal)
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freq_array)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freq_array)
         nt.assert_equal(AC.ant_dly, None)
         nt.assert_equal(AC.ant_dly_gain, None)
         nt.assert_equal(AC.ant_dly_arr, None)
@@ -432,7 +433,7 @@ class Test_AbsCal:
         nt.assert_equal(AC.ant_dly_phi_arr, None)
         nt.assert_equal(AC.ant_dly_phi_gain_arr, None)
         # test flags handling
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freqs)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freqs)
         AC.wgts[(24, 25, 'xx')] *= 0
         AC.delay_lincal(verbose=False)
         # test medfilt
@@ -454,10 +455,10 @@ class Test_AbsCal:
         g = self.AC.custom_dly_slope_gain(self.gk, self.ap)
         nt.assert_equal(g[(0, 'Jxx')].shape, (60, 64))
         # test exception
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data)
         nt.assert_raises(AttributeError, AC.delay_slope_lincal)
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
         nt.assert_equal(AC.dly_slope, None)
         nt.assert_equal(AC.dly_slope_gain, None)
         nt.assert_equal(AC.dly_slope_arr, None)
@@ -473,7 +474,7 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.dly_slope_arr.shape, (7, 2, 60, 1, 1))
         nt.assert_equal(self.AC.dly_slope_gain_arr.shape, (7, 60, 64, 1))
         # test flags handling
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
         AC.wgts[(24, 25, 'xx')] *= 0
         AC.delay_slope_lincal(verbose=False)
         # test w/ no wgts
@@ -492,13 +493,13 @@ class Test_AbsCal:
         g = self.AC.custom_phs_slope_gain(self.gk, self.ap)
         nt.assert_equal(g[(0, 'Jxx')].shape, (60, 64))
         # test Nones
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
         nt.assert_equal(AC.phs_slope, None)
         nt.assert_equal(AC.phs_slope_gain, None)
         nt.assert_equal(AC.phs_slope_arr, None)
         nt.assert_equal(AC.phs_slope_gain_arr, None)
         nt.assert_equal(AC.phs_slope_ant_phs_arr, None)
-        AC = hc.abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
+        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
         AC.wgts[(24, 25, 'xx')] *= 0
         AC.global_phase_slope_logcal(verbose=False)
         # test w/ no wgts
@@ -513,7 +514,7 @@ class Test_AbsCal:
         self.AC.amp_logcal(verbose=False)
         gains = (self.AC.abs_eta_gain, self.AC.TT_Phi_gain, self.AC.abs_psi_gain,
                  self.AC.ant_dly_gain, self.AC.ant_eta_gain, self.AC.ant_phi_gain)
-        gains = hc.abscal.merge_gains(gains)
+        gains = abscal.merge_gains(gains)
         k = (53, 'Jxx')
         nt.assert_equal(gains[k].shape, (60, 64))
         nt.assert_equal(gains[k].dtype, np.complex)
@@ -530,13 +531,13 @@ class Test_AbsCal:
         self.AC.amp_logcal(verbose=False)
         gains = (self.AC.abs_eta_gain, self.AC.TT_Phi_gain, self.AC.abs_psi_gain,
                  self.AC.ant_dly_gain, self.AC.ant_eta_gain, self.AC.ant_phi_gain)
-        corr_data = hc.abscal.apply_gains(self.AC.data, gains, gain_convention='multiply')
+        corr_data = abscal.apply_gains(self.AC.data, gains, gain_convention='multiply')
         nt.assert_equal(corr_data[(24, 25, 'xx')].shape, (60, 64))
         nt.assert_equal(corr_data[(24, 25, 'xx')].dtype, np.complex)
         nt.assert_almost_equal(corr_data[(24, 25, 'xx')][0, 0], (self.AC.data[(24, 25, 'xx')] *
                                                                  self.AC.abs_eta_gain[(24, 'Jxx')] * self.AC.abs_eta_gain[(25, 'Jxx')] * self.AC.ant_eta_gain[(24, 'Jxx')] *
                                                                  self.AC.ant_eta_gain[(25, 'Jxx')])[0, 0])
-        corr_data = hc.abscal.apply_gains(self.AC.data, gains, gain_convention='divide')
+        corr_data = abscal.apply_gains(self.AC.data, gains, gain_convention='divide')
         nt.assert_equal(corr_data[(24, 25, 'xx')].shape, (60, 64))
         nt.assert_equal(corr_data[(24, 25, 'xx')].dtype, np.complex)
         nt.assert_almost_equal(corr_data[(24, 25, 'xx')][0, 0], (self.AC.data[(24, 25, 'xx')] /
@@ -545,7 +546,7 @@ class Test_AbsCal:
         # test for missing data
         gains = copy.deepcopy(self.AC.abs_eta_gain)
         del gains[(24, 'Jxx')]
-        corr_data = hc.abscal.apply_gains(self.AC.data, gains)
+        corr_data = abscal.apply_gains(self.AC.data, gains)
         nt.assert_true((24, 25, 'xx') not in corr_data)
 
     def test_fill_dict_nans(self):
@@ -553,7 +554,7 @@ class Test_AbsCal:
         wgts = copy.deepcopy(self.AC.wgts)
         data[(25, 38, 'xx')][15, 20] *= np.nan
         data[(25, 38, 'xx')][20, 15] *= np.inf
-        hc.abscal.fill_dict_nans(data, wgts=wgts, nan_fill=-1, inf_fill=-2)
+        abscal.fill_dict_nans(data, wgts=wgts, nan_fill=-1, inf_fill=-2)
         nt.assert_equal(data[(25, 38, 'xx')][15, 20].real, -1)
         nt.assert_equal(data[(25, 38, 'xx')][20, 15].real, -2)
         nt.assert_almost_equal(wgts[(25, 38, 'xx')][15, 20], 0)
@@ -562,7 +563,7 @@ class Test_AbsCal:
         wgts = copy.deepcopy(self.AC.wgts)
         data[(25, 38, 'xx')][15, 20] *= np.nan
         data[(25, 38, 'xx')][20, 15] *= np.inf
-        hc.abscal.fill_dict_nans(data[(25, 38, 'xx')], wgts=wgts[(25, 38, 'xx')], nan_fill=-1, inf_fill=-2, array=True)
+        abscal.fill_dict_nans(data[(25, 38, 'xx')], wgts=wgts[(25, 38, 'xx')], nan_fill=-1, inf_fill=-2, array=True)
         nt.assert_equal(data[(25, 38, 'xx')][15, 20].real, -1)
         nt.assert_equal(data[(25, 38, 'xx')][20, 15].real, -2)
         nt.assert_almost_equal(wgts[(25, 38, 'xx')][15, 20], 0)
@@ -572,52 +573,52 @@ class Test_AbsCal:
         # test basic execution
         k = (24, 25, 'xx')
         vis = self.AC.model[k] / self.AC.data[k]
-        hc.abscal.fill_dict_nans(vis, nan_fill=0.0, inf_fill=0.0, array=True)
+        abscal.fill_dict_nans(vis, nan_fill=0.0, inf_fill=0.0, array=True)
         df = np.median(np.diff(self.AC.freqs))
         # basic execution
-        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=False, solve_phase=False)
+        dly, offset = abscal.fft_dly(vis, df, medfilt=False, solve_phase=False)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset, None)
         # median filtering
-        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=True, solve_phase=False)
+        dly, offset = abscal.fft_dly(vis, df, medfilt=True, solve_phase=False)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset, None)
         # solve phase
-        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=True, solve_phase=True)
+        dly, offset = abscal.fft_dly(vis, df, medfilt=True, solve_phase=True)
         nt.assert_equal(dly.shape, (60, 1))
         nt.assert_equal(offset.shape, (60, 1))
         # test windows and edgecut
-        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=False, solve_phase=False, edge_cut=2, window='hann')
-        dly, offset = hc.abscal.fft_dly(vis, df, medfilt=False, solve_phase=False, window='blackmanharris')
-        nt.assert_raises(ValueError, hc.abscal.fft_dly, vis, df, window='foo')
-        nt.assert_raises(AssertionError, hc.abscal.fft_dly, vis, df, edge_cut=1000)
+        dly, offset = abscal.fft_dly(vis, df, medfilt=False, solve_phase=False, edge_cut=2, window='hann')
+        dly, offset = abscal.fft_dly(vis, df, medfilt=False, solve_phase=False, window='blackmanharris')
+        nt.assert_raises(ValueError, abscal.fft_dly, vis, df, window='foo')
+        nt.assert_raises(AssertionError, abscal.fft_dly, vis, df, edge_cut=1000)
         # test mock data
         tau = np.array([1.5e-8]).reshape(1, -1)  # 15 nanoseconds
         f = np.linspace(0, 100e6, 1024)
         df = np.median(np.diff(f))
         r = np.exp(1j * 2 * np.pi * f * tau)
-        dly, offset = hc.abscal.fft_dly(r, df, medfilt=True, kernel=(1, 5), solve_phase=False)
+        dly, offset = abscal.fft_dly(r, df, medfilt=True, kernel=(1, 5), solve_phase=False)
         nt.assert_almost_equal(float(dly), 1.5e-8, delta=1e-9)
 
     def test_abscal_arg_parser(self):
-        a = hc.abscal.abscal_arg_parser()
+        a = abscal.abscal_arg_parser()
 
     def test_omni_abscal_arg_parser(self):
-        a = hc.abscal.omni_abscal_arg_parser()
+        a = abscal.omni_abscal_arg_parser()
 
     def test_abscal_run(self):
         data_files = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
-        gains, flags = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
         # assert shapes and types
         nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
         nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
         # first freq bin should be flagged due to complete flagging in model and data
         nt.assert_true(flags[(24, 'Jxx')][:, 0].all())
         # solar flag run
-        gains, flags = hc.abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        gains, flags = abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
         # all data should be flagged
         nt.assert_true(flags[(24, 'Jxx')].all())
         # write calfits
@@ -625,39 +626,39 @@ class Test_AbsCal:
         cf_name = "ex.calfits"
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
-        gains, flags = hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
+        gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
                                             return_gains=True, verbose=False)
         nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
         # check match_red_bls and reweight
-        hc.abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
+        abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
                              match_red_bls=True, reweight=True)
         # check all calibration routines
-        gains, flags = hc.abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True, delay_slope_cal=True, phase_slope_cal=True,
+        gains, flags = abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True, delay_slope_cal=True, phase_slope_cal=True,
                                             delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False)
         nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
         nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
         if os.path.exists('./ex.calfits'):
             os.remove('./ex.calfits')
         # check exceptions
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
+        nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
                          output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, delay_cal=True, verbose=False)
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
+        nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
                          output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_phs_cal=True, verbose=False)
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
+        nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
                          output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_amp_cal=True, verbose=False)
         if os.path.exists('./ex.calfits'):
             os.remove('./ex.calfits')
         # check all antenna gains run
-        hc.abscal.abscal_run(data_files, model_files, abs_amp_cal=True, all_antenna_gains=True, write_calfits=False)
+        abscal.abscal_run(data_files, model_files, abs_amp_cal=True, all_antenna_gains=True, write_calfits=False)
         # test general bandpass solvers
-        hc.abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False)
+        abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False)
         # test exception
-        nt.assert_raises(ValueError, hc.abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
+        nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
         # check blank & flagged calfits file written if no LST overlap
         bad_model_files = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458044.*.xx.HH.uvXRAA")))
-        hc.abscal.abscal_run(data_files, bad_model_files, write_calfits=True, overwrite=True, outdir='./',
+        abscal.abscal_run(data_files, bad_model_files, write_calfits=True, overwrite=True, outdir='./',
                              output_calfits_fname='ex.calfits', verbose=False)
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
@@ -666,7 +667,7 @@ class Test_AbsCal:
         os.remove('./ex.calfits')
         # test w/ calfits files
         calfits_infile = os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')
-        hc.abscal.abscal_run(data_files, model_files, calfits_infile=calfits_infile, delay_slope_cal=True, phase_slope_cal=True,
+        abscal.abscal_run(data_files, model_files, calfits_infile=calfits_infile, delay_slope_cal=True, phase_slope_cal=True,
                              outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False, refant=38)
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
@@ -694,7 +695,7 @@ class Test_AbsCal:
             model[k] = data[k] * np.exp(2j * np.pi * f * np.dot(dly_slope, bl))
         model = DataContainer(model)
         # setup AbsCal
-        AC = hc.abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
+        AC = abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run delay_slope_cal
         AC.delay_slope_lincal(time_avg=True, verbose=False)
         # test recovery: accuracy only checked at 10% level
@@ -709,7 +710,7 @@ class Test_AbsCal:
             model[k] = data[k] * np.exp(abs_gain + 1j * np.dot(TT_phi, bl))
         model = DataContainer(model)
         # setup AbsCal
-        AC = hc.abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
+        AC = abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run abs_amp cal
         AC.abs_amp_logcal(verbose=False)
         # run TT_phs_logcal
