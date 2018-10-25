@@ -23,8 +23,10 @@ where {i,j} index antennas and {x,y} are the polarization of
 the i-th and j-th antenna respectively.
 """
 from __future__ import print_function, division, absolute_import
-from .abscal_funcs import *
 import gc as garbage_collector
+
+from .abscal_funcs import *
+from . import flag_utils
 
 
 class AbsCal(object):
@@ -1213,8 +1215,8 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
             antpos = model_antpos
 
         # solar flag data and model
-        utils.solar_flag(data_flags, times=data_times, flag_alt=solar_horizon, inplace=True)
-        utils.solar_flag(model_flags, times=model_times, flag_alt=solar_horizon, inplace=True)
+        flag_utils.solar_flag(data_flags, times=data_times, flag_alt=solar_horizon, inplace=True)
+        flag_utils.solar_flag(model_flags, times=model_times, flag_alt=solar_horizon, inplace=True)
 
         # rephase model to match data lst grid
         if rephase_model:
@@ -1248,7 +1250,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
         total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
 
         # construct antenna flag_dict based purely on data flags
-        gain_flag_dict = utils.synthesize_ant_flags(data_flags, threshold=antflag_thresh)
+        gain_flag_dict = flag_utils.synthesize_ant_flags(data_flags, threshold=antflag_thresh)
         for k in total_gain_keys:
             if k not in gain_flag_dict:
                 gain_flag_dict[k] = np.ones((Ntimes, Nfreqs), np.bool)

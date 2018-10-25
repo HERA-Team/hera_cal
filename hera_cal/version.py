@@ -16,7 +16,7 @@ def _get_git_output(args, capture_stderr=False):
     """Get output from git, ensuring that it is of the ``str`` type,
     not bytes."""
 
-    argv = ['git', '-C', pyuvdata_dir] + args
+    argv = ['git', '-C', hera_cal_dir] + args
 
     if capture_stderr:
         data = subprocess.check_output(argv, stderr=subprocess.STDOUT)
