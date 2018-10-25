@@ -107,7 +107,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
     return conv_gains[nBefore: nBefore + len(times), :]
 
 
-def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0, 
+def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
                         tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-smoothed delay from the gains, then performs the low-pass 2D filter in time and frequency,
@@ -120,13 +120,13 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
         freq_scale: frequency scale in MHz to use for the low-pass filter. freq_scale^-1 corresponds
             to the half-width (i.e. the width of the positive part) of the region in fourier
-            space, symmetric about 0, that is retained after filtering. 
+            space, symmetric about 0, that is retained after filtering.
             Note that freq_scale is in MHz while freqs is in Hz.
         time_scale: time scale in seconds. Defined analogously to freq_scale.
             Note that time_scale is in seconds, times is in days.
         tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
         filter_mode: either 'rect' or 'plus':
-            'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0 
+            'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0
                     and fringe rate = 0
             'plus': produce a separable calibration solution by only keeping modes with 0 delay,
                     0 fringe rate, or both
@@ -147,21 +147,21 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     delay_scale = (freq_scale * 1e6)**-1  # Puts it in seconds
     fringe_scale = (time_scale)**-1  # in Hz
 
-    # find per-integration delays, smooth on the time_scale of gain smoothing, and rephase 
+    # find per-integration delays, smooth on the time_scale of gain smoothing, and rephase
     taus = fft_dly(gains, df, wgts, medfilt=False, solve_phase=False)[0].astype(np.complex)  # delays are in seconds
     if not np.all(taus == 0):  # this breaks CLEAN, but it means we don't need smoothing anyway
         taus = uvtools.dspec.high_pass_fourier_filter(taus.T, np.sum(wgts, axis=1, keepdims=True).T,
                                                       fringe_scale, dt, tol=tol, maxiter=maxiter)[0].T  # 0th index is the CLEAN components
     rephasor = np.exp(-2.0j * np.pi * np.outer(np.abs(taus), freqs))
-    
+
     # Build fourier space image and kernel for deconvolution
     window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
     image = np.fft.ifft2(gains * rephasor * wgts * window)
     kernel = np.fft.ifft2(wgts * window)
-    
+
     # set up "area", the set of Fourier modes that are allowed to be non-zero in the CLEAN
     if filter_mode == 'rect':
-        area = np.outer(np.where(np.abs(fringes) < fringe_scale, 1, 0), 
+        area = np.outer(np.where(np.abs(fringes) < fringe_scale, 1, 0),
                         np.where(np.abs(delays) < delay_scale, 1, 0))
     elif filter_mode == 'plus':
         area = np.zeros(image.shape, dtype=int)
@@ -179,7 +179,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
 
 def pick_reference_antenna(flags):
     '''Pick a refrence antenna that has the minimum number of per-antenna flags.
-    
+
     Arguments:
         flags: dictionary mapping antenna keys to flag waterfall where True means flagged
 
@@ -225,7 +225,7 @@ class CalibrationSmoother():
                 and frequency. Must have all baselines for all times. Flags on baselines are broadcast to both
                 antennas involved, unless either antenna is completely flagged for all times and frequencies.
             pick_refant: if True, automatically pick as the reference anteanna the antenna with the fewest total
-                flags and then rephase all gains so that that reference antenna has purely real gains. 
+                flags and then rephase all gains so that that reference antenna has purely real gains.
             antflag_thresh: float, fraction of flagged pixels across all visibilities (with a common antenna)
                 needed to flag that antenna gain at a particular time and frequency. antflag_thresh=0.0 is
                 aggressive flag broadcasting, antflag_thresh=1.0 is conservative flag_broadcasting.
@@ -277,7 +277,7 @@ class CalibrationSmoother():
         # perform data quality checks
         self.check_consistency()
         self.reset_filtering()
-        
+
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
             self.refant = pick_reference_antenna(self.flag_grids)
@@ -368,7 +368,7 @@ class CalibrationSmoother():
                     self.filtered_flag_grids[ant][i, :] = np.ones_like(self.filtered_flag_grids[ant][i, :])
         self.rephase_to_refant()
 
-    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09, 
+    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09,
                             filter_mode='rect', window='tukey', maxiter=100, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
@@ -379,7 +379,7 @@ class CalibrationSmoother():
             time_scale: time scale in seconds. Defined analogously to freq_scale.
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
             filter_mode: either 'rect' or 'plus':
-                'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0 
+                'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0
                         and fringe rate = 0
                 'plus': produce a separable calibration solution by only keeping modes with 0 delay,
                         0 fringe rate, or both
@@ -433,7 +433,7 @@ def smooth_cal_argparser():
                   fewest total flags and then rephase all gains so that that reference antenna has purely real gains.')
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
-    
+
     # Options relating to performing the filter in time and frequency
     filter_options = a.add_argument_group(title='Filtering options.')
     filter_options.add_argument("--freq_scale", type=float, default=10.0, help="frequency scale in MHz for the low-pass filter\

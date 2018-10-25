@@ -168,7 +168,7 @@ class Delay_Filter():
         by CLEAN models where possible. Uses input_data from Delay_Filter.load_data() as a template.
 
         Arguments:
-            res_outfilename: path for writing the filtered visibilities with flags 
+            res_outfilename: path for writing the filtered visibilities with flags
             CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
             filled_outfilename: path for writing the original data but with flags unflagged and replaced
                 with CLEAN models wherever possible
@@ -185,7 +185,7 @@ class Delay_Filter():
             raise ValueError('You must specifiy at least one outfilename.')
         else:
             # loop over the three output modes if a corresponding outfilename is supplied
-            for mode, outfilename in zip(['residual', 'CLEAN', 'filled'], 
+            for mode, outfilename in zip(['residual', 'CLEAN', 'filled'],
                                          [res_outfilename, CLEAN_outfilename, filled_outfilename]):
                 if outfilename is not None:
                     if mode == 'residual':
@@ -197,10 +197,10 @@ class Delay_Filter():
                     if partial_write:
                         if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
                             raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
-                        self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber, 
+                        self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber,
                                               add_to_history=add_to_history, **kwargs)
                     else:
-                        io.update_vis(self.hd, outfilename, filetype_out=filetype, data=data_out, flags=flags_out, 
+                        io.update_vis(self.hd, outfilename, filetype_out=filetype, data=data_out, flags=flags_out,
                                       add_to_history=add_to_history, clobber=clobber, **kwargs)
 
 
@@ -213,7 +213,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         infilename: string path to data to uvh5 file to load
         cal: optional string path to calibration file to apply to data before delay filtering
         Nbls: the number of baselines to load at once.
-        res_outfilename: path for writing the filtered visibilities with flags 
+        res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
             with CLEAN models wherever possible

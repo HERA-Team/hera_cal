@@ -241,7 +241,7 @@ class AbsCal(object):
             # make gaussian taper func
             def taper(ratio):
                 return np.exp(-0.5 * ratio**2)
-                
+
             # iterate over baselines
             for k in self.wgts.keys():
                 self.wgts[k] *= taper(np.linalg.norm(self.bls[k]) / bl_taper_fwhm)
@@ -358,7 +358,7 @@ class AbsCal(object):
 
         # run delay_lincal
         fit = delay_lincal(model, data, wgts=wgts, refant=self.refant, solve_offsets=solve_offsets,
-                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose, 
+                           medfilt=medfilt, df=df, kernel=kernel, verbose=verbose,
                            window=window, edge_cut=edge_cut)
 
         # time average
@@ -1101,7 +1101,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
 
     min_bl_cut : float, minimum baseline separation [meters] to keep in data
 
-    max_bl_cut : float, maximum baseline separation [meters] to keep in data    
+    max_bl_cut : float, maximum baseline separation [meters] to keep in data
 
     bl_taper_fwhm : float, impose a gaussian taper on the data weights as a function of
         bl separation length, with a specified fwhm [meters]
@@ -1472,7 +1472,7 @@ def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=F
 
     min_bl_cut : float, minimum baseline separation [meters] to keep in data
 
-    max_bl_cut : float, maximum baseline separation [meters] to keep in data    
+    max_bl_cut : float, maximum baseline separation [meters] to keep in data
 
     inplace : bool, if True edit data in input object, else make a copy.
 

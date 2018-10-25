@@ -10,11 +10,11 @@ from pyuvdata import UVCal, UVData
 import argparse
 
 from . import io
-from .datacontainer import DataContainer
 from . import utils
+from .datacontainer import DataContainer
 
 
-def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None, 
+def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None,
                        gain_convention='divide', flags_are_wgts=False):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in new calibration
     solutions, and updating flags from those calibration solutions. Previously flagged data is modified, but
@@ -24,7 +24,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
         new_gains: Dictionary of complex calibration gains to apply with keys like (1,'x')
-        data_flags: DataContainer containing data flags. This is modified in place if its not None. 
+        data_flags: DataContainer containing data flags. This is modified in place if its not None.
         cal_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
             if either antenna in a visibility is flagged. Any missing antennas are assumed to be totally
             flagged, so leaving this as None will result in input data_flags becoming totally flagged.
@@ -40,7 +40,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
     for (i, j, pol) in data.keys():
         ap1, ap2 = utils.split_pol(pol)
         flag_all = False
-        
+
         # apply new gains for antennas i and j. If either is missing, flag the whole baseline
         try:
             data[(i, j, pol)] /= (new_gains[(i, ap1)])**exponent
@@ -63,7 +63,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
         if data_flags is not None:
             # update data_flags in the case where flags are weights, flag all if cal_flags are missing
-            if flags_are_wgts: 
+            if flags_are_wgts:
                 try:
                     data_flags[(i, j, pol)] *= (~cal_flags[(i, ap1)]).astype(np.float)
                     data_flags[(i, j, pol)] *= (~cal_flags[(j, ap2)]).astype(np.float)

@@ -3,7 +3,7 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
-"""Command-line drive script for redundant calibration (firstcal, logcal, omnical, remove_degen). 
+"""Command-line drive script for redundant calibration (firstcal, logcal, omnical, remove_degen).
 Includes solar flagging and iterative antenna exclusion based on chi^2."""
 
 from __future__ import absolute_import, division, print_function
