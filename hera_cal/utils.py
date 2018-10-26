@@ -31,7 +31,7 @@ def _comply_vispol(pol):
     return polnum2str(polstr2num(pol))
 
 
-_VISPOLS = [pol for pol in POL_STR2NUM_DICT.keys() if polstr2num(pol) < 0]
+_VISPOLS = [pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0]
 SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _VISPOLS}
 JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
@@ -142,6 +142,16 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
     return dlys, offset.reshape(-1, 1)
 
 
+def echo(message, type=0, verbose=True):
+    if verbose:
+        if type == 0:
+            print(message)
+        elif type == 1:
+            print('')
+            print(message)
+            print("-" * 40)
+
+
 class AntennaArray(aipy.pol.AntennaArray):
     def __init__(self, *args, **kwargs):
         aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
@@ -234,10 +244,10 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
         antpos[antnum] = {'x': rotECEF[0], 'y': rotECEF[1], 'z': rotECEF[2]}
 
     # make antpos_ideal array
-    nants = np.max(antpos.keys()) + 1
+    nants = np.max(list(antpos.keys())) + 1
     antpos_ideal = np.zeros(shape=(nants, 3), dtype=float) - 1
     # unpack from dict -> numpy array
-    for k in antpos.keys():
+    for k in list(antpos.keys()):
         antpos_ideal[k, :] = np.array([antpos[k]['x'], antpos[k]['y'], antpos[k]['z']])
     freqs = np.asarray(freqs)
     # Make list of antennas.
@@ -259,30 +269,10 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     # Make the AntennaArray and set position parameters
     aa = AntennaArray(location, antennas, antpos_ideal=antpos_ideal)
     pos_prms = {}
-    for i in antpos.keys():
+    for i in list(antpos.keys()):
         pos_prms[str(i)] = antpos[i]
     aa.set_params(pos_prms)
     return aa
-
-
-def get_aa_from_calfile(freqs, calfile, **kwargs):
-    '''
-    Generate an AntennaArray object from the specified calfile.
-
-    Arguments:
-    ====================
-    freqs: list of frequencies in data file, in GHz
-    calfile: name of calfile, without the .py extension (e.g., hsa7458_v001). Note that this
-        file must be in sys.path.
-
-    Returns:
-    ====================
-    aa: AntennaArray object
-    '''
-    exec('from {calfile} import get_aa'.format(calfile=calfile))
-
-    # generate aa
-    return get_aa(freqs, **kwargs)
 
 
 def JD2LST(JD, longitude=21.42830):
@@ -480,6 +470,63 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
         return alts
     else:
         return alts[0]
+
+
+def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
+    """
+    multiply together multiple calfits gain solutions (overlapping in time and frequency)
+
+    Parameters:
+    -----------
+    files : type=list, dtype=str, list of files to multiply together
+
+    fname : type=str, path to output filename
+
+    outdir : type=str, path to output directory
+
+    overwrite : type=bool, overwrite output file
+
+    broadcast_flags : type=bool, if True, broadcast flags from each calfits to final solution
+    """
+    # get io params
+    if outdir is None:
+        outdir = "./"
+
+    output_fname = os.path.join(outdir, fname)
+    if os.path.exists(fname) and overwrite is False:
+        raise IOError("{} exists, not overwriting".format(output_fname))
+
+    # iterate over files
+    for i, f in enumerate(files):
+        if i == 0:
+            echo("...loading {}".format(f), verbose=verbose)
+            uvc = UVCal()
+            uvc.read_calfits(f)
+            f1 = copy.copy(f)
+
+            # set flagged data to unity
+            uvc.gain_array[uvc.flag_array] /= uvc.gain_array[uvc.flag_array]
+
+        else:
+            uvc2 = UVCal()
+            uvc2.read_calfits(f)
+
+            # set flagged data to unity
+            gain_array = uvc2.gain_array
+            gain_array[uvc2.flag_array] /= gain_array[uvc2.flag_array]
+
+            # multiply gain solutions in
+            uvc.gain_array *= uvc2.gain_array
+
+            # pass flags
+            if broadcast_flags:
+                uvc.flag_array += uvc2.flag_array
+            else:
+                uvc.flag_array = uvc.flag_array * uvc2.flag_array
+
+    # write to file
+    echo("...saving {}".format(output_fname), verbose=verbose)
+    uvc.write_calfits(output_fname, clobber=True)
 
 
 def get_miriad_times(filepaths, add_int_buffer=False):
@@ -730,7 +777,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     for bl in data.keys():
         ap1, ap2 = split_pol(bl[2])
         # make that if split_by_antpol is true, the baseline is not cross-polarized
-        if model.has_key(bl) and data_wgts.has_key(bl) and (not split_by_antpol or ap1 == ap2):
+        if bl in model and bl in data_wgts and (not split_by_antpol or ap1 == ap2):
             ant1, ant2 = (bl[0], ap1), (bl[1], ap2)
 
             # multiply model by gains if they are supplied
@@ -749,12 +796,12 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             # calculate chi^2
             chisq_here = np.asarray(np.abs(model_here - data[bl])**2 * wgts, dtype=np.float64)
             if split_by_antpol:
-                if chisq.has_key(ap1):
-                    assert nObs.has_key(ap1)
+                if ap1 in chisq:
+                    assert ap1 in nObs
                     chisq[ap1] = chisq[ap1] + chisq_here
                     nObs[ap1] = nObs[ap1] + (wgts > 0)
                 else:
-                    assert not nObs.has_key(ap1)
+                    assert not ap1 in nObs
                     chisq[ap1] = copy.deepcopy(chisq_here)
                     nObs[ap1] = np.array(wgts > 0, dtype=int)
             else:
@@ -763,12 +810,12 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
 
             # assign chisq and observations to both chisq_per_ant and nObs_per_ant
             for ant in [ant1, ant2]:
-                if chisq_per_ant.has_key(ant):
-                    assert nObs_per_ant.has_key(ant)
+                if ant in chisq_per_ant:
+                    assert ant in nObs_per_ant
                     chisq_per_ant[ant] = chisq_per_ant[ant] + chisq_here
                     nObs_per_ant[ant] = nObs_per_ant[ant] + (wgts > 0)
                 else:
-                    assert not nObs_per_ant.has_key(ant)
+                    assert not ant in nObs_per_ant
                     chisq_per_ant[ant] = copy.deepcopy(chisq_here)
                     nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
 

@@ -8,18 +8,36 @@ import numpy as np
 import sys
 import os
 import shutil
-from pyuvdata import UVData
-from hera_cal import utils, abscal, datacontainer
-from hera_cal.redcal import noise
-from hera_cal.calibrations import CAL_PATH
-from hera_cal.data import DATA_PATH
-from hera_cal import io
-from pyuvdata import UVCal
 import glob
 from collections import OrderedDict as odict
 import copy
-import hera_cal as hc
 import scipy
+from contextlib import contextmanager
+import six
+from pyuvdata import UVData
+from pyuvdata import UVCal
+
+from hera_cal import utils, abscal, datacontainer, io
+from hera_cal.redcal import noise
+from hera_cal.calibrations import CAL_PATH
+from hera_cal.data import DATA_PATH
+
+
+# define a context manager for checking stdout
+# from https://stackoverflow.com/questions/4219717/how-to-assert-output-with-nosetest-unittest-in-python
+@contextmanager
+def captured_output():
+    if six.PY2:
+        from io import BytesIO as StringIO
+    else:
+        from io import StringIO
+    new_out, new_err = StringIO(), StringIO()
+    old_out, old_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = new_out, new_err
+        yield sys.stdout, sys.stderr
+    finally:
+        sys.stdout, sys.stderr = old_out, old_err
 
 
 class Test_Pol_Ops(object):
@@ -132,7 +150,7 @@ class TestFftDly(object):
         data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         # make custom gain keys
-        d, fl, antpos, a, freqs, t, l, p = hc.io.load_vis(data_fname, return_meta = True, pick_data_ants = False)
+        d, fl, antpos, a, freqs, t, l, p = io.load_vis(data_fname, return_meta = True, pick_data_ants = False)
         freqs /= 1e9
         # test basic execution
         k1 = (24, 25, 'xx')
@@ -148,21 +166,6 @@ class TestFftDly(object):
         phs = np.exp(2j * np.pi * freqs.reshape((1, -1)) * (true_dlys - .25))
         dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt = True)
         np.testing.assert_almost_equal(5. * dlys, 5. * true_dlys, -1)
-
-class TestAAFromCalfile(object):
-    def setUp(self):
-        # define frequencies
-        self.freqs = np.array([0.15])
-
-        # add directory with calfile
-        if CAL_PATH not in sys.path:
-            sys.path.append(CAL_PATH)
-        self.calfile = "hera_test_calfile"
-
-    def test_get_aa_from_calfile(self):
-        aa = utils.get_aa_from_calfile(self.freqs, self.calfile)
-        nt.assert_equal(len(aa), 128)
-
 
 class TestAAFromUV(object):
     def setUp(self):
@@ -273,7 +276,7 @@ def test_lst_rephase():
     bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
 
     # basic test: single dlst for all integrations
-    hc.utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+    utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # get phase error on shortest EW baseline
     k = (0, 1, 'xx')
     # check error at transit
@@ -286,7 +289,7 @@ def test_lst_rephase():
     # multiple phase term test: dlst per integration
     dlst = np.array([np.median(np.diff(lsts))] * data[k].shape[0])
     data = copy.deepcopy(data_drift)
-    hc.utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+    utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # check error at transit
     phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4])
     nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
@@ -297,7 +300,7 @@ def test_lst_rephase():
     # phase all integrations to a single integration
     dlst = lsts[50] - lsts
     data = copy.deepcopy(data_drift)
-    hc.utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
+    utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # check error at transit
     phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration, 4])
     nt.assert_true(np.isclose(phs_err, 0, atol=1e-7))
@@ -308,7 +311,7 @@ def test_lst_rephase():
     # test operation on array
     k = (0, 1, 'xx')
     d = data_drift[k].copy()
-    d_phs = hc.utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
+    d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
     nt.assert_almost_equal(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
 
 
@@ -392,8 +395,8 @@ def test_chisq():
     model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, split_by_antpol=True)
-    nt.assert_true(chisq.has_key('Jxx'))
-    nt.assert_true(nObs.has_key('Jxx'))
+    nt.assert_true('Jxx' in chisq)
+    nt.assert_true('Jxx' in nObs)
     nt.assert_true(chisq['Jxx'].shape, (5, 10))
     nt.assert_true(nObs['Jxx'].shape, (5, 10))
     np.testing.assert_array_equal(chisq['Jxx'], 1.0)
@@ -453,3 +456,16 @@ def test_factorize_flags():
     nt.assert_raises(ValueError, utils.factorize_flags, 'hi')
 
 
+def test_echo():
+    with captured_output() as (out, err):
+        utils.echo('hi', verbose=True)
+    output = out.getvalue().strip()
+    nt.assert_equal(output, 'hi')
+
+    with captured_output() as (out, err):
+        utils.echo('hi', type=1, verbose=True)
+    output = out.getvalue()
+    print("output: ", output)
+    nt.assert_equal(output[0], '\n')
+    nt.assert_equal(output[1:4], 'hi\n')
+    nt.assert_equal(output[4:], '-' * 40 + '\n')

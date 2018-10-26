@@ -159,10 +159,6 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(w[(24, 25, 'xx')].dtype, np.float)
         nt.assert_almost_equal(w[(24, 25, 'xx')].max(), 16.0)
 
-    def test_echo(self):
-        abscal.echo('hi', verbose=True)
-        abscal.echo('hi', type=1, verbose=True)
-
     def test_flatten(self):
         l = abscal.flatten([['hi']])
         nt.assert_equal(np.array(l).ndim, 1)

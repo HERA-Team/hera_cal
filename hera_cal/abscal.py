@@ -25,8 +25,9 @@ the i-th and j-th antenna respectively.
 from __future__ import print_function, division, absolute_import
 import gc as garbage_collector
 
-from .abscal_funcs import *
 from . import flag_utils
+from .abscal_funcs import *
+from .utils import echo
 
 
 class AbsCal(object):
@@ -177,19 +178,19 @@ class AbsCal(object):
 
         # get pols is not defined, if so, make sure they are string format
         if pols is None:
-            pols = np.unique(map(lambda k: k[2], self.keys))
+            pols = np.unique(list(map(lambda k: k[2], self.keys)))
         elif isinstance(pols, np.ndarray) or isinstance(pols, list):
             if np.issubdtype(type(pols[0]), int):
-                pols = map(lambda p: polnum2str(p), pols)
+                pols = list(map(lambda p: polnum2str(p), pols))
 
         # convert to integer format
         self.pols = pols
-        self.pols = map(lambda p: polstr2num(p), self.pols)
+        self.pols = list(map(lambda p: polstr2num(p), self.pols))
         self.Npols = len(self.pols)
 
         # save pols in string format and get gain_pols
-        self.polstrings = np.array(map(lambda p: polnum2str(p), self.pols))
-        self.gain_pols = np.unique(map(lambda p: list(utils.split_pol(p)), self.polstrings))
+        self.polstrings = np.array(list(map(lambda p: polnum2str(p), self.pols)))
+        self.gain_pols = np.unique(list(map(lambda p: list(utils.split_pol(p)), self.polstrings)))
         self.Ngain_pols = len(self.gain_pols)
 
         # setup weights
@@ -200,7 +201,7 @@ class AbsCal(object):
         self.wgts = wgts
 
         # setup ants
-        self.ants = np.unique(np.concatenate(map(lambda k: k[:2], self.keys)))
+        self.ants = np.unique(np.concatenate(list(map(lambda k: k[:2], self.keys))))
         self.Nants = len(self.ants)
         if refant is None:
             refant = self.keys[0][0]
@@ -217,11 +218,11 @@ class AbsCal(object):
             # center antpos about reference antenna
             self.antpos = odict(map(lambda k: (k, antpos[k] - antpos[self.refant]), self.ants))
             self.bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in self.keys])
-            self.antpos_arr = np.array(map(lambda x: self.antpos[x], self.ants))
+            self.antpos_arr = np.array(list(map(lambda x: self.antpos[x], self.ants)))
             self.antpos_arr -= np.median(self.antpos_arr, axis=0)
 
         # setup gain solution keys
-        self._gain_keys = map(lambda p: map(lambda a: (a, p), self.ants), self.gain_pols)
+        self._gain_keys = list(map(lambda p: map(lambda a: (a, p), self.ants), self.gain_pols))
 
         # perform baseline cut
         if min_bl_cut is not None or max_bl_cut is not None:
@@ -273,7 +274,7 @@ class AbsCal(object):
 
         # form result array
         self._ant_eta = odict(map(lambda k: (k, copy.copy(fit["eta_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
-        self._ant_eta_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_eta[k], pk), self._gain_keys), 0, -1)
+        self._ant_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_eta[k], pk)), self._gain_keys)), 0, -1)
 
     def phs_logcal(self, avg=False, verbose=True):
         """
@@ -304,12 +305,12 @@ class AbsCal(object):
 
         # form result array
         self._ant_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
-        self._ant_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys), 0, -1)
+        self._ant_phi_arr = np.moveaxis(list(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys)), 0, -1)
 
         # take time and freq average
         if avg:
             self._ant_phi = odict(map(lambda k: (k, np.ones_like(self._ant_phi[k]) * np.angle(np.median(np.real(np.exp(1j * self._ant_phi[k]))) + 1j * np.median(np.imag(np.exp(1j * self._ant_phi[k]))))), flatten(self._gain_keys)))
-            self._ant_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys), 0, -1)
+            self._ant_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_phi[k], pk)), self._gain_keys)), 0, -1)
 
     def delay_lincal(self, medfilt=True, kernel=(1, 11), verbose=True, time_avg=False,
                      solve_offsets=True, window=None, edge_cut=0):
@@ -379,11 +380,11 @@ class AbsCal(object):
 
         # form result
         self._ant_dly = odict(map(lambda k: (k, copy.copy(fit["tau_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
-        self._ant_dly_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_dly[k], pk), self._gain_keys), 0, -1)
+        self._ant_dly_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_dly[k], pk)), self._gain_keys)), 0, -1)
 
         if solve_offsets:
             self._ant_dly_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
-            self._ant_dly_phi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._ant_dly_phi[k], pk), self._gain_keys), 0, -1)
+            self._ant_dly_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_dly_phi[k], pk)), self._gain_keys)), 0, -1)
 
     def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), verbose=True, time_avg=False,
                            four_pol=False, window=None, edge_cut=0):
@@ -457,7 +458,7 @@ class AbsCal(object):
 
         # form result
         self._dly_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
-        self._dly_slope_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._dly_slope[k][0], self._dly_slope[k][1]]), pk), self._gain_keys), 0, -1)
+        self._dly_slope_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._dly_slope[k][0], self._dly_slope[k][1]]), pk)), self._gain_keys)), 0, -1)
 
     def global_phase_slope_logcal(self, tol=1.0, edge_cut=0, verbose=True):
         """
@@ -493,7 +494,7 @@ class AbsCal(object):
 
         # form result
         self._phs_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
-        self._phs_slope_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._phs_slope[k][0], self._phs_slope[k][1]]), pk), self._gain_keys), 0, -1)
+        self._phs_slope_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._phs_slope[k][0], self._phs_slope[k][1]]), pk)), self._gain_keys)), 0, -1)
 
     def abs_amp_logcal(self, verbose=True):
         """
@@ -521,7 +522,7 @@ class AbsCal(object):
 
         # form result
         self._abs_eta = odict(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys)))
-        self._abs_eta_arr = np.moveaxis(map(lambda pk: map(lambda k: self._abs_eta[k], pk), self._gain_keys), 0, -1)
+        self._abs_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_eta[k], pk)), self._gain_keys)), 0, -1)
 
     def TT_phs_logcal(self, verbose=True, zero_psi=True, four_pol=False):
         """
@@ -570,10 +571,10 @@ class AbsCal(object):
 
         # form result
         self._abs_psi = odict(map(lambda k: (k, copy.copy(fit["psi_{}".format(k[1])])), flatten(self._gain_keys)))
-        self._abs_psi_arr = np.moveaxis(map(lambda pk: map(lambda k: self._abs_psi[k], pk), self._gain_keys), 0, -1)
+        self._abs_psi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_psi[k], pk)), self._gain_keys)), 0, -1)
 
         self._TT_Phi = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
-        self._TT_Phi_arr = np.moveaxis(map(lambda pk: map(lambda k: np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]), pk), self._gain_keys), 0, -1)
+        self._TT_Phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]), pk)), self._gain_keys)), 0, -1)
 
     # amp_logcal results
     @property
@@ -1204,7 +1205,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
 
     # get data ants
     total_data_antpos = copy.deepcopy(data_antpos)
-    data_ants = np.unique(map(lambda k: k[:2], data.keys()))
+    data_ants = np.unique(list(map(lambda k: k[:2], data.keys())))
     data_antpos = odict(map(lambda k: (k, data_antpos[k]), data_ants))
 
     # ensure nomodelfiles is False
@@ -1247,7 +1248,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
         total_data_antpos = odict(map(lambda k: (k, total_data_antpos[k] - total_data_antpos[refant]), total_data_antpos.keys()))
 
         # construct total_gain_keys
-        total_gain_keys = flatten(map(lambda p: map(lambda k: (k, p), total_data_antpos.keys()), AC.gain_pols))
+        total_gain_keys = flatten(list(map(lambda p: list(map(lambda k: (k, p), total_data_antpos.keys())), AC.gain_pols)))
 
         # construct antenna flag_dict based purely on data flags
         gain_flag_dict = flag_utils.synthesize_ant_flags(data_flags, threshold=antflag_thresh)
@@ -1397,7 +1398,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
     # make blank gains if no modelfiles
     else:
         gain_pols = set(flatten(map(utils.split_pol, data_pols)))
-        gain_keys = flatten(map(lambda p: map(lambda a: (a, p), data_ants), gain_pols))
+        gain_keys = flatten(list(map(lambda p: list(map(lambda a: (a, p), data_ants)), gain_pols)))
         gain_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.complex)), gain_keys))
         flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_keys))
         if refant is None:
