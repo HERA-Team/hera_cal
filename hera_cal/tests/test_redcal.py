@@ -7,12 +7,16 @@ import hera_cal.redcal as om
 import numpy as np
 import unittest
 from copy import deepcopy
-from hera_cal.utils import split_pol, conj_pol
 import warnings
+import os
+import sys
+import shutil
+from six.moves import range
+
+from hera_cal.utils import split_pol, conj_pol
 from hera_cal.apply_cal import calibrate_in_place
 from hera_cal.data import DATA_PATH
 from hera_cal import io
-import os, sys, shutil
 
 np.random.seed(0)
 
@@ -410,7 +414,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         d = {k: v.astype(np.complex64) for k, v in d.items()}
         sol = info.firstcal(d, df=fqs[1] - fqs[0], medfilt=False)
         sol_degen = info.remove_degen_gains(sol, degen_gains=delays, mode='phase')
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].dtype, np.float32)
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
             self.assertAlmostEqual(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0, 0)
@@ -423,7 +427,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.05)
         w = dict([(k, 1.) for k in d.keys()])
         sol = info.logcal(d)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].shape, (10, 10))
         for bls in reds:
             ubl = sol[bls[0]]
@@ -457,7 +461,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         #sol0 = info.logcal(d)
         #for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
         meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].shape, (10, 10))
         for bls in reds:
             ubl = sol[bls[0]]
@@ -522,7 +526,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         #sol0 = info.logcal(d)
         #for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
         meta, sol = info.lincal(d, sol0)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].shape, (10, 10))
         for bls in reds:
             ubl = sol[bls[0]]
@@ -643,7 +647,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, len(freqs)))
         for bls in reds:
             ubl = sol[bls[0]]
@@ -712,7 +716,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, len(freqs)))
             self.assertEqual(sol[(i, 'Jyy')].shape, (1, len(freqs)))
         for bls in reds:
@@ -799,7 +803,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, len(freqs)))
             self.assertEqual(sol[(i, 'Jyy')].shape, (1, len(freqs)))
         for bls in reds:
@@ -898,7 +902,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, len(freqs)))
             self.assertEqual(sol[(i, 'Jyy')].shape, (1, len(freqs)))
         for bls in reds:

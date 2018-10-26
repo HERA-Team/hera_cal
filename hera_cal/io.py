@@ -616,7 +616,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 
     # remove autos if requested
     if pop_autos:
-        for k in d.keys():
+        for k in list(d.keys()):
             if k[0] == k[1]:
                 del d[k], f[k], n[k]
 
