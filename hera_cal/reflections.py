@@ -203,7 +203,8 @@ class Reflection_Fitter(object):
 
         # get window kwargs
         win_kwargs = {}
-        if taper == 'tukey': win_kwargs['alpha'] = alpha
+        if taper == 'tukey':
+            win_kwargs['alpha'] = alpha
 
         # iterate over keys
         for k in keys:
@@ -261,8 +262,8 @@ class Reflection_Fitter(object):
                 freq_array = cal.freq_array
             else:
                 freq_array = self.freqs
-            kwargs = dict([(k, getattr(cal, k)) for k in ['gain_convention', 'x_orientation', 'telescope_name',
-                                                    'cal_style']])
+            kwargs = dict([(k, getattr(cal, k)) for k in ['gain_convention', 'x_orientation', 
+                                                          'telescope_name', 'cal_style']])
         else:
             time_array = self.reflection_times
             freq_array = self.freqs
@@ -302,7 +303,7 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
     if real:
         eps = eps.real
 
-    return  eps
+    return eps
 
 
 def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
@@ -359,7 +360,7 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
     if zero_pad > 0:
         z = np.zeros((Ntimes, zero_pad), dtype=d.dtype)
         d = np.concatenate([z, d, z], axis=1)
-        f = np.arange(1, zero_pad+1) * dnu
+        f = np.arange(1, zero_pad + 1) * dnu
         freqs = np.concatenate([freqs.min() - f[::-1], freqs, freqs.max() + f])
         t = np.concatenate([z[:1], t, z[:1]], axis=1)
     
@@ -386,8 +387,8 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
     # calculate shifted peak for sub-bin resolution
     # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
     # alpha = a, beta = b, gamma = g
-    a = abs_dfft[np.arange(Ntimes), ref_dly_inds-1, None]
-    g = abs_dfft[np.arange(Ntimes), ref_dly_inds+1, None]
+    a = abs_dfft[np.arange(Ntimes), ref_dly_inds - 1, None]
+    g = abs_dfft[np.arange(Ntimes), ref_dly_inds + 1, None]
     b = abs_dfft[np.arange(Ntimes), ref_dly_inds, None]
     bin_shifts = 0.5 * (a - g) / (a - 2 * b + g)
     
@@ -407,29 +408,29 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
     if Nfreqs % 2 == 1:
         filt[:, -select] = dfft[:, -select]
     else:
-        filt[:, -select-1] = dfft[:, -select-1]
+        filt[:, -select - 1] = dfft[:, -select - 1]
     filt = np.fft.ifft(filt, axis=1)
     if zero_pad > 0:
         filt = filt[:, zero_pad:-zero_pad]
         freqs = freqs[zero_pad:-zero_pad]
         t = t[:, zero_pad:-zero_pad]
-    phases = np.linspace(0, 2*np.pi, 500, endpoint=False)
+    phases = np.linspace(0, 2 * np.pi, 500, endpoint=False)
     cosines = np.array([construct_reflection(freqs[::fthin], ref_amps, ref_dlys, p) for p in phases])
     residuals = np.sum((filt[None, :, ::fthin].real - cosines.real * t[None, :, ::fthin])**2, axis=-1)
-    ref_phs = phases[np.argmin(residuals, axis=0)][:, None] % (2*np.pi)
+    ref_phs = phases[np.argmin(residuals, axis=0)][:, None] % (2 * np.pi)
     dlys = np.fft.fftfreq(len(freqs), d=dnu) * 1e9
 
     # get reflection phase by interpolation: this didn't work well in practice
     # when the reflection delay wasn't directly centered in a sampled delay bin,
     # but leaving it here for possible future use b/c it should be much faster.
-    #x = np.array([-1, 0, 1])
-    #a = dfft[np.arange(Ntimes), ref_dly_inds-1]
-    #g = dfft[np.arange(Ntimes), ref_dly_inds+1]
-    #b = dfft[np.arange(Ntimes), ref_dly_inds]
-    #y = np.array([a, b, g]).T
-    #real = np.array([interp1d(x, y[i].real, kind='linear')(bin_shifts[i]) for i in range(Ntimes)])
-    #imag = np.array([interp1d(x, y[i].imag, kind='linear')(bin_shifts[i]) for i in range(Ntimes)])
-    #ref_phs = np.angle(real + 1j*imag)
+    # x = np.array([-1, 0, 1])
+    # a = dfft[np.arange(Ntimes), ref_dly_inds-1]
+    # g = dfft[np.arange(Ntimes), ref_dly_inds+1]
+    # b = dfft[np.arange(Ntimes), ref_dly_inds]
+    # y = np.array([a, b, g]).T
+    # real = np.array([interp1d(x, y[i].real, kind='linear')(bin_shifts[i]) for i in range(Ntimes)])
+    # imag = np.array([interp1d(x, y[i].imag, kind='linear')(bin_shifts[i]) for i in range(Ntimes)])
+    # ref_phs = np.angle(real + 1j*imag)
 
     # construct reflection
     if full_freqs is None:
@@ -437,7 +438,7 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
     eps = construct_reflection(full_freqs, ref_amps, ref_dlys, ref_phs)
 
     return (eps, ref_amps, ref_dlys, ref_phs, ref_dly_inds, ref_significance,
-           np.fft.fftshift(dfft, axes=1), np.fft.fftshift(dlys))
+            np.fft.fftshift(dfft, axes=1), np.fft.fftshift(dlys))
 
 
 def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0.1, tol=1e-5, maxiter=500,
@@ -503,7 +504,7 @@ def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0
     kwargs = {}
     if taper == 'tukey':
         kwargs['alpha'] = alpha
-    mdl, res, info = hc.delay_filter.delay_filter(d, w, 0., dnu/1e9, min_dly=dly_cut, skip_wgt=skip_wgt,
+    mdl, res, info = hc.delay_filter.delay_filter(d, w, 0., dnu / 1e9, min_dly=dly_cut, skip_wgt=skip_wgt,
                                                   window=taper, tol=tol, maxiter=maxiter, gain=gain, **kwargs)
     dlys = np.fft.fftshift(np.fft.fftfreq(d.shape[1], d=dnu)) * 1e9
 
@@ -513,4 +514,3 @@ def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0
 def echo(message, verbose=True):
     if verbose:
         print(message)
-
