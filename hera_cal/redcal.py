@@ -1115,8 +1115,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     
     ex_ants = set(ex_ants)
     if ant_metrics_file is not None:
-        for ant in load_metric_file(ant_metrics_file)['xants']:
-            ex_ants.add(ant)
+        for ant in load_metric_file(ant_metrics_file)['xants']:  # This needs to be updated to handle h5 metrics
+            ex_ants.add(ant[0])  # Just take the antenna number, flagging both polarizations
     high_z_ant_hist = ''
 
     # loop over calibration, removing bad antennas and re-running if necessary
