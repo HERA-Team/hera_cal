@@ -3,21 +3,22 @@
 # Licensed under the MIT License
 
 from __future__ import absolute_import, division, print_function
-from hera_cal import io
-from hera_cal import smooth_cal
-from hera_cal.datacontainer import DataContainer
 import numpy as np
 import unittest
 from copy import deepcopy
-from pyuvdata.utils import check_histories
-from pyuvdata import UVCal, UVData
-from hera_cal.data import DATA_PATH
 import os
 import glob
 import sys
 import shutil
 from scipy import constants
 import warnings
+from pyuvdata.utils import check_histories
+from pyuvdata import UVCal, UVData
+
+from hera_cal import io
+from hera_cal import smooth_cal
+from hera_cal.datacontainer import DataContainer
+from hera_cal.data import DATA_PATH
 
 
 class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):

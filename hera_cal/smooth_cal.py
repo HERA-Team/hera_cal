@@ -12,14 +12,14 @@ import warnings
 import uvtools
 import argparse
 
-from . import io, utils
+from . import io, utils, flag_utils
 from .abscal import fft_dly
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
                 maxiter=100, **win_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
-    Befor filtering, removes a per-integration delay using abscal.fft_dly, then puts it back in after filtering.
+    Before filtering, removes a per-integration delay using abscal.fft_dly, then puts it back in after filtering.
 
     Arguments:
         gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions to filter
@@ -243,7 +243,7 @@ class CalibrationSmoother():
         if len(self.npzs) > 0:
             self.npz_flags, self.npz_freqs, self.npz_times = odict(), odict(), odict()
             for npz in self.npzs:
-                self.npz_flags[npz] = utils.synthesize_ant_flags(io.load_npz_flags(npz), threshold=antflag_thresh)
+                self.npz_flags[npz] = flag_utils.synthesize_ant_flags(io.load_npz_flags(npz), threshold=antflag_thresh)
                 npz_dict = np.load(npz)
                 self.npz_freqs[npz] = npz_dict['freq_array']
                 self.npz_times[npz] = np.unique(npz_dict['time_array'])

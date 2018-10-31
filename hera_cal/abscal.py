@@ -156,7 +156,7 @@ class AbsCal(object):
         if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data.__class__, UVData):
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
              data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True, filetype=filetype)
-            wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
+            wgts = DataContainer(odict(list(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys()))))
             pols = data_pols
             freqs = data_freqs
             antpos = data_antpos
@@ -216,7 +216,7 @@ class AbsCal(object):
         self.bls = None
         if self.antpos is not None:
             # center antpos about reference antenna
-            self.antpos = odict(map(lambda k: (k, antpos[k] - antpos[self.refant]), self.ants))
+            self.antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[self.refant]), self.ants)))
             self.bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in self.keys])
             self.antpos_arr = np.array(list(map(lambda x: self.antpos[x], self.ants)))
             self.antpos_arr -= np.median(self.antpos_arr, axis=0)
@@ -273,7 +273,7 @@ class AbsCal(object):
         fit = amp_logcal(model, data, wgts=wgts, verbose=verbose)
 
         # form result array
-        self._ant_eta = odict(map(lambda k: (k, copy.copy(fit["eta_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
+        self._ant_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
         self._ant_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_eta[k], pk)), self._gain_keys)), 0, -1)
 
     def phs_logcal(self, avg=False, verbose=True):
@@ -304,12 +304,14 @@ class AbsCal(object):
         fit = phs_logcal(model, data, wgts=wgts, refant=self.refant, verbose=verbose)
 
         # form result array
-        self._ant_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
+        self._ant_phi = odict(list(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
         self._ant_phi_arr = np.moveaxis(list(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys)), 0, -1)
 
         # take time and freq average
         if avg:
-            self._ant_phi = odict(map(lambda k: (k, np.ones_like(self._ant_phi[k]) * np.angle(np.median(np.real(np.exp(1j * self._ant_phi[k]))) + 1j * np.median(np.imag(np.exp(1j * self._ant_phi[k]))))), flatten(self._gain_keys)))
+            self._ant_phi = odict(list(map(lambda k: (k, np.ones_like(self._ant_phi[k])
+                                                      * np.angle(np.median(np.real(np.exp(1j * self._ant_phi[k])))
+                                                                 + 1j * np.median(np.imag(np.exp(1j * self._ant_phi[k]))))), flatten(self._gain_keys))))
             self._ant_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_phi[k], pk)), self._gain_keys)), 0, -1)
 
     def delay_lincal(self, medfilt=True, kernel=(1, 11), verbose=True, time_avg=False,
@@ -379,11 +381,11 @@ class AbsCal(object):
                     fit[phi_key] = np.repeat(phi_avg, Ntimes, axis=0)
 
         # form result
-        self._ant_dly = odict(map(lambda k: (k, copy.copy(fit["tau_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
+        self._ant_dly = odict(list(map(lambda k: (k, copy.copy(fit["tau_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
         self._ant_dly_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_dly[k], pk)), self._gain_keys)), 0, -1)
 
         if solve_offsets:
-            self._ant_dly_phi = odict(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys)))
+            self._ant_dly_phi = odict(list(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
             self._ant_dly_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_dly_phi[k], pk)), self._gain_keys)), 0, -1)
 
     def delay_slope_lincal(self, medfilt=True, kernel=(1, 15), verbose=True, time_avg=False,
@@ -457,7 +459,7 @@ class AbsCal(object):
                 fit[ns_key] = np.repeat(ns_avg, Ntimes, axis=0)
 
         # form result
-        self._dly_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
+        self._dly_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
         self._dly_slope_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._dly_slope[k][0], self._dly_slope[k][1]]), pk)), self._gain_keys)), 0, -1)
 
     def global_phase_slope_logcal(self, tol=1.0, edge_cut=0, verbose=True):
@@ -493,7 +495,7 @@ class AbsCal(object):
         fit = global_phase_slope_logcal(model, data, antpos, wgts=wgts, refant=self.refant, verbose=verbose, tol=tol, edge_cut=edge_cut)
 
         # form result
-        self._phs_slope = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
+        self._phs_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
         self._phs_slope_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._phs_slope[k][0], self._phs_slope[k][1]]), pk)), self._gain_keys)), 0, -1)
 
     def abs_amp_logcal(self, verbose=True):
@@ -521,7 +523,7 @@ class AbsCal(object):
         fit = abs_amp_logcal(model, data, wgts=wgts, verbose=verbose)
 
         # form result
-        self._abs_eta = odict(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys)))
+        self._abs_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys))))
         self._abs_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_eta[k], pk)), self._gain_keys)), 0, -1)
 
     def TT_phs_logcal(self, verbose=True, zero_psi=True, four_pol=False):
@@ -570,10 +572,10 @@ class AbsCal(object):
                 fit.pop('Phi_ns')
 
         # form result
-        self._abs_psi = odict(map(lambda k: (k, copy.copy(fit["psi_{}".format(k[1])])), flatten(self._gain_keys)))
+        self._abs_psi = odict(list(map(lambda k: (k, copy.copy(fit["psi_{}".format(k[1])])), flatten(self._gain_keys))))
         self._abs_psi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_psi[k], pk)), self._gain_keys)), 0, -1)
 
-        self._TT_Phi = odict(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys)))
+        self._TT_Phi = odict(list(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
         self._TT_Phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._TT_Phi[k][0], self._TT_Phi[k][1]]), pk)), self._gain_keys)), 0, -1)
 
     # amp_logcal results
@@ -590,7 +592,7 @@ class AbsCal(object):
         """ form complex gain from _ant_eta dict """
         if hasattr(self, '_ant_eta'):
             ant_eta = self.ant_eta
-            return odict(map(lambda k: (k, np.exp(ant_eta[k]).astype(np.complex)), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(ant_eta[k]).astype(np.complex)), flatten(self._gain_keys))))
         else:
             return None
 
@@ -624,7 +626,7 @@ class AbsCal(object):
         """ form complex gain from _ant_phi dict """
         if hasattr(self, '_ant_phi'):
             ant_phi = self.ant_phi
-            return odict(map(lambda k: (k, np.exp(1j * ant_phi[k])), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(1j * ant_phi[k])), flatten(self._gain_keys))))
         else:
             return None
 
@@ -658,7 +660,7 @@ class AbsCal(object):
         """ form complex gain from _ant_dly dict """
         if hasattr(self, '_ant_dly'):
             ant_dly = self.ant_dly
-            return odict(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * ant_dly[k])), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * ant_dly[k])), flatten(self._gain_keys))))
         else:
             return None
 
@@ -691,7 +693,7 @@ class AbsCal(object):
         """ form complex gain from _ant_dly_phi dict """
         if hasattr(self, '_ant_dly_phi'):
             ant_dly_phi = self.ant_dly_phi
-            return odict(map(lambda k: (k, np.exp(1j * np.repeat(ant_dly_phi[k], self.Nfreqs, 1))), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(1j * np.repeat(ant_dly_phi[k], self.Nfreqs, 1))), flatten(self._gain_keys))))
         else:
             return None
 
@@ -727,7 +729,8 @@ class AbsCal(object):
             # get dly_slope dictionary
             dly_slope = self.dly_slope
             # turn delay slope into per-antenna complex gains, while iterating over self._gain_keys
-            return odict(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2]))),
+                                  flatten(self._gain_keys))))
         else:
             return None
 
@@ -742,7 +745,8 @@ class AbsCal(object):
             # get dly slope dictionary
             dly_slope = self.dly_slope[self._gain_keys[0][0]]
             # turn delay slope into per-antenna complex gains, while iterating over gain_keys
-            return odict(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope, antpos[k[0]][:2]))), gain_keys))
+            return odict(list(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope, antpos[k[0]][:2]))),
+                                  gain_keys)))
         else:
             return None
 
@@ -786,7 +790,8 @@ class AbsCal(object):
             # get phs_slope dictionary
             phs_slope = self.phs_slope
             # turn phs slope into per-antenna complex gains, while iterating over self._gain_keys
-            return odict(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))),
+                                  flatten(self._gain_keys))))
         else:
             return None
 
@@ -801,7 +806,8 @@ class AbsCal(object):
             # get phs slope dictionary
             phs_slope = self.phs_slope[self._gain_keys[0][0]]
             # turn phs slope into per-antenna complex gains, while iterating over gain_keys
-            return odict(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope, antpos[k[0]][:2]))), gain_keys))
+            return odict(list(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope, antpos[k[0]][:2]))),
+                                  gain_keys)))
         else:
             return None
 
@@ -843,7 +849,7 @@ class AbsCal(object):
         """form complex gain from _abs_eta dict"""
         if hasattr(self, '_abs_eta'):
             abs_eta = self.abs_eta
-            return odict(map(lambda k: (k, np.exp(abs_eta[k]).astype(np.complex)), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(abs_eta[k]).astype(np.complex)), flatten(self._gain_keys))))
         else:
             return None
 
@@ -855,7 +861,7 @@ class AbsCal(object):
         """
         if hasattr(self, '_abs_eta'):
             abs_eta = self.abs_eta[self._gain_keys[0][0]]
-            return odict(map(lambda k: (k, np.exp(abs_eta).astype(np.complex)), gain_keys))
+            return odict(list(map(lambda k: (k, np.exp(abs_eta).astype(np.complex)), gain_keys)))
         else:
             return None
 
@@ -889,7 +895,7 @@ class AbsCal(object):
         """ form complex gain from _abs_psi array """
         if hasattr(self, '_abs_psi'):
             abs_psi = self.abs_psi
-            return odict(map(lambda k: (k, np.exp(1j * abs_psi[k])), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(1j * abs_psi[k])), flatten(self._gain_keys))))
         else:
             return None
 
@@ -901,7 +907,7 @@ class AbsCal(object):
         """
         if hasattr(self, '_abs_psi'):
             abs_psi = self.abs_psi[self._gain_keys[0][0]]
-            return odict(map(lambda k: (k, np.exp(1j * abs_psi)), gain_keys))
+            return odict(list(map(lambda k: (k, np.exp(1j * abs_psi)), gain_keys)))
         else:
             return None
 
@@ -934,7 +940,7 @@ class AbsCal(object):
         """ form complex gain from _TT_Phi array """
         if hasattr(self, '_TT_Phi'):
             TT_Phi = self.TT_Phi
-            return odict(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys)))
+            return odict(list(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys))))
         else:
             return None
 
@@ -947,7 +953,7 @@ class AbsCal(object):
         """
         if hasattr(self, '_TT_Phi'):
             TT_Phi = self.TT_Phi[self._gain_keys[0][0]]
-            return odict(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi, antpos[k[0]][:2]))), gain_keys))
+            return odict(list(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi, antpos[k[0]][:2]))), gain_keys)))
         else:
             return None
 
@@ -1198,7 +1204,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
     echo("loading {}".format(data_file), type=1, verbose=verbose)
     (data, data_flags, data_antpos, data_ants, data_freqs, data_times, data_lsts,
         data_pols) = io.load_vis(data_file, pop_autos=True, return_meta=True, pick_data_ants=False, filetype=filetype)
-    bls = odict(map(lambda k: (k, data_antpos[k[0]] - data_antpos[k[1]]), data.keys()))
+    bls = odict(list(map(lambda k: (k, data_antpos[k[0]] - data_antpos[k[1]]), data.keys())))
     Ntimes = len(data_times)
     Nfreqs = len(data_freqs)
     data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
@@ -1206,7 +1212,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
     # get data ants
     total_data_antpos = copy.deepcopy(data_antpos)
     data_ants = np.unique(list(map(lambda k: k[:2], data.keys())))
-    data_antpos = odict(map(lambda k: (k, data_antpos[k]), data_ants))
+    data_antpos = odict(list(map(lambda k: (k, data_antpos[k]), data_ants)))
 
     # ensure nomodelfiles is False
     if not nomodelfiles:
@@ -1233,7 +1239,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
                 data_flags[k] += model_flags[k]
 
         # get wgts
-        wgts = DataContainer(odict(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys())))
+        wgts = DataContainer(odict(list(map(lambda k: (k, (~data_flags[k]).astype(np.float)), data_flags.keys()))))
 
         # reweight according to redundancy
         if reweight:
@@ -1245,7 +1251,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
         refant = AC.refant
 
         # center total_data_antpos w/ refant
-        total_data_antpos = odict(map(lambda k: (k, total_data_antpos[k] - total_data_antpos[refant]), total_data_antpos.keys()))
+        total_data_antpos = odict(list(map(lambda k: (k, total_data_antpos[k] - total_data_antpos[refant]), total_data_antpos.keys())))
 
         # construct total_gain_keys
         total_gain_keys = flatten(list(map(lambda p: list(map(lambda k: (k, p), total_data_antpos.keys())), AC.gain_pols)))
@@ -1265,7 +1271,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
                 raise ValueError("can't run delay_cal when all_antenna_gains is True")
             AC.delay_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
             result_gains = merge_gains((AC.ant_dly_gain, AC.ant_dly_phi_gain))
-            cal_flags = odict(map(lambda k: (k, np.zeros_like(result_gains[k], np.bool)), result_gains.keys()))
+            cal_flags = odict(list(map(lambda k: (k, np.zeros_like(result_gains[k], np.bool)), result_gains.keys())))
             apply_cal.calibrate_in_place(AC.data, result_gains, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_dly_gain)
             merged_gains.append(AC.ant_dly_phi_gain)
@@ -1277,14 +1283,14 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
             if all_antenna_gains:
                 raise ValueError("can't run avg_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(avg=True, verbose=verbose)
-            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
+            cal_flags = odict(list(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys())))
             apply_cal.calibrate_in_place(AC.data, AC.ant_phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_phi_gain)
             merged_gains = [merge_gains(merged_gains)]
 
         if avg_dly_slope_cal:
             AC.delay_slope_lincal(verbose=verbose, time_avg=True, window=window, edge_cut=edge_cut)
-            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
+            cal_flags = odict(list(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys())))
             apply_cal.calibrate_in_place(AC.data, AC.dly_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
@@ -1294,7 +1300,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
 
         if delay_slope_cal:
             AC.delay_slope_lincal(verbose=verbose, time_avg=False, window=window, edge_cut=edge_cut)
-            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys()))
+            cal_flags = odict(list(map(lambda k: (k, np.zeros_like(AC.dly_slope_gain[k], np.bool)), AC.dly_slope_gain.keys())))
             apply_cal.calibrate_in_place(AC.data, AC.dly_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_dly_slope_gain(total_gain_keys, total_data_antpos))
@@ -1307,7 +1313,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
                 echo("it is recommended to run a delay_slope_cal before phase_slope_cal", verbose=verbose)
             for i in range(phs_max_iter):
                 AC.global_phase_slope_logcal(tol=tol, edge_cut=edge_cut, verbose=verbose)
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys()))
+                cal_flags = odict(list(map(lambda k: (k, np.zeros_like(AC.phs_slope_gain[k], np.bool)), AC.phs_slope_gain.keys())))
                 apply_cal.calibrate_in_place(AC.data, AC.phs_slope_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
                 if all_antenna_gains:
                     merged_gains.append(AC.custom_phs_slope_gain(total_gain_keys, total_data_antpos))
@@ -1328,7 +1334,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
 
         if abs_amp_cal:
             AC.abs_amp_logcal(verbose=verbose)
-            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.abs_eta_gain[k], np.bool)), AC.abs_eta_gain.keys()))
+            cal_flags = odict(list(map(lambda k: (k, np.zeros_like(AC.abs_eta_gain[k], np.bool)), AC.abs_eta_gain.keys())))
             apply_cal.calibrate_in_place(AC.data, AC.abs_eta_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             if all_antenna_gains:
                 merged_gains.append(AC.custom_abs_eta_gain(total_gain_keys))
@@ -1341,7 +1347,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
                 echo("it is recommended to run a delay_slope_cal and a phase_slope_cal before TT_phs_cal", verbose=verbose)
             for i in range(phs_max_iter):
                 AC.TT_phs_logcal(verbose=verbose)
-                cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.TT_Phi_gain[k], np.bool)), AC.TT_Phi_gain.keys()))
+                cal_flags = odict(list(map(lambda k: (k, np.zeros_like(AC.TT_Phi_gain[k], np.bool)), AC.TT_Phi_gain.keys())))
                 apply_cal.calibrate_in_place(AC.data, AC.TT_Phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
                 if all_antenna_gains:
                     merged_gains.append(AC.custom_TT_Phi_gain(total_gain_keys, total_data_antpos))
@@ -1366,7 +1372,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
             if all_antenna_gains:
                 raise ValueError("can't run gen_amp_cal when all_antenna_gains is True")
             AC.amp_logcal(verbose=verbose)
-            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_eta_gain[k], np.bool)), AC.ant_eta_gain.keys()))
+            cal_flags = odict(list(map(lambda k: (k, np.zeros_like(AC.ant_eta_gain[k], np.bool)), AC.ant_eta_gain.keys())))
             apply_cal.calibrate_in_place(AC.data, AC.ant_eta_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_eta_gain)
             merged_gains = [merge_gains(merged_gains)]
@@ -1377,7 +1383,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
             if all_antenna_gains:
                 raise ValueError("can't run gen_phs_cal when all_antenna_gains is True")
             AC.phs_logcal(verbose=verbose)
-            cal_flags = odict(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys()))
+            cal_flags = odict(list(map(lambda k: (k, np.zeros_like(AC.ant_phi_gain[k], np.bool)), AC.ant_phi_gain.keys())))
             apply_cal.calibrate_in_place(AC.data, AC.ant_phi_gain, AC.wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
             merged_gains.append(AC.ant_phi_gain)
             merged_gains = [merge_gains(merged_gains)]
@@ -1386,7 +1392,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
         if len(merged_gains) == 0:
             raise ValueError("abscal_run executed without any calibration arguments set to True")
         gain_dict = merge_gains(merged_gains)
-        flag_dict = odict(map(lambda k: (k, np.zeros((Ntimes, Nfreqs), np.bool)), gain_dict.keys()))
+        flag_dict = odict(list(map(lambda k: (k, np.zeros((Ntimes, Nfreqs), np.bool)), gain_dict.keys())))
         gain_pols = AC.gain_pols
         gain_keys = gain_dict.keys()
 
@@ -1397,16 +1403,16 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
 
     # make blank gains if no modelfiles
     else:
-        gain_pols = set(flatten(map(utils.split_pol, data_pols)))
+        gain_pols = set(flatten(list(map(utils.split_pol, data_pols))))
         gain_keys = flatten(list(map(lambda p: list(map(lambda a: (a, p), data_ants)), gain_pols)))
-        gain_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.complex)), gain_keys))
-        flag_dict = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_keys))
+        gain_dict = odict(list(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.complex)), gain_keys)))
+        flag_dict = odict(list(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.bool)), gain_keys)))
         if refant is None:
             refant = gain_keys[0][0]
 
     # make extra calfits metadata
-    total_qual = odict(map(lambda p: (p, np.ones((Ntimes, Nfreqs), np.float)), gain_pols))
-    quals = odict(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.float)), gain_keys))
+    total_qual = odict(list(map(lambda p: (p, np.ones((Ntimes, Nfreqs), np.float)), gain_pols)))
+    quals = odict(list(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.float)), gain_keys)))
 
     # load in extra calfits file if provided
     if calfits_infile is not None:

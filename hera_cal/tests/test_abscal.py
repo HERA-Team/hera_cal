@@ -11,11 +11,12 @@ import numpy as np
 import aipy
 import optparse
 import sys
-from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
 from collections import OrderedDict as odict
 import copy
 import glob
+from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
+import pyuvdata.tests as uvtest
 
 from hera_cal import io, abscal, redcal
 from hera_cal.data import DATA_PATH
@@ -233,34 +234,6 @@ class Test_AbsCal_Funcs:
         abscal.cut_bls(_data2, min_bl_cut=20.0, inplace=True)
         nt.assert_true(len(_data2), 12)
 
-    def test_combine_calfits(self):
-        test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
-        test_file2 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.dly.calfits')
-        # test basic execution
-        if os.path.exists('ex.calfits'):
-            os.remove('ex.calfits')
-        abscal_funcs.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = True)
-        # test it exists
-        nt.assert_true(os.path.exists('ex.calfits'))
-        # test antenna number
-        uvc = UVCal()
-        uvc.read_calfits('ex.calfits')
-        nt.assert_equal(len(uvc.antenna_numbers), 7)
-        # test time number
-        nt.assert_equal(uvc.Ntimes, 60)
-        # test gain value got properly multiplied
-        uvc_dly = UVCal()
-        uvc_dly.read_calfits(test_file1)
-        uvc_abs = UVCal()
-        uvc_abs.read_calfits(test_file2)
-        nt.assert_almost_equal(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
-        if os.path.exists('ex.calfits'):
-            os.remove('ex.calfits')
-        abscal_funcs.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = False)
-        nt.assert_true(os.path.exists('ex.calfits'))
-        if os.path.exists('ex.calfits'):
-            os.remove('ex.calfits')
-
 
 class Test_AbsCal:
 
@@ -279,6 +252,18 @@ class Test_AbsCal:
         self.ap = ap
         self.gk = abscal.flatten(map(lambda p: map(lambda k: (k, p), a), gain_pols))
         self.freqs = f
+
+        # make custom error message lists
+        messages = ['divide by zero encountered in true_divide',
+                    'invalid value encountered in true_divide',
+                    'divide by zero encountered in log']
+        messages.extend(['divide by zero encountered in true_divide',
+                         'invalid value encountered in true_divide'] * 20)
+        messages.extend(['divide by zero encountered in log'])
+        self.abscal_n44_messages = messages
+
+        self.abscal_n42_messages = ['divide by zero encountered in true_divide',
+                                    'invalid value encountered in true_divide'] * 21
 
     def test_init(self):
         # init with no meta
@@ -302,7 +287,9 @@ class Test_AbsCal:
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
-        self.AC.abs_amp_logcal(verbose=False)
+        uvtest.checkWarnings(self.AC.abs_amp_logcal, [], {'verbose': False},
+                             nwarnings=44, category=RuntimeWarning,
+                             message=self.abscal_n44_messages)
         nt.assert_equal(self.AC.abs_eta[(24, 'Jxx')].shape, (60, 64))
         nt.assert_equal(self.AC.abs_eta_gain[(24, 'Jxx')].shape, (60, 64))
         nt.assert_equal(self.AC.abs_eta_arr.shape, (7, 60, 64, 1))
@@ -314,7 +301,9 @@ class Test_AbsCal:
         nt.assert_equal(AC.abs_eta_gain, None)
         nt.assert_equal(AC.abs_eta_gain_arr, None)
         # test propagation to gain_arr
-        AC.abs_amp_logcal(verbose=False)
+        uvtest.checkWarnings(AC.abs_amp_logcal, [], {'verbose': False},
+                             nwarnings=44, category=RuntimeWarning,
+                             message=self.abscal_n44_messages)
         AC._abs_eta_arr *= 0
         nt.assert_almost_equal(np.abs(AC.abs_eta_gain_arr[0, 0, 0, 0]), 1.0)
         # test custom gain
@@ -322,11 +311,15 @@ class Test_AbsCal:
         nt.assert_equal(len(g), 47)
         # test w/ no wgts
         AC.wgts = None
-        AC.abs_amp_logcal(verbose=False)
+        uvtest.checkWarnings(AC.abs_amp_logcal, [], {'verbose': False},
+                             nwarnings=44, category=RuntimeWarning,
+                             message=self.abscal_n44_messages)
 
     def test_TT_phs_logcal(self):
         # test execution
-        self.AC.TT_phs_logcal(verbose=False)
+        uvtest.checkWarnings(self.AC.TT_phs_logcal, [], {'verbose': False},
+                             nwarnings=42, category=RuntimeWarning,
+                             message=self.abscal_n42_messages)
         nt.assert_equal(self.AC.TT_Phi_arr.shape, (7, 2, 60, 64, 1))
         nt.assert_equal(self.AC.TT_Phi_gain_arr.shape, (7, 60, 64, 1))
         nt.assert_equal(self.AC.abs_psi_arr.shape, (7, 60, 64, 1))
@@ -337,7 +330,9 @@ class Test_AbsCal:
         nt.assert_equal(self.AC.TT_Phi_gain[(24, 'Jxx')].shape, (60, 64))
         nt.assert_true(np.isclose(np.angle(self.AC.TT_Phi_gain[(24, 'Jxx')]), 0.0).all())
         # test merge pols
-        self.AC.TT_phs_logcal(verbose=False, four_pol=True)
+        uvtest.checkWarnings(self.AC.TT_phs_logcal, [], {'verbose': False, 'four_pol': True},
+                             nwarnings=42, category=RuntimeWarning,
+                             message=self.abscal_n42_messages)
         nt.assert_equal(self.AC.TT_Phi_arr.shape, (7, 2, 60, 64, 1))
         nt.assert_equal(self.AC.abs_psi_arr.shape, (7, 60, 64, 1))
         # test Nones
@@ -357,10 +352,14 @@ class Test_AbsCal:
         nt.assert_equal(g[(0, 'Jxx')].shape, (60, 64))
         # test w/ no wgts
         AC.wgts = None
-        AC.TT_phs_logcal(verbose=False)
+        uvtest.checkWarnings(AC.TT_phs_logcal, [], {'verbose': False},
+                             nwarnings=42, category=RuntimeWarning,
+                             message=self.abscal_n42_messages)
 
     def test_amp_logcal(self):
-        self.AC.amp_logcal(verbose=False)
+        uvtest.checkWarnings(self.AC.amp_logcal, [], {'verbose': False},
+                             nwarnings=44, category=RuntimeWarning,
+                             message=self.abscal_n44_messages)
         nt.assert_equal(self.AC.ant_eta[(24, 'Jxx')].shape, (60, 64))
         nt.assert_equal(self.AC.ant_eta_gain[(24, 'Jxx')].shape, (60, 64))
         nt.assert_equal(self.AC.ant_eta_arr.shape, (7, 60, 64, 1))
@@ -375,7 +374,9 @@ class Test_AbsCal:
         nt.assert_equal(AC.ant_eta_gain_arr, None)
         # test w/ no wgts
         AC.wgts = None
-        AC.amp_logcal(verbose=False)
+        uvtest.checkWarnings(AC.amp_logcal, [], {'verbose': False},
+                             nwarnings=44, category=RuntimeWarning,
+                             message=self.abscal_n44_messages)
 
     def test_phs_logcal(self):
         self.AC.phs_logcal(verbose=False)
@@ -678,11 +679,11 @@ class Test_AbsCal:
     def test_mock_data(self):
         # load into pyuvdata object
         data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        data, flgs, ap, a, f, t, l, p = hc.io.load_vis(data_file, return_meta=True)
+        data, flgs, ap, a, f, t, l, p = io.load_vis(data_file, return_meta=True)
         wgts = odict()
         for k in flgs.keys():
             wgts[k] = (~flgs[k]).astype(np.float)
-        wgts = hc.datacontainer.DataContainer(wgts)
+        wgts = DataContainer(wgts)
         # make mock data
         dly_slope = np.array([-1e-9, 2e-9, 0])
         model = odict()

@@ -56,7 +56,7 @@ class Test_Delay_Filter(unittest.TestCase):
 
         # test uvh5 with calibration
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.h5OCR_53x_54x_only")
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         hc = io.HERACal(cal)
         gains, calflags, _, _ = hc.read()
         hd = io.HERAData(uvh5, filetype='uvh5')
@@ -131,7 +131,7 @@ class Test_Delay_Filter(unittest.TestCase):
         dfil.load_data(fname, filetype='miriad')
         data = dfil.data
         dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, flag_nchan_low=5, flag_nchan_high=5)
-        outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.h5ORAD')
+        outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5')
         with self.assertRaises(ValueError):
             dfil.write_filtered_data()
         with self.assertRaises(NotImplementedError):
@@ -159,7 +159,7 @@ class Test_Delay_Filter(unittest.TestCase):
         os.remove(outfilename)
 
     def test_partial_load_delay_filter_and_write(self):
-        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.h5OCR_53x_54x_only")
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         df.partial_load_delay_filter_and_write(uvh5, res_outfilename=outfilename, Nbls=2, clobber=True)
         hd = io.HERAData(outfilename)
