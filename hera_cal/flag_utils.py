@@ -6,6 +6,7 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 import copy
+from six.moves import zip
 from scipy.interpolate import interp1d
 from pyuvdata import UVData
 
@@ -124,7 +125,7 @@ def synthesize_ant_flags(flags, threshold=0.0):
         threshold = threshold - 1e-10
 
     # get Ntimes and Nfreqs
-    Ntimes, Nfreqs = flags[flags.keys()[0]].shape
+    Ntimes, Nfreqs = flags[list(flags.keys())[0]].shape
 
     # get antenna-pol keys
     antpols = set([ap for (i, j, pol) in flags.keys() for ap in [(i, split_pol(pol)[0]), (j, split_pol(pol)[1])]])

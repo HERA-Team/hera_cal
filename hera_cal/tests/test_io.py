@@ -3,7 +3,9 @@
 # Licensed under the MIT License
 
 '''Tests for io.py'''
+
 from __future__ import print_function, division, absolute_import
+
 import unittest
 import numpy as np
 import os
@@ -11,6 +13,7 @@ import warnings
 import shutil
 import copy
 from collections import OrderedDict as odict
+from six.moves import range, zip
 import pyuvdata
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import parse_polstr, parse_jpolstr
@@ -89,10 +92,6 @@ class Test_HERACal(unittest.TestCase):
             np.testing.assert_array_equal(total_qual_in[key] * (2.0), total_qual_out[key])
 
         os.remove('test.calfits')
-
-
-from hera_cal.data import DATA_PATH
-import os
 
 
 class Test_HERAData(unittest.TestCase):
@@ -274,7 +273,7 @@ class Test_HERAData(unittest.TestCase):
         self.assertEqual(hd.last_read_kwargs['polarizations'], None)
         for dc in [d, f, n]:
             self.assertEqual(len(dc), 1)
-            self.assertEqual(dc.keys(), [(53, 54, parse_polstr('XX'))])
+            self.assertEqual(list(dc.keys()), [(53, 54, parse_polstr('XX'))])
             self.assertEqual(dc[53, 54, 'xx'].shape, (10, 100))
         with self.assertRaises(ValueError):
             d, f, n = hd.read(polarizations=['xy'])
@@ -289,18 +288,18 @@ class Test_HERAData(unittest.TestCase):
         self.assertEqual(hd.last_read_kwargs['polarizations'], ['XX'])
         for dc in [d, f, n]:
             self.assertEqual(len(dc), 1)
-            self.assertEqual(dc.keys(), [(52, 53, parse_polstr('XX'))])
+            self.assertEqual(list(dc.keys()), [(52, 53, parse_polstr('XX'))])
             self.assertEqual(dc[52, 53, 'xx'].shape, (10, 30))
         with self.assertRaises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
 
         # uvfits
         hd = HERAData(self.uvfits, filetype='uvfits')
-        d, f, n = hd.read(bls=(0, 1, 'xx'), freq_chans=range(10))
-        self.assertEqual(hd.last_read_kwargs['freq_chans'], range(10))
+        d, f, n = hd.read(bls=(0, 1, 'xx'), freq_chans=list(range(10)))
+        self.assertEqual(hd.last_read_kwargs['freq_chans'], list(range(10)))
         for dc in [d, f, n]:
             self.assertEqual(len(dc), 1)
-            self.assertEqual(dc.keys(), [(0, 1, parse_polstr('XX'))])
+            self.assertEqual(list(dc.keys()), [(0, 1, parse_polstr('XX'))])
             self.assertEqual(dc[0, 1, 'xx'].shape, (60, 10))
         with self.assertRaises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
@@ -389,7 +388,7 @@ class Test_HERAData(unittest.TestCase):
 
         hd = HERAData(self.miriad_1, filetype='miriad')
         d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')]))
-        self.assertEqual(d.keys(), [(52, 53, parse_polstr('XX'))])
+        self.assertEqual(list(d.keys()), [(52, 53, parse_polstr('XX'))])
         with self.assertRaises(NotImplementedError):
             next(hd.iterate_over_bls())
 
@@ -453,7 +452,7 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
         self.uvd.read_miriad(self.data_file)
         self.freq_array = np.unique(self.uvd.freq_array)
         self.antpos, self.ants = self.uvd.get_ENU_antpos(center=True, pick_data_ants=True)
-        self.antpos = odict(zip(self.ants, self.antpos))
+        self.antpos = odict(list(zip(self.ants, self.antpos)))
         self.time_array = np.unique(self.uvd.time_array)
 
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -520,7 +519,7 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
             for pol in d[i, j]:
                 uvpol = list(uvd1.polarization_array).index(polstr2num(pol))
                 uvmask = np.all(
-                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
+                    np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
                     uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
                 np.testing.assert_equal(f[i, j][pol], np.resize(
@@ -531,7 +530,7 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
             for pol in d[i, j]:
                 uvpol = list(uvd.polarization_array).index(polstr2num(pol))
                 uvmask = np.all(
-                    np.array(zip(uvd.ant_1_array, uvd.ant_2_array)) == [i, j], axis=1)
+                    np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
                     uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
                 np.testing.assert_equal(f[i, j][pol], np.resize(
@@ -708,7 +707,7 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
         if os.path.exists('ex.calfits'):
             os.remove('ex.calfits')
         # test single integration write
-        gains2 = odict(map(lambda k: (k, gains[k][:1]), gains.keys()))
+        gains2 = odict(list(map(lambda k: (k, gains[k][:1]), gains.keys())))
         uvc = io.write_cal("ex.calfits", gains2, freqs, times[:1], return_uvc=True, outdir='./')
         self.assertAlmostEqual(uvc.integration_time, 0.0)
         self.assertEqual(uvc.Ntimes, 1)
@@ -716,7 +715,7 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
         os.remove('ex.calfits')
 
         # test multiple pol
-        for k in gains.keys():
+        for k in list(gains.keys()):
             gains[(k[0], 'y')] = gains[k].conj()
         uvc = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, outdir='./')
         self.assertEqual(uvc.gain_array.shape, (10, 1, 64, 100, 2))
@@ -725,7 +724,7 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
 
         # test zero check
         gains[(0, 'x')][:] = 0.0
-        uvc1 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False ,outdir='./', zero_check=True)
+        uvc1 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False, outdir='./', zero_check=True)
         uvc2 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False, outdir='./', zero_check=False)
         self.assertTrue(np.isclose(uvc1.gain_array[0, 0, :, :, 0], 1.0).all())
         self.assertTrue(np.isclose(uvc2.gain_array[0, 0, :, :, 0], 0.0).all())

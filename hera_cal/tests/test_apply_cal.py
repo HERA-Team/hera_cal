@@ -5,20 +5,22 @@
 """Unit tests for the hera_cal.apply_cal module."""
 
 from __future__ import absolute_import, division, print_function
-from hera_cal import io
-from hera_cal import apply_cal as ac
-from hera_cal.datacontainer import DataContainer
-import numpy as np
+
 import unittest
+import numpy as np
 from copy import deepcopy
-from pyuvdata.utils import check_histories
-from pyuvdata import UVCal, UVData
-from hera_cal.data import DATA_PATH
 import os
 import sys
 import shutil
 from scipy import constants
 import warnings
+from pyuvdata.utils import check_histories
+from pyuvdata import UVCal, UVData
+
+from hera_cal import io
+from hera_cal import apply_cal as ac
+from hera_cal.datacontainer import DataContainer
+from hera_cal.data import DATA_PATH
 
 
 class Test_Update_Cal(unittest.TestCase):
@@ -100,7 +102,7 @@ class Test_Update_Cal(unittest.TestCase):
         hd_old.read()
         hd_old.flag_array = np.logical_or(hd_old.flag_array, np.load(flags_npz)['flag_array'])
         data, data_flags, _ = hd_old.build_datacontainers()
-        
+
         new_gains, new_flags = io.load_cal(new_cal)
         uvc_old = UVCal()
         uvc_old.read_calfits(old_cal)
@@ -108,7 +110,7 @@ class Test_Update_Cal(unittest.TestCase):
         uvc_old.write_calfits(calout, clobber=True)
 
         ac.apply_cal(miriad, outname_miriad, new_cal, old_calibration=calout, gain_convention='divide',
-                     flag_nchan_low=450, flag_nchan_high=400, flags_npz=flags_npz, 
+                     flag_nchan_low=450, flag_nchan_high=400, flags_npz=flags_npz,
                      filetype_in='miriad', filetype_out='miriad', clobber=True, vis_units='Jy')
         hd = io.HERAData(outname_miriad, filetype='miriad')
         new_data, new_flags, _ = hd.read()
@@ -145,7 +147,6 @@ class Test_Update_Cal(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             ac.apply_cal(miriad, outname_uvh5, new_cal, filetype_in='miriad', nbl_per_load=1)
         shutil.rmtree(outname_miriad)
-
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']

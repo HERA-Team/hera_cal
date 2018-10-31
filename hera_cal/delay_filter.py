@@ -6,13 +6,14 @@
 
 from __future__ import print_function, division, absolute_import
 import numpy as np
-from pyuvdata import UVData
 from collections import OrderedDict as odict
-from uvtools.dspec import delay_filter
 from copy import deepcopy
 from scipy import constants
 import argparse
 import datetime
+from six.moves import range, zip
+from pyuvdata import UVData
+from uvtools.dspec import delay_filter
 
 from . import io, apply_cal
 from .datacontainer import DataContainer

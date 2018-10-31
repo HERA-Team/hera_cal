@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
+
 import nose.tools as nt
 import numpy as np
 import sys
@@ -124,20 +125,20 @@ class TestFftDly(object):
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
         np.testing.assert_almost_equal(1. * dlys, 1. * true_dlys, -1)  # accuracy of 10 ns
-        dlys, offs = utils.fft_dly(data, df, medfilt = True)
+        dlys, offs = utils.fft_dly(data, df, medfilt=True)
         np.testing.assert_almost_equal(1. * dlys, 1. * true_dlys, -1)  # accuracy of 10 ns
 
     def test_rfi(self):
-        true_dlys = np.random.uniform(-200, 200, size = 60)
+        true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         data[:, ::16] = 1000.
         df = np.median(np.diff(self.freqs))
-        dlys, offs = utils.fft_dly(data, df, medfilt = True)
+        dlys, offs = utils.fft_dly(data, df, medfilt=True)
         np.testing.assert_almost_equal(5. * dlys, 5. * true_dlys, -1)  # accuracy of 2 ns
 
     def test_nan(self):
-        true_dlys = np.random.uniform(-200, 200, size = 60)
+        true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         data[:, ::16] = np.nan
@@ -150,7 +151,7 @@ class TestFftDly(object):
         data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         # make custom gain keys
-        d, fl, antpos, a, freqs, t, l, p = io.load_vis(data_fname, return_meta = True, pick_data_ants = False)
+        d, fl, antpos, a, freqs, t, l, p = io.load_vis(data_fname, return_meta=True, pick_data_ants=False)
         freqs /= 1e9
         # test basic execution
         k1 = (24, 25, 'xx')
@@ -158,14 +159,15 @@ class TestFftDly(object):
         flat_phs = d[k1] * d[k2].conj()
         df = np.median(np.diff(freqs))
         # basic execution
-        dlys, offs = utils.fft_dly(flat_phs, df, medfilt = True)
+        dlys, offs = utils.fft_dly(flat_phs, df, medfilt=True)
         nt.assert_equal(dlys.shape, (60, 1))
         np.testing.assert_almost_equal(dlys, .25, 1)
-        true_dlys = np.random.uniform(-20, 20, size = 60)
+        true_dlys = np.random.uniform(-20, 20, size=60)
         true_dlys.shape = (60, 1)
         phs = np.exp(2j * np.pi * freqs.reshape((1, -1)) * (true_dlys - .25))
-        dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt = True)
+        dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt=True)
         np.testing.assert_almost_equal(5. * dlys, 5. * true_dlys, -1)
+
 
 class TestAAFromUV(object):
     def setUp(self):
@@ -212,7 +214,7 @@ def test_JD2LST():
     nt.assert_almost_equal(utils.JD2LST(jd, longitude=21.), 3.930652307266274)
     # test array execution
     jd = np.arange(2458042, 2458046.1, .5)
-    lst = utils.JD2LST(jd, longitude = 21.)
+    lst = utils.JD2LST(jd, longitude=21.)
     nt.assert_equal(len(lst), 9)
     nt.assert_almost_equal(lst[3], 0.81486300218170715)
 
@@ -220,11 +222,11 @@ def test_JD2LST():
 def test_LST2JD():
     # test basic execution
     lst = np.pi
-    jd = utils.LST2JD(lst, start_jd = 2458042)
+    jd = utils.LST2JD(lst, start_jd=2458042)
     nt.assert_almost_equal(jd, 2458042.8708433118)
     # test array execution
     lst = np.arange(np.pi, np.pi + 1.1, 0.2)
-    jd = utils.LST2JD(lst, start_jd = 2458042)
+    jd = utils.LST2JD(lst, start_jd=2458042)
     nt.assert_equal(len(jd), 6)
     nt.assert_almost_equal(jd[3], 2458042.9660755517)
 
@@ -240,9 +242,9 @@ def test_JD2RA():
     nt.assert_equal(len(ra), 6)
     nt.assert_almost_equal(ra[3], 82.229459674026003)
     # test exception
-    nt.assert_raises(ValueError, utils.JD2RA, jd, epoch = 'foo')
+    nt.assert_raises(ValueError, utils.JD2RA, jd, epoch='foo')
     # test J2000 epoch
-    ra = utils.JD2RA(jd, epoch = 'J2000')
+    ra = utils.JD2RA(jd, epoch='J2000')
     nt.assert_almost_equal(ra[0], 225.37671446615548)
 
 
@@ -252,7 +254,7 @@ def test_combine_calfits():
     # test basic execution
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
-    utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = True)
+    utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=True)
     # test it exists
     nt.assert_true(os.path.exists('ex.calfits'))
     # test antenna number
@@ -269,7 +271,7 @@ def test_combine_calfits():
     nt.assert_almost_equal(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
-    utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = False)
+    utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir='./', overwrite=True, broadcast_flags=False)
     nt.assert_true(os.path.exists('ex.calfits'))
     if os.path.exists('ex.calfits'):
         os.remove('ex.calfits')
@@ -278,7 +280,7 @@ def test_combine_calfits():
 def test_get_miriad_times():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
     # test execution
-    starts, stops, ints = utils.get_miriad_times(filepaths, add_int_buffer = False)
+    starts, stops, ints = utils.get_miriad_times(filepaths, add_int_buffer=False)
     nt.assert_almost_equal(starts[0], 4.7293432458811866)
     nt.assert_almost_equal(stops[0], 4.7755393587036084)
     nt.assert_almost_equal(ints[0], 0.00078298496309189868)
@@ -286,7 +288,7 @@ def test_get_miriad_times():
     nt.assert_equal(len(stops), 2)
     nt.assert_equal(len(ints), 2)
     # test with integration buffer
-    _starts, _stops, _ints = utils.get_miriad_times(filepaths, add_int_buffer = True)
+    _starts, _stops, _ints = utils.get_miriad_times(filepaths, add_int_buffer=True)
     nt.assert_almost_equal(starts[0], _starts[0])
     nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
     # test if fed as a str
@@ -296,7 +298,7 @@ def test_get_miriad_times():
 def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
-    data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta = True)
+    data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
     data_drift = copy.deepcopy(data)
     transit_integration = 50
 
@@ -371,7 +373,7 @@ def test_chisq():
 
     # test with weights
     data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex)})
-    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})    
+    model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.zeros((5, 10), dtype=float)})
     data_wgts[(0, 1, 'xx')][:, 0] = 1.0
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
@@ -384,7 +386,7 @@ def test_chisq():
     data_wgts = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=float)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, chisq=chisq, nObs=nObs,
-                                                           chisq_per_ant = chisq_per_ant, nObs_per_ant = nObs_per_ant)
+                                                           chisq_per_ant=chisq_per_ant, nObs_per_ant=nObs_per_ant)
     np.testing.assert_array_equal(chisq, 2.0)
     np.testing.assert_array_equal(nObs, 2)
     np.testing.assert_array_equal(chisq_per_ant[0, 'Jxx'], 2.0)
@@ -393,7 +395,7 @@ def test_chisq():
     np.testing.assert_array_equal(nObs_per_ant[1, 'Jxx'], 2)
 
     # test with gains and gain flags
-    gains = {(0, 'Jxx'): .5**.5 * np.ones((5, 10), dtype = complex),
+    gains = {(0, 'Jxx'): .5**.5 * np.ones((5, 10), dtype=complex),
              (1, 'Jxx'): .5**.5 * np.ones((5, 10), dtype=complex)}
     gain_flags = {(0, 'Jxx'): np.zeros((5, 10), dtype=bool),
                   (1, 'Jxx'): np.zeros((5, 10), dtype=bool)}
@@ -446,7 +448,7 @@ def test_predict_noise_variance_from_autos():
     for k in data.keys():
         if k[0] != k[1]:
             sigmasq = utils.predict_noise_variance_from_autos(k, data)
-            kernel = [[1,-2,1],[-2,4,-2],[1,-2,1]]
+            kernel = [[1, -2, 1], [-2, 4, -2], [1, -2, 1]]
             sigma = scipy.signal.convolve2d(data[k], kernel, mode='same', boundary='wrap')
             sigma /= np.sum(np.array(kernel)**2)**.5
             np.testing.assert_array_equal(np.abs(np.mean(np.mean(np.abs(sigma)**2, axis=0) / np.mean(sigmasq, axis=0)) - 1) <= .1, True)

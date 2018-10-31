@@ -5,6 +5,7 @@
 from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
+from six.moves import map, zip
 
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
 
@@ -154,13 +155,13 @@ class DataContainer:
         if axis == 0:
             # check 1 axis is identical for all D
             for d in D:
-                if d[d.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
+                if d[list(d.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
                     raise ValueError("[1] axis of dictionary values aren't identical in length")
 
         if axis == 1:
             # check 0 axis is identical for all D
             for d in D:
-                if d[d.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
+                if d[list(d.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
                     raise ValueError("[0] axis of dictionary values aren't identical in length")
 
         # start new object
@@ -174,16 +175,16 @@ class DataContainer:
         # iterate over D keys
         for i, k in enumerate(keys):
             if self.__contains__(k):
-                newD[k] = np.concatenate([self.__getitem__(k)] + map(lambda d: d[k], D), axis=axis)
+                newD[k] = np.concatenate([self.__getitem__(k)] + list(map(lambda d: d[k], D)), axis=axis)
 
         return DataContainer(newD)
 
     def __add__(self, D):
         '''Adds values of two DataContainers together.'''
         # check time and frequency structure matches
-        if D[D.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
+        if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
             raise ValueError("[0] axis of dictionary values don't match")
-        if D[D.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
+        if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
             raise ValueError("[1] axis of dictionary values don't match")
 
         # start new object
@@ -199,9 +200,9 @@ class DataContainer:
     def __mul__(self, D):
         '''Multiplies the values of two DataContainers together.'''
         # check time and frequency structure matches
-        if D[D.keys()[0]].shape[0] != self.__getitem__(self.keys()[0]).shape[0]:
+        if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
             raise ValueError("[0] axis of dictionary values don't match")
-        if D[D.keys()[0]].shape[1] != self.__getitem__(self.keys()[0]).shape[1]:
+        if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
             raise ValueError("[1] axis of dictionary values don't match")
 
         # start new object

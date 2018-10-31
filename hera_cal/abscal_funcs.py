@@ -348,8 +348,8 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     assert np.array(list(map(lambda k: refant in k, keys))).any(), "refant {} not found in data and model".format(refant)
 
     for p in gain_pols:
-        ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
-        ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(wgts.values()[0])
+        ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
+        ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(list(wgts.values())[0])
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
@@ -488,8 +488,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     assert np.array(list(map(lambda k: refant in k, keys))).any(), "refant {} not found in data and model".format(refant)
 
     for p in gain_pols:
-        ls_data['tau_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
-        ls_wgts['tau_{}_{}'.format(refant, p)] = np.ones_like(ywgts.values()[0])
+        ls_data['tau_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
+        ls_wgts['tau_{}_{}'.format(refant, p)] = np.ones_like(list(ywgts.values())[0])
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
@@ -507,8 +507,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
         ls_design_matrix = odict()
         for p in gain_pols:
-            ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
-            ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(ywgts.values()[0])
+            ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
+            ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(list(ywgts.values())[0])
         sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
         echo("...running linsolve", verbose=verbose)
         offset_fit = sol.solve()
@@ -698,7 +698,7 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
           for each position component and polarization [radians / meter].
     """
     echo("...configuring linsolve data for global_phase_slope_logcal", verbose=verbose)
-    assert 2 * edge_cut < data.values()[0].shape[1] - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
+    assert 2 * edge_cut < list(data.values())[0].shape[1] - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
 
     # get keys from model and data dictionaries
     keys = sorted(set(model.keys()) & set(data.keys()))

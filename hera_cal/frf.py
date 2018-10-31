@@ -4,11 +4,12 @@
 
 from __future__ import print_function, division, absolute_import
 import numpy as np
-from pyuvdata import UVData
-import pyuvdata.utils as uvutils
 from collections import OrderedDict as odict
 import copy
 import os
+from six.moves import range
+from pyuvdata import UVData
+import pyuvdata.utils as uvutils
 
 from . import io, utils, datacontainer
 

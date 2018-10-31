@@ -1504,7 +1504,7 @@ def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=F
             if bl[0] not in ap or bl[1] not in ap:
                 continue
             bls[bl] = ap[bl[1]] - ap[bl[0]]
-    for k in datacontainer.keys():
+    for k in list(datacontainer.keys()):
         bl_len = np.linalg.norm(bls[k])
         if k not in bls:
             continue

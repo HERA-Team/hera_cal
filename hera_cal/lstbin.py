@@ -10,17 +10,18 @@ import copy
 import argparse
 import functools
 import numpy as np
-from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
+import itertools
+import operator
+import gc as garbage_collector
+import datetime
+from six.moves import map, range
 from scipy import signal
 from scipy import interpolate
 from scipy import spatial
-import itertools
-import operator
 from astropy import stats as astats
-import gc as garbage_collector
-import datetime
 import aipy
+from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
 
 from . import utils, abscal, redcal, io
 from .datacontainer import DataContainer
@@ -106,7 +107,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         flags_min : dictionary with data flags
     """
     # get visibility shape
-    Ntimes, Nfreqs = data_list[0][data_list[0].keys()[0]].shape
+    Ntimes, Nfreqs = data_list[0][list(data_list[0].keys())[0]].shape
 
     # get dlst if not provided
     if dlst is None:
@@ -165,7 +166,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 raise ValueError("freq_array and antpos is needed for rephase")
 
             # form baseline dictionary
-            bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys()))
+            bls = odict(list(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys())))
 
             # get appropriate lst_shift for each integration, then rephase
             lst_shift = lst_grid[grid_indices] - li
@@ -220,7 +221,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             if index in all_lst_indices:
                 # skip if index already in data
                 continue
-            for key in data.keys():
+            for key in list(data.keys()):
                 # fill data with blank data
                 data[key][index] = [np.ones(Nfreqs, np.complex)]
                 flags[key][index] = [np.ones(Nfreqs, np.bool)]
@@ -240,8 +241,12 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     # return un-averaged data if desired
     if return_no_avg:
         # return all binned data instead of just bin average
-        data_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, data[k][k2]), sorted(data[k].keys()))).values())), sorted(data.keys())))
-        flags_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, flags[k][k2]), sorted(flags[k].keys()))).values())), sorted(flags.keys())))
+        data_bin = odict(list(map(lambda k: (k, np.array(list(odict(list(map(lambda k2: (k2, data[k][k2]),
+                                                                             sorted(data[k].keys())))).values()))),
+                                  sorted(data.keys()))))
+        flags_bin = odict(list(map(lambda k: (k, np.array(list(odict(list(map(lambda k2: (k2, flags[k][k2]),
+                                                                              sorted(flags[k].keys())))).values()))),
+                                   sorted(flags.keys()))))
 
         return lst_bins, data_bin, flags_bin
 
@@ -382,7 +387,7 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
     lst_grid = make_lst_grid(dlst, lst_start=lst_start, verbose=verbose)
 
     # get frequency info
-    Nfreqs = data[data.keys()[0]].shape[1]
+    Nfreqs = data[list(data.keys())[0]].shape[1]
     data_freqs = np.arange(Nfreqs)
     model_freqs = np.arange(Nfreqs)
 
@@ -647,14 +652,14 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             output_file_select = [output_file_select]
         output_file_select = [int(o) for o in output_file_select]
         try:
-            file_lsts = map(lambda i: file_lsts[i], output_file_select)
+            file_lsts = list(map(lambda i: file_lsts[i], output_file_select))
         except IndexError:
             print("Warning: one or more indices in output_file_select {} caused an index error with length {} "
                   "file_lsts list, exiting...".format(output_file_select, nfiles))
             return
 
     # create data file status: None if not opened, data objects if opened
-    data_status = map(lambda d: map(lambda f: None, d), data_files)
+    data_status = list(map(lambda d: list(map(lambda f: None, d)), data_files))
 
     # get outdir
     if outdir is None:
@@ -690,7 +695,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # locate all data files that fall within the range of lst for this output file
         f_min = np.min(f_lst)
         f_max = np.max(f_lst)
-        f_select = np.array(map(lambda d: map(lambda f: (f[1] > f_min) & (f[0] < f_max + atol), d), data_times))
+        f_select = np.array(list(map(lambda d: list(map(lambda f: (f[1] > f_min) & (f[0] < f_max + atol), d)), data_times)))
         if i == 0:
             old_f_select = copy.copy(f_select)
 
@@ -759,7 +764,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                              sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
         # update history
-        file_history = history + " Input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
+        file_history = history + " Input files: " + "-".join(list(map(lambda ff: os.path.basename(ff), file_list)))
         kwargs['history'] = file_history
 
         # form integration time array
