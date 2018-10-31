@@ -24,6 +24,7 @@ the i-th and j-th antenna respectively.
 """
 from __future__ import print_function, division, absolute_import
 import gc as garbage_collector
+from six.moves import map, range
 
 from . import flag_utils
 from .abscal_funcs import *
@@ -222,7 +223,7 @@ class AbsCal(object):
             self.antpos_arr -= np.median(self.antpos_arr, axis=0)
 
         # setup gain solution keys
-        self._gain_keys = list(map(lambda p: map(lambda a: (a, p), self.ants), self.gain_pols))
+        self._gain_keys = list(map(lambda p: list(map(lambda a: (a, p), self.ants)), self.gain_pols))
 
         # perform baseline cut
         if min_bl_cut is not None or max_bl_cut is not None:
@@ -305,7 +306,7 @@ class AbsCal(object):
 
         # form result array
         self._ant_phi = odict(list(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
-        self._ant_phi_arr = np.moveaxis(list(map(lambda pk: map(lambda k: self._ant_phi[k], pk), self._gain_keys)), 0, -1)
+        self._ant_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_phi[k], pk)), self._gain_keys)), 0, -1)
 
         # take time and freq average
         if avg:
