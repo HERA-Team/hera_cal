@@ -801,7 +801,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                     chisq[ap1] = chisq[ap1] + chisq_here
                     nObs[ap1] = nObs[ap1] + (wgts > 0)
                 else:
-                    assert not ap1 in nObs
+                    assert ap1 not in nObs
                     chisq[ap1] = copy.deepcopy(chisq_here)
                     nObs[ap1] = np.array(wgts > 0, dtype=int)
             else:
@@ -815,7 +815,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                     chisq_per_ant[ant] = chisq_per_ant[ant] + chisq_here
                     nObs_per_ant[ant] = nObs_per_ant[ant] + (wgts > 0)
                 else:
-                    assert not ant in nObs_per_ant
+                    assert ant not in nObs_per_ant
                     chisq_per_ant[ant] = copy.deepcopy(chisq_here)
                     nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
 
