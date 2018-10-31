@@ -10,15 +10,16 @@ import copy
 import argparse
 import functools
 import numpy as np
-from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
-from scipy import signal
-from scipy import interpolate
-from scipy import spatial
-import linsolve
 import itertools
 import operator
 from functools import reduce
+from six.moves import map, range, zip
+from scipy import signal
+from scipy import interpolate
+from scipy import spatial
+from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
+import linsolve
 
 from . import utils, redcal, io, apply_cal
 from .datacontainer import DataContainer
@@ -154,7 +155,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
 
     # get keys from model dictionary
     keys = sorted(set(model.keys()) & set(data.keys()))
-    ants = np.unique(antpos.keys())
+    ants = np.unique(list(antpos.keys()))
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
@@ -571,7 +572,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     # get shared keys
     keys = sorted(set(model.keys()) & set(data.keys()))
-    ants = np.unique(antpos.keys())
+    ants = np.unique(list(antpos.keys()))
 
     # make wgts
     if wgts is None:
@@ -701,7 +702,7 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
 
     # get keys from model and data dictionaries
     keys = sorted(set(model.keys()) & set(data.keys()))
-    ants = np.unique(antpos.keys())
+    ants = np.unique(list(antpos.keys()))
 
     # make weights if None and make flags
     if wgts is None:
@@ -822,7 +823,7 @@ def apply_gains(data, gains, gain_convention='divide'):
     new_data = odict()
 
     # get keys
-    keys = data.keys()
+    keys = list(data.keys())
 
     # merge gains if multiple gain dictionaries fed
     if isinstance(gains, list) or isinstance(gains, tuple) or isinstance(gains, np.ndarray):
@@ -881,7 +882,7 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
     new_avg = odict()
 
     # get keys
-    keys = data.keys()
+    keys = list(data.keys())
 
     # sort keys across key_index
     key_sort = np.argsort(np.array(keys, dtype=np.object)[:, key_index])
@@ -1098,7 +1099,7 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3, 9)
         data = {'arr': data}
 
     new_data = odict()
-    for i, k in enumerate(data.keys()):
+    for i, k in enumerate(list(data.keys())):
         real = np.real(data[k])
         imag = np.imag(data[k])
         if medfilt:
@@ -1185,11 +1186,11 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     # ensure flags are booleans
     if flags is not None:
-        if np.issubdtype(flags[flags.keys()[0]].dtype, np.float):
+        if np.issubdtype(flags[list(flags.keys())[0]].dtype, np.float):
             flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys()))))
 
     # loop over keys
-    for i, k in enumerate(model.keys()):
+    for i, k in enumerate(list(model.keys())):
         # get model array
         m = model[k]
 
@@ -1480,11 +1481,11 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
         had matching baselines to data
     """
     # create baseline keys for model
-    model_keys = model.keys()
+    model_keys = list(model.keys())
     model_bls = np.array(list(map(lambda k: Baseline(model_antpos[k[1]] - model_antpos[k[0]], tol=tol), model_keys)))
 
     # create baseline keys for data
-    data_keys = data.keys()
+    data_keys = list(data.keys())
     data_bls = np.array(list(map(lambda k: Baseline(data_antpos[k[1]] - data_antpos[k[0]], tol=tol), data_keys)))
 
     # iterate over data baselines
@@ -1542,7 +1543,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     -------
     """
     # get data keys
-    keys = data.keys()
+    keys = list(data.keys())
 
     # get data, wgts and ants
     data = copy.deepcopy(data)
@@ -1592,7 +1593,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
                 break
 
     # get red_data keys
-    red_keys = red_data.keys()
+    red_keys = list(red_data.keys())
 
     return DataContainer(red_data), DataContainer(red_wgts), red_keys
 
@@ -1697,7 +1698,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
         red_data is a real-valued wgts dictionary with redundant baseline weighting muliplied in.
     """
     # get data keys
-    keys = data.keys()
+    keys = list(data.keys())
 
     # get polarizations in data
     pols = data.pols()
