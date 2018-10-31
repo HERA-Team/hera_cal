@@ -246,6 +246,35 @@ def test_JD2RA():
     nt.assert_almost_equal(ra[0], 225.37671446615548)
 
 
+def test_combine_calfits():
+    test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
+    test_file2 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.dly.calfits')
+    # test basic execution
+    if os.path.exists('ex.calfits'):
+        os.remove('ex.calfits')
+    utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = True)
+    # test it exists
+    nt.assert_true(os.path.exists('ex.calfits'))
+    # test antenna number
+    uvc = UVCal()
+    uvc.read_calfits('ex.calfits')
+    nt.assert_equal(len(uvc.antenna_numbers), 7)
+    # test time number
+    nt.assert_equal(uvc.Ntimes, 60)
+    # test gain value got properly multiplied
+    uvc_dly = UVCal()
+    uvc_dly.read_calfits(test_file1)
+    uvc_abs = UVCal()
+    uvc_abs.read_calfits(test_file2)
+    nt.assert_almost_equal(uvc_dly.gain_array[0, 0, 10, 10, 0] * uvc_abs.gain_array[0, 0, 10, 10, 0], uvc.gain_array[0, 0, 10, 10, 0])
+    if os.path.exists('ex.calfits'):
+        os.remove('ex.calfits')
+    utils.combine_calfits([test_file1, test_file2], 'ex.calfits', outdir = './', overwrite = True, broadcast_flags = False)
+    nt.assert_true(os.path.exists('ex.calfits'))
+    if os.path.exists('ex.calfits'):
+        os.remove('ex.calfits')
+
+
 def test_get_miriad_times():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
     # test execution

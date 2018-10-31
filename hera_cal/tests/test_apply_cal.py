@@ -88,7 +88,7 @@ class Test_Update_Cal(unittest.TestCase):
 
     def test_apply_cal(self):
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
-        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.h5OCR_53x_54x_only")
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outname_miriad = os.path.join(DATA_PATH, "test_output/out.uv")
         outname_uvh5 = os.path.join(DATA_PATH, "test_output/out.h5")
         calout = os.path.join(DATA_PATH, "test_output/out.cal")

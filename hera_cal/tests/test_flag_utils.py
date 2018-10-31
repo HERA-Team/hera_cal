@@ -8,7 +8,9 @@ import nose.tools as nt
 import numpy as np
 import os
 from pyuvdata import UVData
-from hera_cal import flag_utils, utils, io
+
+from hera_cal import flag_utils, utils, io, datacontainer
+from hera_cal.data import DATA_PATH
 
 
 def test_solar_flag():

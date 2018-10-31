@@ -5,7 +5,9 @@
 
 from __future__ import print_function, division, absolute_import
 import numpy as np
+import copy
 from scipy.interpolate import interp1d
+from pyuvdata import UVData
 
 from . import datacontainer, utils
 from .utils import split_pol

@@ -6,19 +6,20 @@
 from __future__ import print_function, division, absolute_import
 import unittest
 import numpy as np
-import pyuvdata
-from pyuvdata import UVCal, UVData
-from hera_cal.data import DATA_PATH
-from collections import OrderedDict as odict
-from hera_cal.datacontainer import DataContainer
-import hera_cal.io as io
-from hera_cal.io import HERACal, HERAData
-from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num
-from pyuvdata.utils import parse_polstr, parse_jpolstr
 import os
 import warnings
 import shutil
 import copy
+from collections import OrderedDict as odict
+import pyuvdata
+from pyuvdata import UVCal, UVData
+from pyuvdata.utils import parse_polstr, parse_jpolstr
+
+import hera_cal.io as io
+from hera_cal.io import HERACal, HERAData
+from hera_cal.datacontainer import DataContainer
+from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num
+from hera_cal.data import DATA_PATH
 
 
 class Test_HERACal(unittest.TestCase):
@@ -97,8 +98,8 @@ import os
 class Test_HERAData(unittest.TestCase):
 
     def setUp(self):
-        self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.h5XRS_downselected")
-        self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.h5XRS_downselected")
+        self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
+        self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
         self.miriad_1 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.miriad_2 = os.path.join(DATA_PATH, "zen.2458043.13298.xx.HH.uvORA")
         self.uvfits = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvA.vis.uvfits')
