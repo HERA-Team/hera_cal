@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
+
 import os
 import sys
 from collections import OrderedDict as odict
@@ -21,7 +22,10 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 import linsolve
 
-from . import utils, redcal, io, apply_cal
+from . import utils
+from . import redcal
+from . import io
+from . import apply_cal
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, echo
 

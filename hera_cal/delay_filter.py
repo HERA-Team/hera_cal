@@ -5,6 +5,7 @@
 """Module for delay filtering data and related operations."""
 
 from __future__ import print_function, division, absolute_import
+
 import numpy as np
 from collections import OrderedDict as odict
 from copy import deepcopy
@@ -15,7 +16,8 @@ from six.moves import range, zip
 from pyuvdata import UVData
 from uvtools.dspec import delay_filter
 
-from . import io, apply_cal
+from . import io
+from . import apply_cal
 from .datacontainer import DataContainer
 
 
