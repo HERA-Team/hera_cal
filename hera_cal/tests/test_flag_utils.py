@@ -4,6 +4,7 @@
 
 
 from __future__ import print_function, division, absolute_import
+
 import nose.tools as nt
 import numpy as np
 import os

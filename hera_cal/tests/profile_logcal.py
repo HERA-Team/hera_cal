@@ -10,9 +10,9 @@ import pstats
 import cProfile
 
 np.random.seed(0)
-#SHAPE = (1,1024)
+# SHAPE = (1,1024)
 SHAPE = (60, 1024)
-#SHAPE = (2,1024)
+# SHAPE = (2,1024)
 
 NANTS = 18
 
@@ -32,6 +32,7 @@ def build_hex_array(hexNum, sep=14.7):
             i += 1
     return antpos
 
+
 antpos = build_linear_array(NANTS)
 reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
 info = om.RedundantCalibrator(reds)
@@ -45,6 +46,7 @@ class TestRedundantCalibrator(unittest.TestCase):
     def setUp(self):
         self.pr = cProfile.Profile()
         self.pr.enable()
+
     def tearDown(self):
         p = pstats.Stats(self.pr)
         p.strip_dirs()
@@ -62,7 +64,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         t0 = time.time()
         for i in xrange(1):
             sol = info.logcal(d)
-        #print('logcal', time.time() - t0)
+        # print('logcal', time.time() - t0)
         for i in xrange(NANTS):
             self.assertEqual(sol[(i, 'x')].shape, SHAPE)
         for bls in reds:
@@ -71,8 +73,8 @@ class TestRedundantCalibrator(unittest.TestCase):
             for bl in bls:
                 d_bl = d[bl]
                 mdl = sol[(bl[0], 'x')] * sol[(bl[1], 'x')].conj() * ubl
-                #np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
-                #np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
+                # np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 10)
+                # np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 10)
                 np.testing.assert_almost_equal(np.abs(d_bl), np.abs(mdl), 5)
                 np.testing.assert_almost_equal(np.angle(d_bl * mdl.conj()), 0, 5)
 
@@ -91,11 +93,11 @@ class TestRedundantCalibrator(unittest.TestCase):
                 i = hera_cal.omni.Antpol(ant, pol, NANTS)
                 antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
         reds = hera_cal.omni.compute_reds(NANTS, pols, antpos[:NANTS], tol=.01)
-        #reds = hera_cal.omni.filter_reds(reds, **kwargs)
+        # reds = hera_cal.omni.filter_reds(reds, **kwargs)
         info = hera_cal.omni.RedundantInfo(NANTS)
         info.init_from_reds(reds, antpos_ideal)
-        #info = om.RedundantCalibrator(reds)
-        #gains, true_vis, d = om.sim_red_data(hcreds, shape=SHAPE, gain_scatter=.05)
+        # info = om.RedundantCalibrator(reds)
+        # gains, true_vis, d = om.sim_red_data(hcreds, shape=SHAPE, gain_scatter=.05)
         data = {}
         for key in d.keys():
             if not data.has_key(key[:2]):
@@ -104,7 +106,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         t0 = time.time()
         for i in xrange(1):
             m1, g1, v1 = omnical.calib.logcal(data, info)
-        #print('omnilogcal', time.time() - t0)
+        # print('omnilogcal', time.time() - t0)
         for i in xrange(NANTS):
             self.assertEqual(g1['x'][i].shape, SHAPE)
         for bls in reds:
@@ -127,8 +129,8 @@ class TestRedundantCalibrator(unittest.TestCase):
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
-        #sol0 = info.logcal(d)
-        #for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
+        # sol0 = info.logcal(d)
+        # for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
         meta, sol = info.lincal(d, sol0)
         for i in xrange(NANTS):
             self.assertEqual(sol[(i, 'x')].shape, SHAPE)
@@ -146,15 +148,15 @@ class TestRedundantCalibrator(unittest.TestCase):
         antpos = build_linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        #gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=.0099999)
-        #d = {key:value.astype(np.complex64) for key,value in d.items()}
+        # gains, true_vis, d = om.sim_red_data(reds, shape=SHAPE, gain_scatter=.0099999)
+        # d = {key:value.astype(np.complex64) for key,value in d.items()}
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
         sol0 = {k: v.astype(np.complex64) for k, v in sol0.items()}
         meta, sol = info.omnical(d, sol0, gain=.5, maxiter=500, check_after=30, check_every=6)
-        #meta, sol = info.omnical(d, sol0, gain=.5, maxiter=50, check_after=1, check_every=1)
-        #print(meta)
+        # meta, sol = info.omnical(d, sol0, gain=.5, maxiter=50, check_after=1, check_every=1)
+        # print(meta)
         for i in xrange(NANTS):
             self.assertEqual(sol[(i, 'x')].shape, SHAPE)
         for bls in reds:
@@ -181,11 +183,11 @@ class TestRedundantCalibrator(unittest.TestCase):
                 i = hera_cal.omni.Antpol(ant, pol, NANTS)
                 antpos[int(i), 0], antpos[int(i), 1], antpos[int(i), 2] = x, y, z
         reds = hera_cal.omni.compute_reds(NANTS, pols, antpos[:NANTS], tol=.01)
-        #reds = hera_cal.omni.filter_reds(reds, **kwargs)
+        # reds = hera_cal.omni.filter_reds(reds, **kwargs)
         info = hera_cal.omni.RedundantInfo(NANTS)
         info.init_from_reds(reds, antpos_ideal)
-        #info = om.RedundantCalibrator(reds)
-        #gains, true_vis, d = om.sim_red_data(hcreds, shape=SHAPE, gain_scatter=.0099999)
+        # info = om.RedundantCalibrator(reds)
+        # gains, true_vis, d = om.sim_red_data(hcreds, shape=SHAPE, gain_scatter=.0099999)
         data = {}
         for key in d.keys():
             if not data.has_key(key[:2]):
@@ -194,7 +196,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         t0 = time.time()
         for i in xrange(1):
             m1, g1, v1 = omnical.calib.lincal(data, info, maxiter=50)
-        #print('omnilincal', time.time() - t0)
+        # print('omnilincal', time.time() - t0)
         for i in xrange(NANTS):
             self.assertEqual(g1['x'][i].shape, SHAPE)
         for bls in reds:

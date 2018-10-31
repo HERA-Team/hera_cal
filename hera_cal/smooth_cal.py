@@ -8,9 +8,10 @@ import scipy
 import aipy
 from collections import OrderedDict as odict
 from copy import deepcopy
+from six.moves import range
 import warnings
-import uvtools
 import argparse
+import uvtools
 
 from . import io, utils, flag_utils
 from .abscal import fft_dly
@@ -187,7 +188,7 @@ def pick_reference_antenna(flags):
         refant: key of the antenna with the minimum number of flags. Tie goes to the first in a sorted list of keys.
     '''
     flags_per_ant = {ant: np.sum(f) for ant, f in flags.items()}
-    refant = sorted([ant for ant, nflags in flags_per_ant.items() if nflags == np.min(flags_per_ant.values())])[0]
+    refant = sorted([ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))])[0]
     return refant
 
 

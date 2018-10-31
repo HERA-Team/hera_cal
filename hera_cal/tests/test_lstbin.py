@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
+
 import nose.tools as nt
 import os
 import shutil
@@ -11,16 +12,18 @@ import numpy as np
 import aipy
 import optparse
 import sys
-from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
-import hera_cal as hc
-from hera_cal.data import DATA_PATH
 from collections import OrderedDict as odict
 import copy
-from hera_cal.datacontainer import DataContainer
 import glob
+from six.moves import map
 import scipy.stats as stats
+from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
+
+import hera_cal as hc
 from hera_cal import io
+from hera_cal.datacontainer import DataContainer
+from hera_cal.data import DATA_PATH
 
 
 class Test_lstbin:
@@ -87,10 +90,10 @@ class Test_lstbin:
         nt.assert_almost_equal(output[2][(24, 25, 'xx')][210, 32], False)
         # test return no avg
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=self.flgs_list, return_no_avg=True)
-        nt.assert_equal(len(output[2][output[2].keys()[0]][100]), 3)
-        nt.assert_equal(len(output[2][output[2].keys()[0]][100][0]), 64)
+        nt.assert_equal(len(output[2][list(output[2].keys())[0]][100]), 3)
+        nt.assert_equal(len(output[2][list(output[2].keys())[0]][100][0]), 64)
         # test switch bl
-        conj_data3 = DataContainer(odict(map(lambda k: (hc.lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys())))
+        conj_data3 = DataContainer(odict(list(map(lambda k: (hc.lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys()))))
         data_list = [self.data1, self.data2, conj_data3]
         output = hc.lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
         nt.assert_equal(output[1][(24, 25, 'xx')].shape, (224, 64))
@@ -98,7 +101,7 @@ class Test_lstbin:
         output = hc.lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                    verbose=False, sig_clip=True, min_N=5, sigma=2)
         # test wrapping
-        lst_list = map(lambda l: (copy.deepcopy(l) + 6) % (2 * np.pi), self.lst_list)
+        lst_list = list(map(lambda l: (copy.deepcopy(l) + 6) % (2 * np.pi), self.lst_list))
         output = hc.lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, lst_start=np.pi)
         nt.assert_true(output[0][0] > output[0][-1])
         nt.assert_equal(len(output[0]), 175)
@@ -223,7 +226,7 @@ class Test_lstbin:
         nt.assert_true(arr[10])
         nt.assert_true(arr[11])
         # test array performance
-        x = np.array(map(lambda s: stats.norm.rvs(0, s, 100), np.arange(1, 5.1, 1)))
+        x = np.array(list(map(lambda s: stats.norm.rvs(0, s, 100), np.arange(1, 5.1, 1))))
         x[0, 50] = 100
         x[4, 50] = 5
         arr = hc.lstbin.sigma_clip(x, sigma=2.0)

@@ -4,17 +4,18 @@
 
 from __future__ import print_function, division, absolute_import
 import numpy as np
+import os
+import copy
+from six.moves import map, range
 import aipy
 import astropy.constants as const
 from astropy.time import Time
 from astropy import coordinates as crd
 from astropy import units as unt
-import pyuvdata.utils as uvutils
-from pyuvdata import UVCal, UVData
-import os
-import copy
 from scipy import signal
 from collections import OrderedDict as odict
+import pyuvdata.utils as uvutils
+from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT
 
@@ -464,7 +465,7 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
     a = crd.AltAz(location=e)
 
     # get Sun locations
-    alts = np.array(map(lambda t: crd.get_sun(Time(t, format='jd')).transform_to(a).alt.value, jds))
+    alts = np.array(list(map(lambda t: crd.get_sun(Time(t, format='jd')).transform_to(a).alt.value, jds)))
 
     if array:
         return alts

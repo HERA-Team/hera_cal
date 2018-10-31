@@ -3,18 +3,20 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
-import hera_cal.delay_filter as df
-from hera_cal import io
-import numpy as np
+
 import unittest
+import numpy as np
 from copy import deepcopy
-from pyuvdata import UVCal, UVData
-from hera_cal.data import DATA_PATH
 import os
 import sys
 import shutil
 from scipy import constants
+from pyuvdata import UVCal, UVData
 from uvtools.dspec import delay_filter
+
+from hera_cal import io
+import hera_cal.delay_filter as df
+from hera_cal.data import DATA_PATH
 
 
 class Test_Delay_Filter(unittest.TestCase):
@@ -61,7 +63,7 @@ class Test_Delay_Filter(unittest.TestCase):
         gains, calflags, _, _ = hc.read()
         hd = io.HERAData(uvh5, filetype='uvh5')
         data, flags, _ = hd.read()
-        
+
         dfil = df.Delay_Filter()
         dfil.load_data(hd, filetype='uvh5', input_cal=hc)
         flag_sum = flags[54, 54, 'xx'] + calflags[54, 'Jxx']
@@ -75,7 +77,6 @@ class Test_Delay_Filter(unittest.TestCase):
         np.testing.assert_array_equal(flag_sum, dfil.flags[54, 54, 'xx'])
         calibrated = (data[54, 54, 'xx'] / gains[54, 'Jxx'] / np.conj(gains[54, 'Jxx']))[~flag_sum]
         np.testing.assert_array_almost_equal(dfil.data[54, 54, 'xx'][~flag_sum] / calibrated, 1.0 + 0.0j, decimal=5)
-
 
     def test_load_data_as_dicts(self):
         dfil = df.Delay_Filter()
@@ -95,12 +96,15 @@ class Test_Delay_Filter(unittest.TestCase):
         sdf = (dfil.freqs[1] - dfil.freqs[0]) / 1e9
 
         dfil.run_filter(to_filter=[k], standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-        d_mdl, d_res, info = delay_filter(dfil.data[k], np.logical_not(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+        d_mdl, d_res, info = delay_filter(dfil.data[k], np.logical_not(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9,
+                                          window='blackman-harris', skip_wgt=0.1, maxiter=100)
         np.testing.assert_almost_equal(d_mdl, dfil.CLEAN_models[k])
         np.testing.assert_almost_equal(d_res, dfil.filtered_residuals[k])
 
-        dfil.run_filter(to_filter=[k], weight_dict={k: np.ones_like(dfil.flags[k])}, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-        d_mdl, d_res, info = delay_filter(dfil.data[k], np.ones_like(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+        dfil.run_filter(to_filter=[k], weight_dict={k: np.ones_like(dfil.flags[k])}, standoff=0., horizon=1., tol=1e-9,
+                        window='blackman-harris', skip_wgt=0.1, maxiter=100)
+        d_mdl, d_res, info = delay_filter(dfil.data[k], np.ones_like(dfil.flags[k]), bl, sdf, standoff=0., horizon=1., tol=1e-9,
+                                          window='blackman-harris', skip_wgt=0.1, maxiter=100)
         np.testing.assert_almost_equal(d_mdl, dfil.CLEAN_models[k])
         np.testing.assert_almost_equal(d_res, dfil.filtered_residuals[k])
 
@@ -170,7 +174,7 @@ class Test_Delay_Filter(unittest.TestCase):
         dfil.run_filter(to_filter=[(53, 54, 'xx')], verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'xx')], dfil.filtered_residuals[(53, 54, 'xx')])
         np.testing.assert_array_equal(f[(53, 54, 'xx')], dfil.flags[(53, 54, 'xx')])
-        
+
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         df.partial_load_delay_filter_and_write(uvh5, calfile=cal, res_outfilename=outfilename, Nbls=2, clobber=True)

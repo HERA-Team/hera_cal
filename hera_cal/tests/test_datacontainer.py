@@ -3,12 +3,14 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
+
 import unittest
-from hera_cal import datacontainer, io
 import numpy as np
-from hera_cal.data import DATA_PATH
 import os
-from hera_cal import abscal
+from six.moves import zip
+
+from hera_cal.data import DATA_PATH
+from hera_cal import abscal, io, datacontainer
 
 
 class TestDataContainer(unittest.TestCase):
@@ -104,32 +106,32 @@ class TestDataContainer(unittest.TestCase):
 
     def test_values(self):
         dc = datacontainer.DataContainer(self.blpol)
-        values = dc.values()
+        values = list(dc.values())
         self.assertEqual(len(values), len(self.pols) * len(self.antpairs))
         self.assertEqual(values[0], 1j)
         dc = datacontainer.DataContainer(self.polbl)
-        values = dc.values()
+        values = list(dc.values())
         self.assertEqual(len(values), len(self.pols) * len(self.antpairs))
         self.assertEqual(values[0], 1j)
         dc = datacontainer.DataContainer(self.both)
-        values = dc.values()
+        values = list(dc.values())
         self.assertEqual(len(values), len(self.pols) * len(self.antpairs))
         self.assertEqual(values[0], 1j)
 
     def test_items(self):
         dc = datacontainer.DataContainer(self.blpol)
-        items = dc.items()
+        items = list(dc.items())
         self.assertEqual(len(items), len(self.pols) * len(self.antpairs))
         self.assertTrue(items[0][0][0:2] in self.antpairs)
         self.assertTrue(items[0][0][2] in self.pols)
         self.assertEqual(items[0][1], 1j)
         dc = datacontainer.DataContainer(self.polbl)
-        items = dc.items()
+        items = list(dc.items())
         self.assertTrue(items[0][0][0:2] in self.antpairs)
         self.assertTrue(items[0][0][2] in self.pols)
         self.assertEqual(items[0][1], 1j)
         dc = datacontainer.DataContainer(self.both)
-        items = dc.items()
+        items = list(dc.items())
         self.assertTrue(items[0][0][0:2] in self.antpairs)
         self.assertTrue(items[0][0][2] in self.pols)
         self.assertEqual(items[0][1], 1j)
@@ -283,9 +285,9 @@ class TestDataContainer(unittest.TestCase):
         self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] * 2)
         # test exception
         d2, f2 = io.load_vis(test_file, pop_autos=True)
-        d2[d2.keys()[0]] = d2[d2.keys()[0]][:, :10]
+        d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:, :10]
         self.assertRaises(ValueError, d.__add__, d2)
-        d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :]
+        d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:10, :]
         self.assertRaises(ValueError, d.__add__, d2)
 
     def test_mul(self):
@@ -296,9 +298,9 @@ class TestDataContainer(unittest.TestCase):
         self.assertFalse(f2[(24, 25, 'xx')][0, 0])
         # test exception
         d2, f2 = io.load_vis(test_file, pop_autos=True)
-        d2[d2.keys()[0]] = d2[d2.keys()[0]][:, :10]
+        d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:, :10]
         self.assertRaises(ValueError, d.__mul__, d2)
-        d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :]
+        d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:10, :]
         self.assertRaises(ValueError, d.__mul__, d2)
 
     def test_concatenate(self):
@@ -312,7 +314,7 @@ class TestDataContainer(unittest.TestCase):
         self.assertEqual(d2[(24, 25, 'xx')].shape[0], d[(24, 25, 'xx')].shape[0] * 3)
         # test exceptions
         d2, f2 = io.load_vis(test_file, pop_autos=True)
-        d2[d2.keys()[0]] = d2[d2.keys()[0]][:10, :10]
+        d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:10, :10]
         self.assertRaises(ValueError, d.concatenate, d2, axis=0)
         self.assertRaises(ValueError, d.concatenate, d2, axis=1)
 

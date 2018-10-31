@@ -4,12 +4,13 @@
 
 from __future__ import absolute_import, division, print_function
 import numpy as np
-import linsolve
 from copy import deepcopy
-from hera_qm.ant_metrics import per_antenna_modified_z_scores
-from hera_qm.metrics_io import load_metric_file
 import argparse
 import os
+from six.moves import range, zip
+import linsolve
+from hera_qm.ant_metrics import per_antenna_modified_z_scores
+from hera_qm.metrics_io import load_metric_file
 
 from . import utils
 from .datacontainer import DataContainer
@@ -76,11 +77,11 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
             reds: list (sorted by baseline legnth) of lists of redundant tuples of antenna indices (no polarizations),
             sorted by index with the first index of the first baseline the lowest in the group.
     """
-    keys = antpos.keys()
+    keys = list(antpos.keys())
     reds = {}
     assert np.all([len(pos) <= 3 for pos in antpos.values()]), 'Get_pos_reds only works in up to 3 dimensions.'
     ap = {ant: np.pad(pos, (0, 3 - len(pos)), mode='constant') for ant, pos in antpos.items()}  # increase dimensionality
-    array_is_flat = np.all(np.abs(np.array(ap.values())[:, 2] - np.mean(ap.values(), axis=0)[2]) < bl_error_tol / 4.0)
+    array_is_flat = np.all(np.abs(np.array(list(ap.values()))[:, 2] - np.mean(list(ap.values()), axis=0)[2]) < bl_error_tol / 4.0)
     for i, ant1 in enumerate(keys):
         for ant2 in keys[i + 1:]:
             delta = tuple(np.round(1.0 * (np.array(ap[ant2]) - np.array(ap[ant1])) / bl_error_tol).astype(int))
@@ -266,7 +267,7 @@ def reds_to_antpos(reds, tol=1e-10):
                 antpos = {ant: np.delete(pos - pos[dim_to_elim] / delta[dim_to_elim] * delta, dim_to_elim)
                           for ant, pos in antpos.items()}
     # remove any all-zero dimensions
-    dim_to_elim = np.argwhere(np.sum(np.abs(antpos.values()), axis=0) == 0).flatten()
+    dim_to_elim = np.argwhere(np.sum(np.abs(list(antpos.values())), axis=0) == 0).flatten()
     antpos = {ant: np.delete(pos, dim_to_elim) for ant, pos in antpos.items()}
     return antpos
 
@@ -508,7 +509,7 @@ class RedundantCalibrator:
         Returns:
             solver: instantiated solver with redcal equations and weights
         """
-        dtype = data.values()[0].dtype  # TODO: fix this for python 3
+        dtype = list(data.values())[0].dtype
         dc = DataContainer(data)
         eqs = self.build_eqs(dc)
         self.phs_avg = {}  # detrend phases within redundant group, used for logcal to avoid phase wraps
