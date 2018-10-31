@@ -276,6 +276,28 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     return aa
 
 
+def get_aa_from_calfile(freqs, calfile, **kwargs):
+    '''
+    Generate an AntennaArray object from the specified calfile.
+
+    Arguments:
+    ====================
+    freqs: list of frequencies in data file, in GHz
+    calfile: name of calfile, without the .py extension (e.g., hsa7458_v001). Note that this
+        file must be in sys.path.
+
+    Returns:
+    ====================
+    aa: AntennaArray object
+    '''
+    namespace = {}
+    exec('from {calfile} import get_aa'.format(calfile=calfile), namespace)
+
+    # generate aa
+    get_aa = namespace['get_aa']
+    return get_aa(freqs, **kwargs)
+
+
 def JD2LST(JD, longitude=21.42830):
     """
     Input:

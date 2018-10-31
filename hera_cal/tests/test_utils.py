@@ -184,6 +184,21 @@ class TestAAFromUV(object):
         nt.assert_equal(len(aa), 88)
 
 
+class TestAAFromCalfile(object):
+    def setUp(self):
+        # define frequencies
+        self.freqs = np.array([0.15])
+
+        # add directory with calfile
+        if CAL_PATH not in sys.path:
+            sys.path.append(CAL_PATH)
+        self.calfile = "hera_test_calfile"
+
+    def test_get_aa_from_calfile(self):
+        aa = utils.get_aa_from_calfile(self.freqs, self.calfile)
+        nt.assert_equal(len(aa), 128)
+
+
 class TestAA(object):
     def setUp(self):
         # define test file that is compatible with get_aa_from_uv
