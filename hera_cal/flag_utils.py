@@ -2,16 +2,16 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
-
 from __future__ import print_function, division, absolute_import
+
 import numpy as np
 import copy
 from six.moves import zip
 from scipy.interpolate import interp1d
 from pyuvdata import UVData
 
-from . import datacontainer, utils
-from .utils import split_pol
+from . import datacontainer
+from .utils import split_pol, get_sun_alt
 
 
 def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False,
@@ -80,13 +80,13 @@ def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30
     if interp:
         # first evaluate coarse grid, then interpolate
         _times = np.linspace(times.min(), times.max(), interp_Nsteps)
-        _alts = utils.get_sun_alt(_times, longitude=longitude, latitude=latitude)
+        _alts = get_sun_alt(_times, longitude=longitude, latitude=latitude)
 
         # interpolate _alts
         alts = interp1d(_times, _alts, kind='quadratic')(times)
     else:
         # directly evaluate solar altitude at times
-        alts = utils.get_sun_alt(times, longitude=longitude, latitude=latitude)
+        alts = get_sun_alt(times, longitude=longitude, latitude=latitude)
 
     # apply flags
     if dtype == 'DC':

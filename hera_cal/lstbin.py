@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
+
 import os
 import sys
 from collections import OrderedDict as odict
@@ -23,7 +24,10 @@ import aipy
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
-from . import utils, abscal, redcal, io
+from . import utils
+from . import abscal
+from . import redcal
+from . import io
 from .datacontainer import DataContainer
 
 

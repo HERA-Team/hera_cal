@@ -5,9 +5,10 @@
 """Module for applying calibration solutions to visibility data, both in memory and on disk."""
 
 from __future__ import print_function, division, absolute_import
+
 import numpy as np
-from pyuvdata import UVCal, UVData
 import argparse
+from pyuvdata import UVCal, UVData
 
 from . import io
 from . import utils

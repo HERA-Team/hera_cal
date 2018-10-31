@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 from __future__ import absolute_import, division, print_function
+
 import numpy as np
 import scipy
 import aipy
@@ -13,7 +14,9 @@ import warnings
 import argparse
 import uvtools
 
-from . import io, utils, flag_utils
+from . import io
+from . import utils
+from . import flag_utils
 from .abscal import fft_dly
 
 

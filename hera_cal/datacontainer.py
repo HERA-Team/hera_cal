@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
+
 import numpy as np
 from collections import OrderedDict as odict
 from six.moves import map, zip

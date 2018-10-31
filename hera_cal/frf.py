@@ -3,6 +3,7 @@
 # Licensed under the MIT License
 
 from __future__ import print_function, division, absolute_import
+
 import numpy as np
 from collections import OrderedDict as odict
 import copy
@@ -11,7 +12,9 @@ from six.moves import range
 from pyuvdata import UVData
 import pyuvdata.utils as uvutils
 
-from . import io, utils, datacontainer
+from . import io
+from . import utils
+from . import datacontainer
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts=None,
