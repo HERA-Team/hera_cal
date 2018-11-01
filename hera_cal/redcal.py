@@ -11,8 +11,6 @@ from hera_cal import utils
 from hera_cal.utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, fft_dly
 from hera_cal.io import HERAData, HERACal, write_cal, write_vis
 from hera_cal.apply_cal import calibrate_in_place
-from hera_qm.ant_metrics import per_antenna_modified_z_scores
-from hera_qm.metrics_io import load_metric_file
 import argparse
 import os
 
@@ -1114,12 +1112,14 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         raise TypeError('input_data must be a single string path to a visibility data file or a HERAData object')
     
     ex_ants = set(ex_ants)
+    from hera_qm.metrics_io import load_metric_file
     if ant_metrics_file is not None:
         for ant in load_metric_file(ant_metrics_file)['xants']:
             ex_ants.add(ant[0])  # Just take the antenna number, flagging both polarizations
     high_z_ant_hist = ''
 
     # loop over calibration, removing bad antennas and re-running if necessary
+    from hera_qm.ant_metrics import per_antenna_modified_z_scores
     run_number = 0
     while True:
         # Run redundant calibration
