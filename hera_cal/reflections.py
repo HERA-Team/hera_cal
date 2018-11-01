@@ -140,11 +140,15 @@ class Reflection_Fitter(object):
         # iterate over keys
         for k in keys:
             echo("...Cleaning data key {}".format(k), verbose=verbose)
-            (model, residual, dlys,
+            (model, flag, residual, dlys,
              info) = delay_filter(self.data[k].copy(), self.flags[k].copy(), self.dnu, tol=tol,
                                   maxiter=maxiter, gain=gain, skip_wgt=skip_wgt, dly_cut=dly_cut,
                                   edgecut=edgecut, taper=taper, alpha=alpha, timeavg=timeavg,
                                   broadcast_flags=broadcast_flags, time_thresh=time_thresh)
+            # add residual back into model
+            model += residual * ~flag
+
+            # append to containers
             self.clean_data[k] = model
             self.resid_data[k] = residual
             self.clean_info[k] = info
@@ -508,7 +512,7 @@ def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0
                                                   window=taper, tol=tol, maxiter=maxiter, gain=gain, **kwargs)
     dlys = np.fft.fftshift(np.fft.fftfreq(d.shape[1], d=dnu)) * 1e9
 
-    return mdl, res, dlys, info
+    return mdl, f, res, dlys, info
 
 
 def echo(message, verbose=True):
