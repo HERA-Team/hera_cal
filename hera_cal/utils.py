@@ -1126,4 +1126,3 @@ def broadcast_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
 
     else:
         raise ValueError("Didn't recognize data structure of flags")
-
