@@ -23,7 +23,7 @@ def test_get_gitinfo_file():
     git_file = os.path.join(hera_cal_dir, 'GIT_INFO')
     if not os.path.exists(git_file):
         # write a file to read in
-        temp_git_file = os.path.join(DATA_PATH, 'test/GIT_INFO')
+        temp_git_file = os.path.join(DATA_PATH, 'test_output/GIT_INFO')
         version_info = hera_cal.version.construct_version_info()
         data = [version_info['git_origin'], version_info['git_origin'],
                 version_info['git_origin'], version_info['git_origin']]
