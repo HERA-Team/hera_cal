@@ -293,7 +293,7 @@ def get_aa(freqs):
     '''Return the AntennaArray to be used for simulation.'''
     location = prms['loc']
     antennas = []
-    if not 'antpos' in prms:
+    if 'antpos' not in prms:
         prms['antpos'] = prms['antpos_ideal']
     nants = len(prms['antpos'])
     antpos_ideal = n.zeros(shape=(nants, 3), dtype=float)
