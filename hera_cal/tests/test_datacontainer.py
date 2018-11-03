@@ -9,8 +9,10 @@ import numpy as np
 import os
 from six.moves import zip
 
+from hera_cal import abscal
+from hera_cal import io
+from hera_cal import datacontainer
 from hera_cal.data import DATA_PATH
-from hera_cal import abscal, io, datacontainer
 
 
 class TestDataContainer(unittest.TestCase):
