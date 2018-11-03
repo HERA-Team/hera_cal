@@ -10,7 +10,10 @@ import numpy as np
 import os
 from pyuvdata import UVData
 
-from hera_cal import flag_utils, utils, io, datacontainer
+from hera_cal import flag_utils
+from hera_cal import utils
+from hera_cal import io
+from hera_cal import datacontainer
 from hera_cal.data import DATA_PATH
 
 
