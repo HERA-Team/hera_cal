@@ -21,8 +21,7 @@ from . import apply_cal
 from .datacontainer import DataContainer
 
 
-class Delay_Filter():
-
+class DelayFilter():
     def __init__(self):
         '''Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.
         To use, run either self.load_data() or self.load_dicts(), then self.run_filter(). If data is loaded from
@@ -73,7 +72,7 @@ class Delay_Filter():
     def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., min_dly=0.0,
                    tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False,
                    flag_nchan_low=0, flag_nchan_high=0, gain=0.1, **win_kwargs):
-        '''Performs uvtools.dspec.Delay_Filter on (a subset of) the data stored in the object.
+        '''Performs uvtools.dspec.DelayFilter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
         Arguments:
@@ -168,7 +167,7 @@ class Delay_Filter():
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
                             partial_write=False, clobber=False, add_to_history='', **kwargs):
         '''Method for writing filtered residuals, CLEAN models, and/or original data with flags filled
-        by CLEAN models where possible. Uses input_data from Delay_Filter.load_data() as a template.
+        by CLEAN models where possible. Uses input_data from DelayFilter.load_data() as a template.
 
         Arguments:
             res_outfilename: path for writing the filtered visibilities with flags
@@ -183,7 +182,7 @@ class Delay_Filter():
                 Must be valid UVData object attributes.
         '''
         if not self.writable:
-            raise ValueError('Writing functionality only enabled by running Delay_Filter.load_data()')
+            raise ValueError('Writing functionality only enabled by running DelayFilter.load_data()')
         if (res_outfilename is None) and (CLEAN_outfilename is None) and (filled_outfilename is None):
             raise ValueError('You must specifiy at least one outfilename.')
         else:
@@ -222,7 +221,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
-        filter_kwargs: additional keyword arguments to be passed to Delay_Filter.run_filter()
+        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
     if calfile is not None:
@@ -230,7 +229,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         calfile.read()
     # loop over all baselines in increments of Nbls
     for i in range(0, len(hd.bls), Nbls):
-        df = Delay_Filter()
+        df = DelayFilter()
         df.load_data(hd, input_cal=calfile, bls=hd.bls[i:i + Nbls])
         df.run_filter(**filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
