@@ -145,10 +145,10 @@ class ReflectionFitter(object):
         for k in keys:
             echo("...Cleaning data key {}".format(k), verbose=verbose)
             (model, flag, residual, dlys,
-             info) = delay_filter(self.data[k].copy(), self.flags[k].copy(), self.dnu, tol=tol,
-                                  maxiter=maxiter, gain=gain, skip_wgt=skip_wgt, dly_cut=dly_cut,
-                                  edgecut=edgecut, taper=taper, alpha=alpha, timeavg=timeavg,
-                                  broadcast_flags=broadcast_flags, time_thresh=time_thresh)
+             info) = reflections_delay_filter(self.data[k].copy(), self.flags[k].copy(), self.dnu, tol=tol,
+                                              maxiter=maxiter, gain=gain, skip_wgt=skip_wgt, dly_cut=dly_cut,
+                                              edgecut=edgecut, taper=taper, alpha=alpha, timeavg=timeavg,
+                                              broadcast_flags=broadcast_flags, time_thresh=time_thresh)
             # add residual back into model
             model += residual * ~flag
 
@@ -449,8 +449,8 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
             np.fft.fftshift(dfft, axes=1), np.fft.fftshift(dlys))
 
 
-def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0.1, tol=1e-5, maxiter=500,
-                 gain=0.1, skip_wgt=0.2, timeavg=False, broadcast_flags=False, time_thresh=0.1):
+def reflections_delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0.1, tol=1e-5, maxiter=500,
+                             gain=0.1, skip_wgt=0.2, timeavg=False, broadcast_flags=False, time_thresh=0.1):
     """
     Delay (CLEAN) and filter flagged data and return model and residual visibilities.
 
