@@ -17,6 +17,7 @@ from contextlib import contextmanager
 import six
 from pyuvdata import UVData
 from pyuvdata import UVCal
+import pyuvdata.tests as uvtest
 
 from hera_cal import utils, abscal, datacontainer, io
 from hera_cal.redcal import noise
@@ -28,11 +29,7 @@ from hera_cal.data import DATA_PATH
 # from https://stackoverflow.com/questions/4219717/how-to-assert-output-with-nosetest-unittest-in-python
 @contextmanager
 def captured_output():
-    if six.PY2:
-        from io import BytesIO as StringIO
-    else:
-        from io import StringIO
-    new_out, new_err = StringIO(), StringIO()
+    new_out, new_err = six.StringIO(), six.StringIO()
     old_out, old_err = sys.stdout, sys.stderr
     try:
         sys.stdout, sys.stderr = new_out, new_err
@@ -313,7 +310,9 @@ def test_get_miriad_times():
 def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
-    data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(fname, return_meta=True)
+    (data, flags, antpos, ants, freqs, times,
+     lsts, pols) = uvtest.checkWarnings(io.load_vis, [fname], {'return_meta': True}, nwarnings=1,
+                                        message='Telescope AIPY is not in known_telescopes')
     data_drift = copy.deepcopy(data)
     transit_integration = 50
 
