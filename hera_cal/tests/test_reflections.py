@@ -10,13 +10,15 @@ import numpy as np
 from copy import deepcopy
 import os
 import sys
-from scipy import stats
 import shutil
+from six.moves import zip
+from scipy import stats
 from matplotlib import pyplot as plt
 from pyuvdata import UVCal, UVData
 
-import hera_cal as hc
 from hera_cal import io
+from hera_cal import reflections
+from hera_cal import datacontainer
 from hera_cal.data import DATA_PATH
 
 
@@ -85,21 +87,21 @@ class Test_ReflectionFitter(unittest.TestCase):
     uvd.flag_array[:, :, 20:22, :] = True
 
     def test_load_data(self):
-        RF = hc.ReflectionFitter(self.uvd)
+        RF = reflections.ReflectionFitter(self.uvd)
         nt.assert_equal(len(RF.data), 6)
 
         self.uvd.write_miriad("./ex")
-        RF = hc.ReflectionFitter("./ex", filetype='miriad')
+        RF = reflections.ReflectionFitter("./ex", filetype='miriad')
         nt.assert_equal(len(RF.data), 6)
         shutil.rmtree("./ex")
 
     def test_delay_clean(self):
-        RF = hc.ReflectionFitter(self.uvd)
+        RF = reflections.ReflectionFitter(self.uvd)
         RF.dly_clean_data(tol=1e-10, maxiter=5000, gain=0.1, skip_wgt=0.1, dly_cut=200.0, edgecut=5,
                           taper='tukey', alpha=0.1, timeavg=True, broadcast_flags=True, time_thresh=0.05,
                           overwrite=True, verbose=True)
         nt.assert_equal(len(RF.data), len(RF.clean_data))
-        nt.assert_true(isinstance(RF.clean_data, hc.datacontainer.DataContainer))
+        nt.assert_true(isinstance(RF.clean_data, datacontainer.DataContainer))
         nt.assert_equal(RF.clean_data[(37, 37, 'xx')].shape, (1, 54))
         nt.assert_equal(len(RF.clean_freqs), 54)
 
@@ -108,25 +110,25 @@ class Test_ReflectionFitter(unittest.TestCase):
                           taper='tukey', alpha=0.1, timeavg=True, broadcast_flags=True, time_thresh=0.05,
                           overwrite=True, verbose=True)
         nt.assert_equal(len(RF.data), len(RF.clean_data))
-        nt.assert_true(isinstance(RF.clean_data, hc.datacontainer.DataContainer))
+        nt.assert_true(isinstance(RF.clean_data, datacontainer.DataContainer))
         nt.assert_equal(RF.clean_data[(37, 37, 'xx')].shape, (1, 64))
         nt.assert_equal(len(RF.clean_freqs), 64)
 
     def test_reflection_modeling(self):
-        RF = hc.ReflectionFitter(self.uvd)
+        RF = reflections.ReflectionFitter(self.uvd)
         RF.dly_clean_data(tol=1e-12, maxiter=500, gain=1e-2, skip_wgt=0.1, dly_cut=200.0, edgecut=5,
                           taper='hanning', timeavg=True, broadcast_flags=True, time_thresh=0.05,
                           overwrite=True, verbose=True)
         RF.model_reflections((100, 200), taper='hanning', zero_pad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(RF.delays.values()), 150.0, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(RF.amps.values()), 2e-2, atol=2e-3).all())
-        nt.assert_true(np.isclose(np.ravel(RF.phs.values()), 2.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.delays.values())), 150.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.amps.values())), 2e-2, atol=2e-3).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.phs.values())), 2.0, atol=2e-1).all())
 
         # now reverse delay range
         RF.model_reflections((-200, -100), taper='hanning', zero_pad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(RF.delays.values()), -150.0, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(RF.amps.values()), 2e-2, atol=2e-3).all())
-        nt.assert_true(np.isclose(np.ravel(RF.phs.values()), 2 * np.pi - 2.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.delays.values())), -150.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.amps.values())), 2e-2, atol=2e-3).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.phs.values())), 2 * np.pi - 2.0, atol=2e-1).all())
 
         # exceptions
         nt.assert_raises(ValueError, RF.model_reflections, (1000, 2000), taper='none', overwrite=True)
@@ -134,17 +136,17 @@ class Test_ReflectionFitter(unittest.TestCase):
         nt.assert_raises(AssertionError, RF.model_reflections, (-100, 100), overwrite=True)
 
         # non-even Nfreqs
-        RF = hc.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[1:], inplace=False))
+        RF = reflections.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[1:], inplace=False))
         RF.dly_clean_data(tol=1e-12, maxiter=500, gain=1e-2, skip_wgt=0.1, dly_cut=200.0, edgecut=0,
                           taper='hanning', timeavg=True, broadcast_flags=True, time_thresh=0.05,
                           overwrite=True, verbose=True)
         RF.model_reflections((100, 200), taper='hanning', zero_pad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(RF.delays.values()), 150.0, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(RF.amps.values()), 2e-2, atol=2e-3).all())
-        nt.assert_true(np.isclose(np.ravel(RF.phs.values()), 2.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.delays.values())), 150.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.amps.values())), 2e-2, atol=2e-3).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.phs.values())), 2.0, atol=2e-1).all())
 
     def test_write_reflections(self):
-        RF = hc.ReflectionFitter(self.uvd)
+        RF = reflections.ReflectionFitter(self.uvd)
         RF.dly_clean_data(tol=1e-12, maxiter=500, gain=1e-2, skip_wgt=0.1, dly_cut=200.0, edgecut=5,
                           taper='hanning', timeavg=True, broadcast_flags=True, time_thresh=0.05,
                           overwrite=True, verbose=True)
