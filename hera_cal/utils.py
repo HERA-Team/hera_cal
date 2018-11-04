@@ -1045,10 +1045,11 @@ def top2eq_m(ha, dec):
     return mat
 
 
-def broadcast_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
+def factorize_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
     """
-    Broadcast flags across time if fraction of flagged times exceeds
-    time_thresh, otherwise broadcast across frequency specified by spw_ranges.
+    Factorize flags into two 1D time and frequency masks. This works by
+    broadcasting flags across time if the fraction of flagged times exceeds
+    time_thresh, otherwise flags are broadcasted across channels in a spw_range.
 
     Note: although technically allowed, this function may give unexpected results
     if multiple spectral windows in spw_ranges have frequency overlap.
@@ -1096,7 +1097,7 @@ def broadcast_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
         for (spw1, spw2) in spw_ranges:
 
             # identify fully flagged integrations
-            fully_flagged_ints = np.sum(flags, axis=1) / Nfreqs > 0.9999999
+            fully_flagged_ints = np.isclose(np.sum(flags, axis=1), Nfreqs, atol=1e-6)
             unflagged_Ntimes = np.sum(~fully_flagged_ints, dtype=np.float)
 
             # identify channels where flagged fraction exceeds time threshold
@@ -1120,7 +1121,7 @@ def broadcast_flags(flags, spw_ranges=None, time_thresh=0.05, inplace=False):
         if not inplace:
             flags = copy.deepcopy(flags)
         for k in flags.keys():
-            broadcast_flags(flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True)
+            factorize_flags(flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True)
 
         return flags
 

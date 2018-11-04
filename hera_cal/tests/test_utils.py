@@ -502,33 +502,33 @@ def test_predict_noise_variance_from_autos():
             np.testing.assert_array_equal(sigmasq, sigmasq2)
 
 
-def test_broadcast_flags():
+def test_factorize_flags():
     # load data
     data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
     hd = io.HERAData(data_fname, filetype='miriad')
     data, flags, _ = hd.read(bls=[(24, 25)])
 
     # run on ndarray
-    f = utils.broadcast_flags(flags[(24, 25, 'xx')].copy(), time_thresh=1.5/60, inplace=False)
+    f = utils.factorize_flags(flags[(24, 25, 'xx')].copy(), time_thresh=1.5/60, inplace=False)
     nt.assert_true(f[52].all())
     nt.assert_true(f[:, 60:62].all())
 
-    f = utils.broadcast_flags(flags[(24, 25, 'xx')].copy(), spw_ranges=[(45, 60)], time_thresh=0.5/60, inplace=False)
+    f = utils.factorize_flags(flags[(24, 25, 'xx')].copy(), spw_ranges=[(45, 60)], time_thresh=0.5/60, inplace=False)
     nt.assert_true(f[:, 48].all())
     nt.assert_false(np.min(f, axis=1).any())
     nt.assert_false(f[:, 24].all())
 
     f = flags[(24, 25, 'xx')].copy()
-    utils.broadcast_flags(f, time_thresh=0.5/60, inplace=True)
+    utils.factorize_flags(f, time_thresh=0.5/60, inplace=True)
     nt.assert_true(f[:, 48].all())
     nt.assert_false(np.min(f, axis=1).any())
 
     # run on datacontainer
-    f2 = utils.broadcast_flags(copy.deepcopy(flags), time_thresh=0.5/60, inplace=False)
+    f2 = utils.factorize_flags(copy.deepcopy(flags), time_thresh=0.5/60, inplace=False)
     np.testing.assert_array_equal(f2[(24, 25, 'xx')], f)
 
     # test exceptions
-    nt.assert_raises(ValueError, utils.broadcast_flags, flags, spw_ranges=(0, 1))
-    nt.assert_raises(ValueError, utils.broadcast_flags, 'hi')
+    nt.assert_raises(ValueError, utils.factorize_flags, flags, spw_ranges=(0, 1))
+    nt.assert_raises(ValueError, utils.factorize_flags, 'hi')
 
 
