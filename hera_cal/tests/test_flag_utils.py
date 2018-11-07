@@ -8,6 +8,7 @@ from __future__ import print_function, division, absolute_import
 import nose.tools as nt
 import numpy as np
 import os
+import copy
 from pyuvdata import UVData
 
 from hera_cal import flag_utils
@@ -64,3 +65,34 @@ def test_synthesize_ant_flags():
     ant_flags = flag_utils.synthesize_ant_flags(flags, threshold=1.0)
     np.testing.assert_array_equal(ant_flags[(2, 'Jxx')][:3, 4], True)
     np.testing.assert_array_equal(ant_flags[(2, 'Jxx')][3:, 4], False)
+
+
+def test_factorize_flags():
+    # load data
+    data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+    hd = io.HERAData(data_fname, filetype='miriad')
+    data, flags, _ = hd.read(bls=[(24, 25)])
+
+    # run on ndarray
+    f = flag_utils.factorize_flags(flags[(24, 25, 'xx')].copy(), time_thresh=1.5 / 60, inplace=False)
+    nt.assert_true(f[52].all())
+    nt.assert_true(f[:, 60:62].all())
+
+    f = flag_utils.factorize_flags(flags[(24, 25, 'xx')].copy(), spw_ranges=[(45, 60)],
+                                   time_thresh=0.5 / 60, inplace=False)
+    nt.assert_true(f[:, 48].all())
+    nt.assert_false(np.min(f, axis=1).any())
+    nt.assert_false(f[:, 24].all())
+
+    f = flags[(24, 25, 'xx')].copy()
+    flag_utils.factorize_flags(f, time_thresh=0.5 / 60, inplace=True)
+    nt.assert_true(f[:, 48].all())
+    nt.assert_false(np.min(f, axis=1).any())
+
+    # run on datacontainer
+    f2 = flag_utils.factorize_flags(copy.deepcopy(flags), time_thresh=0.5 / 60, inplace=False)
+    np.testing.assert_array_equal(f2[(24, 25, 'xx')], f)
+
+    # test exceptions
+    nt.assert_raises(ValueError, flag_utils.factorize_flags, flags, spw_ranges=(0, 1))
+    nt.assert_raises(ValueError, flag_utils.factorize_flags, 'hi')
