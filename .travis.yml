@@ -36,7 +36,7 @@ install:
   - pip install git+https://github.com/HERA-Team/uvtools.git
 script:
   - nosetests hera_cal --with-coverage --cover-package=hera_cal
-  - pycodestyle . --ignore=E501,W503,W601
+  - pycodestyle . --ignore=E501,W291,W293,W503,W601
 after_success:
   - coveralls
 notifications:
