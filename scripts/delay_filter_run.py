@@ -26,7 +26,7 @@ if a.partial_load_Nbls is not None:  # partial loading
                                                      filled_outfilename=a.filled_outfilename, clobber=a.clobber,
                                                      add_to_history=' '.join(sys.argv), **filter_kwargs)
 else:
-    df = delay_filter.Delay_Filter()
+    df = delay_filter.DelayFilter()
     df.load_data(a.infilename, filetype=a.filetype_in, input_cal=a.calfile)
     df.run_filter(**filter_kwargs)
     df.write_filtered_data(res_outfilename=a.res_outfilename, CLEAN_outfilename=a.CLEAN_outfilename,
