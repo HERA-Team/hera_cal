@@ -195,51 +195,66 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
 
 class FRFilter(object):
     """
-    Fringe Rate Filter
+    Fringe Rate Filter Object
     """
 
-    def __init__(self):
+    def __init__(self, inp_data=None, filetype='miriad', **load_kwargs):
         """
-        Fringe Rate Filter
-        """
-        pass
+        Initialize a FRFilter object and optionally
+        load data if provided.
 
-    def load_data(self, input_data, filetype='miriad'):
+        Args:
+            inp_data : string, UVData or DataContainer object
+                Filepath to a miriad, uvfits or uvh5
+                datafile, a UVData object or a DataContainer
+                object.
+
+            filetype : str
+                If inp_data is a filepath, this is its filetype.
+                See hera_cal.io.HERAData for supported filetypes.
+
+            load_kwargs : dictionary
+                Keyword arguments to pass to UVData.read if
+                dainp_datata is fed as a string.
+        """
+        if inp_data is not None:
+            self.load_data(inp_data, **load_kwargs)
+
+    def load_data(self, inp_data, filetype='miriad', **load_kwargs):
         """
         Load in visibility data for filtering
 
-        Parameters
-        ----------
-        input_data : HERAData object or str
-            HERAData object or string filepath to visibility data
+        Args:
+            inp_data : string, UVData or HERAData object
+                Filepath to visibility file, or UVData or HERAData object
+    
+            filetype : str
+                IF data is a filepath, this is its filetype.
+                See hera_cal.io.HERAData for supported filetypes.
 
-        filetype : str
-            File format of the data. Only miriad is currently supported.
+            load_kwargs : dictionary
+                Keyword arguments to pass to UVData.read if data is a string.
         """
-        assert isinstance(input_data, (UVData, str, np.str, io.HERAData)), "input_data must be fed as a HERAData, UVData object or a string filepath"
-
         # load HERAData if fed as string
-        if isinstance(input_data, (str, np.str)):
-            # TODO: Need HERAData to take UVData objects
-            self.input_data = io.HERAData(input_data, filetype=filetype)
-            self.input_data.read()
-        elif isinstance(input_data, UVData):
+        if isinstance(inp_data, (str, np.str)):
+            self.inp_data = io.HERAData(inp_data, filetype=filetype)
+        elif isinstance(inp_data, UVData):
             # promote UVData to HERAData
-            self.input_data = input_data
-            self.input_data.__class__ = io.HERAData
-            self.input_data._determine_blt_slicing()
-            self.input_data._determine_pol_indexing()
+            self.inp_data = inp_data
+            self.inp_data.__class__ = io.HERAData
+            self.inp_data._determine_blt_slicing()
+            self.inp_data._determine_pol_indexing()
+        elif isinstance(inp_data, io.HERAData):
+            self.inp_data = inp_data
         else:
-            self.input_data = input_data
-
+            raise ValueError("inp_data must be fed as a HERAData or UVData object or a string filepath")
         self.filetype = filetype
 
         # read all the data into datacontainers
-        self.data, self.flags, self.nsamples = self.input_data.build_datacontainers()
+        self.data, self.flags, self.nsamples = self.inp_data.build_datacontainers()
 
-        # read the metadata: assign individually to guard against code
-        # changes within hera_cal.io implicitly changing variable names
-        mdict = self.input_data.get_metadata_dict()
+        # assign necessary metadata
+        mdict = self.inp_data.get_metadata_dict()
         self.antpos = mdict['antpos']
         self.ants = mdict['ants']
         self.freqs = mdict['freqs']
