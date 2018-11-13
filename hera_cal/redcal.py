@@ -10,8 +10,6 @@ import argparse
 import os
 from six.moves import range, zip
 import linsolve
-from hera_qm.ant_metrics import per_antenna_modified_z_scores
-from hera_qm.metrics_io import load_metric_file
 
 from . import utils
 from .datacontainer import DataContainer
