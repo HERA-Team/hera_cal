@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
+
+from __future__ import print_function, division, absolute_import
+
 import os
 import sys
 from collections import OrderedDict as odict
@@ -8,19 +11,24 @@ import copy
 import argparse
 import functools
 import numpy as np
-from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
-from hera_cal import utils, abscal, redcal, io
-from hera_cal.datacontainer import DataContainer
+import itertools
+import operator
+import gc as garbage_collector
+import datetime
+from six.moves import map, range
 from scipy import signal
 from scipy import interpolate
 from scipy import spatial
-import itertools
-import operator
 from astropy import stats as astats
-import gc as garbage_collector
-import datetime
 import aipy
+from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
+
+from . import utils
+from . import abscal
+from . import redcal
+from . import io
+from .datacontainer import DataContainer
 
 
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst_low=None,
@@ -103,7 +111,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         flags_min : dictionary with data flags
     """
     # get visibility shape
-    Ntimes, Nfreqs = data_list[0][data_list[0].keys()[0]].shape
+    Ntimes, Nfreqs = data_list[0][list(data_list[0].keys())[0]].shape
 
     # get dlst if not provided
     if dlst is None:
@@ -162,7 +170,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 raise ValueError("freq_array and antpos is needed for rephase")
 
             # form baseline dictionary
-            bls = odict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys()))
+            bls = odict(list(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys())))
 
             # get appropriate lst_shift for each integration, then rephase
             lst_shift = lst_grid[grid_indices] - li
@@ -217,7 +225,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             if index in all_lst_indices:
                 # skip if index already in data
                 continue
-            for key in data.keys():
+            for key in list(data.keys()):
                 # fill data with blank data
                 data[key][index] = [np.ones(Nfreqs, np.complex)]
                 flags[key][index] = [np.ones(Nfreqs, np.bool)]
@@ -237,8 +245,12 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     # return un-averaged data if desired
     if return_no_avg:
         # return all binned data instead of just bin average
-        data_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, data[k][k2]), sorted(data[k].keys()))).values())), sorted(data.keys())))
-        flags_bin = odict(map(lambda k: (k, np.array(odict(map(lambda k2: (k2, flags[k][k2]), sorted(flags[k].keys()))).values())), sorted(flags.keys())))
+        data_bin = odict(list(map(lambda k: (k, np.array(list(odict(list(map(lambda k2: (k2, data[k][k2]),
+                                                                             sorted(data[k].keys())))).values()))),
+                                  sorted(data.keys()))))
+        flags_bin = odict(list(map(lambda k: (k, np.array(list(odict(list(map(lambda k2: (k2, flags[k][k2]),
+                                                                              sorted(flags[k].keys())))).values()))),
+                                   sorted(flags.keys()))))
 
         return lst_bins, data_bin, flags_bin
 
@@ -379,7 +391,7 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
     lst_grid = make_lst_grid(dlst, lst_start=lst_start, verbose=verbose)
 
     # get frequency info
-    Nfreqs = data[data.keys()[0]].shape[1]
+    Nfreqs = data[list(data.keys())[0]].shape[1]
     data_freqs = np.arange(Nfreqs)
     model_freqs = np.arange(Nfreqs)
 
@@ -644,13 +656,14 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             output_file_select = [output_file_select]
         output_file_select = [int(o) for o in output_file_select]
         try:
-            file_lsts = map(lambda i: file_lsts[i], output_file_select)
+            file_lsts = list(map(lambda i: file_lsts[i], output_file_select))
         except IndexError:
-            print "Warning: one or more indices in output_file_select {} caused an index error with length {} file_lsts list, exiting...".format(output_file_select, nfiles)
+            print("Warning: one or more indices in output_file_select {} caused an index error with length {} "
+                  "file_lsts list, exiting...".format(output_file_select, nfiles))
             return
 
     # create data file status: None if not opened, data objects if opened
-    data_status = map(lambda d: map(lambda f: None, d), data_files)
+    data_status = list(map(lambda d: list(map(lambda f: None, d)), data_files))
 
     # get outdir
     if outdir is None:
@@ -675,7 +688,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
-        abscal.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
+        utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
 
         # create empty data_list and lst_list
         data_list = []
@@ -686,7 +699,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
         # locate all data files that fall within the range of lst for this output file
         f_min = np.min(f_lst)
         f_max = np.max(f_lst)
-        f_select = np.array(map(lambda d: map(lambda f: (f[1] > f_min) & (f[0] < f_max + atol), d), data_times))
+        f_select = np.array(list(map(lambda d: list(map(lambda f: (f[1] > f_min) & (f[0] < f_max + atol), d)), data_times)))
         if i == 0:
             old_f_select = copy.copy(f_select)
 
@@ -739,7 +752,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # skip if data_list is empty
         if len(data_list) == 0:
-            abscal.echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
+            utils.echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
 
             # erase data references
             del file_list, data_list, flgs_list, lst_list
@@ -755,7 +768,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
                              sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
         # update history
-        file_history = history + " Input files: " + "-".join(map(lambda ff: os.path.basename(ff), file_list))
+        file_history = history + " Input files: " + "-".join(list(map(lambda ff: os.path.basename(ff), file_list)))
         kwargs['history'] = file_history
 
         # form integration time array
@@ -777,7 +790,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
-            abscal.echo("{} exists, not overwriting".format(bin_file), verbose=verbose)
+            utils.echo("{} exists, not overwriting".format(bin_file), verbose=verbose)
             continue
 
         # write to file
@@ -816,8 +829,8 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
         dlst_diff = dlsts - dlst
         dlst_diff[dlst_diff < 0] = 10
         new_dlst = dlsts[np.argmin(dlst_diff)]
-        abscal.echo("2pi is not equally divisible by input dlst ({:.16f}) at 1 part in 1e7.\n"
-                    "Using {:.16f} instead.".format(dlst, new_dlst), verbose=verbose)
+        utils.echo("2pi is not equally divisible by input dlst ({:.16f}) at 1 part in 1e7.\n"
+                   "Using {:.16f} instead.".format(dlst, new_dlst), verbose=verbose)
         dlst = new_dlst
 
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
@@ -827,7 +840,7 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
     if lst_start is not None:
         # enforce lst_start to be within 0-2pi, else replace with 0
         if lst_start < 0 or lst_start >= 2 * np.pi:
-            abscal.echo("lst_start was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
+            utils.echo("lst_start was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
             lst_start = lst_start % (2 * np.pi)
         lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] - dlst / 2
         lst_grid += lst_start

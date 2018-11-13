@@ -2,20 +2,21 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import print_function, division, absolute_import
+
 import numpy as np
+import os
+import copy
+from six.moves import map, range
 import aipy
 import astropy.constants as const
 from astropy.time import Time
 from astropy import coordinates as crd
 from astropy import units as unt
-import pyuvdata.utils as uvutils
-from pyuvdata import UVCal, UVData
-import os
-import hera_cal
-import copy
-from scipy.interpolate import interp1d
 from scipy import signal
 from collections import OrderedDict as odict
+import pyuvdata.utils as uvutils
+from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT
 
@@ -32,13 +33,13 @@ def _comply_vispol(pol):
     return polnum2str(polstr2num(pol))
 
 
-_VISPOLS = [pol for pol in POL_STR2NUM_DICT.keys() if polstr2num(pol) < 0]
+_VISPOLS = [pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0]
 SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _VISPOLS}
 JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
 
 def split_pol(pol):
-    '''Splits visibility polarization string (pyuvdata's polstr) into 
+    '''Splits visibility polarization string (pyuvdata's polstr) into
     antenna polarization strings (pyuvdata's jstr).'''
     return SPLIT_POL[_comply_vispol(pol)]
 
@@ -50,7 +51,7 @@ def join_pol(p1, p2):
 
 
 def comply_pol(pol):
-    '''Maps an input (visibility or antenna) polarization string onto a string 
+    '''Maps an input (visibility or antenna) polarization string onto a string
     compliant with pyuvdata and hera_cal.'''
     try:
         return _comply_vispol(pol)
@@ -70,7 +71,7 @@ def join_bl(ai, aj):
 
 
 def reverse_bl(bl):
-    '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i) 
+    '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i)
     or (j,i,pol[::-1]), respectively.'''
     i, j = bl[:2]
     if len(bl) == 2:
@@ -141,6 +142,16 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df
     offset = np.angle(np.mean(data * np.exp(-np.complex64(2j * np.pi) * dlys * freqs.reshape(1, -1)), axis=1))
     return dlys, offset.reshape(-1, 1)
+
+
+def echo(message, type=0, verbose=True):
+    if verbose:
+        if type == 0:
+            print(message)
+        elif type == 1:
+            print('')
+            print(message)
+            print("-" * 40)
 
 
 class AntennaArray(aipy.pol.AntennaArray):
@@ -235,10 +246,10 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
         antpos[antnum] = {'x': rotECEF[0], 'y': rotECEF[1], 'z': rotECEF[2]}
 
     # make antpos_ideal array
-    nants = np.max(antpos.keys()) + 1
+    nants = np.max(list(antpos.keys())) + 1
     antpos_ideal = np.zeros(shape=(nants, 3), dtype=float) - 1
     # unpack from dict -> numpy array
-    for k in antpos.keys():
+    for k in list(antpos.keys()):
         antpos_ideal[k, :] = np.array([antpos[k]['x'], antpos[k]['y'], antpos[k]['z']])
     freqs = np.asarray(freqs)
     # Make list of antennas.
@@ -260,7 +271,7 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     # Make the AntennaArray and set position parameters
     aa = AntennaArray(location, antennas, antpos_ideal=antpos_ideal)
     pos_prms = {}
-    for i in antpos.keys():
+    for i in list(antpos.keys()):
         pos_prms[str(i)] = antpos[i]
     aa.set_params(pos_prms)
     return aa
@@ -280,9 +291,11 @@ def get_aa_from_calfile(freqs, calfile, **kwargs):
     ====================
     aa: AntennaArray object
     '''
-    exec('from {calfile} import get_aa'.format(calfile=calfile))
+    namespace = {}
+    exec('from {calfile} import get_aa'.format(calfile=calfile), namespace)
 
     # generate aa
+    get_aa = namespace['get_aa']
     return get_aa(freqs, **kwargs)
 
 
@@ -475,101 +488,12 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
     a = crd.AltAz(location=e)
 
     # get Sun locations
-    alts = np.array(map(lambda t: crd.get_sun(Time(t, format='jd')).transform_to(a).alt.value, jds))
+    alts = np.array(list(map(lambda t: crd.get_sun(Time(t, format='jd')).transform_to(a).alt.value, jds)))
 
     if array:
         return alts
     else:
         return alts[0]
-
-
-def solar_flag(flags, times=None, flag_alt=0.0, longitude=21.42830, latitude=-30.72152, inplace=False,
-               interp=False, interp_Nsteps=11, verbose=True):
-    """
-    Apply flags at times when the Sun is above some minimum altitude.
-
-    Parameters
-    ----------
-    flags : flag ndarray, or DataContainer, or pyuvdata.UVData object
-
-    start_jd : int
-        Integer Julian Date to perform calculation for
-
-    times : 1D float ndarray
-        If flags is an ndarray or DataContainer, this contains the time bins
-        of the data's time axis in Julian Date
-
-    flag_alt : float
-        If the Sun is greater than this altitude [degrees], we flag the data.
-
-    longitude : float
-        Longitude of observer in degrees East (if flags is a UVData object,
-        use its stored longitude instead)
-
-    latitude : float
-        Latitude of observer in degrees North (if flags is a UVData object,
-        use its stored latitude instead)
-
-    inplace: bool
-        If inplace, edit flags instead of returning a new flags object.
-
-    interp : bool
-        If True, evaluate Solar altitude with a coarse grid and interpolate at times values.
-
-    interp_Nsteps : int
-        Number of steps from times.min() to times.max() to use in get_solar_alt call.
-        If the range of times is <= a single day, Nsteps=11 is a good-enough resolution.
-
-    verbose : bool
-        if True, print feedback to standard output
-
-    Returns
-    -------
-    flags : solar-applied flags, same format as input
-    """
-    # type check
-    if isinstance(flags, hera_cal.datacontainer.DataContainer):
-        dtype = 'DC'
-    elif isinstance(flags, np.ndarray):
-        dtype = 'ndarr'
-    elif isinstance(flags, UVData):
-        if verbose:
-            print "Note: using latitude and longitude in given UVData object"
-        latitude, longitude, altitude = flags.telescope_location_lat_lon_alt_degrees
-        times = np.unique(flags.time_array)
-        dtype = 'uvd'
-    if dtype in ['ndarr', 'DC']:
-        assert times is not None, "if flags is an ndarray or DataContainer, must feed in times"
-
-    # inplace
-    if not inplace:
-        flags = copy.deepcopy(flags)
-
-    # get solar alts
-    if interp:
-        # first evaluate coarse grid, then interpolate
-        _times = np.linspace(times.min(), times.max(), interp_Nsteps)
-        _alts = get_sun_alt(_times, longitude=longitude, latitude=latitude)
-
-        # interpolate _alts
-        alts = interp1d(_times, _alts, kind='quadratic')(times)
-    else:
-        # directly evaluate solar altitude at times
-        alts = get_sun_alt(times, longitude=longitude, latitude=latitude)
-
-    # apply flags
-    if dtype == 'DC':
-        for k in flags.keys():
-            flags[k][alts > flag_alt, :] = True
-    elif dtype == 'ndarr':
-        flags[alts > flag_alt, :] = True
-    elif dtype == 'uvd':
-        for t, a in zip(times, alts):
-            if a > flag_alt:
-                flags.flag_array[np.isclose(flags.time_array, t)] = True
-
-    if not inplace:
-        return flags
 
 
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
@@ -599,7 +523,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
     # iterate over files
     for i, f in enumerate(files):
         if i == 0:
-            hera_cal.abscal_funcs.echo("...loading {}".format(f), verbose=verbose)
+            echo("...loading {}".format(f), verbose=verbose)
             uvc = UVCal()
             uvc.read_calfits(f)
             f1 = copy.copy(f)
@@ -625,7 +549,7 @@ def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=
                 uvc.flag_array = uvc.flag_array * uvc2.flag_array
 
     # write to file
-    hera_cal.abscal_funcs.echo("...saving {}".format(output_fname), verbose=verbose)
+    echo("...saving {}".format(output_fname), verbose=verbose)
     uvc.write_calfits(output_fname, clobber=True)
 
 
@@ -793,75 +717,6 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         return data
 
 
-def synthesize_ant_flags(flags, threshold=0.0):
-    '''
-    Synthesizes flags on visibilities into flags on antennas. For a given antenna and
-    a given time and frequency, if the fraction of flagged pixels in all visibilities with that
-    antenna exceeds 'threshold', the antenna gain is flagged at that time and frequency. This
-    excludes contributions from antennas that are completely flagged, i.e. are dead.
-
-    Arguments:
-        flags: DataContainer containing boolean data flag waterfalls
-        threshold: float, fraction of flagged pixels across all visibilities (with a common antenna)
-            needed to flag that antenna gain at a particular time and frequency.
-
-    Returns:
-        ant_flags: dictionary mapping antenna-pol keys like (1,'x') to boolean flag waterfalls
-    '''
-    # type check
-    assert isinstance(flags, hera_cal.datacontainer.DataContainer), "flags must be fed as a datacontainer"
-    assert threshold >= 0.0 and threshold <= 1.0, "threshold must be 0.0 <= threshold <= 1.0"
-    if np.isclose(threshold, 1.0):
-        threshold = threshold - 1e-10
-
-    # get Ntimes and Nfreqs
-    Ntimes, Nfreqs = flags[flags.keys()[0]].shape
-
-    # get antenna-pol keys
-    antpols = set([ap for (i, j, pol) in flags.keys() for ap in [(i, split_pol(pol)[0]), (j, split_pol(pol)[1])]])
-
-    # get dictionary of completely flagged ants to exclude
-    is_excluded = {ap: True for ap in antpols}
-    for (i, j, pol), flags_here in flags.items():
-        if not np.all(flags_here):
-            is_excluded[(i, split_pol(pol)[0])] = False
-            is_excluded[(j, split_pol(pol)[1])] = False
-
-    # construct dictionary of visibility count (number each antenna touches)
-    # and dictionary of number of flagged visibilities each antenna has (excluding dead ants)
-    # per time and freq
-    ant_Nvis = {ap: 0 for ap in antpols}
-    ant_Nflag = {ap: np.zeros((Ntimes, Nfreqs), np.float) for ap in antpols}
-    for (i, j, pol), flags_here in flags.items():
-        # get antenna keys
-        ap1 = (i, split_pol(pol)[0])
-        ap2 = (j, split_pol(pol)[1])
-        # only continue if not in is_excluded
-        if not is_excluded[ap1] and not is_excluded[ap2]:
-            # add to Nvis count
-            ant_Nvis[ap1] += 1
-            ant_Nvis[ap2] += 1
-            # Add to Nflag count
-            ant_Nflag[ap1] += flags_here.astype(np.float)
-            ant_Nflag[ap2] += flags_here.astype(np.float)
-
-    # iterate over antpols and construct antenna gain dictionaries
-    ant_flags = {}
-    for ap in antpols:
-        # create flagged arrays for excluded ants
-        if is_excluded[ap]:
-            ant_flags[ap] = np.ones((Ntimes, Nfreqs), np.bool)
-        # else create flags based on threshold
-        else:
-            # handle Nvis = 0 cases
-            if ant_Nvis[ap] == 0:
-                ant_Nvis[ap] = 1e-10
-            # create antenna flags
-            ant_flags[ap] = (ant_Nflag[ap] / ant_Nvis[ap]) > threshold
-
-    return ant_flags
-
-
 def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_antpol=False,
           reds=None, chisq=None, nObs=None, chisq_per_ant=None, nObs_per_ant=None):
     """Computes chi^2 defined as:
@@ -890,7 +745,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
         split_by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy
             arrays. Additionally, if split_by_antpol is True, cross-polarized visibilities are ignored.
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol). Requires that the model
-            contains visibilities for the first baseline in each redundant group. Any other baselines 
+            contains visibilities for the first baseline in each redundant group. Any other baselines
             in those redundant groups are overwritten in the model, which is copied not modified.
         chisq: optional chisq to update (see below)
         nObs: optional nObs to update (see below). Must be specified if chisq is specified and must be
@@ -946,7 +801,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     for bl in data.keys():
         ap1, ap2 = split_pol(bl[2])
         # make that if split_by_antpol is true, the baseline is not cross-polarized
-        if model.has_key(bl) and data_wgts.has_key(bl) and (not split_by_antpol or ap1 == ap2):
+        if bl in model and bl in data_wgts and (not split_by_antpol or ap1 == ap2):
             ant1, ant2 = (bl[0], ap1), (bl[1], ap2)
 
             # multiply model by gains if they are supplied
@@ -965,12 +820,12 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             # calculate chi^2
             chisq_here = np.asarray(np.abs(model_here - data[bl])**2 * wgts, dtype=np.float64)
             if split_by_antpol:
-                if chisq.has_key(ap1):
-                    assert nObs.has_key(ap1)
+                if ap1 in chisq:
+                    assert ap1 in nObs
                     chisq[ap1] = chisq[ap1] + chisq_here
                     nObs[ap1] = nObs[ap1] + (wgts > 0)
                 else:
-                    assert not nObs.has_key(ap1)
+                    assert ap1 not in nObs
                     chisq[ap1] = copy.deepcopy(chisq_here)
                     nObs[ap1] = np.array(wgts > 0, dtype=int)
             else:
@@ -979,12 +834,12 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
 
             # assign chisq and observations to both chisq_per_ant and nObs_per_ant
             for ant in [ant1, ant2]:
-                if chisq_per_ant.has_key(ant):
-                    assert nObs_per_ant.has_key(ant)
+                if ant in chisq_per_ant:
+                    assert ant in nObs_per_ant
                     chisq_per_ant[ant] = chisq_per_ant[ant] + chisq_here
                     nObs_per_ant[ant] = nObs_per_ant[ant] + (wgts > 0)
                 else:
-                    assert not nObs_per_ant.has_key(ant)
+                    assert ant not in nObs_per_ant
                     chisq_per_ant[ant] = copy.deepcopy(chisq_here)
                     nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
 
@@ -993,21 +848,21 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
 
 def predict_noise_variance_from_autos(bl, data, dt=None, df=None):
     '''Predict the noise variance on a baseline using autocorrelation data.
-    
+
     Arguments:
         bl: baseline tuple of the form (0, 1, 'xx')
         data: DataContainer containing autocorrelation data
-        dt: integration time in seconds. If None, will try infer this 
-            from the times stored in the DataContainer. 
+        dt: integration time in seconds. If None, will try infer this
+            from the times stored in the DataContainer.
         df: channel width in Hz. If None, will try to infer this from
             from the frequencies stored in the DataContainer
-            
+
     Returns:
         Noise variance predicted on baseline bl in units of data squared
     '''
     if dt is None:
         assert(len(data.times_by_bl[bl[0:2]]) > 1)  # cannot infer integration time if only one integration is given
-        dt = np.median(np.ediff1d(data.times_by_bl[bl[0:2]])) * 24. * 3600.       
+        dt = np.median(np.ediff1d(data.times_by_bl[bl[0:2]])) * 24. * 3600.
     if df is None:
         assert(len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
         df = np.median(np.ediff1d(data.freqs))

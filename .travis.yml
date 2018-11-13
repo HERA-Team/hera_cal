@@ -2,8 +2,10 @@ language: python
 python:
   # We don't actually use the Travis Python, but this keeps it organized.
   - "2.7"
-#  - "3.6"
-
+  - "3.6"
+env:
+  global:
+    - COVERALLS_PARALLEL=true
 install:
   # ensure that we have the full tag information available for version.py
   - git fetch --unshallow --tags
@@ -23,22 +25,19 @@ install:
   - conda update -q conda
   # Useful for debugging any issues with conda
   - conda info -a
-
   # create environment and install dependencies
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION 'numpy <1.15.3' scipy astropy nose pip matplotlib coverage pandas scikit-learn h5py
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy astropy nose pip matplotlib coverage pandas scikit-learn h5py six
   - source activate test-environment
   - conda install -c conda-forge healpy aipy pycodestyle
   - pip install coveralls
   - pip install git+https://github.com/HERA-Team/pyuvdata.git
-  - pip install git+https://github.com/HERA-Team/omnical.git
   - pip install git+https://github.com/HERA-Team/linsolve.git
   - pip install git+https://github.com/HERA-Team/hera_qm.git
   - pip install git+https://github.com/HERA-Team/uvtools.git
-  - python setup.py install
-
 script:
   - nosetests hera_cal --with-coverage --cover-package=hera_cal
-  - pycodestyle */*.py --ignore=E501,W291,W293,W503,W601
-
+  - pycodestyle . --ignore=E501,W291,W293,W503,W601
 after_success:
   - coveralls
+notifications:
+  webhooks: https://coveralls.io/webhook?repo_token=$COVERALLS_REPO_TOKEN

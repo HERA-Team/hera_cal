@@ -42,22 +42,26 @@ Reflections that couple other voltage signals into v_1 cannot
 be described in this formalism (for example, over-the-air aka
 inter-feed reflections).
 """
+from __future__ import print_function, division, absolute_import
+
 import numpy as np
 import aipy
-import matplotlib.pyplot as plt
-import hera_cal as hc
-from hera_cal.datacontainer import DataContainer
+import os
 import copy
+import matplotlib.pyplot as plt
 from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
-import os
+
+from . import io
+from . import abscal_funcs
+from . import delay_filter
+from .datacontainer import DataContainer
 
 
-class Reflection_Fitter(object):
-
+class ReflectionFitter(object):
     def __init__(self, data=None, **load_kwargs):
         """
-        Initialize a Reflection_Fitter object and optionally
+        Initialize a ReflectionFitter object and optionally
         load / read data if provided.
 
         Args:
@@ -80,7 +84,7 @@ class Reflection_Fitter(object):
                 if filepath provided and read_data is True
         """
         # mount data into hd object
-        self.hd = hc.io.to_HERAData(data, filetype=filetype)
+        self.hd = io.to_HERAData(data, filetype=filetype)
 
         # read data if desired
         if self.hd.data_array is not None:
@@ -141,10 +145,10 @@ class Reflection_Fitter(object):
         for k in keys:
             echo("...Cleaning data key {}".format(k), verbose=verbose)
             (model, flag, residual, dlys,
-             info) = delay_filter(self.data[k].copy(), self.flags[k].copy(), self.dnu, tol=tol,
-                                  maxiter=maxiter, gain=gain, skip_wgt=skip_wgt, dly_cut=dly_cut,
-                                  edgecut=edgecut, taper=taper, alpha=alpha, timeavg=timeavg,
-                                  broadcast_flags=broadcast_flags, time_thresh=time_thresh)
+             info) = reflections_delay_filter(self.data[k].copy(), self.flags[k].copy(), self.dnu, tol=tol,
+                                              maxiter=maxiter, gain=gain, skip_wgt=skip_wgt, dly_cut=dly_cut,
+                                              edgecut=edgecut, taper=taper, alpha=alpha, timeavg=timeavg,
+                                              broadcast_flags=broadcast_flags, time_thresh=time_thresh)
             # add residual back into model
             model += residual * ~flag
 
@@ -251,11 +255,11 @@ class Reflection_Fitter(object):
 
         if input_calfits is not None:
             # Load calfits
-            cal = hc.io.HERACal(input_calfits)
+            cal = io.HERACal(input_calfits)
             gains, flags, quals, tquals = cal.read()
 
             # Merge gains
-            rgains = hc.abscal_funcs.merge_gains([gains, rgains])
+            rgains = abscal_funcs.merge_gains([gains, rgains])
 
             # resolve possible broadcasting across time and freq
             if cal.Ntimes > self.Ntimes:
@@ -266,16 +270,16 @@ class Reflection_Fitter(object):
                 freq_array = cal.freq_array
             else:
                 freq_array = self.freqs
-            kwargs = dict([(k, getattr(cal, k)) for k in ['gain_convention', 'x_orientation', 
+            kwargs = dict([(k, getattr(cal, k)) for k in ['gain_convention', 'x_orientation',
                                                           'telescope_name', 'cal_style']])
         else:
             time_array = self.reflection_times
             freq_array = self.freqs
             kwargs = {}
 
-        uvc = hc.io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
-                              quality=quals, total_qual=tquals, outdir=os.path.dirname(output_calfits),
-                              zero_check=False, overwrite=overwrite, **kwargs)
+        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
+                           quality=quals, total_qual=tquals, outdir=os.path.dirname(output_calfits),
+                           zero_check=False, overwrite=overwrite, **kwargs)
         return uvc
 
 
@@ -315,7 +319,7 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
     """
     Fourier Transform of RFI-clean visibility data and fit for a reflection
     in a specified region of delay and solve for the reflection coefficients.
-    
+
     Args:
         data : complex 2D array with shape [Ntimes, Nfreqs]
         dly_range : len-2 tuple specifying range of delays [nanosec]
@@ -349,8 +353,8 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
         d = data[:, edgecut:-edgecut].copy()
         freqs = freqs[edgecut:-edgecut]
     else:
-        d = data.copy() 
-    
+        d = data.copy()
+
     # set a taper
     assert d.ndim == 2, "input data must be 2-dimensional with shape [Ntimes, Nfreqs]"
     Ntimes, Nfreqs = d.shape
@@ -367,7 +371,7 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
         f = np.arange(1, zero_pad + 1) * dnu
         freqs = np.concatenate([freqs.min() - f[::-1], freqs, freqs.max() + f])
         t = np.concatenate([z[:1], t, z[:1]], axis=1)
-    
+
     # get delays
     Ntimes, Nfreqs = d.shape
     assert Nfreqs == len(freqs), "data Nfreqs != len(freqs)"
@@ -395,11 +399,11 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
     g = abs_dfft[np.arange(Ntimes), ref_dly_inds + 1, None]
     b = abs_dfft[np.arange(Ntimes), ref_dly_inds, None]
     bin_shifts = 0.5 * (a - g) / (a - 2 * b + g)
-    
+
     # update delay center and peak value given shifts
     ref_dlys += bin_shifts * np.median(np.diff(dlys))
     ref_peaks = b - 0.25 * (a - g) * bin_shifts
-    
+
     # get reflection significance, defined as ref_peak / median_abs
     ref_significance = ref_peaks / np.median(abs_dfft_selection, axis=1, keepdims=True)
 
@@ -445,11 +449,11 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
             np.fft.fftshift(dfft, axes=1), np.fft.fftshift(dlys))
 
 
-def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0.1, tol=1e-5, maxiter=500,
-                 gain=0.1, skip_wgt=0.2, timeavg=False, broadcast_flags=False, time_thresh=0.1):
-    """ 
+def reflections_delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0.1, tol=1e-5, maxiter=500,
+                             gain=0.1, skip_wgt=0.2, timeavg=False, broadcast_flags=False, time_thresh=0.1):
+    """
     Delay (CLEAN) and filter flagged data and return model and residual visibilities.
-    
+
     Args:
         data : 2D complex visibility data with shape [Ntimes, Nfreqs]
         flags : 2D boolean flags with shape [Ntimes, Nfreqs]
@@ -465,7 +469,7 @@ def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0
         timeavg : bool, average data weighted by flags across time before CLEAN
         broadcast_flags : bool, broadcast flags across time if True, determined by time_thresh
         time_thresh : float, ratio of flagged channels across time to flag a freq channel for all times
-        
+
     Returns: (mdl, res, dlys, info)
         mdl : 2D array of visibility CLEAN model
         res : 2D array of visibility residual
@@ -479,7 +483,7 @@ def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0
     else:
         d = data.copy()
         f = flags.copy()
-        
+
     # average across time
     w = (~f).astype(np.float)
     if timeavg:
@@ -495,10 +499,10 @@ def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0
         # get Ntimes and Nfreqs that aren't completely flagged across opposite axis
         freq_contig_flags = np.sum(f, axis=1) / Nfreqs > 0.99999999
         Ntimes = np.sum(~freq_contig_flags, dtype=np.float)
-        
+
         # get freq channels where non-contiguous flags exceed threshold
         flag_freq = (np.sum(f[~freq_contig_flags], axis=0, dtype=np.float) / Ntimes) > time_thresh
-        
+
         # flag integrations holding flags that didn't meet broadcasting limit
         f[:, flag_freq] = False
         f[np.max(f, axis=1)] = True
@@ -508,8 +512,8 @@ def delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0
     kwargs = {}
     if taper == 'tukey':
         kwargs['alpha'] = alpha
-    mdl, res, info = hc.delay_filter.delay_filter(d, w, 0., dnu / 1e9, min_dly=dly_cut, skip_wgt=skip_wgt,
-                                                  window=taper, tol=tol, maxiter=maxiter, gain=gain, **kwargs)
+    mdl, res, info = delay_filter.delay_filter(d, w, 0., dnu / 1e9, min_dly=dly_cut, skip_wgt=skip_wgt,
+                                               window=taper, tol=tol, maxiter=maxiter, gain=gain, **kwargs)
     dlys = np.fft.fftshift(np.fft.fftfreq(d.shape[1], d=dnu)) * 1e9
 
     return mdl, f, res, dlys, info

@@ -3,21 +3,23 @@
 # Licensed under the MIT License
 
 from __future__ import absolute_import, division, print_function
-from hera_cal import io
-from hera_cal import smooth_cal
-from hera_cal.datacontainer import DataContainer
-import numpy as np
+
 import unittest
+import numpy as np
 from copy import deepcopy
-from pyuvdata.utils import check_histories
-from pyuvdata import UVCal, UVData
-from hera_cal.data import DATA_PATH
 import os
 import glob
 import sys
 import shutil
 from scipy import constants
 import warnings
+from pyuvdata.utils import check_histories
+from pyuvdata import UVCal, UVData
+
+from hera_cal import io
+from hera_cal import smooth_cal
+from hera_cal.datacontainer import DataContainer
+from hera_cal.data import DATA_PATH
 
 
 class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
@@ -96,11 +98,11 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
             ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='blah')
 
     def test_pick_reference_antenna(self):
-        flags = {ant: np.random.randn(10,10)>0 for ant in [(0, 'Jxx'), (1, 'Jxx')]}
+        flags = {ant: np.random.randn(10, 10) > 0 for ant in [(0, 'Jxx'), (1, 'Jxx')]}
         if np.sum(flags[0, 'Jxx']) > np.sum(flags[1, 'Jxx']):
-            self.assertEqual(smooth_cal.pick_reference_antenna(flags), (1,'Jxx'))
+            self.assertEqual(smooth_cal.pick_reference_antenna(flags), (1, 'Jxx'))
         else:
-            self.assertEqual(smooth_cal.pick_reference_antenna(flags), (0,'Jxx'))
+            self.assertEqual(smooth_cal.pick_reference_antenna(flags), (0, 'Jxx'))
 
     def test_rephase_to_refant(self):
         gains = {(0, 'Jxx'): np.array([1. + 1.0j, 1. - 1.0j]),

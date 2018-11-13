@@ -3,18 +3,24 @@
 # Licensed under the MIT License
 
 from __future__ import absolute_import, division, print_function
-import hera_cal.redcal as om
-import numpy as np
+
 import unittest
+import numpy as np
 from copy import deepcopy
-from hera_cal.utils import split_pol, conj_pol
 import warnings
+import os
+import sys
+import shutil
+from six.moves import range
+
+import hera_cal.redcal as om
+from hera_cal import io
+from hera_cal.utils import split_pol, conj_pol
 from hera_cal.apply_cal import calibrate_in_place
 from hera_cal.data import DATA_PATH
-from hera_cal import io
-import os, sys, shutil
 
 np.random.seed(0)
+
 
 def build_linear_array(nants, sep=14.7):
     antpos = {i: np.array([sep * i, 0, 0]) for i in range(nants)}
@@ -31,32 +37,33 @@ def build_hex_array(hexNum, sep=14.7):
             i += 1
     return antpos
 
-def build_split_hex_array_with_outriggers(sep = 14.6, hexNum = 11, splitCore = True, splitCoreOutriggers = 4):
+
+def build_split_hex_array_with_outriggers(sep=14.6, hexNum=11, splitCore=True, splitCoreOutriggers=4):
     '''Default parameter produce the planned HERA configuration with its outriggers.'''
-    #Main Hex
+    # Main Hex
     positions = []
-    for row in range(hexNum-1,-(hexNum)+splitCore,-1):
-        for col in range(0,2*hexNum-abs(row)-1):
-            xPos = ((-(2*hexNum-abs(row))+2)/2.0 + col)*sep
-            yPos = row*sep*3**.5/2
+    for row in range(hexNum - 1, -(hexNum) + splitCore, -1):
+        for col in range(0, 2 * hexNum - abs(row) - 1):
+            xPos = ((-(2 * hexNum - abs(row)) + 2) / 2.0 + col) * sep
+            yPos = row * sep * 3**.5 / 2
             positions.append([xPos, yPos, 0])
-            
-    right = sep*np.asarray([1,0,0])
-    up = sep*np.asarray([0,1,0])
-    upRight = sep*np.asarray([.5,3**.5/2,0])
-    upLeft = sep*np.asarray([-.5,3**.5/2,0])
-    
-    #Split the core into 3 pieces
+
+    right = sep * np.asarray([1, 0, 0])
+    up = sep * np.asarray([0, 1, 0])
+    upRight = sep * np.asarray([.5, 3**.5 / 2, 0])
+    upLeft = sep * np.asarray([-.5, 3**.5 / 2, 0])
+
+    # Split the core into 3 pieces
     if splitCore:
         newPos = []
-        for i,pos in enumerate(positions):
-            theta = np.arctan2(pos[1],pos[0])
-            if (pos[0]==0 and pos[1]==0):
+        for i, pos in enumerate(positions):
+            theta = np.arctan2(pos[1], pos[0])
+            if (pos[0] == 0 and pos[1] == 0):
                 newPos.append(pos)
-            elif (theta > -np.pi/3 and theta < np.pi/3):
-                newPos.append(np.asarray(pos) + (upRight + upLeft)/3)
-            elif (theta >= np.pi/3 and theta < np.pi):
-                newPos.append(np.asarray(pos) +upLeft  - (upRight + upLeft)/3)
+            elif (theta > -np.pi / 3 and theta < np.pi / 3):
+                newPos.append(np.asarray(pos) + (upRight + upLeft) / 3)
+            elif (theta >= np.pi / 3 and theta < np.pi):
+                newPos.append(np.asarray(pos) + upLeft - (upRight + upLeft) / 3)
             else:
                 newPos.append(pos)
         positions = newPos
@@ -64,20 +71,20 @@ def build_split_hex_array_with_outriggers(sep = 14.6, hexNum = 11, splitCore = T
     # Add outriggers
     if splitCoreOutriggers:
         exteriorHexNum = splitCoreOutriggers
-        for row in range(exteriorHexNum-1,-(exteriorHexNum),-1):
-            for col in range(2*exteriorHexNum-abs(row)-1):
-                xPos = ((-(2*exteriorHexNum-abs(row))+2)/2.0 + col)*sep*(hexNum-1)
-                yPos = row*sep*(hexNum-1)*3**.5/2
-                theta = np.arctan2(yPos,xPos)
-                if ((xPos**2 + yPos**2)**.5 > sep*(hexNum+1)):
-                    if (theta > 0 and theta <= 2*np.pi/3+.01):
-                        positions.append(np.asarray([xPos, yPos, 0]) - 4*(upRight + upLeft)/3)
-                    elif (theta <= 0 and theta > -2*np.pi/3):
-                        positions.append(np.asarray([xPos, yPos, 0])- 2*(upRight + upLeft)/3)
+        for row in range(exteriorHexNum - 1, -(exteriorHexNum), -1):
+            for col in range(2 * exteriorHexNum - abs(row) - 1):
+                xPos = ((-(2 * exteriorHexNum - abs(row)) + 2) / 2.0 + col) * sep * (hexNum - 1)
+                yPos = row * sep * (hexNum - 1) * 3**.5 / 2
+                theta = np.arctan2(yPos, xPos)
+                if ((xPos**2 + yPos**2)**.5 > sep * (hexNum + 1)):
+                    if (theta > 0 and theta <= 2 * np.pi / 3 + .01):
+                        positions.append(np.asarray([xPos, yPos, 0]) - 4 * (upRight + upLeft) / 3)
+                    elif (theta <= 0 and theta > -2 * np.pi / 3):
+                        positions.append(np.asarray([xPos, yPos, 0]) - 2 * (upRight + upLeft) / 3)
                     else:
-                        positions.append(np.asarray([xPos, yPos, 0]) - 3*(upRight + upLeft)/3)
-                        
-    return {i: pos for i,pos in enumerate(np.array(positions))}
+                        positions.append(np.asarray([xPos, yPos, 0]) - 3 * (upRight + upLeft) / 3)
+
+    return {i: pos for i, pos in enumerate(np.array(positions))}
 
 
 class TestMethods(unittest.TestCase):
@@ -209,25 +216,30 @@ class TestMethods(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         # exclude ants
         r = om.filter_reds(reds, ex_ants=[0, 4])
-        self.assertEqual(r, [[(1, 2, 'xx'), (2, 3, 'xx'), (5, 6, 'xx')], [(1, 3, 'xx'), (3, 5, 'xx')], [(2, 5, 'xx'), (3, 6, 'xx')], [(1, 5, 'xx'), (2, 6, 'xx')], [(1, 6, 'xx')]])
+        self.assertEqual(r, [[(1, 2, 'xx'), (2, 3, 'xx'), (5, 6, 'xx')], [(1, 3, 'xx'), (3, 5, 'xx')], [(2, 5, 'xx'), (3, 6, 'xx')],
+                             [(1, 5, 'xx'), (2, 6, 'xx')], [(1, 6, 'xx')]])
         # include ants
         r = om.filter_reds(reds, ants=[0, 1, 4, 5, 6])
-        self.assertEqual(r, [[(0, 1, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')], [(4, 6, 'xx')], [(1, 4, 'xx')], [(0, 4, 'xx'), (1, 5, 'xx')], [(0, 5, 'xx'), (1, 6, 'xx')], [(0, 6, 'xx')]])
+        self.assertEqual(r, [[(0, 1, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')], [(4, 6, 'xx')], [(1, 4, 'xx')], [(0, 4, 'xx'), (1, 5, 'xx')],
+                             [(0, 5, 'xx'), (1, 6, 'xx')], [(0, 6, 'xx')]])
         # exclued bls
         r = om.filter_reds(reds, ex_bls=[(0, 2), (1, 2), (0, 6)])
-        self.assertEqual(r, [[(0, 1, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')], [(1, 3, 'xx'), (2, 4, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')], [(0, 3, 'xx'), (1, 4, 'xx'), (2, 5, 'xx'), (3, 6, 'xx')], [(0, 4, 'xx'), (1, 5, 'xx'), (2, 6, 'xx')], [(0, 5, 'xx'), (1, 6, 'xx')]])
+        self.assertEqual(r, [[(0, 1, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')],
+                             [(1, 3, 'xx'), (2, 4, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')], [(0, 3, 'xx'), (1, 4, 'xx'), (2, 5, 'xx'), (3, 6, 'xx')],
+                             [(0, 4, 'xx'), (1, 5, 'xx'), (2, 6, 'xx')], [(0, 5, 'xx'), (1, 6, 'xx')]])
         # include bls
         r = om.filter_reds(reds, bls=[(0, 1), (1, 2)])
         self.assertEqual(r, [[(0, 1, 'xx'), (1, 2, 'xx')]])
         # include ubls
         r = om.filter_reds(reds, ubls=[(0, 2), (1, 4)])
-        self.assertEqual(r, [[(0, 2, 'xx'), (1, 3, 'xx'), (2, 4, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')], [(0, 3, 'xx'), (1, 4, 'xx'), (2, 5, 'xx'), (3, 6, 'xx')]])
+        self.assertEqual(r, [[(0, 2, 'xx'), (1, 3, 'xx'), (2, 4, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')],
+                             [(0, 3, 'xx'), (1, 4, 'xx'), (2, 5, 'xx'), (3, 6, 'xx')]])
         # exclude ubls
         r = om.filter_reds(reds, ex_ubls=[(0, 2), (1, 4), (4, 5), (0, 5), (2, 3), (0, 6)])
         self.assertEqual(r, [[(0, 4, 'xx'), (1, 5, 'xx'), (2, 6, 'xx')]])
         # exclude crosspols
         # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
-    
+
     def test_filter_reds_2pol(self):
         antpos = build_linear_array(4)
         reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='1pol')
@@ -270,11 +282,11 @@ class TestMethods(unittest.TestCase):
     def test_reds_to_antpos(self):
         # Test 1D
         true_antpos = build_linear_array(10)
-        reds = om.get_reds(true_antpos, pols=['xx','yy'], pol_mode='2pol', bl_error_tol=1e-10)
+        reds = om.get_reds(true_antpos, pols=['xx', 'yy'], pol_mode='2pol', bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds,)
         for pos in inferred_antpos.values():
             self.assertEqual(len(pos), 1)
-        new_reds = om.get_reds(inferred_antpos, pols=['xx','yy'], pol_mode='2pol', bl_error_tol=1e-10)
+        new_reds = om.get_reds(inferred_antpos, pols=['xx', 'yy'], pol_mode='2pol', bl_error_tol=1e-10)
         for nred in new_reds:
             for red in reds:
                 if nred[0] in red:
@@ -283,7 +295,7 @@ class TestMethods(unittest.TestCase):
             self.assertTrue(found_match)
             found_match = False
 
-        # Test 2D 
+        # Test 2D
         true_antpos = build_hex_array(5)
         reds = om.get_reds(true_antpos, pols=['xx'], pol_mode='1pol', bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds)
@@ -299,7 +311,7 @@ class TestMethods(unittest.TestCase):
             found_match = False
 
         # Test 2D with split
-        true_antpos = build_split_hex_array_with_outriggers(hexNum = 5, splitCore = True, splitCoreOutriggers = 0)
+        true_antpos = build_split_hex_array_with_outriggers(hexNum=5, splitCore=True, splitCoreOutriggers=0)
         reds = om.get_pos_reds(true_antpos, bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds)
         for pos in inferred_antpos.values():
@@ -315,7 +327,7 @@ class TestMethods(unittest.TestCase):
 
         # Test 2D with additional degeneracy
         true_antpos = {0: [0, 0], 1: [1, 0], 2: [0, 1], 3: [1, 1],
-                       4: [100,100], 5: [101, 100], 6: [100, 101], 7: [101, 101]}
+                       4: [100, 100], 5: [101, 100], 6: [100, 101], 7: [101, 101]}
         reds = om.get_pos_reds(true_antpos, bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds)
         for pos in inferred_antpos.values():
@@ -398,7 +410,6 @@ class TestRedundantCalibrator(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
         fqs = np.linspace(.1, .2, NFREQ)
-        #g, true_vis, d = om.sim_red_data(reds, shape=(1,NFREQ), gain_scatter=.1)
         g, true_vis, d = om.sim_red_data(reds, shape=(1, NFREQ), gain_scatter=0)
         delays = {k: np.random.randn() * 30 for k in g.keys()}  # in ns
         fc_gains = {k: np.exp(2j * np.pi * v * fqs) for k, v in delays.items()}
@@ -410,10 +421,10 @@ class TestRedundantCalibrator(unittest.TestCase):
         d = {k: v.astype(np.complex64) for k, v in d.items()}
         sol = info.firstcal(d, df=fqs[1] - fqs[0], medfilt=False)
         sol_degen = info.remove_degen_gains(sol, degen_gains=delays, mode='phase')
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].dtype, np.float32)
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
-            self.assertAlmostEqual(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0, 0)
+            self.assertTrue(np.allclose(np.round(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0), 0))
 
     def test_logcal(self):
         NANTS = 18
@@ -423,7 +434,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.05)
         w = dict([(k, 1.) for k in d.keys()])
         sol = info.logcal(d)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].shape, (10, 10))
         for bls in reds:
             ubl = sol[bls[0]]
@@ -454,10 +465,8 @@ class TestRedundantCalibrator(unittest.TestCase):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
-        #sol0 = info.logcal(d)
-        #for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
         meta, sol = info.omnical(d, sol0, conv_crit=1e-12, gain=.5, maxiter=500, check_after=30, check_every=6)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].shape, (10, 10))
         for bls in reds:
             ubl = sol[bls[0]]
@@ -519,10 +528,8 @@ class TestRedundantCalibrator(unittest.TestCase):
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
-        #sol0 = info.logcal(d)
-        #for k in sol0: sol0[k] += .01*capo.oqe.noise(sol0[k].shape)
         meta, sol = info.lincal(d, sol0)
-        for i in xrange(NANTS):
+        for i in range(NANTS):
             self.assertEqual(sol[(i, 'Jxx')].shape, (10, 10))
         for bls in reds:
             ubl = sol[bls[0]]
@@ -588,7 +595,7 @@ class TestRedundantCalibrator(unittest.TestCase):
                 sol0 = {k: np.ones_like(gk) for k, gk in gains.items()}
                 sol0.update(rc.compute_ubls(d, sol0))
                 meta, sol = rc.lincal(d, sol0)  # should not raise 'np.linalg.linalg.LinAlgError: SVD did not converge'
-    
+
     def test_remove_degen_firstcal_1D(self):
         pol = 'xx'
         xhat = np.array([1., 0, 0])
@@ -615,9 +622,9 @@ class TestRedundantCalibrator(unittest.TestCase):
         reds = om.get_reds(antpos, pols=[pol], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         # put in a linear slope in delays, see that it is taken out
-        true_dlys = {(i, split_pol(pol)[0]): 
-                        np.array([[np.dot(xhat, antpos[i]) * dtau_dx + np.dot(yhat, antpos[i]) * dtau_dy]]) 
-                        for i in range(len(antpos))}
+        true_dlys = {(i, split_pol(pol)[0]):
+                     np.array([[np.dot(xhat, antpos[i]) * dtau_dx + np.dot(yhat, antpos[i]) * dtau_dy]])
+                     for i in range(len(antpos))}
         dlys = rc.remove_degen_gains(true_dlys, mode='phase')
         for k in dlys:
             np.testing.assert_almost_equal(dlys[k], 0, 10)
@@ -643,7 +650,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, len(freqs)))
         for bls in reds:
             ubl = sol[bls[0]]
@@ -661,7 +668,6 @@ class TestRedundantCalibrator(unittest.TestCase):
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jxx' and key2[1] == 'Jxx' and key1[0] != key2[0]], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
-        #np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
 
         for bls in reds:
             ubl = sol_rd[bls[0]]
@@ -679,7 +685,6 @@ class TestRedundantCalibrator(unittest.TestCase):
         degenMeanSqAmplitude = np.mean([np.abs(gains[key1] * gains[key2]) for key1 in g.keys()
                                         for key2 in g.keys() if key1[1] == 'Jxx' and key2[1] == 'Jxx' and key1[0] != key2[0]], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, degenMeanSqAmplitude, 10)
-        #np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
 
         for key, val in sol_rd.items():
             if len(key) == 2:
@@ -712,7 +717,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, len(freqs)))
             self.assertEqual(sol[(i, 'Jyy')].shape, (1, len(freqs)))
         for bls in reds:
@@ -739,8 +744,6 @@ class TestRedundantCalibrator(unittest.TestCase):
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jyy' and key2[1] == 'Jyy' and key1[0] != key2[0]], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
-        #np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='Jxx']), axis=0), 0, 10)
-        #np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='Jyy']), axis=0), 0, 10)
 
         for bls in reds:
             for bl in bls:
@@ -799,7 +802,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, len(freqs)))
             self.assertEqual(sol[(i, 'Jyy')].shape, (1, len(freqs)))
         for bls in reds:
@@ -826,7 +829,6 @@ class TestRedundantCalibrator(unittest.TestCase):
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jyy' and key2[1] == 'Jyy' and key1[0] != key2[0]], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
-        #np.testing.assert_almost_equal(np.mean(np.angle(gainSols), axis=0), 0, 10)
 
         for bls in reds:
             ubl = sol_rd[bls[0]]
@@ -898,7 +900,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         np.testing.assert_almost_equal(meta['chisq'], np.zeros_like(meta['chisq']), decimal=10)
 
         np.testing.assert_almost_equal(meta['chisq'], 0, 10)
-        for i in xrange(len(antpos)):
+        for i in range(len(antpos)):
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, len(freqs)))
             self.assertEqual(sol[(i, 'Jyy')].shape, (1, len(freqs)))
         for bls in reds:
@@ -926,8 +928,6 @@ class TestRedundantCalibrator(unittest.TestCase):
         meanSqAmplitude = np.mean([np.abs(g[key1] * g[key2]) for key1 in g.keys()
                                    for key2 in g.keys() if key1[1] == 'Jyy' and key2[1] == 'Jyy' and key1[0] != key2[0]], axis=0)
         np.testing.assert_almost_equal(meanSqAmplitude, 1, 10)
-        #np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='Jxx']), axis=0), 0, 10)
-        #np.testing.assert_almost_equal(np.mean(np.angle(gainSols[gainPols=='Jyy']), axis=0), 0, 10)
 
         for bls in reds:
             for bl in bls:
@@ -1036,7 +1036,7 @@ class TestRunMethods(unittest.TestCase):
             rv = om.redcal_iteration(hd, nInt_to_load=1)
         for t in range(len(hd.times)):
             for flag in rv['gf_omnical'].values():
-                self.assertFalse(np.all(flag[t,:]))
+                self.assertFalse(np.all(flag[t, :]))
 
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
@@ -1044,7 +1044,7 @@ class TestRunMethods(unittest.TestCase):
             rv = om.redcal_iteration(hd, pol_mode='4pol')
         np.testing.assert_array_equal(rv['chisq']['Jxx'], rv['chisq']['Jyy'])
 
-        hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  #move array longitude
+        hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  # move array longitude
         rv = om.redcal_iteration(hd, solar_horizon=0.0)
         for flag in rv['gf_firstcal'].values():
             np.testing.assert_array_equal(flag, True)
@@ -1099,7 +1099,6 @@ class TestRunMethods(unittest.TestCase):
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
 
-
         hd = io.HERAData(input_data)
         hd.read()
         hd.channel_width = np.median(np.diff(hd.freqs))
@@ -1119,7 +1118,6 @@ class TestRunMethods(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             cal = om.redcal_run({})
-
 
     def test_redcal_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--ant_metrics_file', 'b', '--ex_ants', '5', '6', '--verbose']

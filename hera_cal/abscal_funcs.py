@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
+
+from __future__ import print_function, division, absolute_import
+
 import os
 import sys
 from collections import OrderedDict as odict
@@ -8,18 +11,23 @@ import copy
 import argparse
 import functools
 import numpy as np
-from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
-from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl
-from hera_cal import utils, redcal, io, apply_cal
-from hera_cal.datacontainer import DataContainer
-from scipy import signal
-from scipy import interpolate
-from scipy import spatial
-import linsolve
 import itertools
 import operator
 from functools import reduce
+from six.moves import map, range, zip
+from scipy import signal
+from scipy import interpolate
+from scipy import spatial
+from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
+import linsolve
+
+from . import utils
+from . import redcal
+from . import io
+from . import apply_cal
+from .datacontainer import DataContainer
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, echo
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
@@ -151,7 +159,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
 
     # get keys from model dictionary
     keys = sorted(set(model.keys()) & set(data.keys()))
-    ants = np.unique(antpos.keys())
+    ants = np.unique(list(antpos.keys()))
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
@@ -170,11 +178,11 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     if refant is None:
         refant = keys[0][0]
     assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
-    antpos = odict(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys()))
+    antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
     # setup antenna position terms
-    r_ew = odict(map(lambda a: (a, "r_ew_{}".format(a)), ants))
-    r_ns = odict(map(lambda a: (a, "r_ns_{}".format(a)), ants))
+    r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
+    r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
 
     # setup linsolve equations
     if four_pol:
@@ -188,8 +196,8 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
                                  r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
     # set design matrix entries
-    ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))
-    ls_design_matrix.update(odict(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants)))
+    ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
+    ls_design_matrix.update(odict(list(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants))))
 
     if zero_psi:
         ls_design_matrix.update({"a1": 0.0, "a2": 0.0})
@@ -336,16 +344,16 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
 
     # get unique gain polarizations
-    gain_pols = np.unique(map(lambda k: list(utils.split_pol(k[2])), keys))
+    gain_pols = np.unique(list(map(lambda k: list(utils.split_pol(k[2])), keys)))
 
     # set reference antenna phase to zero
     if refant is None:
         refant = keys[0][0]
-    assert np.array(map(lambda k: refant in k, keys)).any(), "refant {} not found in data and model".format(refant)
+    assert np.array(list(map(lambda k: refant in k, keys))).any(), "refant {} not found in data and model".format(refant)
 
     for p in gain_pols:
-        ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
-        ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(wgts.values()[0])
+        ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
+        ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(list(wgts.values())[0])
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
@@ -476,16 +484,16 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
 
     # get unique gain polarizations
-    gain_pols = np.unique(map(lambda k: [utils.split_pol(k[2])[0], utils.split_pol(k[2])[1]], keys))
+    gain_pols = np.unique(list(map(lambda k: [utils.split_pol(k[2])[0], utils.split_pol(k[2])[1]], keys)))
 
     # set reference antenna phase to zero
     if refant is None:
         refant = keys[0][0]
-    assert np.array(map(lambda k: refant in k, keys)).any(), "refant {} not found in data and model".format(refant)
+    assert np.array(list(map(lambda k: refant in k, keys))).any(), "refant {} not found in data and model".format(refant)
 
     for p in gain_pols:
-        ls_data['tau_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
-        ls_wgts['tau_{}_{}'.format(refant, p)] = np.ones_like(ywgts.values()[0])
+        ls_data['tau_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
+        ls_wgts['tau_{}_{}'.format(refant, p)] = np.ones_like(list(ywgts.values())[0])
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
@@ -503,8 +511,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
         ls_design_matrix = odict()
         for p in gain_pols:
-            ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(ydata.values()[0])
-            ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(ywgts.values()[0])
+            ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
+            ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(list(ywgts.values())[0])
         sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
         echo("...running linsolve", verbose=verbose)
         offset_fit = sol.solve()
@@ -568,7 +576,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     # get shared keys
     keys = sorted(set(model.keys()) & set(data.keys()))
-    ants = np.unique(antpos.keys())
+    ants = np.unique(list(antpos.keys()))
 
     # make wgts
     if wgts is None:
@@ -580,7 +588,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     if refant is None:
         refant = keys[0][0]
     assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
-    antpos = odict(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys()))
+    antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
     # median filter and FFT to get delays
     ratio_delays = []
@@ -622,8 +630,8 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     ywgts = odict(zip(keys, ratio_wgts))
 
     # setup antenna position terms
-    r_ew = odict(map(lambda a: (a, "r_ew_{}".format(a)), ants))
-    r_ns = odict(map(lambda a: (a, "r_ns_{}".format(a)), ants))
+    r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
+    r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
 
     # setup linsolve equations
     if four_pol:
@@ -636,8 +644,8 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
                       for i, k in enumerate(keys)])
 
     # set design matrix entries
-    ls_design_matrix = odict(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants))
-    ls_design_matrix.update(odict(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants)))
+    ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
+    ls_design_matrix.update(odict(list(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants))))
 
     # setup linsolve data dictionary
     ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
@@ -694,11 +702,11 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
           for each position component and polarization [radians / meter].
     """
     echo("...configuring linsolve data for global_phase_slope_logcal", verbose=verbose)
-    assert 2 * edge_cut < data.values()[0].shape[1] - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
+    assert 2 * edge_cut < list(data.values())[0].shape[1] - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
 
     # get keys from model and data dictionaries
     keys = sorted(set(model.keys()) & set(data.keys()))
-    ants = np.unique(antpos.keys())
+    ants = np.unique(list(antpos.keys()))
 
     # make weights if None and make flags
     if wgts is None:
@@ -710,7 +718,7 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
     if refant is None:
         refant = keys[0][0]
     assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
-    antpos = odict(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys()))
+    antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
     # average data over baselines
     _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
@@ -770,14 +778,14 @@ def merge_gains(gains):
                    structure as input gain dictionaries.
     """
     # get shared keys
-    keys = sorted(reduce(operator.and_, map(lambda g: set(g.keys()), gains)))
+    keys = sorted(reduce(operator.and_, list(map(lambda g: set(g.keys()), gains))))
 
     # form merged_gains dict
     merged_gains = odict()
 
     # iterate over keys
     for i, k in enumerate(keys):
-        merged_gains[k] = reduce(operator.mul, map(lambda g: g.get(k, 1.0), gains))
+        merged_gains[k] = reduce(operator.mul, list(map(lambda g: g.get(k, 1.0), gains)))
 
     return merged_gains
 
@@ -819,7 +827,7 @@ def apply_gains(data, gains, gain_convention='divide'):
     new_data = odict()
 
     # get keys
-    keys = data.keys()
+    keys = list(data.keys())
 
     # merge gains if multiple gain dictionaries fed
     if isinstance(gains, list) or isinstance(gains, tuple) or isinstance(gains, np.ndarray):
@@ -878,15 +886,15 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
     new_avg = odict()
 
     # get keys
-    keys = data.keys()
+    keys = list(data.keys())
 
     # sort keys across key_index
     key_sort = np.argsort(np.array(keys, dtype=np.object)[:, key_index])
-    keys = map(lambda i: keys[i], key_sort)
+    keys = list(map(lambda i: keys[i], key_sort))
     popped_keys = np.unique(np.array(keys, dtype=np.object)[:, key_index])
 
     # get new keys
-    new_keys = map(lambda k: k[:key_index] + k[key_index + 1:], keys)
+    new_keys = list(map(lambda k: k[:key_index] + k[key_index + 1:], keys))
     new_unique_keys = []
 
     # iterate over new_keys
@@ -897,7 +905,7 @@ def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
         new_unique_keys.append(nk)
 
         # get all instances of redundant keys
-        ravel = map(lambda k: k == nk, new_keys)
+        ravel = list(map(lambda k: k == nk, new_keys))
 
         # iterate over redundant keys and consolidate into new arrays
         arr = []
@@ -977,7 +985,7 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data
 
 
-def fft_dly(data, df, wgts=None, window=None, medfilt=False, kernel=(1, 11), 
+def fft_dly(data, df, wgts=None, window=None, medfilt=False, kernel=(1, 11),
             solve_phase=False, edge_cut=0):
     """Get delay of visibility across band using FFT and quadratic fit to delay peak.
 
@@ -1095,7 +1103,7 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3, 9)
         data = {'arr': data}
 
     new_data = odict()
-    for i, k in enumerate(data.keys()):
+    for i, k in enumerate(list(data.keys())):
         real = np.real(data[k])
         imag = np.imag(data[k])
         if medfilt:
@@ -1168,8 +1176,8 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     new_flags = odict()
 
     # get nearest neighbor points
-    freq_nn = np.array(map(lambda x: np.argmin(np.abs(model_freqs - x)), data_freqs))
-    time_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts - x)), data_lsts))
+    freq_nn = np.array(list(map(lambda x: np.argmin(np.abs(model_freqs - x)), data_freqs)))
+    time_nn = np.array(list(map(lambda x: np.argmin(np.abs(model_lsts - x)), data_lsts)))
     freq_nn, time_nn = np.meshgrid(freq_nn, time_nn)
 
     # get model indices meshgrid
@@ -1182,11 +1190,11 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
 
     # ensure flags are booleans
     if flags is not None:
-        if np.issubdtype(flags[flags.keys()[0]].dtype, np.float):
-            flags = DataContainer(odict(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys())))
+        if np.issubdtype(flags[list(flags.keys())[0]].dtype, np.float):
+            flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys()))))
 
     # loop over keys
-    for i, k in enumerate(model.keys()):
+    for i, k in enumerate(list(model.keys())):
         # get model array
         m = model[k]
 
@@ -1313,7 +1321,7 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=N
         data_lsts[data_lsts]
 
     # get nearest neighbor model points
-    lst_nn = np.array(map(lambda x: np.argmin(np.abs(model_lsts - x)), data_lsts))
+    lst_nn = np.array(list(map(lambda x: np.argmin(np.abs(model_lsts - x)), data_lsts)))
 
     # get dlst array
     dlst = data_lsts - model_lsts[lst_nn]
@@ -1395,16 +1403,6 @@ def fill_dict_nans(data, wgts=None, nan_fill=None, inf_fill=None, array=False):
                     wgts[k][inf_select] = 0.0
 
 
-def echo(message, type=0, verbose=True):
-    if verbose:
-        if type == 0:
-            print(message)
-        elif type == 1:
-            print('')
-            print(message)
-            print("-" * 40)
-
-
 def flatten(l):
     """ flatten a nested list """
     return [item for sublist in l for item in sublist]
@@ -1442,7 +1440,7 @@ class Baseline(object):
         # check same length
         if np.isclose(self.len, B2.len, atol=tol):
             # check x, y, z
-            equiv = bool(reduce(operator.mul, map(lambda x: np.isclose(*x, atol=tol), zip(self.bl, B2.bl))))
+            equiv = bool(reduce(operator.mul, list(map(lambda x: np.isclose(*x, atol=tol), zip(self.bl, B2.bl)))))
             dot = np.dot(self.unit, B2.unit)
             if equiv:
                 return True
@@ -1487,18 +1485,18 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
         had matching baselines to data
     """
     # create baseline keys for model
-    model_keys = model.keys()
-    model_bls = np.array(map(lambda k: Baseline(model_antpos[k[1]] - model_antpos[k[0]], tol=tol), model_keys))
+    model_keys = list(model.keys())
+    model_bls = np.array(list(map(lambda k: Baseline(model_antpos[k[1]] - model_antpos[k[0]], tol=tol), model_keys)))
 
     # create baseline keys for data
-    data_keys = data.keys()
-    data_bls = np.array(map(lambda k: Baseline(data_antpos[k[1]] - data_antpos[k[0]], tol=tol), data_keys))
+    data_keys = list(data.keys())
+    data_bls = np.array(list(map(lambda k: Baseline(data_antpos[k[1]] - data_antpos[k[0]], tol=tol), data_keys)))
 
     # iterate over data baselines
     new_model = odict()
     for i, bl in enumerate(model_bls):
         # compre bl to all model_bls
-        comparison = np.array(map(lambda mbl: bl == mbl, data_bls), np.str)
+        comparison = np.array(list(map(lambda mbl: bl == mbl, data_bls)), np.str)
 
         # get matches
         matches = np.where((comparison == 'True') | (comparison == 'conjugated'))[0]
@@ -1509,7 +1507,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
             continue
         else:
             if len(matches) > 1:
-                echo("found more than 1 match in data to model {}: {}".format(model_keys[i], map(lambda j: data_keys[j], matches)), verbose=verbose)
+                echo("found more than 1 match in data to model {}: {}".format(model_keys[i], list(map(lambda j: data_keys[j], matches))), verbose=verbose)
             # assign to new_data
             if comparison[matches[0]] == 'True':
                 new_model[data_keys[matches[0]]] = model[model_keys[i]]
@@ -1549,14 +1547,14 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     -------
     """
     # get data keys
-    keys = data.keys()
+    keys = list(data.keys())
 
     # get data, wgts and ants
     data = copy.deepcopy(data)
-    pols = np.unique(map(lambda k: k[2], data.keys()))
+    pols = np.unique(list(map(lambda k: k[2], data.keys())))
     ants = np.unique(np.concatenate(keys))
     if wgts is None:
-        wgts = DataContainer(odict(map(lambda k: (k, np.ones_like(data[k]).astype(np.float)), data.keys())))
+        wgts = DataContainer(odict(list(map(lambda k: (k, np.ones_like(data[k]).astype(np.float)), data.keys()))))
 
     # get redundant baselines if not provided
     if reds is None:
@@ -1579,14 +1577,14 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     # iterate over reds
     for i, bl_group in enumerate(stripped_reds):
         # average redundant baseline group
-        d = np.nansum(map(lambda k: data[k] * wgts[k], bl_group), axis=0)
-        d /= np.nansum(map(lambda k: wgts[k], bl_group), axis=0)
+        d = np.nansum(list(map(lambda k: data[k] * wgts[k], bl_group)), axis=0)
+        d /= np.nansum(list(map(lambda k: wgts[k], bl_group)), axis=0)
 
         # get wgts
         if broadcast_wgts:
-            w = np.array(reduce(operator.mul, map(lambda k: wgts[k], bl_group)), np.float) ** (1. / len(bl_group))
+            w = np.array(reduce(operator.mul, list(map(lambda k: wgts[k], bl_group))), np.float) ** (1. / len(bl_group))
         else:
-            w = np.array(reduce(operator.add, map(lambda k: wgts[k], bl_group)), np.float) / len(bl_group)
+            w = np.array(reduce(operator.add, list(map(lambda k: wgts[k], bl_group))), np.float) / len(bl_group)
 
         # iterate over bl_group
         for j, key in enumerate(sorted(bl_group)):
@@ -1599,7 +1597,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
                 break
 
     # get red_data keys
-    red_keys = red_data.keys()
+    red_keys = list(red_data.keys())
 
     return DataContainer(red_data), DataContainer(red_wgts), red_keys
 
@@ -1645,7 +1643,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
 
     # get data
     data, flags = io.load_vis(uvd, pop_autos=True, return_meta=False, pick_data_ants=True)
-    wgts = DataContainer(odict(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys())))
+    wgts = DataContainer(odict(list(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys()))))
 
     # get antpos and baselines
     antpos, ants = uvd.get_ENU_antpos()
@@ -1653,13 +1651,13 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
 
     # avg data across reds
     red_data, red_wgts, red_keys = avg_data_across_red_bls(data, antpos, wgts=wgts, **kwargs)
-    uvd_data = np.array(map(lambda k: red_data[k], red_keys))
-    uvd_flags = np.array(map(lambda k: ~red_wgts[k].astype(np.bool), red_keys))
-    uvd_bls = np.array(map(lambda k: k[:2], red_keys))
-    blts_select = np.array(map(lambda k: uvd.antpair2ind(*k), uvd_bls)).reshape(-1)
+    uvd_data = np.array(list(map(lambda k: red_data[k], red_keys)))
+    uvd_flags = np.array(list(map(lambda k: ~red_wgts[k].astype(np.bool), red_keys)))
+    uvd_bls = np.array(list(map(lambda k: k[:2], red_keys)))
+    blts_select = np.array(list(map(lambda k: uvd.antpair2ind(*k), uvd_bls))).reshape(-1)
     Nbls = len(uvd_bls)
     Nblts = len(blts_select)
-    uvd_bls = np.array(map(lambda k: uvd.baseline_to_antnums(k), uvd.baseline_array[blts_select]))
+    uvd_bls = np.array(list(map(lambda k: uvd.baseline_to_antnums(k), uvd.baseline_array[blts_select])))
 
     # resort data
     uvd_data = uvd_data.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
@@ -1704,7 +1702,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
         red_data is a real-valued wgts dictionary with redundant baseline weighting muliplied in.
     """
     # get data keys
-    keys = data.keys()
+    keys = list(data.keys())
 
     # get polarizations in data
     pols = data.pols()
@@ -1719,8 +1717,8 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     for i, k in enumerate(keys):
 
         # find which bl_group this key belongs to
-        match = np.array(map(lambda r: k in r, reds))
-        conj_match = np.array(map(lambda r: reverse_bl(k) in r, reds))
+        match = np.array(list(map(lambda r: k in r, reds)))
+        conj_match = np.array(list(map(lambda r: reverse_bl(k) in r, reds)))
 
         # if no match, just copy data over to red_data
         if True not in match and True not in conj_match:

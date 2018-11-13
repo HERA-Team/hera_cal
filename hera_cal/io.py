@@ -2,20 +2,23 @@
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License
 
+from __future__ import print_function, division, absolute_import
+
 import numpy as np
-from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
 from collections import OrderedDict as odict
-from hera_cal.datacontainer import DataContainer
-import hera_cal as hc
 import operator
 import os
 import copy
 import warnings
 from functools import reduce
-from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num
-from hera_cal.utils import split_pol, conj_pol
 import collections
+from six.moves import map, range, zip
+from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
+
+from .datacontainer import DataContainer
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num
+from .utils import split_pol, conj_pol, LST2JD
 
 
 class HERACal(UVCal):
@@ -507,7 +510,7 @@ class HERAData(UVData):
                                           + ' without setting freqs has not been implemented.')
             freqs = self.freqs
             if isinstance(self.freqs, dict):  # multiple files
-                freqs = np.unique(self.freqs.values())
+                freqs = np.unique(list(self.freqs.values()))
         for i in range(0, len(freqs), Nchans):
             yield self.read(frequencies=freqs[i:i + Nchans])
 
@@ -529,7 +532,7 @@ class HERAData(UVData):
                                           + ' without setting times has not been implemented.')
             times = self.times
             if isinstance(times, dict):  # multiple files
-                times = np.unique(times.values())
+                times = np.unique(list(times.values()))
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
 
@@ -615,7 +618,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 
     # remove autos if requested
     if pop_autos:
-        for k in d.keys():
+        for k in list(d.keys()):
             if k[0] == k[1]:
                 del d[k], f[k], n[k]
 
@@ -711,15 +714,15 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     """
     # configure UVData parameters
     # get pols
-    pols = np.unique(map(lambda k: k[-1], data.keys()))
+    pols = np.unique(list(map(lambda k: k[-1], data.keys())))
     Npols = len(pols)
-    polarization_array = np.array(map(lambda p: polstr2num(p), pols))
+    polarization_array = np.array(list(map(lambda p: polstr2num(p), pols)))
 
     # get times
     if time_array is None:
         if start_jd is None:
             raise AttributeError("if time_array is not fed, start_jd must be fed")
-        time_array = hc.utils.LST2JD(lst_array, start_jd, longitude=longitude)
+        time_array = LST2JD(lst_array, start_jd, longitude=longitude)
     Ntimes = len(time_array)
 
     # get freqs
@@ -744,21 +747,21 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         integration_time = np.ones_like(time_array, dtype=np.float64) * np.median(np.diff(np.unique(time_array))) * 24 * 3600.
 
     # get data array
-    data_array = np.moveaxis(map(lambda p: map(lambda ap: data[str(p)][ap], antpairs), pols), 0, -1)
+    data_array = np.moveaxis(list(map(lambda p: list(map(lambda ap: data[str(p)][ap], antpairs)), pols)), 0, -1)
 
     # resort time and baseline axes
     data_array = data_array.reshape(Nblts, 1, Nfreqs, Npols)
     if nsamples is None:
         nsample_array = np.ones_like(data_array, np.float)
     else:
-        nsample_array = np.moveaxis(map(lambda p: map(lambda ap: nsamples[str(p)][ap], antpairs), pols), 0, -1)
+        nsample_array = np.moveaxis(list(map(lambda p: list(map(lambda ap: nsamples[str(p)][ap], antpairs)), pols)), 0, -1)
         nsample_array = nsample_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # flags
     if flags is None:
         flag_array = np.zeros_like(data_array, np.float).astype(np.bool)
     else:
-        flag_array = np.moveaxis(map(lambda p: map(lambda ap: flags[str(p)][ap].astype(np.bool), antpairs), pols), 0, -1)
+        flag_array = np.moveaxis(list(map(lambda p: list(map(lambda ap: flags[str(p)][ap].astype(np.bool), antpairs)), pols)), 0, -1)
         flag_array = flag_array.reshape(Nblts, 1, Nfreqs, Npols)
 
     # configure baselines
@@ -776,16 +779,16 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     Nants_data = len(data_ants)
 
     # get telescope ants
-    antenna_numbers = np.unique(antpos.keys())
+    antenna_numbers = np.unique(list(antpos.keys()))
     Nants_telescope = len(antenna_numbers)
-    antenna_names = map(lambda a: "HH{}".format(a), antenna_numbers)
+    antenna_names = list(map(lambda a: "HH{}".format(a), antenna_numbers))
 
     # set uvw assuming drift phase i.e. phase center is zenith
     uvw_array = np.array([antpos[k[1]] - antpos[k[0]] for k in zip(ant_1_array, ant_2_array)])
 
     # get antenna positions in ITRF frame
     tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
-    antenna_positions = np.array(map(lambda k: antpos[k], antenna_numbers))
+    antenna_positions = np.array(list(map(lambda k: antpos[k], antenna_numbers)))
     antenna_positions = uvutils.ECEF_from_ENU(antenna_positions.T, *tel_lat_lon_alt).T - telescope_location
 
     # get zenith location: can only write drift phase
@@ -1008,15 +1011,15 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     '''
 
     # get antenna info
-    ant_array = np.unique(map(lambda k: k[0], gains.keys())).astype(np.int)
+    ant_array = np.unique(list(map(lambda k: k[0], gains.keys()))).astype(np.int)
     antenna_numbers = copy.copy(ant_array)
-    antenna_names = np.array(map(lambda a: "ant{}".format(a), antenna_numbers))
+    antenna_names = np.array(list(map(lambda a: "ant{}".format(a), antenna_numbers)))
     Nants_data = len(ant_array)
     Nants_telescope = len(antenna_numbers)
 
     # get polarization info
     pol_array = np.array(sorted(set(map(lambda k: k[1], gains.keys()))))
-    jones_array = np.array(map(lambda p: jstr2num(p), pol_array), np.int)
+    jones_array = np.array(list(map(lambda p: jstr2num(p), pol_array)), np.int)
     Njones = len(jones_array)
 
     # get time info
@@ -1073,7 +1076,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         gain_array[zero_check_arr] = 1.0 + 0j
         flag_array[zero_check_arr] += True
         if zero_check_arr.max() is True:
-            print("Some of values in self.gain_array were zero and are flagged and set to 1.")
+            warnings.warn("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
     # instantiate UVCal
     uvc = UVCal()
@@ -1141,7 +1144,7 @@ def update_uvcal(cal, gains=None, flags=None, quals=None, add_to_history='', **k
     cal.gain_array[zero_check] = 1.0 + 0j
     cal.flag_array[zero_check] += True
     if zero_check.max() is True:
-        print("Some of values in self.gain_array were zero and are flagged and set to 1.")
+        warnings.warn("Some of values in self.gain_array were zero and are flagged and set to 1.")
 
     # Set additional attributes
     cal.history += add_to_history
