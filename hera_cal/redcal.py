@@ -186,9 +186,9 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             polarizations in reds.
         ex_pols (optional): same as pols, but excludes polarizations.
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}. 1D and 2D also OK.
-        min_bl_cut: cut redundant groups with average baseline lengths shorter than this. Same unitas as antpos
+        min_bl_cut: cut redundant groups with average baseline lengths shorter than this. Same units as antpos
             which must be specified.
-        max_bl_cut: cut redundant groups with average baselines lengths longer than this. Same unitas as antpos
+        max_bl_cut: cut redundant groups with average baselines lengths longer than this. Same units as antpos
             which must be specified.
     Return:
         reds: list of lists of redundant baselines in the same form as input reds.
@@ -1021,7 +1021,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
     # get reds and then intitialize omnical visibility solutions to all 1s and all flagged
     all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
                         pols=set([pol for pols in pol_load_list for pol in pols]))
-    all_reds = filter_reds(all_reds, ex_ants=ex_ants, **filter_reds_kwargs)
+    all_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
     rv['v_omnical'] = {red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds}
     rv['vf_omnical'] = {red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds}
 
@@ -1210,6 +1210,8 @@ def redcal_argparser():
     redcal_opts.add_argument("--solar_horizon", type=float, default=0.0, help="When the Sun is above this altitude in degrees, calibration is skipped and the integrations are flagged.")
     redcal_opts.add_argument("--nInt_to_load", type=int, default=8, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead.")
     redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
+    redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
+    redcal_opts.add_argument("--max_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths longer than this length in meters")
 
     omni_opts = a.add_argument_group(title='Omnical-Specific Options')
     omni_opts.add_argument("--conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
