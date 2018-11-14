@@ -163,27 +163,33 @@ def get_reds(antpos, pols=['xx'], pol_mode='1pol', bl_error_tol=1.0):
     return add_pol_reds(pos_reds, pols=pols, pol_mode=pol_mode)
 
 
-def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, pols=None, ex_pols=None):
+def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, 
+                pols=None, ex_pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None):
     '''
     Filter redundancies to include/exclude the specified bls, antennas, unique bl groups and polarizations.
     Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, ubls, ex_ubls, bls, ex_bls,
     ants, ex_ants).
     Args:
         reds: list of lists of redundant (i,j,pol) baseline tuples, e.g. the output of get_reds()
-        bls (optional): baselines to include.  Baselines of the form (i,j,pol) include that specific
+        bls (optional): baselines to include. Baselines of the form (i,j,pol) include that specific
             visibility.  Baselines of the form (i,j) are broadcast across all polarizations present in reds.
         ex_bls (optional): same as bls, but excludes baselines.
-        ants (optional): antennas to include.  Only baselines where both antenna indices are in ants
-            are included.  Antennas of the form (i,pol) include that antenna/pol.  Antennas of the form i are
+        ants (optional): antennas to include. Only baselines where both antenna indices are in ants
+            are included.  Antennas of the form (i,pol) include that antenna/pol. Antennas of the form i are
             broadcast across all polarizations present in reds.
         ex_ants (optional): same as ants, but excludes antennas.
-        ubls (optional): redundant (unique baseline) groups to include.  Each baseline in ubls is taken to
-            represent the redundant group containing it.  Baselines of the form (i,j) are broadcast across all
+        ubls (optional): redundant (unique baseline) groups to include. Each baseline in ubls is taken to
+            represent the redundant group containing it. Baselines of the form (i,j) are broadcast across all
             polarizations, otherwise (i,j,pol) selects a specific redundant group.
         ex_ubls (optional): same as ubls, but excludes groups.
-        pols (optional): polarizations to include in reds. e.g. ['xx','yy','xy','yx'].  Default includes all
+        pols (optional): polarizations to include in reds. e.g. ['xx','yy','xy','yx']. Default includes all
             polarizations in reds.
         ex_pols (optional): same as pols, but excludes polarizations.
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}. 1D and 2D also OK.
+        min_bl_cut: cut redundant groups with average baseline lengths shorter than this. Same unitas as antpos
+            which must be specified.
+        max_bl_cut: cut redundant groups with average baselines lengths longer than this. Same unitas as antpos
+            which must be specified.
     Return:
         reds: list of lists of redundant baselines in the same form as input reds.
     '''
@@ -237,7 +243,15 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
         bls = set(join_bl(i, j) for i, j in split_bls(bls) if i not in ex_ants and j not in ex_ants)
     bls.union(set(reverse_bl(k) for k in bls))  # put in reverse baselines, just in case
     reds = [[key for key in gp if key in bls] for gp in reds]
-    return [gp for gp in reds if len(gp) > 0]
+    reds = [gp for gp in reds if len(gp) > 0]
+
+    if min_bl_cut is not None or max_bl_cut is not None:
+        assert antpos is not None, 'antpos must be passed in if min_bl_cut or max_bl_cut is specified.'
+        lengths = [np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp]) for gp in reds]
+        reds = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l > min_bl_cut) and 
+                                                       (max_bl_cut is None or l < max_bl_cut))]
+    return reds
+
 
 
 def reds_to_antpos(reds, tol=1e-10):
