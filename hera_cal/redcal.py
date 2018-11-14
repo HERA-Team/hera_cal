@@ -248,10 +248,9 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     if min_bl_cut is not None or max_bl_cut is not None:
         assert antpos is not None, 'antpos must be passed in if min_bl_cut or max_bl_cut is specified.'
         lengths = [np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp]) for gp in reds]
-        reds = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l > min_bl_cut) and 
-                                                       (max_bl_cut is None or l < max_bl_cut))]
+        reds = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l > min_bl_cut)
+                                                       and (max_bl_cut is None or l < max_bl_cut))]
     return reds
-
 
 
 def reds_to_antpos(reds, tol=1e-10):
