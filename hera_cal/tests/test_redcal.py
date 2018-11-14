@@ -184,7 +184,6 @@ class TestMethods(unittest.TestCase):
         self.assertEqual(om.parse_pol_mode(reds), 'unrecognized_pol_mode')
 
     def test_get_pos_red(self):
-
         pos = build_hex_array(3, sep=14.7)
         self.assertEqual(len(om.get_pos_reds(pos)), 30)
 
@@ -267,6 +266,11 @@ class TestMethods(unittest.TestCase):
         # exclude ubls
         r = om.filter_reds(reds, ex_ubls=[(2, 3), (0, 3)])
         self.assertEqual(r, [[(0, 2, 'xx'), (1, 3, 'xx')], [(0, 2, 'yy'), (1, 3, 'yy')]])
+        # test baseline length min and max cutoffs
+        antpos = build_hex_array(4, sep=14.7)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        self.assertEqual(om.filter_reds(reds, antpos=antpos, min_bl_cut=85), reds[-3:])
+        self.assertEqual(om.filter_reds(reds, antpos=antpos, max_bl_cut=15), reds[:3])
 
     def test_add_pol_reds(self):
         reds = [[(1, 2)]]
