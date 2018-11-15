@@ -350,9 +350,13 @@ class FRFilter(object):
         self.avg_flags = avg_flags
         self.avg_nsamples = avg_nsamples
         self.avg_lsts = al
-        self.avg_times = ea['avg_times']
+        self.avg_times = np.asarray(ea['avg_times'])
         self.t_avg = t_avg
         self.Navg = Navg
+
+        # attach time array to DataContainers
+        for dc in ['avg_data', 'avg_flags', 'avg_nsamples']:
+            setattr(getattr(self, dc), 'times', self.avg_times)
 
     def write_data(self, outfilename, write_avg=True, filetype='miriad', add_to_history='', overwrite=False,
                    run_check=True):

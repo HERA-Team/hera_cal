@@ -74,6 +74,7 @@ import matplotlib.pyplot as plt
 from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
 from scipy.signal import windows
+from sklearn import gaussian_process as gp
 
 from . import io
 from . import abscal_funcs
@@ -84,13 +85,27 @@ from .frf import FRFilter
 
 class ReflectionFitter(FRFilter):
     """
-    A sublcass of frf.FRFilter with added
+    A subclass of frf.FRFilter with added
     reflection modeling capabilities.
     """
 
-    def dly_clean_data(self, keys=None, tol=1e-5, maxiter=500, gain=0.1, skip_wgt=0.2,
-                       dly_cut=1500, edgecut=0, taper='none', alpha=0.1, timeavg=False,
-                       broadcast_flags=False, time_thresh=0.05, overwrite=False, verbose=False):
+    def reset(self, force=False):
+        """
+        Empty all DataContainer attached to class except for
+        original data, flags and nsamples. force must be True
+        to execute.
+        """
+        if not force:
+            raise ValueError("cannot reset object without force == True")
+        else:
+            for o in self.__dict__:
+                if isinstance(getattr(self, o), DataContainer):
+                    if o not in ['data', 'flags', 'nsamples']:
+                        setattr(self, o, DataContainer({}))
+
+    def dly_clean_data(self, keys=None, data=None, flags=None, nsamples=None, tol=1e-5, maxiter=500, gain=0.1,
+                       skip_wgt=0.2, dly_cut=1500, edgecut=0, taper='none', alpha=0.1, timeavg=False,
+                       broadcast_flags=False, time_thresh=0.05, overwrite=False, verbose=True):
         """
         Run a Delay Clean on self.data dictionary to derive a model of the
         visibility free of flagged channels. CLEAN data is inserted into
@@ -98,7 +113,10 @@ class ReflectionFitter(FRFilter):
 
         Parameters
         ----------
-        keys : len-3 tuple, keys of self.data to run clean on. Default is all keys.
+        keys : list of baseline-pol tuples to run clean on. Default is all keys.
+        data : DataContainer to pull data from. Default is self.data
+        flags : DataContainer to pull flags from. Default is self.flags.
+        nsamples : DataContainer to pull nsample from. Default is self.nsamples.
         tol : float, stopping tolerance for CLEAN. See aipy.deconv.clean
         maxiter : int, maximum number of CLEAN iterations
         gain : float, CLEAN gain
@@ -116,27 +134,37 @@ class ReflectionFitter(FRFilter):
             flag a channel for all times.
         """
         # initialize containers
-        if hasattr(self, "clean_data") and not overwrite:
-            raise ValueError("self.clean_data exists and overwrite is False...")
-        self.clean_data = DataContainer({})
-        self.resid_data = DataContainer({})
-        self.clean_flags = DataContainer({})
-        self.clean_nsamples = DataContainer({})
-        self.clean_info = {}
+        for dc in ['clean_data', 'resid_data', 'clean_flags', 'clean_nsamples']:
+            if not hasattr(self, dc):
+                setattr(self, dc, DataContainer({}))
+        if not hasattr(self, 'clean_info'):
+            self.clean_info = {}
         self.clean_freqs = self.freqs
         self.clean_edgecut = edgecut
         if edgecut > 0:
             self.clean_freqs = self.clean_freqs[edgecut:-edgecut]
 
+        # setup data and flags
+        if data is None:
+            data = self.data
+        if flags is None:
+            flags = self.flags
+        if nsamples is None:
+            nsamples = self.nsamples
+
         # get keys
         if keys is None:
-            keys = self.data.keys()
+            keys = data.keys()
 
         # iterate over keys
         for k in keys:
+            if k in self.clean_data and not overwrite:
+                echo("{} exists in clean_data and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+
             echo("...Cleaning data key {}".format(k), verbose=verbose)
             (model, flag, residual, dlys,
-             info) = reflections_delay_filter(self.data[k].copy(), self.flags[k].copy(), self.dnu, tol=tol,
+             info) = reflections_delay_filter(data[k].copy(), flags[k].copy(), self.dnu, tol=tol,
                                               maxiter=maxiter, gain=gain, skip_wgt=skip_wgt, dly_cut=dly_cut,
                                               edgecut=edgecut, taper=taper, alpha=alpha, timeavg=timeavg,
                                               broadcast_flags=broadcast_flags, time_thresh=time_thresh)
@@ -150,17 +178,17 @@ class ReflectionFitter(FRFilter):
             self.clean_flags[k] = flag
 
             # make a band-averaged nsample
-            nsamp = self.nsamples[k]
+            nsamp = nsamples[k]
             if edgecut > 0:
                 nsamp = nsamp[:, edgecut:-edgecut]
-            self.clean_nsamples[k] = np.ones((self.Ntimes, 1), dtype=np.float) * np.sum(~flag * nsamp, axis=1, keepdims=True) / np.sum(~flag, axis=1, keepdims=True).clip(1e-10, np.inf)
+            self.clean_nsamples[k] = np.ones((len(data.times), 1), dtype=np.float) * np.sum(~flag * nsamp, axis=1, keepdims=True) / np.sum(~flag, axis=1, keepdims=True).clip(1e-10, np.inf)
 
         self.clean_dlys = dlys
-        self.clean_times = self.times
+        self.clean_times = data.times
         if timeavg:
             self.clean_times = np.mean(self.clean_times, keepdims=True)
 
-    def fft_data(self, keys=None, taper='none', alpha=0.1, overwrite=False):
+    def fft_data(self, keys=None, taper='none', alpha=0.1, overwrite=False, verbose=True):
         """
         Take FFT of clean data in self.clean_data and assign to self.clean_fft.
 
@@ -175,9 +203,6 @@ class ReflectionFitter(FRFilter):
         overwrite : bool
             If self.clean_fft already exists, overwrite its contents.
         """
-        if hasattr(self, 'clean_fft') and not overwrite:
-            raise ValueError("self.clean_fft exists and overwrite == False...")
-
         # get keys
         if keys is None:
             keys = self.clean_data.keys()
@@ -195,13 +220,19 @@ class ReflectionFitter(FRFilter):
             raise ValueError("Didn't recognize taper {}".format(taper))
 
         # iterate over keys
-        self.clean_fft = DataContainer({})
+        if not hasattr(self, 'clean_fft'):
+            self.clean_fft = DataContainer({})
         self.clean_taper = taper
         for k in keys:
-            if k in self.clean_data:
-                d = self.clean_data[k]
-                self.clean_fft[k] = np.fft.fftshift(np.fft.fft(d * t(d.shape[1]), axis=1), axes=1)
-
+            if k not in self.clean_data:
+                echo("{} not in self.clean_data, skipping...".format(k), verbose=verbose)
+                continue
+            if k in self.clean_fft and not overwrite:
+                echo("{} in self.clean_fft and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+            d = self.clean_data[k]
+            self.clean_fft[k] = np.fft.fftshift(np.fft.fft(d * t(d.shape[1]), axis=1), axes=1)
+   
     def model_auto_reflections(self, dly_range, keys=None, data='clean', edgecut=0, taper='none',
                                alpha=0.1, zero_pad=0, overwrite=False, fthin=10, verbose=True):
         """
@@ -326,7 +357,7 @@ class ReflectionFitter(FRFilter):
         return uvc
 
     def pca_decomp(self, dly_range, side='both', keys=None, taper='none', alpha=0.1,
-                   overwrite=False, truncate_level=0):
+                   overwrite=False, truncate_level=0, verbose=True):
         """
         Create a PCA based model of the FFT of clean data.
 
@@ -361,9 +392,14 @@ class ReflectionFitter(FRFilter):
         self.fft_data(keys=keys, taper=taper, alpha=alpha, overwrite=overwrite)
 
         # setup dictionaries
-        self.clean_u = DataContainer({})
-        self.clean_v = DataContainer({})
-        self.clean_svals = DataContainer({})
+        if not hasattr(self, 'clean_u'):
+            self.clean_u = DataContainer({})
+        if not hasattr(self, 'clean_v'):
+            self.clean_v = DataContainer({})
+        if not hasattr(self, 'clean_svals'):
+            self.clean_svals = DataContainer({})
+        if not hasattr(self, 'clean_u_flags'):
+            self.clean_u_flags = DataContainer({})
 
         # get selection function
         if side == 'pos':
@@ -375,6 +411,10 @@ class ReflectionFitter(FRFilter):
 
         # iterate over keys
         for k in keys:
+            if k in self.clean_svals and not overwrite:
+                echo("{} exists in clean_svals and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+
             # perform svd to get principal components
             d = np.zeros_like(self.clean_fft[k])
             d[:, select] = self.clean_fft[k][:, select]
@@ -385,34 +425,78 @@ class ReflectionFitter(FRFilter):
             self.clean_u[k] = u[:, keep]
             self.clean_v[k] = v[keep, :]
             self.clean_svals[k] = svals[keep]
+            self.clean_u_flags[k] = np.min(self.clean_flags[k], axis=1)
 
         # get principal components
         self.form_PCs(keys, overwrite=overwrite)
 
-    
+        # append relevant metadata
+        self.clean_u.times = self.clean_times
+        self.clean_v.times = self.clean_times
+        self.clean_svals.times = self.clean_times
+        self.clean_u_flags.times = self.clean_times
 
-    def form_PCs(self, keys=None, overwrite=False):
+    def form_PCs(self, keys=None, u=None, v=None, overwrite=False, verbose=True):
         """
-        Take self.clean_u and self.clean_v
-        and form principal components.
-        """
-        if keys is None:
-            keys = self.clean_svals.keys()
-
-        if hasattr(self, "clean_PCs") and not overwrite:
-            raise ValueError("self.clean_PCs exists and overwrite == False...")
-
-        self.clean_PCs = DataContainer({})
-        for k in keys:
-            self.clean_PCs[k] = _form_PCs(self.clean_u[k], self.clean_v[k])
-
-    def pc_subtraction(self, keys=None, truncate_level=0.5, overwrite=False):
-        """
-        Sum principal components, iFFT (with necessary zero-padding) and
-        subtract from original self.data container
+        Take u and v-modes and form outer product to get principal components.
 
         Parameters
         ----------
+        keys : list of tuples
+            List of baseline-pol DataContainer tuples to operate on.
+
+        u : DataContainer 
+            Holds u-modes to use in forming PCs. Default is self.clean_u
+
+        v : DataContainer 
+            Holds v-modes to use in forming PCs. Default is self.clean_v
+
+        overwrite : bool
+            If True, overwrite output data if it exists.
+
+        verbose : bool
+            If True, report feedback to stdout.
+        """
+        if keys is None:
+            keys = self.clean_svals.keys()
+        if u is None:
+            u = self.clean_u
+        if v is None:
+            v = self.clean_v
+
+        if not hasattr(self, 'clean_PCs'):
+            self.clean_PCs = DataContainer({})
+
+        for k in keys:
+            if k in self.clean_PCs and not overwrite:
+                echo("{} exists in clean_PCs and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+
+            self.clean_PCs[k] = _form_PCs(u[k], v[k])
+
+    def build_model(self, keys=None, Nkeep=None, overwrite=False, increment=False, verbose=True):
+        """
+        Sum principal components dotted with singular values and add to 
+        the clean_pc_model.
+
+        Parameters
+        ----------
+        keys : list of tuples
+            List of baseline-pol DataContainer tuples to operate on.
+
+        Nkeep : int
+            Number of principal components to keep when forming model.
+
+        overwrite : bool
+            If True, overwrite output data if it exists.
+
+        increment : bool
+            If key already exists in clean_pc_model, add the new model
+            to it, rather than overwrite it. This supercedes overwrite
+            if both are true.
+
+        verbose : bool
+            If True, report feedback to stdout.
         """
         if not hasattr(self, "clean_PCs"):
             raise ValueError("self.clean_PCs must exist. See self.pcs_decomp()")
@@ -424,39 +508,241 @@ class ReflectionFitter(FRFilter):
         # form PCs
         self.form_PCs(keys=keys, overwrite=overwrite)
 
-        self.clean_pc_model = DataContainer({})
-        self.data_pcsub = DataContainer({})
+        # setup containers
+        if not hasattr(self, "clean_pc_model"):
+            self.clean_pc_model = DataContainer({})
+        if not hasattr(self, "data_pc_model"):
+            self.data_pc_model = DataContainer({})
+        if not hasattr(self, "data_pc_sub"):
+            self.data_pc_sub = DataContainer({})
+
+        # iterate over keys
         for k in keys:
+            if k not in self.clean_PCs:
+                echo("{} not in clean_PCs, skipping...".format(k), verbose=verbose)
+                continue
+            if k in self.clean_pc_model and (not overwrite or increment):
+                echo("{} in clean_pc_model and overwrite == increment == False, skipping...".format(k), verbose=verbose)
+                continue
+
             # sum PCs
-            keep = np.where(self.clean_svals[k] / self.clean_svals[k][0] > truncate_level)[0]
-            pcs = self.clean_PCs[k][keep]
-            model_fft = sum_principal_components(self.clean_svals[k], pcs)
+            model_fft = sum_principal_components(self.clean_svals[k], self.clean_PCs[k], Nkeep=Nkeep)
+            if k not in self.clean_pc_model:
+                self.clean_pc_model[k] = model_fft
+            elif k in self.clean_pc_model and increment:
+                self.clean_pc_model[k] += model_fft
+            else:
+                self.clean_pc_model[k] = model_fft
+
+    def subtract_model(self, keys=None, data=None, overwrite=False, verbose=True):
+        """
+        iFFT clean_pc_model (with necessary zero-padding) and then
+        subtract from original self.data container.
+
+        Parameters
+        ----------
+        keys : list of tuples
+            List of baseline-pol DataContainer tuples to operate on.
+
+        data : datacontainer
+            Object to pull data from in forming data-model residual.
+            Default is self.data.
+
+        overwrite : bool
+            If True, overwrite output data if it exists.
+
+        verbose : bool
+            If True, report feedback to stdout.
+        """
+        # get keys
+        if keys is None:
+            keys = self.clean_pc_model.keys()
+
+        if not hasattr(self, 'data_pc_model'):
+            self.data_pc_model = DataContainer({})
+        if not hasattr(self, 'data_pc_sub'):
+            self.data_pc_sub = DataContainer({})
+
+        # get data
+        if data is None:
+            data = self.data
+
+        # iterate over keys
+        for k in keys:
+            if k in self.data_pc_model and not overwrite:
+                echo("{} in data_pc_model and overwrite==False, skipping...".format(k), verbose=verbose)
+                continue
+
+            # get fft of model
+            model_fft = self.clean_pc_model[k]
 
             # zero-pad if necessary
             if self.clean_edgecut > 0:
-                z = np.zeros((self.Ntimes, self.clean_edgecut), dtype=model_fft.dtype)
+                z = np.zeros((model_fft.shape[0], self.clean_edgecut), dtype=model_fft.dtype)
                 model_fft = np.concatenate([z, model_fft, z], axis=1)
 
-            # ifft to get data
+            # ifft to get to data space
             model = np.fft.fftshift(np.fft.ifft(model_fft, axis=1), axes=1)
-            self.clean_pc_model[k] = model_fft
-            if k in self.data:
-                self.data_pcsub[k] = self.data[k] - model
 
-    def write_pcsub(self, outfilename, filetype='miriad', add_to_history='', overwrite=False,
-                    run_check=True):
+            # subtract from data
+            self.data_pc_model[k] = model
+            self.data_pc_sub[k] = data[k] - model
+
+    def interp_u(self, u=None, uflags=None, keys=None, overwrite=False, verbose=True,
+                 mode='gpr', gp_len=600, gp_nl=0.1, optimizer=None):
         """
-        Write PC-subtracted data.
+        Interpolate u modes along time. This can cover
+        flagged gaps, can interpolate a time-averaged u-mode
+        onto the original full time resolution, and can also
+        act as a smoothing process for noisey u-modes. Pulls
+        from self.clean_u and inserts into self.clean_u_interp
+
+        Parameters
+        ----------
+        u : DataContainer
+            Object to pull target u from. Default is self.clean_u
+
+        uflags : DataContainer
+            Object to pull target u flags from. Default is self.clean_u_flags
+
+        keys : list of tuples
+            List of baseline-pol DataContainer tuples to operate on.
+
+        overwrite : bool
+            If True, overwrite output data if it exists.
+
+        verbose : bool
+            If True, report feedback to stdout.
+
+        mode : str
+            Interpolation mode. Options=['gpr']
+
         """
-        # shuffle around original data
-        self._data = self.data
-        self.data = self.data_pcsub
+        if not hasattr(self, 'clean_u_interp'):
+            self.clean_u_interp = DataContainer({})
 
-        self.write_data(outfilename, filetype=filetype, add_to_history=add_to_history, overwrite=overwrite,
-                        run_check=run_check)
+        if u is None:
+            u = self.clean_u
+        if uflags is None:
+            uflags = self.clean_u_flags
+        times = np.asarray(u.times)
 
-        self.data = self._data
-        del self._data
+        # get keys
+        if keys is None:
+            keys = u.keys()
+
+        # setup X predict
+        Xpredict = self.times[:, None] * 24 * 3600
+        Xmean = np.median(Xpredict)
+        Xpredict -= Xmean
+
+        # iterate over keys
+        for k in keys:
+            # check overwrite
+            if k in self.clean_u_interp and overwrite == False:
+                echo("{} in clean_u_interp and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+
+            if mode == 'gpr':
+                # setup GP kernel
+                kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
+                GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer)
+
+                # setup regression data: get unflagged data
+                X = times[~uflags[k], None] * 3600 * 24 - Xmean
+                y = u[k][~uflags[k], :]
+
+                # fit gp
+                GP.fit(X, y)
+
+                # predict across all times
+                ypredict = GP.predict(Xpredict)
+
+                # append
+                self.clean_u_interp[k] = ypredict
+
+            else:
+                raise ValueError("didn't recognize interp mode {}".format(mode))
+
+    def project_autos_onto_u(self, keys, auto_keys, u=None, umode=0, auto_delay=0,
+                             overwrite=False, verbose=True):
+        """
+        Project the time dependent clean_fft of an autocorrelation
+        at a specified delay onto the specified u-mode, replacing
+        the u-mode with the projected autocorrelation. Inserts
+        results into self.clean_u_interp
+
+        Parameters
+        ----------
+        keys : list of tuples
+            List of baseline-pol DataContainer tuples to operate on.
+
+        auto_keys : list of tuples
+            List of autocorr-pol tuples matching input keys in length
+            to pull auto-correlation data from in self.clean_fft.
+
+        u : DataContainer
+            Object to pull u modes from. Default is self.clean_u.
+
+        umode : int
+            Index of the u-mode to project auto-correlation onto.
+            All other u-mode indices are copied as-is into clean_u_interp.
+            This should almost always be set to zero.
+
+        auto_dly : float
+            Delay in nanosec of autocorrelation to project onto the u-mode.
+            This should almost always be set to zero.
+
+        overwrite : bool
+            If True, overwrite output data if it exists.
+
+        verbose : bool
+            If True, report feedback to stdout.
+        """
+        # type check
+        assert len(keys) == len(autokeys), "len(keys) must equal len(autokeys)"
+
+        # get u
+        if u is None:
+            u = self.clean_u
+
+        # get dly index
+        select = np.argmin(np.abs(self.clean_dlys - auto_dly))
+
+        if not hasattr(self, 'clean_u_interp'):
+            self.clean_u_interp = DataContainer({})
+            self.clean_u_interp.times = u.times
+        if not hasattr(self, 'clean_u_interp_flags'):
+            self.clean_u_interp_flags = DataContainer({})
+            self.clean_u_interp_flags.times = u.times
+
+        # iterate over keys
+        for k, ak in zip(keys, autokeys):
+            # check overwrite
+            if k in self.clean_u_interp and not overwrite:
+                echo("{} exists in clean_u_interp and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+
+            if k not in u or ak not in self.clean_fft:
+                echo("{} not in u container or {} not in self.clean_fft, skipping...".format(k, ak), verbose=verbose)
+                continnue
+
+            # get u-mode
+            _u = u[k][:, umode]
+
+            # get autocorr
+            ac = self.clean_fft[ak][:, select]
+
+            # form least squares estimate
+            f = np.min(RF.clean_flags[k] + RF.clean_flags[ak], axis=1)
+            W = np.eye(len(_u)) * (~f).astype(np.float)
+            A = ac[:, None]
+            xhat = np.asarray(np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.real)), dtype=np.complex) \
+                    + 1j * np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.imag))
+            proj_u = A.dot(xhat)
+
+            self.clean_u_interp[k] = proj_u
+            self.clean_u_interp_flags[k] = f
 
 
 def _form_gains(epsilon):
