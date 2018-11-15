@@ -588,10 +588,10 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
             for i, ant in enumerate(uvf.ant_array):
                 for ip, jnum in enumerate(uvf.polarization_array):
-                    flags[(ant, jnum2str(jnum))] = np.array(self.flag_array[i, 0, :, :, ip].T)
+                    flags[(ant, jnum2str(jnum))] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
         elif uvf.type == 'waterfall':  # one time x freq waterfall per visibility polarization
             for ip, jnum in enumerate(uvf.polarization_array):
-                flags[jnum2str(jnum)] = uvf.flag_array[:, :, pol_index]
+                flags[jnum2str(jnum)] = uvf.flag_array[:, :, ip]
 
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
         npz = np.load(flagfile)
