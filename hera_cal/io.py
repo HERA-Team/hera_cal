@@ -537,6 +537,70 @@ class HERAData(UVData):
             yield self.read(times=times[i:i + Nints])
 
 
+def load_flags(flagfile, filetype='h5', return_meta=False):
+    '''Load flags from a file and returns them as a DataContainer (for per-visibility flags)
+    or dictionary (for per-antenna or per-polarization flags). More than one spectral window
+    is not supported. Assumes times are evenly-spaced and in order for each baseline.
+    
+    Arguments:
+        flagfile: path to file containing flags and flagging metadata
+        filetype: either 'h5' or 'npz'. 'h5' assumes the file is readable as a hera_qm
+            UVFlag object in the 'flag' mode (could be by baseline, by antenna, or by 
+            polarization). 'npz' provides legacy support for the IDR2.1 flagging npzs,
+            but only for per-visibility flags.
+        return_meta: if True, return a metadata dictionary with, e.g., 'times' and 'freqs'
+        
+    Returns:
+        flags: dictionary or DataContainer mapping keys to Ntimes x Nfreqs numpy arrays.
+            if 'h5' and 'baseline' mode or 'npz': DataContainer with keys like (0,1,'xx')
+            if 'h5' and 'antenna' mode: dictionary with keys like (0,'Jxx')
+            if 'h5' and 'waterfall' mode: dictionary with keys like 'Jxx'
+        meta: (only returned if return_meta is True)
+    '''
+    flags = {}
+    if filetype not in ['h5', 'npz']:
+        raise ValueError("filetype must be 'h5' or 'npz'.")
+    
+    elif filetype == 'h5':
+        uvf = UVFlag(flagfile)
+        assert uvf.mode == 'flag', 'Must be in flag mode.'
+        freqs = np.unique(uvf.freq_array)
+        times = np.unique(uvf.time_array)
+        pol_indices = {polnum2str(polnum): i for i, polnum in enumerate(uvf.polarization_array)}
+        if uvf.type == 'baseline':  # one time x freq waterfall per baseline
+            blt_slices = get_blt_slices(uvf)
+            for ip, polnum in enumerate(uvf.polarization_array):
+                for (ant1, ant2), blt_slice in blt_slices.items():
+                    flags[(ant1, ant2, polnum2str(polnum))] = uvf.flag_array[blt_slice, 0, :, ip] 
+            flags = DataContainer(flags)
+        elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
+            for i, ant in enumerate(uvf.ant_array):
+                for ip, jnum in enumerate(uvf.polarization_array):
+                    flags[(ant, jnum2str(jnum))] = np.array(self.flag_array[i, 0, :, :, ip].T)
+        elif uvf.type == 'waterfall':  # one time x freq waterfall per visibility polarization
+            for ip, jnum in enumerate(uvf.polarization_array):
+                flags[jnum2str(jnum)] = uvf.flag_array[:, :, pol_index]
+
+    elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
+        npz = np.load(flagfile)
+        pols = [polnum2str(p) for p in npz['polarization_array']]
+        freqs = np.unique(uvf.freq_array)
+        times = np.unique(uvf.time_array)
+        nAntpairs = len(npz['antpairs'])
+        assert npz['flag_array'].shape[0] == nAntpairs * len(times), \
+            'flag_array must have flags for all baselines for all times.'
+        for p, pol in enumerate(pols):
+            flag_array = np.reshape(npz['flag_array'][:, 0, :, p], (len(times), nAntpairs, len(freqs)))
+            for n, (i, j) in enumerate(npz['antpairs']):
+                flags[i, j, pol] = flag_array[:, n, :]
+        flags = DataContainer(flags)
+    
+    if return_meta:
+        return flags, {'freqs': freqs, 'times': times}
+    else:
+        return flags
+
+
 #######################################################################
 #                             LEGACY CODE
 #######################################################################
@@ -1182,30 +1246,3 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
-
-
-def load_npz_flags(npzfile):
-    '''Load flags from a npz file (like those produced by hera_qm.xrfi) and converts
-    them into a DataContainer. More than one spectral window is not supported. Assumes
-    every baseline has the same times present and that the times are in order.
-
-    Arguments:
-        npzfile: path to .npz file containing flags and array metadata
-    Returns:
-        flags: Dictionary of boolean flags as a function of time and
-            frequency with keys in the (1,'x') format
-    '''
-    npz = np.load(npzfile)
-    pols = [polnum2str(p) for p in npz['polarization_array']]
-    nTimes = len(np.unique(npz['time_array']))
-    nAntpairs = len(npz['antpairs'])
-    nFreqs = npz['flag_array'].shape[2]
-    assert npz['flag_array'].shape[0] == nAntpairs * nTimes, \
-        'flag_array must have flags for all baselines for all times.'
-
-    flags = {}
-    for p, pol in enumerate(pols):
-        flag_array = np.reshape(npz['flag_array'][:, 0, :, p], (nTimes, nAntpairs, nFreqs))
-        for n, (i, j) in enumerate(npz['antpairs']):
-            flags[i, j, pol] = flag_array[:, n, :]
-    return DataContainer(flags)
