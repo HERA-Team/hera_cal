@@ -7,6 +7,7 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
 import copy
+from .datacontainer import DataContainer
 import os
 from six.moves import range
 from pyuvdata import UVData
@@ -14,7 +15,6 @@ import pyuvdata.utils as uvutils
 
 from . import io
 from . import utils
-from . import datacontainer
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts=None,
@@ -24,7 +24,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     weighted by a boolean flag array (flags) and also optionally by an Nsample array (nsample),
     such that, for a single frequency channel, the time average is constructed as
 
-    avg_data = sum( data * flag_wgt * nsample ) / sum( flag_wgt * nsample )
+    avg_data = sum( data * flag_wgt * nsample**2 ) / sum( flag_wgt * nsample**2 )
 
     where flag_wgt is constructed as (~flags).astype(np.float).
 
@@ -32,14 +32,13 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     window-center before taking their average. This assumes the
     input data are drift-scan phased. See hera_cal.utils.lst_rephase
     for details on the rephasing algorithm. By feeding an nsample array,
-    one can also construct the averaged nsample for each averaging window.
+    the averaged nsample for each averaging window is computed and returned.
 
     Parameters
     ----------
     data : ndarray
         2D complex ndarray of complex visibility with shape=(Ntimes, Nfreqs)
-        The rows of data are assumed to be ordered chronologically, in either
-        asending or descending order.
+        The rows of data are assumed to be ordered chronologically.
 
     Navg : int
         Number of time samples to average together, with the condition
@@ -55,9 +54,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         in data. Default is to assume unity for all pixels.
 
     rephase : boolean, optional
-        if True, shift the phase center of each integration to the
-        LST of the averaging window-center before averaging. Need to
-        feed lsts, freqs and bl_vec if True.
+        If True, phase each integration to the LST of the averaging window-center
+        before averaging. Need to feed lsts, freqs and bl_vec if True.
 
     lsts : ndarray, optional
         1D float array holding the LST [radians] of each time integration in
@@ -68,7 +66,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         in data. Shape=(Nfreqs,)
 
     bl_vec : ndarray, optional
-        3D float ndarray containing baseline vector of visibility in meters
+        3D float ndarray containing the visibility baseline vector in meters
         in the ENU (TOPO) frame.
 
     lat : float, optional
@@ -80,13 +78,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         anything that has length Ntimes.
 
     verbose : bool, optional
-        if True, report feedback to standard output.
+        If True, report feedback to standard output.
 
-    Returns (output_dictionary)
+    Returns 
     -------
-    output_dictionary : dictionary
-        A dictionary containing the following variables
-
     avg_data : ndarray
         2D complex array with time-average spectrum, shape=(Navg_times, Nfreqs)
 
@@ -170,8 +165,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
             dlst = mean_l - lst
             d = utils.lst_rephase(d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True)
 
-        # form data weights : flag weights * nsample
-        w = fw * n
+        # form data weights : flag weights * nsample**2
+        w = fw * n**2
         w_sum = np.sum(w, axis=0, keepdims=False).clip(1e-10, np.inf)
 
         # perfom weighted average of data along time
@@ -195,8 +190,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     # wrap lsts
     avg_lsts = avg_lsts % (2 * np.pi)
 
-    return dict(avg_data=avg_data, win_flags=win_flags, avg_nsamples=avg_nsamples,
-                avg_lsts=avg_lsts, avg_extra_arrays=avg_extra_arrays)
+    return avg_data, win_flags, avg_nsamples, avg_lsts, avg_extra_arrays
 
 
 class FRFilter(object):
@@ -206,44 +200,47 @@ class FRFilter(object):
 
     def __init__(self, inp_data=None, filetype='miriad', **load_kwargs):
         """
-        Initialize a FRFilter object and optionally
+        Initialize the object and optionally
         load data if provided.
 
-        Args:
-            inp_data : string, UVData or DataContainer object
-                Filepath to a miriad, uvfits or uvh5
-                datafile, a UVData object or a DataContainer
-                object.
+        Parameters
+        ----------
+        inp_data : string, UVData or DataContainer object
+            Filepath to a miriad, uvfits or uvh5
+            datafile, a UVData object or a DataContainer
+            object.
 
-            filetype : str
-                If inp_data is a filepath, this is its filetype.
-                See hera_cal.io.HERAData for supported filetypes.
+        filetype : str
+            If inp_data is a filepath, this is its filetype.
+            See hera_cal.io.HERAData for supported filetypes.
 
-            load_kwargs : dictionary
-                Keyword arguments to pass to UVData.read if
-                dainp_datata is fed as a string.
+        load_kwargs : dictionary
+            Keyword arguments to pass to UVData.read if
+            dainp_datata is fed as a string.
         """
         if inp_data is not None:
-            self.load_data(inp_data, **load_kwargs)
+            self.load_data(inp_data, filetype=filetype, **load_kwargs)
 
     def load_data(self, inp_data, filetype='miriad', **load_kwargs):
         """
         Load in visibility data for filtering
 
-        Args:
-            inp_data : string, UVData or HERAData object
-                Filepath to visibility file, or UVData or HERAData object
-    
-            filetype : str
-                IF data is a filepath, this is its filetype.
-                See hera_cal.io.HERAData for supported filetypes.
+        Parameters
+        ----------
+        inp_data : string, UVData or HERAData object
+            Filepath to visibility file, or UVData or HERAData object
 
-            load_kwargs : dictionary
-                Keyword arguments to pass to UVData.read if data is a string.
+        filetype : str
+            IF data is a filepath, this is its filetype.
+            See hera_cal.io.HERAData for supported filetypes.
+
+        load_kwargs : dictionary
+            Keyword arguments to pass to UVData.read if data is a string.
         """
         # load HERAData if fed as string
         if isinstance(inp_data, (str, np.str)):
             self.inp_data = io.HERAData(inp_data, filetype=filetype)
+            self.inp_data.read(**load_kwargs)
         elif isinstance(inp_data, UVData):
             # promote UVData to HERAData
             self.inp_data = inp_data
@@ -252,6 +249,8 @@ class FRFilter(object):
             self.inp_data._determine_pol_indexing()
         elif isinstance(inp_data, io.HERAData):
             self.inp_data = inp_data
+            if self.inp_data.data_array is None:
+                self.inp_data.read(**load_kwargs)
         else:
             raise ValueError("inp_data must be fed as a HERAData or UVData object or a string filepath")
         self.filetype = filetype
@@ -272,11 +271,12 @@ class FRFilter(object):
         self.Ntimes = len(self.times)
         self.dlst = np.median(np.diff(self.lsts))
         self.dtime = np.median(np.diff(self.times))
+        self.dnu = np.median(np.diff(self.freqs))
         self.bls = sorted(set([k[:2] for k in self.data.keys()]))
         self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
-        self.lat = self.input_data.telescope_location_lat_lon_alt[0] * 180 / np.pi
+        self.lat = self.inp_data.telescope_location_lat_lon_alt[0] * 180 / np.pi
 
-    def timeavg_data(self, t_avg, rephase=False, verbose=True):
+    def timeavg_data(self, t_avg, rephase=False, verbose=True, data=None, flags=None, nsamples=None):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The time-averaged data, flags, time arrays, etc. are stored in avg_* attributes.
@@ -290,6 +290,26 @@ class FRFilter(object):
         ----------
         t_avg : float
             Width of time-averaging window in seconds.
+
+        rephase : bool
+            If True, rephase data in averaging window to window-center.
+
+        data : DataContainer
+            data to use in averaging. Default is self.data.
+            Must be consistent with self.lsts, self.freqs, etc.
+
+        flags : DataContainer
+            flags to use in averaging. Default is self.flags.
+            Must be consistent with self.lsts, self.freqs, etc.
+
+        nsamples : DataContainer
+            nsamples to use in averaging. Default is self.nsamples.
+            Must be consistent with self.lsts, self.freqs, etc.
+
+        Result
+        ------
+        self.avg_data, self.avg_flags, self.avg_nsamples, self.avg_lsts
+        self.avg_times
         """
         # turn t_avg into Navg given dtime
         Navg = int(np.round((t_avg / (3600.0 * 24) / self.dtime)))
@@ -300,34 +320,42 @@ class FRFilter(object):
         t_avg = Navg * self.dtime * 3600.0 * 24
 
         if verbose:
-            print("The t_avg provided of {:.1f} has been shifted to {:.1f} to make Navg = {:d}".format(
+            print("The t_avg provided of {:.3f} has been shifted to {:.3f} to make Navg = {:d}".format(
                 old_t_avg, t_avg, Navg))
 
         # setup lists
-        avg_data = odict()
-        avg_flags = odict()
-        avg_nsamples = odict()
+        avg_data = DataContainer({})
+        avg_flags = DataContainer({})
+        avg_nsamples = DataContainer({})
+
+        # setup averaging quantities
+        if data is None:
+            data = self.data
+        if flags is None:
+            flags = self.flags
+        if nsamples is None:
+            nsamples = self.nsamples
 
         # iterate over keys
-        for i, k in enumerate(self.data.keys()):
-            output = timeavg_waterfall(self.data[k], Navg, flags=self.flags[k], nsamples=self.nsamples[k],
-                                       rephase=rephase, lsts=self.lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
-                                       lat=self.lat, extra_arrays=dict(times=self.times), verbose=verbose)
-            ad, af, an, al, ea = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
-                                  output['avg_lsts'], output['avg_extra_arrays'])
+        for i, k in enumerate(data.keys()):
+            (ad, af, an, al,
+             ea) = timeavg_waterfall(data[k], Navg, flags=flags[k], nsamples=nsamples[k],
+                                     rephase=rephase, lsts=self.lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
+                                     lat=self.lat, extra_arrays=dict(times=self.times), verbose=verbose)
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
 
-        self.avg_data = datacontainer.DataContainer(avg_data)
-        self.avg_flags = datacontainer.DataContainer(avg_flags)
-        self.avg_nsamples = datacontainer.DataContainer(avg_nsamples)
+        self.avg_data = avg_data
+        self.avg_flags = avg_flags
+        self.avg_nsamples = avg_nsamples
         self.avg_lsts = al
         self.avg_times = ea['avg_times']
         self.t_avg = t_avg
         self.Navg = Navg
 
-    def write_data(self, outfilename, write_avg=True, filetype='miriad', add_to_history='', overwrite=False):
+    def write_data(self, outfilename, write_avg=True, filetype='miriad', add_to_history='', overwrite=False,
+                   run_check=True):
         """
         Write data in FRFringe object. If write_avg == True, write the self.avg_data dictionary,
         else write the self.data dictionary.
@@ -343,16 +371,23 @@ class FRFilter(object):
         filetype : str
             Output file format. Currently only miriad is supported.
 
-        add_to_history = str
+        add_to_history : str
             History string to add to the HERAData object before writing to disk.
 
-        overwrite: bool
+        overwrite : bool
             If True, overwrite output if it exists.
+
+        run_check : bool
+            If True, run acceptability check on object before write.
+    
+        data : DataContainer
+            DataContainer to write to file. Must be consistent with all other
+            containers and metadata. Supercedes write_avg if provided.
 
         Returns
         -------
         new_hd : HERAData object
-            A copy of the input_data object, but with updated data
+            A copy of the inp_data object, but with updated data
             and relevant metadata.
         """
         # check output
@@ -397,9 +432,15 @@ class FRFilter(object):
             new_hd.time_array[blts_inds] = times
             new_hd.lst_array[blts_inds] = lsts
 
+        # run check
+        if run_check:
+            new_hd.check()
+
         # write data
         if filetype == 'miriad':
             new_hd.write_miriad(outfilename, clobber=True)
+        elif filetype == 'uvh5':
+            new_hd.write_uvh5(outfilename, clobber=True)
         else:
             raise NotImplementedError("filetype {} not recognized".format(filetype))
 
