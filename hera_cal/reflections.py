@@ -646,7 +646,7 @@ class ReflectionFitter(FRFilter):
             if mode == 'gpr':
                 # setup GP kernel
                 kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
-                GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer)
+                GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=True)
 
                 # setup regression data: get unflagged data
                 X = times[~uflags[k], None] * 3600 * 24 - Xmean
@@ -680,6 +680,10 @@ class ReflectionFitter(FRFilter):
         auto_keys : list of tuples
             List of autocorr-pol tuples matching input keys in length
             to pull auto-correlation data from in self.clean_fft.
+            Optionally, each auto_key can be itself a list of
+            keys that will be used as separate basis functions
+            to project onto the u modes. Example: for a given
+            cross-corr key, you can provide both auto-corr keys.
 
         u : DataContainer
             Object to pull u modes from. Default is self.clean_u.
@@ -700,7 +704,7 @@ class ReflectionFitter(FRFilter):
             If True, report feedback to stdout.
         """
         # type check
-        assert len(keys) == len(autokeys), "len(keys) must equal len(autokeys)"
+        assert len(keys) == len(auto_keys), "len(keys) must equal len(auto_keys)"
 
         # get u
         if u is None:
@@ -717,7 +721,7 @@ class ReflectionFitter(FRFilter):
             self.clean_u_interp_flags.times = u.times
 
         # iterate over keys
-        for k, ak in zip(keys, autokeys):
+        for k, ak in zip(keys, auto_keys):
             # check overwrite
             if k in self.clean_u_interp and not overwrite:
                 echo("{} exists in clean_u_interp and overwrite == False, skipping...".format(k), verbose=verbose)
@@ -731,12 +735,14 @@ class ReflectionFitter(FRFilter):
             _u = u[k][:, umode]
 
             # get autocorr
-            ac = self.clean_fft[ak][:, select]
+            if isinstance(ak, list):
+                A = np.array([self.clean_fft[_ak][:, select] for _ak in ak]).T
+            else:
+                A = np.array([self.clean_fft[ak][:, select]]).T
 
             # form least squares estimate
             f = np.min(RF.clean_flags[k] + RF.clean_flags[ak], axis=1)
             W = np.eye(len(_u)) * (~f).astype(np.float)
-            A = ac[:, None]
             xhat = np.asarray(np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.real)), dtype=np.complex) \
                     + 1j * np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.imag))
             proj_u = A.dot(xhat)
