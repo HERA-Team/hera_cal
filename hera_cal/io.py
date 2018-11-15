@@ -128,6 +128,28 @@ class HERACal(UVCal):
                 self.total_quality_array[0, :, :, ip] = total_qual[pol].T
 
 
+def get_blt_slices(uvo):
+    '''For a pyuvdata-style UV object, get the mapping from antenna pair to blt slice.
+    
+    Arguments:
+        uvo: a "UV-Object" like UVData or baseline-type UVFlag
+
+    Returns:
+        blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
+    '''
+    blt_slices = {}
+    for ant1, ant2 in uvo.get_antpairs():
+        indices = uvo.antpair2ind(ant1, ant2)
+        if len(indices) == 1:  # only one blt matches
+            blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, self.Nblts)
+        elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
+            raise NotImplementedError('UVData objects with non-regular spacing of '
+                                      'baselines in its baseline-times are not supported.')
+        else:
+            blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
+    return blt_slices
+
+
 class HERAData(UVData):
     '''HERAData is a subclass of pyuvdata.UVData meant to serve as an interface between
     pyuvdata-compatible data formats on disk (especially uvh5) and DataContainers,
@@ -239,19 +261,8 @@ class HERAData(UVData):
         return {meta: locs[meta] for meta in self.HERAData_metas}
 
     def _determine_blt_slicing(self):
-        '''Determine the mapping between antenna pairs and
-        slices of the blt axis of the data_array.'''
-        self._blt_slices = {}
-        for ant1, ant2 in self.get_antpairs():
-            indices = self.antpair2ind(ant1, ant2)
-            if len(indices) == 1:  # only one blt matches
-                self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, self.Nblts)
-            elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
-                raise NotImplementedError('UVData objects with non-regular spacing of '
-                                          'baselines in its baseline-times are not supported.')
-            else:
-                self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1,
-                                                       indices[1] - indices[0])
+        '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
+        self._blt_slices = get_blt_slices(self)
 
     def _determine_pol_indexing(self):
         '''Determine the mapping between polnums and indices
@@ -562,6 +573,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         raise ValueError("filetype must be 'h5' or 'npz'.")
     
     elif filetype == 'h5':
+        from hera_qm import UVFlag
         uvf = UVFlag(flagfile)
         assert uvf.mode == 'flag', 'Must be in flag mode.'
         freqs = np.unique(uvf.freq_array)
@@ -584,8 +596,8 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
         npz = np.load(flagfile)
         pols = [polnum2str(p) for p in npz['polarization_array']]
-        freqs = np.unique(uvf.freq_array)
-        times = np.unique(uvf.time_array)
+        freqs = np.unique(npz['freq_array'])
+        times = np.unique(npz['time_array'])
         nAntpairs = len(npz['antpairs'])
         assert npz['flag_array'].shape[0] == nAntpairs * len(times), \
             'flag_array must have flags for all baselines for all times.'
