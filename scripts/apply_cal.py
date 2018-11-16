@@ -17,7 +17,7 @@ kwargs = {}
 if args.vis_units is not None:
     kwargs['vis_units'] = args.vis_units
 
-ac.apply_cal(args.infilename, args.outfilename, args.new_cal, old_calibration=args.old_cal, flags_npz=args.flags_npz,
-             flag_nchan_low=args.flag_nchan_low, flag_nchan_high=args.flag_nchan_high, filetype_in=args.filetype_in,
-             filetype_out=args.filetype_out, gain_convention=args.gain_convention, add_to_history=' '.join(sys.argv),
-             clobber=args.clobber, **kwargs)
+ac.apply_cal(args.infilename, args.outfilename, args.new_cal, old_calibration=args.old_cal, flag_file=args.flag_file,
+             flag_filetype=args.flag_filetype, flag_nchan_low=args.flag_nchan_low, flag_nchan_high=args.flag_nchan_high,
+             filetype_in=args.filetype_in, filetype_out=args.filetype_out, gain_convention=args.gain_convention,
+             add_to_history=' '.join(sys.argv), clobber=args.clobber, **kwargs)
