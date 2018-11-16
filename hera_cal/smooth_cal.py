@@ -215,19 +215,20 @@ def rephase_to_refant(gains, refant, flags=None):
 
 class CalibrationSmoother():
 
-    def __init__(self, calfits_list, flags_npz_list=[], pick_refant=False, antflag_thresh=0.0):
+    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', pick_refant=False, antflag_thresh=0.0):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
-        calfits files and, optionally, a corresponding list of flag npz files, which must match the calfits files
+        calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
         Gains and flags are assigned to the nearest gridpoint using np.searchsorted. It is assumed that:
-        1) All calfits and npzs have the same frequencies
-        2) The npz times and calfits time map one-to-one to the same set of integrations
+        1) All calfits and flag files have the same frequencies
+        2) The flag times and calfits time map one-to-one to the same set of integrations
 
         Arguments:
             calfits_list: list of string paths to calfits files containing calibration solutions and flags
-            flags_npz_list: list of string paths to npz files containing flags as a function of baseline, times
+            flag_file_list: list of string paths to files containing flags as a function of baseline, times
                 and frequency. Must have all baselines for all times. Flags on baselines are broadcast to both
                 antennas involved, unless either antenna is completely flagged for all times and frequencies.
+            flag_filetype: filetype of flag_file_list to pass into io.load_flags. Either 'h5' (default) or legacy 'npz'.
             pick_refant: if True, automatically pick as the reference anteanna the antenna with the fewest total
                 flags and then rephase all gains so that that reference antenna has purely real gains.
             antflag_thresh: float, fraction of flagged pixels across all visibilities (with a common antenna)
@@ -242,41 +243,39 @@ class CalibrationSmoother():
             gains[cal], cal_flags[cal], _, _ = hc.read()
             self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
 
-        # load flags files
-        self.npzs = flags_npz_list
-        if len(self.npzs) > 0:
-            self.npz_flags, self.npz_freqs, self.npz_times = odict(), odict(), odict()
-            for npz in self.npzs:
-                self.npz_flags[npz] = flag_utils.synthesize_ant_flags(io.load_npz_flags(npz), threshold=antflag_thresh)
-                npz_dict = np.load(npz)
-                self.npz_freqs[npz] = npz_dict['freq_array']
-                self.npz_times[npz] = np.unique(npz_dict['time_array'])
+        # load flag files
+        self.flag_files = flag_file_list
+        if len(self.flag_files) > 0:
+            self.ext_flags, self.flag_freqs, self.flag_times = odict(), odict(), odict()
+            for ff in self.flag_files:
+                flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
+                self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
+                self.flag_freqs[ff] = meta['freqs']
+                self.flag_times[ff] = meta['times']
 
         # set up time grid (note that it is offset by .5 dt so that times always map to the same
-        # index, even if they are slightly different between the npzs and the calfits files)
+        # index, even if they are slightly different between the flag_files and the calfits files)
         all_file_times = sorted(np.array([t for times in self.cal_times.values() for t in times]))
         self.dt = np.median(np.diff(all_file_times))
         self.time_grid = np.arange(all_file_times[0] + self.dt / 2.0, all_file_times[-1] + self.dt, self.dt)
         self.time_indices = {cal: np.searchsorted(self.time_grid, times) for cal, times in self.cal_times.items()}
-        if len(self.npzs) > 0:
-            self.npz_time_indices = {npz: np.searchsorted(self.time_grid, times) for npz, times in self.npz_times.items()}
+        if len(self.flag_files) > 0:
+            self.flag_time_indices = {ff: np.searchsorted(self.time_grid, times) for ff, times in self.flag_times.items()}
 
         # build multi-file grids for each antenna's gains and flags
         self.freqs = self.cal_freqs[self.cals[0]]
         self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
-        self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)),
-                                        dtype=np.complex) for ant in self.ants}
-        self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)),
-                                        dtype=bool) for ant in self.ants}
+        self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=np.complex) for ant in self.ants}
+        self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         for ant in self.ants:
             for cal in self.cals:
                 if ant in gains[cal]:
                     self.gain_grids[ant][self.time_indices[cal], :] = gains[cal][ant]
                     self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
-            if len(self.npzs) > 0:
-                for npz in self.npzs:
-                    if ant in self.npz_flags[npz]:
-                        self.flag_grids[ant][self.npz_time_indices[npz], :] += self.npz_flags[npz][ant]
+            if len(self.flag_files) > 0:
+                for ff in self.flag_files:
+                    if ant in self.ext_flags[ff]:
+                        self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
 
         # perform data quality checks
         self.check_consistency()
@@ -288,25 +287,25 @@ class CalibrationSmoother():
             self.rephase_to_refant()
 
     def check_consistency(self):
-        '''Checks the consistency of the input calibration files (and, if loaded, flag npzs).
+        '''Checks the consistency of the input calibration files (and, if loaded, flag files).
         Ensures that all files have the same frequencies, that they are time-ordered, that
         times are internally contiguous in a file and that calibration and flagging times match.
         '''
         all_time_indices = np.array([i for indices in self.time_indices.values() for i in indices])
         assert len(all_time_indices) == len(np.unique(all_time_indices)), \
             'Multiple calibration integrations map to the same time index.'
-        for n, cal in enumerate(self.cals):
+        for cal in self.cals:
             assert np.all(np.abs(self.cal_freqs[cal] - self.freqs) < 1e-4), \
                 '{} and {} have different frequencies.'.format(cal, self.cals[0])
-        if len(self.npzs) > 0:
-            all_npz_time_indices = np.array([i for indices in self.npz_time_indices.values() for i in indices])
-            assert len(all_npz_time_indices) == len(np.unique(all_npz_time_indices)), \
-                'Multiple flagging npz integrations map to the same time index.'
-            assert np.all(np.unique(all_npz_time_indices) == np.unique(all_time_indices)), \
-                'The number of unique indices for the flag npzs does not match the calibration files.'
-            for n, npz in enumerate(self.npzs):
-                assert np.all(np.abs(self.npz_freqs[npz] - self.freqs) < 1e-4), \
-                    '{} and {} have different frequencies.'.format(npz, self.cals[0])
+        if len(self.flag_files) > 0:
+            all_flag_time_indices = np.array([i for indices in self.flag_time_indices.values() for i in indices])
+            assert len(all_flag_time_indices) == len(np.unique(all_flag_time_indices)), \
+                'Multiple flag file integrations map to the same time index.'
+            assert np.all(np.unique(all_flag_time_indices) == np.unique(all_time_indices)), \
+                'The number of unique indices for the flag files does not match the calibration files.'
+            for ff in self.flag_files:
+                assert np.all(np.abs(self.flag_freqs[ff] - self.freqs) < 1e-4), \
+                    '{} and {} have different frequencies.'.format(ff, self.cals[0])
 
     def reset_filtering(self):
         '''Reset gain smoothing to the original input gains.'''
@@ -425,8 +424,9 @@ def smooth_cal_argparser():
     '''Arg parser for commandline operation of 2D calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
     a.add_argument("calfits_list", type=str, nargs='+', help="list of paths to chronologically sortable calfits files (usually a full day)")
-    a.add_argument("--flags_npz_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
-                   sortable flag npz files (usually a full day)")
+    a.add_argument("--flag_file_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
+                   sortable flag files (usually a full day)")
+    a.add_argument("--flag_filetype", type=str, default='h5', help="filetype of flag_file_list (either 'h5' or legacy 'npz'")
     a.add_argument("--infile_replace", type=str, default='.abs.', help="substring of files in calfits_list to replace for output files")
     a.add_argument("--outfile_replace", type=str, default='.smooth_abs.', help="replacement substring for output files")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at cal_outfile (default False)')
