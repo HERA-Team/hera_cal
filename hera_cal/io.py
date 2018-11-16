@@ -559,7 +559,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             UVFlag object in the 'flag' mode (could be by baseline, by antenna, or by 
             polarization). 'npz' provides legacy support for the IDR2.1 flagging npzs,
             but only for per-visibility flags.
-        return_meta: if True, return a metadata dictionary with, e.g., 'times' and 'freqs'
+        return_meta: if True, return a metadata dictionary with, e.g., 'times', 'freqs', 'history'
         
     Returns:
         flags: dictionary or DataContainer mapping keys to Ntimes x Nfreqs numpy arrays.
@@ -578,6 +578,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         assert uvf.mode == 'flag', 'Must be in flag mode.'
         freqs = np.unique(uvf.freq_array)
         times = np.unique(uvf.time_array)
+        history = uvf.history
         pol_indices = {polnum2str(polnum): i for i, polnum in enumerate(uvf.polarization_array)}
         if uvf.type == 'baseline':  # one time x freq waterfall per baseline
             blt_slices = get_blt_slices(uvf)
@@ -598,6 +599,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         pols = [polnum2str(p) for p in npz['polarization_array']]
         freqs = np.unique(npz['freq_array'])
         times = np.unique(npz['time_array'])
+        history = npz['history']
         nAntpairs = len(npz['antpairs'])
         assert npz['flag_array'].shape[0] == nAntpairs * len(times), \
             'flag_array must have flags for all baselines for all times.'
@@ -608,7 +610,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         flags = DataContainer(flags)
     
     if return_meta:
-        return flags, {'freqs': freqs, 'times': times}
+        return flags, {'freqs': freqs, 'times': times, 'history': history}
     else:
         return flags
 
