@@ -784,11 +784,18 @@ class Test_Flags_IO(unittest.TestCase):
             np.testing.assert_array_equal(f[:, -50:], True)
             self.assertFalse(np.all(f))
 
+        flags, meta = io.load_flags(npzfile, filetype='npz', return_meta=True)
+        self.assertEqual(len(meta['freqs']), 1024)
+        self.assertEqual(len(meta['times']), 60)
+        self.assertTrue('history' in meta)
+
+
     def test_load_flags_h5_baseline(self):
         h5file = os.path.join(QM_DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.testuvflag.flags.h5')
         flags, meta = io.load_flags(h5file, return_meta=True)
         self.assertEqual(len(meta['freqs']), 256)
         self.assertEqual(len(meta['times']), 3)
+        self.assertTrue('history' in meta)
         self.assertTrue(((20, 105, 'xx') in flags))
         for k in flags.keys():
             self.assertEqual(len(k), 3)
@@ -799,6 +806,7 @@ class Test_Flags_IO(unittest.TestCase):
         flags, meta = io.load_flags(h5file, return_meta=True)
         self.assertEqual(len(meta['freqs']), 256)
         self.assertEqual(len(meta['times']), 3)
+        self.assertTrue('history' in meta)
         self.assertTrue(((20, 'Jxx') in flags))
         for k in flags.keys():
             self.assertEqual(len(k), 2)
@@ -809,6 +817,7 @@ class Test_Flags_IO(unittest.TestCase):
         flags, meta = io.load_flags(h5file, return_meta=True)
         self.assertEqual(len(meta['freqs']), 256)
         self.assertEqual(len(meta['times']), 3)
+        self.assertTrue('history' in meta)
         self.assertTrue(('Jxx' in flags))
         for k in flags.keys():
             self.assertTrue(isinstance(k, str))
