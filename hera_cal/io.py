@@ -141,7 +141,7 @@ def get_blt_slices(uvo):
     for ant1, ant2 in uvo.get_antpairs():
         indices = uvo.antpair2ind(ant1, ant2)
         if len(indices) == 1:  # only one blt matches
-            blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, self.Nblts)
+            blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, uvo.Nblts)
         elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
             raise NotImplementedError('UVData objects with non-regular spacing of '
                                       'baselines in its baseline-times are not supported.')
