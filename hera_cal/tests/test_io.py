@@ -789,7 +789,6 @@ class Test_Flags_IO(unittest.TestCase):
         self.assertEqual(len(meta['times']), 60)
         self.assertTrue('history' in meta)
 
-
     def test_load_flags_h5_baseline(self):
         h5file = os.path.join(QM_DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.testuvflag.flags.h5')
         flags, meta = io.load_flags(h5file, return_meta=True)
@@ -830,7 +829,6 @@ class Test_Flags_IO(unittest.TestCase):
         h5file = os.path.join(QM_DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.testuvflag.h5')
         with self.assertRaises(AssertionError):
             flags = io.load_flags(h5file)
-
 
 
 if __name__ == '__main__':
