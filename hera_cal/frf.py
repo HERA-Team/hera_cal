@@ -400,7 +400,7 @@ class FRFilter(object):
             return
 
         # create new HERAData object
-        new_hd = copy.deepcopy(self.input_data)
+        new_hd = copy.deepcopy(self.inp_data)
 
         # set write data references
         if write_avg:
