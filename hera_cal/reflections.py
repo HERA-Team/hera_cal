@@ -639,14 +639,14 @@ class ReflectionFitter(FRFilter):
                 X = times[~uflags[k], None] * 3600 * 24 - Xmean
                 y = u[k][~uflags[k], :]
 
-                # fit gp
-                GP.fit(X, y)
-
-                # predict across all times
-                ypredict = GP.predict(Xpredict)
+                # fit gp and predict
+                GP.fit(X, y.real)
+                ypredict_real = GP.predict(Xpredict)
+                GP.fit(X, y.imag)
+                ypredict_imag = GP.predict(Xpredict)
 
                 # append
-                self.umode_interp[k] = ypredict
+                self.umode_interp[k] = ypredict_real.astype(np.complex) + 1j * ypredict_imag
 
             else:
                 raise ValueError("didn't recognize interp mode {}".format(mode))
