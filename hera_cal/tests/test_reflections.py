@@ -49,7 +49,7 @@ def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True,
 
     np.random.seed(0)
     s1 = np.ones((sim_uvd.Ntimes, sim_uvd.Nfreqs), dtype=np.complex128) * 100 * (freqs / 150e6)**-1
-    theta = np.linspace(np.pi / 2 - np.pi / 10, np.pi / 2 + np.pi / 10, uvd.Ntimes) # pointing
+    theta = np.linspace(np.pi / 2 - np.pi / 10, np.pi / 2 + np.pi / 10, uvd.Ntimes)  # pointing
     dnu = np.median(np.diff(freqs))
 
     # get source fluxes and positions

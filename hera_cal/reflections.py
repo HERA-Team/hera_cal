@@ -197,7 +197,8 @@ class ReflectionFitter(FRFilter):
         if timeavg:
             self.clean_times = np.mean(self.clean_times, keepdims=True)
 
-    def fft_data(self, data=None, keys=None, taper='none', alpha=0.1, overwrite=False, verbose=True):
+    def fft_data(self, data=None, keys=None, taper='none', alpha=0.1, overwrite=False,
+                 edgecut=0, verbose=True):
         """
         Take FFT of data and assign to self.dfft.
 
@@ -211,6 +212,10 @@ class ReflectionFitter(FRFilter):
             Tapering function to apply across frequency before FFT. See aipy.dsp
         alpha : float
             If taper is tukey this is its alpha parameter.
+        edgecut : int
+            If applying a taper, it is defined _within_ edgecut number
+            of channels on either side of the band. Also set band edges
+            within edgecut to zero.
         overwrite : bool
             If self.dfft already exists, overwrite its contents.
         """
@@ -233,8 +238,12 @@ class ReflectionFitter(FRFilter):
             if k in self.dfft and not overwrite:
                 echo("{} in dfft and overwrite == False, skipping...".format(k), verbose=verbose)
                 continue
-            d = data[k]
-            self.dfft[k] = np.fft.fftshift(np.fft.fft(d * _gen_taper(taper, d.shape[1], alpha=alpha), axis=1), axes=1)
+            if edgecut > 0:
+                d = np.zeros_like(data[k])
+                d[:, edgecut:-edgecut] = data[k][:, edgecut:-edgecut] * _gen_taper(taper, d.shape[1] - 2 * edgecut, alpha=alpha)
+            else:
+                d = data[k] * _gen_taper(taper, data[k].shape[1], alpha=alpha)
+            self.dfft[k] = np.fft.fftshift(np.fft.fft(d , axis=1), axes=1)
    
     def model_auto_reflections(self, dly_range, keys=None, data='clean', edgecut=0, taper='none',
                                alpha=0.1, zero_pad=0, overwrite=False, fthin=10, verbose=True):
