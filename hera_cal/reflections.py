@@ -243,7 +243,7 @@ class ReflectionFitter(FRFilter):
                 d[:, edgecut:-edgecut] = data[k][:, edgecut:-edgecut] * _gen_taper(taper, d.shape[1] - 2 * edgecut, alpha=alpha)
             else:
                 d = data[k] * _gen_taper(taper, data[k].shape[1], alpha=alpha)
-            self.dfft[k] = np.fft.fftshift(np.fft.fft(d , axis=1), axes=1)
+            self.dfft[k] = np.fft.fftshift(np.fft.fft(d, axis=1), axes=1)
    
     def model_auto_reflections(self, dly_range, keys=None, data='clean', edgecut=0, taper='none',
                                alpha=0.1, zero_pad=0, overwrite=False, fthin=10, verbose=True):
