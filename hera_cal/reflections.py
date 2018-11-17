@@ -276,7 +276,7 @@ class ReflectionFitter(FRFilter):
             freqs = self.clean_freqs
             self.reflection_times = self.clean_times
             if self.clean_edgecut != edgecut:
-                echo("Warning: (self.clean_edgecut = {:d}) != (edgecut = {:d}): " \
+                echo("Warning: (self.clean_edgecut = {:d}) != (edgecut = {:d}): "
                      "This will degrade accuracy of solved reflection parameters!".format(self.clean_edgecut, edgecut), verbose=verbose)
         elif data == 'data':
             # if using unCLEANed data, apply flags now on-the-fly
@@ -626,7 +626,7 @@ class ReflectionFitter(FRFilter):
         # iterate over keys
         for k in keys:
             # check overwrite
-            if k in self.umode_interp and overwrite == False:
+            if k in self.umode_interp and not overwrite:
                 echo("{} in umode_interp and overwrite == False, skipping...".format(k), verbose=verbose)
                 continue
 
@@ -739,7 +739,7 @@ class ReflectionFitter(FRFilter):
             f = np.min(self.clean_flags[k] + af, axis=1)
             W = np.eye(len(_u)) * (~f).astype(np.float)
             xhat = np.asarray(np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.real)), dtype=np.complex) \
-                    + 1j * np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.imag))
+                + 1j * np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.imag))
             proj_u = A.dot(xhat)
 
             self.umode_interp[k] = u[k].copy()
@@ -823,7 +823,7 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
     if edgecut > 0:
         w[:, :edgecut] = 0.0
         w[:, -edgecut:] = 0.0
-        w[:, edgecut:-edgecut] = _gen_taper(taper, Nfreqs-2*edgecut, alpha=alpha)
+        w[:, edgecut:-edgecut] = _gen_taper(taper, Nfreqs - 2 * edgecut, alpha=alpha)
     else:
         w *= _gen_taper(taper, Nfreqs, alpha=alpha)
 
@@ -976,7 +976,7 @@ def reflections_delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='no
 
     # apply tapering function and account for edgecut
     if edgecut > 0:
-        w[:, edgecut:-edgecut] *= _gen_taper(taper, int(Nfreqs-2*edgecut))
+        w[:, edgecut:-edgecut] *= _gen_taper(taper, int(Nfreqs - 2 * edgecut))
     else:
         w *= _gen_taper(taper, int(Nfreqs))
 

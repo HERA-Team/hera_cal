@@ -49,7 +49,7 @@ def test_timeavg_waterfall():
 
     # test rephase
     ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 25, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
-                                      nsamples=n, extra_arrays=dict(times=t), verbose=False)
+                                                   nsamples=n, extra_arrays=dict(times=t), verbose=False)
 
     nt.assert_equal(ad.shape, (3, 64))
     nt.assert_equal(af.shape, (3, 64))
@@ -61,16 +61,16 @@ def test_timeavg_waterfall():
 
     # test various Navgs
     ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 1, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
-                                      nsamples=n, extra_arrays=dict(times=t), verbose=False)
+                                                   nsamples=n, extra_arrays=dict(times=t), verbose=False)
 
     nt.assert_equal(ad.shape, (60, 64))
     ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
-                                      nsamples=n, extra_arrays=dict(times=t), verbose=False)
+                                                   nsamples=n, extra_arrays=dict(times=t), verbose=False)
     nt.assert_equal(ad.shape, (1, 64))
 
     # wrap lst
     ad2, af2, an2, al2, aea2 = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=lsts + 1.52917804, freqs=fr, bl_vec=blv,
-                                      nsamples=n, extra_arrays=dict(times=t), verbose=False)
+                                                        nsamples=n, extra_arrays=dict(times=t), verbose=False)
 
     nt.assert_equal(ad.shape, (1, 64))
     nt.assert_true(np.isclose(ad, ad2).all())

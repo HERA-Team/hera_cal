@@ -45,15 +45,15 @@ def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True,
 
     def beam(theta):
         """ theta is radians from horizon """
-        return np.exp(-((theta - np.pi/2) / (np.pi/6))**2)
+        return np.exp(-((theta - np.pi / 2) / (np.pi / 6))**2)
 
     np.random.seed(0)
     s1 = np.ones((sim_uvd.Ntimes, sim_uvd.Nfreqs), dtype=np.complex128) * 100 * (freqs / 150e6)**-1
-    theta = np.linspace(np.pi/2-np.pi/10, np.pi/2+np.pi/10, uvd.Ntimes) # pointing
+    theta = np.linspace(np.pi / 2 - np.pi / 10, np.pi / 2 + np.pi / 10, uvd.Ntimes) # pointing
     dnu = np.median(np.diff(freqs))
 
     # get source fluxes and positions
-    src_theta = stats.norm.rvs(0, np.pi/6, 2)
+    src_theta = stats.norm.rvs(0, np.pi / 6, 2)
     src_amp = stats.norm.rvs(1, 0.1, 2)
 
     # get antenna vectors
@@ -217,6 +217,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
         os.remove('./ex.calfits')
 
+
 class Test_ReflectionFitter_XTalk(unittest.TestCase):
     uvd = simulate_reflections(cdelay=150.0, cphase=2.0, camp=2e-2, add_cable=False,
                                xdelay=250.0, xphase=0, xamp=.1, add_xtalk=True)
@@ -288,7 +289,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         # pca decomp
         RF.pca_decomp((180, 330), side='both', overwrite=True)
 
-        ### test interpolation of umodes
+        # test interpolation of umodes
         RF.interp_u(overwrite=True, mode='gpr', gp_len=100, gp_nl=0.01, optimizer=None)
 
         # assert broadcasting to full time resolution worked
@@ -297,7 +298,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         # assert that residual between interpolated and non-interpolated is small
         nt.assert_true(np.std(RF.umodes[(37, 38, 'xx')][:, 0] - RF.umode_interp[(37, 38, 'xx')][1::3, 0]) < 0.001)
 
-        ### project auto correlation onto umode and assert residual is small
+        # project auto correlation onto umode and assert residual is small
         RF.project_autos_onto_u([(37, 38, 'xx')], [(37, 37, 'xx')], index=0, auto_delay=0, overwrite=True)
         nt.assert_true(np.std(RF.umodes[(37, 38, 'xx')][:, 0] - RF.umode_interp[(37, 38, 'xx')][:, 0]) < 0.0005)
 
