@@ -575,7 +575,9 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
     elif filetype == 'h5':
         from hera_qm import UVFlag
         uvf = UVFlag(flagfile)
-        assert uvf.mode == 'flag', 'Must be in flag mode.'
+        assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
+        assert np.issubdtype(uvf.polarization_array.dtype, np.signedinteger), \
+            "The input h5-based UVFlag object's polarization_array must be integers."
         freqs = np.unique(uvf.freq_array)
         times = np.unique(uvf.time_array)
         history = uvf.history
