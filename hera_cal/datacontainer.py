@@ -7,6 +7,7 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
 from six.moves import map, zip
+import copy
 
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
 
@@ -213,6 +214,17 @@ class DataContainer:
         for i, k in enumerate(D.keys()):
             if self.__contains__(k):
                 newD[k] = self.__getitem__(k) * D[k]
+
+        return DataContainer(newD)
+
+    def __invert__(self):
+        '''Inverts the values of the DataContainer'''
+        # start new object
+        newD = copy.deepcopy(self)
+
+        # iterate over keys
+        for i, k in enumerate(newD.keys()):
+            newD[k] = ~newD[k]
 
         return DataContainer(newD)
 

@@ -305,6 +305,14 @@ class TestDataContainer(unittest.TestCase):
         d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:10, :]
         self.assertRaises(ValueError, d.__mul__, d2)
 
+    def test_invert(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = io.load_vis(test_file, pop_autos=True)
+        f2 = ~f
+        bl = (24, 25, 'xx')
+        self.assertEqual(f2[(bl)][0, 0], ~f[bl][0, 0])
+        self.assertRaises(TypeError, d.__invert__)
+
     def test_concatenate(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = io.load_vis(test_file, pop_autos=True)
