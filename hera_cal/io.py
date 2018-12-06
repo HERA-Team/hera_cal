@@ -405,6 +405,11 @@ class HERAData(UVData):
                                  times=times, frequencies=frequencies, freq_chans=freq_chans)
                 self.unphase_to_drift()
 
+        # link SoftContainers
+        self.data = SoftContainer(self, 'data_array')
+        self.flags = SoftContainer(self, 'flag_array')
+        self.nsamples = SoftContainer(self, 'nsample_array')
+
         # process data into DataContainers
         if read_data or self.filetype == 'uvh5':
             self._determine_blt_slicing()
@@ -414,7 +419,11 @@ class HERAData(UVData):
 
     def __getitem__(self, key):
         '''Shortcut for reading a single visibility waterfall given a baseline tuple.'''
-        return self.read(bls=key)[0][key]
+        try:
+            return (self._get_slice(self.data_array, key), self._get_slice(self.flag_array, key),
+                    self._get_slice(self.nsample_array, key))
+        except KeyError:
+            return self.read(bls=key)[0][key]
 
     def update(self, data=None, flags=None, nsamples=None):
         '''Update internal data arrays (data_array, flag_array, and nsample_array)
@@ -546,6 +555,39 @@ class HERAData(UVData):
                 times = np.unique(list(times.values()))
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
+
+
+class SoftContainer:
+    """
+    A soft-link to a HERAData's data_array,
+    utilizing its blt_slicing to mimic a DataContainer
+    without actually making a copy of the data_array.
+    """
+    def __init__(self, heradata, data_array):
+        """
+        Initialize a SoftContainer
+
+        Args:
+            heradata : A HERAData instance
+            data_array : str, options=['data_array', 'flag_array', 'nsample_array']
+        """
+        self.hd = heradata
+        self.data_array = getattr(self.hd, data_array)
+
+    def __getitem__(self, key):
+        return self.hd._get_slice(self.data_array, key)
+
+    def __setitem__(self, key, value):
+        return self.hd._set_slice(self.data_array, key, value)
+
+    def __contains__(self, key):
+        return key in self.hd.get_antpairpols() or key in self.hd.get_antpairs()
+
+    def keys(self):
+        """
+        Return the antpair-pol keys in the object
+        """
+        return self.hd.get_antpairpols()
 
 
 def load_flags(flagfile, filetype='h5', return_meta=False):
