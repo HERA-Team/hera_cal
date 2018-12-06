@@ -130,7 +130,7 @@ class HERACal(UVCal):
 
 def get_blt_slices(uvo):
     '''For a pyuvdata-style UV object, get the mapping from antenna pair to blt slice.
-    
+
     Arguments:
         uvo: a "UV-Object" like UVData or baseline-type UVFlag
 
@@ -597,7 +597,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
     Arguments:
         flagfile: path to file containing flags and flagging metadata
         filetype: either 'h5' or 'npz'. 'h5' assumes the file is readable as a hera_qm
-            UVFlag object in the 'flag' mode (could be by baseline, by antenna, or by 
+            UVFlag object in the 'flag' mode (could be by baseline, by antenna, or by
             polarization). 'npz' provides legacy support for the IDR2.1 flagging npzs,
             but only for per-visibility flags.
         return_meta: if True, return a metadata dictionary with, e.g., 'times', 'freqs', 'history'

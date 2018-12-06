@@ -318,7 +318,7 @@ class Test_HERAData(unittest.TestCase):
         nt.assert_equal(len(hd._blt_slices), 3)
 
         # test that getitem of key that doesn't exist is a read
-        hd.read(bls=[(53, 53),(53, 54)])
+        hd.read(bls=[(53, 53), (53, 54)])
         d = hd[(54, 54, 'xx')]
         nt.assert_equal(len(hd._blt_slices), 1)
 
