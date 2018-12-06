@@ -17,6 +17,7 @@ from six.moves import range, zip
 import pyuvdata
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import parse_polstr, parse_jpolstr
+import nose.tools as nt
 
 import hera_cal.io as io
 from hera_cal.io import HERACal, HERAData
@@ -311,6 +312,16 @@ class Test_HERAData(unittest.TestCase):
         for bl in hd.bls:
             np.testing.assert_array_almost_equal(hd[bl], hd.get_data(bl))
 
+        # test that getitem of key that exists is just a slice, not a read
+        hd.read()
+        d = hd[(53, 53, 'xx')]
+        nt.assert_equal(len(hd._blt_slices), 3)
+
+        # test that getitem of key that doesn't exist is a read
+        hd.read(bls=[(53, 53),(53, 54)])
+        d = hd[(54, 54, 'xx')]
+        nt.assert_equal(len(hd._blt_slices), 1)
+
     def test_update(self):
         hd = HERAData(self.uvh5_1)
         d, f, n = hd.read()
@@ -440,6 +451,32 @@ class Test_HERAData(unittest.TestCase):
             self.assertEqual(value.shape, (2, 64))
         with self.assertRaises(NotImplementedError):
             next(hd.iterate_over_times())
+
+    def test_SoftContainers(self):
+        hd = HERAData(self.uvh5_1)
+        hd.read()
+        for name in ['data', 'flags', 'nsamples']:
+            c = getattr(hd, name)
+            nt.assert_equal(c.keys(), [(53, 53, 'xx'), (53, 54, 'xx'), (54, 54, 'xx')])
+            nt.assert_equal(c.hd, hd)
+            nt.assert_true((53, 54) in c)
+            nt.assert_true((53, 54, 'xx') in c)
+            nt.assert_false((52, 54) in c)
+            if name == 'data':
+                np.testing.assert_array_almost_equal(c[(53, 54, 'xx')], hd.get_data(53, 54, 'xx'))
+                d = np.ones_like(c[(53, 54, 'xx')])
+                c[(53, 54, 'xx')] = d
+                np.testing.assert_array_almost_equal(d, hd.get_data(53, 54, 'xx'))
+            elif name == 'flags':
+                np.testing.assert_array_almost_equal(c[(53, 54, 'xx')], hd.get_flags(53, 54, 'xx'))
+                d = np.ones_like(c[(53, 54, 'xx')])
+                c[(53, 54, 'xx')] = d
+                np.testing.assert_array_almost_equal(d, hd.get_flags(53, 54, 'xx'))
+            elif name == 'nsamples':
+                np.testing.assert_array_almost_equal(c[(53, 54, 'xx')], hd.get_nsamples(53, 54, 'xx'))
+                d = np.ones_like(c[(53, 54, 'xx')])
+                c[(53, 54, 'xx')] = d
+                np.testing.assert_array_almost_equal(d, hd.get_nsamples(53, 54, 'xx'))
 
 
 class Test_Visibility_IO_Legacy(unittest.TestCase):

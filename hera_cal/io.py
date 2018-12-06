@@ -420,8 +420,7 @@ class HERAData(UVData):
     def __getitem__(self, key):
         '''Shortcut for reading a single visibility waterfall given a baseline tuple.'''
         try:
-            return (self._get_slice(self.data_array, key), self._get_slice(self.flag_array, key),
-                    self._get_slice(self.nsample_array, key))
+            return self._get_slice(self.data_array, key)
         except KeyError:
             return self.read(bls=key)[0][key]
 
