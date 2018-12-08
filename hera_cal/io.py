@@ -355,7 +355,7 @@ class HERAData(UVData):
         return data, flags, nsamples
 
     def read(self, bls=None, polarizations=None, times=None,
-             frequencies=None, freq_chans=None, read_data=True):
+             frequencies=None, freq_chans=None, read_data=True, return_data=True):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -405,10 +405,10 @@ class HERAData(UVData):
                                  times=times, frequencies=frequencies, freq_chans=freq_chans)
                 self.unphase_to_drift()
 
-        # link SoftContainers
-        self.data = SoftContainer(self, 'data_array')
-        self.flags = SoftContainer(self, 'flag_array')
-        self.nsamples = SoftContainer(self, 'nsample_array')
+        # link PseudoContainers
+        self.data = PseudoContainer(self, 'data_array')
+        self.flags = PseudoContainer(self, 'flag_array')
+        self.nsamples = PseudoContainer(self, 'nsample_array')
 
         # process data into DataContainers
         if read_data or self.filetype == 'uvh5':
@@ -418,7 +418,11 @@ class HERAData(UVData):
             return self.build_datacontainers()
 
     def __getitem__(self, key):
-        '''Shortcut for reading a single visibility waterfall given a baseline tuple.'''
+        '''
+        Shortcut for reading a single visibility waterfall given a
+        baseline tuple. If key exists it will return it using its
+        blt_slice, if it does not it will attempt to read it
+        from disk.'''
         try:
             return self._get_slice(self.data_array, key)
         except KeyError:
@@ -556,15 +560,15 @@ class HERAData(UVData):
             yield self.read(times=times[i:i + Nints])
 
 
-class SoftContainer:
+class PseudoContainer:
     """
-    A soft-link to a HERAData's data_array,
-    utilizing its blt_slicing to mimic a DataContainer
-    without actually making a copy of the data_array.
+    An access pattern to HERAData's data_array,
+    utilizing its built-in blt_slicing to mimic a DataContainer.
+    Returns a copy of the requested slice of data_array.
     """
     def __init__(self, heradata, data_array):
         """
-        Initialize a SoftContainer
+        Initialize a PseudoContainer
 
         Args:
             heradata : A HERAData instance
@@ -582,11 +586,29 @@ class SoftContainer:
     def __contains__(self, key):
         return key in self.hd.get_antpairpols() or key in self.hd.get_antpairs()
 
+    def values(self):
+        """
+        Returns values of PseudoContainer
+        """
+        return [self[k] for k in self.keys()]
+
     def keys(self):
         """
         Return the antpair-pol keys in the object
         """
         return self.hd.get_antpairpols()
+
+    def items(self):
+        """
+        Mimics dictionary items of PseudoContainer
+        """
+        return zip(self.keys(), self.values())
+
+    def __len__(self):
+        return len(self.keys())
+
+    def __iter__(self):
+        return iter(self.keys())
 
 
 def load_flags(flagfile, filetype='h5', return_meta=False):
