@@ -182,40 +182,91 @@ class DataContainer:
         return DataContainer(newD)
 
     def __add__(self, D):
-        '''Adds values of two DataContainers together.'''
-        # check time and frequency structure matches
-        if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
-            raise ValueError("[0] axis of dictionary values don't match")
-        if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
-            raise ValueError("[1] axis of dictionary values don't match")
+        '''Add the values of this DataContainer with
+        the value of D. If D is another DataContainer, add
+        their values together.'''
+        # check type of D
+        if isinstance(D, DataContainer):
+            # check time and frequency structure matches
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                raise ValueError("[0] axis of dictionary values don't match")
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                raise ValueError("[1] axis of dictionary values don't match")
 
-        # start new object
-        newD = odict()
+            # start new object
+            newD = odict()
 
-        # iterate over D keys
-        for i, k in enumerate(D.keys()):
-            if self.__contains__(k):
-                newD[k] = self.__getitem__(k) + D[k]
+            # iterate over D keys
+            for i, k in enumerate(D.keys()):
+                if self.__contains__(k):
+                    newD[k] = self.__getitem__(k) + D[k]
 
-        return DataContainer(newD)
+            return DataContainer(newD)
+
+        else:
+            newD = copy.deepcopy(self)
+            for k in newD.keys():
+                newD[k] = newD[k] + D
+
+            return newD
+
+    def __sub__(self, D):
+        '''Subtracts the values of this DataContainer with
+        the value of D. If D is another DataContainer, subtract
+        their values together.'''
+        # check type of D
+        if isinstance(D, DataContainer):
+            # check time and frequency structure matches
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                raise ValueError("[0] axis of dictionary values don't match")
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                raise ValueError("[1] axis of dictionary values don't match")
+
+            # start new object
+            newD = odict()
+
+            # iterate over D keys
+            for i, k in enumerate(D.keys()):
+                if self.__contains__(k):
+                    newD[k] = self.__getitem__(k) - D[k]
+
+            return DataContainer(newD)
+
+        else:
+            newD = copy.deepcopy(self)
+            for k in newD.keys():
+                newD[k] = newD[k] - D
+
+            return newD
 
     def __mul__(self, D):
-        '''Multiplies the values of two DataContainers together.'''
-        # check time and frequency structure matches
-        if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
-            raise ValueError("[0] axis of dictionary values don't match")
-        if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
-            raise ValueError("[1] axis of dictionary values don't match")
+        '''Multiplies the values of this DataContainer with
+        the value of D. If D is another DataContainer, multiply
+        their values together.'''
+        # check type of D
+        if isinstance(D, DataContainer):
+            # check time and frequency structure matches
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                raise ValueError("[0] axis of dictionary values don't match")
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                raise ValueError("[1] axis of dictionary values don't match")
 
-        # start new object
-        newD = odict()
+            # start new object
+            newD = odict()
 
-        # iterate over D keys
-        for i, k in enumerate(D.keys()):
-            if self.__contains__(k):
-                newD[k] = self.__getitem__(k) * D[k]
+            # iterate over D keys
+            for i, k in enumerate(D.keys()):
+                if self.__contains__(k):
+                    newD[k] = self.__getitem__(k) * D[k]
 
-        return DataContainer(newD)
+            return DataContainer(newD)
+
+        else:
+            newD = copy.deepcopy(self)
+            for k in newD.keys():
+                newD[k] = newD[k] * D
+
+            return newD
 
     def __invert__(self):
         '''Inverts the values of the DataContainer'''
@@ -226,7 +277,33 @@ class DataContainer:
         for i, k in enumerate(newD.keys()):
             newD[k] = ~newD[k]
 
-        return DataContainer(newD)
+        return newD
+
+    def __neg__(self):
+        '''Negates the values of the DataContainer'''
+        # start new object
+        newD = copy.deepcopy(self)
+
+        # iterate over keys
+        for i, k in enumerate(newD.keys()):
+            newD[k] = -newD[k]
+
+        return newD
+
+    def __transpose__(self):
+        '''Tranposes the values of the DataContainer'''
+        # start new object
+        newD = copy.deepcopy(self)
+
+        # iterate over keys
+        for i, k in enumerate(newD.keys()):
+            newD[k] = newD[k].T
+
+        return newD
+
+    @property
+    def T(self):
+        return self.__transpose__()
 
     def __contains__(self, key):
         '''Returns True if the key is in the data, abstracting away case and baseline order.'''

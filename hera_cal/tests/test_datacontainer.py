@@ -291,6 +291,8 @@ class TestDataContainer(unittest.TestCase):
         self.assertRaises(ValueError, d.__add__, d2)
         d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:10, :]
         self.assertRaises(ValueError, d.__add__, d2)
+        d2 = d + 1
+        self.assertTrue(np.isclose(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] + 1))
 
     def test_mul(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -304,6 +306,8 @@ class TestDataContainer(unittest.TestCase):
         self.assertRaises(ValueError, d.__mul__, d2)
         d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:10, :]
         self.assertRaises(ValueError, d.__mul__, d2)
+        d2 = d * 2
+        self.assertTrue(np.isclose(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] * 2))
 
     def test_invert(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -312,6 +316,13 @@ class TestDataContainer(unittest.TestCase):
         bl = (24, 25, 'xx')
         self.assertEqual(f2[(bl)][0, 0], ~f[bl][0, 0])
         self.assertRaises(TypeError, d.__invert__)
+
+    def test_transpose(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = io.load_vis(test_file, pop_autos=True)
+        d2 = d.T
+        bl = (24, 25, 'xx')
+        self.assertEqual(d2[(bl)][0, 0], d[bl].T[0, 0])
 
     def test_concatenate(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")

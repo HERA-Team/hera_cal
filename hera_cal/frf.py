@@ -14,7 +14,8 @@ import pyuvdata.utils as uvutils
 
 from . import io
 from . import utils
-from . import datacontainer
+from .datacontainer import DataContainer
+from .vis_clean import VisClean
 
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts=None,
@@ -199,67 +200,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
                 avg_lsts=avg_lsts, avg_extra_arrays=avg_extra_arrays)
 
 
-class FRFilter(object):
+class FRFilter(VisClean):
     """
-    Fringe Rate Filter
+    Fringe Rate Filter object.
     """
-
-    def __init__(self):
-        """
-        Fringe Rate Filter
-        """
-        pass
-
-    def load_data(self, input_data, filetype='miriad'):
-        """
-        Load in visibility data for filtering
-
-        Parameters
-        ----------
-        input_data : HERAData object or str
-            HERAData object or string filepath to visibility data
-
-        filetype : str
-            File format of the data. Only miriad is currently supported.
-        """
-        assert isinstance(input_data, (UVData, str, np.str, io.HERAData)), "input_data must be fed as a HERAData, UVData object or a string filepath"
-
-        # load HERAData if fed as string
-        if isinstance(input_data, (str, np.str)):
-            # TODO: Need HERAData to take UVData objects
-            self.input_data = io.HERAData(input_data, filetype=filetype)
-            self.input_data.read()
-        elif isinstance(input_data, UVData):
-            # promote UVData to HERAData
-            self.input_data = input_data
-            self.input_data.__class__ = io.HERAData
-            self.input_data._determine_blt_slicing()
-            self.input_data._determine_pol_indexing()
-        else:
-            self.input_data = input_data
-
-        self.filetype = filetype
-
-        # read all the data into datacontainers
-        self.data, self.flags, self.nsamples = self.input_data.build_datacontainers()
-
-        # read the metadata: assign individually to guard against code
-        # changes within hera_cal.io implicitly changing variable names
-        mdict = self.input_data.get_metadata_dict()
-        self.antpos = mdict['antpos']
-        self.ants = mdict['ants']
-        self.freqs = mdict['freqs']
-        self.times = mdict['times']
-        self.lsts = mdict['lsts']
-        self.pols = mdict['pols']
-
-        self.Nfreqs = len(self.freqs)
-        self.Ntimes = len(self.times)
-        self.dlst = np.median(np.diff(self.lsts))
-        self.dtime = np.median(np.diff(self.times))
-        self.bls = sorted(set([k[:2] for k in self.data.keys()]))
-        self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
-        self.lat = self.input_data.telescope_location_lat_lon_alt[0] * 180 / np.pi
 
     def timeavg_data(self, t_avg, rephase=False, verbose=True):
         """
@@ -304,15 +248,16 @@ class FRFilter(object):
             avg_flags[k] = af
             avg_nsamples[k] = an
 
-        self.avg_data = datacontainer.DataContainer(avg_data)
-        self.avg_flags = datacontainer.DataContainer(avg_flags)
-        self.avg_nsamples = datacontainer.DataContainer(avg_nsamples)
+        self.avg_data = DataContainer(avg_data)
+        self.avg_flags = DataContainer(avg_flags)
+        self.avg_nsamples = DataContainer(avg_nsamples)
         self.avg_lsts = al
         self.avg_times = ea['avg_times']
         self.t_avg = t_avg
         self.Navg = Navg
 
-    def write_data(self, outfilename, write_avg=True, filetype='miriad', add_to_history='', overwrite=False):
+    def write_data(self, outfilename, write_avg=True, filetype='miriad', add_to_history='', overwrite=False,
+                   run_check=True):
         """
         Write data in FRFringe object. If write_avg == True, write the self.avg_data dictionary,
         else write the self.data dictionary.
@@ -334,10 +279,13 @@ class FRFilter(object):
         overwrite: bool
             If True, overwrite output if it exists.
 
+        run_check : bool
+            If True, run UVData check before write.
+
         Returns
         -------
         new_hd : HERAData object
-            A copy of the input_data object, but with updated data
+            A copy of the hd object, but with updated data
             and relevant metadata.
         """
         # check output
@@ -346,7 +294,7 @@ class FRFilter(object):
             return
 
         # create new HERAData object
-        new_hd = copy.deepcopy(self.input_data)
+        new_hd = copy.deepcopy(self.hd)
 
         # set write data references
         if write_avg:
@@ -381,6 +329,9 @@ class FRFilter(object):
             new_hd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
             new_hd.time_array[blts_inds] = times
             new_hd.lst_array[blts_inds] = lsts
+
+        if run_check:
+            new_hd.check()
 
         # write data
         if filetype == 'miriad':

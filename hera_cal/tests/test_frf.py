@@ -99,9 +99,9 @@ class Test_FRFilter:
         self.F.load_data(self.fname)
         hd = hc.io.HERAData(self.fname, filetype='miriad')
         hd.read()
-        nt.assert_equal(self.F.input_data, hd)
+        nt.assert_equal(self.F.hd, hd)
         self.F.load_data(self.uvd)
-        nt.assert_equal(self.F.input_data, hd)
+        nt.assert_equal(self.F.hd, hd)
 
     def test_timeavg_data(self):
         self.F.load_data(self.uvd)

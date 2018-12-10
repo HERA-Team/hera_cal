@@ -54,7 +54,7 @@ import pyuvdata.utils as uvutils
 
 from . import io
 from . import abscal_funcs
-from . import delay_filter
+from uvtools.dspec import delay_filter
 from .datacontainer import DataContainer
 
 

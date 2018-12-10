@@ -9,75 +9,30 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
 from copy import deepcopy
-from scipy import constants
 import argparse
 import datetime
 from six.moves import range, zip
-from pyuvdata import UVData
-from uvtools.dspec import delay_filter
 
 from . import io
-from . import apply_cal
-from .datacontainer import DataContainer
+from .vis_clean import VisClean
 
 
-class DelayFilter():
-    def __init__(self):
-        '''Class for loading data, performing uvtools.dspec.delay_filter, and writing out data using pyuvdata.
-        To use, run either self.load_data() or self.load_dicts(), then self.run_filter(). If data is loaded from
-        disk or with a UVData/HERAData object(s), it can be written to a new file using self.write_filtered_data().
-        '''
-        self.writable = False
+class DelayFilter(VisClean):
+    """
+    DelayFilter object for delay CLEANing
+    and filtering. See vis_clean.VisClean for
+    CLEAN functions.
+    """
 
-    def load_data(self, input_data, filetype='uvh5', input_cal=None, **read_kwargs):
-        '''Loads in and stores data for delay filtering.
-
-        Arguments:
-            input_data: data file path, or UVData/HERAData instance, or list of either strings of data file
-                paths or list of UVData/HERAData instances to concatenate into a single internal DataContainer
-            filetype: file format of data. Default 'uvh5.' Ignored if input_data is UVData/HERAData object(s).
-            input_cal: calibration to apply to data before delay filtering. Could be a string path to a calfits file,
-                a UVCal/HERACal object, or a list of either.
-            read_kwargs: kwargs to be passed into HERAData.read() for partial data loading
-        '''
-        # load data into data containers
-        self.hd = io.to_HERAData(input_data, filetype=filetype)
-        if self.hd.data_array is not None:
-            self.data, self.flags, _ = self.hd.build_datacontainers()
-        else:
-            self.data, self.flags, _ = self.hd.read(**read_kwargs)
-
-        # optionally apply calibration and calibration flags
-        if input_cal is not None:
-            g, f = io.load_cal(input_cal)
-            apply_cal.calibrate_in_place(self.data, g, data_flags=self.flags, cal_flags=f)
-
-        # save metadata
-        self.antpos = deepcopy(self.data.antpos)
-        self.freqs = deepcopy(self.data.freqs)
-        self.Nfreqs = len(self.freqs)
-        self.writable = True
-
-    def load_data_as_dicts(self, data, flags, freqs, antpos):
-        '''Loads in data manually as a dictionary, an ordered dictionary, or a DataContainer.
-
-        Arguments:
-            data: visibility data as a dictionary or DataContainer.
-            flags: flags with the same format and keys as data
-            freqs: array of frequencies in Hz
-            antpos: dictionary mapping antenna index to antenna position in m
-        '''
-        self.data, self.flags, self.freqs, self.antpos = data, flags, freqs, antpos
-
-    def run_filter(self, to_filter=[], weight_dict=None, standoff=15., horizon=1., min_dly=0.0,
+    def run_filter(self, to_filter=None, weight_dict=None, standoff=15., horizon=1., min_dly=0.0,
                    tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False,
-                   flag_nchan_low=0, flag_nchan_high=0, gain=0.1, **win_kwargs):
-        '''Performs uvtools.dspec.DelayFilter on (a subset of) the data stored in the object.
+                   edgecut_low=0, edgecut_hi=0, gain=0.1, alpha=0.5):
+        '''Performs uvtools.dspec.vis_filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
         Arguments:
             to_filter: list of visibilities to filter in the (i,j,pol) format.
-                If [] (the default), all visibilities are filtered.
+                If None (the default), all visibilities are filtered.
             weight_dict: dictionary or DataContainer with all the same keys as self.data.
                 Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
                 of self.flags. uvtools.dspec.delay_filter will renormalize to compensate
@@ -86,83 +41,59 @@ class DelayFilter():
             min_dly: minimum delay used for cleaning [ns]: if bl_len * horizon + standoff < min_dly, use min_dly.
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
             window: window function for filtering applied to the filtered axis.
-                See aipy.dsp.gen_window for options.
+                See uvtools.dspec.gen_window for options.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
             verbose: If True print feedback to stdout
-            flag_nchan_low: Integer number of channels to flag on lower band edge before filtering
-            flag_nchan_low: Integer number of channels to flag on upper band edge before filtering
+            edgecut_low : int, number of bins to consider zero-padded at low-side of the FFT axis,
+                such that the windowing function smoothly approaches zero. If ax is 'both',
+                can feed as a tuple specifying for 0th and 1st FFT axis.
+            edgecut_hi : int, number of bins to consider zero-padded at high-side of the FFT axis,
+                such that the windowing function smoothly approaches zero. If ax is 'both',
+                can feed as a tuple specifying for 0th and 1st FFT axis.
             gain: The fraction of a residual used in each iteration. If this is too low, clean takes
                 unnecessarily long. If it is too high, clean does a poor job of deconvolving.
-            win_kwargs : keyword arguments to feed aipy.dsp.gen_window()
+            alpha : float, if window is Tukey, this is its alpha parameter
 
         Results are stored in:
-            self.filtered_residuals: DataContainer formatted like self.data with only high-delay components
-            self.CLEAN_models: DataContainer formatted like self.data with only low-delay components
-            self.info: Dictionary of info from uvtools.dspec.delay_filter with the same keys as self.data
+            self.clean_resid: DataContainer formatted like self.data with only high-delay components
+            self.clean_model: DataContainer formatted like self.data with only low-delay components
+            self.clean_info: Dictionary of info from uvtools.dspec.delay_filter with the same keys as self.data
         '''
-        self.filtered_residuals = deepcopy(self.data)
-        self.CLEAN_models = DataContainer({k: np.zeros_like(list(self.data.values())[0]) for k in self.data.keys()})
-        self.info = odict()
-        if to_filter == []:
-            to_filter = self.data.keys()
-
-        for k in to_filter:
-            if verbose:
-                print("\nStarting filter on {} at {}".format(k, str(datetime.datetime.now())))
-            bl_len = np.linalg.norm(self.antpos[k[0]] - self.antpos[k[1]]) / constants.c * 1e9  # in ns
-            sdf = np.median(np.diff(self.freqs)) / 1e9  # in GHz
-            if weight_dict is not None:
-                wgts = weight_dict[k]
-            else:
-                wgts = np.logical_not(self.flags[k])
-
-            # edge flag
-            if flag_nchan_low > 0:
-                self.flags[k][:, :flag_nchan_low] = True
-                wgts[:, :flag_nchan_low] = 0.0
-            if flag_nchan_high > 0:
-                self.flags[k][:, -flag_nchan_high:] = True
-                wgts[:, -flag_nchan_high:] = 0.0
-
-            d_mdl, d_res, info = delay_filter(self.data[k], wgts, bl_len, sdf, standoff=standoff, horizon=horizon, min_dly=min_dly,
-                                              tol=tol, window=window, skip_wgt=skip_wgt, maxiter=maxiter, gain=gain, **win_kwargs)
-            self.filtered_residuals[k] = d_res
-            self.CLEAN_models[k] = d_mdl
-            self.info[k] = info
-            # Flag all channels for any time when skip_wgt gets triggered
-            for i, info_dict in enumerate(info):
-                if info_dict.get('skipped', False):
-                    self.flags[k][i, :] = np.ones_like(self.flags[k][i, :])
+        # run delay CLEAN
+        self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict, ax='freq',
+                       horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol, maxiter=maxiter,
+                       window=window, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
+                       edgecut_hi=edgecut_hi, alpha=alpha, overwrite=True, verbose=verbose)
 
     def get_filled_data(self):
         """Get original data with flagged pixels filled with CLEAN_models
 
         Returns
             filled_data: DataContainer with original data and flags filled with CLEAN model
-            filled_flgs: DataContainer with flags set to False unless time is skipped
+            filled_flags: DataContainer with flags set to False unless time is skipped
         """
-        assert hasattr(self, 'CLEAN_models') and hasattr(self, 'data') and hasattr(self, 'flags'), "self.CLEAN_models, "\
+        assert hasattr(self, 'clean_model') and hasattr(self, 'data') and hasattr(self, 'flags'), "self.clean_model, "\
             "self.data and self.flags must all exist to get filled data"
         # construct filled data and filled flags
         filled_data = deepcopy(self.data)
-        filled_flgs = deepcopy(self.flags)
+        filled_flags = deepcopy(self.flags)
 
         # iterate over filled_data keys
         for k in filled_data.keys():
             # get flags
-            f = filled_flgs[k].copy()
+            f = filled_flags[k].copy()
             # if flagged across all freqs, "unflag" this f
             f[np.sum(f, axis=1) / float(self.Nfreqs) > 0.99999] = False
-            # replace data_out with CLEAN_models at f == True
-            filled_data[k][f] = self.CLEAN_models[k][f]
+            # replace data_out with clean_model at f == True
+            filled_data[k][f] = self.clean_model[k][f]
             # unflag at f == True
-            filled_flgs[k][f] = False
+            filled_flags[k][f] = False
 
-        return filled_data, filled_flgs
+        return filled_data, filled_flags
 
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
                             partial_write=False, clobber=False, add_to_history='', **kwargs):
@@ -181,8 +112,8 @@ class DelayFilter():
             kwargs: addtional UVData keyword arguments update the before saving.
                 Must be valid UVData object attributes.
         '''
-        if not self.writable:
-            raise ValueError('Writing functionality only enabled by running DelayFilter.load_data()')
+        if not hasattr(self, 'data'):
+            raise ValueError("Cannot write data without first loading")
         if (res_outfilename is None) and (CLEAN_outfilename is None) and (filled_outfilename is None):
             raise ValueError('You must specifiy at least one outfilename.')
         else:
@@ -191,9 +122,9 @@ class DelayFilter():
                                          [res_outfilename, CLEAN_outfilename, filled_outfilename]):
                 if outfilename is not None:
                     if mode == 'residual':
-                        data_out, flags_out = self.filtered_residuals, self.flags
+                        data_out, flags_out = self.clean_resid, self.flags
                     elif mode == 'CLEAN':
-                        data_out, flags_out = self.CLEAN_models, self.flags
+                        data_out, flags_out = self.clean_model, self.clean_flags
                     elif mode == 'filled':
                         data_out, flags_out = self.get_filled_data()
                     if partial_write:
@@ -230,7 +161,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
     # loop over all baselines in increments of Nbls
     for i in range(0, len(hd.bls), Nbls):
         df = DelayFilter()
-        df.load_data(hd, input_cal=calfile, bls=hd.bls[i:i + Nbls])
+        df.load_data(hd, inp_cal=calfile, bls=hd.bls[i:i + Nbls])
         df.run_filter(**filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=True,
@@ -261,8 +192,8 @@ def delay_filter_argparser():
                               see aipy.dsp.gen_window for options')
     filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
-    filt_options.add_argument("--flag_nchan_low", default=0, type=int, help="Number of channels to flag on lower band edge before filtering.")
-    filt_options.add_argument("--flag_nchan_high", default=0, type=int, help="Number of channels to flag on upper band edge before filtering.")
+    filt_options.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag on lower band edge and exclude from window function.")
+    filt_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
     filt_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     filt_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
 
