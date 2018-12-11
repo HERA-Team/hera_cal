@@ -132,7 +132,8 @@ class VisClean(object):
 
     def apply_cal(self, inp_cal):
         """
-        Load calibration solutions and apply to the data.
+        Load calibration solutions and apply to the self.data
+        DataContainer using hera_cal.apply_cal
 
         Args:
             inp_cal : UVCal, HERACal or filepath to calfits file
