@@ -68,7 +68,7 @@ class Test_VisClean(unittest.TestCase):
         fname = os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5')
         V = VisClean(fname, filetype='uvh5')
         V.read(read_data=False)
-        nt.assert_equal(set(V.hd.ant_1_array), set([1] + range(11, 15)))
+        nt.assert_equal(set(V.hd.ant_1_array), set([1, 11, 12, 13, 14]))
 
         # test read-write-read
         V.read()
