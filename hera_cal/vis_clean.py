@@ -26,147 +26,140 @@ class VisClean(object):
     and filtering.
     """
 
-    def __init__(self, hd=None, filetype='miriad', **read_kwargs):
+    def __init__(self, input_data, filetype='uvh5', input_cal=None):
         """
         Initialize the object and optionally
         read data if provided.
 
         Args:
-            hd : string, UVData or DataContainer object
+            input_data : string, UVData or HERAData object
                 Filepath to a miriad, uvfits or uvh5
-                datafile, a UVData object or a DataContainer
-                object.
-            filetype : str
-                If hd is a filepath, this is its filetype.
-                See hera_cal.io.HERAData for supported filetypes.
-            read_kwargs : dictionary
-                Keyword arguments to pass to UVData.read if
-                hd is fed as a string.
+                datafile, or a UVData or HERAData object.
+            filetype : string, options=['miriad', 'uvh5', 'uvfits']
+            input_cal : string, UVCal or HERACal object holding
+                gain solutions to apply to DataContainers
+                as they are built.
         """
-        if hd is not None:
-            self.load_data(hd, filetype=filetype, **read_kwargs)
-
-    def load_data(self, hd, filetype='miriad', inp_cal=None, read_data=True, **read_kwargs):
-        """
-        Load in visibility data.
-
-        Args:
-            hd : string, UVData or HERAData object, or list of such objects
-            filetype : str
-                IF data is a filepath, this is its filetype.
-                See hera_cal.io.HERAData for supported filetypes.
-            inp_cal : UVCal, HERACal or string to calfits
-                Calibration solutions to apply to the data.
-            read_data : bool, if True read the data, otherwise only read metadata.
-            read_kwargs : dictionary
-                Keyword arguments to pass to UVData.read if data is a string.
-        """
-        # check for lists etc.
-        dtype = None
-        if isinstance(hd, (list, tuple, np.ndarray)):
-            if isinstance(hd[0], (str, np.str)):
-                dtype = 'str'
-            elif isinstance(hd[0], UVData):
-                assert np.all([_hd.data_array is not None for _hd in hd]), "Cannot feed a list of empty HERAData or UVData objects"
-                hd = reduce(operator.add, hd)
-
-        # read HERAData if fed as string
-        if isinstance(hd, (str, np.str)) or dtype == 'str':
-            self.hd = io.HERAData(hd, filetype=filetype)
-
         # attach HERAData
-        elif isinstance(hd, io.HERAData):
-            self.hd = hd
+        self.clear_containers()
+        self.hd = io.to_HERAData(input_data, filetype=filetype)
 
-        # promote UVData to HERAData
-        elif isinstance(hd, UVData):
-            self.hd = hd
-            self.hd.__class__ = io.HERAData
-            self.hd._determine_blt_slicing()
-            self.hd._determine_pol_indexing()
+        # attach calibration
+        if input_cal is not None:
+            self.attach_calibration(input_cal)
 
-        else:
-            raise ValueError("hd must be fed as a HERAData, UVData object, string filepath or list of these")
-        self.filetype = filetype
+        # attach data and/or metadata to object if exists
+        self.attach_data()
 
-        # read data
-        if read_data:
-            if self.hd.data_array is None:
-                data, flags, nsamples = self.hd.read(read_data=read_data, **read_kwargs)
-            else:
-                echo("Requested to read_data but hd.data_array already exists.\nUsing existing data_array to build DataContainers")
-                data, flags, nsamples = self.hd.build_datacontainers()
+    def attach_data(self):
+        """
+        If they exist, attach metadata and/or data from self.hd
+        and apply calibration solutions from self.hc if it exists.
+        """
+        # link the metadata if they exist
+        if self.hd.antenna_numbers is not None:
+            mdict = self.hd.get_metadata_dict()
+            self.antpos = mdict['antpos']
+            self.ants = mdict['ants']
+            self.freqs = mdict['freqs']
+            self.times = mdict['times']
+            self.lsts = mdict['lsts']
+            self.pols = mdict['pols']
 
-            # link to the DataContainers
+            self.Nfreqs = len(self.freqs)
+            self.Ntimes = len(self.times)  # Does not support BDA for now
+            self.dlst = np.median(np.diff(self.lsts))
+            self.dtime = np.median(np.diff(self.times))
+            self.dnu = np.median(np.diff(self.freqs))
+            self.bls = sorted(set(self.hd.get_antpairs()))
+            self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
+            self.bllens = odict([(bl, np.linalg.norm(self.blvecs[bl]) / 2.99e8) for bl in self.bls])
+            self.lat = self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi  # degrees
+            self.lon = self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi  # degrees
+
+        # link the data if they exist
+        if self.hd.data_array is not None:
+            data, flags, nsamples = self.hd.build_datacontainers()
             self.data = data
             self.flags = flags
             self.nsamples = nsamples
 
-        else:
-            self.hd.read(read_data=read_data, **read_kwargs)
+            # apply calibration solutions if they exist
+            if hasattr(self, 'hc'):
+                self.apply_calibration(self.hc)
 
-        # assign necessary metadata
-        mdict = self.hd.get_metadata_dict()
-        self.antpos = mdict['antpos']
-        self.ants = mdict['ants']
-        self.freqs = mdict['freqs']
-        self.times = mdict['times']
-        self.lsts = mdict['lsts']
-        self.pols = mdict['pols']
-
-        self.Nfreqs = len(self.freqs)
-        self.Ntimes = len(self.times)
-        self.dlst = np.median(np.diff(self.lsts))
-        self.dtime = np.median(np.diff(self.times))
-        self.dnu = np.median(np.diff(self.freqs))
-        self.bls = sorted(set(self.hd.get_antpairs()))
-        self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
-        self.bllens = odict([(bl, np.linalg.norm(self.blvecs[bl]) / 2.99e8) for bl in self.bls])
-        self.lat = self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi
-        self.delays = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs, self.dnu)) * 1e9  # ns
-        self.frates = np.fft.fftshift(np.fft.fftfreq(self.Ntimes, self.dtime * 24 * 3600)) * 1e3  # mHz
-
-        # load calibration solutions
-        if inp_cal is not None:
-            self.apply_cal(inp_cal)
-
-    def apply_cal(self, inp_cal):
+    def clear_containers(self, exclude=[]):
         """
-        Load calibration solutions and apply to the self.data
-        DataContainer using hera_cal.apply_cal
+        Delete all DataContainers attached to self.
 
         Args:
-            inp_cal : UVCal, HERACal or filepath to calfits file
+            exclude : list of DataContainer names attached
+                to self to exclude from purge.
         """
-        assert hasattr(self, 'data'), "Must have loaded data before applying calibration solutions."
+        for key in self.__dict__.keys():
+            if key in exclude:
+                continue
+            obj = getattr(self, key)
+            if isinstance(getattr(self, key), DataContainer):
+                delattr(self, key)
 
-        # read HERACal if fed as string
-        if isinstance(inp_cal, (str, np.str)):
-            self.inp_cal = io.HERACal(inp_cal)
-            cal_gains, cal_flags, cal_quals, cal_tquals = self.inp_cal.read()
+    def attach_calibration(self, input_cal):
+        """
+        Attach calibration solutions to the object, so-as to
+        apply or unapply to visibility data on-the-fly as it
+        is piped into DataContainers upon read-in.
+        """
+        # attach HERACal
+        self.hc = io.to_HERACal(input_cal)
 
-        # read data if not already done
-        elif isinstance(inp_cal, io.HERACal):
-            self.inp_cal = inp_cal
-            if self.inp_cal.gain_array is None:
-                cal_gains, cal_flags, cal_quals, cal_tquals = self.inp_cal.read()
-            else:
-                cal_gains, cal_flags, cal_quals, cal_tquals = self.inp_cal.build_calcontainers()
+    def clear_calibration(self):
+        """
+        Remove calibration object if exists to clear memory
+        """
+        if hasattr(self, 'hc'):
+            delattr(self, 'hc')
 
-        # promote UVCal to HERACal
-        elif isinstance(inp_cal, UVCal):
-            self.inp_cal = inp_cal
-            self.inp_cal.__class__ = io.HERACal
-            cal_gains, cal_flags, cal_quals, cal_tquals = self.inp_cal.build_calcontainers()
+    def apply_calibration(self, input_cal, unapply=False):
+        """
+        Load calibration solutions and apply to the self.data
+        using hera_cal.apply_cal
 
-        else:
-            raise ValueError("inp_cal must be fed as a HERACal or UVCal object, or a calfits filepath")
+        Args:
+            input_cal : UVCal, HERACal or filepath to calfits file
+            unapply : bool, if True, reverse gain convention to
+                unapply the gains from the data.
+        """
+        # ensure its a HERACal
+        hc = io.to_HERACal(input_cal)
 
-        # apply calibration solutions to data
-        apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags, gain_convention=self.inp_cal.gain_convention)
+        # load gains
+        cal_gains, cal_flags, cal_quals, cal_tquals = hc.read()
 
-    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, filetype='miriad',
-                   add_to_history=None, verbose=True):
+        # apply calibration solutions to data and flags
+        gain_convention = hc.gain_convention
+        if unapply:
+            if gain_convention == 'multiply':
+                gain_convention = 'divide'
+            elif gain_convention == 'divide':
+                gain_convention = 'multiply'
+        apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags, gain_convention=gain_convention)
+
+    def read(self, **read_kwargs):
+        """
+        Read visibility data from self.hd and attach data and/or metadata to self.
+
+        Args:
+            read_kwargs : dictionary
+                Keyword arguments to pass to HERAData.read().
+        """
+        # read data
+        self.hd.read(return_data=False, **read_kwargs)
+
+        # attach data
+        self.attach_data()
+
+    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, filetype='uvh5',
+                   partial_write=False, add_to_history=None, verbose=True, **kwargs):
         """
         Write data attached to object to file. If data or flags are fed as DataContainers,
         create a new HERAData with those data and write that to file. Can only write
@@ -179,7 +172,10 @@ class VisClean(object):
             flags : DataContainer, boolean flag arrays to write to disk with data.
             nsamples : DataContainer, float nsample arrays to write to disk with data.
             filetype : string, output filetype. ['miriad', 'uvh5', 'uvfits'] supported.
-            add_to_history : string, string to prepend to hd history.
+            partial_write : bool, if True, begin (or continue) a partial write to
+            the output filename and store file descriptor in self.hd._writers.
+            add_to_history : string, string to append to hd history.
+            kwargs : additional attributes to update before write to disk.
         """
         # get common keys
         keys = [k for k in self.hd.get_antpairpols() if data.has_key(k)]
@@ -193,20 +189,29 @@ class VisClean(object):
 
         # update HERAData
         hd.update(data=data, flags=flags, nsamples=nsamples)
-
+ 
         # add history
         if add_to_history is not None:
-            hd.history = "{} {}".format(add_to_history, hd.history)
+            hd.history = "{}\n{}".format(hd.history, add_to_history)
 
+        # update other kwargs
+        for attribute, value in kwargs.items():
+            hd.__setattr__(attribute, value)
+
+        # write to disk
         if filetype == 'miriad':
             hd.write_miriad(filename, clobber=overwrite)
         elif filetype == 'uvh5':
-            hd.write_uvh5(filename, clobber=overwrite)
+            if partial_write:
+                hd.partial_write(filename, clobber=overwrite, inplace=True)
+                self.hd._writers.update(hd._writers)
+            else:
+                hd.write_uvh5(filename, clobber=overwrite)
         elif filetype == 'uvfits':
             hd.write_uvfits(filename)
         else:
             raise ValueError("filetype {} not recognized".format(filetype))
-        echo("...wrote {}".format(filename), verbose=verbose)
+        echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none',
@@ -306,9 +311,9 @@ class VisClean(object):
 
             # time clean
             elif ax == 'time':
-                # make sure bad channels are zeroed out: this is a common fault case
-                # channels are bad (i.e. all zeros) but are not completely flagged
-                # and this causes filtering to hang...
+                # make sure bad channels are flagged: this is a common failure mode where
+                # channels are bad (i.e. data is identically zero) but are not flagged
+                # and this causes filtering to hang. Particularly band edges...
                 bad_chans = (~np.min(np.isclose(d, 0.0), axis=0, keepdims=True)).astype(np.float)
                 w *= bad_chans
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=self.dtime * 24 * 3600, tol=tol, maxiter=maxiter,
@@ -341,10 +346,11 @@ class VisClean(object):
             self.clean_flags[k] = flgs
             self.clean_info[k] = info
 
-    def fft_data(self, data=None, flags=None, keys=None, ax='freq', window='none', alpha=0.1, overwrite=False,
-                 edgecut_low=0, edgecut_hi=0, ifft=True, verbose=True):
+    def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
+                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=True, fftshift=True, verbose=True):
         """
-        Take FFT of data and assign to self.dfft. Note the fourier convention via ifft kwarg.
+        Take FFT of data and attach to self via assign kwarg. Default is self.dfft.
+        Take note of the adopted fourier convention via ifft and fftshift kwargs.
 
         Args:
             data : DataContainer
@@ -353,6 +359,8 @@ class VisClean(object):
                 Object to pull flags in FT from. Default is no flags.
             keys : list of tuples
                 List of keys from clean_data to FFT. Default is all keys.
+            assign : str
+                Name of DataContainer to attach to self. Default is self.dfft
             ax : str, options=['freq', 'time', 'both']
                 Axis along with to take FFT.
             window : str
@@ -368,8 +376,9 @@ class VisClean(object):
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
             ifft : bool, if True, use ifft instead of fft
+            fftshift : bool, if True, fftshift along FFT axes.
             overwrite : bool
-                If self.dfft[key] already exists, overwrite its contents.
+                If dfft[key] already exists, overwrite its contents.
         """
         # type checks
         assert ax in ['freq', 'time', 'both'], "ax must be one of ['freq', 'time', 'both']"
@@ -384,6 +393,13 @@ class VisClean(object):
                 edgecut_low = (edgecut_low, edgecut_low)
             if isinstance(edgecut_hi, (int, np.integer)):
                 edgecut_hi = (edgecut_hi, edgecut_hi)
+
+        # generate home
+        if not hasattr(self, assign):
+            setattr(self, assign, DataContainer({}))
+
+        # get home
+        dfft = getattr(self, assign)
 
         # generate window
         if ax == 'freq':
@@ -407,33 +423,48 @@ class VisClean(object):
         if keys is None:
             keys = data.keys()
 
-        if not hasattr(self, 'dfft'):
-            self.dfft = DataContainer({})
+        # set ifft and fftshift standard
+        def fft(d, ifft=ifft, shift=fftshift, ax=-1):
+            if isinstance(ax, tuple):
+                if ifft:
+                    dfft = np.fft.ifft2(d)
+                else:
+                    dfft = np.fft.fft2(d)
+                if shift:
+                    dfft = np.fft.fftshift(dfft)
+            else:
+                if ifft:
+                    dfft = np.fft.ifft(d, axis=ax)
+                else:
+                    dfft = np.fft.fft(d, axis=ax)
+                if shift:
+                    dfft = np.fft.fftshift(dfft, axes=ax)
+            return dfft
 
         # iterate over keys
         for k in keys:
             if k not in data:
                 echo("{} not in data, skipping...".format(k), verbose=verbose)
                 continue
-            if k in self.dfft and not overwrite:
-                echo("{} in dfft and overwrite == False, skipping...".format(k), verbose=verbose)
+            if k in dfft and not overwrite:
+                echo("{} in self.{} and overwrite == False, skipping...".format(k, assign), verbose=verbose)
                 continue
 
             # FFT
             if ax == 'time':
-                if ifft:
-                    dfft = np.fft.fftshift(np.fft.ifft(data[k] * win * wgts[k], axis=0), axes=0)
-                else:
-                    dfft = np.fft.fftshift(np.fft.fft(data[k] * win * wgts[k], axis=0), axes=0)
+                d = fft(data[k] * win * wgts[k], ax=0)
             elif ax == 'freq':
-                if ifft:
-                    dfft = np.fft.fftshift(np.fft.ifft(data[k] * win * wgts[k], axis=1), axes=1)
-                else:
-                    dfft = np.fft.fftshift(np.fft.fft(data[k] * win * wgts[k], axis=1), axes=1)
+                d = fft(data[k] * win * wgts[k], ax=1)
             else:
-                if ifft:
-                    dfft = np.fft.fftshift(np.fft.ifft2(data[k] * win * wgts[k]))
-                else:
-                    dfft = np.fft.fftshift(np.fft.fft2(data[k] * win * wgts[k]))
+                d = fft(data[k] * win * wgts[k], ax=(0, 1))
 
-            self.dfft[k] = dfft
+            dfft[k] = d
+
+        if ax == 'freq' or ax == 'both':
+            self.delays = np.fft.fftfreq(self.Nfreqs, self.dnu) * 1e9  # ns
+            if fftshift:
+                self.delays = np.fft.fftshift(self.delays)
+        if ax == 'time' or ax == 'both':
+            self.frates = np.fft.fftfreq(self.Ntimes, self.dtime * 24 * 3600) * 1e3  # mHz
+            if fftshift:
+                self.frates = np.fft.fftshift(self.frates)

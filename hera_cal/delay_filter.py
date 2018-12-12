@@ -133,8 +133,8 @@ class DelayFilter(VisClean):
                         self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber,
                                               add_to_history=add_to_history, **kwargs)
                     else:
-                        io.update_vis(self.hd, outfilename, filetype_out=filetype, data=data_out, flags=flags_out,
-                                      add_to_history=add_to_history, clobber=clobber, **kwargs)
+                        self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
+                                        add_to_history=add_to_history, **kwargs)
 
 
 def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
@@ -160,14 +160,14 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         calfile.read()
     # loop over all baselines in increments of Nbls
     for i in range(0, len(hd.bls), Nbls):
-        df = DelayFilter()
-        df.load_data(hd, inp_cal=calfile, bls=hd.bls[i:i + Nbls])
+        df = DelayFilter(hd, input_cal=calfile)
+        df.read(bls=hd.bls[i:i + Nbls])
         df.run_filter(**filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=True,
                                clobber=clobber, add_to_history=add_to_history)
         df.hd.data_array = None  # this forces a reload in the next loop
-
+        
 
 def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''
@@ -189,7 +189,7 @@ def delay_filter_argparser():
     filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for cleaning.")
     filt_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
     filt_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
-                              see aipy.dsp.gen_window for options')
+                              see uvtools.dspec.gen_window for options')
     filt_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     filt_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
     filt_options.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag on lower band edge and exclude from window function.")
