@@ -21,64 +21,11 @@ from hera_cal.data import DATA_PATH
 
 class Test_DelayFilter(unittest.TestCase):
 
-    def test_init(self):
-        dfil = df.DelayFilter()
-
-    def test_load_data(self):
-        fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        dfil = df.DelayFilter()
-        dfil.load_data(fname, filetype='miriad')
-        self.assertEqual(dfil.data[(24, 25, 'xx')].shape, (60, 64))
-        self.assertEqual(dfil.flags[(24, 25, 'xx')].shape, (60, 64))
-        self.assertEqual(len(dfil.antpos), 47)
-        self.assertEqual(type(dfil.antpos[24]), np.ndarray)
-        self.assertEqual(len(dfil.antpos[24]), 3)
-        self.assertEqual(len(dfil.freqs), 64)
-
-        fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        uvd = UVData()
-        uvd.read_miriad(fname)
-        dfil = df.DelayFilter()
-        dfil.load_data(uvd, filetype='miriad')
-        self.assertEqual(dfil.data[(24, 25, 'xx')].shape, (60, 64))
-        self.assertEqual(dfil.flags[(24, 25, 'xx')].shape, (60, 64))
-        self.assertEqual(len(dfil.antpos), 47)
-        self.assertEqual(type(dfil.antpos[24]), np.ndarray)
-        self.assertEqual(len(dfil.antpos[24]), 3)
-        self.assertEqual(len(dfil.freqs), 64)
-
-        filename1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA')
-        filename2 = os.path.join(DATA_PATH, 'zen.2458043.13298.xx.HH.uvORA')
-        dfil = df.DelayFilter()
-        dfil.load_data([filename1, filename2], filetype='miriad')
-
-        # test uvh5 with calibration
-        cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-        hc = io.HERACal(cal)
-        gains, calflags, _, _ = hc.read()
-        hd = io.HERAData(uvh5, filetype='uvh5')
-        data, flags, _ = hd.read()
-
-        dfil = df.DelayFilter()
-        dfil.load_data(hd, filetype='uvh5', inp_cal=hc)
-        flag_sum = flags[54, 54, 'xx'] + calflags[54, 'Jxx']
-        np.testing.assert_array_equal(flag_sum, dfil.flags[54, 54, 'xx'])
-        calibrated = (data[54, 54, 'xx'] / gains[54, 'Jxx'] / np.conj(gains[54, 'Jxx']))[~flag_sum]
-        np.testing.assert_array_almost_equal(dfil.data[54, 54, 'xx'][~flag_sum] / calibrated, 1.0 + 0.0j, decimal=5)
-
-        dfil = df.DelayFilter()
-        dfil.load_data(uvh5, filetype='uvh5', inp_cal=cal)
-        flag_sum = flags[54, 54, 'xx'] + calflags[54, 'Jxx']
-        np.testing.assert_array_equal(flag_sum, dfil.flags[54, 54, 'xx'])
-        calibrated = (data[54, 54, 'xx'] / gains[54, 'Jxx'] / np.conj(gains[54, 'Jxx']))[~flag_sum]
-        np.testing.assert_array_almost_equal(dfil.data[54, 54, 'xx'][~flag_sum] / calibrated, 1.0 + 0.0j, decimal=5)
-
     def test_run_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'xx')
-        dfil = df.DelayFilter()
-        dfil.load_data(fname, filetype='miriad')
+        dfil = df.DelayFilter(fname, filetype='miriad')
+        dfil.read(bls=[k])
         bl = np.linalg.norm(dfil.antpos[24] - dfil.antpos[25]) / constants.c * 1e9
         sdf = (dfil.freqs[1] - dfil.freqs[0]) / 1e9
 
@@ -89,8 +36,10 @@ class Test_DelayFilter(unittest.TestCase):
             self.assertTrue(k in dfil.clean_info)
 
         # test skip_wgt imposition of flags
-        dfil = df.DelayFilter()
-        dfil.load_data(fname, filetype='miriad')
+        fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        k = (24, 25, 'xx')
+        dfil = df.DelayFilter(fname, filetype='miriad')
+        dfil.read(bls=[k])
         wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
         wgts[k][0, :] = 0.0
         dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
@@ -100,13 +49,11 @@ class Test_DelayFilter(unittest.TestCase):
         np.testing.assert_array_equal(dfil.clean_resid[k][0, :], dfil.data[k][0, :])
 
     def test_write_filtered_data(self):
-        dfil = df.DelayFilter()
-        with self.assertRaises(ValueError):
-            dfil.write_filtered_data('')
-
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        dfil = df.DelayFilter()
-        dfil.load_data(fname, filetype='miriad')
+        k = (24, 25, 'xx')
+        dfil = df.DelayFilter(fname, filetype='miriad')
+        dfil.read(bls=[k])
+
         data = dfil.data
         dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edgecut_low=5, edgecut_hi=5)
         outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5')
@@ -143,8 +90,8 @@ class Test_DelayFilter(unittest.TestCase):
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'xx')])
 
-        dfil = df.DelayFilter()
-        dfil.load_data(uvh5, filetype='uvh5')
+        dfil = df.DelayFilter(uvh5, filetype='uvh5')
+        dfil.read(bls=[(53, 54, 'xx')])
         dfil.run_filter(to_filter=[(53, 54, 'xx')], tol=1e-4, verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'xx')], dfil.clean_resid[(53, 54, 'xx')])
         np.testing.assert_array_equal(f[(53, 54, 'xx')], dfil.flags[(53, 54, 'xx')])
