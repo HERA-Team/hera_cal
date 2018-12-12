@@ -17,6 +17,7 @@ from six.moves import range, zip
 import pyuvdata
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import parse_polstr, parse_jpolstr
+import nose.tools as nt
 
 import hera_cal.io as io
 from hera_cal.io import HERACal, HERAData
@@ -278,6 +279,18 @@ class Test_HERAData(unittest.TestCase):
             self.assertEqual(dc[53, 54, 'xx'].shape, (10, 100))
         with self.assertRaises(ValueError):
             d, f, n = hd.read(polarizations=['xy'])
+
+        # assert return data = False
+        o = hd.read(bls=[(53, 53), (53, 54)], return_data=False)
+        nt.assert_equal(o, None)
+
+        # assert __getitem__ isn't a read when key exists
+        o = hd[(53, 53, 'xx')]
+        nt.assert_true(len(hd._blt_slices), 2)
+
+        # assert __getitem__ is a read when key does not exist
+        o = hd[(54, 54, 'xx')]
+        nt.assert_true(len(hd._blt_slices), 1)
 
         # miriad
         hd = HERAData(self.miriad_1, filetype='miriad')

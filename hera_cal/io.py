@@ -355,7 +355,7 @@ class HERAData(UVData):
         return data, flags, nsamples
 
     def read(self, bls=None, polarizations=None, times=None,
-             frequencies=None, freq_chans=None, read_data=True):
+             frequencies=None, freq_chans=None, read_data=True, return_data=True):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -376,6 +376,7 @@ class HERAData(UVData):
             read_data: Read in the visibility and flag data. If set to false, only the
                 basic metadata will be read in and nothing will be returned. Results in an
                 incompletely defined object (check will not pass). Default True.
+            return_data: bool, if True, return the output of build_datacontainers().
 
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls
@@ -409,12 +410,20 @@ class HERAData(UVData):
         if read_data or self.filetype == 'uvh5':
             self._determine_blt_slicing()
             self._determine_pol_indexing()
-        if read_data:
+        if read_data and return_data:
             return self.build_datacontainers()
 
     def __getitem__(self, key):
-        '''Shortcut for reading a single visibility waterfall given a baseline tuple.'''
-        return self.read(bls=key)[0][key]
+        """
+        Shortcut for reading a single visibility waterfall given a
+        baseline tuple. If key exists it will return it using its
+        blt_slice, if it does not it will attempt to read it
+        from disk.
+        """
+        try:
+            return self._get_slice(self.data_array, key)
+        except KeyError:
+            return self.read(bls=key)[0][key]
 
     def update(self, data=None, flags=None, nsamples=None):
         '''Update internal data arrays (data_array, flag_array, and nsample_array)
