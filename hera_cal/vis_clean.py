@@ -96,7 +96,7 @@ class VisClean(object):
             exclude : list of DataContainer names attached
                 to self to exclude from purge.
         """
-        keys = self.__dict__.keys()
+        keys = list(self.__dict__.keys())
         for key in keys:
             if key in exclude:
                 continue
