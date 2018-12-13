@@ -269,7 +269,7 @@ class DataContainer:
             return newD
 
     def __invert__(self):
-        '''Inverts the values of the DataContainer'''
+        '''Inverts the values of the DataContainer via logical not'''
         # start new object
         newD = copy.deepcopy(self)
 

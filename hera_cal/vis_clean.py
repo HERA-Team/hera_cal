@@ -6,13 +6,10 @@ from __future__ import print_function, division, absolute_import
 
 import numpy as np
 from collections import OrderedDict as odict
-from copy import deepcopy
-import argparse
 import datetime
 from six.moves import range, zip
-from pyuvdata import UVData, UVCal
 from uvtools import dspec
-import operator
+from astropy import constants
 
 from . import io
 from . import apply_cal
@@ -73,7 +70,7 @@ class VisClean(object):
             self.dnu = np.median(np.diff(self.freqs))
             self.bls = sorted(set(self.hd.get_antpairs()))
             self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
-            self.bllens = odict([(bl, np.linalg.norm(self.blvecs[bl]) / 2.99e8) for bl in self.bls])
+            self.bllens = odict([(bl, np.linalg.norm(self.blvecs[bl]) / constants.c.value) for bl in self.bls])
             self.lat = self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi  # degrees
             self.lon = self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi  # degrees
 
@@ -257,10 +254,12 @@ class VisClean(object):
             self.clean_model + self.clean_resid * ~self.flags
         """
         # type checks
-        assert ax in ['freq', 'time', 'both'], "ax must be one of ['freq', 'time', 'both']"
+        if ax not in ['freq', 'time', 'both']:
+            raise ValueError("ax must be one of ['freq', 'time', 'both']")
 
         if ax == 'time':
-            assert max_frate is not None, "if time cleaning, must feed max_frate parameter"
+            if max_frate is None:
+                raise ValueError("if time cleaning, must feed max_frate parameter")
 
         # initialize containers
         for dc in ['clean_model', 'clean_resid', 'clean_flags', 'clean_info']:
@@ -285,7 +284,8 @@ class VisClean(object):
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.float)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
-            assert isinstance(max_frate, DataContainer), "If fed, max_frate must be a float, or a DataContainer of floats"
+            if not isinstance(max_frate, DataContainer):
+                raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
 
         # iterate over keys
         for k in keys:
@@ -382,7 +382,9 @@ class VisClean(object):
                 If dfft[key] already exists, overwrite its contents.
         """
         # type checks
-        assert ax in ['freq', 'time', 'both'], "ax must be one of ['freq', 'time', 'both']"
+        if ax not in ['freq', 'time', 'both']:
+            raise ValueError("ax must be one of ['freq', 'time', 'both']")
+            
         fft2d = ax == 'both'
         if fft2d:
             # 2D fft
