@@ -66,7 +66,7 @@ class VisClean(object):
             self.Nfreqs = len(self.freqs)
             self.Ntimes = len(self.times)  # Does not support BDA for now
             self.dlst = np.median(np.diff(self.lsts))
-            self.dtime = np.median(np.diff(self.times))
+            self.dtime = np.median(np.diff(self.times)) * 24 * 3600
             self.dnu = np.median(np.diff(self.freqs))
             self.bls = sorted(set(self.hd.get_antpairs()))
             self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
@@ -231,9 +231,10 @@ class VisClean(object):
             wgts : DataContainer, weights to use. Default is None.
             ax : str, axis to CLEAN, options=['freq', 'time', 'both']
                 Where 'freq' and 'time' are 1D CLEANs and 'both' is a 2D CLEAN
-            standoff: fixed additional delay beyond the horizon (in ns) to CLEAN [freq cleaning]
+            standoff: fixed additional delay beyond the horizon (in nanosec) to CLEAN [freq cleaning]
             horizon: coefficient to bl_len where 1 is the horizon [freq cleaning]
-            min_dly: minimum delay used for freq cleaning [ns]: if bl_len * horizon + standoff < min_dly, use min_dly.
+            min_dly: max delay (in nanosec) used for freq CLEAN is never below this.
+            max_frate : max fringe rate (in milli-Hz) used for time CLEANing. See uvtools.dspec.vis_filter for options.
             tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
             gain: The fraction of a residual used in each iteration. If this is too low, clean takes
                 unnecessarily long. If it is too high, clean does a poor job of deconvolving.
@@ -292,6 +293,12 @@ class VisClean(object):
             if not isinstance(max_frate, DataContainer):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
 
+        # convert kwargs to proper units
+        if max_frate is not None:
+            max_frate /= 1e3
+        min_dly /= 1e9
+        standoff /= 1e9
+
         # iterate over keys
         for k in keys:
             if k in self.clean_model and overwrite is False:
@@ -322,7 +329,7 @@ class VisClean(object):
                 # and this causes filtering to hang. Particularly band edges...
                 bad_chans = (~np.min(np.isclose(d, 0.0), axis=0, keepdims=True)).astype(np.float)
                 w *= bad_chans
-                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=self.dtime * 24 * 3600, tol=tol, maxiter=maxiter,
+                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=self.dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                                                   edgecut_hi=edgecut_hi)
                 flgs = np.zeros_like(mdl, dtype=np.bool)
@@ -334,7 +341,7 @@ class VisClean(object):
             elif ax == 'both':
                 # check for completely flagged baseline
                 if w.max() > 0.0:
-                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, max_frate=max_frate[k], dt=self.dtime * 24 * 3600,
+                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, max_frate=max_frate[k], dt=self.dtime,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
                                                       alpha=alpha, gain=gain, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
                                                       filt2d_mode=filt2d_mode)
@@ -395,13 +402,13 @@ class VisClean(object):
         fft2d = ax == 'both'
         if fft2d:
             # 2D fft
-            if isinstance(window, (str, np.str)):
+            if not isinstance(window, (tuple, list)):
                 window = (window, window)
-            if isinstance(alpha, (int, np.integer, float, np.float)):
+            if not isinstance(alpha, (tuple, list)):
                 alpha = (alpha, alpha)
-            if isinstance(edgecut_low, (int, np.integer)):
+            if not isinstance(edgecut_low, (tuple, list)):
                 edgecut_low = (edgecut_low, edgecut_low)
-            if isinstance(edgecut_hi, (int, np.integer)):
+            if not isinstance(edgecut_hi, (tuple, list)):
                 edgecut_hi = (edgecut_hi, edgecut_hi)
 
         # generate home
@@ -435,7 +442,7 @@ class VisClean(object):
 
         # set ifft and fftshift standard
         def fft(d, ifft=ifft, shift=fftshift, ax=-1):
-            if isinstance(ax, tuple):
+            if isinstance(ax, (tuple, list)):
                 if ifft:
                     dfft = np.fft.ifft2(d)
                 else:
@@ -475,6 +482,6 @@ class VisClean(object):
             if fftshift:
                 self.delays = np.fft.fftshift(self.delays)
         if ax == 'time' or ax == 'both':
-            self.frates = np.fft.fftfreq(self.Ntimes, self.dtime * 24 * 3600) * 1e3  # mHz
+            self.frates = np.fft.fftfreq(self.Ntimes, self.dtime) * 1e3  # mHz
             if fftshift:
                 self.frates = np.fft.fftshift(self.frates)

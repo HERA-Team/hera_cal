@@ -96,21 +96,21 @@ class Test_VisClean(unittest.TestCase):
         nt.assert_true(np.all([i['success'] for i in V.clean_info[(24, 25, 'xx')]]))
 
         # basic time clean
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='time', max_frate=10e-3, overwrite=True)
+        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='time', max_frate=10., overwrite=True)
         nt.assert_true('skipped' in V.clean_info[(24, 25, 'xx')][0])
         nt.assert_true('success' in V.clean_info[(24, 25, 'xx')][3])
 
         # basic 2d clean
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', max_frate=10e-3, overwrite=True,
+        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', max_frate=10., overwrite=True,
                     filt2d_mode='plus')
         nt.assert_true('success' in V.clean_info[(24, 25, 'xx')])
 
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', flags=V.flags + True, max_frate=10e-3,
+        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', flags=V.flags + True, max_frate=10.,
                     overwrite=True, filt2d_mode='plus')
         nt.assert_true('skipped' in V.clean_info[(24, 25, 'xx')])
 
         # test fft data
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', max_frate=10e-3, overwrite=True,
+        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', max_frate=10., overwrite=True,
                     filt2d_mode='rect')
 
         # assert foreground peak is at 0 delay bin
