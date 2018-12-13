@@ -19,14 +19,12 @@ from .utils import echo
 
 class VisClean(object):
     """
-    VisClean object for visibility CLEANing
-    and filtering.
+    VisClean object for visibility CLEANing and filtering.
     """
 
     def __init__(self, input_data, filetype='uvh5', input_cal=None):
         """
-        Initialize the object and optionally
-        read data if provided.
+        Initialize the object and optionally read data if provided.
 
         Args:
             input_data : string, UVData or HERAData object
@@ -50,6 +48,8 @@ class VisClean(object):
 
     def attach_data(self):
         """
+        Attach DataContainers to self.
+
         If they exist, attach metadata and/or data from self.hd
         and apply calibration solutions from self.hc if it exists.
         """
@@ -103,8 +103,10 @@ class VisClean(object):
 
     def attach_calibration(self, input_cal):
         """
-        Attach calibration solutions to the object, so-as to
-        apply or unapply to visibility data on-the-fly as it
+        Attach input_cal to self.
+
+        Attach calibration so-as to apply or unapply
+        to visibility data on-the-fly as it
         is piped into DataContainers upon read-in.
         """
         # attach HERACal
@@ -112,15 +114,14 @@ class VisClean(object):
 
     def clear_calibration(self):
         """
-        Remove calibration object if exists to clear memory
+        Remove calibration object self.hc to clear memory
         """
         if hasattr(self, 'hc'):
             delattr(self, 'hc')
 
     def apply_calibration(self, input_cal, unapply=False):
         """
-        Load calibration solutions and apply to the self.data
-        using hera_cal.apply_cal
+        Apply self.hc calibration to self.data.
 
         Args:
             input_cal : UVCal, HERACal or filepath to calfits file
@@ -144,7 +145,7 @@ class VisClean(object):
 
     def read(self, **read_kwargs):
         """
-        Read visibility data from self.hd and attach data and/or metadata to self.
+        Read from self.hd and attach data and/or metadata to self.
 
         Args:
             read_kwargs : dictionary
@@ -159,7 +160,9 @@ class VisClean(object):
     def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, filetype='uvh5',
                    partial_write=False, add_to_history=None, verbose=True, **kwargs):
         """
-        Write data attached to object to file. If data or flags are fed as DataContainers,
+        Write data attached to object to file.
+
+        If data or flags are fed as DataContainers,
         create a new HERAData with those data and write that to file. Can only write
         data that has associated metadata in the self.hd HERAData object.
 
@@ -216,8 +219,10 @@ class VisClean(object):
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, verbose=True):
         """
-        Perform a CLEAN deconvolution on data and insert
-        results into self.clean_model and self.clean_resid.
+        Perform a CLEAN deconvolution.
+
+        Run a CLEAN on data and insert results into
+        self.clean_model and self.clean_resid.
 
         Args:
             keys : list of bl-pol keys in data to CLEAN
@@ -350,7 +355,9 @@ class VisClean(object):
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
                  overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=True, fftshift=True, verbose=True):
         """
-        Take FFT of data and attach to self via assign kwarg. Default is self.dfft.
+        Take FFT of data and attach to self.
+
+        Results are stored as self.assign. Default is self.dfft.
         Take note of the adopted fourier convention via ifft and fftshift kwargs.
 
         Args:

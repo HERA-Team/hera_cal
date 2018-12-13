@@ -19,15 +19,19 @@ from .vis_clean import VisClean
 
 class DelayFilter(VisClean):
     """
-    DelayFilter object for delay CLEANing
-    and filtering. See vis_clean.VisClean for
-    CLEAN functions.
+    DelayFilter object.
+
+    Used for delay CLEANing and filtering.
+    See vis_clean.VisClean for CLEAN functions.
     """
 
     def run_filter(self, to_filter=None, weight_dict=None, standoff=15., horizon=1., min_dly=0.0,
                    tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False,
                    edgecut_low=0, edgecut_hi=0, gain=0.1, alpha=0.5):
-        '''Performs uvtools.dspec.vis_filter on (a subset of) the data stored in the object.
+        '''
+        Run uvtools.dspec.vis_filter on data.
+
+        Run on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
         Arguments:
@@ -70,7 +74,7 @@ class DelayFilter(VisClean):
                        edgecut_hi=edgecut_hi, alpha=alpha, overwrite=True, verbose=verbose)
 
     def get_filled_data(self):
-        """Get original data with flagged pixels filled with CLEAN_models
+        """Get data with flagged pixels filled with clean_model.
 
         Returns
             filled_data: DataContainer with original data and flags filled with CLEAN model
@@ -97,7 +101,10 @@ class DelayFilter(VisClean):
 
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
                             partial_write=False, clobber=False, add_to_history='', **kwargs):
-        '''Method for writing filtered residuals, CLEAN models, and/or original data with flags filled
+        '''
+        Method for writing data products.
+        
+        Can write filtered residuals, CLEAN models, and/or original data with flags filled
         by CLEAN models where possible. Uses input_data from DelayFilter.load_data() as a template.
 
         Arguments:
@@ -140,7 +147,8 @@ class DelayFilter(VisClean):
 def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
                                         res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                         clobber=False, add_to_history='', **filter_kwargs):
-    '''Function using partial data loading and writing to perform delay filtering.
+    '''
+    Uses partial data loading and writing to perform delay filtering.
 
     Arguments:
         infilename: string path to data to uvh5 file to load

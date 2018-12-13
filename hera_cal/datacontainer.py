@@ -182,9 +182,14 @@ class DataContainer:
         return DataContainer(newD)
 
     def __add__(self, D):
-        '''Add the values of this DataContainer with
+        '''
+        Addition operator overload.
+
+        Add the values of this DataContainer with
         the value of D. If D is another DataContainer, add
-        their values together.'''
+        their values together and form a new container,
+        otherwise add D to each ndarray in self.
+        '''
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -211,9 +216,14 @@ class DataContainer:
             return newD
 
     def __sub__(self, D):
-        '''Subtracts the values of this DataContainer with
-        the value of D. If D is another DataContainer, subtract
-        their values together.'''
+        '''
+        Subtraction operator overload.
+
+        Subtract D with the values of this DataContainer.
+        If D is another DataContainer, subtract
+        their values and form a new container,
+        otherwise subtract D from each ndarray in self.
+        '''
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -240,9 +250,14 @@ class DataContainer:
             return newD
 
     def __mul__(self, D):
-        '''Multiplies the values of this DataContainer with
-        the value of D. If D is another DataContainer, multiply
-        their values together.'''
+        '''
+        Multiplication operator overload.
+
+        Multiply D with the values of this DataContainer.
+        If D is another DataContainer, multiply
+        their values together and form a new container,
+        otherwise multiply D with each ndarray in self.
+        '''
         # check type of D
         if isinstance(D, DataContainer):
             # check time and frequency structure matches
@@ -269,7 +284,7 @@ class DataContainer:
             return newD
 
     def __invert__(self):
-        '''Inverts the values of the DataContainer via logical not'''
+        '''Inverts the values of the DataContainer via logical not.'''
         # start new object
         newD = copy.deepcopy(self)
 
@@ -280,7 +295,7 @@ class DataContainer:
         return newD
 
     def __neg__(self):
-        '''Negates the values of the DataContainer'''
+        '''Negates the values of the DataContainer.'''
         # start new object
         newD = copy.deepcopy(self)
 
