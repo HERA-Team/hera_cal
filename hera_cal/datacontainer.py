@@ -283,40 +283,6 @@ class DataContainer:
 
             return newD
 
-    def __div__(self, D):
-        '''
-        Division operator overload.
-
-        Divide the values of this DataContainer by D.
-        If D is another DataContainer, divide
-        their values and form a new container,
-        otherwise divide D from each ndarray in self.
-        '''
-        # check type of D
-        if isinstance(D, DataContainer):
-            # check time and frequency structure matches
-            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
-                raise ValueError("[0] axis of dictionary values don't match")
-            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
-                raise ValueError("[1] axis of dictionary values don't match")
-
-            # start new object
-            newD = odict()
-
-            # iterate over D keys
-            for i, k in enumerate(D.keys()):
-                if self.__contains__(k):
-                    newD[k] = self.__getitem__(k) / D[k]
-
-            return DataContainer(newD)
-
-        else:
-            newD = copy.deepcopy(self)
-            for k in newD.keys():
-                newD[k] = newD[k] / D
-
-            return newD
-
     def __floordiv__(self, D):
         '''
         Floor division operator overload, i.e. //.
