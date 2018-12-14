@@ -7,6 +7,7 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
 from six.moves import map, zip
+import copy
 
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
 
@@ -181,40 +182,211 @@ class DataContainer:
         return DataContainer(newD)
 
     def __add__(self, D):
-        '''Adds values of two DataContainers together.'''
-        # check time and frequency structure matches
-        if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
-            raise ValueError("[0] axis of dictionary values don't match")
-        if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
-            raise ValueError("[1] axis of dictionary values don't match")
+        '''
+        Addition operator overload.
 
-        # start new object
-        newD = odict()
+        Add the values of this DataContainer with
+        the value of D. If D is another DataContainer, add
+        their values together and form a new container,
+        otherwise add D to each ndarray in self.
+        '''
+        # check type of D
+        if isinstance(D, DataContainer):
+            # check time and frequency structure matches
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                raise ValueError("[0] axis of dictionary values don't match")
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                raise ValueError("[1] axis of dictionary values don't match")
 
-        # iterate over D keys
-        for i, k in enumerate(D.keys()):
-            if self.__contains__(k):
-                newD[k] = self.__getitem__(k) + D[k]
+            # start new object
+            newD = odict()
 
-        return DataContainer(newD)
+            # iterate over D keys
+            for i, k in enumerate(D.keys()):
+                if self.__contains__(k):
+                    newD[k] = self.__getitem__(k) + D[k]
+
+            return DataContainer(newD)
+
+        else:
+            newD = copy.deepcopy(self)
+            for k in newD.keys():
+                newD[k] = newD[k] + D
+
+            return newD
+
+    def __sub__(self, D):
+        '''
+        Subtraction operator overload.
+
+        Subtract D with the values of this DataContainer.
+        If D is another DataContainer, subtract
+        their values and form a new container,
+        otherwise subtract D from each ndarray in self.
+        '''
+        # check type of D
+        if isinstance(D, DataContainer):
+            # check time and frequency structure matches
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                raise ValueError("[0] axis of dictionary values don't match")
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                raise ValueError("[1] axis of dictionary values don't match")
+
+            # start new object
+            newD = odict()
+
+            # iterate over D keys
+            for i, k in enumerate(D.keys()):
+                if self.__contains__(k):
+                    newD[k] = self.__getitem__(k) - D[k]
+
+            return DataContainer(newD)
+
+        else:
+            newD = copy.deepcopy(self)
+            for k in newD.keys():
+                newD[k] = newD[k] - D
+
+            return newD
 
     def __mul__(self, D):
-        '''Multiplies the values of two DataContainers together.'''
-        # check time and frequency structure matches
-        if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
-            raise ValueError("[0] axis of dictionary values don't match")
-        if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
-            raise ValueError("[1] axis of dictionary values don't match")
+        '''
+        Multiplication operator overload.
 
+        Multiply D with the values of this DataContainer.
+        If D is another DataContainer, multiply
+        their values together and form a new container,
+        otherwise multiply D with each ndarray in self.
+        '''
+        # check type of D
+        if isinstance(D, DataContainer):
+            # check time and frequency structure matches
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                raise ValueError("[0] axis of dictionary values don't match")
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                raise ValueError("[1] axis of dictionary values don't match")
+
+            # start new object
+            newD = odict()
+
+            # iterate over D keys
+            for i, k in enumerate(D.keys()):
+                if self.__contains__(k):
+                    newD[k] = self.__getitem__(k) * D[k]
+
+            return DataContainer(newD)
+
+        else:
+            newD = copy.deepcopy(self)
+            for k in newD.keys():
+                newD[k] = newD[k] * D
+
+            return newD
+
+    def __floordiv__(self, D):
+        '''
+        Floor division operator overload, i.e. //.
+
+        Floor divide the values of this DataContainer by D.
+        If D is another DataContainer, floor divide
+        their values and form a new container,
+        otherwise floor divide D from each ndarray in self.
+        '''
+        # check type of D
+        if isinstance(D, DataContainer):
+            # check time and frequency structure matches
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                raise ValueError("[0] axis of dictionary values don't match")
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                raise ValueError("[1] axis of dictionary values don't match")
+
+            # start new object
+            newD = odict()
+
+            # iterate over D keys
+            for i, k in enumerate(D.keys()):
+                if self.__contains__(k):
+                    newD[k] = self.__getitem__(k) // D[k]
+
+            return DataContainer(newD)
+
+        else:
+            newD = copy.deepcopy(self)
+            for k in newD.keys():
+                newD[k] = newD[k] // D
+
+            return newD
+
+    def __truediv__(self, D):
+        '''
+        True division operator overload, i.e. /.
+
+        True divide the values of this DataContainer by D.
+        If D is another DataContainer, true divide
+        their values and form a new container,
+        otherwise true divide D from each ndarray in self.
+        '''
+        # check type of D
+        if isinstance(D, DataContainer):
+            # check time and frequency structure matches
+            if D[list(D.keys())[0]].shape[0] != self.__getitem__(list(self.keys())[0]).shape[0]:
+                raise ValueError("[0] axis of dictionary values don't match")
+            if D[list(D.keys())[0]].shape[1] != self.__getitem__(list(self.keys())[0]).shape[1]:
+                raise ValueError("[1] axis of dictionary values don't match")
+
+            # start new object
+            newD = odict()
+
+            # iterate over D keys
+            for i, k in enumerate(D.keys()):
+                if self.__contains__(k):
+                    newD[k] = self.__getitem__(k) / D[k]
+
+            return DataContainer(newD)
+
+        else:
+            newD = copy.deepcopy(self)
+            for k in newD.keys():
+                newD[k] = newD[k] / D
+
+            return newD
+
+    def __invert__(self):
+        '''Inverts the values of the DataContainer via logical not.'''
         # start new object
-        newD = odict()
+        newD = copy.deepcopy(self)
 
-        # iterate over D keys
-        for i, k in enumerate(D.keys()):
-            if self.__contains__(k):
-                newD[k] = self.__getitem__(k) * D[k]
+        # iterate over keys
+        for i, k in enumerate(newD.keys()):
+            newD[k] = ~newD[k]
 
-        return DataContainer(newD)
+        return newD
+
+    def __neg__(self):
+        '''Negates the values of the DataContainer.'''
+        # start new object
+        newD = copy.deepcopy(self)
+
+        # iterate over keys
+        for i, k in enumerate(newD.keys()):
+            newD[k] = -newD[k]
+
+        return newD
+
+    def __transpose__(self):
+        '''Tranposes the values of the DataContainer'''
+        # start new object
+        newD = copy.deepcopy(self)
+
+        # iterate over keys
+        for i, k in enumerate(newD.keys()):
+            newD[k] = newD[k].T
+
+        return newD
+
+    @property
+    def T(self):
+        return self.__transpose__()
 
     def __contains__(self, key):
         '''Returns True if the key is in the data, abstracting away case and baseline order.'''

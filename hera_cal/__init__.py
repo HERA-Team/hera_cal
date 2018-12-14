@@ -16,5 +16,6 @@ from . import apply_cal
 from . import frf
 from . import flag_utils
 from . import reflections
+from . import vis_clean
 
 __version__ = version.version

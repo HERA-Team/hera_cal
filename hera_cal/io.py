@@ -647,7 +647,9 @@ def to_HERAData(input_data, filetype='miriad'):
         raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
     if isinstance(input_data, str):  # single visibility data path
         return HERAData(input_data, filetype=filetype)
-    elif isinstance(input_data, (UVData, HERAData)):  # single UVData object
+    elif isinstance(input_data, HERAData):  # already a HERAData object
+        return input_data
+    elif isinstance(input_data, UVData):  # single UVData object
         hd = input_data
         hd.__class__ = HERAData
         hd._determine_blt_slicing()
@@ -1005,7 +1007,9 @@ def to_HERACal(input_cal):
     '''
     if isinstance(input_cal, str):  # single calfits path
         return HERACal(input_cal)
-    elif isinstance(input_cal, (UVCal, HERACal)):  # single UVCal/HERACal object
+    if isinstance(input_cal, HERACal):  # single HERACal
+        return input_cal
+    elif isinstance(input_cal, UVCal):  # single UVCal object
         input_cal.__class__ = HERACal
         return input_cal
     elif isinstance(input_cal, collections.Iterable):  # List loading
