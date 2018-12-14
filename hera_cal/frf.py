@@ -221,12 +221,12 @@ class FRFilter(VisClean):
             Width of time-averaging window in seconds.
         """
         # turn t_avg into Navg given dtime
-        Navg = int(np.round((t_avg / (3600.0 * 24) / self.dtime)))
+        Navg = int(np.round((t_avg / self.dtime)))
         assert Navg > 0, "A t_avg of {:0.5f} makes Navg=0, which is too small.".format(t_avg)
         if Navg > self.Ntimes:
             Navg = self.Ntimes
         old_t_avg = t_avg
-        t_avg = Navg * self.dtime * 3600.0 * 24
+        t_avg = Navg * self.dtime
 
         if verbose:
             print("The t_avg provided of {:.1f} has been shifted to {:.1f} to make Navg = {:d}".format(
