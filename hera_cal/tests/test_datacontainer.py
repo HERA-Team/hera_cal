@@ -309,6 +309,16 @@ class TestDataContainer(unittest.TestCase):
         d2 = d * 2
         self.assertTrue(np.isclose(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] * 2))
 
+    def test_div(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = io.load_vis(test_file, pop_autos=True)
+        d2 = d / d
+        self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], 1.0)
+        d2 = d / 2.0
+        self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] / 2.0)
+        d2 = d // 2.0
+        self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] // 2.0)
+
     def test_invert(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = io.load_vis(test_file, pop_autos=True)
