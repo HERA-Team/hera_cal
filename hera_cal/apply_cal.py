@@ -86,8 +86,8 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
 
-def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flags_npz=None,
-              flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
+def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
+              flag_filetype='h5', flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', add_to_history='', clobber=False, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
@@ -99,8 +99,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             to be applied, along with its new flags (if any).
         old_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
-        flags_npz: optional path to npz file containing just flags to be ORed with flags in input data. Must have
+        flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
+        flag_filetype: filetype of flag_file to pass into io.load_flags. Either 'h5' (default) or legacy 'npz'.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         filetype_in: type of data infile. Supports 'miriad', 'uvfits', and 'uvh5'.
@@ -110,16 +111,15 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
-            of flags_npz (if applicable), new_calibration and, old_calibration (if applicable).
+            of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
-    # optionally load npz flags
-    if flags_npz is not None:
-        npz_flags = np.load(flags_npz)
-        add_to_history += ' FLAGS_NPZ_HISTORY: ' + str(npz_flags['history']) + '\n'
-        npz_flag_dc = io.load_npz_flags(flags_npz)
+    # optionally load external flags
+    if flag_file is not None:
+        ext_flags, flag_meta = io.load_flags(flag_file, filetype=flag_filetype, return_meta=True)
+        add_to_history += ' FLAGS_HISTORY: ' + str(flag_meta['history']) + '\n'
 
     # load new calibration solution
     hc = io.HERACal(new_calibration)
@@ -144,9 +144,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 # apply band edge flags
                 data_flags[bl][:, 0:flag_nchan_low] = True
                 data_flags[bl][:, data_flags[bl].shape[1] - flag_nchan_high:] = True
-                # apply npz flags
-                if flags_npz is not None:
-                    data_flags[bl] = np.logical_or(data_flags[bl], npz_flag_dc[bl])
+                # apply external flags
+                if flag_file is not None:
+                    data_flags[bl] = np.logical_or(data_flags[bl], ext_flags[bl])
             calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                                old_gains=old_calibration, gain_convention=gain_convention)
             hd.partial_write(data_outfilename, data=data, flags=data_flags,
@@ -155,18 +155,14 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     # full data loading and writing
     else:
         hd = io.HERAData(data_infilename, filetype=filetype_in)
-        hd.read()
-        # apply npz flags
-        if flags_npz is not None:
-            hd.flag_array = np.logical_or(npz_flags['flag_array'], hd.flag_array)
-        data, data_flags, _ = hd.build_datacontainers()
+        data, data_flags, _ = hd.read()
         for bl in data_flags.keys():
             # apply band edge flags
             data_flags[bl][:, 0:flag_nchan_low] = True
             data_flags[bl][:, data_flags[bl].shape[1] - flag_nchan_high:] = True
-            # apply npz flags
-            if flags_npz is not None:
-                data_flags[bl] = np.logical_or(data_flags[bl], npz_flag_dc[bl])
+            # apply external flags
+            if flag_file is not None:
+                data_flags[bl] = np.logical_or(data_flags[bl], ext_flags[bl])
         calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                            old_gains=old_calibration, gain_convention=gain_convention)
         io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
@@ -180,7 +176,8 @@ def apply_cal_argparser():
     a.add_argument("outfilename", type=str, help="path to new visibility results file")
     a.add_argument("--new_cal", type=str, default=None, nargs="+", help="path to new calibration calfits file (or files for cross-pol)")
     a.add_argument("--old_cal", type=str, default=None, nargs="+", help="path to old calibration calfits file to unapply (or files for cross-pol)")
-    a.add_argument("--flags_npz", type=str, default=None, help="path to npz file of flags to OR with data flags")
+    a.add_argument("--flag_file", type=str, default=None, help="path to file of flags to OR with data flags")
+    a.add_argument("--flag_filetype", type=str, default='h5', help="filetype of flag_file (either 'h5' or legacy 'npz'")
     a.add_argument("--flag_nchan_low", type=int, default=0, help="integer number of channels at the low frequency end of the band to always flag (default 0)")
     a.add_argument("--flag_nchan_high", type=int, default=0, help="integer number of channels at the high frequency end of the band to always flag (default 0)")
     a.add_argument("--filetype_in", type=str, default='miriad', help='filetype of input data files')

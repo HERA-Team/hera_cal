@@ -128,6 +128,28 @@ class HERACal(UVCal):
                 self.total_quality_array[0, :, :, ip] = total_qual[pol].T
 
 
+def get_blt_slices(uvo):
+    '''For a pyuvdata-style UV object, get the mapping from antenna pair to blt slice.
+    
+    Arguments:
+        uvo: a "UV-Object" like UVData or baseline-type UVFlag
+
+    Returns:
+        blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
+    '''
+    blt_slices = {}
+    for ant1, ant2 in uvo.get_antpairs():
+        indices = uvo.antpair2ind(ant1, ant2)
+        if len(indices) == 1:  # only one blt matches
+            blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, uvo.Nblts)
+        elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
+            raise NotImplementedError('UVData objects with non-regular spacing of '
+                                      'baselines in its baseline-times are not supported.')
+        else:
+            blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
+    return blt_slices
+
+
 class HERAData(UVData):
     '''HERAData is a subclass of pyuvdata.UVData meant to serve as an interface between
     pyuvdata-compatible data formats on disk (especially uvh5) and DataContainers,
@@ -239,19 +261,8 @@ class HERAData(UVData):
         return {meta: locs[meta] for meta in self.HERAData_metas}
 
     def _determine_blt_slicing(self):
-        '''Determine the mapping between antenna pairs and
-        slices of the blt axis of the data_array.'''
-        self._blt_slices = {}
-        for ant1, ant2 in self.get_antpairs():
-            indices = self.antpair2ind(ant1, ant2)
-            if len(indices) == 1:  # only one blt matches
-                self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, self.Nblts)
-            elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
-                raise NotImplementedError('UVData objects with non-regular spacing of '
-                                          'baselines in its baseline-times are not supported.')
-            else:
-                self._blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1,
-                                                       indices[1] - indices[0])
+        '''Determine the mapping between antenna pairs and slices of the blt axis of the data_array.'''
+        self._blt_slices = get_blt_slices(self)
 
     def _determine_pol_indexing(self):
         '''Determine the mapping between polnums and indices
@@ -344,7 +355,7 @@ class HERAData(UVData):
         return data, flags, nsamples
 
     def read(self, bls=None, polarizations=None, times=None,
-             frequencies=None, freq_chans=None, read_data=True):
+             frequencies=None, freq_chans=None, read_data=True, return_data=True):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -365,6 +376,7 @@ class HERAData(UVData):
             read_data: Read in the visibility and flag data. If set to false, only the
                 basic metadata will be read in and nothing will be returned. Results in an
                 incompletely defined object (check will not pass). Default True.
+            return_data: bool, if True, return the output of build_datacontainers().
 
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls
@@ -398,12 +410,20 @@ class HERAData(UVData):
         if read_data or self.filetype == 'uvh5':
             self._determine_blt_slicing()
             self._determine_pol_indexing()
-        if read_data:
+        if read_data and return_data:
             return self.build_datacontainers()
 
     def __getitem__(self, key):
-        '''Shortcut for reading a single visibility waterfall given a baseline tuple.'''
-        return self.read(bls=key)[0][key]
+        """
+        Shortcut for reading a single visibility waterfall given a
+        baseline tuple. If key exists it will return it using its
+        blt_slice, if it does not it will attempt to read it
+        from disk.
+        """
+        try:
+            return self._get_slice(self.data_array, key)
+        except KeyError:
+            return self.read(bls=key)[0][key]
 
     def update(self, data=None, flags=None, nsamples=None):
         '''Update internal data arrays (data_array, flag_array, and nsample_array)
@@ -537,6 +557,75 @@ class HERAData(UVData):
             yield self.read(times=times[i:i + Nints])
 
 
+def load_flags(flagfile, filetype='h5', return_meta=False):
+    '''Load flags from a file and returns them as a DataContainer (for per-visibility flags)
+    or dictionary (for per-antenna or per-polarization flags). More than one spectral window
+    is not supported. Assumes times are evenly-spaced and in order for each baseline.
+    
+    Arguments:
+        flagfile: path to file containing flags and flagging metadata
+        filetype: either 'h5' or 'npz'. 'h5' assumes the file is readable as a hera_qm
+            UVFlag object in the 'flag' mode (could be by baseline, by antenna, or by 
+            polarization). 'npz' provides legacy support for the IDR2.1 flagging npzs,
+            but only for per-visibility flags.
+        return_meta: if True, return a metadata dictionary with, e.g., 'times', 'freqs', 'history'
+        
+    Returns:
+        flags: dictionary or DataContainer mapping keys to Ntimes x Nfreqs numpy arrays.
+            if 'h5' and 'baseline' mode or 'npz': DataContainer with keys like (0,1,'xx')
+            if 'h5' and 'antenna' mode: dictionary with keys like (0,'Jxx')
+            if 'h5' and 'waterfall' mode: dictionary with keys like 'Jxx'
+        meta: (only returned if return_meta is True)
+    '''
+    flags = {}
+    if filetype not in ['h5', 'npz']:
+        raise ValueError("filetype must be 'h5' or 'npz'.")
+    
+    elif filetype == 'h5':
+        from hera_qm import UVFlag
+        uvf = UVFlag(flagfile)
+        assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
+        assert np.issubdtype(uvf.polarization_array.dtype, np.signedinteger), \
+            "The input h5-based UVFlag object's polarization_array must be integers."
+        freqs = np.unique(uvf.freq_array)
+        times = np.unique(uvf.time_array)
+        history = uvf.history
+        pol_indices = {polnum2str(polnum): i for i, polnum in enumerate(uvf.polarization_array)}
+        if uvf.type == 'baseline':  # one time x freq waterfall per baseline
+            blt_slices = get_blt_slices(uvf)
+            for ip, polnum in enumerate(uvf.polarization_array):
+                for (ant1, ant2), blt_slice in blt_slices.items():
+                    flags[(ant1, ant2, polnum2str(polnum))] = uvf.flag_array[blt_slice, 0, :, ip] 
+            flags = DataContainer(flags)
+        elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
+            for i, ant in enumerate(uvf.ant_array):
+                for ip, jnum in enumerate(uvf.polarization_array):
+                    flags[(ant, jnum2str(jnum))] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
+        elif uvf.type == 'waterfall':  # one time x freq waterfall per visibility polarization
+            for ip, jnum in enumerate(uvf.polarization_array):
+                flags[jnum2str(jnum)] = uvf.flag_array[:, :, ip]
+
+    elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
+        npz = np.load(flagfile)
+        pols = [polnum2str(p) for p in npz['polarization_array']]
+        freqs = np.unique(npz['freq_array'])
+        times = np.unique(npz['time_array'])
+        history = npz['history']
+        nAntpairs = len(npz['antpairs'])
+        assert npz['flag_array'].shape[0] == nAntpairs * len(times), \
+            'flag_array must have flags for all baselines for all times.'
+        for p, pol in enumerate(pols):
+            flag_array = np.reshape(npz['flag_array'][:, 0, :, p], (len(times), nAntpairs, len(freqs)))
+            for n, (i, j) in enumerate(npz['antpairs']):
+                flags[i, j, pol] = flag_array[:, n, :]
+        flags = DataContainer(flags)
+    
+    if return_meta:
+        return flags, {'freqs': freqs, 'times': times, 'history': history}
+    else:
+        return flags
+
+
 #######################################################################
 #                             LEGACY CODE
 #######################################################################
@@ -558,7 +647,9 @@ def to_HERAData(input_data, filetype='miriad'):
         raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
     if isinstance(input_data, str):  # single visibility data path
         return HERAData(input_data, filetype=filetype)
-    elif isinstance(input_data, (UVData, HERAData)):  # single UVData object
+    elif isinstance(input_data, HERAData):  # already a HERAData object
+        return input_data
+    elif isinstance(input_data, UVData):  # single UVData object
         hd = input_data
         hd.__class__ = HERAData
         hd._determine_blt_slicing()
@@ -916,7 +1007,9 @@ def to_HERACal(input_cal):
     '''
     if isinstance(input_cal, str):  # single calfits path
         return HERACal(input_cal)
-    elif isinstance(input_cal, (UVCal, HERACal)):  # single UVCal/HERACal object
+    if isinstance(input_cal, HERACal):  # single HERACal
+        return input_cal
+    elif isinstance(input_cal, UVCal):  # single UVCal object
         input_cal.__class__ = HERACal
         return input_cal
     elif isinstance(input_cal, collections.Iterable):  # List loading
@@ -1182,30 +1275,3 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
-
-
-def load_npz_flags(npzfile):
-    '''Load flags from a npz file (like those produced by hera_qm.xrfi) and converts
-    them into a DataContainer. More than one spectral window is not supported. Assumes
-    every baseline has the same times present and that the times are in order.
-
-    Arguments:
-        npzfile: path to .npz file containing flags and array metadata
-    Returns:
-        flags: Dictionary of boolean flags as a function of time and
-            frequency with keys in the (1,'x') format
-    '''
-    npz = np.load(npzfile)
-    pols = [polnum2str(p) for p in npz['polarization_array']]
-    nTimes = len(np.unique(npz['time_array']))
-    nAntpairs = len(npz['antpairs'])
-    nFreqs = npz['flag_array'].shape[2]
-    assert npz['flag_array'].shape[0] == nAntpairs * nTimes, \
-        'flag_array must have flags for all baselines for all times.'
-
-    flags = {}
-    for p, pol in enumerate(pols):
-        flag_array = np.reshape(npz['flag_array'][:, 0, :, p], (nTimes, nAntpairs, nFreqs))
-        for n, (i, j) in enumerate(npz['antpairs']):
-            flags[i, j, pol] = flag_array[:, n, :]
-    return DataContainer(flags)

@@ -151,12 +151,10 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
     def test_model_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
-        autokeys = [k for k in RF.data.keys() if k[0] == k[1]]
-        edgecut = 0
-        RF.dly_clean_data(tol=1e-12, maxiter=500, gain=1e-2, skip_wgt=0.1, dly_cut=200.0, edgecut=edgecut,
-                          taper='hann', timeavg=True, broadcast_flags=True, time_thresh=0.05,
-                          overwrite=True, verbose=True, keys=autokeys)
-        RF.model_auto_reflections((100, 200), taper='hann', zero_pad=100, overwrite=True, fthin=1, edgecut=edgecut, verbose=True)
+        RF.dly_clean_data(tol=1e-12, maxiter=500, gain=1e-2, skip_wgt=0.1, dly_cut=200.0, edgecut=2,
+                          taper='hanning', timeavg=True, broadcast_flags=True, time_thresh=0.05,
+                          overwrite=True, verbose=True)
+        RF.model_reflections((100, 200), taper='hanning', zero_pad=100, overwrite=True, fthin=1, verbose=True)
         nt.assert_true(np.isclose(np.ravel(list(RF.delays.values())), 150.0, atol=2e-1).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.amps.values())), 2e-1, atol=2e-1).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.phs.values())), 2.0, atol=2e-1).all())
@@ -185,14 +183,13 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
         # non-even Nfreqs
         RF = reflections.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[1:], inplace=False))
-        edgecut = 0
-        RF.dly_clean_data(tol=1e-12, maxiter=500, gain=1e-2, skip_wgt=0.1, dly_cut=200.0, edgecut=edgecut,
+        RF.dly_clean_data(tol=1e-12, maxiter=500, gain=1e-2, skip_wgt=0.1, dly_cut=200.0, edgecut=2,
                           taper='hanning', timeavg=True, broadcast_flags=True, time_thresh=0.05,
-                          overwrite=True, verbose=True, keys=autokeys)
-        RF.model_auto_reflections((100, 200), taper='hanning', zero_pad=100, overwrite=True, fthin=1, edgecut=edgecut, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.delays.values())), 150.0, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.amps.values())), 2e-2, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.phs.values())), 2.0, atol=2e-1).all())
+                          overwrite=True, verbose=True)
+        RF.model_reflections((100, 200), taper='hanning', zero_pad=100, overwrite=True, fthin=1, verbose=True)
+        nt.assert_true(np.isclose(np.ravel(list(RF.delays.values())), 150.0, atol=5e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.amps.values())), 2e-2, atol=2e-3).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.phs.values())), 2.0, atol=5e-1).all())
 
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)

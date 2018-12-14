@@ -34,10 +34,10 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         self.assertEqual(len(kernel), 201)
 
     def test_smooth_cal_argparser(self):
-        sys.argv = [sys.argv[0], 'a', 'b', '--flags_npz_list', 'c']
+        sys.argv = [sys.argv[0], 'a', 'b', '--flag_file_list', 'c']
         a = smooth_cal.smooth_cal_argparser()
         self.assertEqual(a.calfits_list, ['a', 'b'])
-        self.assertEqual(a.flags_npz_list, ['c'])
+        self.assertEqual(a.flag_file_list, ['c'])
 
     def test_time_filter(self):
         gains = np.ones((10, 10), dtype=complex)
@@ -119,13 +119,13 @@ class Test_Calibration_Smoother(unittest.TestCase):
 
     def setUp(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
-        flags_npz_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
-        self.cs = smooth_cal.CalibrationSmoother(calfits_list, flags_npz_list=flags_npz_list)
+        flag_file_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
+        self.cs = smooth_cal.CalibrationSmoother(calfits_list, flag_file_list=flag_file_list, flag_filetype='npz')
 
     def test_ref_ant(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
-        flags_npz_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
-        cs = smooth_cal.CalibrationSmoother(calfits_list, flags_npz_list=flags_npz_list, pick_refant=True)
+        flag_file_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
+        cs = smooth_cal.CalibrationSmoother(calfits_list, flag_file_list=flag_file_list, flag_filetype='npz', pick_refant=True)
         self.assertEqual(cs.refant, (54, 'Jxx'))
         cs.time_freq_2D_filter(window='tukey', alpha=.45)
         cs.rephase_to_refant()
@@ -146,18 +146,18 @@ class Test_Calibration_Smoother(unittest.TestCase):
             self.cs.check_consistency()
         self.cs.cal_freqs[self.cs.cals[0]] -= 1
 
-        self.cs.npz_freqs[self.cs.npzs[0]] += 1
+        self.cs.flag_freqs[self.cs.flag_files[0]] += 1
         with self.assertRaises(AssertionError):
             self.cs.check_consistency()
-        self.cs.npz_freqs[self.cs.npzs[0]] -= 1
+        self.cs.flag_freqs[self.cs.flag_files[0]] -= 1
 
-        temp_time = self.cs.npz_times[self.cs.npzs[0]][0]
-        self.cs.npz_times[self.cs.npzs[0]][0] = self.cs.npz_times[self.cs.npzs[0]][1]
-        self.cs.npz_time_indices = {npz: np.searchsorted(self.cs.time_grid, times) for npz, times in self.cs.npz_times.items()}
+        temp_time = self.cs.flag_times[self.cs.flag_files[0]][0]
+        self.cs.flag_times[self.cs.flag_files[0]][0] = self.cs.flag_times[self.cs.flag_files[0]][1]
+        self.cs.flag_time_indices = {ff: np.searchsorted(self.cs.time_grid, times) for ff, times in self.cs.flag_times.items()}
         with self.assertRaises(AssertionError):
             self.cs.check_consistency()
-        self.cs.npz_times[self.cs.npzs[0]][0] = temp_time
-        self.cs.npz_time_indices = {npz: np.searchsorted(self.cs.time_grid, times) for npz, times in self.cs.npz_times.items()}
+        self.cs.flag_times[self.cs.flag_files[0]][0] = temp_time
+        self.cs.flag_time_indices = {ff: np.searchsorted(self.cs.time_grid, times) for ff, times in self.cs.flag_times.items()}
 
     def test_load_cal_and_flags(self):
         self.assertEqual(len(self.cs.freqs), 1024)

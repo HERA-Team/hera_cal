@@ -78,7 +78,7 @@ from sklearn import gaussian_process as gp
 
 from . import io
 from . import abscal_funcs
-from . import delay_filter
+from uvtools.dspec import delay_filter
 from .datacontainer import DataContainer
 from .frf import FRFilter
 
@@ -990,8 +990,11 @@ def reflections_delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='no
         w *= _gen_taper(taper, int(Nfreqs))
 
     # delay filter
-    mdl, res, info = delay_filter.delay_filter(d, w, 0., dnu / 1e9, min_dly=dly_cut, skip_wgt=skip_wgt,
-                                               window='none', tol=tol, maxiter=maxiter, gain=gain)
+    kwargs = {}
+    if taper == 'tukey':
+        kwargs['alpha'] = alpha
+    mdl, res, info = delay_filter(d, w, 0., dnu / 1e9, min_dly=dly_cut, skip_wgt=skip_wgt,
+                                  window=taper, tol=tol, maxiter=maxiter, gain=gain, **kwargs)
     dlys = np.fft.fftshift(np.fft.fftfreq(d.shape[1], d=dnu)) * 1e9
 
     return mdl, f, res, dlys, info

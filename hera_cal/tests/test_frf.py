@@ -81,20 +81,10 @@ class Test_FRFilter:
 
     def setUp(self):
         self.fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
-        self.F = hc.frf.FRFilter()
-        self.uvd = UVData()
-        self.uvd.read_miriad(self.fname)
-
-    def test_load_data(self):
-        self.F.load_data(self.fname)
-        hd = hc.io.HERAData(self.fname, filetype='miriad')
-        hd.read()
-        nt.assert_equal(self.F.inp_data, hd)
-        self.F.load_data(self.uvd)
-        nt.assert_equal(self.F.inp_data, hd)
+        self.F = hc.frf.FRFilter(self.fname, filetype='miriad')
+        self.F.read()
 
     def test_timeavg_data(self):
-        self.F.load_data(self.uvd)
         self.F.timeavg_data(35, rephase=True)
         nt.assert_equal(self.F.Navg, 3)
 
@@ -105,7 +95,6 @@ class Test_FRFilter:
         nt.assert_raises(AssertionError, self.F.timeavg_data, 1.0)
 
     def test_write_data(self):
-        self.F.load_data(self.uvd)
         self.F.timeavg_data(35, rephase=False, verbose=False)
         u = self.F.write_data("./out.uv", write_avg=True, filetype='miriad', overwrite=True)
         nt.assert_true(os.path.exists("./out.uv"))
@@ -117,7 +106,7 @@ class Test_FRFilter:
         nt.assert_equal(u, None)
 
         u = self.F.write_data("./out.uv", write_avg=False, overwrite=True)
-        nt.assert_true(np.isclose(u.data_array, self.uvd.data_array).all())
+        nt.assert_true(np.isclose(u.data_array, self.F.hd.data_array).all())
         if os.path.exists("./out.uv"):
             shutil.rmtree("./out.uv")
 

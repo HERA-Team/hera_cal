@@ -17,11 +17,13 @@ from six.moves import range, zip
 import pyuvdata
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import parse_polstr, parse_jpolstr
+import nose.tools as nt
 
 import hera_cal.io as io
 from hera_cal.io import HERACal, HERAData
 from hera_cal.datacontainer import DataContainer
 from hera_cal.utils import polnum2str, polstr2num, jnum2str, jstr2num
+from hera_qm.data import DATA_PATH as QM_DATA_PATH
 from hera_cal.data import DATA_PATH
 
 
@@ -277,6 +279,18 @@ class Test_HERAData(unittest.TestCase):
             self.assertEqual(dc[53, 54, 'xx'].shape, (10, 100))
         with self.assertRaises(ValueError):
             d, f, n = hd.read(polarizations=['xy'])
+
+        # assert return data = False
+        o = hd.read(bls=[(53, 53), (53, 54)], return_data=False)
+        nt.assert_equal(o, None)
+
+        # assert __getitem__ isn't a read when key exists
+        o = hd[(53, 53, 'xx')]
+        nt.assert_true(len(hd._blt_slices), 2)
+
+        # assert __getitem__ is a read when key does not exist
+        o = hd[(54, 54, 'xx')]
+        nt.assert_true(len(hd._blt_slices), 1)
 
         # miriad
         hd = HERAData(self.miriad_1, filetype='miriad')
@@ -771,17 +785,63 @@ class Test_Calibration_IO_Legacy(unittest.TestCase):
         os.remove(outname)
 
 
-class Test_Flags_NPZ_IO(unittest.TestCase):
+class Test_Flags_IO(unittest.TestCase):
 
-    def test_load_npz_flags(self):
+    def test_load_flags_npz(self):
         npzfile = os.path.join(DATA_PATH, "test_input/zen.2458101.45361.xx.HH.uvOCR_53x_54x_only.flags.applied.npz")
-        flags = io.load_npz_flags(npzfile)
+        flags = io.load_flags(npzfile, filetype='npz')
         self.assertTrue((53, 54, parse_polstr('XX')) in flags)
         for f in flags.values():
             self.assertEqual(f.shape, (60, 1024))
             np.testing.assert_array_equal(f[:, 0:50], True)
             np.testing.assert_array_equal(f[:, -50:], True)
             self.assertFalse(np.all(f))
+
+        flags, meta = io.load_flags(npzfile, filetype='npz', return_meta=True)
+        self.assertEqual(len(meta['freqs']), 1024)
+        self.assertEqual(len(meta['times']), 60)
+        self.assertTrue('history' in meta)
+
+    def test_load_flags_h5_baseline(self):
+        h5file = os.path.join(QM_DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.testuvflag.flags.h5')
+        flags, meta = io.load_flags(h5file, return_meta=True)
+        self.assertEqual(len(meta['freqs']), 256)
+        self.assertEqual(len(meta['times']), 3)
+        self.assertTrue('history' in meta)
+        self.assertTrue(((20, 105, 'xx') in flags))
+        for k in flags.keys():
+            self.assertEqual(len(k), 3)
+            self.assertEqual(flags[k].shape, (3, 256))
+
+    def test_load_flags_h5_antenna(self):
+        h5file = os.path.join(QM_DATA_PATH, 'antenna_flags.h5')
+        flags, meta = io.load_flags(h5file, return_meta=True)
+        self.assertEqual(len(meta['freqs']), 256)
+        self.assertEqual(len(meta['times']), 3)
+        self.assertTrue('history' in meta)
+        self.assertTrue(((20, 'Jxx') in flags))
+        for k in flags.keys():
+            self.assertEqual(len(k), 2)
+            self.assertEqual(flags[k].shape, (3, 256))
+
+    def test_load_flags_h5_waterfall(self):
+        h5file = os.path.join(QM_DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.omni.calfits.g.flags.h5')
+        flags, meta = io.load_flags(h5file, return_meta=True)
+        self.assertEqual(len(meta['freqs']), 256)
+        self.assertEqual(len(meta['times']), 3)
+        self.assertTrue('history' in meta)
+        self.assertTrue(('Jxx' in flags))
+        for k in flags.keys():
+            self.assertTrue(isinstance(k, str))
+            self.assertEqual(flags[k].shape, (3, 256))
+
+    def test_load_flags_errors(self):
+        with self.assertRaises(ValueError):
+            flags = io.load_flags('some/path', filetype='not_a_type')
+
+        h5file = os.path.join(QM_DATA_PATH, 'zen.2457698.40355.xx.HH.uvcAA.testuvflag.h5')
+        with self.assertRaises(AssertionError):
+            flags = io.load_flags(h5file)
 
 
 if __name__ == '__main__':

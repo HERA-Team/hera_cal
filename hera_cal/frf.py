@@ -16,6 +16,9 @@ import pyuvdata.utils as uvutils
 from . import io
 from . import utils
 
+from .datacontainer import DataContainer
+from .vis_clean import VisClean
+
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts=None,
                       freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
@@ -193,90 +196,12 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     return avg_data, win_flags, avg_nsamples, avg_lsts, avg_extra_arrays
 
 
-class FRFilter(object):
+class FRFilter(VisClean):
     """
-    Fringe Rate Filter Object
+    Fringe Rate Filter object.
     """
 
-    def __init__(self, inp_data=None, filetype='miriad', **load_kwargs):
-        """
-        Initialize the object and optionally
-        load data if provided.
-
-        Parameters
-        ----------
-        inp_data : string, UVData or DataContainer object
-            Filepath to a miriad, uvfits or uvh5
-            datafile, a UVData object or a DataContainer
-            object.
-
-        filetype : str
-            If inp_data is a filepath, this is its filetype.
-            See hera_cal.io.HERAData for supported filetypes.
-
-        load_kwargs : dictionary
-            Keyword arguments to pass to UVData.read if
-            dainp_datata is fed as a string.
-        """
-        if inp_data is not None:
-            self.load_data(inp_data, filetype=filetype, **load_kwargs)
-
-    def load_data(self, inp_data, filetype='miriad', **load_kwargs):
-        """
-        Load in visibility data for filtering
-
-        Parameters
-        ----------
-        inp_data : string, UVData or HERAData object
-            Filepath to visibility file, or UVData or HERAData object
-
-        filetype : str
-            IF data is a filepath, this is its filetype.
-            See hera_cal.io.HERAData for supported filetypes.
-
-        load_kwargs : dictionary
-            Keyword arguments to pass to UVData.read if data is a string.
-        """
-        # load HERAData if fed as string
-        if isinstance(inp_data, (str, np.str)):
-            self.inp_data = io.HERAData(inp_data, filetype=filetype)
-            self.inp_data.read(**load_kwargs)
-        elif isinstance(inp_data, UVData):
-            # promote UVData to HERAData
-            self.inp_data = inp_data
-            self.inp_data.__class__ = io.HERAData
-            self.inp_data._determine_blt_slicing()
-            self.inp_data._determine_pol_indexing()
-        elif isinstance(inp_data, io.HERAData):
-            self.inp_data = inp_data
-            if self.inp_data.data_array is None:
-                self.inp_data.read(**load_kwargs)
-        else:
-            raise ValueError("inp_data must be fed as a HERAData or UVData object or a string filepath")
-        self.filetype = filetype
-
-        # read all the data into datacontainers
-        self.data, self.flags, self.nsamples = self.inp_data.build_datacontainers()
-
-        # assign necessary metadata
-        mdict = self.inp_data.get_metadata_dict()
-        self.antpos = mdict['antpos']
-        self.ants = mdict['ants']
-        self.freqs = mdict['freqs']
-        self.times = mdict['times']
-        self.lsts = mdict['lsts']
-        self.pols = mdict['pols']
-
-        self.Nfreqs = len(self.freqs)
-        self.Ntimes = len(self.times)
-        self.dlst = np.median(np.diff(self.lsts))
-        self.dtime = np.median(np.diff(self.times))
-        self.dnu = np.median(np.diff(self.freqs))
-        self.bls = sorted(set([k[:2] for k in self.data.keys()]))
-        self.blvecs = odict([(bl, self.antpos[bl[0]] - self.antpos[bl[1]]) for bl in self.bls])
-        self.lat = self.inp_data.telescope_location_lat_lon_alt[0] * 180 / np.pi
-
-    def timeavg_data(self, t_avg, rephase=False, verbose=True, data=None, flags=None, nsamples=None):
+    def timeavg_data(self, t_avg, rephase=False, verbose=True):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The time-averaged data, flags, time arrays, etc. are stored in avg_* attributes.
@@ -312,12 +237,12 @@ class FRFilter(object):
         self.avg_times
         """
         # turn t_avg into Navg given dtime
-        Navg = int(np.round((t_avg / (3600.0 * 24) / self.dtime)))
+        Navg = int(np.round((t_avg / self.dtime)))
         assert Navg > 0, "A t_avg of {:0.5f} makes Navg=0, which is too small.".format(t_avg)
         if Navg > self.Ntimes:
             Navg = self.Ntimes
         old_t_avg = t_avg
-        t_avg = Navg * self.dtime * 3600.0 * 24
+        t_avg = Navg * self.dtime
 
         if verbose:
             print("The t_avg provided of {:.3f} has been shifted to {:.3f} to make Navg = {:d}".format(
@@ -346,17 +271,13 @@ class FRFilter(object):
             avg_flags[k] = af
             avg_nsamples[k] = an
 
-        self.avg_data = avg_data
-        self.avg_flags = avg_flags
-        self.avg_nsamples = avg_nsamples
+        self.avg_data = DataContainer(avg_data)
+        self.avg_flags = DataContainer(avg_flags)
+        self.avg_nsamples = DataContainer(avg_nsamples)
         self.avg_lsts = al
         self.avg_times = np.asarray(ea['avg_times'])
         self.t_avg = t_avg
         self.Navg = Navg
-
-        # attach time array to DataContainers
-        for dc in ['avg_data', 'avg_flags', 'avg_nsamples']:
-            setattr(getattr(self, dc), 'times', self.avg_times)
 
     def write_data(self, outfilename, write_avg=True, filetype='miriad', add_to_history='', overwrite=False,
                    run_check=True):
@@ -382,16 +303,12 @@ class FRFilter(object):
             If True, overwrite output if it exists.
 
         run_check : bool
-            If True, run acceptability check on object before write.
-    
-        data : DataContainer
-            DataContainer to write to file. Must be consistent with all other
-            containers and metadata. Supercedes write_avg if provided.
+            If True, run UVData check before write.
 
         Returns
         -------
         new_hd : HERAData object
-            A copy of the inp_data object, but with updated data
+            A copy of the hd object, but with updated data
             and relevant metadata.
         """
         # check output
@@ -400,7 +317,7 @@ class FRFilter(object):
             return
 
         # create new HERAData object
-        new_hd = copy.deepcopy(self.inp_data)
+        new_hd = copy.deepcopy(self.hd)
 
         # set write data references
         if write_avg:
@@ -436,7 +353,6 @@ class FRFilter(object):
             new_hd.time_array[blts_inds] = times
             new_hd.lst_array[blts_inds] = lsts
 
-        # run check
         if run_check:
             new_hd.check()
 
