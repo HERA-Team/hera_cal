@@ -294,6 +294,20 @@ class TestDataContainer(unittest.TestCase):
         d2 = d + 1
         self.assertTrue(np.isclose(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] + 1))
 
+    def test_sub(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = io.load_vis(test_file, pop_autos=True)
+        d2 = d - d
+        self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], 0.0)
+        # test exception
+        d2, f2 = io.load_vis(test_file, pop_autos=True)
+        d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:, :10]
+        self.assertRaises(ValueError, d.__sub__, d2)
+        d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:10, :]
+        self.assertRaises(ValueError, d.__sub__, d2)
+        d2 = d - 1
+        self.assertTrue(np.isclose(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] - 1))
+
     def test_mul(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         d, f = io.load_vis(test_file, pop_autos=True)
@@ -316,6 +330,8 @@ class TestDataContainer(unittest.TestCase):
         self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], 1.0)
         d2 = d / 2.0
         self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] / 2.0)
+        d2 = d // d
+        self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], 1.0)
         d2 = d // 2.0
         self.assertAlmostEqual(d2[(24, 25, 'xx')][30, 30], d[(24, 25, 'xx')][30, 30] // 2.0)
 
@@ -333,6 +349,13 @@ class TestDataContainer(unittest.TestCase):
         d2 = d.T
         bl = (24, 25, 'xx')
         self.assertEqual(d2[(bl)][0, 0], d[bl].T[0, 0])
+
+    def test_neg(self):
+        test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
+        d, f = io.load_vis(test_file, pop_autos=True)
+        d2 = -d
+        bl = (24, 25, 'xx')
+        self.assertEqual(d2[(bl)][0, 0], -d[(bl)][0, 0])
 
     def test_concatenate(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
