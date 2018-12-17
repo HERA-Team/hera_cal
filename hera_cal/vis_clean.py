@@ -10,11 +10,13 @@ import datetime
 from six.moves import range, zip
 from uvtools import dspec
 from astropy import constants
+import copy
 
 from . import io
 from . import apply_cal
 from .datacontainer import DataContainer
 from .utils import echo
+from .flag_utils import factorize_flags
 
 
 class VisClean(object):
@@ -359,8 +361,14 @@ class VisClean(object):
             self.clean_flags[k] = flgs
             self.clean_info[k] = info
 
+        # add metadata
+        if hasattr(data, 'times'):
+            self.clean_model.times = data.times
+            self.clean_resid.times = data.times
+            self.clean_flags.times = data.times
+
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
-                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=True, fftshift=True, verbose=True):
+                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=True, fftshift=True, zeropad=0, verbose=True):
         """
         Take FFT of data and attach to self.
 
@@ -391,25 +399,14 @@ class VisClean(object):
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
             ifft : bool, if True, use ifft instead of fft
-            fftshift : bool, if True, fftshift along FFT axes.
+            fftshift : bool, if True, fftshift along FFT axes. If ifft, use ifftshift.
+            zeropad : int, number of zero-valued channels to append to each side of FFT axis.
             overwrite : bool
                 If dfft[key] already exists, overwrite its contents.
         """
         # type checks
         if ax not in ['freq', 'time', 'both']:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
-            
-        fft2d = ax == 'both'
-        if fft2d:
-            # 2D fft
-            if not isinstance(window, (tuple, list)):
-                window = (window, window)
-            if not isinstance(alpha, (tuple, list)):
-                alpha = (alpha, alpha)
-            if not isinstance(edgecut_low, (tuple, list)):
-                edgecut_low = (edgecut_low, edgecut_low)
-            if not isinstance(edgecut_hi, (tuple, list)):
-                edgecut_hi = (edgecut_hi, edgecut_hi)
 
         # generate home
         if not hasattr(self, assign):
@@ -417,16 +414,6 @@ class VisClean(object):
 
         # get home
         dfft = getattr(self, assign)
-
-        # generate window
-        if ax == 'freq':
-            win = dspec.gen_window(window, self.Nfreqs, alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)[None, :]
-        elif ax == 'time':
-            win = dspec.gen_window(window, self.Ntimes, alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)[:, None]
-        else:
-            w1 = dspec.gen_window(window[0], self.Ntimes, alpha=alpha[0], edgecut_low=edgecut_low[0], edgecut_hi=edgecut_hi[0])[:, None]
-            w2 = dspec.gen_window(window[1], self.Nfreqs, alpha=alpha[1], edgecut_low=edgecut_low[1], edgecut_hi=edgecut_hi[1])[None, :]
-            win = w1 * w2
 
         # get data
         if data is None:
@@ -439,26 +426,22 @@ class VisClean(object):
         # get keys
         if keys is None:
             keys = data.keys()
+        if len(keys) == 0:
+            raise ValueError("No keys found")
 
-        # set ifft and fftshift standard
-        def fft(d, ifft=ifft, shift=fftshift, ax=-1):
-            if isinstance(ax, (tuple, list)):
-                if ifft:
-                    dfft = np.fft.ifft2(d)
-                else:
-                    dfft = np.fft.fft2(d)
-                if shift:
-                    dfft = np.fft.fftshift(dfft)
-            else:
-                if ifft:
-                    dfft = np.fft.ifft(d, axis=ax)
-                else:
-                    dfft = np.fft.fft(d, axis=ax)
-                if shift:
-                    dfft = np.fft.fftshift(dfft, axes=ax)
-            return dfft
+        # get delta bin
+        if ax == 'freq':
+            delta_bin = self.dnu
+            axis = 1
+        elif ax == 'time':
+            delta_bin = self.dtime
+            axis = 0
+        else:
+            delta_bin = (self.dtime, self.dnu)
+            axis = (0, 1)
 
         # iterate over keys
+        j = 0
         for k in keys:
             if k not in data:
                 echo("{} not in data, skipping...".format(k), verbose=verbose)
@@ -468,20 +451,179 @@ class VisClean(object):
                 continue
 
             # FFT
-            if ax == 'time':
-                d = fft(data[k] * win * wgts[k], ax=0)
-            elif ax == 'freq':
-                d = fft(data[k] * win * wgts[k], ax=1)
+            dfft[k], fourier_axes = fft_data(data[k], delta_bin, wgts=wgts[k], axis=axis, window=window,
+                                             alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
+                                             ifft=ifft, fftshift=fftshift, zeropad=zeropad)
+            j += 1
+
+        if j == 0:
+            raise ValueError("No FFT run with keys {}".format(keys))
+
+        if hasattr(data, 'times'):
+            dfft.times = data.times
+        if ax == 'freq':
+            self.delays = fourier_axes
+            self.delays *= 1e9
+        elif ax == 'time':
+            self.frates = fourier_axes
+            self.frates *= 1e3
+        else:
+            self.frates, self.delays = fourier_axes
+            self.delays *= 1e9
+            self.frates *= 1e3
+
+    def factorize_flags(self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False):
+        """
+        Factorize self.flags into two 1D time and frequency masks.
+
+        This works by broadcasting flags across time if the fraction of
+        flagged times exceeds time_thresh, otherwise flags are broadcasted
+        across channels in a spw_range.
+
+        Note: although technically allowed, this function may give unexpected
+        results if multiple spectral windows in spw_ranges have overlap.
+
+        Note: it is generally not recommended to set time_thresh > 0.5, which
+        could lead to substantial amounts of data being flagged.
+
+        Args:
+            keys : list of antpairpol tuples to operate on
+            spw_ranges : list of tuples
+                list of len-2 spectral window tuples, specifying the start (inclusive)
+                and stop (exclusive) index of the freq channels for each spw.
+                Default is to use the whole band.
+
+            time_thresh : float
+                Fractional threshold of flagged pixels across time needed to flag all times
+                per freq channel. It is not recommend to set this greater than 0.5.
+                Fully flagged integrations do not count towards triggering time_thresh.
+
+            inplace : bool, if True, edit self.flags in place, otherwise return a copy
+        """
+        # get flags
+        flags = self.flags
+        if not inplace:
+            flags = copy.deepcopy(flags)
+
+        # get keys
+        if keys is None:
+            keys = flags.keys()
+
+        # iterate over keys
+        for k in keys:
+            factorize_flags(flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True)
+
+        if not inplace:
+            return flags
+
+
+def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
+             edgecut_hi=0, ifft=True, fftshift=True, zeropad=0):
+    """
+    FFT data along specified axis.
+
+    Note the fourier convention of ifft and fftshift.
+
+    Args:
+        data : complex ndarray
+        delta_bin : bin size (seconds or Hz). If axis is a tuple can feed
+            as tuple with bin size for time and freq axis respectively.
+        wgts : float ndarray of shape (Ntimes, Nfreqs)
+        axis : int, FFT axis. Can feed as tuple for 2D fft.
+        window : str
+            Windowing function to apply across frequency before FFT. If axis is tuple,
+            can feed as a tuple specifying window for each FFT axis.
+        alpha : float
+            If window is 'tukey' this is its alpha parameter. If axis is tuple,
+            can feed as a tuple specifying alpha for each FFT axis.
+        edgecut_low : int, number of bins to consider zero-padded at low-side of the FFT axis,
+            such that the windowing function smoothly approaches zero. If axis is tuple,
+            can feed as a tuple specifying for each FFT axis.
+        edgecut_hi : int, number of bins to consider zero-padded at high-side of the FFT axis,
+            such that the windowing function smoothly approaches zero. If axis is tuple,
+            can feed as a tuple specifying for each FFT axis.
+        ifft : bool, if True, use ifft instead of fft
+        fftshift : bool, if True, fftshift along FFT axes. If ifft, use ifftshift
+        zeropad : int, number of zero-valued channels to append to each side of FFT axis.
+            If axis is tuple, can feed as a tuple specifying for each FFT axis.
+    Returns:
+        dfft : complex ndarray FFT of data
+        fourier_axes : fourier axes, if axis is ndimensional, so is this.
+    """
+    # type checks
+    if not isinstance(axis, (tuple, list)):
+        axis = [axis]
+    if not isinstance(window, (tuple, list)):
+        window = [window for i in range(len(axis))]
+    if not isinstance(alpha, (tuple, list)):
+        alpha = [alpha for i in range(len(axis))]
+    if not isinstance(edgecut_low, (tuple, list)):
+        edgecut_low = [edgecut_low for i in range(len(axis))]
+    if not isinstance(edgecut_hi, (tuple, list)):
+        edgecut_hi = [edgecut_hi for i in range(len(axis))]
+    if not isinstance(zeropad, (tuple, list)):
+        zeropad = [zeropad for i in range(len(axis))]
+    if not isinstance(delta_bin, (tuple, list)):
+        if len(axis) > 1:
+            raise ValueError("delta_bin must have same len as axis")
+        delta_bin = [delta_bin]
+    else:
+        if len(delta_bin) != len(axis):
+            raise ValueError("delta_bin must have same len as axis")
+    Nax = len(axis)
+
+    # get a copy
+    data = data.copy()
+
+    # set fft convention
+    fourier_axes = []
+    if ifft:
+        fft = np.fft.ifft
+    else:
+        fft = np.fft.fft
+
+    # get wgts
+    if wgts is None:
+        wgts = np.ones_like(data, dtype=np.float)
+
+    # iterate over axis
+    for i, ax in enumerate(axis):
+        Nbins = data.shape[ax]
+
+        # generate and apply window
+        win = dspec.gen_window(window[i], Nbins, alpha=alpha[i], edgecut_low=edgecut_low[i], edgecut_hi=edgecut_hi[i])
+        wshape = np.ones(data.ndim, dtype=np.int)
+        wshape[ax] = Nbins
+        win.shape = tuple(wshape)
+        data *= win
+
+        # zeropad
+        if zeropad[i] > 0:
+            zshape = list(data.shape)
+            zshape[ax] = zeropad[i]
+            z = np.zeros(zshape)
+            data = np.concatenate([z, data, z], axis=ax)
+
+        # FFT
+        data = fft(data, axis=ax)
+
+        # get fourier axis
+        fax = np.fft.fftfreq(data.shape[ax], delta_bin[i])
+
+        # shift
+        if fftshift:
+            if ifft:
+                data = np.fft.ifftshift(data, axes=ax)
+                fax = np.fft.ifftshift(fax)
             else:
-                d = fft(data[k] * win * wgts[k], ax=(0, 1))
+                data = np.fft.fftshift(data, axes=ax)
+                fax = np.fft.fftshift(fax)
 
-            dfft[k] = d
+        fourier_axes.append(fax)
 
-        if ax == 'freq' or ax == 'both':
-            self.delays = np.fft.fftfreq(self.Nfreqs, self.dnu) * 1e9  # ns
-            if fftshift:
-                self.delays = np.fft.fftshift(self.delays)
-        if ax == 'time' or ax == 'both':
-            self.frates = np.fft.fftfreq(self.Ntimes, self.dtime) * 1e3  # mHz
-            if fftshift:
-                self.frates = np.fft.fftshift(self.frates)
+    if len(axis) == 1:
+        fourier_axes = fourier_axes[0]
+
+    return data, fourier_axes
+
+
