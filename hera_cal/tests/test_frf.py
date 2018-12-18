@@ -111,7 +111,7 @@ class Test_FRFilter:
             shutil.rmtree("./out.uv")
 
         u = self.F.write_data("./out.h5", write_avg=False, overwrite=True, filetype='uvh5')
-        nt.assert_true(np.isclose(u.data_array, self.uvd.data_array).all())
+        nt.assert_true(np.isclose(u.data_array, self.F.hd.data_array).all())
         nt.assert_true(os.path.exists("./out.h5"))
         if os.path.exists("./out.h5"):
             os.remove("./out.h5")

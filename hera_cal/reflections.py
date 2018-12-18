@@ -236,7 +236,7 @@ class ReflectionFitter(FRFilter):
                 raise ValueError("self.dfft doesn't exist, see self.fft_data and/or self.vis_clean")
             dfft = self.dfft
         if flags is None:
-            flags = copy.deepcopy(self.flags) * False
+            flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=np.bool)) for k in dfft]))
 
         # get keys
         if keys is None:
@@ -273,10 +273,11 @@ class ReflectionFitter(FRFilter):
             d = np.zeros_like(dfft[k])
             d[:, select] = dfft[k][:, select]
             u, s, v = _svd_waterfall(d)
+            Nmodes = len(s)
 
             # append to containers
-            self.umodes[k] = u
-            self.vmodes[k] = v
+            self.umodes[k] = u[:, :Nmodes]
+            self.vmodes[k] = v[:Nmodes, :]
             self.svals[k] = s
             self.uflags[k] = np.min(flags[k], axis=1)
 
@@ -422,24 +423,24 @@ class ReflectionFitter(FRFilter):
                 continue
 
             # get fft of model
-            model_fft = self.pcomp_model[k]
+            model = self.pcomp_model[k]
 
             # fftshift
             if fftshift:
                 if ifft:
-                    model_fft = np.fft.ifftshift(model_fft, axes=-1)
+                    model = np.fft.ifftshift(model, axes=-1)
                 else:
-                    model_fft = np.fft.fftshift(model_fft, axes=-1)
+                    model = np.fft.fftshift(model, axes=-1)
 
             # ifft to get to data space
             if ifft:
-                model = np.fft.ifft(model_fft, axis=-1)
+                model_fft = np.fft.ifft(model, axis=-1)
             else:
-                model = np.fft.fft(model_fft, axis=-1)
+                model_fft = np.fft.fft(model, axis=-1)
 
             # subtract from data
-            self.pcomp_model_fft[k] = model
-            self.data_pmodel_resid[k] = data[k] - model
+            self.pcomp_model_fft[k] = model_fft
+            self.data_pmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, u, times, full_times=None, uflags=None, keys=None, overwrite=False, verbose=True,
                  mode='gpr', gp_len=600, gp_nl=0.1, optimizer=None):
@@ -470,7 +471,7 @@ class ReflectionFitter(FRFilter):
             self.umode_interp = DataContainer({})
 
         if uflags is None:
-            uflags = DataContainer(dict([(k, np.zeros_like(u[k], dtype=np.bool)) for k in u]))
+            uflags = self.uflags
 
         if full_times is None:
             full_times = times
@@ -511,7 +512,7 @@ class ReflectionFitter(FRFilter):
             else:
                 raise ValueError("didn't recognize interp mode {}".format(mode))
 
-    def project_autos_onto_u(self, keys, auto_keys, u=None, index=0, auto_delay=0,
+    def project_autos_onto_u(self, keys, auto_keys, u=None, flags=None, index=0, auto_delay=0,
                              overwrite=False, verbose=True):
         """
         Project autocorr onto u modes.
@@ -533,6 +534,8 @@ class ReflectionFitter(FRFilter):
                 cross-corr key, you can provide both auto-corr keys.
             u : DataContainer
                 Object to pull u modes from. Default is self.umodes
+            flags : DataContainer
+                Object to pull data flags from.
             index : int
                 Index of the u-mode to project auto-correlation onto.
                 All other u-mode indices are copied as-is into umode_interp
@@ -548,9 +551,11 @@ class ReflectionFitter(FRFilter):
         # type check
         assert len(keys) == len(auto_keys), "len(keys) must equal len(auto_keys)"
 
-        # get u
+        # get u and flags
         if u is None:
             u = self.umodes
+        if flags is None:
+            flags = DataContainer(dict([(k, np.zeros_like(self.pcomps[k][0], dtype=np.bool)) for k in u]))
 
         # get dly index
         select = np.argmin(np.abs(self.delays - auto_delay))
@@ -582,16 +587,16 @@ class ReflectionFitter(FRFilter):
                     echo("{} not in self.dfft, skipping...".format(ak), verbose=verbose)
                     continue
                 A = np.array([self.dfft[_ak][:, select] for _ak in ak]).T
-                af = np.sum([self.clean_flags[_ak] for _ak in ak], axis=0)
+                af = np.sum([flags[_ak] for _ak in ak], axis=0)
             else:
                 if ak not in self.dfft:
                     echo("{} not in self.dfft, skipping...".format(ak), verbose=verbose)
                     continue
                 A = np.array([self.dfft[ak][:, select]]).T
-                af = self.clean_flags[ak]
+                af = flags[ak]
 
             # form least squares estimate
-            f = np.min(self.clean_flags[k] + af, axis=1)
+            f = np.min(flags[k] + af, axis=1)
             W = np.eye(len(_u)) * (~f).astype(np.float)
             xhat = np.asarray(np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.real)), dtype=np.complex) \
                 + 1j * np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.imag))

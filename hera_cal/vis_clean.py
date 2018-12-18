@@ -217,14 +217,14 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
-                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none',
+                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, verbose=True):
         """
         Perform a CLEAN deconvolution.
 
-        Run a CLEAN on data and insert results into
-        self.clean_model and self.clean_resid.
+        Run a CLEAN on data and insert model into self.clean_model,
+        self.clean_resid and self.clean_data.
 
         Args:
             keys : list of bl-pol keys in data to CLEAN
@@ -255,11 +255,6 @@ class VisClean(object):
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
             verbose: If True print feedback to stdout
-
-        Notes
-        -----
-        One can create a "clean_data" DataContainer via
-            self.clean_model + self.clean_resid * ~self.flags
         """
         # type checks
         if ax not in ['freq', 'time', 'both']:
@@ -270,7 +265,7 @@ class VisClean(object):
                 raise ValueError("if time cleaning, must feed max_frate parameter")
 
         # initialize containers
-        for dc in ['clean_model', 'clean_resid', 'clean_flags', 'clean_info']:
+        for dc in ['clean_model', 'clean_resid', 'clean_flags', 'clean_info', 'clean_data']:
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
 
@@ -294,8 +289,9 @@ class VisClean(object):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
             if not isinstance(max_frate, DataContainer):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
+            # convert kwargs to proper units
+            max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
 
-        # convert kwargs to proper units
         if max_frate is not None:
             max_frate /= 1e3
         min_dly /= 1e9
@@ -311,14 +307,26 @@ class VisClean(object):
             # form d and w
             d = data[k]
             f = flags[k]
-            w = (~f).astype(np.float) * wgts[k]
+            fw = (~f).astype(np.float)
+            w = fw * wgts[k]
 
             # freq clean
             if ax == 'freq':
+                # zeropad the data
+                if zeropad > 0:
+                    d = _zeropad_array(d, zeropad, axis=1)
+                    w = _zeropad_array(w, zeropad, axis=1)
+
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
                                                   gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                                                   edgecut_hi=edgecut_hi)
+
+                # un-zeropad the data
+                if zeropad > 0:
+                    mdl = _zeropad_array(mdl, zeropad, axis=1, undo=True)
+                    res = _zeropad_array(res, zeropad, axis=1, undo=True)
+
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
                     if 'skipped' in _info:
@@ -331,9 +339,21 @@ class VisClean(object):
                 # and this causes filtering to hang. Particularly band edges...
                 bad_chans = (~np.min(np.isclose(d, 0.0), axis=0, keepdims=True)).astype(np.float)
                 w *= bad_chans
+
+                # zeropad the data
+                if zeropad > 0:
+                    d = _zeropad_array(d, zeropad, axis=0)
+                    w = _zeropad_array(w, zeropad, axis=0)
+
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=self.dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                                                   edgecut_hi=edgecut_hi)
+
+                # un-zeropad the data
+                if zeropad > 0:
+                    mdl = _zeropad_array(mdl, zeropad, axis=0, undo=True)
+                    res = _zeropad_array(res, zeropad, axis=0, undo=True)
+
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
                     if 'skipped' in _info:
@@ -343,10 +363,21 @@ class VisClean(object):
             elif ax == 'both':
                 # check for completely flagged baseline
                 if w.max() > 0.0:
+                    # zeropad the data
+                    if zeropad > 0:
+                        d = _zeropad_array(d, zeropad, axis=(0, 1))
+                        w = _zeropad_array(w, zeropad, axis=(0, 1))
+
                     mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, max_frate=max_frate[k], dt=self.dtime,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
                                                       alpha=alpha, gain=gain, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
                                                       filt2d_mode=filt2d_mode)
+
+                    # un-zeropad the data
+                    if zeropad > 0:
+                        mdl = _zeropad_array(mdl, zeropad, axis=(0, 1), undo=True)
+                        res = _zeropad_array(res, zeropad, axis=(0, 1), undo=True)
+ 
                     flgs = np.zeros_like(mdl, dtype=np.bool)
                 else:
                     # flagged baseline
@@ -358,11 +389,13 @@ class VisClean(object):
             # append to new Containers
             self.clean_model[k] = mdl
             self.clean_resid[k] = res
+            self.clean_data[k] = mdl + res * fw
             self.clean_flags[k] = flgs
             self.clean_info[k] = info
 
         # add metadata
         if hasattr(data, 'times'):
+            self.clean_data.times = data.times
             self.clean_model.times = data.times
             self.clean_resid.times = data.times
             self.clean_flags.times = data.times
@@ -585,6 +618,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     # get wgts
     if wgts is None:
         wgts = np.ones_like(data, dtype=np.float)
+    data *= wgts
 
     # iterate over axis
     for i, ax in enumerate(axis):
@@ -598,11 +632,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         data *= win
 
         # zeropad
-        if zeropad[i] > 0:
-            zshape = list(data.shape)
-            zshape[ax] = zeropad[i]
-            z = np.zeros(zshape)
-            data = np.concatenate([z, data, z], axis=ax)
+        data = _zeropad_array(data, zeropad[i], axis=ax)
 
         # FFT
         data = fft(data, axis=ax)
@@ -627,3 +657,40 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     return data, fourier_axes
 
 
+def _zeropad_array(data, zeropad=0, axis=-1, undo=False):
+    """
+    Zeropad data ndarray along axis.
+
+    Args:
+        data : ndarray to zero-pad (or un-pad)
+        zeropad : int, number of bins on each axis to pad
+            If axis is a tuple, zeropad must be a tuple
+        axis : int, axis to zeropad. Can be a tuple
+            to zeropad mutliple axes.
+        undo : If True, remove zero-padded edges along axis.
+
+    Returns:
+        zdata : zero-padded (or un-padded) data
+    """
+    if not isinstance(axis, (list, tuple, np.ndarray)):
+        axis = [axis]
+    if not isinstance(zeropad, (list, tuple, np.ndarray)):
+        zeropad = [zeropad]
+    if isinstance(axis, (list, tuple, np.ndarray)) and not isinstance(zeropad, (list, tuple, np.ndarray)):
+        raise ValueError("If axis is an iterable, so must be zeropad.")
+    if len(axis) != len(zeropad):
+        raise ValueError("len(axis) must equal len(zeropad)")
+
+    for i, ax in enumerate(axis):
+        if zeropad[i] > 0:
+            if undo:
+                s = [slice(None) for j in range(data.ndim)]
+                s[ax] = slice(zeropad[i], -zeropad[i])
+                data = data[s]
+            else:
+                zshape = list(data.shape)
+                zshape[ax] = zeropad[i]
+                z = np.zeros(zshape)
+                data = np.concatenate([z, data, z], axis=ax)
+
+    return data

@@ -112,7 +112,6 @@ def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True,
 class Test_ReflectionFitter_Cables(unittest.TestCase):
     uvd_clean = simulate_reflections(add_cable=False, add_xtalk=False)
     uvd = simulate_reflections(cdelay=150.0, cphase=2.0, camp=2e-1, add_cable=True, add_xtalk=False)
-    uvd.flag_array[:, :, 20:22, :] = True
 
     def test_model_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
@@ -153,9 +152,9 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-1, atol=1e-1).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=2e-1).all())
 
-
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
+        bl_k = (37, 37, 'xx')
         RF.model_auto_reflections((100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True)
         nt.assert_equal(uvc.Ntimes, 60)
@@ -179,103 +178,84 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
 
 class Test_ReflectionFitter_XTalk(unittest.TestCase):
-    uvd = simulate_reflections(cdelay=150.0, cphase=2.0, camp=2e-2, add_cable=False,
-                               xdelay=250.0, xphase=0, xamp=.1, add_xtalk=True)
-    uvd.flag_array[:, :, 20:21, :] = True
+    uvd = simulate_reflections(add_cable=False, xdelay=250.0, xphase=0, xamp=.1, add_xtalk=True)
 
     def test_pca_functions(self):
         RF = reflections.ReflectionFitter(self.uvd)
-        RF.dly_clean_data(tol=1e-10, maxiter=1000, gain=5e-2, skip_wgt=0.1, dly_cut=300.0,
-                          taper='hann', timeavg=False, broadcast_flags=True, time_thresh=0.05,
-                          overwrite=True, verbose=True, keys=[(37, 38, 'xx')])
+        bl = (37, 38, 'xx')
+
         # fft data
-        RF.fft_data(data=RF.clean_data, taper='tukey', alpha=0.2, overwrite=True)
+        RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
 
         # test pca_decomposition
-        RF.pca_decomp((180, 330), side='pos', overwrite=True)
+        RF.pca_decomp((200, 300), keys=[bl], side='pos', overwrite=True)
+
         # test containers exist
         nt.assert_true(np.all([hasattr(RF, o) for o in ['umodes', 'vmodes', 'svals', 'uflags', 'pcomps', 'dfft']]))
         # test good information compression
-        bl = (37, 38, 'xx')
-        nt.assert_true(RF.svals[bl][0] / RF.svals[bl][1] > 40)
+        nt.assert_true(RF.svals[bl][0] / RF.svals[bl][1] > 20)
 
         # build a model
         RF.build_model(Nkeep=1, increment=False, overwrite=True)
+
         # assert its a good fit to the xtalk at 250 ns delay
-        Vstd = np.std(RF.dfft[bl][:, 57].real)
-        Rstd = np.std(RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 57].real)
+        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 57].real**2))
+        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 57].real)**2))
         # says that residual is small compared to original array
-        nt.assert_true(Rstd / Vstd < 0.01)
+        nt.assert_true(Rrms / Vrms < 0.01)
 
         # increment the model 
-        RF.pca_decomp((180, 330), side='neg', overwrite=True)
+        RF.pca_decomp((200, 300), side='neg', overwrite=True)
         RF.build_model(Nkeep=1, increment=True)
         # says that the two are similar to each other, which they should be
-        nt.assert_true(np.std(RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 7].real) / Vstd < .05)
+        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 7].real**2))
+        nt.assert_true(np.sqrt(np.mean((RF.dfft[bl][:, 7].real - RF.pcomp_model[bl][:, 7].real)**2)) / Vrms < .01)
 
         # overwrite the model
-        RF.pca_decomp((180, 330), side='both', overwrite=True)
-        RF.build_model(Nkeep=1, increment=False, overwrite=True)
+        RF.pca_decomp((200, 300), side='both', overwrite=True)
+        RF.build_model(Nkeep=2, increment=False, overwrite=True)
         # says the residual is small compared to original array
-        nt.assert_true(np.std(RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 7].real) / Vstd < .01)
-        Rstd = np.std(RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 57].real)
-        nt.assert_true(Rstd / Vstd < .01)
+        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 57].real**2))
+        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 57].real)**2))
+        nt.assert_true(Rrms / Vrms < 0.01)
 
-        # subtract the model from the data!
+        # subtract the model from the data
         RF.subtract_model(overwrite=True)
-
-        # assert std of difference is smaller than original data, b/c it should be
-        Vstd = np.std(RF.data[(37, 38, 'xx')])
-        Rstd = np.std(RF.data[(37, 38, 'xx')] - RF.data_pc_sub[(37, 38, 'xx')])
-        nt.assert_true(Rstd / Vstd < 0.2)
-
-        # assert difference is near-mean zero
-        nt.assert_true(np.abs(np.mean(RF.data[(37, 38, 'xx')] - RF.data_pc_sub[(37, 38, 'xx')])) < 1e-10)
+        nt.assert_equal(RF.pcomp_model_fft[bl].shape, (60, 64))
+        nt.assert_equal(RF.data_pmodel_resid[bl].shape, (60, 64))
 
     def test_misc_pca_funcs(self):
         RF = reflections.ReflectionFitter(self.uvd)
+        bl = (37, 38, 'xx')
+        abl1 = (37, 37, 'xx')
+        abl2 = (38, 38, 'xx')
         # time average the data
         RF.timeavg_data(30, rephase=False)
 
-        # delay clean as before, but use timeaveraged data
-        RF.dly_clean_data(tol=1e-10, maxiter=1000, gain=5e-2, skip_wgt=0.1, dly_cut=300.0,
-                          taper='hann', timeavg=False, broadcast_flags=True, time_thresh=0.05,
-                          overwrite=True, verbose=True, keys=[(37, 37, 'xx'), (37, 38, 'xx'), (38, 38, 'xx')],
-                          data=RF.avg_data, flags=RF.avg_flags, nsamples=RF.avg_nsamples)
-
         # fft data
-        RF.fft_data(data=RF.clean_data, taper='tukey', alpha=0.2, overwrite=True)
+        RF.fft_data(data=RF.avg_data, window='blackmanharris', overwrite=True)
 
         # pca decomp
-        RF.pca_decomp((180, 330), side='both', overwrite=True)
+        RF.pca_decomp((200, 300), keys=[bl, abl1, abl2], dfft=RF.dfft, side='both', overwrite=True)
 
         # test interpolation of umodes
-        RF.interp_u(overwrite=True, mode='gpr', gp_len=100, gp_nl=0.01, optimizer=None)
+        RF.interp_u(RF.umodes, RF.avg_times, overwrite=True, mode='gpr', gp_len=100, gp_nl=0.01, optimizer=None)
+        nt.assert_true(RF.umode_interp[bl].shape, (20, 20))
 
         # assert broadcasting to full time resolution worked
-        nt.assert_equal(len(RF.umode_interp[(37, 38, 'xx')]), 60)
-
-        # assert that residual between interpolated and non-interpolated is small
-        nt.assert_true(np.std(RF.umodes[(37, 38, 'xx')][:, 0] - RF.umode_interp[(37, 38, 'xx')][1::3, 0]) < 0.001)
+        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_len=100, gp_nl=0.01, optimizer=None)
+        nt.assert_true(RF.umode_interp[bl].shape, (60, 60))
 
         # project auto correlation onto umode and assert residual is small
-        RF.project_autos_onto_u([(37, 38, 'xx')], [(37, 37, 'xx')], index=0, auto_delay=0, overwrite=True)
-        nt.assert_true(np.std(RF.umodes[(37, 38, 'xx')][:, 0] - RF.umode_interp[(37, 38, 'xx')][:, 0]) < 0.0005)
+        RF.project_autos_onto_u([bl], [abl1], index=0, auto_delay=0, overwrite=True)
+        nt.assert_true(np.sqrt(np.mean((RF.umodes[bl][:, 0] - RF.umode_interp[bl][:, 0])**2)) < 0.01)
 
         # test multiple auto projection
-        RF.project_autos_onto_u([(37, 38, 'xx')], [[(37, 37, 'xx'), (38, 38, 'xx')]], index=0, auto_delay=0, overwrite=True)
-        nt.assert_true(np.std(RF.umodes[(37, 38, 'xx')][:, 0] - RF.umode_interp[(37, 38, 'xx')][:, 0]) < 0.0005)
+        RF.project_autos_onto_u([bl], [[abl1, abl2]], index=0, auto_delay=0, overwrite=True)
+        nt.assert_true(np.std(RF.umodes[bl][:, 0] - RF.umode_interp[bl][:, 0]) < 0.01)
 
         # exceptions
-        nt.assert_raises(ValueError, RF.interp_u, overwrite=True, mode='foo')
-
-
-def test_gen_taper():
-    for taper in ['none', 'blackmanharris', 'hann', 'tukey', 'blackman']:
-        t = reflections._gen_taper(taper, 10)
-        nt.assert_equal(t.ndim, 2)
-        nt.assert_equal(t.shape, (1, 10))
-    nt.assert_raises(ValueError, reflections._gen_taper, 'foo', 10)
+        nt.assert_raises(ValueError, RF.interp_u, RF.umodes, RF.times, overwrite=True, mode='foo')
 
 
 if __name__ == '__main__':

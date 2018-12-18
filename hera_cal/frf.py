@@ -201,7 +201,7 @@ class FRFilter(VisClean):
     Fringe Rate Filter object.
     """
 
-    def timeavg_data(self, t_avg, rephase=False, verbose=True):
+    def timeavg_data(self, t_avg, rephase=False, data=None, flags=None, nsamples=None, verbose=True):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The time-averaged data, flags, time arrays, etc. are stored in avg_* attributes.

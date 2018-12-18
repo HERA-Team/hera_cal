@@ -130,5 +130,5 @@ class Test_VisClean(unittest.TestCase):
         V.fft_data(keys=[(24, 25, 'xx')], assign='foo', ifft=True, fftshift=True)
         delays = V.delays
         nt.assert_true(hasattr(V, 'foo'))
-        V.fft_data(keys=[(24, 25, 'xx')], assign='foo', ifft=False, fftshift=False)
+        V.fft_data(keys=[(24, 25, 'xx')], assign='foo', overwrite=True, ifft=False, fftshift=False)
         np.testing.assert_array_almost_equal(delays, np.fft.fftshift(V.delays))
