@@ -401,7 +401,8 @@ class VisClean(object):
             self.clean_flags.times = data.times
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
-                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=True, fftshift=True, zeropad=0, verbose=True):
+                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=True, ifftshift=False, fftshift=True,
+                 zeropad=0, verbose=True):
         """
         Take FFT of data and attach to self.
 
@@ -432,7 +433,8 @@ class VisClean(object):
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
             ifft : bool, if True, use ifft instead of fft
-            fftshift : bool, if True, fftshift along FFT axes. If ifft, use ifftshift.
+            ifftshift : bool, if True, ifftshift data along FT axis before FFT.
+            fftshift : bool, if True, fftshift along FFT axes.
             zeropad : int, number of zero-valued channels to append to each side of FFT axis.
             overwrite : bool
                 If dfft[key] already exists, overwrite its contents.
@@ -486,7 +488,7 @@ class VisClean(object):
             # FFT
             dfft[k], fourier_axes = fft_data(data[k], delta_bin, wgts=wgts[k], axis=axis, window=window,
                                              alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
-                                             ifft=ifft, fftshift=fftshift, zeropad=zeropad)
+                                             ifft=ifft, ifftshift=ifftshift, fftshift=fftshift, zeropad=zeropad)
             j += 1
 
         if j == 0:
@@ -551,7 +553,7 @@ class VisClean(object):
 
 
 def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
-             edgecut_hi=0, ifft=True, fftshift=True, zeropad=0):
+             edgecut_hi=0, ifft=True, ifftshift=False, fftshift=True, zeropad=0):
     """
     FFT data along specified axis.
 
@@ -576,7 +578,8 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
             such that the windowing function smoothly approaches zero. If axis is tuple,
             can feed as a tuple specifying for each FFT axis.
         ifft : bool, if True, use ifft instead of fft
-        fftshift : bool, if True, fftshift along FFT axes. If ifft, use ifftshift
+        ifftshift : bool, if True, ifftshift data along FT axis before FFT.
+        fftshift : bool, if True, fftshift along FT axes after FFT.
         zeropad : int, number of zero-valued channels to append to each side of FFT axis.
             If axis is tuple, can feed as a tuple specifying for each FFT axis.
     Returns:
@@ -634,20 +637,20 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         # zeropad
         data = _zeropad_array(data, zeropad[i], axis=ax)
 
+        # ifftshift
+        if ifftshift:
+            data = np.fft.ifftshift(data, axes=ax)
+
         # FFT
         data = fft(data, axis=ax)
 
         # get fourier axis
         fax = np.fft.fftfreq(data.shape[ax], delta_bin[i])
 
-        # shift
+        # fftshift
         if fftshift:
-            if ifft:
-                data = np.fft.ifftshift(data, axes=ax)
-                fax = np.fft.ifftshift(fax)
-            else:
-                data = np.fft.fftshift(data, axes=ax)
-                fax = np.fft.fftshift(fax)
+            data = np.fft.fftshift(data, axes=ax)
+            fax = np.fft.fftshift(fax)
 
         fourier_axes.append(fax)
 
