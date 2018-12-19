@@ -338,7 +338,7 @@ class VisClean(object):
                 # channels are bad (i.e. data is identically zero) but are not flagged
                 # and this causes filtering to hang. Particularly band edges...
                 bad_chans = (~np.min(np.isclose(d, 0.0), axis=0, keepdims=True)).astype(np.float)
-                w *= bad_chans
+                w = w * bad_chans  # not inplace for broadcasting
 
                 # zeropad the data
                 if zeropad > 0:

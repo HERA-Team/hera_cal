@@ -279,7 +279,7 @@ class ReflectionFitter(FRFilter):
             self.umodes[k] = u[:, :Nmodes]
             self.vmodes[k] = v[:Nmodes, :]
             self.svals[k] = s
-            self.uflags[k] = np.min(flags[k], axis=1)
+            self.uflags[k] = np.min(flags[k], axis=1, keepdims=True)
 
         # get principal components
         self.form_PCs(keys, overwrite=overwrite)
@@ -497,8 +497,9 @@ class ReflectionFitter(FRFilter):
                 GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=True)
 
                 # setup regression data: get unflagged data
-                X = times[~uflags[k], None] - Xmean
-                y = u[k][~uflags[k], :]
+                select = ~np.max(uflags[k], axis=1)
+                X = times[select, None] - Xmean
+                y = u[k][select, :]
 
                 # fit gp and predict
                 GP.fit(X, y.real)
