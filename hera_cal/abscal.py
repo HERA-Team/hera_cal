@@ -78,7 +78,7 @@ class AbsCal(object):
     """
     def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None,
                  min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, verbose=True,
-                 filetype='miriad'):
+                 filetype='miriad', input_cal=None):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -145,6 +145,9 @@ class AbsCal(object):
             bl separation length, with a specified fwhm [meters]
 
         filetype : str, if data and/or model are fed as strings, this is their filetype
+
+        input_cal : filepath to calfits, UVCal or HERACal object with gain solutions to
+            apply to data on-the-fly via hera_cal.apply_cal.calibrate_in_place
         """
         # set pols to None
         pols = None
@@ -158,10 +161,17 @@ class AbsCal(object):
         if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data.__class__, UVData):
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
              data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True, filetype=filetype)
-            wgts = DataContainer(odict(list(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys()))))
             pols = data_pols
             freqs = data_freqs
             antpos = data_antpos
+
+        # apply calibration
+        if input_cal is not None:
+            if 'flags' not in locals():
+                flags = None
+            uvc = io.to_HERACal(input_cal)
+            gains, cal_flags, quals, totquals = uvc.read()
+            apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags, gain_convention=uvc.gain_convention)
 
         # get shared keys
         self.keys = sorted(set(model.keys()) & set(data.keys()))
@@ -197,9 +207,16 @@ class AbsCal(object):
 
         # setup weights
         if wgts is None:
-            wgts = odict()
-            for k in self.keys:
-                wgts[k] = np.ones_like(data[k], dtype=np.float)
+            # use data flags if present
+            if 'flags' in locals() and flags is not None:
+                wgts = DataContainer(odict([(k, (~flags[k]).astype(np.float)) for k in self.keys]))
+            else:
+                wgts = DataContainer(odict())
+                for k in self.keys:
+                    wgts[k] = np.ones_like(data[k], dtype=np.float)
+            if 'model_flags' in locals():
+                for k in self.keys:
+                    wgts[k] *= (~model_flags[k]).astype(np.float)
         self.wgts = wgts
 
         # setup ants
@@ -1057,7 +1074,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
                TT_phs_cal=False, phs_max_iter=100, phs_conv_crit=1e-6, gen_amp_cal=False, gen_phs_cal=False,
-               latitude=-30.72152, max_dlst=0.005, solar_horizon=90.0, antflag_thresh=0.2, history=''):
+               latitude=-30.72152, max_dlst=0.005, solar_horizon=90.0, antflag_thresh=0.2, input_cal=None, history=''):
     """
     Run abscal on a set of time-contiguous data files, using time-contiguous model files that cover
     the data_files across LST.
@@ -1249,7 +1266,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
 
         # instantiate class
         AC = AbsCal(new_model, data, wgts=wgts, refant=refant, antpos=antpos, freqs=data_freqs,
-                    min_bl_cut=min_bl_cut, max_bl_cut=min_bl_cut, bl_taper_fwhm=bl_taper_fwhm)
+                    min_bl_cut=min_bl_cut, max_bl_cut=min_bl_cut, bl_taper_fwhm=bl_taper_fwhm, input_cal=input_cal)
         refant = AC.refant
 
         # center total_data_antpos w/ refant

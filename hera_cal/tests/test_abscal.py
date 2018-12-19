@@ -245,6 +245,7 @@ class Test_AbsCal:
         self.data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         self.AC = abscal.AbsCal(self.data_fname, self.model_fname, refant=24)
+        self.input_cal = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits")
 
         # make custom gain keys
         d, fl, ap, a, f, t, l, p = io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
@@ -286,6 +287,17 @@ class Test_AbsCal:
         nt.assert_false((np.array(list(map(lambda k: np.linalg.norm(AC.bls[k]), AC.bls.keys()))) > 26.0).any())
         # test bl taper
         nt.assert_true(np.median(AC.wgts[(24, 25, 'xx')]) > np.median(AC.wgts[(24, 39, 'xx')]))
+
+        # test with input cal
+        bl = (24, 25, 'xx')
+        uvc = UVCal()
+        uvc.read_calfits(self.input_cal)
+        aa = uvc.ant_array.tolist()
+        g = (uvc.gain_array[aa.index(bl[0])] * uvc.gain_array[aa.index(bl[1])].conj()).squeeze().T
+        gf = (uvc.flag_array[aa.index(bl[0])] + uvc.flag_array[aa.index(bl[1])]).squeeze().T
+        w = self.AC.wgts[bl] * ~gf
+        AC2 = abscal.AbsCal(copy.deepcopy(self.AC.model), copy.deepcopy(self.AC.data), wgts=copy.deepcopy(self.AC.wgts), refant=24, input_cal=self.input_cal)
+        np.testing.assert_array_almost_equal(self.AC.data[bl]/g*w, AC2.data[bl]*w)
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
