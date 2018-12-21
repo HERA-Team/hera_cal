@@ -14,7 +14,7 @@ from .apply_cal import calibrate_in_place
 
 def read_and_write_autocorrelations(infile, outfile, calfile=None, gain_convention='divide', add_to_history='', clobber=False):
     '''Extracts autocorrelations from visibility file on disk, optionally applies a calibration solution, 
-    then writes the result to disk. Only readcs and writes .uvh5 files.
+    then writes the result to disk. Only reads and writes .uvh5 files.
 
     Arguments:
         infile: string path to .uvh5 visibility data file from which to extract autocorrelations
