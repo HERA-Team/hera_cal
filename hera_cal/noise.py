@@ -10,9 +10,34 @@ import numpy as np
 import argparse
 
 from . import io
-from .utils import split_pol, predict_noise_variance_from_autos
+from .utils import split_pol, join_pol
 from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
+
+
+def predict_noise_variance_from_autos(bl, data, dt=None, df=None):
+    '''Predict the noise variance on a baseline using autocorrelation data.
+
+    Arguments:
+        bl: baseline tuple of the form (0, 1, 'xx')
+        data: DataContainer containing autocorrelation data
+        dt: integration time in seconds. If None, will try infer this
+            from the times stored in the DataContainer.
+        df: channel width in Hz. If None, will try to infer this from
+            from the frequencies stored in the DataContainer
+
+    Returns:
+        Noise variance predicted on baseline bl in units of data squared
+    '''
+    if dt is None:
+        assert(len(data.times_by_bl[bl[0:2]]) > 1)  # cannot infer integration time if only one integration is given
+        dt = np.median(np.ediff1d(data.times_by_bl[bl[0:2]])) * 24. * 3600.
+    if df is None:
+        assert(len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
+        df = np.median(np.ediff1d(data.freqs))
+
+    ap1, ap2 = split_pol(bl[2])
+    return np.abs(data[bl[0], bl[0], join_pol(ap1, ap1)] * data[bl[1], bl[1], join_pol(ap2, ap2)] / dt / df)
 
 
 def per_antenna_noise_std(autos, dt=None, df=None):
