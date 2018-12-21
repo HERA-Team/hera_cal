@@ -41,7 +41,7 @@ def read_and_write_autocorrelations(infile, outfile, calfile=None, gain_conventi
 
 
 def extract_autos_argparser():
-    '''Arg parser for commandline operation of apply_cal.'''
+    '''Arg parser for commandline operation of extract_autos.py.'''
     a = argparse.ArgumentParser(description="Extract autocorrelations from a .uvh5 file and write to disk as a .uvh5 file, optionally calibrating")
     a.add_argument("infile", type=str, help="path to .uvh5 visibility data file from which to extract autocorrelations")
     a.add_argument("outfile", type=str, help="path to .uvh5 output data file containing only autocorrelations")
