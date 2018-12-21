@@ -8,11 +8,30 @@ from __future__ import print_function, division, absolute_import
 
 import numpy as np
 import argparse
+import scipy
 
 from . import io
 from .utils import split_pol, join_pol
 from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
+
+
+def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1, -2, 1]]):
+    '''Estimate the noise on a visibiltiy per frequency and time using sequential differecing.
+    
+    Arguments:
+        vis: complex visibility waterfall, usually a numpy array of size (Ntimes, Nfreqs)
+        kernel: differencing kernel for how to weight each visibiltiy relative to its neighbors
+            in time and frequency. Must sum to zero and must be 2D.
+
+    Returns:
+        variance: estimate of the noise variance on the input visibility with the same shape
+    '''
+    assert(np.sum(kernel) == 0), 'The kernal must sum to zero for difference-based noise estimation.'
+    assert(np.array(kernel).ndim == 2), 'The kernel must be 2D.'
+    variance = np.abs(scipy.signal.convolve2d(vis, kernel, mode='same', boundary='wrap'))**2
+    variance /= np.sum(np.array(kernel)**2)
+    return variance
 
 
 def predict_noise_variance_from_autos(bl, data, dt=None, df=None):
