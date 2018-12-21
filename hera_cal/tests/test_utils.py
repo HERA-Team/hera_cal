@@ -12,7 +12,6 @@ import shutil
 import glob
 from collections import OrderedDict as odict
 import copy
-import scipy
 from contextlib import contextmanager
 import six
 from pyuvdata import UVData

@@ -10,6 +10,7 @@ import unittest
 import numpy as np
 import os
 import sys
+import scipy
 
 from hera_cal import io
 from hera_cal import noise
@@ -19,6 +20,20 @@ from hera_cal.apply_cal import apply_cal
 
 
 class Test_Noise(unittest.TestCase):
+
+    def test_predict_noise_variance_from_autos(self):
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5'))
+        data, flags, nsamples = hd.read()
+        for k in data.keys():
+            if k[0] != k[1]:
+                sigmasq = noise.predict_noise_variance_from_autos(k, data)
+                kernel = [[1, -2, 1], [-2, 4, -2], [1, -2, 1]]
+                sigma = scipy.signal.convolve2d(data[k], kernel, mode='same', boundary='wrap')
+                sigma /= np.sum(np.array(kernel)**2)**.5
+                np.testing.assert_array_equal(np.abs(np.mean(np.mean(np.abs(sigma)**2, axis=0) / np.mean(sigmasq, axis=0)) - 1) <= .1, True)
+                times = hd.times_by_bl[k[:2]]
+                sigmasq2 = noise.predict_noise_variance_from_autos(k, data, df=(hd.freqs[1] - hd.freqs[0]), dt=((times[1] - times[0]) * 24. * 3600.))
+                np.testing.assert_array_equal(sigmasq, sigmasq2)
 
     def test_per_antenna_noise_std(self):
         infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
