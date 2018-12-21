@@ -454,6 +454,7 @@ def test_chisq():
     nt.assert_true(len(chisq_per_ant) == 0)
     nt.assert_true(len(chisq_per_ant) == 0)
 
+
 def test_echo():
     with captured_output() as (out, err):
         utils.echo('hi', verbose=True)

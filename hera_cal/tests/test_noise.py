@@ -29,23 +29,22 @@ class Test_Noise(unittest.TestCase):
         gauss_test = np.mean(noise.interleaved_noise_variance_estimate(np.random.randn(1000, 1000)))
         np.testing.assert_almost_equal(gauss_test, 1, decimal=2)
 
-        kernels = [('2x2 diff', [[1,-1],[-1,1]]),
-                   ('2D plus', [[0,1,0],[1,-4,1],[0,1,0]]),
-                   ('2D box', [[1,1,1],[1,-8,1],[1,1,1]]),
-                   ('2D hybrid', [[1,-2,1],[-2,4,-2],[1,-2,1]]),
-                   ('1D 2-term', [[1,-1]]),
-                   ('1D 3-term', [[1,-2,1]]),
-                   ('1D 5-term', [[-1,4,-6,4,-1]]),
-                   ('1D 7-term', [[2,-9,18, -22, 18, -9, 2]])]
+        kernels = [('2x2 diff', [[1, -1], [-1, 1]]),
+                   ('2D plus', [[0, 1, 0], [1, -4, 1], [0, 1, 0]]),
+                   ('2D box', [[1, 1, 1], [1, -8, 1], [1, 1, 1]]),
+                   ('2D hybrid', [[1, -2, 1], [-2, 4, -2], [1, -2, 1]]),
+                   ('1D 2-term', [[1, -1]]),
+                   ('1D 3-term', [[1, -2, 1]]),
+                   ('1D 5-term', [[-1, 4, -6, 4, -1]]),
+                   ('1D 7-term', [[2, -9, 18, -22, 18, -9, 2]])]
         for kname, kernel in kernels:
             gauss_test = np.mean(noise.interleaved_noise_variance_estimate(np.random.randn(1000, 1000), kernel=kernel))
             np.testing.assert_almost_equal(gauss_test, 1, decimal=2)
 
         with self.assertRaises(AssertionError):
-            noise.interleaved_noise_variance_estimate(np.random.randn(10,10), kernel=[[.5, 1.0, .5]])
-        with self.assertRaises(ValueError):
-            noise.interleaved_noise_variance_estimate(np.random.randn(10,10), kernel=[-1, 1])
-
+            noise.interleaved_noise_variance_estimate(np.random.randn(10, 10), kernel=[[.5, 1.0, .5]])
+        with self.assertRaises(AssertionError):
+            noise.interleaved_noise_variance_estimate(np.random.randn(10, 10), kernel=[-1, 1])
 
     def test_predict_noise_variance_from_autos(self):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5'))
