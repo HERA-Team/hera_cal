@@ -15,6 +15,7 @@ import collections
 from six.moves import map, range, zip
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
+import aipy
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num
@@ -624,6 +625,92 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         return flags, {'freqs': freqs, 'times': times, 'history': history}
     else:
         return flags
+
+
+def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
+    """
+    Get a file's start, stop and dlst in radians.
+
+    Start and stop are bin center.
+
+    Miriad standard is bin start, so shift by int_time / 2 is done.
+    UVH5 standard is bin center, so lsts are left untouched.
+
+    Parameters:
+    ------------
+    filepaths : type=list, list of filepaths
+
+    filetype : str, options=['miriad', 'uvh5']
+
+    add_int_buffer : type=bool, if True, extend stop times by an integration duration.
+
+    Output: (file_starts, file_stops, int_times)
+    -------
+    file_starts : file starting point (bin center) in LST [radians]
+
+    file_stops : file ending point (bin center) in LST [radians]
+
+    int_times : integration duration in LST [radians]
+    """
+    _array = True
+    # check filepaths type
+    if isinstance(filepaths, str):
+        _array = False
+        filepaths = [filepaths]
+        if filetype not in ['miriad', 'uvh5']:
+            raise ValueError("filetype {} not recognized".format(filetype))
+
+    # form empty lists
+    file_starts = []
+    file_stops = []
+    int_times = []
+
+    # get Nfiles
+    Nfiles = len(filepaths)
+
+    # iterate over filepaths and extract time info
+    for i, f in enumerate(filepaths):
+        if filetype == 'miriad':
+            uv = aipy.miriad.UV(f)
+            # get integration time
+            int_time = uv['inttime'] * 2 * np.pi / (23.9344699 * 3600.)
+            # get start and stop
+            start = uv['lst']
+            stop = start + (uv['ntimes'] - 1) * int_time
+            # add half an integration to get center of integration
+            start += int_time / 2
+            stop += int_time / 2
+        elif filetype == 'uvh5':
+            hd = HERAData(f)
+            lsts = []
+            for l in hd.lst_array:
+                if l not in lsts:
+                    lsts.append(l)
+            lsts = np.unwrap(lsts)
+            start, stop, int_time = lsts[0], lsts[-1], np.median(np.diff(lsts))
+
+        # add integration buffer to end of file if desired
+        if add_int_buffer:
+            stop += int_time
+
+        file_starts.append(start)
+        file_stops.append(stop)
+        int_times.append(int_time)
+
+    file_starts = np.array(file_starts)
+    file_stops = np.array(file_stops)
+    int_times = np.array(int_times)
+
+    # make sure times don't wrap
+    file_starts[np.where(file_starts < 0)] += 2 * np.pi
+    file_stops[np.where(file_stops >= 2 * np.pi)] -= 2 * np.pi
+
+    if _array is False:
+        file_starts = file_starts[0]
+        file_stops = file_stops[0]
+        int_times = int_times[0]
+
+    return file_starts, file_stops, int_times
 
 
 #######################################################################

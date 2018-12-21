@@ -289,24 +289,6 @@ def test_combine_calfits():
         os.remove('ex.calfits')
 
 
-def test_get_miriad_times():
-    filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
-    # test execution
-    starts, stops, ints = utils.get_miriad_times(filepaths, add_int_buffer=False)
-    nt.assert_almost_equal(starts[0], 4.7293432458811866)
-    nt.assert_almost_equal(stops[0], 4.7755393587036084)
-    nt.assert_almost_equal(ints[0], 0.00078298496309189868)
-    nt.assert_equal(len(starts), 2)
-    nt.assert_equal(len(stops), 2)
-    nt.assert_equal(len(ints), 2)
-    # test with integration buffer
-    _starts, _stops, _ints = utils.get_miriad_times(filepaths, add_int_buffer=True)
-    nt.assert_almost_equal(starts[0], _starts[0])
-    nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
-    # test if fed as a str
-    starts, stops, ints = utils.get_miriad_times(filepaths[0])
-
-
 def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")

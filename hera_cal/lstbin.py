@@ -451,7 +451,7 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
 
     # get dlst if None
     if dlst is None:
-        start, stop, int_time = utils.get_miriad_times(data_files[0])
+        start, stop, int_time = io.get_file_lst_range(data_files[0])
         dlst = int_time
 
     # iterate over data files
@@ -507,16 +507,21 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed_lst_start=False, verbose=True,
+def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst_start=0.0, fixed_lst_start=False, verbose=True,
                          ntimes_per_file=60):
     """
-    Configure lst grid, starting LST and output files given input data files and LSTbin params.
+    Configure data for LST binning.
+
+    Make an lst grid, starting LST and output files given
+    input data files and LSTbin params.
 
     Parameters
     ----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
-                 paths to miriad files from a particular night. These files should be sorted
+                 paths to data files from a particular night. These files should be sorted
                  by ascending Julian Date. Frequency axis of each file must be identical.
+
+    filetype : str, filetype of filepaths in data_files. options=['miriad', 'uvh5']
 
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
 
@@ -539,7 +544,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
     """
     # get dlst from first data file if None
     if dlst is None:
-        start, stop, int_time = utils.get_miriad_times(data_files[0][0])
+        start, stop, int_time = io.get_file_lst_range(data_files[0][0])
         dlst = int_time
 
     # get start and stop times for each list of files in data_files.
@@ -547,7 +552,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
     # and the %(2pi) ensures everything is within a 2pi LST grid.
     data_times = []
     for df in data_files:
-        data_times.append(np.array(utils.get_miriad_times(df, add_int_buffer=True))[:2, :].T % (2 * np.pi))
+        data_times.append(np.array(io.get_file_lst_range(df, add_int_buffer=True))[:2, :].T % (2 * np.pi))
 
     # unwrap data_times less than lst_start, get starting and ending lst
     start_lst = 100
@@ -593,9 +598,10 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
     return data_times, lst_grid, dlst, file_lsts, start_lst
 
 
-def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
-                  outdir=None, overwrite=False, history=' ', lst_start=0, fixed_lst_start=False, atol=1e-6,
-                  sig_clip=True, sigma=5.0, min_N=5, rephase=False, output_file_select=None, **kwargs):
+def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_per_file=60,
+                  file_ext="{}.{}.{:7.5f}.uv", outdir=None, overwrite=False, history=' ', lst_start=0, 
+                  fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
+                  output_file_select=None, **kwargs):
     """
     LST bin a series of miriad files with identical frequency bins, but varying
     time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
@@ -611,6 +617,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     data_files : type=list of lists: nested set of lists, with each nested list containing
                  paths to miriad files from a particular night. These files should be sorted
                  by ascending Julian Date. Frequency axis of each file must be identical.
+
+    filetype : str, options=['uvh5', 'miriad']
 
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
 
@@ -646,7 +654,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
     (data_times, lst_grid, dlst, file_lsts,
-     start_lst) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
+     start_lst) = config_lst_bin_files(data_files, filetype=filetype, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
                                        ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
 
