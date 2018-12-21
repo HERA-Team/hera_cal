@@ -11,6 +11,7 @@ import argparse
 
 from . import io
 from .utils import split_pol, predict_noise_variance_from_autos
+from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
 
 def per_antenna_noise_stdev(autos, dt=None, df=None):
@@ -31,5 +32,33 @@ def per_antenna_noise_stdev(autos, dt=None, df=None):
         if (bl[0] == bl[1]) and (split_pol(bl[2])[0] == split_pol(bl[2])[1]):
             noise[bl] = np.sqrt(predict_noise_variance_from_autos(bl, autos, dt=dt, df=df))
     return DataContainer(noise)
+
+
+def write_per_antenna_noise_std_from_autos(infile, outfile, calfile=None, gain_convention='divide', add_to_history='', clobber=False):
+    '''Loads autocorrelations and uses them to predict the per-antenna noise standard deviation on visibilities (e.g. to predict
+    the noise variance on e.g. (1, 2, 'xy'), one would use noise[1, 1, 'xx'] * noise[2, 2, 'yy']). Optionally applies calibration
+    solutions with associated flags. Only reads and writes to .uhv5 files.
+
+    Arguments:
+        infile: string path to .uvh5 visibility data file from which to extract autocorrelations
+        outfile: string path to .uvh5 output data file of noise standard deviations (saved as if they were autocorrelations).
+        calfile: optional string path to .calfits calibration file to apply to autocorrelations before computing noise.
+            Can also take a list of paths if the .calfits files can be combined into a single UVCal object.
+        gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
+            'multiply' means V_true = gi gj* V_obs.
+        add_to_history: appends a string to the history of the infile when writing the outfile
+        clobber: if True, overwrites existing file at outfile
+    '''
+    hd = io.HERAData(infile)
+    auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1] and split_pol(bl[2])[0] == split_pol(bl[2])[1])]
+    autos, auto_flags, _ = hd.read(bls=auto_bls)
+    if calfile is not None:
+        hc = io.HERACal(calfile)
+        gains, cal_flags, _, _ = hc.read()
+        calibrate_in_place(autos, gains, data_flags=auto_flags, cal_flags=cal_flags, gain_convention=gain_convention)
+    noise = per_antenna_noise_stdev()
+    hd.update(data=data, flags=auto_flags)
+    hd.history += add_to_history
+    hd.write_uvh5(outfile, clobber=clobber)
 
 
