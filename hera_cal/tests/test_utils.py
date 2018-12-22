@@ -8,6 +8,7 @@ import nose.tools as nt
 import numpy as np
 import sys
 import os
+import warnings
 import shutil
 import glob
 from collections import OrderedDict as odict
@@ -309,9 +310,9 @@ def test_get_miriad_times():
 def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
-    (data, flags, antpos, ants, freqs, times,
-     lsts, pols) = uvtest.checkWarnings(io.load_vis, [fname], {'return_meta': True}, nwarnings=1,
-                                        message='Telescope AIPY is not in known_telescopes')
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        (data, flags, antpos, ants, freqs, times, lsts, pols) = io.load_vis(fname, return_meta=True)
     data_drift = copy.deepcopy(data)
     transit_integration = 50
 
