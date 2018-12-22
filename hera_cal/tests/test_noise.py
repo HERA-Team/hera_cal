@@ -73,7 +73,7 @@ class Test_Noise(unittest.TestCase):
 
     def test_write_per_antenna_noise_std_from_autos(self):
         infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
-        calfile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.omni.calfits')
+        calfile = os.path.join(DATA_PATH, 'test_input/zen.2458098.43124.downsample.omni.calfits')
         outfile = os.path.join(DATA_PATH, 'test_output/noise.uvh5')
         noise.write_per_antenna_noise_std_from_autos(infile, outfile, calfile=calfile, add_to_history='testing', clobber=True)
 

@@ -40,7 +40,7 @@ class Test_Autos(unittest.TestCase):
     def test_read_calibrate_and_write_autocorrelations(self):
         infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
         outfile = os.path.join(DATA_PATH, 'test_output/autos.uvh5')
-        calfile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.omni.calfits')
+        calfile = os.path.join(DATA_PATH, 'test_input/zen.2458098.43124.downsample.omni.calfits')
         calibrated = os.path.join(DATA_PATH, 'test_output/calibrated.uvh5')
         autos.read_and_write_autocorrelations(infile, outfile, calfile=calfile, clobber=True)
         apply_cal(infile, calibrated, calfile, clobber=True)
