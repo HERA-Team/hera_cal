@@ -12,7 +12,7 @@ from six.moves import range, zip
 import linsolve
 
 from . import utils
-from . import noise
+from .noise import predict_noise_variance_from_autos
 from .datacontainer import DataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol
 from .io import HERAData, HERACal, write_cal, write_vis
@@ -934,9 +934,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    data_wgts = {bl: noise.predict_noise_variance_from_autos(bl, data,
-                                                             dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
-                                                                 * SEC_PER_DAY))**-1 for bl in data.keys()}
+    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
+                                                                     * SEC_PER_DAY))**-1 for bl in data.keys()}
     rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
                                                                        gains=rv['g_omnical'], reds=reds,
                                                                        split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
