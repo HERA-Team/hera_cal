@@ -85,7 +85,7 @@ class Test_VisClean(unittest.TestCase):
 
         # test write on subset of data
         V.read(read_data=True)
-        data = datacontainer.DataContainer(dict([(k, V.data[k]) for k in V.data.keys()[:2]]))
+        data = datacontainer.DataContainer(dict([(k, V.data[k]) for k in list(V.data.keys())[:2]]))
         V.write_data(data, "ex.uvh5", overwrite=True, filetype='uvh5')
         nt.assert_true(os.path.exists("ex.uvh5"))
         os.remove('ex.uvh5')
