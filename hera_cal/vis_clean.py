@@ -187,10 +187,12 @@ class VisClean(object):
 
         # select out a copy of hd
         hd = self.hd.select(bls=keys, inplace=False)
+        hd._determine_blt_slicing()
+        hd._determine_pol_indexing()
 
         # update HERAData
         hd.update(data=data, flags=flags, nsamples=nsamples)
- 
+
         # add history
         if add_to_history is not None:
             hd.history = "{}\n{}".format(hd.history, add_to_history)
