@@ -189,10 +189,12 @@ class VisClean(object):
 
         # select out a copy of hd
         hd = self.hd.select(bls=keys, inplace=False)
+        hd._determine_blt_slicing()
+        hd._determine_pol_indexing()
 
         # update HERAData
         hd.update(data=data, flags=flags, nsamples=nsamples)
- 
+
         # add history
         if add_to_history is not None:
             hd.history = "{}\n{}".format(hd.history, add_to_history)
@@ -223,8 +225,12 @@ class VisClean(object):
         """
         Perform a CLEAN deconvolution.
 
-        Run a CLEAN on data and insert model into self.clean_model,
-        self.clean_resid and self.clean_data.
+        Run a CLEAN on data and insert the CLEAN components
+        into self.clean_model, the CLEAN residual into self.clean_resid,
+        the CLEAN flags into self.clean_flags and other relevant info
+        into self.clean_info. CLEAN flags are by definition all False
+        unless a skip_wgt is triggered, in which case all pixels
+        along the CLEAN axis are set to True.
 
         Args:
             keys : list of bl-pol keys in data to CLEAN
