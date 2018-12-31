@@ -17,12 +17,13 @@ from .datacontainer import DataContainer
 
 
 def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1, -2, 1]]):
-    '''Estimate the noise on a visibiltiy per frequency and time using sequential differecing.
+    '''Estimate the noise on a visibility per frequency and time using weighted differecing of
+    neighboring frequency and time samples.
     
     Arguments:
         vis: complex visibility waterfall, usually a numpy array of size (Ntimes, Nfreqs)
-        kernel: differencing kernel for how to weight each visibiltiy relative to its neighbors
-            in time and frequency. Must sum to zero and must be 2D.
+        kernel: differencing kernel for how to weight each visibility relative to its neighbors
+            in time and frequency. Must sum to zero and must be 2D (either dimension could be length 1)
 
     Returns:
         variance: estimate of the noise variance on the input visibility with the same shape
@@ -70,7 +71,7 @@ def per_antenna_noise_std(autos, dt=None, df=None):
 
     Returns:
         noise: DataContainer mapping autocorrelation baselines like (1, 1, 'xx') to predictions for the standard
-            deviation of noise for that antenna.
+            deviation of noise for that antenna (in the same units as the autocorrelations themselves).
     '''
     noise = {}
     for bl in autos:
