@@ -14,7 +14,7 @@ from scipy import constants
 from pyuvdata import UVCal, UVData
 import nose.tools as nt
 
-from hera_cal import io
+from hera_cal import io, datacontainer
 from hera_cal.vis_clean import VisClean
 from hera_cal.data import DATA_PATH
 
@@ -82,6 +82,13 @@ class Test_VisClean(unittest.TestCase):
 
         # exceptions
         nt.assert_raises(ValueError, V.write_data, V.data, 'foo', filetype='what')
+
+        # test write on subset of data
+        V.read(read_data=True)
+        data = datacontainer.DataContainer(dict([(k, V.data[k]) for k in list(V.data.keys())[:2]]))
+        V.write_data(data, "ex.uvh5", overwrite=True, filetype='uvh5')
+        nt.assert_true(os.path.exists("ex.uvh5"))
+        os.remove('ex.uvh5')
 
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.uvXRAA")

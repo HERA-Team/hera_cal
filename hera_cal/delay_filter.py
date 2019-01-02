@@ -78,24 +78,19 @@ class DelayFilter(VisClean):
 
         Returns
             filled_data: DataContainer with original data and flags filled with CLEAN model
-            filled_flags: DataContainer with flags set to False unless time is skipped
+            filled_flags: DataContainer with flags set to False unless the time is skipped in delay filter
         """
-        assert hasattr(self, 'clean_model') and hasattr(self, 'data') and hasattr(self, 'flags'), "self.clean_model, "\
-            "self.data and self.flags must all exist to get filled data"
+        assert np.all([hasattr(self, n) for n in ['clean_model', 'clean_flags', 'data', 'flags']]), "self.data, self.flags, self.clean_model and self.clean_flags must all exist to get filled data"
         # construct filled data and filled flags
-        filled_data = deepcopy(self.data)
-        filled_flags = deepcopy(self.flags)
+        filled_data = deepcopy(self.clean_model)
+        filled_flags = deepcopy(self.clean_flags)
 
         # iterate over filled_data keys
         for k in filled_data.keys():
-            # get flags
-            f = filled_flags[k].copy()
-            # if flagged across all freqs, "unflag" this f
-            f[np.sum(f, axis=1) / float(self.Nfreqs) > 0.99999] = False
-            # replace data_out with clean_model at f == True
-            filled_data[k][f] = self.clean_model[k][f]
-            # unflag at f == True
-            filled_flags[k][f] = False
+            # get original data flags
+            f = self.flags[k]
+            # replace filled_data with original data at f == False
+            filled_data[k][~f] = self.data[k][~f]
 
         return filled_data, filled_flags
 
