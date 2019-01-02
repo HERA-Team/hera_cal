@@ -297,7 +297,7 @@ class Test_AbsCal:
         gf = (uvc.flag_array[aa.index(bl[0])] + uvc.flag_array[aa.index(bl[1])]).squeeze().T
         w = self.AC.wgts[bl] * ~gf
         AC2 = abscal.AbsCal(copy.deepcopy(self.AC.model), copy.deepcopy(self.AC.data), wgts=copy.deepcopy(self.AC.wgts), refant=24, input_cal=self.input_cal)
-        np.testing.assert_array_almost_equal(self.AC.data[bl]/g*w, AC2.data[bl]*w)
+        np.testing.assert_array_almost_equal(self.AC.data[bl] / g * w, AC2.data[bl] * w)
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments

@@ -239,11 +239,11 @@ class Test_lstbin:
         # test on uvh5 files
         uvh5_files = []
         for dfiles in self.data_files:
-            uvh5_files.append([df+'.uvh5' for df in dfiles])
+            uvh5_files.append([df + '.uvh5' for df in dfiles])
             for df in dfiles:
                 u = UVData()
                 u.read_miriad(df)
-                u.write_uvh5(df+'.uvh5', clobber=True)
+                u.write_uvh5(df + '.uvh5', clobber=True)
 
         hc.lstbin.lst_bin_files(uvh5_files, ntimes_per_file=250, outdir="./", overwrite=True,
                                 verbose=False, filetype='uvh5')
