@@ -17,5 +17,7 @@ from . import frf
 from . import flag_utils
 from . import reflections
 from . import vis_clean
+from . import autos
+from . import noise
 
 __version__ = version.version
