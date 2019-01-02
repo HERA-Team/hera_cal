@@ -78,7 +78,7 @@ class AbsCal(object):
     """
     def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None,
                  min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, verbose=True,
-                 filetype='miriad'):
+                 filetype='miriad', input_cal=None):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -145,6 +145,9 @@ class AbsCal(object):
             bl separation length, with a specified fwhm [meters]
 
         filetype : str, if data and/or model are fed as strings, this is their filetype
+
+        input_cal : filepath to calfits, UVCal or HERACal object with gain solutions to
+            apply to data on-the-fly via hera_cal.apply_cal.calibrate_in_place
         """
         # set pols to None
         pols = None
@@ -158,10 +161,17 @@ class AbsCal(object):
         if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data.__class__, UVData):
             (data, flags, data_antpos, data_ants, data_freqs, data_lsts,
              data_times, data_pols) = io.load_vis(data, pop_autos=True, return_meta=True, filetype=filetype)
-            wgts = DataContainer(odict(list(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys()))))
             pols = data_pols
             freqs = data_freqs
             antpos = data_antpos
+
+        # apply calibration
+        if input_cal is not None:
+            if 'flags' not in locals():
+                flags = None
+            uvc = io.to_HERACal(input_cal)
+            gains, cal_flags, quals, totquals = uvc.read()
+            apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags, gain_convention=uvc.gain_convention)
 
         # get shared keys
         self.keys = sorted(set(model.keys()) & set(data.keys()))
@@ -197,9 +207,16 @@ class AbsCal(object):
 
         # setup weights
         if wgts is None:
-            wgts = odict()
-            for k in self.keys:
-                wgts[k] = np.ones_like(data[k], dtype=np.float)
+            # use data flags if present
+            if 'flags' in locals() and flags is not None:
+                wgts = DataContainer(odict([(k, (~flags[k]).astype(np.float)) for k in self.keys]))
+            else:
+                wgts = DataContainer(odict())
+                for k in self.keys:
+                    wgts[k] = np.ones_like(data[k], dtype=np.float)
+            if 'model_flags' in locals():
+                for k in self.keys:
+                    wgts[k] *= (~model_flags[k]).astype(np.float)
         self.wgts = wgts
 
         # setup ants
@@ -987,7 +1004,8 @@ def abscal_arg_parser():
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
     a.add_argument("--data_file", type=str, help="file path of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_infile", type=str, help="path to calfits file to multiply with abscal solution before writing to disk.")
+    a.add_argument("--input_cal", type=str, help="Path to a calfits file to apply to the data before running abscal.")
+    a.add_argument("--secondary_cal", type=str, help="Path to a calfits file to multiply with abscal solution before writing to disk.")
     a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits files.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
@@ -1026,7 +1044,8 @@ def omni_abscal_arg_parser():
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
     a.add_argument("--data_file", type=str, help="file path of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
-    a.add_argument("--calfits_infile", type=str, help="path to calfits file to multiply with abscal solution before writing to disk.")
+    a.add_argument("--input_cal", type=str, help="Path to a calfits file to apply to the data before running abscal.")
+    a.add_argument("--secondary_cal", type=str, help="Path to a calfits file to multiply with abscal solution before writing to disk.")
     a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits files.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output calfits file if it exists.")
@@ -1052,7 +1071,7 @@ def omni_abscal_arg_parser():
     return a
 
 
-def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_infile=None, verbose=True, overwrite=False, write_calfits=True,
+def abscal_run(data_file, model_files, filetype='miriad', refant=None, secondary_cal=None, input_cal=None, verbose=True, overwrite=False, write_calfits=True,
                min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, window=None, edge_cut=0,
                delay_cal=False, avg_phs_cal=False, avg_dly_slope_cal=False, delay_slope_cal=False, phase_slope_cal=False, abs_amp_cal=False,
@@ -1088,9 +1107,12 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
 
     filetype : str, filetype of input data and models
 
-    calfits_infile : type=str, path to calfits files containing gain solutions
+    secondary_cal : type=str, path to calfits files containing gain solutions
                      to multiply with abscal gain solution before writing to file.
                      History, quality and flags are also propagated to final output calfits file.
+
+    input_cal : filepath to calfits, UVCal or HERACal object with gain solutions to
+        apply to data on-the-fly via hera_cal.apply_cal.calibrate_in_place
 
     refant : type=int, antenna number integer to use as reference antenna.
 
@@ -1249,7 +1271,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
 
         # instantiate class
         AC = AbsCal(new_model, data, wgts=wgts, refant=refant, antpos=antpos, freqs=data_freqs,
-                    min_bl_cut=min_bl_cut, max_bl_cut=min_bl_cut, bl_taper_fwhm=bl_taper_fwhm)
+                    min_bl_cut=min_bl_cut, max_bl_cut=min_bl_cut, bl_taper_fwhm=bl_taper_fwhm, input_cal=input_cal)
         refant = AC.refant
 
         # center total_data_antpos w/ refant
@@ -1417,9 +1439,9 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
     quals = odict(list(map(lambda k: (k, np.ones((Ntimes, Nfreqs), np.float)), gain_keys)))
 
     # load in extra calfits file if provided
-    if calfits_infile is not None:
+    if secondary_cal is not None:
         cal_in = UVCal()
-        cal_in.read_calfits(calfits_infile)
+        cal_in.read_calfits(secondary_cal)
         (out_gains, out_flags, quals, total_qual, ants, freqs, times,
          pols) = io.load_cal(cal_in, return_meta=True)
         history = cal_in.history + history
