@@ -101,7 +101,12 @@ class HERACal(UVCal):
             quals: dict mapping antenna-pol keys to (Nint, Nfreq) float qual arrays
             total_qual: dict mapping polarization to (Nint, Nfreq) float total quality array
         '''
-        self.read_calfits(self.filepaths)
+        # if filepaths is None, this was converted to HERAData
+        # from a different pre-loaded object with no history of filepath
+        if self.filepaths is not None:
+            # load data
+            self.read_calfits(self.filepaths)
+
         return self.build_calcontainers()
 
     def update(self, gains=None, flags=None, quals=None, total_qual=None):
@@ -389,23 +394,26 @@ class HERAData(UVData):
         partials = ['bls', 'polarizations', 'times', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
 
-        # load data
-        if self.filetype == 'uvh5':
-            self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
-                           frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
-        else:
-            if not read_data:
-                raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
-            if self.filetype == 'miriad':
-                self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
-                if any([times is not None, frequencies is not None, freq_chans is not None]):
-                    warnings.warn('miriad does not support partial loading for times and frequencies. '
-                                  'Loading the file first and then performing select.')
-                    self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
-            elif self.filetype == 'uvfits':
-                self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
-                                 times=times, frequencies=frequencies, freq_chans=freq_chans)
-                self.unphase_to_drift()
+        # if filepaths is None, this was converted to HERAData
+        # from a different pre-loaded object with no history of filepath
+        if self.filepaths is not None:
+            # load data
+            if self.filetype == 'uvh5':
+                self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
+                               frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
+            else:
+                if not read_data:
+                    raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
+                if self.filetype == 'miriad':
+                    self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
+                    if any([times is not None, frequencies is not None, freq_chans is not None]):
+                        warnings.warn('miriad does not support partial loading for times and frequencies. '
+                                      'Loading the file first and then performing select.')
+                        self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
+                elif self.filetype == 'uvfits':
+                    self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
+                                     times=times, frequencies=frequencies, freq_chans=freq_chans)
+                    self.unphase_to_drift()
 
         # process data into DataContainers
         if read_data or self.filetype == 'uvh5':
@@ -741,6 +749,7 @@ def to_HERAData(input_data, filetype='miriad'):
         hd.__class__ = HERAData
         hd._determine_blt_slicing()
         hd._determine_pol_indexing()
+        hd.filepaths = None
         return hd
     elif isinstance(input_data, collections.Iterable):  # List loading
         if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
@@ -993,17 +1002,19 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     # write to file
     if write_file:
-        if filetype == 'miriad':
-            # check output
-            fname = os.path.join(outdir, fname)
-            if os.path.exists(fname) and overwrite is False:
-                if verbose:
-                    print("{} exists, not overwriting".format(fname))
-            else:
-                if verbose:
-                    print("saving {}".format(fname))
-                uvd.write_miriad(fname, clobber=True)
+        # check output
+        fname = os.path.join(outdir, fname)
+        if os.path.exists(fname) and overwrite is False:
+            if verbose:
+                print("{} exists, not overwriting".format(fname))
+        else:
+            if verbose:
+                print("saving {}".format(fname))
 
+        if filetype == 'miriad':
+            uvd.write_miriad(fname, clobber=True)
+        elif filetype == 'uvh5':
+            uvd.write_uvh5(fname, clobber=True)
         else:
             raise AttributeError("didn't recognize filetype: {}".format(filetype))
 
@@ -1098,6 +1109,7 @@ def to_HERACal(input_cal):
         return input_cal
     elif isinstance(input_cal, UVCal):  # single UVCal object
         input_cal.__class__ = HERACal
+        input_cal.filepaths = None
         return input_cal
     elif isinstance(input_cal, collections.Iterable):  # List loading
         if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths

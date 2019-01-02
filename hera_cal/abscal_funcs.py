@@ -1602,8 +1602,8 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     return DataContainer(red_data), DataContainer(red_wgts), red_keys
 
 
-def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
-                            write_miriad=True, output_data=False, overwrite=False,
+def avg_file_across_red_bls(data_fname, filetype='uvh5', outdir=None, output_fname=None,
+                            write=True, output_data=False, overwrite=False,
                             verbose=True, **kwargs):
     """
     Open a file and run avg_data_across_red_bls on data, then write to file
@@ -1616,7 +1616,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
 
     output_fname : type=str, output filename
 
-    write_miriad : type=boolean, if True, write output miriad file
+    write : type=boolean, if True, write output file
 
     output_data : type=boolean, if True, return data dictionary
 
@@ -1642,7 +1642,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
         uvd.read_miriad(data_fname)
 
     # get data
-    data, flags = io.load_vis(uvd, pop_autos=True, return_meta=False, pick_data_ants=True)
+    data, flags = io.load_vis(uvd, pop_autos=True, return_meta=False, pick_data_ants=True, filetype=filetype)
     wgts = DataContainer(odict(list(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys()))))
 
     # get antpos and baselines
@@ -1664,7 +1664,7 @@ def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
     uvd_flags = uvd_flags.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
 
     # write to file
-    if write_miriad:
+    if write:
         raise NotImplementedError("Correct averaging of integration_time and nsample not yet implemented")
         # echo("saving {}".format(output_fname), type=1, verbose=verbose)
         # TODO: Perform the proper summing of integration_time and nsample in
@@ -1760,7 +1760,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     return DataContainer(red_data)
 
 
-def match_times(datafile, modelfiles, atol=1e-5):
+def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
     """
     Match start and end LST of datafile to modelfiles. Each file in modelfiles needs
     to have the same integration time.
@@ -1769,14 +1769,15 @@ def match_times(datafile, modelfiles, atol=1e-5):
     -----------
     datafile : type=str, path to miriad data file
     modelfiles : type=str, list of paths to miriad model files ordered according to file start time
+    filetype : str, options=['miriad', 'uvh5']
 
     Return: (matched_modelfiles)
     -------
     matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
     """
     # get times
-    data_time = np.array(utils.get_miriad_times(datafile))[:2]
-    model_times = np.array(utils.get_miriad_times(modelfiles))
+    data_time = np.array(io.get_file_lst_range(datafile, filetype=filetype))[:2]
+    model_times = np.array(io.get_file_lst_range(modelfiles, filetype=filetype))
     model_inttime = model_times[2][0]
     model_times = model_times[:2]
     model_times[1] += model_inttime

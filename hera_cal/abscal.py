@@ -1004,6 +1004,7 @@ def abscal_arg_parser():
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
     a.add_argument("--data_file", type=str, help="file path of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
+    a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of input filepaths.")
     a.add_argument("--input_cal", type=str, help="Path to a calfits file to apply to the data before running abscal.")
     a.add_argument("--secondary_cal", type=str, help="Path to a calfits file to multiply with abscal solution before writing to disk.")
     a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits files.")
@@ -1044,6 +1045,7 @@ def omni_abscal_arg_parser():
     a = argparse.ArgumentParser(description="command-line drive script for hera_cal.abscal module")
     a.add_argument("--data_file", type=str, help="file path of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
+    a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of input filepaths.")
     a.add_argument("--input_cal", type=str, help="Path to a calfits file to apply to the data before running abscal.")
     a.add_argument("--secondary_cal", type=str, help="Path to a calfits file to multiply with abscal solution before writing to disk.")
     a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits files.")
@@ -1195,7 +1197,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, secondary
     """
     # only load model files needed to create LST overlap w/ data file
     # and reject data files that have no LST overlap w/ any of model files
-    model_files = sorted(set(match_times(data_file, model_files)))
+    model_files = sorted(set(match_times(data_file, model_files, filetype=filetype)))
 
     # check length of model files
     nomodelfiles = False
