@@ -78,6 +78,8 @@ class Test_Noise(unittest.TestCase):
         noise.write_per_antenna_noise_std_from_autos(infile, outfile, calfile=calfile, add_to_history='testing', clobber=True)
 
         hd = io.HERAData(outfile)
+        self.assertTrue('testing' in hd.history)
+        self.assertTrue('This file was producted by the function' in hd.history)
         n, f, _ = hd.read()
         hc = io.HERACal(calfile)
         g, gf, _, _ = hc.read()
