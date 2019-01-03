@@ -11,6 +11,7 @@ import argparse
 import scipy
 
 from . import io
+from . import version
 from .utils import split_pol, join_pol
 from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
@@ -104,7 +105,7 @@ def write_per_antenna_noise_std_from_autos(infile, outfile, calfile=None, gain_c
         calibrate_in_place(autos, gains, data_flags=auto_flags, cal_flags=cal_flags, gain_convention=gain_convention)
     noise = per_antenna_noise_std(autos)
     hd.update(data=noise, flags=auto_flags)
-    hd.history += add_to_history
+    hd.history += add_to_history + version.history_string()
     hd.write_uvh5(outfile, clobber=clobber)
 
 
