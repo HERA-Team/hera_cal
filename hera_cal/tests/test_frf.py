@@ -106,11 +106,13 @@ class Test_FRFilter:
 
     def test_write_data(self):
         self.F.timeavg_data(35, rephase=False, verbose=False)
-        u = self.F.write_data("./out.uv", write_avg=True, filetype='miriad', overwrite=True)
+        u = self.F.write_data("./out.uv", write_avg=True, filetype='miriad', overwrite=True, add_to_history='testing')
         nt.assert_true(os.path.exists("./out.uv"))
         hd = hc.io.HERAData('./out.uv', filetype='miriad')
         hd.read()
         nt.assert_equal(u, hd)
+        nt.assert_true('testing' in hd.history)
+        nt.assert_true('This file was producted by the function' in hd.history)
 
         u = self.F.write_data("./out.uv", overwrite=False)
         nt.assert_equal(u, None)
