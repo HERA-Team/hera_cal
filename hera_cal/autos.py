@@ -8,6 +8,7 @@ from __future__ import print_function, division, absolute_import
 
 import argparse
 from . import io
+from . import version
 from .utils import split_pol
 from .apply_cal import calibrate_in_place
 
@@ -37,7 +38,7 @@ def read_and_write_autocorrelations(infile, outfile, calfile=None, gain_conventi
         hd.update(data=data, flags=data_flags)
     else:
         hd.read(bls=auto_bls, return_data=False)
-    hd.history += add_to_history
+    hd.history += add_to_history + version.history_string()
     hd.write_uvh5(outfile, clobber=clobber)
 
 

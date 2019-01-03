@@ -34,7 +34,8 @@ class Test_Autos(unittest.TestCase):
             self.assertEqual(split_pol(bl[2])[0], split_pol(bl[2])[1])
             np.testing.assert_array_equal(d_full[bl], d[bl])
             np.testing.assert_array_equal(f_full[bl], f[bl])
-        self.assertEqual(hd.history[-7:], 'testing')
+        self.assertTrue('testing' in hd.history)
+        self.assertTrue('This file was producted by the function' in hd.history)
         os.remove(outfile)
 
     def test_read_calibrate_and_write_autocorrelations(self):
