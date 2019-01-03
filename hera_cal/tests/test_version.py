@@ -109,6 +109,15 @@ def test_construct_version_info():
     nt.assert_equal(hera_cal.version.construct_version_info(), test_version_info)
 
 
+def test_history_string():
+    hs = hera_cal.version.history_string()
+    nt.assert_true('function test_history_string() in test_version.py' in hs)
+    version_info = hera_cal.version.construct_version_info()
+    for k, v in version_info.items():
+        nt.assert_true(k in hs)
+        nt.assert_true(v in hs)
+
+
 def test_main():
     version_info = hera_cal.version.construct_version_info()
 
