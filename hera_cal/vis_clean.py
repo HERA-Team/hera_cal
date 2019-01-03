@@ -195,9 +195,9 @@ class VisClean(object):
         hd.update(data=data, flags=flags, nsamples=nsamples)
 
         # add history
-        hd.history += version.history_string()
         if add_to_history is not None:
             hd.history = "{}\n{}".format(hd.history, add_to_history)
+        hd.history += version.history_string()
 
         # update other kwargs
         for attribute, value in kwargs.items():
