@@ -11,6 +11,7 @@ import argparse
 from pyuvdata import UVCal, UVData
 
 from . import io
+from . import version
 from . import utils
 from .datacontainer import DataContainer
 
@@ -131,6 +132,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         old_hc = io.HERACal(old_calibration)
         old_calibration, _, _, _ = old_hc.read()
         add_to_history += ' OLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
+
+    add_to_history += version.history_string()
 
     # partial loading and writing using uvh5
     if nbl_per_load is not None:
