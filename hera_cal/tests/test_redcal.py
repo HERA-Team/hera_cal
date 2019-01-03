@@ -1063,7 +1063,7 @@ class TestRunMethods(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
-            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.0, append_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
+            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.0, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
             sys.stdout = sys.__stdout__
 
         bad_ants = [25, 11, 12, 14]  # this is based on experiments with this particular file
@@ -1075,7 +1075,8 @@ class TestRunMethods(unittest.TestCase):
             if ant[0] in bad_ants:
                 np.testing.assert_array_equal(gains[ant], 1.0)
                 np.testing.assert_array_equal(flags[ant], True)
-        self.assertEqual(hc.history[0:7], 'testing')
+        self.assertTrue('testing' in hc.history)
+        self.assertTrue('This file was producted by the function' in hc.history)
 
         hc = io.HERACal(os.path.splitext(input_data)[0] + '.omni.calfits')
         gains, flags, quals, total_qual = hc.read()
@@ -1090,6 +1091,7 @@ class TestRunMethods(unittest.TestCase):
             np.testing.assert_array_almost_equal(total_qual[antpol], cal['chisq'][antpol])
         self.assertTrue('testing' in hc.history)
         self.assertTrue('Throwing out antenna 14' in hc.history)
+        self.assertTrue('This file was producted by the function' in hc.history)
 
         hd = io.HERAData(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
         data, flags, nsamples = hd.read()
@@ -1098,7 +1100,8 @@ class TestRunMethods(unittest.TestCase):
             np.testing.assert_array_almost_equal(flags[bl], cal['vf_omnical'][bl])
             self.assertFalse(bl[0] in bad_ants)
             self.assertFalse(bl[1] in bad_ants)
-        self.assertEqual(hd.history[-7:], 'testing')
+        self.assertTrue('testing' in hd.history)
+        self.assertTrue('This file was producted by the function' in hd.history)
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
