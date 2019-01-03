@@ -15,6 +15,7 @@ import argparse
 import uvtools
 
 from . import io
+from . import version
 from . import utils
 from . import flag_utils
 from .abscal import fft_dly
@@ -417,7 +418,7 @@ class CalibrationSmoother():
             out_gains = {ant: self.filtered_gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             out_flags = {ant: self.filtered_flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             io.update_cal(cal, outfilename, gains=out_gains, flags=out_flags,
-                          add_to_history=add_to_history, clobber=clobber, **kwargs)
+                          add_to_history=(add_to_history + version.history_string()), clobber=clobber, **kwargs)
 
 
 def smooth_cal_argparser():
