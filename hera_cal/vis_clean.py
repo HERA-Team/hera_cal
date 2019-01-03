@@ -13,6 +13,7 @@ from astropy import constants
 
 from . import io
 from . import apply_cal
+from . import version
 from .datacontainer import DataContainer
 from .utils import echo
 
@@ -194,6 +195,7 @@ class VisClean(object):
         hd.update(data=data, flags=flags, nsamples=nsamples)
 
         # add history
+        hd.history += version.history_string()
         if add_to_history is not None:
             hd.history = "{}\n{}".format(hd.history, add_to_history)
 
