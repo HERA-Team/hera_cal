@@ -225,8 +225,8 @@ class Test_Calibration_Smoother(unittest.TestCase):
         for cal in self.cs.cals:
             new_cal = io.HERACal(cal.replace('test_input/', 'test_output/smoothed_'))
             gains, flags, _, _ = new_cal.read()
-            self.assertTrue('hello world' in new_cal.history)
-            self.assertTrue('This file was produced by the function' in new_cal.history)
+            self.assertTrue('helloworld' in new_cal.history.replace('\n','').replace(' ', ''))
+            self.assertTrue('Thisfilewasproducedbythefunction' in new_cal.history.replace('\n','').replace(' ', ''))
             self.assertEqual(new_cal.telescope_name, 'PAPER')
             np.testing.assert_array_equal(gains[54, 'Jxx'], g[self.cs.time_indices[cal], :])
             os.remove(cal.replace('test_input/', 'test_output/smoothed_'))
