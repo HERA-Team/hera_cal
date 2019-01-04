@@ -227,7 +227,7 @@ class Test_Calibration_Smoother(unittest.TestCase):
             old_cal.read_calfits(cal)
             new_cal.read_calfits(cal.replace('test_input/', 'test_output/smoothed_'))
             self.assertTrue('hello world' in new_cal.history)
-            self.assertTrue('This file was producted by the function' in new_cal.history)
+            self.assertTrue('This file was produced by the function' in new_cal.history)
             self.assertEqual(new_cal.telescope_name, 'PAPER')
             gains, flags = io.load_cal(new_cal)
             np.testing.assert_array_equal(gains[54, 'Jxx'], g[self.cs.time_indices[cal], :])

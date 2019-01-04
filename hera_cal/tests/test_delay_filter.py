@@ -66,7 +66,7 @@ class Test_DelayFilter(unittest.TestCase):
         uvd = UVData()
         uvd.read_uvh5(outfilename)
         self.assertTrue('Hello_world.' in uvd.history)
-        self.assertTrue('This file was producted by the function' in uvd.history)
+        self.assertTrue('This file was produced by the function' in uvd.history)
         self.assertEqual(uvd.telescope_name, 'PAPER')
 
         filtered_residuals, flags = io.load_vis(uvd)
@@ -101,7 +101,7 @@ class Test_DelayFilter(unittest.TestCase):
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         df.partial_load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls=2, clobber=True)
         hd = io.HERAData(outfilename)
-        self.assertTrue('This file was producted by the function' in hd.history)
+        self.assertTrue('This file was produced by the function' in hd.history)
         d, f, n = hd.read(bls=[(53, 54, 'xx')])
         np.testing.assert_array_equal(f[(53, 54, 'xx')], True)
         os.remove(outfilename)

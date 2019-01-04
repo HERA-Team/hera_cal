@@ -164,7 +164,7 @@ class Test_ReflectionFitter(unittest.TestCase):
         RF.model_reflections((100, 200), taper='hanning', zero_pad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True, add_to_history='testing')
         nt.assert_true('testing' in uvc.history)
-        nt.assert_true('This file was producted by the function' in uvc.history)
+        nt.assert_true('This file was produced by the function' in uvc.history)
         nt.assert_equal(uvc.Ntimes, 60)
         np.testing.assert_array_equal([37, 38, 39], uvc.ant_array)
 
