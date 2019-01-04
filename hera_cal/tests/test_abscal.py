@@ -675,7 +675,7 @@ class Test_AbsCal:
         nt.assert_true(uvc.flag_array[0].min())
         nt.assert_true(len(uvc.history) > 1000)
         nt.assert_true('testing' in uvc.history)
-        nt.assert_true('This file was producted by the function' in uvc.history)
+        nt.assert_true('This file was produced by the function' in uvc.history)
         # assert refant phase is zero
         nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
         os.remove('./ex.calfits')
