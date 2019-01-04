@@ -25,6 +25,7 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
 from . import utils
+from . import version
 from . import abscal
 from . import redcal
 from . import io
@@ -416,13 +417,14 @@ def lst_align_arg_parser():
     a.add_argument("--outdir", default=None, type=str, help='directory for output files')
     a.add_argument("--dlst", type=float, default=None, help="LST grid interval spacing")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
+    a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
     a.add_argument("--miriad_kwargs", type=dict, default={}, help="kwargs to pass to miriad_to_data function")
     a.add_argument("--align_kwargs", type=dict, default={}, help="kwargs to pass to lst_align function")
     a.add_argument("--silence", default=False, action='store_true', help='silence output to stdout')
     return a
 
 
-def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
+def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, history=' ',
                     overwrite=None, outdir=None, miriad_kwargs={}, align_kwargs={}, verbose=True):
     """
     Align a series of data files with a universal LST grid.
@@ -434,6 +436,8 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
     file_ext : type=str, file_extension for each file in data_files when writing to disk
 
     dlst : type=float, LST grid bin interval, if None get it from first file in data_files
+
+    history : history to insert into output files
 
     overwrite : type=boolean, if True overwrite output files
 
@@ -472,7 +476,9 @@ def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None,
         if outdir is not None:
             miriad_kwargs['outdir'] = outdir
         miriad_kwargs['start_jd'] = np.floor(times[0])
-        io.write_vis(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, filetype='miriad', **miriad_kwargs)
+        history += version.history_string()
+        io.write_vis(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, 
+                     filetype='miriad', history=history, **miriad_kwargs)
 
 
 def lst_bin_arg_parser():
@@ -629,6 +635,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
     overwrite : type=bool, if True overwrite output files
 
+    history : history to insert into output files
+
     rephase : type=bool, if True, rephase data points in LST bin to center of bin
 
     bin_kwargs : type=dictionary, keyword arguments for lst_bin.
@@ -769,7 +777,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
 
         # update history
         file_history = history + " Input files: " + "-".join(list(map(lambda ff: os.path.basename(ff), file_list)))
-        kwargs['history'] = file_history
+        kwargs['history'] = file_history + version.history_string()
 
         # form integration time array
         kwargs['integration_time'] = np.ones(len(bin_lst) * len(bin_data.keys()), dtype=np.float64) * integration_time
