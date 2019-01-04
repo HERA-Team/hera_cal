@@ -1102,7 +1102,6 @@ class TestRunMethods(unittest.TestCase):
             self.assertFalse(bl[1] in bad_ants)
         self.assertTrue('testing' in hd.history)
         self.assertTrue('This file was produced by the function' in hd.history)
-        print(hd.history)
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
