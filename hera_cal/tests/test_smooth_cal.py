@@ -223,13 +223,11 @@ class Test_Calibration_Smoother(unittest.TestCase):
         self.cs.write_smoothed_cal(output_replace=('test_input/', 'test_output/smoothed_'),
                                    add_to_history='hello world', clobber=True, telescope_name='PAPER')
         for cal in self.cs.cals:
-            old_cal, new_cal = UVCal(), UVCal()
-            old_cal.read_calfits(cal)
-            new_cal.read_calfits(cal.replace('test_input/', 'test_output/smoothed_'))
+            new_cal = io.HERACal(cal.replace('test_input/', 'test_output/smoothed_'))
+            gains, flags, _, _ = new_cal.read()
             self.assertTrue('hello world' in new_cal.history)
             self.assertTrue('This file was produced by the function' in new_cal.history)
             self.assertEqual(new_cal.telescope_name, 'PAPER')
-            gains, flags = io.load_cal(new_cal)
             np.testing.assert_array_equal(gains[54, 'Jxx'], g[self.cs.time_indices[cal], :])
             os.remove(cal.replace('test_input/', 'test_output/smoothed_'))
 
