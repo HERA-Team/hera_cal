@@ -27,6 +27,7 @@ from __future__ import print_function, division, absolute_import
 import gc as garbage_collector
 from six.moves import map, range
 
+from . import version
 from . import flag_utils
 from .abscal_funcs import *
 from .utils import echo
@@ -1164,6 +1165,8 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
     antflag_thresh : float, fraction of flagged visibilities per antenna needed to flag the
         antenna gain per time and frequency
 
+    history : history string to insert into output calfits files
+
     Result:
     -------
     if return_gains: return (gains dictionary)
@@ -1449,8 +1452,8 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
             total_qual, _, quals, _ = utils.chisq(AC.data, AC.model, AC.wgts,
                                                   gain_flags=flag_dict, split_by_antpol=True)
         io.write_cal(output_calfits_path, gain_dict, data_freqs, data_times,
-                     flags=flag_dict, quality=quals, total_qual=total_qual,
-                     return_uvc=False, overwrite=overwrite, history=history)
+                     flags=flag_dict, quality=quals, total_qual=total_qual, return_uvc=False, 
+                     overwrite=overwrite, history=(history + version.history_string()))
 
     # form return tuple
     return_obj = ()
