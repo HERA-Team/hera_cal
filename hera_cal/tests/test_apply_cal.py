@@ -115,8 +115,8 @@ class Test_Update_Cal(unittest.TestCase):
                      add_to_history='testing')
         hd = io.HERAData(outname_miriad, filetype='miriad')
         new_data, new_flags, _ = hd.read()
-        self.assertTrue('testing' in hd.history)
-        self.assertTrue('This file was produced by the function' in hd.history)
+        self.assertTrue('testing' in hd.history.replace('\n', '').replace(' ', ''))
+        self.assertTrue('Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', ''))
         self.assertEqual(hd.vis_units, 'Jy')
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):

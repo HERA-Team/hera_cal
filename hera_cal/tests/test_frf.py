@@ -111,8 +111,8 @@ class Test_FRFilter:
         hd = hc.io.HERAData('./out.uv', filetype='miriad')
         hd.read()
         nt.assert_equal(u, hd)
-        nt.assert_true('testing' in hd.history)
-        nt.assert_true('This file was produced by the function' in hd.history)
+        nt.assert_true('testing' in hd.history.replace('\n', '').replace(' ', ''))
+        nt.assert_true('Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', ''))
 
         u = self.F.write_data("./out.uv", overwrite=False)
         nt.assert_equal(u, None)

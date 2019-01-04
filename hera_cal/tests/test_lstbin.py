@@ -131,7 +131,7 @@ class Test_lstbin:
         nt.assert_true(os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'))
         uvd1 = UVData()
         uvd1.read_miriad('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124')
-        nt.assert_true('This file was produced by the function' in uvd1.history)
+        nt.assert_true('Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', ''))
         if os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'):
             shutil.rmtree('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124')
 
@@ -178,7 +178,7 @@ class Test_lstbin:
         uvd1 = UVData()
         uvd1.read_miriad(output_files[1])
         nt.assert_equal(uvd1.vis_units, 'Jy')
-        nt.assert_true('This file was produced by the function' in uvd1.history)
+        nt.assert_true('Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', ''))
         nt.assert_equal(uvd1.Ntimes, 80)
         nt.assert_almost_equal(uvd1.nsample_array.max(), 3.0)
         # remove files

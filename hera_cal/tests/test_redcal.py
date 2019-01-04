@@ -1075,8 +1075,8 @@ class TestRunMethods(unittest.TestCase):
             if ant[0] in bad_ants:
                 np.testing.assert_array_equal(gains[ant], 1.0)
                 np.testing.assert_array_equal(flags[ant], True)
-        self.assertTrue('testing' in hc.history)
-        self.assertTrue('This file was produced by the function' in hc.history)
+        self.assertTrue('testing' in hc.history.replace('\n', '').replace(' ', ''))
+        self.assertTrue('Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', ''))
 
         hc = io.HERACal(os.path.splitext(input_data)[0] + '.omni.calfits')
         gains, flags, quals, total_qual = hc.read()
@@ -1089,9 +1089,9 @@ class TestRunMethods(unittest.TestCase):
                 np.testing.assert_array_equal(flags[ant], True)
         for antpol in total_qual.keys():
             np.testing.assert_array_almost_equal(total_qual[antpol], cal['chisq'][antpol])
-        self.assertTrue('testing' in hc.history)
-        self.assertTrue('Throwing out antenna 14' in hc.history)
-        self.assertTrue('This file was produced by the function' in hc.history)
+        self.assertTrue('testing' in hc.history.replace('\n', '').replace(' ', ''))
+        self.assertTrue('Throwingoutantenna14' in hc.history.replace('\n', '').replace(' ', ''))
+        self.assertTrue('Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', ''))
 
         hd = io.HERAData(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
         data, flags, nsamples = hd.read()
@@ -1100,8 +1100,8 @@ class TestRunMethods(unittest.TestCase):
             np.testing.assert_array_almost_equal(flags[bl], cal['vf_omnical'][bl])
             self.assertFalse(bl[0] in bad_ants)
             self.assertFalse(bl[1] in bad_ants)
-        self.assertTrue('testing' in hd.history)
-        self.assertTrue('This file was produced by the function' in hd.history)
+        self.assertTrue('testing' in hd.history.replace('\n', '').replace(' ', ''))
+        self.assertTrue('Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', ''))
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
