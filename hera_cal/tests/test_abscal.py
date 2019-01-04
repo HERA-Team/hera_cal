@@ -667,13 +667,15 @@ class Test_AbsCal:
         # test w/ calfits files
         calfits_infile = os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')
         abscal.abscal_run(data_files, model_files, calfits_infile=calfits_infile, delay_slope_cal=True, phase_slope_cal=True,
-                          outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False, refant=38)
+                          outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False, refant=38, history='testing')
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
         nt.assert_true(uvc.total_quality_array is not None)
         nt.assert_almost_equal(uvc.quality_array[1, 0, 32, 0, 0], 12618138.92409363, places=3)
         nt.assert_true(uvc.flag_array[0].min())
         nt.assert_true(len(uvc.history) > 1000)
+        nt.assert_true('testing' in uvc.history)
+        nt.assert_true('This file was producted by the function' in uvc.history)
         # assert refant phase is zero
         nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
         os.remove('./ex.calfits')
