@@ -648,6 +648,8 @@ def to_HERAData(input_data, filetype='miriad'):
     if isinstance(input_data, str):  # single visibility data path
         return HERAData(input_data, filetype=filetype)
     elif isinstance(input_data, HERAData):  # already a HERAData object
+        hd._determine_blt_slicing()
+        hd._determine_pol_indexing()
         return input_data
     elif isinstance(input_data, UVData):  # single UVData object
         hd = input_data
