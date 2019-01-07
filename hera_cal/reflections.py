@@ -76,6 +76,7 @@ import pyuvdata.utils as uvutils
 from scipy.signal import windows
 from sklearn import gaussian_process as gp
 from uvtools import dspec
+import argparse
 
 from . import io
 from . import abscal_funcs
@@ -137,7 +138,7 @@ class ReflectionFitter(FRFilter):
         # Take FFT of data
         self.fft_data(data, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
                       edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=True, fftshift=True,
-                      zeropad=zeropad, verbose=verbose, overwrite=overwrite)
+                      ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
 
         # iterate over keys
         for k in keys:
@@ -151,13 +152,13 @@ class ReflectionFitter(FRFilter):
             echo("...Modeling reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)
             (amp, dly, phs, inds, sig,
              filt) = fit_reflection(self.dfft[k], self.delays, dly_range, fthin=fthin, Nphs=Nphs,
-                                   ifft=False, fftshift=True)
+                                   ifft=False, ifftshift=True)
 
             # anchor phase to 0 Hz
             phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
 
             # form epsilon term
-            eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=True)
+            eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=False)
 
             self.ref_eps[rkey] = eps
             self.ref_amp[rkey] = amp
@@ -183,7 +184,7 @@ class ReflectionFitter(FRFilter):
             uvc : UVCal object with new gains
         """
         # Create reflection gains
-        rgains = _form_gains(self.ref_eps)
+        rgains = form_gains(self.ref_eps)
         flags, quals, tquals = None, None, None
 
         if input_calfits is not None:
@@ -377,7 +378,7 @@ class ReflectionFitter(FRFilter):
                 self.pcomp_model[k] = model_fft
 
     def subtract_model(self, keys=None, data=None, overwrite=False, verbose=True, inplace=False,
-                       ifft=False, fftshift=True):
+                       ifft=False, ifftshift=True):
         """
         FFT pcomp_model and subtract from data.
 
@@ -396,8 +397,8 @@ class ReflectionFitter(FRFilter):
                 If True, report feedback to stdout.
             ifft : bool
                 If True, use ifft to go from delay to freq axis
-            fftshift : bool
-                If True, fftshift delay axis before fft. If ifft, use ifftshift
+            ifftshift : bool
+                If True, ifftshift delay axis before fft.
         """
         # get keys
         if keys is None:
@@ -425,12 +426,9 @@ class ReflectionFitter(FRFilter):
             # get fft of model
             model = self.pcomp_model[k]
 
-            # fftshift
-            if fftshift:
-                if ifft:
-                    model = np.fft.ifftshift(model, axes=-1)
-                else:
-                    model = np.fft.fftshift(model, axes=-1)
+            # ifftshift
+            if ifftshift:
+                model = np.fft.ifftshift(model, axes=-1)
 
             # ifft to get to data space
             if ifft:
@@ -608,7 +606,7 @@ class ReflectionFitter(FRFilter):
             self.umode_interp_flags[k] = f
 
 
-def _form_gains(epsilon):
+def form_gains(epsilon):
     """ Turn epsilon dictionaries into gain dictionaries """
     return dict([(k, 1 + epsilon[k]) for k in epsilon.keys()])
 
@@ -639,33 +637,36 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
     return eps
 
 
-def fit_reflection(dfft, dlys, dly_range, fthin=1, Nphs=500, ifft=False, fftshift=True):
+def fit_reflection(dfft, dlys, dly_range, fthin=1, Nphs=500, ifft=False, ifftshift=True,
+                   return_peak=False):
     """
     Take delay-transformed data and fit for reflections.
 
     Args:
         dfft : complex 2D array with shape (Ntimes, Ndlys)
         dly_range : len-2 tuple specifying range of delays [nanosec]
-            to look for reflection within. Must be both positive or both negative.
+            to look for reflection within.
         dlys : 1D array of data delays [nanosec]
         fthin : integer thinning parameter along freq axis when solving for reflection phase
         Nphs : int, number of phase bins between 0 and 2pi to use in solving for phase.
         ifft : bool, if True, use ifft to go from delay to freq axis
-        fftshift : bool, if True, fftshift delay axis before fft. If ifft, use ifftshift
+        ifftshift : bool, if True, ifftshift delay axis before fft to freq in solving for phase.
+        return_peak : bool, if True, just return peak delay and amplitude
 
     Returns:
-        ref_amp : reflection amplitudes
-        ref_dly : reflection delays [nanosec]
-        ref_phs : refleciton phases [radians] anchored at starting frequency of data.
-            To get the phase anchored at 0 Hz, subtract by 2*pi*ref_dly*start_nu.
-            Note--if the data was zeropadded before forming dfft you need to take
-            that into account for start_nu!
-        ref_inds : reflection peak indicies of input dfft array
-        ref_sig : reflection significance, SNR of peak relative to neighbors
+        if return_peak:
+            ref_peaks : peak amplitude
+            ref_dlys : peak delay
+        else:
+            ref_amp : reflection amplitudes
+            ref_dly : reflection delays [nanosec]
+            ref_phs : refleciton phases [radians] anchored at starting frequency of data.
+                To get the phase anchored at 0 Hz, subtract by 2*pi*ref_dly*start_nu.
+                Note--if the data was zeropadded before forming dfft you need to take
+                that into account for start_nu!
+            ref_inds : reflection peak indicies of input dfft array
+            ref_sig : reflection significance, SNR of peak relative to neighbors
     """
-    # type checks
-    assert dly_range[0] * dly_range[1] >= 0, "dly_range must be both positive or both negative"
-
     # get fft
     assert dfft.ndim == 2, "input dfft must be 2-dimensional with shape [Ntimes, Ndlys]"
     Ntimes, Ndlys = dfft.shape
@@ -694,24 +695,26 @@ def fit_reflection(dfft, dlys, dly_range, fthin=1, Nphs=500, ifft=False, fftshif
     ref_dlys += bin_shifts * np.median(np.diff(dlys))
     ref_peaks = b - 0.25 * (a - g) * bin_shifts
 
+    if return_peak:
+        return ref_peaks, ref_dlys
+
     # get reflection significance, defined as ref_peak / median_abs
     ref_significance = ref_peaks / np.median(abs_dfft_selection, axis=1, keepdims=True)
 
+    # get peak value at tau near zero
+    peak, _ = fit_reflection(dfft, dlys, (-np.abs(dly_range).min(), np.abs(dly_range).min()), return_peak=True)
+
     # get reflection amplitude
-    ref_amps = ref_peaks / np.max(abs_dfft[:, np.abs(dlys) < np.abs(dly_range).min()], axis=1, keepdims=True)
+    ref_amps = ref_peaks / peak
 
     # get reflection phase by fitting cosines to filtered data thinned along frequency axis
-    s = np.argmin(dlys - np.abs(dly_range[0]))
     filt = np.zeros_like(dfft)
     select = np.where((dlys > dly_range[0]) & (dlys < dly_range[1]))[0]
     filt[:, select] = dfft[:, select]
     select = np.where((dlys > -dly_range[1]) & (dlys < -dly_range[0]))[0]
     filt[:, select] = dfft[:, select]
-    if fftshift:
-        if ifft:
-            filt = np.fft.ifftshift(filt, axes=-1)
-        else:
-            filt = np.fft.fftshift(filt, axes=-1)
+    if ifftshift:
+        filt = np.fft.ifftshift(filt, axes=-1)
     if ifft:
         filt = np.fft.ifft(filt, axis=-1)
     else:
@@ -808,3 +811,31 @@ def sum_principal_components(svals, PCs, Nkeep=None):
     recon = np.einsum("i,i...->...", svals[:Nkeep], PCs[:Nkeep])
 
     return recon
+
+
+def auto_reflection_argparser():
+    a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections')
+    a.add_argument("datafile", nargs='*', type=str, help="Data file paths to run auto reflection modeling on")
+    a.add_argument("--outfname", type=str, help="Full path to the output .calfits file")
+    a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of datafile")
+    a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
+    a.add_argument("--input_cal", type=str, default=None, help="Path to input .calfits to apply to data before modeling")
+    a.add_argument("--dly_range", type=float, nargs='*', help='lower and upper delay [nanosec] within which to search for reflections.')
+    a.add_argument("--ants", default=None, type=int, nargs='*', help="List of antenna numbers to operate on.")
+    a.add_argument("--pols", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
+    a.add_argument("--zeropad", default=0, type=int, help="Number of channels to zeropad *both* sides of band in auto modeling process.")
+    a.add_argument("--window", default='None', type=str, help="FFT window for CLEAN")
+    a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")
+    a.add_argument("--tol", default=1e-6, type=float, help="CLEAN tolerance")
+    a.add_argument("--gain", default=1e-1, type=float, help="CLEAN gain")
+    a.add_argument("--maxiter", default=100, type=int, help="CLEAN maximum Niter")
+    a.add_argument("--skip_wgt", default=0.1, type=float, help="Skip integration if heavily flagged, see hera_cal.delay_filter for details")
+    a.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to consider as zeropad on low edge of band")
+    a.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to consider as zeropad on high edge of band")
+    a.add_argument("--horizon", default=1.0, type=float, help="Baseline horizon coefficient. See hera_cal.delay_filter for details")
+    a.add_argument("--standoff", default=0.0, type=float, help="Baseline horizon standoff. See hera_cal.delay_filter for details")
+    a.add_argument("--min_dly", default=0.0, type=float, help="Minimum CLEAN delay horizon. See hera_cal.delay_filter for details")
+    a.add_argument("--Nphs", default=500, type=int, help="Number of phase points to evaluate from 0--2pi in solving for phase")
+    a.add_argument("--fthin", default=1, type=int, help="Coefficient to thin frequency axis by when solving for phase")
+    return a
+

@@ -26,7 +26,7 @@ class VisClean(object):
 
     def __init__(self, input_data, filetype='uvh5', input_cal=None):
         """
-        Initialize the object and optionally read data if provided.
+        Initialize the object.
 
         Args:
             input_data : string, UVData or HERAData object
@@ -407,7 +407,7 @@ class VisClean(object):
             self.clean_flags.times = data.times
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
-                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=True, ifftshift=False, fftshift=True,
+                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
                  zeropad=0, verbose=True):
         """
         Take FFT of data and attach to self.
@@ -559,7 +559,7 @@ class VisClean(object):
 
 
 def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
-             edgecut_hi=0, ifft=True, ifftshift=False, fftshift=True, zeropad=0):
+             edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True, zeropad=0):
     """
     FFT data along specified axis.
 
