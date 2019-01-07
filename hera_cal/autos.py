@@ -38,7 +38,7 @@ def read_and_write_autocorrelations(infile, outfile, calfile=None, gain_conventi
         hd.update(data=data, flags=data_flags)
     else:
         hd.read(bls=auto_bls, return_data=False)
-    hd.history += add_to_history + version.history_string()
+    hd.history += version.history_string(add_to_history)
     hd.write_uvh5(outfile, clobber=clobber)
 
 

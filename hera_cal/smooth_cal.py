@@ -418,7 +418,7 @@ class CalibrationSmoother():
             out_gains = {ant: self.filtered_gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             out_flags = {ant: self.filtered_flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             io.update_cal(cal, outfilename, gains=out_gains, flags=out_flags,
-                          add_to_history=(add_to_history + version.history_string()), clobber=clobber, **kwargs)
+                          add_to_history=version.history_string(add_to_history), clobber=clobber, **kwargs)
 
 
 def smooth_cal_argparser():
