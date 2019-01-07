@@ -1155,7 +1155,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         for ant, score in z_scores.items():
             if (score >= ant_z_thresh):
                 ex_ants.add(ant[0])
-                bad_ant_str = 'Throwing out antenna ' + str(ant[0]) + ' for a z-score of ' + str(score) + ' on polarization ' + str(ant[1]) + '. '
+                bad_ant_str = 'Throwing out antenna ' + str(ant[0]) + ' for a z-score of ' + str(score) + ' on polarization ' + str(ant[1]) + '.\n'
                 high_z_ant_hist += bad_ant_str
                 if verbose:
                     print(bad_ant_str)
@@ -1164,7 +1164,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             break
 
     # output results files
-    add_to_history += version.history_string()
     filename_no_ext = os.path.splitext(os.path.basename(input_data))[0]
     if outdir is None:
         outdir = os.path.dirname(input_data)
@@ -1172,19 +1171,20 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     if verbose:
         print('\nNow saving firstcal gains to', os.path.join(outdir, filename_no_ext + firstcal_ext))
     write_cal(filename_no_ext + firstcal_ext, cal['g_firstcal'], hd.freqs, hd.times,
-              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, history=add_to_history)
+              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, 
+              history=version.history_string(add_to_history))
 
     if verbose:
         print('Now saving omnical gains to', os.path.join(outdir, filename_no_ext + omnical_ext))
-    write_cal(filename_no_ext + omnical_ext, cal['g_omnical'], hd.freqs, hd.times,
-              flags=cal['gf_omnical'], quality=cal['chisq_per_ant'], total_qual=cal['chisq'],
-              outdir=outdir, overwrite=clobber, history=(high_z_ant_hist + add_to_history))
+    write_cal(filename_no_ext + omnical_ext, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
+              quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
+              history=version.history_string(add_to_history + '\n' + high_z_ant_hist))
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, filename_no_ext + omnivis_ext))
     hd.read(bls=cal['v_omnical'].keys())
     hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'])
-    hd.history += add_to_history
+    hd.history += version.history_string(add_to_history + '\n' + high_z_ant_hist)
     hd.write_uvh5(os.path.join(outdir, filename_no_ext + omnivis_ext), clobber=True)
 
     return cal

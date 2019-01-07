@@ -279,10 +279,9 @@ class ReflectionFitter(object):
             freq_array = self.freqs
             kwargs = {}
 
-        add_to_history += version.history_string()
-        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
-                           quality=quals, total_qual=tquals, outdir=os.path.dirname(output_calfits),
-                           zero_check=False, overwrite=overwrite, history=add_to_history, **kwargs)
+        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags, quality=quals, 
+                           total_qual=tquals, outdir=os.path.dirname(output_calfits), zero_check=False, 
+                           overwrite=overwrite, history=version.history_string(add_to_history), **kwargs)
         return uvc
 
 

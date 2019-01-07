@@ -1425,7 +1425,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
         cal_in.read_calfits(calfits_infile)
         (out_gains, out_flags, quals, total_qual, ants, freqs, times,
          pols) = io.load_cal(cal_in, return_meta=True)
-        history = cal_in.history + history
+        history = history + '\nInput Calibration History:\n' + cal_in.history
 
         # construct merged gains
         new_gains = odict()
@@ -1453,7 +1453,7 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, calfits_i
                                                   gain_flags=flag_dict, split_by_antpol=True)
         io.write_cal(output_calfits_path, gain_dict, data_freqs, data_times,
                      flags=flag_dict, quality=quals, total_qual=total_qual, return_uvc=False, 
-                     overwrite=overwrite, history=(history + version.history_string()))
+                     overwrite=overwrite, history=version.history_string(history))
 
     # form return tuple
     return_obj = ()

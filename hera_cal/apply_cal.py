@@ -117,23 +117,24 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
+
     # optionally load external flags
     if flag_file is not None:
         ext_flags, flag_meta = io.load_flags(flag_file, filetype=flag_filetype, return_meta=True)
-        add_to_history += ' FLAGS_HISTORY: ' + str(flag_meta['history']) + '\n'
+        add_to_history += '\nFLAGS_HISTORY: ' + str(flag_meta['history']) + '\n'
 
     # load new calibration solution
     hc = io.HERACal(new_calibration)
     new_gains, new_flags, _, _ = hc.read()
-    add_to_history += ' NEW_CALFITS_HISTORY: ' + hc.history + '\n'
+    add_to_history += '\nNEW_CALFITS_HISTORY: ' + hc.history + '\n'
 
     # load old calibration solution
     if old_calibration is not None:
         old_hc = io.HERACal(old_calibration)
         old_calibration, _, _, _ = old_hc.read()
-        add_to_history += ' OLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
+        add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
 
-    add_to_history += version.history_string()
+    add_to_history = version.history_string(add_to_history)
 
     # partial loading and writing using uvh5
     if nbl_per_load is not None:

@@ -159,7 +159,7 @@ class VisClean(object):
         self.attach_data()
 
     def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, filetype='uvh5',
-                   partial_write=False, add_to_history=None, verbose=True, **kwargs):
+                   partial_write=False, add_to_history='', verbose=True, **kwargs):
         """
         Write data attached to object to file.
 
@@ -195,9 +195,7 @@ class VisClean(object):
         hd.update(data=data, flags=flags, nsamples=nsamples)
 
         # add history
-        if add_to_history is not None:
-            hd.history = "{}\n{}".format(hd.history, add_to_history)
-        hd.history += version.history_string()
+        hd.history += version.history_string(add_to_history)
 
         # update other kwargs
         for attribute, value in kwargs.items():

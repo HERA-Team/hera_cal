@@ -81,8 +81,8 @@ def construct_version_info():
     return version_info
 
 
-def history_string():
-    '''Creates a standardized history string that all functions that write to disk can use.'''
+def history_string(notes=''):
+    '''Creates a standardized history string that all functions that write to disk can use. Optionally add notes.'''
     history = '\n------------\nThis file was produced by the function ' + str(inspect.stack()[1][3]) + '()'
     # inspect.stack()[1][3] is the name of the function that called this function
     history += ' in ' + os.path.basename(inspect.stack()[1][1]) + ' using: '
@@ -90,6 +90,9 @@ def history_string():
     version_info = construct_version_info()
     for v in sorted(version_info.keys()):
         history += '\n    ' + v + ': ' + version_info[v]
+    if (notes is not None) and (notes != ''):
+        history += '\n\nNotes:\n'
+        history += notes
     return history + '\n------------\n'
 
 

@@ -116,6 +116,9 @@ def test_history_string():
     for k, v in version_info.items():
         nt.assert_true(k in hs)
         nt.assert_true(v in hs)
+    hs = hera_cal.version.history_string('stuff')
+    nt.assert_true('stuff' in hs)
+    nt.assert_true('Notes' in hs)
 
 
 def test_main():

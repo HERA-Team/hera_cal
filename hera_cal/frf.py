@@ -296,7 +296,7 @@ class FRFilter(VisClean):
 
         # create new HERAData object
         new_hd = copy.deepcopy(self.hd)
-        new_hd.history += add_to_history + version.history_string()
+        new_hd.history += version.history_string(add_to_history)
 
         # set write data references
         if write_avg:
