@@ -155,8 +155,8 @@ class ReflectionFitter(FRFilter):
              filt) = fit_reflection(self.dfft[k], self.delays, dly_range, fthin=fthin, Nphs=Nphs,
                                    ifft=False, ifftshift=True)
 
-             # make significance cut
-             if np.max(sig) < ref_sig_cut:
+            # make significance cut
+            if np.max(sig) < ref_sig_cut:
                 continue
 
             # anchor phase to 0 Hz
