@@ -92,7 +92,7 @@ class ReflectionFitter(FRFilter):
     """
     def model_auto_reflections(self, dly_range, data=None, keys=None, Nphs=500, edgecut_low=0, 
                                edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
-                               fthin=10, overwrite=False, verbose=True):
+                               fthin=10, ref_sig_cut=5.0, overwrite=False, verbose=True):
         """
         Model reflections in (ideally RFI-free) autocorrelation data.
 
@@ -116,6 +116,7 @@ class ReflectionFitter(FRFilter):
             alpha : float, if taper is Tukey, this is its alpha parameter
             zeropad : int, number of channels to pad band edges with zeros before FFT
             fthin : int, scaling factor to down-select frequency axis when solving for phase
+            ref_sig_cut : float, if max reflection significance is not above this, do not record solution
             overwrite : bool, if True, overwrite dictionaries
         """
         # initialize containers
@@ -154,6 +155,10 @@ class ReflectionFitter(FRFilter):
              filt) = fit_reflection(self.dfft[k], self.delays, dly_range, fthin=fthin, Nphs=Nphs,
                                    ifft=False, ifftshift=True)
 
+             # make significance cut
+             if np.max(sig) < ref_sig_cut:
+                continue
+
             # anchor phase to 0 Hz
             phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
 
@@ -166,13 +171,21 @@ class ReflectionFitter(FRFilter):
             self.ref_dly[rkey] = dly
             self.ref_significance[rkey] = sig
 
+        # form gains
+        self.ref_gains = form_gains(self.ref_eps)
+        for a in self.ants:
+            for p in self.pols:
+                k = (a, uvutils.parse_jpolstr(p)) 
+                if k not in self.ref_gains:
+                    self.ref_gains[k] = np.ones((self.Ntimes, self.Nfreqs), dtype=np.complex)
+
     def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False):
         """
-        Write auto reflection gain terms.
+        Write auto reflection gain terms from self.ref_gains.
 
         Given a filepath to antenna gain calfits file, load the
         calibration, incorporate auto-correlation reflection term from the
-        self.epsilon dictionary and write to file.
+        self.ref_gains dictionary and write to file.
 
         Args:
             output_calfits : str, filepath to write output calfits file
@@ -184,7 +197,7 @@ class ReflectionFitter(FRFilter):
             uvc : UVCal object with new gains
         """
         # Create reflection gains
-        rgains = form_gains(self.ref_eps)
+        rgains = self.ref_gains
         flags, quals, tquals = None, None, None
 
         if input_calfits is not None:
