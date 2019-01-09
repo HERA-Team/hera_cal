@@ -8,6 +8,7 @@ import os
 import six
 import subprocess
 import json
+import inspect
 
 hera_cal_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -78,6 +79,21 @@ def construct_version_info():
             pass
 
     return version_info
+
+
+def history_string(notes=''):
+    '''Creates a standardized history string that all functions that write to disk can use. Optionally add notes.'''
+    history = '\n------------\nThis file was produced by the function ' + str(inspect.stack()[1][3]) + '()'
+    # inspect.stack()[1][3] is the name of the function that called this function
+    history += ' in ' + os.path.basename(inspect.stack()[1][1]) + ' using: '
+    # inspect.stack()[1][1] is path to the file that contains the function that callede htis function
+    version_info = construct_version_info()
+    for v in sorted(version_info.keys()):
+        history += '\n    ' + v + ': ' + version_info[v]
+    if (notes is not None) and (notes != ''):
+        history += '\n\nNotes:\n'
+        history += notes
+    return history + '\n------------\n'
 
 
 version_info = construct_version_info()

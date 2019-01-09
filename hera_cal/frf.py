@@ -13,6 +13,7 @@ from pyuvdata import UVData
 import pyuvdata.utils as uvutils
 
 from . import io
+from . import version
 from . import utils
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
@@ -295,6 +296,7 @@ class FRFilter(VisClean):
 
         # create new HERAData object
         new_hd = copy.deepcopy(self.hd)
+        new_hd.history += version.history_string(add_to_history)
 
         # set write data references
         if write_avg:

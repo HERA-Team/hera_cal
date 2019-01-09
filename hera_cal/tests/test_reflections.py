@@ -162,7 +162,9 @@ class Test_ReflectionFitter(unittest.TestCase):
                           taper='hanning', timeavg=False, broadcast_flags=True, time_thresh=0.05,
                           overwrite=True, verbose=True)
         RF.model_reflections((100, 200), taper='hanning', zero_pad=100, overwrite=True, fthin=1, verbose=True)
-        uvc = RF.write_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
+        uvc = RF.write_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True, add_to_history='testing')
+        nt.assert_true('testing' in uvc.history.replace('\n', '').replace(' ', ''))
+        nt.assert_true('Thisfilewasproducedbythefunction' in uvc.history.replace('\n', '').replace(' ', ''))
         nt.assert_equal(uvc.Ntimes, 60)
         np.testing.assert_array_equal([37, 38, 39], uvc.ant_array)
 

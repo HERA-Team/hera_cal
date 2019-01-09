@@ -14,6 +14,7 @@ import datetime
 from six.moves import range, zip
 
 from . import io
+from . import version
 from .vis_clean import VisClean
 
 
@@ -133,7 +134,7 @@ class DelayFilter(VisClean):
                         if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
                             raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
                         self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber,
-                                              add_to_history=add_to_history, **kwargs)
+                                              add_to_history=version.history_string(add_to_history), **kwargs)
                     else:
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
                                         add_to_history=add_to_history, **kwargs)

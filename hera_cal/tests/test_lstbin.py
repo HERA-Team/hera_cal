@@ -168,6 +168,7 @@ class Test_lstbin:
         uvd1 = UVData()
         uvd1.read_miriad(output_files[1])
         nt.assert_equal(uvd1.vis_units, 'Jy')
+        nt.assert_true('Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', ''))
         nt.assert_equal(uvd1.Ntimes, 80)
         nt.assert_almost_equal(uvd1.nsample_array.max(), 3.0)
         # remove files

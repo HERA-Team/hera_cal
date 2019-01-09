@@ -25,6 +25,7 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
 from . import utils
+from . import version
 from . import abscal
 from . import redcal
 from . import io
@@ -556,6 +557,12 @@ def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_p
                Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
     outdir : type=str, output directory
     overwrite : type=bool, if True overwrite output files
+<<<<<<< HEAD
+=======
+
+    history : history to insert into output files
+
+>>>>>>> master
     rephase : type=bool, if True, rephase data points in LST bin to center of bin
     bin_kwargs : type=dictionary, keyword arguments for lst_bin.
     atol : type=float, absolute tolerance for LST bin float comparison
@@ -707,7 +714,7 @@ def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_p
 
         # update history
         file_history = history + " Input files: " + "-".join(list(map(lambda ff: os.path.basename(ff), file_list)))
-        kwargs['history'] = file_history
+        kwargs['history'] = file_history + version.history_string()
 
         # form integration time array
         kwargs['integration_time'] = np.ones(len(bin_lst) * len(bin_data.keys()), dtype=np.float64) * integration_time

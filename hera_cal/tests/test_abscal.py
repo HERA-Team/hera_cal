@@ -671,6 +671,7 @@ class Test_AbsCal:
         uvc.read_calfits('./ex.calfits')
         nt.assert_true(uvc.flag_array.min())
         nt.assert_almost_equal(uvc.gain_array.max(), 1.0)
+
         # assert refant phase is zero
         nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
         os.remove('./ex.calfits')

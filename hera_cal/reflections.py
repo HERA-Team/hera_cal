@@ -53,6 +53,7 @@ from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
 
 from . import io
+from . import version
 from . import abscal_funcs
 from uvtools.dspec import delay_filter
 from .datacontainer import DataContainer
@@ -234,7 +235,7 @@ class ReflectionFitter(object):
             self.peak_ratio[rkey] = sig
             self.dfft[k] = dfft
 
-    def write_reflections(self, output_calfits, input_calfits=None, overwrite=False):
+    def write_reflections(self, output_calfits, input_calfits=None, overwrite=False, add_to_history=''):
         """
         Given a filepath to antenna gain calfits file, load the
         calibration, incorporate reflection term from self.epsilon dictionary
@@ -245,6 +246,7 @@ class ReflectionFitter(object):
             input_calfits : str, filepath to input calfits file to multiply in with
                 reflection gains.
             overwrite : bool, if True, overwrite output file
+            add_to_history: string to add to history of output calfits file
 
         Returns:
             uvc : HERACal object with new gains
@@ -277,9 +279,9 @@ class ReflectionFitter(object):
             freq_array = self.freqs
             kwargs = {}
 
-        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
-                           quality=quals, total_qual=tquals, outdir=os.path.dirname(output_calfits),
-                           zero_check=False, overwrite=overwrite, **kwargs)
+        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags, quality=quals, 
+                           total_qual=tquals, outdir=os.path.dirname(output_calfits), zero_check=False, 
+                           overwrite=overwrite, history=version.history_string(add_to_history), **kwargs)
         return uvc
 
 

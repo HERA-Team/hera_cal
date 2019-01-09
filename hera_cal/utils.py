@@ -779,31 +779,6 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     return chisq, nObs, chisq_per_ant, nObs_per_ant
 
 
-def predict_noise_variance_from_autos(bl, data, dt=None, df=None):
-    '''Predict the noise variance on a baseline using autocorrelation data.
-
-    Arguments:
-        bl: baseline tuple of the form (0, 1, 'xx')
-        data: DataContainer containing autocorrelation data
-        dt: integration time in seconds. If None, will try infer this
-            from the times stored in the DataContainer.
-        df: channel width in Hz. If None, will try to infer this from
-            from the frequencies stored in the DataContainer
-
-    Returns:
-        Noise variance predicted on baseline bl in units of data squared
-    '''
-    if dt is None:
-        assert(len(data.times_by_bl[bl[0:2]]) > 1)  # cannot infer integration time if only one integration is given
-        dt = np.median(np.ediff1d(data.times_by_bl[bl[0:2]])) * 24. * 3600.
-    if df is None:
-        assert(len(data.freqs) > 1)  # cannot infer channel width if only one channel is present
-        df = np.median(np.ediff1d(data.freqs))
-
-    ap1, ap2 = split_pol(bl[2])
-    return np.abs(data[bl[0], bl[0], join_pol(ap1, ap1)] * data[bl[1], bl[1], join_pol(ap2, ap2)] / dt / df)
-
-
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
     at the given hour angle (ha) and declination (dec).
