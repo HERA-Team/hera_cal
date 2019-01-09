@@ -162,16 +162,18 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         RF.model_auto_reflections((100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True)
         nt.assert_equal(uvc.Ntimes, 60)
-        np.testing.assert_array_equal([37, 38, 39], uvc.ant_array)
+        np.testing.assert_array_equal(len(uvc.ant_array), 47)
+        nt.assert_true(np.isclose(uvc.gain_array[0], 1.0).all())
+        nt.assert_false(np.isclose(uvc.gain_array[uvc.ant_array.tolist().index(37)], 1.0).all())
 
         # test w/ input calfits
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits="./ex.calfits", overwrite=True)
         RF.model_auto_reflections((100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
         nt.assert_equal(uvc.Ntimes, 60)
-        np.testing.assert_array_equal([37, 38, 39], uvc.ant_array)
+        np.testing.assert_array_equal(len(uvc.ant_array), 47)
 
-        # test data is corrected by takinng ratio w/ clean data
+        # test data is corrected by taking ratio w/ clean data
         data = deepcopy(RF.data)
         g = reflections.form_gains(RF.ref_eps)
         apply_cal.calibrate_in_place(data, g, gain_convention='divide')

@@ -138,7 +138,7 @@ class ReflectionFitter(FRFilter):
 
         # Take FFT of data
         self.fft_data(data, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
-                      edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=True, fftshift=True,
+                      edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True,
                       ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
 
         # iterate over keys
@@ -151,13 +151,16 @@ class ReflectionFitter(FRFilter):
 
             # find reflection
             echo("...Modeling reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)
-            (amp, dly, phs, inds, sig,
-             filt) = fit_reflection(self.dfft[k], self.delays, dly_range, fthin=fthin, Nphs=Nphs,
-                                   ifft=False, ifftshift=True)
+
+            # fit for reflection delays and amplitude
+            amp, dly, inds, sig = fit_reflection_delay(self.dfft[k], dly_range, self.delays, return_peak=False)
 
             # make significance cut
             if np.max(sig) < ref_sig_cut:
                 continue
+
+            # solve for phase (slowest step)
+            phs = fit_reflection_phase(self.dfft[k], dly_range, self.delays, amp, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
 
             # anchor phase to 0 Hz
             phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
@@ -650,33 +653,24 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
     return eps
 
 
-def fit_reflection(dfft, dlys, dly_range, fthin=1, Nphs=500, ifft=False, ifftshift=True,
-                   return_peak=False):
+def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     """
-    Take delay-transformed data and fit for reflections.
+    Take FFT'd data and fit for reflection delay and amplitude.
 
     Args:
         dfft : complex 2D array with shape (Ntimes, Ndlys)
         dly_range : len-2 tuple specifying range of delays [nanosec]
             to look for reflection within.
         dlys : 1D array of data delays [nanosec]
-        fthin : integer thinning parameter along freq axis when solving for reflection phase
-        Nphs : int, number of phase bins between 0 and 2pi to use in solving for phase.
-        ifft : bool, if True, use ifft to go from delay to freq axis
-        ifftshift : bool, if True, ifftshift delay axis before fft to freq in solving for phase.
         return_peak : bool, if True, just return peak delay and amplitude
 
     Returns:
         if return_peak:
             ref_peaks : peak amplitude
-            ref_dlys : peak delay
+            ref_dlys : peak delay [nanosec]
         else:
-            ref_amp : reflection amplitudes
-            ref_dly : reflection delays [nanosec]
-            ref_phs : refleciton phases [radians] anchored at starting frequency of data.
-                To get the phase anchored at 0 Hz, subtract by 2*pi*ref_dly*start_nu.
-                Note--if the data was zeropadded before forming dfft you need to take
-                that into account for start_nu!
+            ref_amps : reflection amplitudes (Ntimes, 1)
+            ref_dlys : reflection delays [nanosec] (Ntimes, 1)
             ref_inds : reflection peak indicies of input dfft array
             ref_sig : reflection significance, SNR of peak relative to neighbors
     """
@@ -715,10 +709,40 @@ def fit_reflection(dfft, dlys, dly_range, fthin=1, Nphs=500, ifft=False, ifftshi
     ref_significance = ref_peaks / np.median(abs_dfft_selection, axis=1, keepdims=True)
 
     # get peak value at tau near zero
-    peak, _ = fit_reflection(dfft, dlys, (-np.abs(dly_range).min(), np.abs(dly_range).min()), return_peak=True)
+    peak, _ = fit_reflection_delay(dfft, (-np.abs(dly_range).min(), np.abs(dly_range).min()),  dlys, return_peak=True)
 
     # get reflection amplitude
     ref_amps = ref_peaks / peak
+
+    return ref_amps, ref_dlys, ref_dly_inds, ref_significance
+
+
+def fit_reflection_phase(dfft, dly_range, dlys, ref_amps, ref_dlys, fthin=1, Nphs=500,
+                         ifft=False, ifftshift=True):
+    """
+    Fit for reflection phases.
+
+    Take FFT'd data and reflection amp and delay and solve for phase.
+
+    Args:
+        dfft : complex 2D array with shape (Ntimes, Ndlys)
+        dly_range : len-2 tuple specifying range of delays [nanosec]
+            to look for reflection within.
+        dlys : 1D array of data delays [nanosec]
+        ref_amps : 2D array (Ntimes, 1) of reflection amplitudes
+        ref_dlys : 2D array (Ntimes, 1) of reflection delays [nanosec]
+        fthin : integer thinning parameter along freq axis when solving for reflection phase
+        Nphs : int, number of phase bins between 0 and 2pi to use in solving for phase.
+        ifft : bool, if True, use ifft to go from delay to freq axis
+        ifftshift : bool, if True, ifftshift delay axis before fft to freq in solving for phase.
+        return_peak : bool, if True, just return peak delay and amplitude
+
+    Returns:
+        ref_phs : reflection phases (Ntimes, 1)
+    """
+    # get fft
+    assert dfft.ndim == 2, "input dfft must be 2-dimensional with shape [Ntimes, Ndlys]"
+    Ntimes, Ndlys = dfft.shape
 
     # get reflection phase by fitting cosines to filtered data thinned along frequency axis
     filt = np.zeros_like(dfft)
@@ -751,7 +775,7 @@ def fit_reflection(dfft, dlys, dly_range, fthin=1, Nphs=500, ifft=False, ifftshi
     # imag = np.array([interp1d(x, y[i].imag, kind='linear')(bin_shifts[i]) for i in range(Ntimes)])
     # ref_phs = np.angle(real + 1j*imag)
 
-    return (ref_amps, ref_dlys, ref_phs, ref_dly_inds, ref_significance, filt)
+    return ref_phs
 
 
 def _svd_waterfall(data):
