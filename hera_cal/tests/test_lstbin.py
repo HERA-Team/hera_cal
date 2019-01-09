@@ -125,13 +125,6 @@ class Test_lstbin:
         output = hc.lstbin.lst_align(self.data1, lsts, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         nt.assert_almost_equal(output[2][150], 0.035628730243852047)
 
-    def test_lst_align_files(self):
-        # basic execution
-        hc.lstbin.lst_align_files(self.data_files[0][0], outdir="./", overwrite=True, verbose=False, filetype='miriad')
-        nt.assert_true(os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'))
-        if os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'):
-            shutil.rmtree('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124')
-
     def test_lst_bin_files(self):
         # basic execution
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
@@ -260,9 +253,6 @@ class Test_lstbin:
 
     def test_lst_bin_arg_parser(self):
         a = hc.lstbin.lst_bin_arg_parser()
-
-    def test_lst_align_arg_parser(self):
-        a = hc.lstbin.lst_align_arg_parser()
 
     def test_sigma_clip(self):
         # test basic execution

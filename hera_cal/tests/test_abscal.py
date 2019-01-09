@@ -189,10 +189,6 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(len(rd.keys()), 21)
         nt.assert_equal(len(rf.keys()), 21)
 
-    def test_avg_file_across_red_bls(self):
-        rd, rf, rk = abscal.avg_file_across_red_bls(self.data_file, write=False, output_data=True, filetype='miriad')
-        nt.assert_raises(NotImplementedError, abscal.avg_file_across_red_bls, self.data_file, write=True)
-
     def test_match_times(self):
         dfiles = list(map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458043.12552.xx.HH.uvORA',
                                                                  'zen.2458043.13298.xx.HH.uvORA']))
@@ -670,21 +666,11 @@ class Test_AbsCal:
         # check blank & flagged calfits file written if no LST overlap
         bad_model_files = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458044.*.xx.HH.uvXRAA")))
         abscal.abscal_run(data_files, bad_model_files, write_calfits=True, overwrite=True, outdir='./',
-                          output_calfits_fname='ex.calfits', verbose=False, filetype='miriad')
+                          output_calfits_fname='ex.calfits', verbose=False, filetype='miriad', refant=38)
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
         nt.assert_true(uvc.flag_array.min())
         nt.assert_almost_equal(uvc.gain_array.max(), 1.0)
-        os.remove('./ex.calfits')
-        # test w/ calfits files
-        calfits_infile = os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')
-        abscal.abscal_run(data_files, model_files, secondary_cal=calfits_infile, delay_slope_cal=True, phase_slope_cal=True,
-                          outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False, refant=38, filetype='miriad')
-        uvc = UVCal()
-        uvc.read_calfits('./ex.calfits')
-        nt.assert_true(uvc.total_quality_array is not None)
-        nt.assert_true(uvc.flag_array[0].min())
-        nt.assert_true(len(uvc.history) > 1000)
         # assert refant phase is zero
         nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
         os.remove('./ex.calfits')

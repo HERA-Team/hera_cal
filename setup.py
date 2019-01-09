@@ -35,7 +35,7 @@ setup_args = {
     'include_package_data': True,
     'scripts': ['scripts/extract_hh.py', 'scripts/omni_abscal_run.py',
                 'scripts/abscal_run.py', 'scripts/apply_cal.py',
-                'scripts/delay_filter_run.py', 'scripts/lstalign_run.py',
+                'scripts/delay_filter_run.py',
                 'scripts/lstbin_run.py', 'scripts/omni_abscal_run.py',
                 'scripts/smooth_cal_run.py', 'scripts/redcal_run.py'],
     'version': version.version,

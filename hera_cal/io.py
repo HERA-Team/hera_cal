@@ -16,6 +16,7 @@ from six.moves import map, range, zip
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 import aipy
+from astropy import units
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num
@@ -639,26 +640,22 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
     """
     Get a file's start, stop and dlst in radians.
 
-    Start and stop are bin center.
+    Start and stop are bin center. Miriad standard is bin start,
+    so shift by int_time / 2 is done. UVH5 standard is bin center,
+    so lsts are left untouched.
 
-    Miriad standard is bin start, so shift by int_time / 2 is done.
-    UVH5 standard is bin center, so lsts are left untouched.
+    Args:
+        filepaths : type=list, list of filepaths
+        filetype : str, options=['miriad', 'uvh5']
+        add_int_buffer : type=bool, if True, extend stop times by an
+            integration duration. This is done so that when LST matching
+            the last bin is appropriately accounted for.
 
-    Parameters:
-    ------------
-    filepaths : type=list, list of filepaths
-
-    filetype : str, options=['miriad', 'uvh5']
-
-    add_int_buffer : type=bool, if True, extend stop times by an integration duration.
-
-    Output: (file_starts, file_stops, int_times)
-    -------
-    file_starts : file starting point (bin center) in LST [radians]
-
-    file_stops : file ending point (bin center) in LST [radians]
-
-    int_times : integration duration in LST [radians]
+    Returns:
+        If input is a string, output are floats, otherwise outputs are lists.
+        file_starts : file starting point (bin center) in LST [radians]
+        file_stops : file ending point (bin center) in LST [radians]
+        int_times : integration duration in LST [radians]
     """
     _array = True
     # check filepaths type
@@ -681,7 +678,7 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
         if filetype == 'miriad':
             uv = aipy.miriad.UV(f)
             # get integration time
-            int_time = uv['inttime'] * 2 * np.pi / (23.9344699 * 3600.)
+            int_time = uv['inttime'] * 2 * np.pi / (units.si.sday.in_units(units.si.s))
             # get start and stop
             start = uv['lst']
             stop = start + (uv['ntimes'] - 1) * int_time
