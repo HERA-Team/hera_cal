@@ -176,7 +176,8 @@ class HERAData(UVData):
     HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols',
                       'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
 
-    def __init__(self, input_data, filetype='uvh5'):
+    def __init__(self, input_data, filetype='uvh5', run_check=True,
+                 check_extra=True, run_check_acceptability=True):
         '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
@@ -184,6 +185,12 @@ class HERAData(UVData):
         Arguments:
             input_data: string data file path or list of string data file paths
             filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
+            run_check: Option to check for the existence and proper shapes of
+                parameters after reading in the file. Only if input UVH5.
+            check_extra: Option to check optional parameters as well as required
+                ones. Only if input UVH5.
+            run_check_acceptability: Option to check acceptable range of the values of
+                parameters after reading in the file. Only if input UVH5.
         '''
         # initialize as empty UVData object
         super(HERAData, self).__init__()
@@ -208,14 +215,16 @@ class HERAData(UVData):
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
-            self.read(read_data=False)
+            self.read(read_data=False, run_check=run_check, check_extra=check_extra,
+                      run_check_acceptability=run_check_acceptability)
             self.filepaths = temp_paths
 
             if len(self.filepaths) > 1:  # save HERAData_metas in dicts
                 for meta in self.HERAData_metas:
                     setattr(self, meta, {})
                 for path in self.filepaths:
-                    hc = HERAData(path, filetype='uvh5')
+                    hc = HERAData(path, filetype='uvh5', run_check=run_check,check_extra=check_extra,
+                                  run_check_acceptability=run_check_acceptability)
                     meta_dict = self.get_metadata_dict()
                     for meta in self.HERAData_metas:
                         getattr(self, meta)[path] = meta_dict[meta]
@@ -354,8 +363,9 @@ class HERAData(UVData):
 
         return data, flags, nsamples
 
-    def read(self, bls=None, polarizations=None, times=None,
-             frequencies=None, freq_chans=None, read_data=True, return_data=True):
+    def read(self, bls=None, polarizations=None, times=None, frequencies=None,
+             freq_chans=None, read_data=True, return_data=True, run_check=True,
+             check_extra=True, run_check_acceptability=True):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -377,6 +387,12 @@ class HERAData(UVData):
                 basic metadata will be read in and nothing will be returned. Results in an
                 incompletely defined object (check will not pass). Default True.
             return_data: bool, if True, return the output of build_datacontainers().
+            run_check: Option to check for the existence and proper shapes of
+                parameters after reading in the file. Default is True.
+            check_extra: Option to check optional parameters as well as required
+                ones. Default is True.
+            run_check_acceptability: Option to check acceptable range of the values of
+                parameters after reading in the file. Default is True.
 
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls
@@ -391,19 +407,25 @@ class HERAData(UVData):
         # load data
         if self.filetype == 'uvh5':
             self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
-                           frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
+                           frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
+                           run_check=run_check, check_extra=check_extra,
+                           run_check_acceptability=run_check_acceptability)
         else:
             if not read_data:
                 raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
             if self.filetype == 'miriad':
-                self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
+                self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations,
+                                 run_check=run_check, check_extra=check_extra,
+                                 run_check_acceptability=run_check_acceptability)
                 if any([times is not None, frequencies is not None, freq_chans is not None]):
                     warnings.warn('miriad does not support partial loading for times and frequencies. '
                                   'Loading the file first and then performing select.')
                     self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
             elif self.filetype == 'uvfits':
                 self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
-                                 times=times, frequencies=frequencies, freq_chans=freq_chans)
+                                 times=times, frequencies=frequencies, freq_chans=freq_chans,
+                                 run_check=run_check, check_extra=check_extra,
+                                 run_check_acceptability=run_check_acceptability)
                 self.unphase_to_drift()
 
         # process data into DataContainers
