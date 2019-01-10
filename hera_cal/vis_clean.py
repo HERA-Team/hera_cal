@@ -221,7 +221,8 @@ class VisClean(object):
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
-                  overwrite=False, verbose=True):
+                  overwrite=False, clean_model='clean_model', clean_resid='clean_resid',
+                  clean_data='clean_data', clean_flags='clean_flags', clean_info='clean_info', verbose=True):
         """
         Perform a CLEAN deconvolution.
 
@@ -260,6 +261,7 @@ class VisClean(object):
             edgecut_hi : int, number of bins to consider zero-padded at high-side of the FFT axis,
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
+            clean_* : str, attach output model, resid, etc, as clean_* to self
             verbose: If True print feedback to stdout
         """
         # type checks
@@ -271,7 +273,7 @@ class VisClean(object):
                 raise ValueError("if time cleaning, must feed max_frate parameter")
 
         # initialize containers
-        for dc in ['clean_model', 'clean_resid', 'clean_flags', 'clean_info', 'clean_data']:
+        for dc in [clean_model, clean_resid, clean_flags, clean_info, clean_data]:
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
 
@@ -393,18 +395,18 @@ class VisClean(object):
                     info = {'skipped': True}
 
             # append to new Containers
-            self.clean_model[k] = mdl
-            self.clean_resid[k] = res
-            self.clean_data[k] = mdl + res * fw
-            self.clean_flags[k] = flgs
-            self.clean_info[k] = info
+            getattr(self, clean_model)[k] = mdl
+            getattr(self, clean_resid)[k] = res
+            getattr(self, clean_data)[k] = mdl + res * fw
+            getattr(self, clean_flags)[k] = flgs
+            getattr(self, clean_info)[k] = info
 
         # add metadata
         if hasattr(data, 'times'):
-            self.clean_data.times = data.times
-            self.clean_model.times = data.times
-            self.clean_resid.times = data.times
-            self.clean_flags.times = data.times
+            getattr(self, clean_data).times = data.times
+            getattr(self, clean_model).times = data.times
+            getattr(self, clean_resid).times = data.times
+            getattr(self, clean_flags).times = data.times
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
                  overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,

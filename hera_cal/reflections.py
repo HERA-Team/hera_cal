@@ -394,7 +394,7 @@ class ReflectionFitter(FRFilter):
                 self.pcomp_model[k] = model_fft
 
     def subtract_model(self, keys=None, data=None, overwrite=False, verbose=True, inplace=False,
-                       ifft=False, ifftshift=True):
+                       ifft=True, ifftshift=True):
         """
         FFT pcomp_model and subtract from data.
 
@@ -710,9 +710,10 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
 
     # get peak value at tau near zero
     peak, _ = fit_reflection_delay(dfft, (-np.abs(dly_range).min(), np.abs(dly_range).min()),  dlys, return_peak=True)
+    peak[np.isclose(peak, 0.0)] = np.inf
 
     # get reflection amplitude
-    ref_amps = ref_peaks / peak
+    ref_amps = ref_peaks
 
     return ref_amps, ref_dlys, ref_dly_inds, ref_significance
 
