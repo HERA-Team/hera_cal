@@ -713,7 +713,7 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     peak[np.isclose(peak, 0.0)] = np.inf
 
     # get reflection amplitude
-    ref_amps = ref_peaks
+    ref_amps = ref_peaks / peak
 
     return ref_amps, ref_dlys, ref_dly_inds, ref_significance
 
