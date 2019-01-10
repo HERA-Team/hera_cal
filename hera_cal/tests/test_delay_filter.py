@@ -46,7 +46,7 @@ class Test_DelayFilter(unittest.TestCase):
         self.assertTrue(dfil.clean_info[k][0]['skipped'])
         np.testing.assert_array_equal(dfil.clean_flags[k][0, :], np.ones_like(dfil.flags[k][0, :]))
         np.testing.assert_array_equal(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
-        np.testing.assert_array_equal(dfil.clean_resid[k][0, :], dfil.data[k][0, :])
+        np.testing.assert_array_equal(dfil.clean_resid[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
 
     def test_write_filtered_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -55,7 +55,7 @@ class Test_DelayFilter(unittest.TestCase):
         dfil.read(bls=[k])
 
         data = dfil.data
-        dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edgecut_low=5, edgecut_hi=5)
+        dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edgecut_low=0, edgecut_hi=0)
         outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5')
         with self.assertRaises(ValueError):
             dfil.write_filtered_data()
@@ -87,14 +87,14 @@ class Test_DelayFilter(unittest.TestCase):
     def test_partial_load_delay_filter_and_write(self):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
-        df.partial_load_delay_filter_and_write(uvh5, res_outfilename=outfilename, Nbls=2, tol=1e-4, clobber=True)
+        df.partial_load_delay_filter_and_write(uvh5, res_outfilename=outfilename, Nbls=1, tol=1e-4, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'xx')])
 
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
         dfil.read(bls=[(53, 54, 'xx')])
         dfil.run_filter(to_filter=[(53, 54, 'xx')], tol=1e-4, verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'xx')], dfil.clean_resid[(53, 54, 'xx')])
+        np.testing.assert_almost_equal(d[(53, 54, 'xx')], dfil.clean_resid[(53, 54, 'xx')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'xx')], dfil.flags[(53, 54, 'xx')])
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")

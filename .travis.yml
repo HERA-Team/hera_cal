@@ -33,7 +33,7 @@ install:
   - pip install git+https://github.com/HERA-Team/pyuvdata.git
   - pip install git+https://github.com/HERA-Team/linsolve.git
   - pip install git+https://github.com/HERA-Team/hera_qm.git
-  - pip install git+https://github.com/HERA-Team/uvtools.git@92adcea016295ed6b423433bde40d450c3f0158e
+  - pip install git+https://github.com/HERA-Team/uvtools.git
 script:
   - nosetests hera_cal --with-coverage --cover-package=hera_cal
   - pycodestyle . --ignore=E501,W291,W293,W503,W601

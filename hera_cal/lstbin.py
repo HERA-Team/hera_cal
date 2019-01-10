@@ -29,6 +29,7 @@ from . import version
 from . import abscal
 from . import redcal
 from . import io
+from . import apply_cal
 from .datacontainer import DataContainer
 
 
@@ -410,77 +411,6 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
     return interp_data, interp_flags, lst_grid
 
 
-def lst_align_arg_parser():
-    a = argparse.ArgumentParser(description='LST align files with a universal LST grid')
-    a.add_argument("data_files", nargs='*', type=str, help="miriad file paths to run LST align on.")
-    a.add_argument("--file_ext", default=".L.{:7.5f}", type=str, help="file extension for LST-aligned data. must have one placeholder for starting LST.")
-    a.add_argument("--outdir", default=None, type=str, help='directory for output files')
-    a.add_argument("--dlst", type=float, default=None, help="LST grid interval spacing")
-    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
-    a.add_argument("--history", default=' ', type=str, help="history to insert into output files")
-    a.add_argument("--miriad_kwargs", type=dict, default={}, help="kwargs to pass to miriad_to_data function")
-    a.add_argument("--align_kwargs", type=dict, default={}, help="kwargs to pass to lst_align function")
-    a.add_argument("--silence", default=False, action='store_true', help='silence output to stdout')
-    return a
-
-
-def lst_align_files(data_files, file_ext=".L.{:7.5f}", dlst=None, history=' ',
-                    overwrite=None, outdir=None, miriad_kwargs={}, align_kwargs={}, verbose=True):
-    """
-    Align a series of data files with a universal LST grid.
-
-    Parameters:
-    -----------
-    data_files : type=list, list of paths to miriad files, or a single miriad file path
-
-    file_ext : type=str, file_extension for each file in data_files when writing to disk
-
-    dlst : type=float, LST grid bin interval, if None get it from first file in data_files
-
-    history : history to insert into output files
-
-    overwrite : type=boolean, if True overwrite output files
-
-    miriad_kwargs : type=dictionary, keyword arguments to feed to miriad_to_data()
-
-    align_kwargs : keyword arguments to feed to lst_align()
-
-    Result:
-    -------
-    A series of "data_files + file_ext" miriad files written to disk.
-    """
-    # check type of data_files
-    if isinstance(data_files, str):
-        data_files = [data_files]
-
-    # get dlst if None
-    if dlst is None:
-        start, stop, int_time = utils.get_miriad_times(data_files[0])
-        dlst = int_time
-
-    # iterate over data files
-    for i, f in enumerate(data_files):
-        # load data
-        (data, flgs, apos, ants, freqs, times, lsts,
-         pols) = io.load_vis(f, return_meta=True)
-
-        # lst align
-        interp_data, interp_flgs, interp_lsts = lst_align(data, lsts, flags=flgs, dlst=dlst, **align_kwargs)
-
-        # check output
-        output_fname = os.path.basename(f) + file_ext.format(interp_lsts[0] - dlst / 2.0)
-
-        # write to miriad file
-        if overwrite is not None:
-            miriad_kwargs['overwrite'] = overwrite
-        if outdir is not None:
-            miriad_kwargs['outdir'] = outdir
-        miriad_kwargs['start_jd'] = np.floor(times[0])
-        history += version.history_string()
-        io.write_vis(output_fname, interp_data, interp_lsts, freqs, apos, flags=interp_flgs, verbose=verbose, 
-                     filetype='miriad', history=history, **miriad_kwargs)
-
-
 def lst_bin_arg_parser():
     """
     arg parser for lst_bin_files() function. data_files argument must be quotation-bounded
@@ -494,6 +424,7 @@ def lst_bin_arg_parser():
                                 "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
                                 "Consult lstbin.lst_bin_files() for further details on functionality.")
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files")
+    a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of input filepaths.")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--lst_start", type=float, default=0, help="starting LST for binner as it sweeps across 2pi LST")
     a.add_argument("--fixed_lst_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
@@ -513,39 +444,36 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed_lst_start=False, verbose=True,
+def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst_start=0.0, fixed_lst_start=False, verbose=True,
                          ntimes_per_file=60):
     """
-    Configure lst grid, starting LST and output files given input data files and LSTbin params.
+    Configure data for LST binning.
+
+    Make an lst grid, starting LST and output files given
+    input data files and LSTbin params.
 
     Parameters
     ----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
-                 paths to miriad files from a particular night. These files should be sorted
+                 paths to data files from a particular night. These files should be sorted
                  by ascending Julian Date. Frequency axis of each file must be identical.
-
+    filetype : str, filetype of filepaths in data_files. options=['miriad', 'uvh5']
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
-
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
-
     fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
         record. Otherwise, LST grid starts at LST of first data record.
-
     ntimes_per_file : type=int, number of LST bins in a single output file
 
     Returns (lst_grid, dlst, file_lsts, start_lst)
     -------
     lst_grid : float ndarray holding LST bin centers
-
     dlst : float, LST bin width of output lst_grid
-
     file_lsts : list, contains the lst grid of each output file
-
     start_lst : float, starting lst for LST binner
     """
     # get dlst from first data file if None
     if dlst is None:
-        start, stop, int_time = utils.get_miriad_times(data_files[0][0])
+        start, stop, int_time = io.get_file_lst_range(data_files[0][0], filetype=filetype)
         dlst = int_time
 
     # get start and stop times for each list of files in data_files.
@@ -553,7 +481,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
     # and the %(2pi) ensures everything is within a 2pi LST grid.
     data_times = []
     for df in data_files:
-        data_times.append(np.array(utils.get_miriad_times(df, add_int_buffer=True))[:2, :].T % (2 * np.pi))
+        data_times.append(np.array(io.get_file_lst_range(df, add_int_buffer=True, filetype=filetype))[:2, :].T % (2 * np.pi))
 
     # unwrap data_times less than lst_start, get starting and ending lst
     start_lst = 100
@@ -599,13 +527,14 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
     return data_times, lst_grid, dlst, file_lsts, start_lst
 
 
-def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_ext="{}.{}.{:7.5f}.uv",
-                  outdir=None, overwrite=False, history=' ', lst_start=0, fixed_lst_start=False, atol=1e-6,
-                  sig_clip=True, sigma=5.0, min_N=5, rephase=False, output_file_select=None, **kwargs):
+def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_per_file=60,
+                  file_ext="{}.{}.{:7.5f}.uv", outdir=None, overwrite=False, history=' ', lst_start=0, 
+                  fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
+                  output_file_select=None, input_cals=None, **kwargs):
     """
-    LST bin a series of miriad files with identical frequency bins, but varying
-    time bins. Output miriad file meta data (frequency bins, antennas positions, time_array)
-    are taken from the first file in data_files.
+    LST bin a series of files with identical frequency bins, but varying
+    time bins. Output file meta data (frequency bins, antennas positions, time_array)
+    are taken from the first file in data_files. Can only LST bin drift-phased data.
 
     Note: Only supports input data files that have nsample_array == 1, and a single
     integration_time equal to np.diff(time_array), i.e. doesn't support baseline-dependent
@@ -615,37 +544,34 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     Parameters:
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
-                 paths to miriad files from a particular night. These files should be sorted
+                 paths to files from a particular night. These files should be sorted
                  by ascending Julian Date. Frequency axis of each file must be identical.
-
+    filetype : str, options=['uvh5', 'miriad']
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
-
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
-
     fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
         record. Otherwise, LST grid starts at LST of first data record.
-
     ntimes_per_file : type=int, number of LST bins in a single output file
-
-    file_ext : type=str, extension to "zen." for output miriad files. This must have three
+    file_ext : type=str, extension to "zen." for output files. This must have three
                formatting placeholders, first for polarization(s), second for type of file
                Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
-
     outdir : type=str, output directory
-
     overwrite : type=bool, if True overwrite output files
+<<<<<<< HEAD
+=======
 
     history : history to insert into output files
 
+>>>>>>> master
     rephase : type=bool, if True, rephase data points in LST bin to center of bin
-
     bin_kwargs : type=dictionary, keyword arguments for lst_bin.
-
     atol : type=float, absolute tolerance for LST bin float comparison
-
     output_file_select : type=int or integer list, list of integer indices of the output files to run on.
         Default is all files.
-
+    input_cals : type=list of lists: nested set of lists matching data_files containing
+        filepath to calfits, UVCal or HERACal objects with gain solutions to
+        apply to data on-the-fly before binning via hera_cal.apply_cal.calibrate_in_place.
+        If no apply cal is desired for a particular file, feed as None in input_cals.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
@@ -654,7 +580,7 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
     (data_times, lst_grid, dlst, file_lsts,
-     start_lst) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
+     start_lst) = config_lst_bin_files(data_files, filetype=filetype, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
                                        ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
 
@@ -677,12 +603,12 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
     if outdir is None:
         outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
 
-    # update miriad_kwrgs
+    # update kwrgs
     kwargs['outdir'] = outdir
     kwargs['overwrite'] = overwrite
 
     # get metadata from the zeroth data file
-    d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False)
+    d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False, filetype=filetype)
 
     # get frequency, time (converting times in days to integration times in seconds) and antenna position information
     freq_array = copy.copy(f)
@@ -720,8 +646,19 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             for k in range(len(data_files[j])):
                 if f_select[j][k] and data_status[j][k] is None:
                     # open file
-                    d, fl, ap, a, f, t, li, p = io.load_vis(data_files[j][k], return_meta=True)
+                    utils.echo("Opening {}".format(data_files[j][k]), verbose=verbose)
+                    d, fl, ap, a, f, t, li, p = io.load_vis(data_files[j][k], return_meta=True, filetype=filetype)
                     d.phase_type = 'drift'
+
+                    # open and apply calibration if provided
+                    if input_cals is not None:
+                        calfile = input_cals[j][k]
+                        if calfile is not None:
+                            utils.echo("Opening and applying {}".format(calfile), verbose=verbose)
+                            uvc = io.to_HERACal(calfile)
+                            gains, cal_flags, quals, totquals = uvc.read()
+                            apply_cal.calibrate_in_place(d, gains, data_flags=fl, cal_flags=cal_flags,
+                                                         gain_convention=uvc.gain_convention)
 
                     # unwrap li relative to itself
                     li[li < li[0]] += 2 * np.pi
@@ -802,8 +739,8 @@ def lst_bin_files(data_files, dlst=None, verbose=True, ntimes_per_file=60, file_
             continue
 
         # write to file
-        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **kwargs)
-        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='miriad', **kwargs)
+        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype=filetype, **kwargs)
+        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype=filetype, **kwargs)
 
         del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
         garbage_collector.collect()

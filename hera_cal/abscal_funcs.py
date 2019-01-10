@@ -1602,80 +1602,6 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     return DataContainer(red_data), DataContainer(red_wgts), red_keys
 
 
-def avg_file_across_red_bls(data_fname, outdir=None, output_fname=None,
-                            write_miriad=True, output_data=False, overwrite=False,
-                            verbose=True, **kwargs):
-    """
-    Open a file and run avg_data_across_red_bls on data, then write to file
-
-    Parameters:
-    -----------
-    data_fname : type=str, path to miriad file
-
-    outdir : type=str, output directory
-
-    output_fname : type=str, output filename
-
-    write_miriad : type=boolean, if True, write output miriad file
-
-    output_data : type=boolean, if True, return data dictionary
-
-    overwrite : type=boolean, if True, overwite output files
-
-    verbose : type=boolean, if True, print feedback to stdout
-
-    Output:
-    -------
-    if output_data: return (red_data, red_wgts, red_keys)
-    """
-    # check output file
-    if outdir is None:
-        outdir = os.path.dirname(data_fname)
-    if output_fname is None:
-        output_fname = os.path.basename(data_fname) + 'M'
-    output_fname = os.path.join(outdir, output_fname)
-    if os.path.exists(output_fname) is True and overwrite is False:
-        raise IOError("{} exists, not overwriting".format(output_fname))
-
-    if isinstance(data_fname, str):
-        uvd = UVData()
-        uvd.read_miriad(data_fname)
-
-    # get data
-    data, flags = io.load_vis(uvd, pop_autos=True, return_meta=False, pick_data_ants=True)
-    wgts = DataContainer(odict(list(map(lambda k: (k, (~flags[k]).astype(np.float)), flags.keys()))))
-
-    # get antpos and baselines
-    antpos, ants = uvd.get_ENU_antpos()
-    antpos = dict(zip(ants, antpos))
-
-    # avg data across reds
-    red_data, red_wgts, red_keys = avg_data_across_red_bls(data, antpos, wgts=wgts, **kwargs)
-    uvd_data = np.array(list(map(lambda k: red_data[k], red_keys)))
-    uvd_flags = np.array(list(map(lambda k: ~red_wgts[k].astype(np.bool), red_keys)))
-    uvd_bls = np.array(list(map(lambda k: k[:2], red_keys)))
-    blts_select = np.array(list(map(lambda k: uvd.antpair2ind(*k), uvd_bls))).reshape(-1)
-    Nbls = len(uvd_bls)
-    Nblts = len(blts_select)
-    uvd_bls = np.array(list(map(lambda k: uvd.baseline_to_antnums(k), uvd.baseline_array[blts_select])))
-
-    # resort data
-    uvd_data = uvd_data.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
-    uvd_flags = uvd_flags.reshape(-1, 1, uvd.Nfreqs, uvd.Npols)
-
-    # write to file
-    if write_miriad:
-        raise NotImplementedError("Correct averaging of integration_time and nsample not yet implemented")
-        # echo("saving {}".format(output_fname), type=1, verbose=verbose)
-        # TODO: Perform the proper summing of integration_time and nsample in
-        # avg_data_across_red_bls given wgts and input arrays and use io.write_vis
-        # to write to file
-
-    # output data
-    if output_data:
-        return red_data, red_wgts, red_keys
-
-
 def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     """
     Given unique baseline data (like omnical model visibilities),
@@ -1760,7 +1686,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     return DataContainer(red_data)
 
 
-def match_times(datafile, modelfiles, atol=1e-5):
+def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
     """
     Match start and end LST of datafile to modelfiles. Each file in modelfiles needs
     to have the same integration time.
@@ -1769,14 +1695,15 @@ def match_times(datafile, modelfiles, atol=1e-5):
     -----------
     datafile : type=str, path to miriad data file
     modelfiles : type=str, list of paths to miriad model files ordered according to file start time
+    filetype : str, options=['miriad', 'uvh5']
 
     Return: (matched_modelfiles)
     -------
     matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
     """
     # get times
-    data_time = np.array(utils.get_miriad_times(datafile))[:2]
-    model_times = np.array(utils.get_miriad_times(modelfiles))
+    data_time = np.array(io.get_file_lst_range(datafile, filetype=filetype))[:2]
+    model_times = np.array(io.get_file_lst_range(modelfiles, filetype=filetype))
     model_inttime = model_times[2][0]
     model_times = model_times[:2]
     model_times[1] += model_inttime

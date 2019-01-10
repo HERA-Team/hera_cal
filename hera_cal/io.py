@@ -15,6 +15,8 @@ import collections
 from six.moves import map, range, zip
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
+import aipy
+from astropy import units
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num
@@ -100,7 +102,12 @@ class HERACal(UVCal):
             quals: dict mapping antenna-pol keys to (Nint, Nfreq) float qual arrays
             total_qual: dict mapping polarization to (Nint, Nfreq) float total quality array
         '''
-        self.read_calfits(self.filepaths)
+        # if filepaths is None, this was converted to HERAData
+        # from a different pre-loaded object with no history of filepath
+        if self.filepaths is not None:
+            # load data
+            self.read_calfits(self.filepaths)
+
         return self.build_calcontainers()
 
     def update(self, gains=None, flags=None, quals=None, total_qual=None):
@@ -388,23 +395,26 @@ class HERAData(UVData):
         partials = ['bls', 'polarizations', 'times', 'frequencies', 'freq_chans']
         self.last_read_kwargs = {p: locs[p] for p in partials}
 
-        # load data
-        if self.filetype == 'uvh5':
-            self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
-                           frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
-        else:
-            if not read_data:
-                raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
-            if self.filetype == 'miriad':
-                self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
-                if any([times is not None, frequencies is not None, freq_chans is not None]):
-                    warnings.warn('miriad does not support partial loading for times and frequencies. '
-                                  'Loading the file first and then performing select.')
-                    self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
-            elif self.filetype == 'uvfits':
-                self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
-                                 times=times, frequencies=frequencies, freq_chans=freq_chans)
-                self.unphase_to_drift()
+        # if filepaths is None, this was converted to HERAData
+        # from a different pre-loaded object with no history of filepath
+        if self.filepaths is not None:
+            # load data
+            if self.filetype == 'uvh5':
+                self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
+                               frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
+            else:
+                if not read_data:
+                    raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
+                if self.filetype == 'miriad':
+                    self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
+                    if any([times is not None, frequencies is not None, freq_chans is not None]):
+                        warnings.warn('miriad does not support partial loading for times and frequencies. '
+                                      'Loading the file first and then performing select.')
+                        self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
+                elif self.filetype == 'uvfits':
+                    self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
+                                     times=times, frequencies=frequencies, freq_chans=freq_chans)
+                    self.unphase_to_drift()
 
         # process data into DataContainers
         if read_data or self.filetype == 'uvh5':
@@ -626,6 +636,88 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         return flags
 
 
+def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
+    """
+    Get a file's start, stop and dlst in radians.
+
+    Start and stop are bin center. Miriad standard is bin start,
+    so shift by int_time / 2 is done. UVH5 standard is bin center,
+    so lsts are left untouched.
+
+    Args:
+        filepaths : type=list, list of filepaths
+        filetype : str, options=['miriad', 'uvh5']
+        add_int_buffer : type=bool, if True, extend stop times by an
+            integration duration. This is done so that when LST matching
+            the last bin is appropriately accounted for.
+
+    Returns:
+        If input is a string, output are floats, otherwise outputs are lists.
+        file_starts : file starting point (bin center) in LST [radians]
+        file_stops : file ending point (bin center) in LST [radians]
+        int_times : integration duration in LST [radians]
+    """
+    _array = True
+    # check filepaths type
+    if isinstance(filepaths, str):
+        _array = False
+        filepaths = [filepaths]
+        if filetype not in ['miriad', 'uvh5']:
+            raise ValueError("filetype {} not recognized".format(filetype))
+
+    # form empty lists
+    file_starts = []
+    file_stops = []
+    int_times = []
+
+    # get Nfiles
+    Nfiles = len(filepaths)
+
+    # iterate over filepaths and extract time info
+    for i, f in enumerate(filepaths):
+        if filetype == 'miriad':
+            uv = aipy.miriad.UV(f)
+            # get integration time
+            int_time = uv['inttime'] * 2 * np.pi / (units.si.sday.in_units(units.si.s))
+            # get start and stop
+            start = uv['lst']
+            stop = start + (uv['ntimes'] - 1) * int_time
+            # add half an integration to get center of integration
+            start += int_time / 2
+            stop += int_time / 2
+        elif filetype == 'uvh5':
+            hd = HERAData(f)
+            lsts = []
+            for l in hd.lst_array:
+                if l not in lsts:
+                    lsts.append(l)
+            lsts = np.unwrap(lsts)
+            start, stop, int_time = lsts[0], lsts[-1], np.median(np.diff(lsts))
+
+        # add integration buffer to end of file if desired
+        if add_int_buffer:
+            stop += int_time
+
+        file_starts.append(start)
+        file_stops.append(stop)
+        int_times.append(int_time)
+
+    file_starts = np.array(file_starts)
+    file_stops = np.array(file_stops)
+    int_times = np.array(int_times)
+
+    # make sure times don't wrap
+    file_starts[np.where(file_starts < 0)] += 2 * np.pi
+    file_stops[np.where(file_stops >= 2 * np.pi)] -= 2 * np.pi
+
+    if _array is False:
+        file_starts = file_starts[0]
+        file_stops = file_stops[0]
+        int_times = int_times[0]
+
+    return file_starts, file_stops, int_times
+
+
 #######################################################################
 #                             LEGACY CODE
 #######################################################################
@@ -654,6 +746,7 @@ def to_HERAData(input_data, filetype='miriad'):
         hd.__class__ = HERAData
         hd._determine_blt_slicing()
         hd._determine_pol_indexing()
+        hd.filepaths = None
         return hd
     elif isinstance(input_data, collections.Iterable):  # List loading
         if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
@@ -906,17 +999,19 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     # write to file
     if write_file:
-        if filetype == 'miriad':
-            # check output
-            fname = os.path.join(outdir, fname)
-            if os.path.exists(fname) and overwrite is False:
-                if verbose:
-                    print("{} exists, not overwriting".format(fname))
-            else:
-                if verbose:
-                    print("saving {}".format(fname))
-                uvd.write_miriad(fname, clobber=True)
+        # check output
+        fname = os.path.join(outdir, fname)
+        if os.path.exists(fname) and overwrite is False:
+            if verbose:
+                print("{} exists, not overwriting".format(fname))
+        else:
+            if verbose:
+                print("saving {}".format(fname))
 
+        if filetype == 'miriad':
+            uvd.write_miriad(fname, clobber=True)
+        elif filetype == 'uvh5':
+            uvd.write_uvh5(fname, clobber=True)
         else:
             raise AttributeError("didn't recognize filetype: {}".format(filetype))
 
@@ -1011,6 +1106,7 @@ def to_HERACal(input_cal):
         return input_cal
     elif isinstance(input_cal, UVCal):  # single UVCal object
         input_cal.__class__ = HERACal
+        input_cal.filepaths = None
         return input_cal
     elif isinstance(input_cal, collections.Iterable):  # List loading
         if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths

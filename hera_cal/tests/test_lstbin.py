@@ -125,20 +125,10 @@ class Test_lstbin:
         output = hc.lstbin.lst_align(self.data1, lsts, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         nt.assert_almost_equal(output[2][150], 0.035628730243852047)
 
-    def test_lst_align_files(self):
-        # basic execution
-        hc.lstbin.lst_align_files(self.data_files[0][0], outdir="./", overwrite=True, verbose=False)
-        nt.assert_true(os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'))
-        uvd1 = UVData()
-        uvd1.read_miriad('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124')
-        nt.assert_true('Thisfilewasproducedbythefunction' in uvd1.history.replace('\n', '').replace(' ', ''))
-        if os.path.exists('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124'):
-            shutil.rmtree('./zen.2458043.40141.xx.HH.uvXRAA.L.0.20124')
-
     def test_lst_bin_files(self):
         # basic execution
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False)
+                                verbose=False, filetype='miriad')
         output_lst_file = "./zen.xx.LST.0.20124.uv"
         output_std_file = "./zen.xx.STD.0.20124.uv"
         nt.assert_true(os.path.exists(output_lst_file))
@@ -147,7 +137,7 @@ class Test_lstbin:
         shutil.rmtree(output_std_file)
         # test rephase
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, rephase=True)
+                                verbose=False, rephase=True, filetype='miriad')
         output_lst_file = "./zen.xx.LST.0.20124.uv"
         output_std_file = "./zen.xx.STD.0.20124.uv"
         nt.assert_true(os.path.exists(output_lst_file))
@@ -159,7 +149,7 @@ class Test_lstbin:
                       [sorted(glob.glob(DATA_PATH + '/zen.2458045.*uvXRAA'))[-1]]]
         # test data_list is empty
         hc.lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
-                                verbose=False)
+                                verbose=False, filetype='miriad')
         output_lst_files = ['./zen.xx.LST.0.20124.uv', './zen.xx.LST.0.31870.uv', './zen.xx.LST.0.36568.uv']
         nt.assert_true(os.path.exists(output_lst_files[0]))
         nt.assert_true(os.path.exists(output_lst_files[1]))
@@ -172,7 +162,7 @@ class Test_lstbin:
 
         # test smaller ntimes file output, sweeping through f_select
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True,
-                                verbose=False, vis_units='Jy')
+                                verbose=False, vis_units='Jy', filetype='miriad')
         output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
         # load a file
         uvd1 = UVData()
@@ -188,7 +178,7 @@ class Test_lstbin:
 
         # test output_file_select
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=1,
-                                verbose=False, vis_units='Jy')
+                                verbose=False, vis_units='Jy', filetype='miriad')
         output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
         # load a file
         uvd2 = UVData()
@@ -201,12 +191,12 @@ class Test_lstbin:
                 shutil.rmtree(of)
         # assert bad output_file_select produces no files
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=100,
-                                verbose=False)
+                                verbose=False, filetype='miriad')
         output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
 
         # test fixed start
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, lst_start=0.18, fixed_lst_start=True)
+                                verbose=False, lst_start=0.18, fixed_lst_start=True, filetype='miriad')
         output_lst_file = "./zen.xx.LST.0.17932.uv"
         output_std_file = "./zen.xx.STD.0.17932.uv"
         nt.assert_true(os.path.exists(output_lst_file))
@@ -214,11 +204,56 @@ class Test_lstbin:
         shutil.rmtree(output_lst_file)
         shutil.rmtree(output_std_file)
 
+        # test input_cal
+        uvc = UVCal()
+        uvc.read_calfits(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits'))
+        uvc.flag_array[uvc.ant_array.tolist().index(24)] = True
+        uvc.gain_array[uvc.ant_array.tolist().index(25)] = 1e10
+        input_cals = []
+        for dfiles in self.data_files:
+            input_cals.append([uvc for df in dfiles])
+
+        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                                verbose=False, filetype='miriad', input_cals=input_cals)
+
+        output_lst_file = "./zen.xx.LST.0.20124.uv"
+        output_std_file = "./zen.xx.STD.0.20124.uv"
+        nt.assert_true(os.path.exists(output_lst_file))
+        nt.assert_true(os.path.exists(output_std_file))
+
+        # assert gains and flags were propagated
+        lstb = UVData()
+        lstb.read_miriad(output_lst_file)
+        nt.assert_true(np.isclose(np.abs(lstb.get_data(25, 37)[~lstb.get_flags(25, 37)]), 0.0).all())
+        nt.assert_true(lstb.get_flags(24, 25).all())
+
+        shutil.rmtree(output_lst_file)
+        shutil.rmtree(output_std_file)
+
+        # test on uvh5 files
+        uvh5_files = []
+        for dfiles in self.data_files:
+            uvh5_files.append([df + '.uvh5' for df in dfiles])
+            for df in dfiles:
+                u = UVData()
+                u.read_miriad(df)
+                u.write_uvh5(df + '.uvh5', clobber=True)
+
+        hc.lstbin.lst_bin_files(uvh5_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                                verbose=False, filetype='uvh5')
+        
+        output_lst_file = "./zen.xx.LST.0.20124.uv"
+        output_std_file = "./zen.xx.STD.0.20124.uv"
+        nt.assert_true(os.path.exists(output_lst_file))
+        nt.assert_true(os.path.exists(output_std_file))
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+        for dfiles in uvh5_files:
+            for df in dfiles:
+                os.remove(df)
+
     def test_lst_bin_arg_parser(self):
         a = hc.lstbin.lst_bin_arg_parser()
-
-    def test_lst_align_arg_parser(self):
-        a = hc.lstbin.lst_align_arg_parser()
 
     def test_sigma_clip(self):
         # test basic execution
