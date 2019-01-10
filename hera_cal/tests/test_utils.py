@@ -13,7 +13,6 @@ import shutil
 import glob
 from collections import OrderedDict as odict
 import copy
-import scipy
 from contextlib import contextmanager
 import six
 from pyuvdata import UVData
@@ -290,24 +289,6 @@ def test_combine_calfits():
         os.remove('ex.calfits')
 
 
-def test_get_miriad_times():
-    filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
-    # test execution
-    starts, stops, ints = utils.get_miriad_times(filepaths, add_int_buffer=False)
-    nt.assert_almost_equal(starts[0], 4.7293432458811866)
-    nt.assert_almost_equal(stops[0], 4.7755393587036084)
-    nt.assert_almost_equal(ints[0], 0.00078298496309189868)
-    nt.assert_equal(len(starts), 2)
-    nt.assert_equal(len(stops), 2)
-    nt.assert_equal(len(ints), 2)
-    # test with integration buffer
-    _starts, _stops, _ints = utils.get_miriad_times(filepaths, add_int_buffer=True)
-    nt.assert_almost_equal(starts[0], _starts[0])
-    nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
-    # test if fed as a str
-    starts, stops, ints = utils.get_miriad_times(filepaths[0])
-
-
 def test_lst_rephase():
     # load point source sim w/ array at latitude = 0
     fname = os.path.join(DATA_PATH, "PAPER_point_source_sim.uv")
@@ -455,21 +436,6 @@ def test_chisq():
     nt.assert_true(len(nObs) == 0)
     nt.assert_true(len(chisq_per_ant) == 0)
     nt.assert_true(len(chisq_per_ant) == 0)
-
-
-def test_predict_noise_variance_from_autos():
-    hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5'))
-    data, flags, nsamples = hd.read()
-    for k in data.keys():
-        if k[0] != k[1]:
-            sigmasq = utils.predict_noise_variance_from_autos(k, data)
-            kernel = [[1, -2, 1], [-2, 4, -2], [1, -2, 1]]
-            sigma = scipy.signal.convolve2d(data[k], kernel, mode='same', boundary='wrap')
-            sigma /= np.sum(np.array(kernel)**2)**.5
-            np.testing.assert_array_equal(np.abs(np.mean(np.mean(np.abs(sigma)**2, axis=0) / np.mean(sigmasq, axis=0)) - 1) <= .1, True)
-            times = hd.times_by_bl[k[:2]]
-            sigmasq2 = utils.predict_noise_variance_from_autos(k, data, df=(hd.freqs[1] - hd.freqs[0]), dt=((times[1] - times[0]) * 24. * 3600.))
-            np.testing.assert_array_equal(sigmasq, sigmasq2)
 
 
 def test_echo():

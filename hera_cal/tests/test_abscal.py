@@ -189,24 +189,20 @@ class Test_AbsCal_Funcs:
         nt.assert_equal(len(rd.keys()), 21)
         nt.assert_equal(len(rf.keys()), 21)
 
-    def test_avg_file_across_red_bls(self):
-        rd, rf, rk = abscal.avg_file_across_red_bls(self.data_file, write_miriad=False, output_data=True)
-        nt.assert_raises(NotImplementedError, abscal.avg_file_across_red_bls, self.data_file, write_miriad=True)
-
     def test_match_times(self):
         dfiles = list(map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458043.12552.xx.HH.uvORA',
                                                                  'zen.2458043.13298.xx.HH.uvORA']))
         mfiles = list(map(lambda f: os.path.join(DATA_PATH, f), ['zen.2458042.12552.xx.HH.uvXA',
                                                                  'zen.2458042.13298.xx.HH.uvXA']))
         # test basic execution
-        relevant_mfiles = abscal.match_times(dfiles[0], mfiles)
+        relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
         nt.assert_equal(len(relevant_mfiles), 2)
         # test basic execution
-        relevant_mfiles = abscal.match_times(dfiles[1], mfiles)
+        relevant_mfiles = abscal.match_times(dfiles[1], mfiles, filetype='miriad')
         nt.assert_equal(len(relevant_mfiles), 1)
         # test exception
         mfiles = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2458045.*.xx.HH.uvXRAA')))
-        relevant_mfiles = abscal.match_times(dfiles[0], mfiles)
+        relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
         nt.assert_equal(len(relevant_mfiles), 0)
 
     def test_rephase_vis(self):
@@ -245,6 +241,7 @@ class Test_AbsCal:
         self.data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         self.model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         self.AC = abscal.AbsCal(self.data_fname, self.model_fname, refant=24)
+        self.input_cal = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA.abs.calfits")
 
         # make custom gain keys
         d, fl, ap, a, f, t, l, p = io.load_vis(self.data_fname, return_meta=True, pick_data_ants=False)
@@ -286,6 +283,17 @@ class Test_AbsCal:
         nt.assert_false((np.array(list(map(lambda k: np.linalg.norm(AC.bls[k]), AC.bls.keys()))) > 26.0).any())
         # test bl taper
         nt.assert_true(np.median(AC.wgts[(24, 25, 'xx')]) > np.median(AC.wgts[(24, 39, 'xx')]))
+
+        # test with input cal
+        bl = (24, 25, 'xx')
+        uvc = UVCal()
+        uvc.read_calfits(self.input_cal)
+        aa = uvc.ant_array.tolist()
+        g = (uvc.gain_array[aa.index(bl[0])] * uvc.gain_array[aa.index(bl[1])].conj()).squeeze().T
+        gf = (uvc.flag_array[aa.index(bl[0])] + uvc.flag_array[aa.index(bl[1])]).squeeze().T
+        w = self.AC.wgts[bl] * ~gf
+        AC2 = abscal.AbsCal(copy.deepcopy(self.AC.model), copy.deepcopy(self.AC.data), wgts=copy.deepcopy(self.AC.wgts), refant=24, input_cal=self.input_cal)
+        np.testing.assert_array_almost_equal(self.AC.data[bl] / g * w, AC2.data[bl] * w)
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
@@ -610,14 +618,14 @@ class Test_AbsCal:
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
-        gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False, filetype='miriad')
         # assert shapes and types
         nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
         nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
         # first freq bin should be flagged due to complete flagging in model and data
         nt.assert_true(flags[(24, 'Jxx')][:, 0].all())
         # solar flag run
-        gains, flags = abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False)
+        gains, flags = abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False, filetype='miriad')
         # all data should be flagged
         nt.assert_true(flags[(24, 'Jxx')].all())
         # write calfits
@@ -626,54 +634,44 @@ class Test_AbsCal:
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
         gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
-                                         return_gains=True, verbose=False)
+                                         return_gains=True, verbose=False, filetype='miriad')
         nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
         # check match_red_bls and reweight
         abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
-                          match_red_bls=True, reweight=True)
+                          match_red_bls=True, reweight=True, filetype='miriad')
         # check all calibration routines
         gains, flags = abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True, delay_slope_cal=True, phase_slope_cal=True,
-                                         delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False)
+                                         delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False, filetype='miriad')
         nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
         nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
         if os.path.exists('./ex.calfits'):
             os.remove('./ex.calfits')
         # check exceptions
         nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
-                         output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, delay_cal=True, verbose=False)
+                         output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, delay_cal=True, verbose=False, filetype='miriad')
         nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
-                         output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_phs_cal=True, verbose=False)
+                         output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_phs_cal=True, verbose=False, filetype='miriad')
         nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
-                         output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_amp_cal=True, verbose=False)
+                         output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_amp_cal=True, verbose=False, filetype='miriad')
         if os.path.exists('./ex.calfits'):
             os.remove('./ex.calfits')
         # check all antenna gains run
-        abscal.abscal_run(data_files, model_files, abs_amp_cal=True, all_antenna_gains=True, write_calfits=False)
+        abscal.abscal_run(data_files, model_files, abs_amp_cal=True, all_antenna_gains=True, write_calfits=False, filetype='miriad')
         # test general bandpass solvers
-        abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False)
+        abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False, filetype='miriad')
         # test exception
-        nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True)
+        nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True, filetype='miriad')
         # check blank & flagged calfits file written if no LST overlap
         bad_model_files = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458044.*.xx.HH.uvXRAA")))
         abscal.abscal_run(data_files, bad_model_files, write_calfits=True, overwrite=True, outdir='./',
-                          output_calfits_fname='ex.calfits', verbose=False)
+                          output_calfits_fname='ex.calfits', verbose=False, filetype='miriad', refant=38)
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
         nt.assert_true(uvc.flag_array.min())
         nt.assert_almost_equal(uvc.gain_array.max(), 1.0)
-        os.remove('./ex.calfits')
-        # test w/ calfits files
-        calfits_infile = os.path.join(DATA_PATH, 'zen.2458043.12552.HH.uvA.omni.calfits')
-        abscal.abscal_run(data_files, model_files, calfits_infile=calfits_infile, delay_slope_cal=True, phase_slope_cal=True,
-                          outdir='./', output_calfits_fname='ex.calfits', overwrite=True, verbose=False, refant=38)
-        uvc = UVCal()
-        uvc.read_calfits('./ex.calfits')
-        nt.assert_true(uvc.total_quality_array is not None)
-        nt.assert_almost_equal(uvc.quality_array[1, 0, 32, 0, 0], 12618138.92409363, places=3)
-        nt.assert_true(uvc.flag_array[0].min())
-        nt.assert_true(len(uvc.history) > 1000)
+
         # assert refant phase is zero
         nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
         os.remove('./ex.calfits')

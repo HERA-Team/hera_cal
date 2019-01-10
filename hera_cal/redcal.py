@@ -12,8 +12,10 @@ from six.moves import range, zip
 import linsolve
 
 from . import utils
+from . import version
+from .noise import predict_noise_variance_from_autos
 from .datacontainer import DataContainer
-from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, fft_dly
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol
 from .io import HERAData, HERACal, write_cal, write_vis
 from .apply_cal import calibrate_in_place
 
@@ -604,7 +606,7 @@ class RedundantCalibrator:
                         ad12 = np.abs(d12)
                         d12 /= np.where(ad12 == 0, np.float32(1), ad12)
                     w12 = w1 * wgts[bl2]
-                    taus_offs[(bl1, bl2)] = fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
+                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
                     twgts[(bl1, bl2)] = np.sum(w12)
         d_ls, w_ls = {}, {}
         for (bl1, bl2), tau_off_ij in taus_offs.items():
@@ -933,9 +935,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    data_wgts = {bl: utils.predict_noise_variance_from_autos(bl, data,
-                                                             dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
-                                                                 * SEC_PER_DAY))**-1 for bl in data.keys()}
+    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
+                                                                     * SEC_PER_DAY))**-1 for bl in data.keys()}
     rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
                                                                        gains=rv['g_omnical'], reds=reds,
                                                                        split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
@@ -1077,7 +1078,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', omnivis_ext='.omni_vis.uvh5',
                outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0,
                max_rerun=5, solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
-               append_to_history='', verbose=False, **filter_reds_kwargs):
+               add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1111,7 +1112,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
-        append_to_history: string to add to history of output firstcal and omnical files
+        add_to_history: string to add to history of output firstcal and omnical files
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
@@ -1154,7 +1155,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         for ant, score in z_scores.items():
             if (score >= ant_z_thresh):
                 ex_ants.add(ant[0])
-                bad_ant_str = 'Throwing out antenna ' + str(ant[0]) + ' for a z-score of ' + str(score) + ' on polarization ' + str(ant[1]) + '. '
+                bad_ant_str = 'Throwing out antenna ' + str(ant[0]) + ' for a z-score of ' + str(score) + ' on polarization ' + str(ant[1]) + '.\n'
                 high_z_ant_hist += bad_ant_str
                 if verbose:
                     print(bad_ant_str)
@@ -1170,19 +1171,20 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     if verbose:
         print('\nNow saving firstcal gains to', os.path.join(outdir, filename_no_ext + firstcal_ext))
     write_cal(filename_no_ext + firstcal_ext, cal['g_firstcal'], hd.freqs, hd.times,
-              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, history=append_to_history)
+              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, 
+              history=version.history_string(add_to_history))
 
     if verbose:
         print('Now saving omnical gains to', os.path.join(outdir, filename_no_ext + omnical_ext))
-    write_cal(filename_no_ext + omnical_ext, cal['g_omnical'], hd.freqs, hd.times,
-              flags=cal['gf_omnical'], quality=cal['chisq_per_ant'], total_qual=cal['chisq'],
-              outdir=outdir, overwrite=clobber, history=(high_z_ant_hist + append_to_history))
+    write_cal(filename_no_ext + omnical_ext, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
+              quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
+              history=version.history_string(add_to_history + '\n' + high_z_ant_hist))
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, filename_no_ext + omnivis_ext))
     hd.read(bls=cal['v_omnical'].keys())
     hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'])
-    hd.history += append_to_history
+    hd.history += version.history_string(add_to_history + '\n' + high_z_ant_hist)
     hd.write_uvh5(os.path.join(outdir, filename_no_ext + omnivis_ext), clobber=True)
 
     return cal

@@ -76,6 +76,7 @@ class Test_VisClean(unittest.TestCase):
         V2 = VisClean("./ex.uvh5", filetype='uvh5')
         V2.read()
         nt.assert_equal(V2.hd.vis_units, 'Jy')
+        nt.assert_true('Thisfilewasproducedbythefunction' in V2.hd.history.replace('\n', '').replace(' ', ''))
         V.hd.history, V2.hd.history, V2.hd.vis_units = '', '', V.hd.vis_units
         nt.assert_equal(V.hd, V2.hd)
         os.remove("./ex.uvh5")

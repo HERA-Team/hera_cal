@@ -79,6 +79,7 @@ from uvtools import dspec
 import argparse
 
 from . import io
+from . import version
 from . import abscal_funcs
 from .datacontainer import DataContainer
 from .frf import FRFilter
@@ -195,6 +196,7 @@ class ReflectionFitter(FRFilter):
             input_calfits : str, filepath to input calfits file to multiply in with
                 reflection gains.
             overwrite : bool, if True, overwrite output file
+            add_to_history: string to add to history of output calfits file
 
         Returns:
             uvc : UVCal object with new gains
@@ -229,7 +231,9 @@ class ReflectionFitter(FRFilter):
 
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
                            quality=quals, total_qual=tquals, zero_check=False,
-                           overwrite=overwrite, **kwargs)
+                           overwrite=overwrite, history=version.history_string(add_to_history),
+                           **kwargs)
+
         return uvc
 
     def pca_decomp(self, dly_range, dfft=None, flags=None, side='both', keys=None, overwrite=False, verbose=True):

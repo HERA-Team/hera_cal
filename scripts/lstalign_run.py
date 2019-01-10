@@ -16,9 +16,11 @@ history = ' '.join(sys.argv)
 
 # get kwargs
 kwargs = dict(vars(args))
+kwargs['history'] += history
 del kwargs['data_files']
 # configure verbose
 kwargs['verbose'] = kwargs['silence'] is False
 del kwargs['silence']
+
 
 lstbin.lst_align_files(args.data_files, **kwargs)

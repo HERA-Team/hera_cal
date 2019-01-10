@@ -111,9 +111,12 @@ class Test_Update_Cal(unittest.TestCase):
 
         ac.apply_cal(miriad, outname_miriad, new_cal, old_calibration=calout, gain_convention='divide',
                      flag_nchan_low=450, flag_nchan_high=400, flags_npz=flags_npz,
-                     filetype_in='miriad', filetype_out='miriad', clobber=True, vis_units='Jy')
+                     filetype_in='miriad', filetype_out='miriad', clobber=True, vis_units='Jy',
+                     add_to_history='testing')
         hd = io.HERAData(outname_miriad, filetype='miriad')
         new_data, new_flags, _ = hd.read()
+        self.assertTrue('testing' in hd.history.replace('\n', '').replace(' ', ''))
+        self.assertTrue('Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', ''))
         self.assertEqual(hd.vis_units, 'Jy')
         for k in new_data.keys():
             for i in range(new_data[k].shape[0]):
