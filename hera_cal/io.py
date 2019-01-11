@@ -1231,8 +1231,9 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     Nants_telescope = len(antenna_numbers)
 
     # get polarization info
-    pol_array = np.array(sorted(set(map(lambda k: k[1], gains.keys()))))
-    jones_array = np.array(list(map(lambda p: jstr2num(p), pol_array)), np.int)
+    jones_array = np.array(list(set([jstr2num(k[1]) for k in gains.keys()])))
+    jones_array = jones_array[np.argsort(np.abs(jones_array))]
+    pol_array = np.array([jnum2str(j) for j in jones_array])
     Njones = len(jones_array)
 
     # get time info

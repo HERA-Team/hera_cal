@@ -32,10 +32,11 @@ keys = [k for k in RF.data if k[0] == k[1]]
 data = RF.data
 flags = RF.flags
 nsamples = RF.nsamples
+times = RF.times
 
-# time average data
-if a.t_avg > 0:
-    RF.timeavg_data(a.t_avg, data=data, flags=flags, nsamples=nsamples)
+# time average file
+if a.time_avg:
+    RF.timeavg_data(1e10, data=data, flags=flags, nsamples=nsamples)
     data = RF.avg_data
     flags = RF.avg_flags
     nsamples = RF.avg_nsamples

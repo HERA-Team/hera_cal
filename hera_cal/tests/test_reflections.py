@@ -16,6 +16,7 @@ from scipy import stats
 from matplotlib import pyplot as plt
 from pyuvdata import UVCal, UVData
 import operator
+import functools
 
 from hera_cal import io
 from hera_cal import reflections
@@ -68,7 +69,7 @@ def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_
 
     # get antenna signals and noise
     n = dict([(a, noise(s1.size, 1e-3).reshape(s1.shape)) for a in ants])
-    s = dict([(a, s1 * reduce(operator.add, [src_a * fringe(freqs, bl_len=ant_dist[a], theta=theta + src_t) * beam(theta + src_t) for src_t, src_a in zip(src_theta, src_amp)])) for a in ants])
+    s = dict([(a, s1 * functools.reduce(operator.add, [src_a * fringe(freqs, bl_len=ant_dist[a], theta=theta + src_t) * beam(theta + src_t) for src_t, src_a in zip(src_theta, src_amp)])) for a in ants])
 
     # iterate over bls
     for i, bl in enumerate(np.unique(sim_uvd.baseline_array)):

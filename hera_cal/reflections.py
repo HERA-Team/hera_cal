@@ -16,7 +16,7 @@ v_1 or v_2 that introduces another copy of the voltage as
     v_1 <= v_1 + eps * v_1 = v_1 (1 + eps)
 
 This kind of auto-reflection could be, for example, a cable
-reflection or intra-feed reflection.
+reflection or dish-to-feed reflection.
 
 The reflection itself (eps) can be decomposed into three parameters:
 its amplitude (A), delay (tau) and phase offset (phi)
@@ -42,7 +42,7 @@ and the calibration equation becomes
 
 Reflections that couple other voltage signals into v_1 cannot
 be described in this formalism (for example, over-the-air aka
-inter-feed reflections). We refer to these as "cross-reflections"
+feed-to-feed reflections). We refer to these as "cross-reflections"
 and their behavior is to introduce a copy of the autocorrelation
 into the cross correlation. If an antenna voltage becomes:
 
@@ -60,9 +60,8 @@ some time-dependent amplitude. This cannot be corrected
 via antenna-based calibration. However, we can in principle
 subtract this off at the visibility level by taking
 some form of a time-average and subtracting off the bias.
-Here, we model the time-dependent offset via PCA, project
-onto the autocorrelation as a basis function and subtract
-off the bias term.
+The code here models the time and delay dependent behavior
+through a combination of SVD and fringe-rate filtering.
 """
 from __future__ import print_function, division, absolute_import
 
@@ -107,12 +106,8 @@ class ReflectionFitter(FRFilter):
             flags : DataContainer, flags of data. Default is None.
             keys : list of len-3 tuples, keys in data model reflections over. Default
                 is to use all auto-correlation keys.
-            edgecut_low : int, number of bins to consider zero-padded at low-side of the FFT axis,
-                such that the windowing function smoothly approaches zero. If ax is 'both',
-                can feed as a tuple specifying for 0th and 1st FFT axis.
-            edgecut_hi : int, number of bins to consider zero-padded at high-side of the FFT axis,
-                such that the windowing function smoothly approaches zero. If ax is 'both',
-                can feed as a tuple specifying for 0th and 1st FFT axis.
+            edgecut_low : int, Nbins to flag but not window at low-side of the FFT axis.
+            edgecut_hi : int, Nbins to flag but not window at high-side of the FFT axis.
             window : str, tapering function to apply across freq before FFT
             alpha : float, if taper is Tukey, this is its alpha parameter
             zeropad : int, number of channels to pad band edges with zeros before FFT
@@ -143,9 +138,9 @@ class ReflectionFitter(FRFilter):
         if flags is None:
             flags = DataContainer(dict([(k, np.zeros_like(data[k], dtype=np.bool)) for k in data]))
 
-        # get keys: only use auto correlations to model reflections
+        # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
-            keys = [k for k in data.keys() if k[0] == k[1]]
+            keys = [k for k in data.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
 
         # Take FFT of data
         self.fft_data(data, flags=flags, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
@@ -257,7 +252,7 @@ class ReflectionFitter(FRFilter):
                 echo("...writing {}".format(output_npz))
                 np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
                          significance=self.ref_significance, times=self.times, freqs=self.freqs,
-                         lsts=self.lsts, pols=self.pols, antpos=self.antpos,
+                         lsts=self.lsts, antpos=self.antpos,
                          history=version.history_string(add_to_history))
 
         return uvc
@@ -423,13 +418,17 @@ class ReflectionFitter(FRFilter):
             else:
                 self.pcomp_model[k] = model_fft
 
-    def subtract_model(self, keys=None, data=None, overwrite=False, verbose=True, inplace=False,
-                       ifft=True, ifftshift=True):
+    def subtract_model(self, keys=None, data=None, overwrite=False, ifft=True, ifftshift=True,
+                       window='none', alpha=0.2, edgecut_low=0, edgecut_hi=0, verbose=True):
         """
-        FFT pcomp_model and subtract from data.
+        Subtract pcomp_model from data.
 
+        FFT pcomp_model to frequency space, divide by window, and subtract from data.
         Inserts FFT of pcomp_model into self.pcomp_model_fft and 
-        residual of data with self.data_pmodel_resid.
+        residual of data with self.data_pmodel_resid. 
+
+        Note: The windowing parameters should be the *same* as those that were used
+        in constructing the dfft that pca_decomp operated on.
 
         Args:
             keys : list of tuples
@@ -439,12 +438,20 @@ class ReflectionFitter(FRFilter):
                 Default is self.data.
             overwrite : bool
                 If True, overwrite output data if it exists.
-            verbose : bool
-                If True, report feedback to stdout.
             ifft : bool
                 If True, use ifft to go from delay to freq axis
             ifftshift : bool
                 If True, ifftshift delay axis before fft.
+            window : str
+                window function across freq to divide by after FFT.
+            alpha : float
+                if window is Tukey, this is its alpha parameter.
+            edgecut_low : int
+                Nbins to flag but not window at low-side of band.
+            edgecut_hi : int
+                Nbins to flag but not window at high-side of band.
+            verbose : bool
+                If True, report feedback to stdout.
         """
         # get keys
         if keys is None:
@@ -458,10 +465,6 @@ class ReflectionFitter(FRFilter):
         # get data
         if data is None:
             data = self.data
-
-        # inplace
-        if not inplace:
-            data = copy.deepcopy(data)
 
         # iterate over keys
         for k in keys:
@@ -481,6 +484,11 @@ class ReflectionFitter(FRFilter):
                 model_fft = np.fft.ifft(model, axis=-1)
             else:
                 model_fft = np.fft.fft(model, axis=-1)
+
+            # divide by a window
+            win = dspec.gen_window(window, model_fft.shape[1], alpha=alpha,
+                                   edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)
+            model_fft = np.true_divide(model_fft, win, where=~np.isclose(win, 0.0))
 
             # subtract from data
             self.pcomp_model_fft[k] = model_fft
@@ -883,7 +891,7 @@ def sum_principal_components(svals, PCs, Nkeep=None):
 
 
 def auto_reflection_argparser():
-    a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections')
+    a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections from auto-correlation visibilities')
     a.add_argument("datafile", nargs='*', type=str, help="Data file paths to run auto reflection modeling on")
     a.add_argument("--outfname", type=str, help="Full path to the output .calfits file")
     a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of datafile")
@@ -909,5 +917,5 @@ def auto_reflection_argparser():
     a.add_argument("--fthin", default=1, type=int, help="Coefficient to thin frequency axis by when solving for phase")
     a.add_argument("--ref_sig_cut", default=2, type=float, help="Reflection minimum 'significance' threshold for fitting.")
     a.add_argument("--add_to_history", default='', type=str, help="String to append to file history")
-    a.add_argument("--t_avg", default=0, type=float, help='Time average autocorrelations by t_avg window [seconds] before reflection fitting.')
+    a.add_argument("--time_avg", default=False, action='store_true', help='Time average file before reflection fitting.')
     return a
