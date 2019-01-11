@@ -230,7 +230,7 @@ class HERAData(UVData):
                 for meta in self.HERAData_metas:
                     setattr(self, meta, {})
                 for path in self.filepaths:
-                    hc = HERAData(path, filetype='uvh5', run_check=run_check,check_extra=check_extra,
+                    hc = HERAData(path, filetype='uvh5', run_check=run_check, check_extra=check_extra,
                                   run_check_acceptability=run_check_acceptability)
                     meta_dict = self.get_metadata_dict()
                     for meta in self.HERAData_metas:

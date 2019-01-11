@@ -252,7 +252,7 @@ class ReflectionFitter(FRFilter):
                            **kwargs)
 
         if write_npz:
-            output_npz = os.path.splitext(output_calfits)[0]+'.npz'
+            output_npz = os.path.splitext(output_calfits)[0] + '.npz'
             if not os.path.exists(output_npz) or overwrite:
                 echo("...writing {}".format(output_npz))
                 np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
@@ -741,7 +741,7 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     ref_significance = np.true_divide(ref_peaks, avgmed, where=~np.isclose(avgmed, 0.0))
 
     # get peak value at tau near zero
-    peak, _ = fit_reflection_delay(dfft, (-np.abs(dly_range).min(), np.abs(dly_range).min()),  dlys, return_peak=True)
+    peak, _ = fit_reflection_delay(dfft, (-np.abs(dly_range).min(), np.abs(dly_range).min()), dlys, return_peak=True)
 
     # get reflection amplitude
     ref_amps = np.true_divide(ref_peaks, peak, where=~np.isclose(peak, 0.0))
@@ -788,7 +788,7 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_amps, ref_dlys, fthin=1, Nph
         filt = np.fft.ifft(filt, axis=-1)
     else:
         filt = np.fft.fft(filt, axis=-1)
-    freqs = np.fft.fftfreq(Ndlys, np.median(np.diff(dlys))/1e9)
+    freqs = np.fft.fftfreq(Ndlys, np.median(np.diff(dlys)) / 1e9)
     freqs = np.linspace(0, freqs.max() - freqs.min(), Ndlys, endpoint=True)
     phases = np.linspace(0, 2 * np.pi, Nphs, endpoint=False)
     cosines = np.array([construct_reflection(freqs[::fthin], ref_amps, ref_dlys / 1e9, p) for p in phases])
@@ -911,4 +911,3 @@ def auto_reflection_argparser():
     a.add_argument("--add_to_history", default='', type=str, help="String to append to file history")
     a.add_argument("--t_avg", default=0, type=float, help='Time average autocorrelations by t_avg window [seconds] before reflection fitting.')
     return a
-
