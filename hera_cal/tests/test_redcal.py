@@ -1037,10 +1037,12 @@ class TestRunMethods(unittest.TestCase):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redcal_iteration(hd, nInt_to_load=1)
+            rv = om.redcal_iteration(hd, nInt_to_load=1, flag_nchan_high=40, flag_nchan_low=30)
         for t in range(len(hd.times)):
             for flag in rv['gf_omnical'].values():
                 self.assertFalse(np.all(flag[t, :]))
+                self.assertTrue(np.all(flag[t, 0:30]))
+                self.assertTrue(np.all(flag[t, -40:]))
 
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
