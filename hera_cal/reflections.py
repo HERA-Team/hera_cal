@@ -91,22 +91,22 @@ class ReflectionFitter(FRFilter):
     """
     A subclass of FRFilter with added reflection modeling capabilities.
     """
-    def model_auto_reflections(self, dly_range, data=None, keys=None, Nphs=500, edgecut_low=0, 
-                               edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
-                               fthin=10, ref_sig_cut=5.0, overwrite=False, verbose=True):
+    def model_auto_reflections(self, data, dly_range, flags=None, keys=None, Nphs=500,
+                               edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
+                               fthin=10, ref_sig_cut=2.0, overwrite=False, verbose=True):
         """
         Model reflections in (ideally RFI-free) autocorrelation data.
 
-        To CLEAN data of flags see the self.vis_clean() function.
-        Recommended to set zeropad to at least as large as Nfreqs.
+        To CLEAN data of RFI gaps see the self.vis_clean() function.
+        Recommended to set zeropad to at least as large as Nfreqs/2.
 
         Args:
+            data : DataContainer, data to find reflections in.
             dly_range : len-2 tuple of delay range [nanoseconds] to search
                 within for reflections. Must be either both positive or both negative.
+            flags : DataContainer, flags of data. Default is None.
             keys : list of len-3 tuples, keys in data model reflections over. Default
                 is to use all auto-correlation keys.
-            data : str, data dictionary to find reflections in.
-                Default is self.clean_model + self.clean_resid * ~self.flags
             edgecut_low : int, number of bins to consider zero-padded at low-side of the FFT axis,
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
@@ -119,6 +119,15 @@ class ReflectionFitter(FRFilter):
             fthin : int, scaling factor to down-select frequency axis when solving for phase
             ref_sig_cut : float, if max reflection significance is not above this, do not record solution
             overwrite : bool, if True, overwrite dictionaries
+
+        Result:
+            self.ref_eps : dict, reflection epsilon term
+            self.ref_amp : dict, reflection amplitude
+            self.ref_phs : dict, reflection phase [radians]
+            self.ref_dly : dict, reflection delay [nanosec]
+            self.ref_flags : dict, reflection flags [bool]
+            self.ref_significance : dict, reflection significance,
+                which is max|Vfft| / median|Vfft| near reflection peak.
         """
         # initialize containers
         if hasattr(self, 'epsilon') and not overwrite:
@@ -127,18 +136,19 @@ class ReflectionFitter(FRFilter):
         self.ref_amp = {}
         self.ref_phs = {}
         self.ref_dly = {}
+        self.ref_flags = {}
         self.ref_significance = {}
 
-        # get data
-        if data is None:
-            data = self.data
+        # get flags
+        if flags is None:
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], dtype=np.bool)) for k in data]))
 
         # get keys: only use auto correlations to model reflections
         if keys is None:
             keys = [k for k in data.keys() if k[0] == k[1]]
 
         # Take FFT of data
-        self.fft_data(data, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
+        self.fft_data(data, flags=flags, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
                       edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True,
                       ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
 
@@ -174,6 +184,7 @@ class ReflectionFitter(FRFilter):
             self.ref_phs[rkey] = phs
             self.ref_dly[rkey] = dly
             self.ref_significance[rkey] = sig
+            self.ref_flags[rkey] = np.min(flags[k], axis=1, keepdims=True)
 
         # form gains
         self.ref_gains = form_gains(self.ref_eps)
@@ -183,19 +194,24 @@ class ReflectionFitter(FRFilter):
                 if k not in self.ref_gains:
                     self.ref_gains[k] = np.ones((self.Ntimes, self.Nfreqs), dtype=np.complex)
 
-    def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False):
+    def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False,
+                               write_npz=False, add_to_history=''):
         """
         Write auto reflection gain terms from self.ref_gains.
 
         Given a filepath to antenna gain calfits file, load the
         calibration, incorporate auto-correlation reflection term from the
-        self.ref_gains dictionary and write to file.
+        self.ref_gains dictionary and write to file. Optionally, take
+        the values in self.ref_amp, self.ref_phs and self.ref_dly and
+        write their values to an NPZ file with the same path name as output_calfits.
 
         Args:
             output_calfits : str, filepath to write output calfits file
             input_calfits : str, filepath to input calfits file to multiply in with
                 reflection gains.
             overwrite : bool, if True, overwrite output file
+            write_npz : bool, if True, write an NPZ file holding reflection
+                params with the same pathname as output_calfits
             add_to_history: string to add to history of output calfits file
 
         Returns:
@@ -229,10 +245,20 @@ class ReflectionFitter(FRFilter):
             freq_array = self.freqs
             kwargs = {}
 
+        echo("...writing {}".format(output_calfits))
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
                            quality=quals, total_qual=tquals, zero_check=False,
                            overwrite=overwrite, history=version.history_string(add_to_history),
                            **kwargs)
+
+        if write_npz:
+            output_npz = os.path.splitext(output_calfits)[0]+'.npz'
+            if not os.path.exists(output_npz) or overwrite:
+                echo("...writing {}".format(output_npz))
+                np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
+                         significance=self.ref_significance, times=self.times, freqs=self.freqs,
+                         lsts=self.lsts, pols=self.pols, antpos=self.antpos,
+                         history=version.history_string(add_to_history))
 
         return uvc
 
@@ -659,7 +685,7 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
 
 def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     """
-    Take FFT'd data and fit for reflection delay and amplitude.
+    Take FFT'd data and fit for peak delay and amplitude.
 
     Args:
         dfft : complex 2D array with shape (Ntimes, Ndlys)
@@ -687,7 +713,7 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     if len(select) == 0:
         raise ValueError("No delays in specified range {} ns".format(dly_range))
 
-    # locate amplitude peak
+    # locate peak bin within dly range
     abs_dfft = np.abs(dfft)
     abs_dfft_selection = abs_dfft[:, select]
     ref_peaks = np.max(abs_dfft_selection, axis=1, keepdims=True)
@@ -698,9 +724,10 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
     # alpha = a, beta = b, gamma = g
     a = abs_dfft[np.arange(Ntimes), ref_dly_inds - 1, None]
-    g = abs_dfft[np.arange(Ntimes), ref_dly_inds + 1, None]
+    g = abs_dfft[np.arange(Ntimes), (ref_dly_inds + 1) % Ndlys, None]
     b = abs_dfft[np.arange(Ntimes), ref_dly_inds, None]
-    bin_shifts = 0.5 * (a - g) / (a - 2 * b + g)
+    denom = (a - 2 * b + g)
+    bin_shifts = 0.5 * np.true_divide((a - g), denom, where=~np.isclose(denom, 0.0))
 
     # update delay center and peak value given shifts
     ref_dlys += bin_shifts * np.median(np.diff(dlys))
@@ -709,15 +736,15 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     if return_peak:
         return ref_peaks, ref_dlys
 
-    # get reflection significance, defined as ref_peak / median_abs
-    ref_significance = ref_peaks / np.median(abs_dfft_selection, axis=1, keepdims=True)
+    # get reflection significance, defined as max|V| / med|V|
+    avgmed = np.median(abs_dfft_selection, axis=1, keepdims=True)
+    ref_significance = np.true_divide(ref_peaks, avgmed, where=~np.isclose(avgmed, 0.0))
 
     # get peak value at tau near zero
     peak, _ = fit_reflection_delay(dfft, (-np.abs(dly_range).min(), np.abs(dly_range).min()),  dlys, return_peak=True)
-    peak[np.isclose(peak, 0.0)] = np.inf
 
     # get reflection amplitude
-    ref_amps = ref_peaks / peak
+    ref_amps = np.true_divide(ref_peaks, peak, where=~np.isclose(peak, 0.0))
 
     return ref_amps, ref_dlys, ref_dly_inds, ref_significance
 
@@ -861,23 +888,27 @@ def auto_reflection_argparser():
     a.add_argument("--outfname", type=str, help="Full path to the output .calfits file")
     a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of datafile")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
+    a.add_argument("--write_npz", default=False, action='store_true', help="Write NPZ file with reflection params with same path name as output calfits.")
     a.add_argument("--input_cal", type=str, default=None, help="Path to input .calfits to apply to data before modeling")
     a.add_argument("--dly_range", type=float, nargs='*', help='lower and upper delay [nanosec] within which to search for reflections.')
     a.add_argument("--ants", default=None, type=int, nargs='*', help="List of antenna numbers to operate on.")
     a.add_argument("--pols", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
-    a.add_argument("--zeropad", default=0, type=int, help="Number of channels to zeropad *both* sides of band in auto modeling process.")
     a.add_argument("--window", default='None', type=str, help="FFT window for CLEAN")
     a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")
     a.add_argument("--tol", default=1e-6, type=float, help="CLEAN tolerance")
     a.add_argument("--gain", default=1e-1, type=float, help="CLEAN gain")
     a.add_argument("--maxiter", default=100, type=int, help="CLEAN maximum Niter")
     a.add_argument("--skip_wgt", default=0.1, type=float, help="Skip integration if heavily flagged, see hera_cal.delay_filter for details")
-    a.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to consider as zeropad on low edge of band")
-    a.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to consider as zeropad on high edge of band")
+    a.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag but not window on low edge of band (before zeropadding)")
+    a.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag but not window on high edge of band (before zeropadding)")
+    a.add_argument("--zeropad", default=0, type=int, help="Number of channels to zeropad *both* sides of band in auto modeling process.")
     a.add_argument("--horizon", default=1.0, type=float, help="Baseline horizon coefficient. See hera_cal.delay_filter for details")
     a.add_argument("--standoff", default=0.0, type=float, help="Baseline horizon standoff. See hera_cal.delay_filter for details")
     a.add_argument("--min_dly", default=0.0, type=float, help="Minimum CLEAN delay horizon. See hera_cal.delay_filter for details")
     a.add_argument("--Nphs", default=500, type=int, help="Number of phase points to evaluate from 0--2pi in solving for phase")
     a.add_argument("--fthin", default=1, type=int, help="Coefficient to thin frequency axis by when solving for phase")
+    a.add_argument("--ref_sig_cut", default=2, type=float, help="Reflection minimum 'significance' threshold for fitting.")
+    a.add_argument("--add_to_history", default='', type=str, help="String to append to file history")
+    a.add_argument("--t_avg", default=0, type=float, help='Time average autocorrelations by t_avg window [seconds] before reflection fitting.')
     return a
 

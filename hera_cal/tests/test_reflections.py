@@ -122,14 +122,14 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (37, 37, 'xx')
         g_k = (37, 'Jxx')
-        RF.model_auto_reflections((100, 200), data=RF.data, keys=[bl_k], window='blackmanharris',
+        RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 150.0, atol=2e-1).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=2e-1).all())
 
         # now reverse delay range
-        RF.model_auto_reflections((-200, -100), data=RF.data, keys=[bl_k], window='blackmanharris',
+        RF.model_auto_reflections(RF.data, (-200, -100), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), -150.0, atol=2e-1).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
@@ -138,19 +138,19 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         # try with a small edgecut
         RF = reflections.ReflectionFitter(self.uvd)
         edgecut = 5
-        RF.model_auto_reflections((100, 200), data=RF.data, keys=[bl_k], window='blackmanharris',
+        RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True, edgecut_low=edgecut, edgecut_hi=edgecut)
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 150.0, atol=5e-1).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=3e-1).all())
 
         # exceptions
-        nt.assert_raises(ValueError, RF.model_auto_reflections, (1000, 2000), window='none', overwrite=True, edgecut_low=edgecut)
-        nt.assert_raises(ValueError, RF.model_auto_reflections, (100, 300), overwrite=False, edgecut_low=edgecut)
+        nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (1000, 2000), window='none', overwrite=True, edgecut_low=edgecut)
+        nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (100, 300), overwrite=False, edgecut_low=edgecut)
 
         # non-even Nfreqs
         RF = reflections.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:-1], inplace=False))
-        RF.model_auto_reflections((100, 200), data=RF.data, keys=[bl_k], window='blackmanharris',
+        RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 150.0, atol=2e-1).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
@@ -159,7 +159,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (37, 37, 'xx')
-        RF.model_auto_reflections((100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
+        RF.model_auto_reflections(RF.data, (100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True)
         nt.assert_equal(uvc.Ntimes, 60)
         np.testing.assert_array_equal(len(uvc.ant_array), 47)
@@ -168,7 +168,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
         # test w/ input calfits
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits="./ex.calfits", overwrite=True)
-        RF.model_auto_reflections((100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
+        RF.model_auto_reflections(RF.data, (100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
         nt.assert_equal(uvc.Ntimes, 60)
         np.testing.assert_array_equal(len(uvc.ant_array), 47)
