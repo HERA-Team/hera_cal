@@ -952,8 +952,9 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     return rv
 
 
-def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_horizon=0.0, conv_crit=1e-10,
-                     maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
+def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_horizon=0.0,
+                     flag_nchan_low=0, flag_nchan_high=0, conv_crit=1e-10, maxiter=500,
+                     check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
@@ -967,6 +968,8 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
             antenna-polarization tuples. In the former case, all pols for an antenna will be excluded.
         solar_horizon: float, Solar altitude flagging threshold [degrees]. When the Sun is above
             this altitude, calibration is skipped and the integrations are flagged.
+        flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
+        flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         conv_crit: maximum allowed relative change in omnical solutions for convergence
         maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -1004,6 +1007,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
 
     # get basic antenna, polarization, and observation info
     nTimes, nFreqs = len(hd.times), len(hd.freqs)
+    fSlice = slice(flag_nchan_low, nFreqs - flag_nchan_high)
     antpols = list(set([ap for pol in hd.pols for ap in split_pol(pol)]))
     ant_nums = np.unique(np.append(hd.ant_1_array, hd.ant_2_array))
     ants = [(ant, antpol) for ant in ant_nums for antpol in antpols]
@@ -1051,34 +1055,34 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
                     for bl in data:
                         data[bl] = data[bl][tinds, :]  # cut down size of DataContainers to match unflagged indices
                 else:  # perform partial i/o
-                    data, _, _ = hd.read(times=hd.times[tinds], polarizations=pols)
-                cal = redundantly_calibrate(data, reds, freqs=hd.freqs, times_by_bl=hd.times_by_bl,
+                    data, _, _ = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
+                cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             conv_crit=conv_crit, maxiter=maxiter,
                                             check_every=check_every, check_after=check_after, gain=gain)
                 # gather results
                 for ant in cal['g_omnical'].keys():
-                    rv['g_firstcal'][ant][tinds, :] = cal['g_firstcal'][ant]
-                    rv['gf_firstcal'][ant][tinds, :] = cal['g_firstcal'][ant]
-                    rv['g_omnical'][ant][tinds, :] = cal['g_omnical'][ant]
-                    rv['gf_omnical'][ant][tinds, :] = cal['gf_omnical'][ant]
-                    rv['chisq_per_ant'][ant][tinds, :] = cal['chisq_per_ant'][ant]
+                    rv['g_firstcal'][ant][tinds, fSlice] = cal['g_firstcal'][ant]
+                    rv['gf_firstcal'][ant][tinds, fSlice] = cal['g_firstcal'][ant]
+                    rv['g_omnical'][ant][tinds, fSlice] = cal['g_omnical'][ant]
+                    rv['gf_omnical'][ant][tinds, fSlice] = cal['gf_omnical'][ant]
+                    rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
                 for bl in cal['v_omnical'].keys():
-                    rv['v_omnical'][bl][tinds, :] = cal['v_omnical'][bl]
-                    rv['vf_omnical'][bl][tinds, :] = cal['vf_omnical'][bl]
+                    rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
+                    rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
                 if pol_mode in ['1pol', '2pol']:
                     for antpol in cal['chisq'].keys():
-                        rv['chisq'][antpol][tinds, :] = cal['chisq'][antpol]
+                        rv['chisq'][antpol][tinds, fSlice] = cal['chisq'][antpol]
                 else:  # duplicate chi^2 into both antenna polarizations
                     for antpol in rv['chisq'].keys():
-                        rv['chisq'][antpol][tinds, :] = cal['chisq']
+                        rv['chisq'][antpol][tinds, fSlice] = cal['chisq']
 
     return rv
 
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', omnivis_ext='.omni_vis.uvh5',
                outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0,
-               max_rerun=5, solar_horizon=0.0, conv_crit=1e-10, maxiter=500, check_every=10, check_after=50, gain=.4,
-               add_to_history='', verbose=False, **filter_reds_kwargs):
+               max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, conv_crit=1e-10, maxiter=500, check_every=10,
+               check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1106,6 +1110,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         max_rerun: maximum number of times to run redundant calibration
         solar_horizon: float, Solar altitude flagging threshold [degrees]. When the Sun is above
             this altitude, calibration is skipped and the integrations are flagged.
+        flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
+        flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         conv_crit: maximum allowed relative change in omnical solutions for convergence
         maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -1145,8 +1151,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         if verbose:
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
         cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, ex_ants=ex_ants, solar_horizon=solar_horizon,
-                               conv_crit=conv_crit, maxiter=maxiter, check_every=check_every, check_after=check_after,
-                               gain=gain, verbose=verbose, **filter_reds_kwargs)
+                               flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high, conv_crit=conv_crit, maxiter=maxiter, 
+                               check_every=check_every, check_after=check_after, gain=gain, verbose=verbose, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
         z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
@@ -1209,6 +1215,8 @@ def redcal_argparser():
     redcal_opts.add_argument("--ant_z_thresh", type=float, default=4.0, help="Threshold of modified z-score for chi^2 per antenna above which antennas are thrown away and calibration is re-run iteratively.")
     redcal_opts.add_argument("--max_rerun", type=int, default=5, help="Maximum number of times to re-run redundant calibration.")
     redcal_opts.add_argument("--solar_horizon", type=float, default=0.0, help="When the Sun is above this altitude in degrees, calibration is skipped and the integrations are flagged.")
+    redcal_opts.add_argument("--flag_nchan_low", type=int, default=0, help="integer number of channels at the low frequency end of the band to always flag (default 0)")
+    redcal_opts.add_argument("--flag_nchan_high", type=int, default=0, help="integer number of channels at the high frequency end of the band to always flag (default 0)")
     redcal_opts.add_argument("--nInt_to_load", type=int, default=8, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead.")
     redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
     redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
