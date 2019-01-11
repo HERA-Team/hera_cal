@@ -1222,7 +1222,6 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         if return_uvc: returns UVCal object
         else: returns None
     '''
-
     # get antenna info
     ant_array = np.unique(list(map(lambda k: k[0], gains.keys()))).astype(np.int)
     antenna_numbers = copy.copy(ant_array)
