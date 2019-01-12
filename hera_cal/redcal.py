@@ -945,10 +945,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
         for antpol in rv['chisq'].keys():
             Ngains = len([ant for ant in rv['g_omnical'].keys() if ant[1] == antpol])
             Nvis = len([bl for bl in rv['v_omnical'].keys() if bl[2] == join_pol(antpol, antpol)])
-            rv['chisq'][antpol] /= (nObs[antpol] - Ngains - Nvis)
-    else:
-        rv['chisq'] /= (nObs + len(rv['g_omnical']) + len(rv['v_omnical']))
-
+            rv['chisq'][antpol] /= (nObs[antpol] - Ngains - Nvis + 2)  # the 2 complex DoF come from 4 real degenerate modes
+    elif rc.pol_mode == '4pol':
+        rv['chisq'] /= (nObs - len(rv['g_omnical']) - len(rv['v_omnical']) + 3)  # 3 complex DoF from 6 degeneracies
+    else:  # 4pol_minV
+        rv['chisq'] /= (nObs - len(rv['g_omnical']) - len(rv['v_omnical']) + 2.5)  # 2.5 complex DoF from 5 degeneracies
     return rv
 
 
