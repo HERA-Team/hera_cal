@@ -190,6 +190,13 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         nt.assert_equal(a.datafile[0], 'a')
         nt.assert_equal(a.outfname, 'ex.calfits')
 
+    def test_auto_reflection_run(self):
+        # code tests have been done above, this is just to ensure this wrapper function runs
+        reflections.auto_reflection_run(self.uvd, (100, 200), "./ex.calfits", window='blackmanharris', write_npz=True)
+        nt.assert_true(os.path.exists("./ex.calfits"))
+        nt.assert_true(os.path.exists("./ex.npz"))
+        os.remove("./ex.calfits")
+        os.remove("./ex.npz")
 
 class Test_ReflectionFitter_XTalk(unittest.TestCase):
     uvd = simulate_reflections(add_cable=False, xdelay=250.0, xphase=0, xamp=.1, add_xtalk=True)

@@ -892,15 +892,15 @@ def sum_principal_components(svals, PCs, Nkeep=None):
 
 def auto_reflection_argparser():
     a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections from auto-correlation visibilities')
-    a.add_argument("datafile", nargs='*', type=str, help="Data file paths to run auto reflection modeling on")
-    a.add_argument("--outfname", type=str, help="Full path to the output .calfits file")
+    a.add_argument("data", nargs='*', type=str, help="Data file paths to run auto reflection modeling on")
+    a.add_argument("--output_fname", type=str, help="Full path to the output .calfits file")
+    a.add_argument("--dly_range", type=float, nargs='*', help='lower and upper delay [nanosec] within which to search for reflections.')
     a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of datafile")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
     a.add_argument("--write_npz", default=False, action='store_true', help="Write NPZ file with reflection params with same path name as output calfits.")
     a.add_argument("--input_cal", type=str, default=None, help="Path to input .calfits to apply to data before modeling")
-    a.add_argument("--dly_range", type=float, nargs='*', help='lower and upper delay [nanosec] within which to search for reflections.')
-    a.add_argument("--ants", default=None, type=int, nargs='*', help="List of antenna numbers to operate on.")
-    a.add_argument("--pols", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
+    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on.")
+    a.add_argument("--polarizations", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
     a.add_argument("--window", default='None', type=str, help="FFT window for CLEAN")
     a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")
     a.add_argument("--tol", default=1e-6, type=float, help="CLEAN tolerance")
@@ -919,3 +919,90 @@ def auto_reflection_argparser():
     a.add_argument("--add_to_history", default='', type=str, help="String to append to file history")
     a.add_argument("--time_avg", default=False, action='store_true', help='Time average file before reflection fitting.')
     return a
+
+
+def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_cal=None, time_avg=False,
+                        write_npz=False, antenna_numbers=None, polarizations=None,
+                        window='None', alpha=0.2, edgecut_low=0, edgecut_hi=0, zeropad=0,
+                        tol=1e-6, gain=1e-1, maxiter=100, skip_wgt=0.2, horizon=1.0, standoff=0.0,
+                        min_dly=100.0, Nphs=500, fthin=10, ref_sig_cut=2.0, add_to_history='',
+                        overwrite=False):
+    """
+    Run auto reflection modeling on files.
+
+    Args:
+        data : str or UVData subclass, data to operate on
+        dly_range : len-2 tuple, min and max delay range [ns] to fit reflections
+        output_fname : str, full path to output calfits file
+        filetype : str, filetype if data is a str, options=['uvh5', 'miriad', 'uvfits']
+        input_cal : str or UVCal subclass, calibration to apply to data on-the-fly
+        time_avg : bool, if True, time-average the entire input data before reflection modeling
+        write_npz : bool, if True, write an NPZ with reflection parameters with matching path as output_fname
+        antenna_numbers : int list, list of antenna number integers to run on. Default is all.
+        polarizations : str list, list of polarization strings to run on, default is all
+        edgecut_low : int, Nbins to flag but not window at low-side of the FFT axis.
+        edgecut_hi : int, Nbins to flag but not window at high-side of the FFT axis.
+        window : str, tapering function to apply across freq before FFT
+        alpha : float, if taper is Tukey, this is its alpha parameter
+        zeropad : int, number of channels to pad band edges with zeros before FFT
+        fthin : int, scaling factor to down-select frequency axis when solving for phase
+        tol : float, CLEAN tolerance
+        gain : float, CLEAN gain
+        maxiter : int, CLEAN max Niter
+        skip_wgt : float, flagged threshold for skipping integration, see delay_filter.py
+        standoff : float ,fixed additional delay beyond the horizon (in nanosec) to CLEAN
+        horizon : float, coefficient to baseline horizon where 1 is the horizon
+        min_dly : float, CLEAN area boundary (in nanosec) used for freq CLEAN is never below this
+        Nphs : int, Number of points in phase [0=2pi] to evaluate for reflection phase solution
+        fthin : int, Thinning number across frequency axis when solving for phase
+        ref_sig_cut : float, if max reflection significance is not above this, do not record solution
+        add_to_history : str, notes to add to history
+        overwrite : bool, if True, overwrite output files.
+
+    Result:
+        A calfits written to output_fname, and if write_npz, an NPZ with the
+        same path and filename, except for the .npz suffix.
+    """
+    # initialize reflection fitter
+    RF = ReflectionFitter(data, filetype=filetype, input_cal=input_cal)
+
+    # get antennas if possible
+    if antenna_numbers is None and hasattr(RF, 'ants'):
+        bls = zip(RF.ants, RF.ants)
+    elif antenna_numbers is not None:
+        bls = zip(antenna_numbers, antenna_numbers)
+    else:
+        bls = None
+
+    # read data
+    RF.read(bls=bls, polarizations=polarizations)
+
+    # get all autocorr keys
+    keys = [k for k in RF.data if k[0] == k[1]]
+
+    # assign Containers
+    data = RF.data
+    flags = RF.flags
+    nsamples = RF.nsamples
+    times = RF.times
+
+    # time average file
+    if time_avg:
+        RF.timeavg_data(1e10, data=data, flags=flags, nsamples=nsamples)
+        data = RF.avg_data
+        flags = RF.avg_flags
+        nsamples = RF.avg_nsamples
+
+    # clean data
+    RF.vis_clean(data=data, flags=flags, keys=keys, ax='freq', window=window, alpha=alpha,
+                 horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol, maxiter=maxiter,
+                 gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)
+
+    # model auto reflections in clean data
+    RF.model_auto_reflections(RF.clean_data, dly_range, flags=RF.clean_flags, edgecut_low=edgecut_low,
+                              edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
+                              zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
+
+    # write reflections
+    RF.write_auto_reflections(output_fname, overwrite=overwrite, add_to_history=add_to_history,
+                              write_npz=write_npz)
