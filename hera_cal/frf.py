@@ -28,7 +28,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     weighted by a boolean flag array (flags) and also optionally by an Nsample array (nsample),
     such that, for a single frequency channel, the time average is constructed as
 
-    avg_data = sum( data * flag_wgt * nsample**2 ) / sum( flag_wgt * nsample**2 )
+    avg_data = sum( data * flag_wgt * nsample ) / sum( flag_wgt * nsample )
 
     where flag_wgt is constructed as (~flags).astype(np.float).
 
@@ -169,8 +169,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
             dlst = mean_l - lst
             d = utils.lst_rephase(d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True)
 
-        # form data weights : flag weights * nsample**2
-        w = fw * n**2
+        # form data weights : flag weights * nsample
+        w = fw * n
         w_sum = np.sum(w, axis=0, keepdims=False).clip(1e-10, np.inf)
 
         # perfom weighted average of data along time
@@ -280,10 +280,12 @@ class FRFilter(VisClean):
         self.t_avg = t_avg
         self.Navg = Navg
 
-    def write_data(self, outfilename, write_avg=True, filetype='miriad', add_to_history='', overwrite=False,
+    def write_data(self, outfilename, write_avg=True, filetype='uvh5', add_to_history='', overwrite=False,
                    run_check=True):
         """
-        Write data in FRFringe object. If write_avg == True, write the self.avg_data dictionary,
+        Write data in FRFringe object.
+
+        If write_avg == True, write the self.avg_data dictionary,
         else write the self.data dictionary.
 
         Parameters

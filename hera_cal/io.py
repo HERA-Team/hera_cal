@@ -183,8 +183,7 @@ class HERAData(UVData):
     HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols',
                       'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
 
-    def __init__(self, input_data, filetype='uvh5', run_check=True,
-                 check_extra=True, run_check_acceptability=True):
+    def __init__(self, input_data, filetype='uvh5', **check_kwargs):
         '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
@@ -192,12 +191,8 @@ class HERAData(UVData):
         Arguments:
             input_data: string data file path or list of string data file paths
             filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
-            run_check: Option to check for the existence and proper shapes of
-                parameters after reading in the file. Only if input UVH5.
-            check_extra: Option to check optional parameters as well as required
-                ones. Only if input UVH5.
-            run_check_acceptability: Option to check acceptable range of the values of
-                parameters after reading in the file. Only if input UVH5.
+            check_kwargs : run_check, check_extra and run_check_acceptability
+                See UVData.read for more details.
         '''
         # initialize as empty UVData object
         super(HERAData, self).__init__()
@@ -222,19 +217,17 @@ class HERAData(UVData):
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
-            self.read(read_data=False, run_check=run_check, check_extra=check_extra,
-                      run_check_acceptability=run_check_acceptability)
+            self.read(read_data=False, **check_kwargs)
             self.filepaths = temp_paths
 
             if len(self.filepaths) > 1:  # save HERAData_metas in dicts
                 for meta in self.HERAData_metas:
                     setattr(self, meta, {})
-                for path in self.filepaths:
-                    hc = HERAData(path, filetype='uvh5', run_check=run_check, check_extra=check_extra,
-                                  run_check_acceptability=run_check_acceptability)
+                for hd in self.filepaths:
+                    hc = HERAData(hd, filetype='uvh5', **check_kwargs)
                     meta_dict = self.get_metadata_dict()
                     for meta in self.HERAData_metas:
-                        getattr(self, meta)[path] = meta_dict[meta]
+                        getattr(self, meta)[hd] = meta_dict[meta]
             else:  # save HERAData_metas as attributes
                 self._writers = {}
                 for key, value in self.get_metadata_dict().items():
@@ -1229,7 +1222,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     Nants_data = len(ant_array)
     Nants_telescope = len(antenna_numbers)
 
-    # get polarization info
+    # get polarization info: ordering must be monotonic in Jones number
     jones_array = np.array(list(set([jstr2num(k[1]) for k in gains.keys()])))
     jones_array = jones_array[np.argsort(np.abs(jones_array))]
     pol_array = np.array([jnum2str(j) for j in jones_array])
