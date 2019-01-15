@@ -155,6 +155,37 @@ class Test_HERAData(unittest.TestCase):
         with self.assertRaises(IOError):
             hd = HERAData('fake path')
 
+    def test_add(self):
+        hd = HERAData(self.uvh5_1)
+        hd.read()
+
+        # test add
+        hd2 = copy.deepcopy(hd)
+        hd2.polarization_array[0] = -6
+        hd3 = hd + hd2
+        nt.assert_true(len(hd3._polnum_indices), 2)
+
+    def test_select(self):
+        hd = HERAData(self.uvh5_1)
+        hd.read()
+        hd2 = copy.deepcopy(hd)
+        hd2.polarization_array[0] = -6
+        hd += hd2
+
+        # blt select
+        d1 = hd.get_data(53, 54, 'xx')
+        hd.select(bls=[(53, 54)])
+        nt.assert_equal(len(hd._blt_slices), 1)
+        d2 = hd.get_data(53, 54, 'xx')
+        np.testing.assert_array_almost_equal(d1, d2)
+        hd.select(times=np.unique(hd.time_array)[-5:])
+        d3 = hd.get_data(53, 54, 'xx')
+        np.testing.assert_array_almost_equal(d2[-5:], d3)
+
+        # pol select
+        hd.select(polarizations=['yy'])
+        nt.assert_equal(len(hd._polnum_indices), 1)
+
     def test_reset(self):
         hd = HERAData(self.uvh5_1)
         hd.read()

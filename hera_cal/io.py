@@ -438,6 +438,47 @@ class HERAData(UVData):
         if read_data and return_data:
             return self.build_datacontainers()
 
+    def select(self, **kwargs):
+        """
+        Select-out parts of a HERAData object.
+
+        Args:
+            kwargs : pyuvdata.UVData select keyword arguments.
+        """
+        # select
+        super(HERAData, self).select(**kwargs)
+
+        # recompute slices if necessary
+        names = ['antenna_nums', 'antenna_names', 'ant_str',
+                 'bls', 'times', 'blt_inds']
+        for n in names:
+            if n in kwargs and kwargs[n] is not None:
+                self._determine_blt_slicing()
+                break
+        if 'polarizations' in kwargs and kwargs['polarizations'] is not None:
+            self._determine_pol_indexing()
+
+    def __add__(self, other, inplace=False, **kwargs):
+        """
+        Combine two HERAData objects.
+
+        Combine along baseline-time, polarization or frequency.
+        See pyuvdata.UVData.__add__ for more details.
+
+        Args:
+            other : Another HERAData object
+            inplace: Overwrite self as we go, otherwise create a third object
+                as the sum of the two (default).
+            kwargs : UVData.__add__ keyword arguments
+        """
+        output = super(HERAData, self).__add__(other, inplace=inplace, **kwargs)
+        if inplace:
+            output = self
+        output._determine_blt_slicing()
+        output._determine_pol_indexing()
+        if not inplace:
+            return output
+
     def __getitem__(self, key):
         """
         Shortcut for reading a single visibility waterfall given a
@@ -755,8 +796,6 @@ def to_HERAData(input_data, filetype='miriad'):
     if isinstance(input_data, str):  # single visibility data path
         return HERAData(input_data, filetype=filetype)
     elif isinstance(input_data, HERAData):  # already a HERAData object
-        input_data._determine_blt_slicing()
-        input_data._determine_pol_indexing()
         return input_data
     elif isinstance(input_data, UVData):  # single UVData object
         hd = input_data
