@@ -222,7 +222,8 @@ class VisClean(object):
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, clean_model='clean_model', clean_resid='clean_resid',
-                  clean_data='clean_data', clean_flags='clean_flags', clean_info='clean_info', verbose=True):
+                  clean_data='clean_data', clean_flags='clean_flags', clean_info='clean_info',
+                  add_clean_residual=False, verbose=True):
         """
         Perform a CLEAN deconvolution.
 
@@ -262,6 +263,9 @@ class VisClean(object):
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
             clean_* : str, attach output model, resid, etc, as clean_* to self
+            add_clean_residual : bool, if True, adds the CLEAN residual within the CLEAN bounds
+                in fourier space to the CLEAN model. Note that the residual actually returned is
+                not the CLEAN residual, but the residual of data - model in real (data) space.
             verbose: If True print feedback to stdout
         """
         # type checks
@@ -328,7 +332,7 @@ class VisClean(object):
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
                                                   gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
-                                                  edgecut_hi=edgecut_hi)
+                                                  edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual)
 
                 # un-zeropad the data
                 if zeropad > 0:

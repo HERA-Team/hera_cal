@@ -198,6 +198,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         os.remove("./ex.calfits")
         os.remove("./ex.npz")
 
+
 class Test_ReflectionFitter_XTalk(unittest.TestCase):
     uvd = simulate_reflections(add_cable=False, xdelay=250.0, xphase=0, xamp=.1, add_xtalk=True)
 
