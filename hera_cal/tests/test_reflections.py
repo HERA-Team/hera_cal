@@ -184,11 +184,11 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         os.remove('./ex.calfits')
 
     def test_auto_reflection_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--outfname', 'ex.calfits', '--dly_range', '10', '20', '--overwrite']
+        sys.argv = [sys.argv[0], 'a', '--output_fname', 'ex.calfits', '--dly_range', '10', '20', '--overwrite']
         parser = reflections.auto_reflection_argparser()
         a = parser.parse_args()
-        nt.assert_equal(a.datafile[0], 'a')
-        nt.assert_equal(a.outfname, 'ex.calfits')
+        nt.assert_equal(a.clean_data[0], 'a')
+        nt.assert_equal(a.output_fname, 'ex.calfits')
 
     def test_auto_reflection_run(self):
         # code tests have been done above, this is just to ensure this wrapper function runs

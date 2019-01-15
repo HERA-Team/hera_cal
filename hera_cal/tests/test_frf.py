@@ -14,6 +14,7 @@ import copy
 import glob
 from pyuvdata import UVData
 from pyuvdata import utils as uvutils
+import unittest
 
 import hera_cal as hc
 from hera_cal.data import DATA_PATH
@@ -107,7 +108,7 @@ class Test_FRFilter:
         u = self.F.write_data("./out.uv", overwrite=False)
         nt.assert_equal(u, None)
 
-        u = self.F.write_data("./out.uv", write_avg=False, overwrite=True)
+        u = self.F.write_data("./out.uv", write_avg=False, overwrite=True, filetype='miriad')
         nt.assert_true(np.isclose(u.data_array, self.F.hd.data_array).all())
         if os.path.exists("./out.uv"):
             shutil.rmtree("./out.uv")

@@ -438,15 +438,18 @@ class HERAData(UVData):
         if read_data and return_data:
             return self.build_datacontainers()
 
-    def select(self, **kwargs):
+    def select(self, inplace=True, **kwargs):
         """
         Select-out parts of a HERAData object.
 
         Args:
+            inplace: Overwrite self, otherwise return a copy.
             kwargs : pyuvdata.UVData select keyword arguments.
         """
         # select
-        super(HERAData, self).select(**kwargs)
+        output = super(HERAData, self).select(inplace=inplace, **kwargs)
+        if inplace:
+            output = self
 
         # recompute slices if necessary
         names = ['antenna_nums', 'antenna_names', 'ant_str',
@@ -457,6 +460,9 @@ class HERAData(UVData):
                 break
         if 'polarizations' in kwargs and kwargs['polarizations'] is not None:
             self._determine_pol_indexing()
+
+        if not inplace:
+            return self
 
     def __add__(self, other, inplace=False, **kwargs):
         """

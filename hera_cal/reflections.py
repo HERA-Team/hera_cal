@@ -88,27 +88,29 @@ from .utils import echo
 
 class ReflectionFitter(FRFilter):
     """
-    A subclass of FRFilter with added reflection modeling capabilities.
+    A subclass of FRFilter & VisClean with added reflection
+    modeling capabilities. Instantiation inherits from the VisClean class.
     """
-    def model_auto_reflections(self, data, dly_range, flags=None, keys=None, Nphs=500,
+    def model_auto_reflections(self, clean_data, dly_range, clean_flags=None, keys=None, Nphs=500,
                                edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
                                fthin=10, ref_sig_cut=2.0, overwrite=False, verbose=True):
         """
         Model reflections in (ideally RFI-free) autocorrelation data.
 
-        To CLEAN data of RFI gaps see the self.vis_clean() function.
         Recommended to set zeropad to at least as large as Nfreqs/2.
+        This function attaches the result to self. See Results below.
+        To CLEAN data of RFI gaps see the self.vis_clean() function.
 
         Args:
-            data : DataContainer, data to find reflections in.
+            clean_data : DataContainer, (CLEANed) data to find reflections in.
             dly_range : len-2 tuple of delay range [nanoseconds] to search
                 within for reflections. Must be either both positive or both negative.
-            flags : DataContainer, flags of data. Default is None.
-            keys : list of len-3 tuples, keys in data model reflections over. Default
+            clean_flags : DataContainer, flags of (CLEANed) data. Default is None.
+            keys : list of len-3 tuples, ant-pair-pols to operate on. Default
                 is to use all auto-correlation keys.
-            edgecut_low : int, Nbins to flag but not window at low-side of the FFT axis.
-            edgecut_hi : int, Nbins to flag but not window at high-side of the FFT axis.
-            window : str, tapering function to apply across freq before FFT
+            edgecut_low : int, Nbins to flag and exclude from windowing function on low-side of the band
+            edgecut_hi : int, Nbins to flag and exclude from windowing function on low-side of the band
+            window : str, tapering function to apply across freq before FFT. See dspec.gen_window for options
             alpha : float, if taper is Tukey, this is its alpha parameter
             zeropad : int, number of channels to pad band edges with zeros before FFT
             fthin : int, scaling factor to down-select frequency axis when solving for phase
@@ -116,16 +118,18 @@ class ReflectionFitter(FRFilter):
             overwrite : bool, if True, overwrite dictionaries
 
         Result:
-            self.ref_eps : dict, reflection epsilon term
-            self.ref_amp : dict, reflection amplitude
-            self.ref_phs : dict, reflection phase [radians]
-            self.ref_dly : dict, reflection delay [nanosec]
-            self.ref_flags : dict, reflection flags [bool]
-            self.ref_significance : dict, reflection significance,
-                which is max|Vfft| / median|Vfft| near reflection peak.
+            self.ref_eps : dict, reflection epsilon term with (ant, pol) keys and ndarray values
+            self.ref_amp : dict, reflection amplitude with (ant, pol) keys and ndarray values
+            self.ref_phs : dict, reflection phase [radians] with (ant, pol) keys and ndarray values
+            self.ref_dly : dict, reflection delay [nanosec] with (ant, pol) keys and ndarray values
+            self.ref_flags : dict, reflection flags [bool] with (ant, pol) keys and ndarray values
+            self.ref_significance : dict, reflection significance with (ant, pol) keys and ndarray values
+                Significance is max|Vfft| / median|Vfft| near the reflection peak
+            self.ref_gains : dict, reflection gains spanning all keys in clean_data. keys that
+                weren't included in input or didn't have a significant reflection have a gain of 1.0
         """
         # initialize containers
-        if hasattr(self, 'epsilon') and not overwrite:
+        if hasattr(self, 'ref_eps') and not overwrite:
             raise ValueError("reflection dictionaries exist but overwrite is False...")
         self.ref_eps = {}
         self.ref_amp = {}
@@ -135,15 +139,15 @@ class ReflectionFitter(FRFilter):
         self.ref_significance = {}
 
         # get flags
-        if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(data[k], dtype=np.bool)) for k in data]))
+        if clean_flags is None:
+            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]))
 
         # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
-            keys = [k for k in data.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
+            keys = [k for k in clean_data.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
 
         # Take FFT of data
-        self.fft_data(data, flags=flags, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
+        self.fft_data(clean_data, flags=clean_flags, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
                       edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True,
                       ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
 
@@ -163,13 +167,17 @@ class ReflectionFitter(FRFilter):
 
             # make significance cut
             if np.max(sig) < ref_sig_cut:
-                continue
+                # set reflection parameters to zero
+                amp[:] = 0.0
+                dly[:] = 0.0
+                phs = np.zeros_like(amp)
 
-            # solve for phase (slowest step)
-            phs = fit_reflection_phase(self.dfft[k], dly_range, self.delays, amp, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
+            else:
+                # solve for phase (slowest step)
+                phs = fit_reflection_phase(self.dfft[k], dly_range, self.delays, amp, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
 
-            # anchor phase to 0 Hz
-            phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
+                # anchor phase to 0 Hz
+                phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
 
             # form epsilon term
             eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=False)
@@ -179,7 +187,7 @@ class ReflectionFitter(FRFilter):
             self.ref_phs[rkey] = phs
             self.ref_dly[rkey] = dly
             self.ref_significance[rkey] = sig
-            self.ref_flags[rkey] = np.min(flags[k], axis=1, keepdims=True)
+            self.ref_flags[rkey] = np.min(clean_flags[k], axis=1, keepdims=True)
 
         # form gains
         self.ref_gains = form_gains(self.ref_eps)
@@ -190,24 +198,27 @@ class ReflectionFitter(FRFilter):
                     self.ref_gains[k] = np.ones((self.Ntimes, self.Nfreqs), dtype=np.complex)
 
     def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False,
-                               write_npz=False, add_to_history=''):
+                               write_npz=False, add_to_history='', verbose=True):
         """
         Write auto reflection gain terms from self.ref_gains.
 
-        Given a filepath to antenna gain calfits file, load the
-        calibration, incorporate auto-correlation reflection term from the
-        self.ref_gains dictionary and write to file. Optionally, take
-        the values in self.ref_amp, self.ref_phs and self.ref_dly and
+        If input_calfits is provided, merge its gains with the reflection
+        gains before writing to disk. Flags, quality and total_quality
+        arrays are all empty unless input_calfits is provided, in which
+        case its arrays are inherited.
+
+        Optionally, take the values in self.ref_amp, self.ref_phs and self.ref_dly and
         write their values to an NPZ file with the same path name as output_calfits.
 
         Args:
-            output_calfits : str, filepath to write output calfits file
+            output_calfits : str, filepath to write output calfits file to
             input_calfits : str, filepath to input calfits file to multiply in with
-                reflection gains.
+                reflection gains. 
             overwrite : bool, if True, overwrite output file
             write_npz : bool, if True, write an NPZ file holding reflection
                 params with the same pathname as output_calfits
             add_to_history: string to add to history of output calfits file
+            verbose : bool, report feedback to stdout
 
         Returns:
             uvc : UVCal object with new gains
@@ -235,12 +246,13 @@ class ReflectionFitter(FRFilter):
                 freq_array = self.freqs
             kwargs = dict([(k, getattr(cal, k)) for k in ['gain_convention', 'x_orientation',
                                                           'telescope_name', 'cal_style']])
+            add_to_history += "\nMerged-in calibration {}".format(input_calfits)
         else:
             time_array = self.times
             freq_array = self.freqs
             kwargs = {}
 
-        echo("...writing {}".format(output_calfits))
+        echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
                            quality=quals, total_qual=tquals, zero_check=False,
                            overwrite=overwrite, history=version.history_string(add_to_history),
@@ -249,7 +261,7 @@ class ReflectionFitter(FRFilter):
         if write_npz:
             output_npz = os.path.splitext(output_calfits)[0] + '.npz'
             if not os.path.exists(output_npz) or overwrite:
-                echo("...writing {}".format(output_npz))
+                echo("...writing {}".format(output_npz), verbose=verbose)
                 np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
                          significance=self.ref_significance, times=self.times, freqs=self.freqs,
                          lsts=self.lsts, antpos=self.antpos,
@@ -260,6 +272,11 @@ class ReflectionFitter(FRFilter):
     def pca_decomp(self, dly_range, dfft=None, flags=None, side='both', keys=None, overwrite=False, verbose=True):
         """
         Create a PCA-based model of the FFT data in dfft.
+
+        This is done via Singluar Value Decomposition on the input delay waterfall data
+        and results in self.umodes, self.vmodes, self.svals, and self.uflags.
+        The input dly_range forms the bounds of a tophat windowing applied to dfft
+        before taking the SVD, to narrow the information-content of the PCs to certain delays.
 
         Args:
             dly_range : len-2 tuple of positive delays in nanosec
@@ -335,7 +352,7 @@ class ReflectionFitter(FRFilter):
 
     def form_PCs(self, keys=None, u=None, v=None, overwrite=False, verbose=True):
         """
-        Build principal components.
+        Build principal components from SVD u-modes and v-modes.
 
         Take u and v-modes and form outer product to get principal components
         and insert into self.pcomps
@@ -892,7 +909,7 @@ def sum_principal_components(svals, PCs, Nkeep=None):
 
 def auto_reflection_argparser():
     a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections from auto-correlation visibilities')
-    a.add_argument("data", nargs='*', type=str, help="Data file paths to run auto reflection modeling on")
+    a.add_argument("clean_data", nargs='*', type=str, help="CLEAN data file paths to run auto reflection modeling on")
     a.add_argument("--output_fname", type=str, help="Full path to the output .calfits file")
     a.add_argument("--dly_range", type=float, nargs='*', help='lower and upper delay [nanosec] within which to search for reflections.')
     a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of datafile")
@@ -999,7 +1016,7 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)
 
     # model auto reflections in clean data
-    RF.model_auto_reflections(RF.clean_data, dly_range, flags=RF.clean_flags, edgecut_low=edgecut_low,
+    RF.model_auto_reflections(RF.clean_data, dly_range, clean_flags=RF.clean_flags, edgecut_low=edgecut_low,
                               edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
                               zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
 
