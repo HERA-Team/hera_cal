@@ -821,15 +821,15 @@ class RedundantCalibrator:
         Returns:
             nDegens: the integer number of degeneracies of redundant calibration given the array configuration.
         """
-        nPhaseSlopes = len(next(reds_to_antpos(self.reds).itervalues())) # number of phase slope degeneracies
+        nPhaseSlopes = len(next(reds_to_antpos(self.reds).itervalues()))  # number of phase slope degeneracies
         if self.pol_mode == '1pol':
             return 1 + 1 + nPhaseSlopes  # 1 amplitude degen, 1 phase degen, N phase slopes
         elif self.pol_mode == '2pol':
             return 2 + 2 + 2 * nPhaseSlopes  # 2 amplitude degens, 2 phase degens, 2N phase slopes
         elif self.pol_mode == '4pol':
-            return 2 + 2 + nPhaseSlopes # 4pol ties phase slopes together, so just N phase slopes
+            return 2 + 2 + nPhaseSlopes  # 4pol ties phase slopes together, so just N phase slopes
         else:  # '4pol_minV'
-            return 2 + 1 + nPhaseSlopes # 4pol_minV ties overall phase together, so just 1 overall phase
+            return 2 + 1 + nPhaseSlopes  # 4pol_minV ties overall phase together, so just 1 overall phase
 
 
 def count_redcal_degeneracies(antpos, bl_error_tol=1.0):

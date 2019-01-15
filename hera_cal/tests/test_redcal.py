@@ -1004,7 +1004,6 @@ class TestRedundantCalibrator(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV')
         self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 7)
 
-
     def test_count_redcal_degeneracies(self):
         pos = build_hex_array(3)
         self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=1), 4)
