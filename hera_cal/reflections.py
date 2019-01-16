@@ -90,6 +90,23 @@ class ReflectionFitter(FRFilter):
     """
     A subclass of FRFilter & VisClean with added reflection
     modeling capabilities. Instantiation inherits from the VisClean class.
+
+    Possible products from this class include
+        self.ref_eps : dictionary, see model_auto_reflections()
+        self.ref_amp : dictionary, see model_auto_reflections()
+        self.ref_dly : dictionary, see model_auto_reflections()
+        self.ref_phs : dictionary, see model_auto_reflections()
+        self.ref_significance : dictionary, see model_auto_reflections()
+        self.ref_gains : dictionary, see model_auto_reflections()
+        self.ref_flags : dictionary, see model_auto_reflections()
+
+        self.umodes : DataContainer, see pca_decomp()
+        self.vmodes : DataContainer, see pca_decomp()
+        self.svals : DataContainer, see pca_decomp()
+        self.umode_interp : DataContainer, see interp_u()
+        self.pcomp_model : DataContainer, see build_pc_model()
+        self.pcomp_model_fft : DataContainer, see subtract_model()
+        self.data_pcmodel_resid : DataContainer, see subtract_model()
     """
     def model_auto_reflections(self, clean_data, dly_range, clean_flags=None, keys=None, Nphs=500,
                                edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
@@ -269,7 +286,8 @@ class ReflectionFitter(FRFilter):
 
         return uvc
 
-    def pca_decomp(self, dly_range, dfft=None, flags=None, side='both', keys=None, overwrite=False, verbose=True):
+    def pca_decomp(self, dly_range, dfft=None, flags=None, side='both', keys=None, Nkeep=None,
+                   overwrite=False, verbose=True):
         """
         Create a PCA-based model of the FFT data in dfft.
 
@@ -286,8 +304,16 @@ class ReflectionFitter(FRFilter):
                 Specifies dly_range as positive delays, negative delays or both.
             keys : list of tuples
                 List of datacontainer baseline-pol tuples to create model for.
+            Nkeep : int, number of modes to keep out of total Ntimes number of modes.
+                Default is keep all modes.
             overwrite : bool
                 If dfft exists, overwrite its values.
+
+        Result:
+            self.umodes : DataContainer, SVD time-modes, ant-pair-pol keys, 2D ndarray values
+            self.vmodes : DataContainer, SVD delay-modes, ant-pair-pol keys, 2D ndarray values
+            self.svals : DataContainer, SVD time-modes, ant-pair-pol keys, 1D ndarray values
+            self.uflags : DataContainer, flags for umodes, ant-pair-pol keys, 2D ndarray values
         """
         # get dfft and flags
         if dfft is None:
@@ -331,17 +357,17 @@ class ReflectionFitter(FRFilter):
             # perform svd to get principal components
             d = np.zeros_like(dfft[k])
             d[:, select] = dfft[k][:, select]
-            u, s, v = _svd_waterfall(d)
-            Nmodes = len(s)
+            u, svals, v = np.linalg.svd(d)
+            if Nkeep is None:
+                Nmodes = len(svals)
+            else:
+                Nmodes = Nkeep
 
-            # append to containers
+            # append to containers: keeping Nmodes b/c otherwise their eventual outerproduct fails
             self.umodes[k] = u[:, :Nmodes]
             self.vmodes[k] = v[:Nmodes, :]
-            self.svals[k] = s
+            self.svals[k] = svals
             self.uflags[k] = np.min(flags[k], axis=1, keepdims=True)
-
-        # get principal components
-        self.form_PCs(keys, overwrite=overwrite)
 
         # append relevant metadata
         if hasattr(dfft, 'times'):
@@ -350,68 +376,46 @@ class ReflectionFitter(FRFilter):
             self.svals.times = dfft.times
             self.uflags.times = dfft.times
 
-    def form_PCs(self, keys=None, u=None, v=None, overwrite=False, verbose=True):
+    def build_pc_model(self, umodes=None, vmodes=None, svals=None, keys=None, Nkeep=None, overwrite=False, increment=False, verbose=True):
         """
-        Build principal components from SVD u-modes and v-modes.
+        Build a data model out of principal components.
 
-        Take u and v-modes and form outer product to get principal components
-        and insert into self.pcomps
+        Take outer products of input umodes and vmodes, multiply by singular
+        values and sum to form self.pcomp_model.
 
         Args:
+            umodes : DataContainer
+                SVD u-modes from self.pca_decomp(). Default is self.umodes.
+            vmodes : DataContainer
+                SVD v-modes from self.pca_decomp(). Default is self.vmodes.
+            svals : DataContainer
+                SVD singular values from self.pca_decomp(). Default is self.svals.
             keys : list of tuples
-                List of baseline-pol DataContainer tuples to operate on.
-            u : DataContainer 
-                Holds u-modes to use in forming PCs. Default is self.umodes
-            v : DataContainer 
-                Holds v-modes to use in forming PCs. Default is self.vmodes
-            overwrite : bool
-                If True, overwrite output data if it exists.
-            verbose : bool
-                If True, report feedback to stdout.
-        """
-        if keys is None:
-            keys = self.svals.keys()
-        if u is None:
-            u = self.umodes
-        if v is None:
-            v = self.vmodes
-
-        if not hasattr(self, 'pcomps'):
-            self.pcomps = DataContainer({})
-
-        for k in keys:
-            if k in self.pcomps and not overwrite:
-                echo("{} exists in pcomps and overwrite == False, skipping...".format(k), verbose=verbose)
-                continue
-
-            self.pcomps[k] = _form_PCs(u[k], v[k])
-        if hasattr(u, 'times'):
-            self.pcomps.times = u.times
-
-    def build_model(self, keys=None, Nkeep=None, overwrite=False, increment=False, verbose=True):
-        """
-        Sum principal components to get a model.
-
-        Sum principal components dotted with singular values and add to 
-        the pcomp_model.
-
-        Args:
-            keys : list of tuples
-                List of baseline-pol DataContainer tuples to operate on.
+                List of ant-pair-pol tuples to operate on.
             Nkeep : int
-                Number of principal components to keep when forming model.
+                Number of principal components to keep when forming model. Default is all.
             overwrite : bool
                 If True, overwrite output data if it exists.
             increment : bool
                 If key already exists in pcomp_model, add the new model
-                to it, rather than overwrite it. This supercedes overwrite
-                if both are true.
+                to it, rather than overwrite it. This supercedes overwrite if both are true.
             verbose : bool
                 If True, report feedback to stdout.
+
+        Result:
+            self.pcomp_model : DataContainer of the PC model, ant-pair-pol key and ndarray value
         """
+        # get inputs
+        if umodes is None:
+            umodes = self.umodes
+        if vmodes is None:
+            vmodes = self.vmodes
+        if svals is None:
+            svals = self.svals
+
         # get keys
         if keys is None:
-            keys = self.pcomps.keys()
+            keys = svals.keys()
 
         # setup containers
         if not hasattr(self, "pcomp_model"):
@@ -419,21 +423,26 @@ class ReflectionFitter(FRFilter):
 
         # iterate over keys
         for k in keys:
-            if k not in self.pcomps:
-                echo("{} not in pcomps, skipping...".format(k), verbose=verbose)
-                continue
             if k in self.pcomp_model and (not overwrite and not increment):
                 echo("{} in pcomp_model and overwrite == increment == False, skipping...".format(k), verbose=verbose)
                 continue
 
-            # sum PCs
-            model_fft = sum_principal_components(self.svals[k], self.pcomps[k], Nkeep=Nkeep)
+            # form principal components
+            pcomps = np.einsum("ij,jk->jik", umodes[k], vmodes[k])
+
+            # multiply by svals and sum 
+            pc_model = np.einsum("i,i...->...", svals[k][:Nkeep], pcomps[:Nkeep])
+
+            # add to pcomp_model
             if k not in self.pcomp_model:
-                self.pcomp_model[k] = model_fft
+                self.pcomp_model[k] = pc_model
             elif k in self.pcomp_model and increment:
-                self.pcomp_model[k] += model_fft
+                self.pcomp_model[k] += pc_model
             else:
-                self.pcomp_model[k] = model_fft
+                self.pcomp_model[k] = pc_model
+
+        if hasattr(umodes, 'times'):
+            self.pcomp_model.times = umodes.times
 
     def subtract_model(self, keys=None, data=None, overwrite=False, ifft=True, ifftshift=True,
                        window='none', alpha=0.2, edgecut_low=0, edgecut_hi=0, verbose=True):
@@ -442,7 +451,7 @@ class ReflectionFitter(FRFilter):
 
         FFT pcomp_model to frequency space, divide by window, and subtract from data.
         Inserts FFT of pcomp_model into self.pcomp_model_fft and 
-        residual of data with self.data_pmodel_resid. 
+        residual of data with self.data_pcmodel_resid. 
 
         Note: The windowing parameters should be the *same* as those that were used
         in constructing the dfft that pca_decomp operated on.
@@ -469,6 +478,13 @@ class ReflectionFitter(FRFilter):
                 Nbins to flag but not window at high-side of band.
             verbose : bool
                 If True, report feedback to stdout.
+
+        Result:
+            self.pcomp_model_fft : DataContainer, ant-pair-pol keys and ndarray values
+                Holds the FFT of self.pcomp_model, divided by the original windowing
+                function applied to the data.
+            self.data_pcmodel_resid : DataContainer, ant-pair-pol keys and ndarray values
+                Holds the residual between input data and pcomp_model_fft.
         """
         # get keys
         if keys is None:
@@ -476,8 +492,8 @@ class ReflectionFitter(FRFilter):
 
         if not hasattr(self, 'pcomp_model_fft'):
             self.pcomp_model_fft = DataContainer({})
-        if not hasattr(self, 'data_pmodel_resid'):
-            self.data_pmodel_resid = DataContainer({})
+        if not hasattr(self, 'data_pcmodel_resid'):
+            self.data_pcmodel_resid = DataContainer({})
 
         # get data
         if data is None:
@@ -509,18 +525,20 @@ class ReflectionFitter(FRFilter):
 
             # subtract from data
             self.pcomp_model_fft[k] = model_fft
-            self.data_pmodel_resid[k] = data[k] - model_fft
+            self.data_pcmodel_resid[k] = data[k] - model_fft
 
-    def interp_u(self, u, times, full_times=None, uflags=None, keys=None, overwrite=False, verbose=True,
-                 mode='gpr', gp_len=600, gp_nl=0.1, optimizer=None):
+    def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
+                 mode='gpr', gp_len=1e-2, gp_nl=1e-4, optimizer=None, verbose=True):
         """
-        Interpolate u modes along time, inserts into self.umode_interp
+        Interpolate u modes along time, inserts into self.umode_interp.
+
+        Currently only a Gaussian Process interpolator is supported.
 
         Args:
-            u : DataContainer
-                u-mode container to interpolate
+            umomdes : DataContainer
+                u-mode container to interpolate, see self.pca_decomp()
             times : 1D array
-                Holds time_array of input u modes.
+                Holds time_array of input umodes.
             full_times : 1D array
                 time_array to interpolate onto. Default is times.
             uflags : DataContainer
@@ -529,12 +547,21 @@ class ReflectionFitter(FRFilter):
                 List of baseline-pol DataContainer tuples to operate on.
             overwrite : bool
                 If True, overwrite output data if it exists.
-            verbose : bool
-                If True, report feedback to stdout.
             mode : str
                 Interpolation mode. Options=['gpr']
-            gp_len : length-scale of GPR in units of times
-            gp_nl : GPR noise-level in units of input u.
+            gp_len : float
+                length-scale of GPR in units of input times.
+            gp_nl : float
+                GPR noise-level in units of input umodes.
+            optimizer : str
+                GPR optimizer for kernel hyperparameter solution.
+                See sklearn.gaussian_process.GaussianProcessRegressor for details.
+            verbose : bool
+                If True, report feedback to stdout.
+
+        Result:
+            self.umode_interp : DataContainer, ant-pair-pol keys and ndarray values
+                Holds the input umodes Container interpolated onto full_times.
         """
         if not hasattr(self, 'umode_interp'):
             self.umode_interp = DataContainer({})
@@ -547,7 +574,7 @@ class ReflectionFitter(FRFilter):
 
         # get keys
         if keys is None:
-            keys = u.keys()
+            keys = umodes.keys()
 
         # setup X predict
         Xmean = np.median(times)
@@ -568,7 +595,7 @@ class ReflectionFitter(FRFilter):
                 # setup regression data: get unflagged data
                 select = ~np.max(uflags[k], axis=1)
                 X = times[select, None] - Xmean
-                y = u[k][select, :]
+                y = umodes[k][select, :]
 
                 # fit gp and predict
                 GP.fit(X, y.real)
@@ -577,108 +604,26 @@ class ReflectionFitter(FRFilter):
                 ypredict_imag = GP.predict(Xpredict)
 
                 # append
-                self.umode_interp[k] = ypredict_real.astype(np.complex) + 1j * ypredict_imag
+                self.umode_interp[k] = ypredict_real + 1j * ypredict_imag
 
             else:
                 raise ValueError("didn't recognize interp mode {}".format(mode))
 
-    def project_autos_onto_u(self, keys, auto_keys, u=None, flags=None, index=0, auto_delay=0,
-                             overwrite=False, verbose=True):
-        """
-        Project autocorr onto u modes.
-
-        Projects the time dependent dfft of an autocorrelation
-        at a specified delay onto the specified u-mode, replacing
-        the u-mode with the projected autocorrelation. Inserts
-        results into self.umode_interp
-
-        Args:
-            keys : list of tuples
-                List of baseline-pol DataContainer tuples to operate on.
-            auto_keys : list of tuples
-                List of autocorr-pol tuples matching input keys in length
-                to pull auto-correlation data from in self.dfft.
-                Optionally, each auto_key can be itself a list of
-                keys that will be used as separate basis functions
-                to project onto the u modes. Example: for a given
-                cross-corr key, you can provide both auto-corr keys.
-            u : DataContainer
-                Object to pull u modes from. Default is self.umodes
-            flags : DataContainer
-                Object to pull data flags from.
-            index : int
-                Index of the u-mode to project auto-correlation onto.
-                All other u-mode indices are copied as-is into umode_interp
-                This should almost always be set to zero.
-            auto_delay : float
-                Delay in nanosec of autocorrelation to project onto the u-mode.
-                This should almost always be set to zero.
-            overwrite : bool
-                If True, overwrite output data if it exists.
-            verbose : bool
-                If True, report feedback to stdout.
-        """
-        # type check
-        assert len(keys) == len(auto_keys), "len(keys) must equal len(auto_keys)"
-
-        # get u and flags
-        if u is None:
-            u = self.umodes
-        if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(self.pcomps[k][0], dtype=np.bool)) for k in u]))
-
-        # get dly index
-        select = np.argmin(np.abs(self.delays - auto_delay))
-
-        if not hasattr(self, 'umode_interp'):
-            self.umode_interp = DataContainer({})
-            self.umode_interp.times = u.times
-        if not hasattr(self, 'umode_interp_flags'):
-            self.umode_interp_flags = DataContainer({})
-            self.umode_interp_flags.times = u.times
-
-        # iterate over keys
-        for k, ak in zip(keys, auto_keys):
-            # check overwrite
-            if k in self.umode_interp and not overwrite:
-                echo("{} exists in umode_interp and overwrite == False, skipping...".format(k), verbose=verbose)
-                continue
-
-            if k not in u:
-                echo("{} not in u container, skipping...".format(k, ak), verbose=verbose)
-                continue
-
-            # get u-mode
-            _u = u[k][:, index]
-
-            # get autocorr
-            if isinstance(ak, list):
-                if not np.all([_ak in self.dfft for _ak in ak]):
-                    echo("{} not in self.dfft, skipping...".format(ak), verbose=verbose)
-                    continue
-                A = np.array([self.dfft[_ak][:, select] for _ak in ak]).T
-                af = np.sum([flags[_ak] for _ak in ak], axis=0)
-            else:
-                if ak not in self.dfft:
-                    echo("{} not in self.dfft, skipping...".format(ak), verbose=verbose)
-                    continue
-                A = np.array([self.dfft[ak][:, select]]).T
-                af = flags[ak]
-
-            # form least squares estimate
-            f = np.min(flags[k] + af, axis=1)
-            W = np.eye(len(_u)) * (~f).astype(np.float)
-            xhat = np.asarray(np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.real)), dtype=np.complex) \
-                + 1j * np.linalg.pinv(A.T.dot(W).dot(A)).dot(A.T.dot(W).dot(_u.imag))
-            proj_u = A.dot(xhat)
-
-            self.umode_interp[k] = u[k].copy()
-            self.umode_interp[k][:, index] = proj_u
-            self.umode_interp_flags[k] = f
-
 
 def form_gains(epsilon):
-    """ Turn epsilon dictionaries into gain dictionaries """
+    """
+    Turn reflection coefficients into gains.
+
+    Reflection gains are formed via g = 1 + eps
+    where eps is the reflection coefficient
+        eps = A exp(2j * pi * tau * freqs + 1j * phs)
+
+    Args:
+        epsilon : dictionary, ant-pol keys and ndarray values
+
+    Returns:
+        gains : dictionary, ant-pol keys and ndarray values
+    """
     return dict([(k, 1 + epsilon[k]) for k in epsilon.keys()])
 
 
@@ -835,78 +780,6 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_amps, ref_dlys, fthin=1, Nph
     return ref_phs
 
 
-def _svd_waterfall(data):
-    """
-    Take a singular-value decomposition of a 2D
-    visibility in either frequency or delay space,
-    with shape (Ntimes, Nfreqs) or (Ntimes, Ndelays).
-
-    Parameters
-    ----------
-    data : 2d complex ndarray
-
-    Returns
-    -------
-    PCs : 3d ndarray
-        Holds principal components of the data
-        with shape=(Npcs, Ntimes, Nfreqs)
-
-    svals : 1d ndarray
-        Holds the singluar (or eigen) values of the
-        principal components.
-    """
-    # get singular values and eigenbases
-    u, svals, v = np.linalg.svd(data)
-
-    return u, svals, v
-
-
-def _form_PCs(u, v):
-    Nu = u.shape[1]
-    Nv = v.shape[0]
-    Npc = min([Nu, Nv])
-
-    # calculate outer products to get principal components
-    PCs = np.einsum("ij,jk->jik", u, v)
-
-    return PCs
-
-
-def sum_principal_components(svals, PCs, Nkeep=None):
-    """
-    Dot singular values into principal components,
-    keeping a specified number of PCs. svals should
-    be rank ordered from highest to lowest.
-
-    Parameters
-    ----------
-    svals : 1D ndarray
-        singular values, with length Nvals
-
-    PCs : 3D ndarray
-        principal components with shape=(Nvals, Ntimes, Nfreqs)
-
-    Nkeep : integer
-        Number of PCs to keep in summation. Default is all.
-
-    Returns
-    -------
-    recon : 2D ndarray
-        Reconstruction of initial data using
-        principal components, shape=(Ntimes, Nfreqs)
-    """
-    assert len(svals) == len(PCs), "svals must have same len as PCs"
-
-    # assign Nkeep if None
-    if Nkeep is None:
-        Nkeep = len(svals)
-
-    # get reconstruction
-    recon = np.einsum("i,i...->...", svals[:Nkeep], PCs[:Nkeep])
-
-    return recon
-
-
 def auto_reflection_argparser():
     a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections from auto-correlation visibilities')
     a.add_argument("clean_data", nargs='*', type=str, help="CLEAN data file paths to run auto reflection modeling on")
@@ -916,7 +789,7 @@ def auto_reflection_argparser():
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
     a.add_argument("--write_npz", default=False, action='store_true', help="Write NPZ file with reflection params with same path name as output calfits.")
     a.add_argument("--input_cal", type=str, default=None, help="Path to input .calfits to apply to data before modeling")
-    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on.")
+    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on. Default is all.")
     a.add_argument("--polarizations", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
     a.add_argument("--window", default='None', type=str, help="FFT window for CLEAN")
     a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")

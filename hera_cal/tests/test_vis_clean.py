@@ -15,6 +15,7 @@ from pyuvdata import UVCal, UVData
 import nose.tools as nt
 
 from hera_cal import io, datacontainer
+from hera_cal import vis_clean
 from hera_cal.vis_clean import VisClean
 from hera_cal.data import DATA_PATH
 
@@ -140,3 +141,34 @@ class Test_VisClean(unittest.TestCase):
         nt.assert_true(hasattr(V, 'foo'))
         V.fft_data(keys=[(24, 25, 'xx')], assign='foo', overwrite=True, ifft=False, fftshift=False)
         np.testing.assert_array_almost_equal(delays, np.fft.fftshift(V.delays))
+
+        # test flag factorization
+        flags = V.factorize_flags(inplace=False, time_thresh=0.05)
+        nt.assert_true(flags[(24, 25, 'xx')][45, :].all())
+        nt.assert_true(flags[(24, 25, 'xx')][:, 5].all())
+
+    def test_fft_data(self):
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.uvXRAA")
+        V = VisClean(fname, filetype='miriad')
+        V.read()
+
+        # zeropad
+        V.fft_data(zeropad=30, ifft=False)
+        nt.assert_equal(V.dfft[(24, 25, 'xx')].shape, (60, 124))
+        d = vis_clean._zeropad_array(V.dfft[(24, 25, 'xx')], zeropad=30, axis=-1, undo=True)
+        nt.assert_equal(d.shape, (60, 64))
+
+        # ifftshift
+        V.fft_data(data=V.data, ifft=False, fftshift=True, overwrite=True, keys=[(24, 25, 'xx')])
+        V.fft_data(V.dfft, ifftshift=True, ifft=True, fftshift=False, assign='d2', overwrite=True, keys=[(24, 25, 'xx')])
+        np.testing.assert_array_almost_equal(V.data[(24, 25, 'xx')], V.d2[(24, 25, 'xx')])
+
+        # exceptions
+        nt.assert_raises(ValueError, V.fft_data, ax='foo')
+        nt.assert_raises(ValueError, V.fft_data, keys=[])
+        nt.assert_raises(ValueError, V.fft_data, keys=[('foo')])
+        nt.assert_raises(ValueError, vis_clean._zeropad_array, d, axis=(0, 1), zeropad=0)
+        nt.assert_raises(ValueError, vis_clean._zeropad_array, d, axis=(0, 1), zeropad=(0,))
+
+
+

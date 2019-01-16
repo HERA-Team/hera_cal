@@ -157,6 +157,10 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=2e-1).all())
 
+        # try a high ref_sig cut
+        RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
+                                  ref_sig_cut=100, overwrite=True)
+
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (37, 37, 'xx')
@@ -192,7 +196,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
     def test_auto_reflection_run(self):
         # code tests have been done above, this is just to ensure this wrapper function runs
-        reflections.auto_reflection_run(self.uvd, (100, 200), "./ex.calfits", window='blackmanharris', write_npz=True)
+        reflections.auto_reflection_run(self.uvd, (100, 200), "./ex.calfits", time_avg=True, window='blackmanharris', write_npz=True)
         nt.assert_true(os.path.exists("./ex.calfits"))
         nt.assert_true(os.path.exists("./ex.npz"))
         os.remove("./ex.calfits")
@@ -212,13 +216,13 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         # test pca_decomposition
         RF.pca_decomp((200, 300), keys=[bl], side='pos', overwrite=True)
 
+        # build a model
+        RF.build_pc_model(Nkeep=1, increment=False, overwrite=True)
+
         # test containers exist
-        nt.assert_true(np.all([hasattr(RF, o) for o in ['umodes', 'vmodes', 'svals', 'uflags', 'pcomps', 'dfft']]))
+        nt.assert_true(np.all([hasattr(RF, o) for o in ['umodes', 'vmodes', 'svals', 'uflags', 'pcomp_model', 'dfft']]))
         # test good information compression
         nt.assert_true(RF.svals[bl][0] / RF.svals[bl][1] > 20)
-
-        # build a model
-        RF.build_model(Nkeep=1, increment=False, overwrite=True)
 
         # assert its a good fit to the xtalk at 250 ns delay
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 57].real**2))
@@ -228,14 +232,14 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
 
         # increment the model 
         RF.pca_decomp((200, 300), side='neg', overwrite=True)
-        RF.build_model(Nkeep=1, increment=True)
+        RF.build_pc_model(Nkeep=1, increment=True)
         # says that the two are similar to each other, which they should be
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 7].real**2))
         nt.assert_true(np.sqrt(np.mean((RF.dfft[bl][:, 7].real - RF.pcomp_model[bl][:, 7].real)**2)) / Vrms < .01)
 
         # overwrite the model
         RF.pca_decomp((200, 300), side='both', overwrite=True)
-        RF.build_model(Nkeep=2, increment=False, overwrite=True)
+        RF.build_pc_model(Nkeep=2, increment=False, overwrite=True)
         # says the residual is small compared to original array
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 57].real**2))
         Rrms = np.sqrt(np.mean((RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 57].real)**2))
@@ -244,7 +248,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         # subtract the model from the data
         RF.subtract_model(overwrite=True)
         nt.assert_equal(RF.pcomp_model_fft[bl].shape, (60, 64))
-        nt.assert_equal(RF.data_pmodel_resid[bl].shape, (60, 64))
+        nt.assert_equal(RF.data_pcmodel_resid[bl].shape, (60, 64))
 
     def test_misc_pca_funcs(self):
         RF = reflections.ReflectionFitter(self.uvd)
@@ -267,14 +271,6 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         # assert broadcasting to full time resolution worked
         RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_len=100, gp_nl=0.01, optimizer=None)
         nt.assert_true(RF.umode_interp[bl].shape, (60, 60))
-
-        # project auto correlation onto umode and assert residual is small
-        RF.project_autos_onto_u([bl], [abl1], index=0, auto_delay=0, overwrite=True)
-        nt.assert_true(np.sqrt(np.mean((RF.umodes[bl][:, 0] - RF.umode_interp[bl][:, 0])**2)) < 0.01)
-
-        # test multiple auto projection
-        RF.project_autos_onto_u([bl], [[abl1, abl2]], index=0, auto_delay=0, overwrite=True)
-        nt.assert_true(np.std(RF.umodes[bl][:, 0] - RF.umode_interp[bl][:, 0]) < 0.01)
 
         # exceptions
         nt.assert_raises(ValueError, RF.interp_u, RF.umodes, RF.times, overwrite=True, mode='foo')
