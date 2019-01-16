@@ -60,7 +60,7 @@ class Test_VisClean(unittest.TestCase):
 
         # test clear
         V1.clear_containers()
-        nt.assert_false(np.any([hasattr(V1, c) for c in ['data', 'flags', 'nsamples']]))
+        nt.assert_true(np.all([len(getattr(V1, c)) == 0 for c in ['data', 'flags', 'nsamples']]))
         V2.clear_calibration()
         nt.assert_false(hasattr(V2, 'hc'))
 
@@ -169,6 +169,3 @@ class Test_VisClean(unittest.TestCase):
         nt.assert_raises(ValueError, V.fft_data, keys=[('foo')])
         nt.assert_raises(ValueError, vis_clean._zeropad_array, d, axis=(0, 1), zeropad=0)
         nt.assert_raises(ValueError, vis_clean._zeropad_array, d, axis=(0, 1), zeropad=(0,))
-
-
-

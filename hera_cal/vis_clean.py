@@ -90,7 +90,7 @@ class VisClean(object):
 
     def clear_containers(self, exclude=[]):
         """
-        Delete all DataContainers attached to self.
+        Clear all DataContainers attached to self.
 
         Args:
             exclude : list of DataContainer names attached
@@ -102,7 +102,7 @@ class VisClean(object):
                 continue
             obj = getattr(self, key)
             if isinstance(getattr(self, key), DataContainer):
-                delattr(self, key)
+                setattr(self, key, DataContainer({}))
 
     def attach_calibration(self, input_cal):
         """

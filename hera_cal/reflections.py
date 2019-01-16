@@ -108,6 +108,49 @@ class ReflectionFitter(FRFilter):
         self.pcomp_model_fft : DataContainer, see subtract_model()
         self.data_pcmodel_resid : DataContainer, see subtract_model()
     """
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize ReflectionFitter, see vis_clean.VisClean for kwargs.
+        """
+        super(ReflectionFitter, self).__init__(*args, **kwargs)
+
+        # init empty datacontainers
+        self.umodes = DataContainer({})
+        self.uflags = DataContainer({})
+        self.vmodes = DataContainer({})
+        self.svals = DataContainer({})
+        self.umode_interp = DataContainer({})
+        self.pcomp_model = DataContainer({})
+        self.pcomp_model_fft = DataContainer({})
+        self.data_pcmodel_resid = DataContainer({})
+
+        # init empty dictionaries
+        self.ref_eps = {}
+        self.ref_amp = {}
+        self.ref_phs = {}
+        self.ref_dly = {}
+        self.ref_flags = {}
+        self.ref_significance = {}
+
+    def clear(self, exclude=[]):
+        """
+        Clear all DataContainers, and
+        all reflection dictionaries beginning with ref_*
+
+        Args:
+            exclude : list of DataContainer and dictionary names
+                attached to self to exclude from purge.
+        """
+        keys = list(self.__dict__.keys())
+        for key in keys:
+            if key in exclude:
+                continue
+            obj = getattr(self, key)
+            if isinstance(getattr(self, key), DataContainer):
+                setattr(self, key, DataContainer({}))
+            if "ref_" in key:
+                setattr(self, key, {})
+
     def model_auto_reflections(self, clean_data, dly_range, clean_flags=None, keys=None, Nphs=500,
                                edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
                                fthin=10, ref_sig_cut=2.0, overwrite=False, verbose=True):
@@ -145,16 +188,6 @@ class ReflectionFitter(FRFilter):
             self.ref_gains : dict, reflection gains spanning all keys in clean_data. keys that
                 weren't included in input or didn't have a significant reflection have a gain of 1.0
         """
-        # initialize containers
-        if hasattr(self, 'ref_eps') and not overwrite:
-            raise ValueError("reflection dictionaries exist but overwrite is False...")
-        self.ref_eps = {}
-        self.ref_amp = {}
-        self.ref_phs = {}
-        self.ref_dly = {}
-        self.ref_flags = {}
-        self.ref_significance = {}
-
         # get flags
         if clean_flags is None:
             clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]))
@@ -286,19 +319,19 @@ class ReflectionFitter(FRFilter):
 
         return uvc
 
-    def pca_decomp(self, dly_range, dfft=None, flags=None, side='both', keys=None, Nkeep=None,
+    def pca_decomp(self, dfft, dly_range, flags=None, side='both', keys=None, Nkeep=None,
                    overwrite=False, verbose=True):
         """
         Create a PCA-based model of the FFT data in dfft.
 
-        This is done via Singluar Value Decomposition on the input delay waterfall data
+        This is done via Singular Value Decomposition on the input delay waterfall data
         and results in self.umodes, self.vmodes, self.svals, and self.uflags.
         The input dly_range forms the bounds of a tophat windowing applied to dfft
         before taking the SVD, to narrow the information-content of the PCs to certain delays.
 
         Args:
+            dfft : DataContainer, holding delay-transformed data.
             dly_range : len-2 tuple of positive delays in nanosec
-            dfft : DataContainer, holding delay-transformed data. Default is self.dfft
             flags : DataContainer, holding dfft flags (e.g. skip_wgts). Default is None.
             side : str, options=['pos', 'neg', 'both']
                 Specifies dly_range as positive delays, negative delays or both.
@@ -315,27 +348,13 @@ class ReflectionFitter(FRFilter):
             self.svals : DataContainer, SVD time-modes, ant-pair-pol keys, 1D ndarray values
             self.uflags : DataContainer, flags for umodes, ant-pair-pol keys, 2D ndarray values
         """
-        # get dfft and flags
-        if dfft is None:
-            if not hasattr(self, 'dfft'):
-                raise ValueError("self.dfft doesn't exist, see self.fft_data and/or self.vis_clean")
-            dfft = self.dfft
+        # get flags
         if flags is None:
             flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=np.bool)) for k in dfft]))
 
         # get keys
         if keys is None:
             keys = dfft.keys()
-
-        # setup dictionaries
-        if not hasattr(self, 'umodes'):
-            self.umodes = DataContainer({})
-        if not hasattr(self, 'vmodes'):
-            self.vmodes = DataContainer({})
-        if not hasattr(self, 'svals'):
-            self.svals = DataContainer({})
-        if not hasattr(self, 'uflags'):
-            self.uflags = DataContainer({})
 
         # get selection function
         if side == 'pos':
@@ -376,7 +395,7 @@ class ReflectionFitter(FRFilter):
             self.svals.times = dfft.times
             self.uflags.times = dfft.times
 
-    def build_pc_model(self, umodes=None, vmodes=None, svals=None, keys=None, Nkeep=None, overwrite=False, increment=False, verbose=True):
+    def build_pc_model(self, umodes, vmodes, svals, keys=None, Nkeep=None, overwrite=False, increment=False, verbose=True):
         """
         Build a data model out of principal components.
 
@@ -385,11 +404,11 @@ class ReflectionFitter(FRFilter):
 
         Args:
             umodes : DataContainer
-                SVD u-modes from self.pca_decomp(). Default is self.umodes.
+                SVD u-modes from self.pca_decomp().
             vmodes : DataContainer
-                SVD v-modes from self.pca_decomp(). Default is self.vmodes.
+                SVD v-modes from self.pca_decomp().
             svals : DataContainer
-                SVD singular values from self.pca_decomp(). Default is self.svals.
+                SVD singular values from self.pca_decomp().
             keys : list of tuples
                 List of ant-pair-pol tuples to operate on.
             Nkeep : int
@@ -405,21 +424,9 @@ class ReflectionFitter(FRFilter):
         Result:
             self.pcomp_model : DataContainer of the PC model, ant-pair-pol key and ndarray value
         """
-        # get inputs
-        if umodes is None:
-            umodes = self.umodes
-        if vmodes is None:
-            vmodes = self.vmodes
-        if svals is None:
-            svals = self.svals
-
         # get keys
         if keys is None:
             keys = svals.keys()
-
-        # setup containers
-        if not hasattr(self, "pcomp_model"):
-            self.pcomp_model = DataContainer({})
 
         # iterate over keys
         for k in keys:
@@ -444,7 +451,7 @@ class ReflectionFitter(FRFilter):
         if hasattr(umodes, 'times'):
             self.pcomp_model.times = umodes.times
 
-    def subtract_model(self, keys=None, data=None, overwrite=False, ifft=True, ifftshift=True,
+    def subtract_model(self, data, keys=None, overwrite=False, ifft=True, ifftshift=True,
                        window='none', alpha=0.2, edgecut_low=0, edgecut_hi=0, verbose=True):
         """
         Subtract pcomp_model from data.
@@ -457,11 +464,10 @@ class ReflectionFitter(FRFilter):
         in constructing the dfft that pca_decomp operated on.
 
         Args:
+            data : DataContainer
+                Object to pull data from in forming data-model residual.
             keys : list of tuples
                 List of baseline-pol DataContainer tuples to operate on.
-            data : datacontainer
-                Object to pull data from in forming data-model residual.
-                Default is self.data.
             overwrite : bool
                 If True, overwrite output data if it exists.
             ifft : bool

@@ -161,6 +161,13 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   ref_sig_cut=100, overwrite=True)
 
+        # try clear
+        RF.clear(exclude=['data'])
+        nt.assert_equal(len(RF.ref_eps), 0)
+        nt.assert_equal(len(RF.ref_gains), 0)
+        nt.assert_true(len(RF.data) > 0)
+        nt.assert_equal(len(RF.dfft), 0)
+
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (37, 37, 'xx')
@@ -214,10 +221,10 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
 
         # test pca_decomposition
-        RF.pca_decomp((200, 300), keys=[bl], side='pos', overwrite=True)
+        RF.pca_decomp(RF.dfft, (200, 300), keys=[bl], side='pos', overwrite=True)
 
         # build a model
-        RF.build_pc_model(Nkeep=1, increment=False, overwrite=True)
+        RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=False, overwrite=True)
 
         # test containers exist
         nt.assert_true(np.all([hasattr(RF, o) for o in ['umodes', 'vmodes', 'svals', 'uflags', 'pcomp_model', 'dfft']]))
@@ -231,22 +238,22 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         nt.assert_true(Rrms / Vrms < 0.01)
 
         # increment the model 
-        RF.pca_decomp((200, 300), side='neg', overwrite=True)
-        RF.build_pc_model(Nkeep=1, increment=True)
+        RF.pca_decomp(RF.dfft, (200, 300), side='neg', overwrite=True)
+        RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=True)
         # says that the two are similar to each other, which they should be
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 7].real**2))
         nt.assert_true(np.sqrt(np.mean((RF.dfft[bl][:, 7].real - RF.pcomp_model[bl][:, 7].real)**2)) / Vrms < .01)
 
         # overwrite the model
-        RF.pca_decomp((200, 300), side='both', overwrite=True)
-        RF.build_pc_model(Nkeep=2, increment=False, overwrite=True)
+        RF.pca_decomp(RF.dfft, (200, 300), side='both', overwrite=True)
+        RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=2, increment=False, overwrite=True)
         # says the residual is small compared to original array
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 57].real**2))
         Rrms = np.sqrt(np.mean((RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 57].real)**2))
         nt.assert_true(Rrms / Vrms < 0.01)
 
         # subtract the model from the data
-        RF.subtract_model(overwrite=True)
+        RF.subtract_model(RF.data, overwrite=True)
         nt.assert_equal(RF.pcomp_model_fft[bl].shape, (60, 64))
         nt.assert_equal(RF.data_pcmodel_resid[bl].shape, (60, 64))
 
@@ -262,7 +269,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         RF.fft_data(data=RF.avg_data, window='blackmanharris', overwrite=True)
 
         # pca decomp
-        RF.pca_decomp((200, 300), keys=[bl, abl1, abl2], dfft=RF.dfft, side='both', overwrite=True)
+        RF.pca_decomp(RF.dfft, (200, 300), keys=[bl, abl1, abl2], side='both', overwrite=True)
 
         # test interpolation of umodes
         RF.interp_u(RF.umodes, RF.avg_times, overwrite=True, mode='gpr', gp_len=100, gp_nl=0.01, optimizer=None)
