@@ -159,7 +159,7 @@ class Test_VisClean(unittest.TestCase):
         nt.assert_equal(d.shape, (60, 64))
 
         # ifftshift
-        V.fft_data(data=V.data, ifft=False, fftshift=True, overwrite=True, keys=[(24, 25, 'xx')])
+        V.fft_data(data=V.data, ifft=False, fftshift=True, overwrite=True, keys=[(24, 25, 'xx')], assign='dfft')
         V.fft_data(V.dfft, ifftshift=True, ifft=True, fftshift=False, assign='d2', overwrite=True, keys=[(24, 25, 'xx')])
         np.testing.assert_array_almost_equal(V.data[(24, 25, 'xx')], V.d2[(24, 25, 'xx')])
 
