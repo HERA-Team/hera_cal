@@ -814,6 +814,23 @@ class RedundantCalibrator:
         new_sol.update(new_gains)
         return new_sol
 
+    def count_degens(self):
+        """Count the number of degeneracies in this redundant calibrator, given the redundancies and the pol_mode.
+        Does not assume coplanarity and instead introduces additional phase slope degeneracies to compensate.
+
+        Returns:
+            nDegens: the integer number of degeneracies of redundant calibration given the array configuration.
+        """
+        nPhaseSlopes = len(list(reds_to_antpos(self.reds).values())[0])  # number of phase slope degeneracies
+        if self.pol_mode == '1pol':
+            return 1 + 1 + nPhaseSlopes  # 1 amplitude degen, 1 phase degen, N phase slopes
+        elif self.pol_mode == '2pol':
+            return 2 + 2 + 2 * nPhaseSlopes  # 2 amplitude degens, 2 phase degens, 2N phase slopes
+        elif self.pol_mode == '4pol':
+            return 2 + 2 + nPhaseSlopes  # 4pol ties phase slopes together, so just N phase slopes
+        else:  # '4pol_minV'
+            return 2 + 1 + nPhaseSlopes  # 4pol_minV ties overall phase together, so just 1 overall phase
+
 
 def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
     """Figures out whether an array is redundantly calibratable.
@@ -824,17 +841,11 @@ def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
 
     Returns:
-        int: the number of 1-pol redundant baseline calibration degeneracies (4 means redundantly calibratable)
+        int: the number of 1-pol redundant calibration degeneracies (<=4 is traditionally redundantly calibratable)
     """
-
-    reds = get_reds(antpos, bl_error_tol=bl_error_tol)
-    gains, true_vis, data = sim_red_data(reds, shape=(1, 1))
+    reds = get_reds(antpos, pol_mode='1pol', bl_error_tol=bl_error_tol)
     cal = RedundantCalibrator(reds)
-    ls = cal._solver(linsolve.LogProductSolver, data, wgts={})
-
-    A, B = ls.ls_amp.get_A()[:, :, 0], ls.ls_phs.get_A()[:, :, 0]
-    AtA, BtB = np.conj(A.T).dot(A), np.conj(B.T).dot(B)
-    return len(AtA) + len(BtB) - np.linalg.matrix_rank(AtA) - np.linalg.matrix_rank(BtB)
+    return cal.count_degens()
 
 
 def is_redundantly_calibratable(antpos, bl_error_tol=1.0):
@@ -846,10 +857,9 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0):
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
 
     Returns:
-        boolean: true if the number of 1pol degeneracies is 4 and thus the array is redundantly calibratable
+        boolean: true if the number of 1pol degeneracies is <=4 and thus the array is redundantly calibratable
     """
-
-    return count_redcal_degeneracies(antpos, bl_error_tol=bl_error_tol) == 4
+    return count_redcal_degeneracies(antpos, bl_error_tol=bl_error_tol) <= 4
 
 
 def _get_pol_load_list(pols, pol_mode='1pol'):
@@ -941,14 +951,16 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
                                                                        gains=rv['g_omnical'], reds=reds,
                                                                        split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
     rv['chisq_per_ant'] = {ant: cs / nObs_per_ant[ant] for ant, cs in rv['chisq_per_ant'].items()}
+    nDegen = rc.count_degens()  # need to add back in nDegen/2 complex degrees of freedom
     if rc.pol_mode in ['1pol', '2pol']:  # in this case, chisq is split by antpol
         for antpol in rv['chisq'].keys():
             Ngains = len([ant for ant in rv['g_omnical'].keys() if ant[1] == antpol])
             Nvis = len([bl for bl in rv['v_omnical'].keys() if bl[2] == join_pol(antpol, antpol)])
-            rv['chisq'][antpol] /= (nObs[antpol] - Ngains - Nvis)
-    else:
-        rv['chisq'] /= (nObs + len(rv['g_omnical']) + len(rv['v_omnical']))
-
+            rv['chisq'][antpol] /= (nObs[antpol] - Ngains - Nvis + nDegen / {'1pol': 2.0, '2pol': 4.0}[rc.pol_mode])  
+    elif rc.pol_mode == '4pol':
+        rv['chisq'] /= (nObs - len(rv['g_omnical']) - len(rv['v_omnical']) + nDegen / 2.0)
+    else:  # 4pol_minV
+        rv['chisq'] /= (nObs - len(rv['g_omnical']) - len(rv['v_omnical']) + nDegen / 2.0)
     return rv
 
 
