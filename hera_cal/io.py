@@ -17,6 +17,7 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 import aipy
 from astropy import units
+import h5py
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num
@@ -686,12 +687,7 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
             start += int_time / 2
             stop += int_time / 2
         elif filetype == 'uvh5':
-            hd = HERAData(f)
-            lsts = []
-            for l in hd.lst_array:
-                if l not in lsts:
-                    lsts.append(l)
-            lsts = np.unwrap(lsts)
+            lsts = np.unwrap(np.unique(h5py.File(f)[u'Header'][u'lst_array']))
             start, stop, int_time = lsts[0], lsts[-1], np.median(np.diff(lsts))
 
         # add integration buffer to end of file if desired
