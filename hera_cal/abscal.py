@@ -395,7 +395,7 @@ class AbsCal(object):
         # form result
         self._ant_dly = odict(list(map(lambda k: (k, copy.copy(fit["tau_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
         self._ant_dly_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_dly[k], pk)), self._gain_keys)), 0, -1)
-        
+
         self._ant_dly_phi = odict(list(map(lambda k: (k, copy.copy(fit["phi_{}_{}".format(k[0], k[1])])), flatten(self._gain_keys))))
         self._ant_dly_phi_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._ant_dly_phi[k], pk)), self._gain_keys)), 0, -1)
 
@@ -1056,8 +1056,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged visibilities per antenna needed to flag the antenna gain per time and frequency.")
     return a
 
-from memory_profiler import profile
-@profile
+
 def abscal_run(data_file, model_files, filetype='miriad', refant=None, input_cal=None, verbose=True, overwrite=False, write_calfits=True,
                min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, output_calfits_fname=None, return_gains=False, return_object=False, outdir=None,
                match_red_bls=False, tol=1.0, reweight=False, rephase_model=True, all_antenna_gains=False, edge_cut=0,
