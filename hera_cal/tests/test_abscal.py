@@ -409,13 +409,13 @@ class Test_AbsCal:
 
     def test_delay_lincal(self):
         # test w/o offsets
-        self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False, solve_offsets=False)
+        self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False)
         nt.assert_equal(self.AC.ant_dly[(24, 'Jxx')].shape, (60, 1))
         nt.assert_equal(self.AC.ant_dly_gain[(24, 'Jxx')].shape, (60, 64))
         nt.assert_equal(self.AC.ant_dly_arr.shape, (7, 60, 1, 1))
         nt.assert_equal(self.AC.ant_dly_gain_arr.shape, (7, 60, 64, 1))
         # test w/ offsets
-        self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False, solve_offsets=True)
+        self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False)
         nt.assert_equal(self.AC.ant_dly_phi[(24, 'Jxx')].shape, (60, 1))
         nt.assert_equal(self.AC.ant_dly_phi_gain[(24, 'Jxx')].shape, (60, 64))
         nt.assert_equal(self.AC.ant_dly_phi_arr.shape, (7, 60, 1, 1))
