@@ -102,7 +102,7 @@ def make_bl(*args):
     return (i, j, _comply_vispol(pol))
 
 
-def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
+def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11), edge_cut=0):
     """Get delay of visibility across band using FFT and quadratic fit to delay peak.
     Arguments:
         data : ndarray of complex data (e.g. gains or visibilities) of shape (Ntimes, Nfreqs)
@@ -110,8 +110,10 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
         wgts : multiplicative wgts of the same shape as the data
         medfilt : boolean, median filter data before fft
         kernel : size of median filter kernel along (time, freq) axes
+        edge_cut : int, number of channels to exclude at each band edge of data in FFT window
     Returns:
         dlys : (Ntimes, 1) ndarray containing delay for each integration
+        offset : (Ntimes, 1) ndarray containing estimated frequency-independent phases
     """
     Ntimes, Nfreqs = data.shape
     if wgts is None:
@@ -122,6 +124,10 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
         data.imag = signal.medfilt(data.imag, kernel_size=kernel)
     # fft w/ window and find argmax
     dw = data * wgts
+    if edge_cut > 0:
+        assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
+        dw[:, :edge_cut] = 0
+        dw[:, -edge_cut:] = 0
     dw[np.isnan(dw)] = 0
     vfft = np.fft.fft(dw, axis=1)
     amp = np.abs(vfft)
@@ -140,7 +146,8 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
         dlys[i] = (1.0 - np.abs(shift)) * fftfreqs[mx] + np.abs(shift) * (fftfreqs[mx] + np.sign(shift) * dtau)
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df
-    offset = np.angle(np.mean(data * np.exp(-np.complex64(2j * np.pi) * dlys * freqs.reshape(1, -1)), axis=1))
+    fSlice = slice(edge_cut, len(freqs) - edge_cut)
+    offset = np.angle(np.mean(data[:, fSlice] * np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)), axis=1))
     return dlys, offset.reshape(-1, 1)
 
 
