@@ -365,7 +365,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
 
 
 def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offsets=True, medfilt=True,
-                 kernel=(1, 5), verbose=True, antpos=None, four_pol=False, window=None, edge_cut=0):
+                 kernel=(1, 5), verbose=True, antpos=None, four_pol=False, edge_cut=0):
     """
     Solve for per-antenna delays according to the equation
 
@@ -397,9 +397,6 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
 
     df : type=float, frequency spacing between channels in Hz
 
-    solve_offsets : type=boolean, if True, setup a system of linear equations for per-antenna phase offset
-                    and solve.
-
     medfilt : type=boolean, median filter visiblity ratio before taking fft
 
     kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
@@ -407,9 +404,6 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
     four_pol : type=boolean, if True, fit multiple polarizations together
-
-    window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
-        None is a top-hat window.
 
     edge_cut : int, number of channels to exclude at each band edge in FFT window
 
@@ -447,16 +441,14 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel,
-                              solve_phase=solve_offsets, window=window, edge_cut=edge_cut)
+        dly, offset = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
 
         # set nans to zero
         rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
         isnan = np.isnan(dly)
         dly[isnan] = 0.0
         rwgts[isnan] = 0.0
-        if solve_offsets:
-            offset[isnan] = 0.0
+        offset[isnan] = 0.0
 
         ratio_delays.append(dly)
         ratio_offsets.append(offset)
@@ -501,29 +493,27 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    # solve for offsets
-    if solve_offsets:
-        # setup linsolve parameters
-        ydata = odict(zip(keys, ratio_offsets))
-        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], utils.split_pol(k[2])[0],
-                                                         k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
-        ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
-        ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
-        ls_design_matrix = odict()
-        for p in gain_pols:
-            ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
-            ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(list(ywgts.values())[0])
-        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
-        echo("...running linsolve", verbose=verbose)
-        offset_fit = sol.solve()
-        echo("...finished linsolve", verbose=verbose)
-        fit.update(offset_fit)
+    # setup linsolve parameters
+    ydata = odict(zip(keys, ratio_offsets))
+    eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], utils.split_pol(k[2])[0],
+                                                     k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
+    ls_design_matrix = odict()
+    for p in gain_pols:
+        ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
+        ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(list(ywgts.values())[0])
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    offset_fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
+    fit.update(offset_fit)
 
     return fit
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True,
-                       kernel=(1, 5), verbose=True, four_pol=False, window=None, edge_cut=0):
+                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -562,9 +552,6 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
 
     four_pol : type=boolean, if True, fit multiple polarizations together
-
-    window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
-        None is a top-hat window.
 
     edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
 
@@ -608,8 +595,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, _ = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel,
-                         window=window, edge_cut=edge_cut)
+        dly, _ = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
 
         # set nans to zero
         rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
