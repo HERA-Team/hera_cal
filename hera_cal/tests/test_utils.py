@@ -110,6 +110,9 @@ class TestFftDly(object):
         dlys, offs = utils.fft_dly(data, df)
         np.testing.assert_almost_equal(5 * dlys, 5 * true_dlys, -1)  # accuracy of 2 ns
         np.testing.assert_almost_equal(offs, 0.123, -2)
+        dlys, offs = utils.fft_dly(data, df, edge_cut=100)
+        np.testing.assert_almost_equal(5 * dlys, 5 * true_dlys, -1)  # accuracy of 2 ns
+        np.testing.assert_almost_equal(offs, 0.123, -2)
         dlys, offs = utils.fft_dly(data, df, medfilt=True)
         np.testing.assert_almost_equal(5 * dlys, 5 * true_dlys, -1)  # accuracy of 2 ns
         mdl = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * dlys + 1j * offs)
