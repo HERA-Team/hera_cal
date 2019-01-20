@@ -18,7 +18,6 @@ from . import io
 from . import version
 from . import utils
 from . import flag_utils
-from .abscal import fft_dly
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
@@ -49,7 +48,7 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
     '''
     sdf = np.median(np.diff(freqs)) / 1e9  # in GHz
     filter_size = (filter_scale / 1e3)**-1  # Puts it in ns
-    (dlys, phi) = fft_dly(gains, sdf * 1e9, wgts, medfilt=False, solve_phase=False)  # delays are in seconds
+    (dlys, phi) = utils.fft_dly(gains, sdf * 1e9, wgts, medfilt=False)  # delays are in seconds
     rephasor = np.exp(-2.0j * np.pi * np.outer(dlys, freqs))
     filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, sdf, tol=tol, window=window,
                                                                  skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
@@ -153,7 +152,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     fringe_scale = (time_scale)**-1  # in Hz
 
     # find per-integration delays, smooth on the time_scale of gain smoothing, and rephase
-    taus = fft_dly(gains, df, wgts, medfilt=False, solve_phase=False)[0].astype(np.complex)  # delays are in seconds
+    taus = utils.fft_dly(gains, df, wgts, medfilt=False)[0].astype(np.complex)  # delays are in seconds
     if not np.all(taus == 0):  # this breaks CLEAN, but it means we don't need smoothing anyway
         taus = uvtools.dspec.high_pass_fourier_filter(taus.T, np.sum(wgts, axis=1, keepdims=True).T,
                                                       fringe_scale, dt, tol=tol, maxiter=maxiter)[0].T  # 0th index is the CLEAN components
