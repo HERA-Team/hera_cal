@@ -179,8 +179,8 @@ class AbsCal(object):
         assert len(self.keys) > 0, "no shared keys exist between model and data"
 
         # append attributes
-        self.model = model
-        self.data = data
+        self.model = DataContainer(dict([(k, model[k]) for k in self.keys]))
+        self.data = DataContainer(dict([(k, data[k]) for k in self.keys]))
 
         # setup frequencies
         self.freqs = freqs
@@ -1033,6 +1033,7 @@ def omni_abscal_arg_parser():
     a.add_argument("--data_file", type=str, help="file path of data to-be-calibrated.", required=True)
     a.add_argument("--model_files", type=str, nargs='*', help="list of data-overlapping miriad files for visibility model.", required=True)
     a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of input filepaths.")
+    a.add_argument("--polarizations", type=str, nargs='*', default=None, help="Polarizations to load from data_file and model_files. Default is all.")
     a.add_argument("--input_cal", type=str, help="Path to a calfits file to apply to the data before running abscal.")
     a.add_argument("--output_calfits_fname", type=str, default=None, help="name of output calfits files.")
     a.add_argument("--outdir", type=str, default=None, help="output directory")

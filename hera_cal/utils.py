@@ -143,10 +143,10 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11), edge_cut=0):
 
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df
-
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
-    offset = np.angle(np.mean(data[:, fSlice] * np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)), axis=1))
-    return dlys, offset.reshape(-1, 1)
+    offset = np.angle(np.mean(data[:, fSlice] * np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)), axis=1, keepdims=True))
+
+    return dlys, offset
 
 
 def interp_peak(data):
