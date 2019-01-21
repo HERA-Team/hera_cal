@@ -10,20 +10,20 @@ is the correlation of two voltage spectra
 
     V_12 = v_1 v_2^*
 
-a reflection is defined as an additive term in either
+an "auto-reflection" is defined as an additive term in either
 v_1 or v_2 that introduces another copy of the voltage as
 
     v_1 <= v_1 + eps * v_1 = v_1 (1 + eps)
 
-This kind of reflection could be, for example, a cable
-reflection or intra-feed reflection.
+This kind of auto-reflection could be, for example, a cable
+reflection or dish-to-feed reflection.
 
 The reflection itself (eps) can be decomposed into three parameters:
 its amplitude (A), delay (tau) and phase offset (phi)
 
     eps = A * exp(2pi * i * tau * nu + i * phi).
 
-Reflections can be removed from the data within the framework
+Auto-reflections can be removed from the data within the framework
 of standard antenna-based calibration
 
     V_12^data = V_12^model g_1 g_2^*
@@ -38,9 +38,30 @@ and the calibration equation becomes
 
     V_12^data = V_12^model g_1^eff g_2^eff*
 
+----------------
+
 Reflections that couple other voltage signals into v_1 cannot
 be described in this formalism (for example, over-the-air aka
-inter-feed reflections).
+feed-to-feed reflections). We refer to these as "cross-reflections"
+and their behavior is to introduce a copy of the autocorrelation
+into the cross correlation. If an antenna voltage becomes:
+
+    v_1 <= v_1 + eps_1 v_2
+
+then the cross correlation is proportional to
+
+    V_12 = v_1 v_2^* + eps_1 v_2 v_2^* + ...
+
+where we see that the V_22 = v_2 v_2^* autocorrelation is now
+present in the V_12 cross correlation. V_22 is a non-fringing
+term but time-dependent term, meaning it will introduce an
+offset in the visibility at a specific delay that will have
+some time-dependent amplitude. This cannot be corrected
+via antenna-based calibration. However, we can in principle
+subtract this off at the visibility level by taking
+some form of a time-average and subtracting off the bias.
+The code here models the time and delay dependent behavior
+through a combination of SVD and fringe-rate filtering.
 """
 from __future__ import print_function, division, absolute_import
 
@@ -51,169 +72,134 @@ import copy
 import matplotlib.pyplot as plt
 from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
+from scipy.signal import windows
+from sklearn import gaussian_process as gp
+from uvtools import dspec
+import argparse
 
 from . import io
 from . import version
 from . import abscal_funcs
-from uvtools.dspec import delay_filter
 from .datacontainer import DataContainer
+from .frf import FRFilter
+from . import vis_clean
+from .utils import echo, interp_peak
 
 
-class ReflectionFitter(object):
-    def __init__(self, data=None, **load_kwargs):
+class ReflectionFitter(FRFilter):
+    """
+    A subclass of FRFilter & VisClean with added reflection
+    modeling capabilities. Instantiation inherits from the VisClean class.
+
+    Possible products from this class include
+        self.ref_eps : dictionary, see model_auto_reflections()
+        self.ref_amp : dictionary, see model_auto_reflections()
+        self.ref_dly : dictionary, see model_auto_reflections()
+        self.ref_phs : dictionary, see model_auto_reflections()
+        self.ref_significance : dictionary, see model_auto_reflections()
+        self.ref_gains : dictionary, see model_auto_reflections()
+        self.ref_flags : dictionary, see model_auto_reflections()
+
+        self.umodes : DataContainer, see pca_decomp()
+        self.vmodes : DataContainer, see pca_decomp()
+        self.svals : DataContainer, see pca_decomp()
+        self.umode_interp : DataContainer, see interp_u()
+        self.pcomp_model : DataContainer, see build_pc_model()
+        self.pcomp_model_fft : DataContainer, see subtract_model()
+        self.data_pcmodel_resid : DataContainer, see subtract_model()
+    """
+    def __init__(self, *args, **kwargs):
         """
-        Initialize a ReflectionFitter object and optionally
-        load / read data if provided.
+        Initialize ReflectionFitter, see vis_clean.VisClean for kwargs.
+        """
+        super(ReflectionFitter, self).__init__(*args, **kwargs)
+
+        # init empty datacontainers
+        self.umodes = DataContainer({})
+        self.uflags = DataContainer({})
+        self.vmodes = DataContainer({})
+        self.svals = DataContainer({})
+        self.umode_interp = DataContainer({})
+        self.pcomp_model = DataContainer({})
+        self.pcomp_model_fft = DataContainer({})
+        self.data_pcmodel_resid = DataContainer({})
+
+        # init empty dictionaries
+        self.ref_eps = {}
+        self.ref_amp = {}
+        self.ref_phs = {}
+        self.ref_dly = {}
+        self.ref_flags = {}
+        self.ref_significance = {}
+
+    def clear(self, exclude=[]):
+        """
+        Clear all DataContainers, and
+        all reflection dictionaries beginning with ref_*
 
         Args:
-            data : Filepath to a miriad or uvh5 file
-                or a pyuvdata.UVData object
-            load_kwargs : keyword arguments for self.load_data
+            exclude : list of DataContainer and dictionary names
+                attached to self to exclude from purge.
         """
-        if data is not None:
-            self.load_data(data, **load_kwargs)
+        keys = list(self.__dict__.keys())
+        for key in keys:
+            if key in exclude:
+                continue
+            obj = getattr(self, key)
+            if isinstance(getattr(self, key), DataContainer):
+                setattr(self, key, DataContainer({}))
+            if "ref_" in key:
+                setattr(self, key, {})
 
-    def load_data(self, data, filetype='uvh5', **read_kwargs):
+    def model_auto_reflections(self, clean_data, dly_range, clean_flags=None, keys=None, Nphs=500,
+                               edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
+                               fthin=10, ref_sig_cut=2.0, overwrite=False, verbose=True):
         """
-        Load data for reflection fitting.
+        Model reflections in (ideally RFI-free) autocorrelation data.
+
+        Recommended to set zeropad to at least as large as Nfreqs/2.
+        This function attaches the result to self. See Results below.
+        To CLEAN data of RFI gaps see the self.vis_clean() function.
 
         Args:
-            data : Filepath to data file or UVData object
-            read_data : If True, read data into Fitter object
-            filetype : filetype of data file if filepath provided
-            read_kwargs : keyword arguments for HERAData.read
-                if filepath provided and read_data is True
-        """
-        # mount data into hd object
-        self.hd = io.to_HERAData(data, filetype=filetype)
-
-        # read data if desired
-        if self.hd.data_array is not None:
-            self.data, self.flags, _ = self.hd.build_datacontainers()
-        else:
-            self.data, self.flags, _ = self.hd.read(**read_kwargs)
-
-        # save metadata
-        self.antpos, self.ants = self.hd.get_ENU_antpos(center=True, pick_data_ants=True)
-        self.pols = np.array([uvutils.polnum2str(p) for p in self.hd.polarization_array])
-        self.freqs = np.unique(self.hd.freq_array)
-        self.dnu = np.median(np.diff(self.freqs))
-        self.Nfreqs = self.hd.Nfreqs
-        self.times = np.unique(self.hd.time_array)
-        self.Ntimes = self.hd.Ntimes
-
-    def dly_clean_data(self, keys=None, tol=1e-5, maxiter=500, gain=0.1, skip_wgt=0.2,
-                       dly_cut=1500, edgecut=0, taper='none', alpha=0.1, timeavg=True,
-                       broadcast_flags=False, time_thresh=0.05, overwrite=False, verbose=False):
-        """
-        Run a Delay Clean on self.data dictionary to derive a model of the
-        visibility free of flagged channels. CLEAN data is inserted into
-        self.clean_data.
-
-        Args:
-            keys : len-3 tuple, keys of self.data to run clean on. Default is all keys.
-            tol : float, stopping tolerance for CLEAN. See aipy.deconv.clean
-            maxiter : int, maximum number of CLEAN iterations
-            gain : float, CLEAN gain
-            skip_wgt : float, fraction of flagged channels needed to skip a time integration
-            dly_cut : float, maximum delay [nanoseconds] to model FT of CLEAN visibility
-            edgecut : int, number of channels to exclude in CLEAN on either side of band.
-                Note this is not the same as flagging edge channels. This excludes them
-                entirely, such that if a taper is applied, it is not discontinuous at
-                the band edges.
-            taper : str, Tapering function to apply across freq before FFT
-            alpha : float, if taper is Tukey, this its alpha parameter
-            timeavg : bool, if True, average data across time weighted by flags
-            broadcast_flags : bool, if True, broadcast flags across time using time_thresh
-            time_thresh : float, if fraction of flagged times exceeds this ratio,
-                flag a channel for all times.
-        """
-        # initialize containers
-        if hasattr(self, "clean_data") and not overwrite:
-            raise ValueError("self.clean_data exists and overwrite is False...")
-        self.clean_data = DataContainer({})
-        self.resid_data = DataContainer({})
-        self.clean_info = {}
-        self.clean_freqs = self.freqs
-        if edgecut > 0:
-            self.clean_freqs = self.clean_freqs[edgecut:-edgecut]
-
-        # get keys
-        if keys is None:
-            keys = self.data.keys()
-
-        # iterate over keys
-        for k in keys:
-            echo("...Cleaning data key {}".format(k), verbose=verbose)
-            (model, flag, residual, dlys,
-             info) = reflections_delay_filter(self.data[k].copy(), self.flags[k].copy(), self.dnu, tol=tol,
-                                              maxiter=maxiter, gain=gain, skip_wgt=skip_wgt, dly_cut=dly_cut,
-                                              edgecut=edgecut, taper=taper, alpha=alpha, timeavg=timeavg,
-                                              broadcast_flags=broadcast_flags, time_thresh=time_thresh)
-            # add residual back into model
-            model += residual * ~flag
-
-            # append to containers
-            self.clean_data[k] = model
-            self.resid_data[k] = residual
-            self.clean_info[k] = info
-
-        self.clean_dlys = dlys
-        self.clean_times = self.times
-        if timeavg:
-            self.clean_times = np.mean(self.clean_times, keepdims=True)
-
-    def model_reflections(self, dly_range, keys=None, data='clean', edgecut=0, taper='none',
-                          alpha=0.1, zero_pad=0, overwrite=False, fthin=10, verbose=True):
-        """
-        Model reflections in (ideally RFI-free) visibility data. To CLEAN data of
-        flags see the self.dly_clean_data() function. Recommended to set zero_pad
-        to at least as large as Nfreqs.
-
-        Args:
+            clean_data : DataContainer, (CLEANed) data to find reflections in.
             dly_range : len-2 tuple of delay range [nanoseconds] to search
                 within for reflections. Must be either both positive or both negative.
-            keys : list of len-3 tuples, keys in data model reflections over. Default
+            clean_flags : DataContainer, flags of (CLEANed) data. Default is None.
+            keys : list of len-3 tuples, ant-pair-pols to operate on. Default
                 is to use all auto-correlation keys.
-            data : str, data dictionary to find reflections in. Options are ['clean', 'data'].
-            edgecut : int, number of channels on band edges to exclude from modeling
-            taper : str, tapering function to apply across freq before FFT
+            edgecut_low : int, Nbins to flag and exclude from windowing function on low-side of the band
+            edgecut_hi : int, Nbins to flag and exclude from windowing function on low-side of the band
+            window : str, tapering function to apply across freq before FFT. See dspec.gen_window for options
             alpha : float, if taper is Tukey, this is its alpha parameter
-            zero_pad : int, number of channels to pad band edges with zeros before FFT
+            zeropad : int, number of channels to pad band edges with zeros before FFT
             fthin : int, scaling factor to down-select frequency axis when solving for phase
+            ref_sig_cut : float, if max reflection significance is not above this, do not record solution
             overwrite : bool, if True, overwrite dictionaries
+
+        Result:
+            self.ref_eps : dict, reflection epsilon term with (ant, pol) keys and ndarray values
+            self.ref_amp : dict, reflection amplitude with (ant, pol) keys and ndarray values
+            self.ref_phs : dict, reflection phase [radians] with (ant, pol) keys and ndarray values
+            self.ref_dly : dict, reflection delay [nanosec] with (ant, pol) keys and ndarray values
+            self.ref_flags : dict, reflection flags [bool] with (ant, pol) keys and ndarray values
+            self.ref_significance : dict, reflection significance with (ant, pol) keys and ndarray values
+                Significance is max|Vfft| / median|Vfft| near the reflection peak
+            self.ref_gains : dict, reflection gains spanning all keys in clean_data. keys that
+                weren't included in input or didn't have a significant reflection have a gain of 1.0
         """
-        # initialize containers
-        if hasattr(self, 'epsilon') and not overwrite:
-            raise ValueError("reflection dictionaries exist but overwrite is False...")
-        self.epsilon = {}
-        self.amps = {}
-        self.phs = {}
-        self.delays = {}
-        self.peak_ratio = {}
-        self.dfft = DataContainer({})
+        # get flags
+        if clean_flags is None:
+            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]))
 
-        # configure data
-        if data == 'clean':
-            data = self.clean_data
-            freqs = self.clean_freqs
-            self.reflection_times = self.clean_times
-        elif data == 'data':
-            # if using unCLEANed data, apply flags now on-the-fly
-            data = DataContainer(dict([(k, self.data[k] * ~self.flags[k]) for k in self.data.keys()]))
-            freqs = self.freqs
-            self.reflection_times = self.times
-        else:
-            raise ValueError("Didn't recognize data dictionary {}".format(data))
-
-        # get keys: only use auto correlations to model reflections
+        # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
-            keys = [k for k in data.keys() if k[0] == k[1]]
+            keys = [k for k in clean_data.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
 
-        # get window kwargs
-        win_kwargs = {}
-        if taper == 'tukey':
-            win_kwargs['alpha'] = alpha
+        # Take FFT of data
+        self.fft_data(clean_data, flags=clean_flags, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
+                      edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True,
+                      ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
 
         # iterate over keys
         for k in keys:
@@ -225,34 +211,70 @@ class ReflectionFitter(object):
 
             # find reflection
             echo("...Modeling reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)
-            (eps, amp, delays, phs, inds, sig, dfft,
-             dly_arr) = fit_reflection(data[k], dly_range, freqs, edgecut=edgecut, taper=taper,
-                                       zero_pad=zero_pad, full_freqs=self.freqs, fthin=fthin, **win_kwargs)
-            self.epsilon[rkey] = eps
-            self.amps[rkey] = amp
-            self.phs[rkey] = phs
-            self.delays[rkey] = delays
-            self.peak_ratio[rkey] = sig
-            self.dfft[k] = dfft
 
-    def write_reflections(self, output_calfits, input_calfits=None, overwrite=False, add_to_history=''):
+            # fit for reflection delays and amplitude
+            amp, dly, inds, sig = fit_reflection_delay(self.dfft[k], dly_range, self.delays, return_peak=False)
+
+            # make significance cut
+            if np.max(sig) < ref_sig_cut:
+                # set reflection parameters to zero
+                amp[:] = 0.0
+                dly[:] = 0.0
+                phs = np.zeros_like(amp)
+
+            else:
+                # solve for phase (slowest step)
+                phs = fit_reflection_phase(self.dfft[k], dly_range, self.delays, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
+
+                # anchor phase to 0 Hz
+                phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
+
+            # form epsilon term
+            eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=False)
+
+            self.ref_eps[rkey] = eps
+            self.ref_amp[rkey] = amp
+            self.ref_phs[rkey] = phs
+            self.ref_dly[rkey] = dly
+            self.ref_significance[rkey] = sig
+            self.ref_flags[rkey] = np.min(clean_flags[k], axis=1, keepdims=True)
+
+        # form gains
+        self.ref_gains = form_gains(self.ref_eps)
+        for a in self.ants:
+            for p in self.pols:
+                k = (a, uvutils.parse_jpolstr(p)) 
+                if k not in self.ref_gains:
+                    self.ref_gains[k] = np.ones((self.Ntimes, self.Nfreqs), dtype=np.complex)
+
+    def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False,
+                               write_npz=False, add_to_history='', verbose=True):
         """
-        Given a filepath to antenna gain calfits file, load the
-        calibration, incorporate reflection term from self.epsilon dictionary
-        and write to output.
+        Write auto reflection gain terms from self.ref_gains.
+
+        If input_calfits is provided, merge its gains with the reflection
+        gains before writing to disk. Flags, quality and total_quality
+        arrays are all empty unless input_calfits is provided, in which
+        case its arrays are inherited.
+
+        Optionally, take the values in self.ref_amp, self.ref_phs and self.ref_dly and
+        write their values to an NPZ file with the same path name as output_calfits.
 
         Args:
-            output_calfits : str, filepath to write output calfits file
+            output_calfits : str, filepath to write output calfits file to
             input_calfits : str, filepath to input calfits file to multiply in with
-                reflection gains.
+                reflection gains. 
             overwrite : bool, if True, overwrite output file
+            write_npz : bool, if True, write an NPZ file holding reflection
+                params with the same pathname as output_calfits
             add_to_history: string to add to history of output calfits file
+            verbose : bool, report feedback to stdout
 
         Returns:
-            uvc : HERACal object with new gains
+            uvc : UVCal object with new gains
         """
         # Create reflection gains
-        rgains = _form_gains(self.epsilon)
+        rgains = self.ref_gains
         flags, quals, tquals = None, None, None
 
         if input_calfits is not None:
@@ -267,26 +289,347 @@ class ReflectionFitter(object):
             if cal.Ntimes > self.Ntimes:
                 time_array = cal.time_array
             else:
-                time_array = self.reflection_times
+                time_array = self.times
             if cal.Nfreqs > self.Nfreqs:
                 freq_array = cal.freq_array
             else:
                 freq_array = self.freqs
             kwargs = dict([(k, getattr(cal, k)) for k in ['gain_convention', 'x_orientation',
                                                           'telescope_name', 'cal_style']])
+            add_to_history += "\nMerged-in calibration {}".format(input_calfits)
         else:
-            time_array = self.reflection_times
+            time_array = self.times
             freq_array = self.freqs
             kwargs = {}
 
-        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags, quality=quals, 
-                           total_qual=tquals, outdir=os.path.dirname(output_calfits), zero_check=False, 
-                           overwrite=overwrite, history=version.history_string(add_to_history), **kwargs)
+        echo("...writing {}".format(output_calfits), verbose=verbose)
+        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
+                           quality=quals, total_qual=tquals, zero_check=False,
+                           overwrite=overwrite, history=version.history_string(add_to_history),
+                           **kwargs)
+
+        if write_npz:
+            output_npz = os.path.splitext(output_calfits)[0] + '.npz'
+            if not os.path.exists(output_npz) or overwrite:
+                echo("...writing {}".format(output_npz), verbose=verbose)
+                np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
+                         significance=self.ref_significance, times=self.times, freqs=self.freqs,
+                         lsts=self.lsts, antpos=self.antpos,
+                         history=version.history_string(add_to_history))
+
         return uvc
 
+    def pca_decomp(self, dfft, dly_range, flags=None, side='both', keys=None, Nkeep=None,
+                   overwrite=False, verbose=True):
+        """
+        Create a PCA-based model of the FFT data in dfft.
 
-def _form_gains(epsilon):
-    """ Turn epsilon dictionaries into gain dictionaries """
+        This is done via Singular Value Decomposition on the input delay waterfall data
+        and results in self.umodes, self.vmodes, self.svals, and self.uflags.
+        The input dly_range forms the bounds of a tophat windowing applied to dfft
+        before taking the SVD, to narrow the information-content of the PCs to certain delays.
+
+        Args:
+            dfft : DataContainer, holding delay-transformed data.
+            dly_range : len-2 tuple of positive delays in nanosec
+            flags : DataContainer, holding dfft flags (e.g. skip_wgts). Default is None.
+            side : str, options=['pos', 'neg', 'both']
+                Specifies dly_range as positive delays, negative delays or both.
+            keys : list of tuples
+                List of datacontainer baseline-pol tuples to create model for.
+            Nkeep : int, number of modes to keep out of total Ntimes number of modes.
+                Default is keep all modes.
+            overwrite : bool
+                If dfft exists, overwrite its values.
+
+        Result:
+            self.umodes : DataContainer, SVD time-modes, ant-pair-pol keys, 2D ndarray values
+            self.vmodes : DataContainer, SVD delay-modes, ant-pair-pol keys, 2D ndarray values
+            self.svals : DataContainer, SVD time-modes, ant-pair-pol keys, 1D ndarray values
+            self.uflags : DataContainer, flags for umodes, ant-pair-pol keys, 2D ndarray values
+        """
+        # get flags
+        if flags is None:
+            flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=np.bool)) for k in dfft]))
+
+        # get keys
+        if keys is None:
+            keys = dfft.keys()
+
+        # get selection function
+        if side == 'pos':
+            select = np.where((self.delays >= dly_range[0]) & (self.delays <= dly_range[1]))[0]
+        elif side == 'neg':
+            select = np.where((self.delays >= -dly_range[1]) & (self.delays <= -dly_range[0]))[0]
+        elif side == 'both':
+            select = np.where((np.abs(self.delays) > dly_range[0]) & (np.abs(self.delays) < dly_range[1]))[0]
+
+        # iterate over keys
+        for k in keys:
+            if k in self.svals and not overwrite:
+                echo("{} exists in svals and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+            if k not in dfft:
+                echo("{} not found in dfft, skipping...".format(k), verbose=verbose)
+                continue
+
+            # perform svd to get principal components
+            d = np.zeros_like(dfft[k])
+            d[:, select] = dfft[k][:, select]
+            u, svals, v = np.linalg.svd(d)
+            if Nkeep is None:
+                Nmodes = len(svals)
+            else:
+                Nmodes = Nkeep
+
+            # append to containers: keeping Nmodes b/c otherwise their eventual outerproduct fails
+            self.umodes[k] = u[:, :Nmodes]
+            self.vmodes[k] = v[:Nmodes, :]
+            self.svals[k] = svals
+            self.uflags[k] = np.min(flags[k], axis=1, keepdims=True)
+
+        # append relevant metadata
+        if hasattr(dfft, 'times'):
+            self.umodes.times = dfft.times
+            self.vmodes.times = dfft.times
+            self.svals.times = dfft.times
+            self.uflags.times = dfft.times
+
+    def build_pc_model(self, umodes, vmodes, svals, keys=None, Nkeep=None, overwrite=False, increment=False, verbose=True):
+        """
+        Build a data model out of principal components.
+
+        Take outer products of input umodes and vmodes, multiply by singular
+        values and sum to form self.pcomp_model.
+
+        Args:
+            umodes : DataContainer
+                SVD u-modes from self.pca_decomp().
+            vmodes : DataContainer
+                SVD v-modes from self.pca_decomp().
+            svals : DataContainer
+                SVD singular values from self.pca_decomp().
+            keys : list of tuples
+                List of ant-pair-pol tuples to operate on.
+            Nkeep : int
+                Number of principal components to keep when forming model. Default is all.
+            overwrite : bool
+                If True, overwrite output data if it exists.
+            increment : bool
+                If key already exists in pcomp_model, add the new model
+                to it, rather than overwrite it. This supercedes overwrite if both are true.
+            verbose : bool
+                If True, report feedback to stdout.
+
+        Result:
+            self.pcomp_model : DataContainer of the PC model, ant-pair-pol key and ndarray value
+        """
+        # get keys
+        if keys is None:
+            keys = svals.keys()
+
+        # iterate over keys
+        for k in keys:
+            if k in self.pcomp_model and (not overwrite and not increment):
+                echo("{} in pcomp_model and overwrite == increment == False, skipping...".format(k), verbose=verbose)
+                continue
+
+            # form principal components
+            pcomps = np.einsum("ij,jk->jik", umodes[k], vmodes[k])
+
+            # multiply by svals and sum 
+            pc_model = np.einsum("i,i...->...", svals[k][:Nkeep], pcomps[:Nkeep])
+
+            # add to pcomp_model
+            if k not in self.pcomp_model:
+                self.pcomp_model[k] = pc_model
+            elif k in self.pcomp_model and increment:
+                self.pcomp_model[k] += pc_model
+            else:
+                self.pcomp_model[k] = pc_model
+
+        if hasattr(umodes, 'times'):
+            self.pcomp_model.times = umodes.times
+
+    def subtract_model(self, data, keys=None, overwrite=False, ifft=True, ifftshift=True,
+                       window='none', alpha=0.2, edgecut_low=0, edgecut_hi=0, verbose=True):
+        """
+        Subtract pcomp_model from data.
+
+        FFT pcomp_model to frequency space, divide by window, and subtract from data.
+        Inserts FFT of pcomp_model into self.pcomp_model_fft and 
+        residual of data with self.data_pcmodel_resid. 
+
+        Note: The windowing parameters should be the *same* as those that were used
+        in constructing the dfft that pca_decomp operated on.
+
+        Args:
+            data : DataContainer
+                Object to pull data from in forming data-model residual.
+            keys : list of tuples
+                List of baseline-pol DataContainer tuples to operate on.
+            overwrite : bool
+                If True, overwrite output data if it exists.
+            ifft : bool
+                If True, use ifft to go from delay to freq axis
+            ifftshift : bool
+                If True, ifftshift delay axis before fft.
+            window : str
+                window function across freq to divide by after FFT.
+            alpha : float
+                if window is Tukey, this is its alpha parameter.
+            edgecut_low : int
+                Nbins to flag but not window at low-side of band.
+            edgecut_hi : int
+                Nbins to flag but not window at high-side of band.
+            verbose : bool
+                If True, report feedback to stdout.
+
+        Result:
+            self.pcomp_model_fft : DataContainer, ant-pair-pol keys and ndarray values
+                Holds the FFT of self.pcomp_model, divided by the original windowing
+                function applied to the data.
+            self.data_pcmodel_resid : DataContainer, ant-pair-pol keys and ndarray values
+                Holds the residual between input data and pcomp_model_fft.
+        """
+        # get keys
+        if keys is None:
+            keys = self.pcomp_model.keys()
+
+        if not hasattr(self, 'pcomp_model_fft'):
+            self.pcomp_model_fft = DataContainer({})
+        if not hasattr(self, 'data_pcmodel_resid'):
+            self.data_pcmodel_resid = DataContainer({})
+
+        # get data
+        if data is None:
+            data = self.data
+
+        # iterate over keys
+        for k in keys:
+            if k in self.pcomp_model_fft and not overwrite:
+                echo("{} in pcomp_model_fft and overwrite==False, skipping...".format(k), verbose=verbose)
+                continue
+
+            # get fft of model
+            model = self.pcomp_model[k]
+
+            # ifftshift
+            if ifftshift:
+                model = np.fft.ifftshift(model, axes=-1)
+
+            # ifft to get to data space
+            if ifft:
+                model_fft = np.fft.ifft(model, axis=-1)
+            else:
+                model_fft = np.fft.fft(model, axis=-1)
+
+            # divide by a window
+            win = dspec.gen_window(window, model_fft.shape[1], alpha=alpha,
+                                   edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)
+            model_fft = np.true_divide(model_fft, win, where=~np.isclose(win, 0.0))
+
+            # subtract from data
+            self.pcomp_model_fft[k] = model_fft
+            self.data_pcmodel_resid[k] = data[k] - model_fft
+
+    def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
+                 mode='gpr', gp_len=1e-2, gp_nl=1e-4, optimizer=None, verbose=True):
+        """
+        Interpolate u modes along time, inserts into self.umode_interp.
+
+        Currently only a Gaussian Process interpolator is supported.
+
+        Args:
+            umomdes : DataContainer
+                u-mode container to interpolate, see self.pca_decomp()
+            times : 1D array
+                Holds time_array of input umodes.
+            full_times : 1D array
+                time_array to interpolate onto. Default is times.
+            uflags : DataContainer
+                Object to pull target u flags from. Default is None.
+            keys : list of tuples
+                List of baseline-pol DataContainer tuples to operate on.
+            overwrite : bool
+                If True, overwrite output data if it exists.
+            mode : str
+                Interpolation mode. Options=['gpr']
+            gp_len : float
+                length-scale of GPR in units of input times.
+            gp_nl : float
+                GPR noise-level in units of input umodes.
+            optimizer : str
+                GPR optimizer for kernel hyperparameter solution.
+                See sklearn.gaussian_process.GaussianProcessRegressor for details.
+            verbose : bool
+                If True, report feedback to stdout.
+
+        Result:
+            self.umode_interp : DataContainer, ant-pair-pol keys and ndarray values
+                Holds the input umodes Container interpolated onto full_times.
+        """
+        if not hasattr(self, 'umode_interp'):
+            self.umode_interp = DataContainer({})
+
+        if uflags is None:
+            uflags = self.uflags
+
+        if full_times is None:
+            full_times = times
+
+        # get keys
+        if keys is None:
+            keys = umodes.keys()
+
+        # setup X predict
+        Xmean = np.median(times)
+        Xpredict = full_times[:, None] - Xmean
+
+        # iterate over keys
+        for k in keys:
+            # check overwrite
+            if k in self.umode_interp and not overwrite:
+                echo("{} in umode_interp and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+
+            if mode == 'gpr':
+                # setup GP kernel
+                kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
+                GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=True)
+
+                # setup regression data: get unflagged data
+                select = ~np.max(uflags[k], axis=1)
+                X = times[select, None] - Xmean
+                y = umodes[k][select, :]
+
+                # fit gp and predict
+                GP.fit(X, y.real)
+                ypredict_real = GP.predict(Xpredict)
+                GP.fit(X, y.imag)
+                ypredict_imag = GP.predict(Xpredict)
+
+                # append
+                self.umode_interp[k] = ypredict_real + 1j * ypredict_imag
+
+            else:
+                raise ValueError("didn't recognize interp mode {}".format(mode))
+
+
+def form_gains(epsilon):
+    """
+    Turn reflection coefficients into gains.
+
+    Reflection gains are formed via g = 1 + eps
+    where eps is the reflection coefficient
+        eps = A exp(2j * pi * tau * freqs + 1j * phs)
+
+    Args:
+        epsilon : dictionary, ant-pol keys and ndarray values
+
+    Returns:
+        gains : dictionary, ant-pol keys and ndarray values
+    """
     return dict([(k, 1 + epsilon[k]) for k in epsilon.keys()])
 
 
@@ -299,7 +642,7 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
     Args:
         freqs : 1-D array of frequencies [Hz]
         amp : N-D array of reflection amplitudes
-        tau : N-D array of reflection delays [nanosec]
+        tau : N-D array of reflection delays [sec]
         phs : N-D array of phase offsets [radians]
         real : bool, if True return as real-valued. Else
             return as complex-valued.
@@ -309,126 +652,107 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
             input frequencies.
     """
     # make reflection
-    eps = amp * np.exp(2j * np.pi * tau / 1e9 * freqs + 1j * phs)
+    eps = amp * np.exp(2j * np.pi * tau * freqs + 1j * phs)
     if real:
         eps = eps.real
 
     return eps
 
 
-def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
-                   taper='none', zero_pad=0, real=False, fthin=10, **win_kwargs):
+def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     """
-    Fourier Transform of RFI-clean visibility data and fit for a reflection
-    in a specified region of delay and solve for the reflection coefficients.
+    Take FFT'd data and fit for peak delay and amplitude.
 
     Args:
-        data : complex 2D array with shape [Ntimes, Nfreqs]
+        dfft : complex 2D array with shape (Ntimes, Ndlys)
         dly_range : len-2 tuple specifying range of delays [nanosec]
-            to look for reflection within. Must be both positive or both negative.
-        freqs : 1D array of frequencies [Hz] matching data.shape[1]
-        full_freqs : optional, 1D array of frequencies to evaluate reflection term over.
-        edgecut : optional, integer value of edge channels to cut from data initially.
-        taper : optional, a taper string to apply to data before FFT (see aipy.dsp.gen_window)
-        zero_pad : optional, an integer number of zero-valued bins to add to both edges of data.
-        real : optional, if True return reflection eps as real-valued, complex otherwise
-        fthin : integer thinning parameter along freq axis when solving for reflection phase
-        win_kwargs : extra keyword arguments to feed to aipy.dsp.gen_window
+            to look for reflection within.
+        dlys : 1D array of data delays [nanosec]
+        return_peak : bool, if True, just return peak delay and amplitude
 
-    Returns: (eps, r_amps, r_dlys, r_phs, r_dly_inds, r_significance, dfft, delays)
-        eps : N-D array of reflection sinusoids
-        r_amps : N-D array holding reflection amplitudes
-        r_dlys : N-D array holding reflection delays [nanosec]
-        r_phs : N-D array holding reflection phases [radians]
-        r_dly_inds : N-D array holding indices of the reflection delays in
-            the FT of input data
-        r_significance : N-D array holding ref_peak / median(abs_dfft_selection),
-            a measure of how significant the reflection is compared to neighboring delays
-        dfft : N-D array holding FFT of input data along freq axis
-        delays : N-D array holding delay bins of dfft [nanosec]
+    Returns:
+        if return_peak:
+            ref_peaks : peak amplitude
+            ref_dlys : peak delay [nanosec]
+        else:
+            ref_amps : reflection amplitudes (Ntimes, 1)
+            ref_dlys : reflection delays [nanosec] (Ntimes, 1)
+            ref_inds : reflection peak indicies of input dfft array
+            ref_sig : reflection significance, SNR of peak relative to neighbors
     """
-    # type checks
-    assert dly_range[0] * dly_range[1] >= 0, "dly_range must be both positive or both negative"
-
-    # enact edgecut
-    if edgecut > 0:
-        d = data[:, edgecut:-edgecut].copy()
-        freqs = freqs[edgecut:-edgecut]
-    else:
-        d = data.copy()
-
-    # set a taper
-    assert d.ndim == 2, "input data must be 2-dimensional with shape [Ntimes, Nfreqs]"
-    Ntimes, Nfreqs = d.shape
-    if taper in ['none', 'None', None]:
-        t = np.ones(Nfreqs)[None, :]
-    else:
-        t = aipy.dsp.gen_window(Nfreqs, window=taper, **win_kwargs)[None, :]
-
-    # zero pad
-    dnu = np.median(np.diff(freqs))
-    if zero_pad > 0:
-        z = np.zeros((Ntimes, zero_pad), dtype=d.dtype)
-        d = np.concatenate([z, d, z], axis=1)
-        f = np.arange(1, zero_pad + 1) * dnu
-        freqs = np.concatenate([freqs.min() - f[::-1], freqs, freqs.max() + f])
-        t = np.concatenate([z[:1], t, z[:1]], axis=1)
-
-    # get delays
-    Ntimes, Nfreqs = d.shape
-    assert Nfreqs == len(freqs), "data Nfreqs != len(freqs)"
-    dlys = np.fft.fftfreq(Nfreqs, d=dnu) * 1e9
-
-    # fourier transform
-    dfft = np.fft.fft(d * t, axis=1)
+    # get fft
+    assert dfft.ndim == 2, "input dfft must be 2-dimensional with shape [Ntimes, Ndlys]"
+    Ntimes, Ndlys = dfft.shape
 
     # select delay range
     select = np.where((dlys > dly_range[0]) & (dlys < dly_range[1]))[0]
     if len(select) == 0:
         raise ValueError("No delays in specified range {} ns".format(dly_range))
 
-    # locate amplitude peak
-    abs_dfft = np.abs(dfft)
-    abs_dfft_selection = abs_dfft[:, select]
-    ref_peaks = np.max(abs_dfft_selection, axis=1, keepdims=True)
-    ref_dly_inds = np.argmin(np.abs(abs_dfft_selection - ref_peaks), axis=1) + select.min()
-    ref_dlys = dlys[ref_dly_inds, None]
+    # locate peak bin within dly range
+    abs_dfft = np.abs(dfft)[:, select]
+    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_dfft)
+    ref_dly_inds += select.min()
+    ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(np.diff(dlys))
+    ref_peaks = ref_peaks[:, None]
 
-    # calculate shifted peak for sub-bin resolution
-    # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-    # alpha = a, beta = b, gamma = g
-    a = abs_dfft[np.arange(Ntimes), ref_dly_inds - 1, None]
-    g = abs_dfft[np.arange(Ntimes), ref_dly_inds + 1, None]
-    b = abs_dfft[np.arange(Ntimes), ref_dly_inds, None]
-    bin_shifts = 0.5 * (a - g) / (a - 2 * b + g)
+    if return_peak:
+        return ref_peaks, ref_dlys
 
-    # update delay center and peak value given shifts
-    ref_dlys += bin_shifts * np.median(np.diff(dlys))
-    ref_peaks = b - 0.25 * (a - g) * bin_shifts
+    # get reflection significance, defined as max|V| / med|V|
+    avgmed = np.median(abs_dfft, axis=1, keepdims=True)
+    ref_significance = np.true_divide(ref_peaks, avgmed, where=~np.isclose(avgmed, 0.0))
 
-    # get reflection significance, defined as ref_peak / median_abs
-    ref_significance = ref_peaks / np.median(abs_dfft_selection, axis=1, keepdims=True)
+    # get peak value at tau near zero
+    peak, _ = fit_reflection_delay(dfft, (-np.abs(dly_range).min(), np.abs(dly_range).min()), dlys, return_peak=True)
 
     # get reflection amplitude
-    ref_amps = ref_peaks / np.max(abs_dfft[:, np.abs(dlys) < np.abs(dly_range).min()], axis=1, keepdims=True)
+    ref_amps = np.true_divide(ref_peaks, peak, where=~np.isclose(peak, 0.0))
+
+    return ref_amps, ref_dlys, ref_dly_inds, ref_significance
+
+
+def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=500, ifft=False, ifftshift=True):
+    """
+    Fit for reflection phases.
+
+    Take FFT'd data and reflection amp and delay and solve for its phase.
+
+    Args:
+        dfft : complex 2D array with shape (Ntimes, Ndlys)
+        dly_range : len-2 tuple specifying range of delays [nanosec]
+            to look for reflection within.
+        dlys : 1D array of data delays [nanosec]
+        ref_dlys : 2D array (Ntimes, 1) of reflection delays [nanosec]
+        fthin : integer thinning parameter along freq axis when solving for reflection phase
+        Nphs : int, number of phase bins between 0 and 2pi to use in solving for phase.
+        ifft : bool, if True, use ifft to go from delay to freq axis
+        ifftshift : bool, if True, ifftshift delay axis before fft to freq in solving for phase.
+        return_peak : bool, if True, just return peak delay and amplitude
+
+    Returns:
+        ref_phs : reflection phases (Ntimes, 1)
+    """
+    # get fft
+    assert dfft.ndim == 2, "input dfft must be 2-dimensional with shape [Ntimes, Ndlys]"
+    Ntimes, Ndlys = dfft.shape
 
     # get reflection phase by fitting cosines to filtered data thinned along frequency axis
     filt = np.zeros_like(dfft)
+    select = np.where((dlys > dly_range[0]) & (dlys < dly_range[1]))[0]
     filt[:, select] = dfft[:, select]
-    if Nfreqs % 2 == 1:
-        filt[:, -select] = dfft[:, -select]
-    else:
-        filt[:, -select - 1] = dfft[:, -select - 1]
-    filt = np.fft.ifft(filt, axis=1)
-    if zero_pad > 0:
-        filt = filt[:, zero_pad:-zero_pad]
-        freqs = freqs[zero_pad:-zero_pad]
-        t = t[:, zero_pad:-zero_pad]
-    phases = np.linspace(0, 2 * np.pi, 500, endpoint=False)
-    cosines = np.array([construct_reflection(freqs[::fthin], ref_amps, ref_dlys, p) for p in phases])
-    residuals = np.sum((filt[None, :, ::fthin].real - cosines.real * t[None, :, ::fthin])**2, axis=-1)
-    ref_phs = phases[np.argmin(residuals, axis=0)][:, None] % (2 * np.pi)
-    dlys = np.fft.fftfreq(len(freqs), d=dnu) * 1e9
+    select = np.where((dlys > -dly_range[1]) & (dlys < -dly_range[0]))[0]
+    filt[:, select] = dfft[:, select]
+    filt, freqs = vis_clean.fft_data(filt, np.median(np.diff(dlys)) / 1e9, axis=-1, ifft=ifft, ifftshift=ifftshift, fftshift=False)
+    filt /= np.max(np.abs(filt), axis=-1, keepdims=True)
+    freqs = np.linspace(0, freqs.max() - freqs.min(), Ndlys, endpoint=True)
+    phases = np.linspace(0, 2 * np.pi, Nphs, endpoint=False)
+    cosines = np.array([construct_reflection(freqs[::fthin], 1, ref_dlys / 1e9, p) for p in phases])
+    residuals = np.sum((filt[None, :, ::fthin].real - cosines.real)**2, axis=-1)
+
+    # quadratic interp of residuals to get reflection phase
+    inds, bin_shifts, _, _ = interp_peak(-residuals.T)
+    ref_phs = (phases[inds] + bin_shifts * np.median(np.diff(phases)))[:, None] % (2 * np.pi)
 
     # get reflection phase by interpolation: this didn't work well in practice
     # when the reflection delay wasn't directly centered in a sampled delay bin,
@@ -442,85 +766,122 @@ def fit_reflection(data, dly_range, freqs, full_freqs=None, edgecut=0,
     # imag = np.array([interp1d(x, y[i].imag, kind='linear')(bin_shifts[i]) for i in range(Ntimes)])
     # ref_phs = np.angle(real + 1j*imag)
 
-    # construct reflection
-    if full_freqs is None:
-        full_freqs = freqs
-    eps = construct_reflection(full_freqs, ref_amps, ref_dlys, ref_phs)
-
-    return (eps, ref_amps, ref_dlys, ref_phs, ref_dly_inds, ref_significance,
-            np.fft.fftshift(dfft, axes=1), np.fft.fftshift(dlys))
+    return ref_phs
 
 
-def reflections_delay_filter(data, flags, dnu, dly_cut=200, edgecut=0, taper='none', alpha=0.1, tol=1e-5, maxiter=500,
-                             gain=0.1, skip_wgt=0.2, timeavg=False, broadcast_flags=False, time_thresh=0.1):
+def auto_reflection_argparser():
+    a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections from auto-correlation visibilities')
+    a.add_argument("clean_data", nargs='*', type=str, help="CLEAN data file paths to run auto reflection modeling on")
+    a.add_argument("--output_fname", type=str, help="Full path to the output .calfits file")
+    a.add_argument("--dly_range", type=float, nargs='*', help='lower and upper delay [nanosec] within which to search for reflections.')
+    a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of datafile")
+    a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
+    a.add_argument("--write_npz", default=False, action='store_true', help="Write NPZ file with reflection params with same path name as output calfits.")
+    a.add_argument("--input_cal", type=str, default=None, help="Path to input .calfits to apply to data before modeling")
+    a.add_argument("--antenna_numbers", default=None, type=int, nargs='*', help="List of antenna numbers to operate on. Default is all.")
+    a.add_argument("--polarizations", default=None, type=str, nargs='*', help="List of polarization strings to operate on.")
+    a.add_argument("--window", default='None', type=str, help="FFT window for CLEAN")
+    a.add_argument("--alpha", default=0.2, type=float, help="Alpha parameter if window is tukey")
+    a.add_argument("--tol", default=1e-6, type=float, help="CLEAN tolerance")
+    a.add_argument("--gain", default=1e-1, type=float, help="CLEAN gain")
+    a.add_argument("--maxiter", default=100, type=int, help="CLEAN maximum Niter")
+    a.add_argument("--skip_wgt", default=0.1, type=float, help="Skip integration if heavily flagged, see hera_cal.delay_filter for details")
+    a.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag but not window on low edge of band (before zeropadding)")
+    a.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag but not window on high edge of band (before zeropadding)")
+    a.add_argument("--zeropad", default=0, type=int, help="Number of channels to zeropad *both* sides of band in auto modeling process.")
+    a.add_argument("--horizon", default=1.0, type=float, help="Baseline horizon coefficient. See hera_cal.delay_filter for details")
+    a.add_argument("--standoff", default=0.0, type=float, help="Baseline horizon standoff. See hera_cal.delay_filter for details")
+    a.add_argument("--min_dly", default=0.0, type=float, help="Minimum CLEAN delay horizon. See hera_cal.delay_filter for details")
+    a.add_argument("--Nphs", default=500, type=int, help="Number of phase points to evaluate from 0--2pi in solving for phase")
+    a.add_argument("--fthin", default=1, type=int, help="Coefficient to thin frequency axis by when solving for phase")
+    a.add_argument("--ref_sig_cut", default=2, type=float, help="Reflection minimum 'significance' threshold for fitting.")
+    a.add_argument("--add_to_history", default='', type=str, help="String to append to file history")
+    a.add_argument("--time_avg", default=False, action='store_true', help='Time average file before reflection fitting.')
+    return a
+
+
+def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_cal=None, time_avg=False,
+                        write_npz=False, antenna_numbers=None, polarizations=None,
+                        window='None', alpha=0.2, edgecut_low=0, edgecut_hi=0, zeropad=0,
+                        tol=1e-6, gain=1e-1, maxiter=100, skip_wgt=0.2, horizon=1.0, standoff=0.0,
+                        min_dly=100.0, Nphs=500, fthin=10, ref_sig_cut=2.0, add_to_history='',
+                        overwrite=False):
     """
-    Delay (CLEAN) and filter flagged data and return model and residual visibilities.
+    Run auto reflection modeling on files.
 
     Args:
-        data : 2D complex visibility data with shape [Ntimes, Nfreqs]
-        flags : 2D boolean flags with shape [Ntimes, Nfreqs]
-        dnu : channelization width, Hz
-        dly_cut : float, maximumm CLEANing delay in nanosec
-        edgecut : int, number of channels to exclude on either side of band
-        taper : str, tapering function to apply to data across freq before FT. See aipy.dsp.gen_window
-        alpha : float, if taper is 'tukey', this is its alpha parameter
-        tol : float, tolerance for aipy.deconv CLEAN threshold
-        maxiter : int, maximum number of CLEAN iterations
+        data : str or UVData subclass, data to operate on
+        dly_range : len-2 tuple, min and max delay range [ns] to fit reflections
+        output_fname : str, full path to output calfits file
+        filetype : str, filetype if data is a str, options=['uvh5', 'miriad', 'uvfits']
+        input_cal : str or UVCal subclass, calibration to apply to data on-the-fly
+        time_avg : bool, if True, time-average the entire input data before reflection modeling
+        write_npz : bool, if True, write an NPZ with reflection parameters with matching path as output_fname
+        antenna_numbers : int list, list of antenna number integers to run on. Default is all.
+        polarizations : str list, list of polarization strings to run on, default is all
+        edgecut_low : int, Nbins to flag but not window at low-side of the FFT axis.
+        edgecut_hi : int, Nbins to flag but not window at high-side of the FFT axis.
+        window : str, tapering function to apply across freq before FFT
+        alpha : float, if taper is Tukey, this is its alpha parameter
+        zeropad : int, number of channels to pad band edges with zeros before FFT
+        fthin : int, scaling factor to down-select frequency axis when solving for phase
+        tol : float, CLEAN tolerance
         gain : float, CLEAN gain
-        skip_wgt : float, fraction of flagged data across frequency to skip CLEAN of an integration.
-        timeavg : bool, average data weighted by flags across time before CLEAN
-        broadcast_flags : bool, broadcast flags across time if True, determined by time_thresh
-        time_thresh : float, ratio of flagged channels across time to flag a freq channel for all times
+        maxiter : int, CLEAN max Niter
+        skip_wgt : float, flagged threshold for skipping integration, see delay_filter.py
+        standoff : float ,fixed additional delay beyond the horizon (in nanosec) to CLEAN
+        horizon : float, coefficient to baseline horizon where 1 is the horizon
+        min_dly : float, CLEAN area boundary (in nanosec) used for freq CLEAN is never below this
+        Nphs : int, Number of points in phase [0=2pi] to evaluate for reflection phase solution
+        fthin : int, Thinning number across frequency axis when solving for phase
+        ref_sig_cut : float, if max reflection significance is not above this, do not record solution
+        add_to_history : str, notes to add to history
+        overwrite : bool, if True, overwrite output files.
 
-    Returns: (mdl, res, dlys, info)
-        mdl : 2D array of visibility CLEAN model
-        res : 2D array of visibility residual
-        dlys : 1D array of delays in ns
-        info : dictionary of CLEAN results
+    Result:
+        A calfits written to output_fname, and if write_npz, an NPZ with the
+        same path and filename, except for the .npz suffix.
     """
-    # enact edgecut
-    if edgecut > 0:
-        d = data[:, edgecut:-edgecut].copy()
-        f = flags[:, edgecut:-edgecut].copy()
+    # initialize reflection fitter
+    RF = ReflectionFitter(data, filetype=filetype, input_cal=input_cal)
+
+    # get antennas if possible
+    if antenna_numbers is None and hasattr(RF, 'ants'):
+        bls = zip(RF.ants, RF.ants)
+    elif antenna_numbers is not None:
+        bls = zip(antenna_numbers, antenna_numbers)
     else:
-        d = data.copy()
-        f = flags.copy()
+        bls = None
 
-    # average across time
-    w = (~f).astype(np.float)
-    if timeavg:
-        wsum = np.sum(w, axis=0, keepdims=True).clip(1e-10, np.inf)
-        d = np.sum(d * w, axis=0, keepdims=True) / wsum
-        w = wsum
-        f = np.isclose(wsum, 1e-10)
+    # read data
+    RF.read(bls=bls, polarizations=polarizations)
 
-    # broadcast flags
-    Ntimes = float(f.shape[0])
-    Nfreqs = float(f.shape[1])
-    if broadcast_flags:
-        # get Ntimes and Nfreqs that aren't completely flagged across opposite axis
-        freq_contig_flags = np.sum(f, axis=1) / Nfreqs > 0.99999999
-        Ntimes = np.sum(~freq_contig_flags, dtype=np.float)
+    # get all autocorr keys
+    keys = [k for k in RF.data if k[0] == k[1]]
 
-        # get freq channels where non-contiguous flags exceed threshold
-        flag_freq = (np.sum(f[~freq_contig_flags], axis=0, dtype=np.float) / Ntimes) > time_thresh
+    # assign Containers
+    data = RF.data
+    flags = RF.flags
+    nsamples = RF.nsamples
+    times = RF.times
 
-        # flag integrations holding flags that didn't meet broadcasting limit
-        f[:, flag_freq] = False
-        f[np.max(f, axis=1)] = True
-        f[:, flag_freq] = True
+    # time average file
+    if time_avg:
+        RF.timeavg_data(1e10, data=data, flags=flags, nsamples=nsamples)
+        data = RF.avg_data
+        flags = RF.avg_flags
+        nsamples = RF.avg_nsamples
 
-    # delay filter
-    kwargs = {}
-    if taper == 'tukey':
-        kwargs['alpha'] = alpha
-    mdl, res, info = delay_filter(d, w, 0., dnu / 1e9, min_dly=dly_cut, skip_wgt=skip_wgt,
-                                  window=taper, tol=tol, maxiter=maxiter, gain=gain, **kwargs)
-    dlys = np.fft.fftshift(np.fft.fftfreq(d.shape[1], d=dnu)) * 1e9
+    # clean data
+    RF.vis_clean(data=data, flags=flags, keys=keys, ax='freq', window=window, alpha=alpha,
+                 horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol, maxiter=maxiter,
+                 gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)
 
-    return mdl, f, res, dlys, info
+    # model auto reflections in clean data
+    RF.model_auto_reflections(RF.clean_data, dly_range, clean_flags=RF.clean_flags, edgecut_low=edgecut_low,
+                              edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
+                              zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
 
-
-def echo(message, verbose=True):
-    if verbose:
-        print(message)
+    # write reflections
+    RF.write_auto_reflections(output_fname, overwrite=overwrite, add_to_history=add_to_history,
+                              write_npz=write_npz)

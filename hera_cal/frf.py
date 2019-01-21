@@ -7,6 +7,7 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
 import copy
+from .datacontainer import DataContainer
 import os
 from six.moves import range
 from pyuvdata import UVData
@@ -15,6 +16,7 @@ import pyuvdata.utils as uvutils
 from . import io
 from . import version
 from . import utils
+
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 
@@ -34,14 +36,13 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     window-center before taking their average. This assumes the
     input data are drift-scan phased. See hera_cal.utils.lst_rephase
     for details on the rephasing algorithm. By feeding an nsample array,
-    one can also construct the averaged nsample for each averaging window.
+    the averaged nsample for each averaging window is computed and returned.
 
     Parameters
     ----------
     data : ndarray
         2D complex ndarray of complex visibility with shape=(Ntimes, Nfreqs)
-        The rows of data are assumed to be ordered chronologically, in either
-        asending or descending order.
+        The rows of data are assumed to be ordered chronologically.
 
     Navg : int
         Number of time samples to average together, with the condition
@@ -57,9 +58,8 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         in data. Default is to assume unity for all pixels.
 
     rephase : boolean, optional
-        if True, shift the phase center of each integration to the
-        LST of the averaging window-center before averaging. Need to
-        feed lsts, freqs and bl_vec if True.
+        If True, phase each integration to the LST of the averaging window-center
+        before averaging. Need to feed lsts, freqs and bl_vec if True.
 
     lsts : ndarray, optional
         1D float array holding the LST [radians] of each time integration in
@@ -70,7 +70,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         in data. Shape=(Nfreqs,)
 
     bl_vec : ndarray, optional
-        3D float ndarray containing baseline vector of visibility in meters
+        3D float ndarray containing the visibility baseline vector in meters
         in the ENU (TOPO) frame.
 
     lat : float, optional
@@ -82,13 +82,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         anything that has length Ntimes.
 
     verbose : bool, optional
-        if True, report feedback to standard output.
+        If True, report feedback to standard output.
 
-    Returns (output_dictionary)
+    Returns 
     -------
-    output_dictionary : dictionary
-        A dictionary containing the following variables
-
     avg_data : ndarray
         2D complex array with time-average spectrum, shape=(Navg_times, Nfreqs)
 
@@ -197,8 +194,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     # wrap lsts
     avg_lsts = avg_lsts % (2 * np.pi)
 
-    return dict(avg_data=avg_data, win_flags=win_flags, avg_nsamples=avg_nsamples,
-                avg_lsts=avg_lsts, avg_extra_arrays=avg_extra_arrays)
+    return avg_data, win_flags, avg_nsamples, avg_lsts, avg_extra_arrays
 
 
 class FRFilter(VisClean):
@@ -206,7 +202,7 @@ class FRFilter(VisClean):
     Fringe Rate Filter object.
     """
 
-    def timeavg_data(self, t_avg, rephase=False, verbose=True):
+    def timeavg_data(self, t_avg, rephase=False, data=None, flags=None, nsamples=None, verbose=True):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The time-averaged data, flags, time arrays, etc. are stored in avg_* attributes.
@@ -220,6 +216,26 @@ class FRFilter(VisClean):
         ----------
         t_avg : float
             Width of time-averaging window in seconds.
+
+        rephase : bool
+            If True, rephase data in averaging window to window-center.
+
+        data : DataContainer
+            data to use in averaging. Default is self.data.
+            Must be consistent with self.lsts, self.freqs, etc.
+
+        flags : DataContainer
+            flags to use in averaging. Default is self.flags.
+            Must be consistent with self.lsts, self.freqs, etc.
+
+        nsamples : DataContainer
+            nsamples to use in averaging. Default is self.nsamples.
+            Must be consistent with self.lsts, self.freqs, etc.
+
+        Result
+        ------
+        self.avg_data, self.avg_flags, self.avg_nsamples, self.avg_lsts
+        self.avg_times
         """
         # turn t_avg into Navg given dtime
         Navg = int(np.round((t_avg / self.dtime)))
@@ -230,21 +246,28 @@ class FRFilter(VisClean):
         t_avg = Navg * self.dtime
 
         if verbose:
-            print("The t_avg provided of {:.1f} has been shifted to {:.1f} to make Navg = {:d}".format(
+            print("The t_avg provided of {:.3f} has been shifted to {:.3f} to make Navg = {:d}".format(
                 old_t_avg, t_avg, Navg))
 
         # setup lists
-        avg_data = odict()
-        avg_flags = odict()
-        avg_nsamples = odict()
+        avg_data = DataContainer({})
+        avg_flags = DataContainer({})
+        avg_nsamples = DataContainer({})
+
+        # setup averaging quantities
+        if data is None:
+            data = self.data
+        if flags is None:
+            flags = self.flags
+        if nsamples is None:
+            nsamples = self.nsamples
 
         # iterate over keys
-        for i, k in enumerate(self.data.keys()):
-            output = timeavg_waterfall(self.data[k], Navg, flags=self.flags[k], nsamples=self.nsamples[k],
-                                       rephase=rephase, lsts=self.lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
-                                       lat=self.lat, extra_arrays=dict(times=self.times), verbose=verbose)
-            ad, af, an, al, ea = (output['avg_data'], output['win_flags'], output['avg_nsamples'],
-                                  output['avg_lsts'], output['avg_extra_arrays'])
+        for i, k in enumerate(data.keys()):
+            (ad, af, an, al,
+             ea) = timeavg_waterfall(data[k], Navg, flags=flags[k], nsamples=nsamples[k],
+                                     rephase=rephase, lsts=self.lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
+                                     lat=self.lat, extra_arrays=dict(times=self.times), verbose=verbose)
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
@@ -253,14 +276,16 @@ class FRFilter(VisClean):
         self.avg_flags = DataContainer(avg_flags)
         self.avg_nsamples = DataContainer(avg_nsamples)
         self.avg_lsts = al
-        self.avg_times = ea['avg_times']
+        self.avg_times = np.asarray(ea['avg_times'])
         self.t_avg = t_avg
         self.Navg = Navg
 
-    def write_data(self, outfilename, write_avg=True, filetype='miriad', add_to_history='', overwrite=False,
+    def write_data(self, outfilename, write_avg=True, filetype='uvh5', add_to_history='', overwrite=False,
                    run_check=True):
         """
-        Write data in FRFringe object. If write_avg == True, write the self.avg_data dictionary,
+        Write data in FRFringe object.
+
+        If write_avg == True, write the self.avg_data dictionary,
         else write the self.data dictionary.
 
         Parameters
@@ -274,10 +299,10 @@ class FRFilter(VisClean):
         filetype : str
             Output file format. Currently only miriad is supported.
 
-        add_to_history = str
+        add_to_history : str
             History string to add to the HERAData object before writing to disk.
 
-        overwrite: bool
+        overwrite : bool
             If True, overwrite output if it exists.
 
         run_check : bool
@@ -338,6 +363,8 @@ class FRFilter(VisClean):
         # write data
         if filetype == 'miriad':
             new_hd.write_miriad(outfilename, clobber=True)
+        elif filetype == 'uvh5':
+            new_hd.write_uvh5(outfilename, clobber=True)
         else:
             raise NotImplementedError("filetype {} not recognized".format(filetype))
 

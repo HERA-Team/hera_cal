@@ -10,12 +10,14 @@ import datetime
 from six.moves import range, zip
 from uvtools import dspec
 from astropy import constants
+import copy
 
 from . import io
 from . import apply_cal
 from . import version
 from .datacontainer import DataContainer
 from .utils import echo
+from .flag_utils import factorize_flags
 
 
 class VisClean(object):
@@ -25,7 +27,7 @@ class VisClean(object):
 
     def __init__(self, input_data, filetype='uvh5', input_cal=None):
         """
-        Initialize the object and optionally read data if provided.
+        Initialize the object.
 
         Args:
             input_data : string, UVData or HERAData object
@@ -88,7 +90,7 @@ class VisClean(object):
 
     def clear_containers(self, exclude=[]):
         """
-        Delete all DataContainers attached to self.
+        Clear all DataContainers attached to self.
 
         Args:
             exclude : list of DataContainer names attached
@@ -98,9 +100,8 @@ class VisClean(object):
         for key in keys:
             if key in exclude:
                 continue
-            obj = getattr(self, key)
             if isinstance(getattr(self, key), DataContainer):
-                delattr(self, key)
+                setattr(self, key, DataContainer({}))
 
     def attach_calibration(self, input_cal):
         """
@@ -217,9 +218,11 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
-                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none',
+                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
-                  overwrite=False, verbose=True):
+                  overwrite=False, clean_model='clean_model', clean_resid='clean_resid',
+                  clean_data='clean_data', clean_flags='clean_flags', clean_info='clean_info',
+                  add_clean_residual=False, verbose=True):
         """
         Perform a CLEAN deconvolution.
 
@@ -258,12 +261,12 @@ class VisClean(object):
             edgecut_hi : int, number of bins to consider zero-padded at high-side of the FFT axis,
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
+            zeropad : int, number of bins to zeropad on both sides of FFT axis.
+            clean_* : str, attach output model, resid, etc, as clean_* to self
+            add_clean_residual : bool, if True, adds the CLEAN residual within the CLEAN bounds
+                in fourier space to the CLEAN model. Note that the residual actually returned is
+                not the CLEAN residual, but the residual of data - model in real (data) space.
             verbose: If True print feedback to stdout
-
-        Notes
-        -----
-        One can create a "clean_data" DataContainer via
-            self.clean_model + self.clean_resid * ~self.flags
         """
         # type checks
         if ax not in ['freq', 'time', 'both']:
@@ -274,7 +277,7 @@ class VisClean(object):
                 raise ValueError("if time cleaning, must feed max_frate parameter")
 
         # initialize containers
-        for dc in ['clean_model', 'clean_resid', 'clean_flags', 'clean_info']:
+        for dc in [clean_model, clean_resid, clean_flags, clean_info, clean_data]:
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
 
@@ -298,8 +301,9 @@ class VisClean(object):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
             if not isinstance(max_frate, DataContainer):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
+            # convert kwargs to proper units
+            max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
 
-        # convert kwargs to proper units
         if max_frate is not None:
             max_frate /= 1e3
         min_dly /= 1e9
@@ -315,14 +319,26 @@ class VisClean(object):
             # form d and w
             d = data[k]
             f = flags[k]
-            w = (~f).astype(np.float) * wgts[k]
+            fw = (~f).astype(np.float)
+            w = fw * wgts[k]
 
             # freq clean
             if ax == 'freq':
+                # zeropad the data
+                if zeropad > 0:
+                    d = zeropad_array(d, zeropad, axis=1)
+                    w = zeropad_array(w, zeropad, axis=1)
+
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
                                                   gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
-                                                  edgecut_hi=edgecut_hi)
+                                                  edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual)
+
+                # un-zeropad the data
+                if zeropad > 0:
+                    mdl = zeropad_array(mdl, zeropad, axis=1, undo=True)
+                    res = zeropad_array(res, zeropad, axis=1, undo=True)
+
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
                     if 'skipped' in _info:
@@ -334,10 +350,22 @@ class VisClean(object):
                 # channels are bad (i.e. data is identically zero) but are not flagged
                 # and this causes filtering to hang. Particularly band edges...
                 bad_chans = (~np.min(np.isclose(d, 0.0), axis=0, keepdims=True)).astype(np.float)
-                w *= bad_chans
+                w = w * bad_chans  # not inplace for broadcasting
+
+                # zeropad the data
+                if zeropad > 0:
+                    d = zeropad_array(d, zeropad, axis=0)
+                    w = zeropad_array(w, zeropad, axis=0)
+
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=self.dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                                                   edgecut_hi=edgecut_hi)
+
+                # un-zeropad the data
+                if zeropad > 0:
+                    mdl = zeropad_array(mdl, zeropad, axis=0, undo=True)
+                    res = zeropad_array(res, zeropad, axis=0, undo=True)
+
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
                     if 'skipped' in _info:
@@ -347,10 +375,21 @@ class VisClean(object):
             elif ax == 'both':
                 # check for completely flagged baseline
                 if w.max() > 0.0:
+                    # zeropad the data
+                    if zeropad > 0:
+                        d = zeropad_array(d, zeropad, axis=(0, 1))
+                        w = zeropad_array(w, zeropad, axis=(0, 1))
+
                     mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, max_frate=max_frate[k], dt=self.dtime,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
                                                       alpha=alpha, gain=gain, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
                                                       filt2d_mode=filt2d_mode)
+
+                    # un-zeropad the data
+                    if zeropad > 0:
+                        mdl = zeropad_array(mdl, zeropad, axis=(0, 1), undo=True)
+                        res = zeropad_array(res, zeropad, axis=(0, 1), undo=True)
+ 
                     flgs = np.zeros_like(mdl, dtype=np.bool)
                 else:
                     # flagged baseline
@@ -360,13 +399,22 @@ class VisClean(object):
                     info = {'skipped': True}
 
             # append to new Containers
-            self.clean_model[k] = mdl
-            self.clean_resid[k] = res
-            self.clean_flags[k] = flgs
-            self.clean_info[k] = info
+            getattr(self, clean_model)[k] = mdl
+            getattr(self, clean_resid)[k] = res
+            getattr(self, clean_data)[k] = mdl + res * fw
+            getattr(self, clean_flags)[k] = flgs
+            getattr(self, clean_info)[k] = info
+
+        # add metadata
+        if hasattr(data, 'times'):
+            getattr(self, clean_data).times = data.times
+            getattr(self, clean_model).times = data.times
+            getattr(self, clean_resid).times = data.times
+            getattr(self, clean_flags).times = data.times
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
-                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=True, fftshift=True, verbose=True):
+                 overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
+                 zeropad=0, verbose=True):
         """
         Take FFT of data and attach to self.
 
@@ -397,25 +445,15 @@ class VisClean(object):
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
             ifft : bool, if True, use ifft instead of fft
+            ifftshift : bool, if True, ifftshift data along FT axis before FFT.
             fftshift : bool, if True, fftshift along FFT axes.
+            zeropad : int, number of zero-valued channels to append to each side of FFT axis.
             overwrite : bool
                 If dfft[key] already exists, overwrite its contents.
         """
         # type checks
         if ax not in ['freq', 'time', 'both']:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
-            
-        fft2d = ax == 'both'
-        if fft2d:
-            # 2D fft
-            if not isinstance(window, (tuple, list)):
-                window = (window, window)
-            if not isinstance(alpha, (tuple, list)):
-                alpha = (alpha, alpha)
-            if not isinstance(edgecut_low, (tuple, list)):
-                edgecut_low = (edgecut_low, edgecut_low)
-            if not isinstance(edgecut_hi, (tuple, list)):
-                edgecut_hi = (edgecut_hi, edgecut_hi)
 
         # generate home
         if not hasattr(self, assign):
@@ -423,16 +461,6 @@ class VisClean(object):
 
         # get home
         dfft = getattr(self, assign)
-
-        # generate window
-        if ax == 'freq':
-            win = dspec.gen_window(window, self.Nfreqs, alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)[None, :]
-        elif ax == 'time':
-            win = dspec.gen_window(window, self.Ntimes, alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)[:, None]
-        else:
-            w1 = dspec.gen_window(window[0], self.Ntimes, alpha=alpha[0], edgecut_low=edgecut_low[0], edgecut_hi=edgecut_hi[0])[:, None]
-            w2 = dspec.gen_window(window[1], self.Nfreqs, alpha=alpha[1], edgecut_low=edgecut_low[1], edgecut_hi=edgecut_hi[1])[None, :]
-            win = w1 * w2
 
         # get data
         if data is None:
@@ -445,26 +473,22 @@ class VisClean(object):
         # get keys
         if keys is None:
             keys = data.keys()
+        if len(keys) == 0:
+            raise ValueError("No keys found")
 
-        # set ifft and fftshift standard
-        def fft(d, ifft=ifft, shift=fftshift, ax=-1):
-            if isinstance(ax, (tuple, list)):
-                if ifft:
-                    dfft = np.fft.ifft2(d)
-                else:
-                    dfft = np.fft.fft2(d)
-                if shift:
-                    dfft = np.fft.fftshift(dfft)
-            else:
-                if ifft:
-                    dfft = np.fft.ifft(d, axis=ax)
-                else:
-                    dfft = np.fft.fft(d, axis=ax)
-                if shift:
-                    dfft = np.fft.fftshift(dfft, axes=ax)
-            return dfft
+        # get delta bin
+        if ax == 'freq':
+            delta_bin = self.dnu
+            axis = 1
+        elif ax == 'time':
+            delta_bin = self.dtime
+            axis = 0
+        else:
+            delta_bin = (self.dtime, self.dnu)
+            axis = (0, 1)
 
         # iterate over keys
+        j = 0
         for k in keys:
             if k not in data:
                 echo("{} not in data, skipping...".format(k), verbose=verbose)
@@ -474,20 +498,214 @@ class VisClean(object):
                 continue
 
             # FFT
-            if ax == 'time':
-                d = fft(data[k] * win * wgts[k], ax=0)
-            elif ax == 'freq':
-                d = fft(data[k] * win * wgts[k], ax=1)
+            dfft[k], fourier_axes = fft_data(data[k], delta_bin, wgts=wgts[k], axis=axis, window=window,
+                                             alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
+                                             ifft=ifft, ifftshift=ifftshift, fftshift=fftshift, zeropad=zeropad)
+            j += 1
+
+        if j == 0:
+            raise ValueError("No FFT run with keys {}".format(keys))
+
+        if hasattr(data, 'times'):
+            dfft.times = data.times
+        if ax == 'freq':
+            self.delays = fourier_axes
+            self.delays *= 1e9
+        elif ax == 'time':
+            self.frates = fourier_axes
+            self.frates *= 1e3
+        else:
+            self.frates, self.delays = fourier_axes
+            self.delays *= 1e9
+            self.frates *= 1e3
+
+    def factorize_flags(self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False):
+        """
+        Factorize self.flags into two 1D time and frequency masks.
+
+        This works by broadcasting flags across time if the fraction of
+        flagged times exceeds time_thresh, otherwise flags are broadcasted
+        across channels in a spw_range.
+
+        Note: although technically allowed, this function may give unexpected
+        results if multiple spectral windows in spw_ranges have overlap.
+
+        Note: it is generally not recommended to set time_thresh > 0.5, which
+        could lead to substantial amounts of data being flagged.
+
+        Args:
+            keys : list of antpairpol tuples to operate on
+            spw_ranges : list of tuples
+                list of len-2 spectral window tuples, specifying the start (inclusive)
+                and stop (exclusive) index of the freq channels for each spw.
+                Default is to use the whole band.
+
+            time_thresh : float
+                Fractional threshold of flagged pixels across time needed to flag all times
+                per freq channel. It is not recommend to set this greater than 0.5.
+                Fully flagged integrations do not count towards triggering time_thresh.
+
+            inplace : bool, if True, edit self.flags in place, otherwise return a copy
+        """
+        # get flags
+        flags = self.flags
+        if not inplace:
+            flags = copy.deepcopy(flags)
+
+        # get keys
+        if keys is None:
+            keys = flags.keys()
+
+        # iterate over keys
+        for k in keys:
+            factorize_flags(flags[k], spw_ranges=spw_ranges, time_thresh=time_thresh, inplace=True)
+
+        if not inplace:
+            return flags
+
+
+def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
+             edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True, zeropad=0):
+    """
+    FFT data along specified axis.
+
+    Note the fourier convention of ifft and fftshift.
+
+    Args:
+        data : complex ndarray
+        delta_bin : bin size (seconds or Hz). If axis is a tuple can feed
+            as tuple with bin size for time and freq axis respectively.
+        wgts : float ndarray of shape (Ntimes, Nfreqs)
+        axis : int, FFT axis. Can feed as tuple for 2D fft.
+        window : str
+            Windowing function to apply across frequency before FFT. If axis is tuple,
+            can feed as a tuple specifying window for each FFT axis.
+        alpha : float
+            If window is 'tukey' this is its alpha parameter. If axis is tuple,
+            can feed as a tuple specifying alpha for each FFT axis.
+        edgecut_low : int, number of bins to consider zero-padded at low-side of the FFT axis,
+            such that the windowing function smoothly approaches zero. If axis is tuple,
+            can feed as a tuple specifying for each FFT axis.
+        edgecut_hi : int, number of bins to consider zero-padded at high-side of the FFT axis,
+            such that the windowing function smoothly approaches zero. If axis is tuple,
+            can feed as a tuple specifying for each FFT axis.
+        ifft : bool, if True, use ifft instead of fft
+        ifftshift : bool, if True, ifftshift data along FT axis before FFT.
+        fftshift : bool, if True, fftshift along FT axes after FFT.
+        zeropad : int, number of zero-valued channels to append to each side of FFT axis.
+            If axis is tuple, can feed as a tuple specifying for each FFT axis.
+    Returns:
+        dfft : complex ndarray FFT of data
+        fourier_axes : fourier axes, if axis is ndimensional, so is this.
+    """
+    # type checks
+    if not isinstance(axis, (tuple, list)):
+        axis = [axis]
+    if not isinstance(window, (tuple, list)):
+        window = [window for i in range(len(axis))]
+    if not isinstance(alpha, (tuple, list)):
+        alpha = [alpha for i in range(len(axis))]
+    if not isinstance(edgecut_low, (tuple, list)):
+        edgecut_low = [edgecut_low for i in range(len(axis))]
+    if not isinstance(edgecut_hi, (tuple, list)):
+        edgecut_hi = [edgecut_hi for i in range(len(axis))]
+    if not isinstance(zeropad, (tuple, list)):
+        zeropad = [zeropad for i in range(len(axis))]
+    if not isinstance(delta_bin, (tuple, list)):
+        if len(axis) > 1:
+            raise ValueError("delta_bin must have same len as axis")
+        delta_bin = [delta_bin]
+    else:
+        if len(delta_bin) != len(axis):
+            raise ValueError("delta_bin must have same len as axis")
+    Nax = len(axis)
+
+    # get a copy
+    data = data.copy()
+
+    # set fft convention
+    fourier_axes = []
+    if ifft:
+        fft = np.fft.ifft
+    else:
+        fft = np.fft.fft
+
+    # get wgts
+    if wgts is None:
+        wgts = np.ones_like(data, dtype=np.float)
+    data *= wgts
+
+    # iterate over axis
+    for i, ax in enumerate(axis):
+        Nbins = data.shape[ax]
+
+        # generate and apply window
+        win = dspec.gen_window(window[i], Nbins, alpha=alpha[i], edgecut_low=edgecut_low[i], edgecut_hi=edgecut_hi[i])
+        wshape = np.ones(data.ndim, dtype=np.int)
+        wshape[ax] = Nbins
+        win.shape = tuple(wshape)
+        data *= win
+
+        # zeropad
+        data = zeropad_array(data, zeropad[i], axis=ax)
+
+        # ifftshift
+        if ifftshift:
+            data = np.fft.ifftshift(data, axes=ax)
+
+        # FFT
+        data = fft(data, axis=ax)
+
+        # get fourier axis
+        fax = np.fft.fftfreq(data.shape[ax], delta_bin[i])
+
+        # fftshift
+        if fftshift:
+            data = np.fft.fftshift(data, axes=ax)
+            fax = np.fft.fftshift(fax)
+
+        fourier_axes.append(fax)
+
+    if len(axis) == 1:
+        fourier_axes = fourier_axes[0]
+
+    return data, fourier_axes
+
+
+def zeropad_array(data, zeropad=0, axis=-1, undo=False):
+    """
+    Zeropad data ndarray along axis.
+
+    Args:
+        data : ndarray to zero-pad (or un-pad)
+        zeropad : int, number of bins on each axis to pad
+            If axis is a tuple, zeropad must be a tuple
+        axis : int, axis to zeropad. Can be a tuple
+            to zeropad mutliple axes.
+        undo : If True, remove zero-padded edges along axis.
+
+    Returns:
+        zdata : zero-padded (or un-padded) data
+    """
+    if not isinstance(axis, (list, tuple, np.ndarray)):
+        axis = [axis]
+    if not isinstance(zeropad, (list, tuple, np.ndarray)):
+        zeropad = [zeropad]
+    if isinstance(axis, (list, tuple, np.ndarray)) and not isinstance(zeropad, (list, tuple, np.ndarray)):
+        raise ValueError("If axis is an iterable, so must be zeropad.")
+    if len(axis) != len(zeropad):
+        raise ValueError("len(axis) must equal len(zeropad)")
+
+    for i, ax in enumerate(axis):
+        if zeropad[i] > 0:
+            if undo:
+                s = [slice(None) for j in range(data.ndim)]
+                s[ax] = slice(zeropad[i], -zeropad[i])
+                data = data[s]
             else:
-                d = fft(data[k] * win * wgts[k], ax=(0, 1))
+                zshape = list(data.shape)
+                zshape[ax] = zeropad[i]
+                z = np.zeros(zshape)
+                data = np.concatenate([z, data, z], axis=ax)
 
-            dfft[k] = d
-
-        if ax == 'freq' or ax == 'both':
-            self.delays = np.fft.fftfreq(self.Nfreqs, self.dnu) * 1e9  # ns
-            if fftshift:
-                self.delays = np.fft.fftshift(self.delays)
-        if ax == 'time' or ax == 'both':
-            self.frates = np.fft.fftfreq(self.Ntimes, self.dtime) * 1e3  # mHz
-            if fftshift:
-                self.frates = np.fft.fftshift(self.frates)
+    return data
