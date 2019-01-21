@@ -83,7 +83,7 @@ from . import abscal_funcs
 from .datacontainer import DataContainer
 from .frf import FRFilter
 from . import vis_clean
-from .utils import echo
+from .utils import echo, interp_peak
 
 
 class ReflectionFitter(FRFilter):
@@ -224,7 +224,7 @@ class ReflectionFitter(FRFilter):
 
             else:
                 # solve for phase (slowest step)
-                phs = fit_reflection_phase(self.dfft[k], dly_range, self.delays, amp, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
+                phs = fit_reflection_phase(self.dfft[k], dly_range, self.delays, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
 
                 # anchor phase to 0 Hz
                 phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
@@ -690,30 +690,17 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
         raise ValueError("No delays in specified range {} ns".format(dly_range))
 
     # locate peak bin within dly range
-    abs_dfft = np.abs(dfft)
-    abs_dfft_selection = abs_dfft[:, select]
-    ref_peaks = np.max(abs_dfft_selection, axis=1, keepdims=True)
-    ref_dly_inds = np.argmin(np.abs(abs_dfft_selection - ref_peaks), axis=1) + select.min()
-    ref_dlys = dlys[ref_dly_inds, None]
-
-    # calculate shifted peak for sub-bin resolution
-    # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-    # alpha = a, beta = b, gamma = g
-    a = abs_dfft[np.arange(Ntimes), ref_dly_inds - 1, None]
-    g = abs_dfft[np.arange(Ntimes), (ref_dly_inds + 1) % Ndlys, None]
-    b = abs_dfft[np.arange(Ntimes), ref_dly_inds, None]
-    denom = (a - 2 * b + g)
-    bin_shifts = 0.5 * np.true_divide((a - g), denom, where=~np.isclose(denom, 0.0))
-
-    # update delay center and peak value given shifts
-    ref_dlys += bin_shifts * np.median(np.diff(dlys))
-    ref_peaks = b - 0.25 * (a - g) * bin_shifts
+    abs_dfft = np.abs(dfft)[:, select]
+    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_dfft)
+    ref_dly_inds += select.min()
+    ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(np.diff(dlys))
+    ref_peaks = ref_peaks[:, None]
 
     if return_peak:
         return ref_peaks, ref_dlys
 
     # get reflection significance, defined as max|V| / med|V|
-    avgmed = np.median(abs_dfft_selection, axis=1, keepdims=True)
+    avgmed = np.median(abs_dfft, axis=1, keepdims=True)
     ref_significance = np.true_divide(ref_peaks, avgmed, where=~np.isclose(avgmed, 0.0))
 
     # get peak value at tau near zero
@@ -725,19 +712,17 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     return ref_amps, ref_dlys, ref_dly_inds, ref_significance
 
 
-def fit_reflection_phase(dfft, dly_range, dlys, ref_amps, ref_dlys, fthin=1, Nphs=500,
-                         ifft=False, ifftshift=True):
+def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=500, ifft=False, ifftshift=True):
     """
     Fit for reflection phases.
 
-    Take FFT'd data and reflection amp and delay and solve for phase.
+    Take FFT'd data and reflection amp and delay and solve for its phase.
 
     Args:
         dfft : complex 2D array with shape (Ntimes, Ndlys)
         dly_range : len-2 tuple specifying range of delays [nanosec]
             to look for reflection within.
         dlys : 1D array of data delays [nanosec]
-        ref_amps : 2D array (Ntimes, 1) of reflection amplitudes
         ref_dlys : 2D array (Ntimes, 1) of reflection delays [nanosec]
         fthin : integer thinning parameter along freq axis when solving for reflection phase
         Nphs : int, number of phase bins between 0 and 2pi to use in solving for phase.
@@ -758,18 +743,16 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_amps, ref_dlys, fthin=1, Nph
     filt[:, select] = dfft[:, select]
     select = np.where((dlys > -dly_range[1]) & (dlys < -dly_range[0]))[0]
     filt[:, select] = dfft[:, select]
-    if ifftshift:
-        filt = np.fft.ifftshift(filt, axes=-1)
-    if ifft:
-        filt = np.fft.ifft(filt, axis=-1)
-    else:
-        filt = np.fft.fft(filt, axis=-1)
-    freqs = np.fft.fftfreq(Ndlys, np.median(np.diff(dlys)) / 1e9)
+    filt, freqs = vis_clean.fft_data(filt, np.median(np.diff(dlys)) / 1e9, axis=-1, ifft=ifft, ifftshift=ifftshift, fftshift=False)
+    filt /= np.max(np.abs(filt), axis=-1, keepdims=True)
     freqs = np.linspace(0, freqs.max() - freqs.min(), Ndlys, endpoint=True)
     phases = np.linspace(0, 2 * np.pi, Nphs, endpoint=False)
-    cosines = np.array([construct_reflection(freqs[::fthin], ref_amps, ref_dlys / 1e9, p) for p in phases])
+    cosines = np.array([construct_reflection(freqs[::fthin], 1, ref_dlys / 1e9, p) for p in phases])
     residuals = np.sum((filt[None, :, ::fthin].real - cosines.real)**2, axis=-1)
-    ref_phs = phases[np.argmin(residuals, axis=0)][:, None] % (2 * np.pi)
+
+    # quadratic interp of residuals to get reflection phase
+    inds, bin_shifts, _, _ = interp_peak(-residuals.T)
+    ref_phs = (phases[inds] + bin_shifts * np.median(np.diff(phases)))[:, None] % (2 * np.pi)
 
     # get reflection phase by interpolation: this didn't work well in practice
     # when the reflection delay wasn't directly centered in a sampled delay bin,

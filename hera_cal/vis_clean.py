@@ -100,7 +100,6 @@ class VisClean(object):
         for key in keys:
             if key in exclude:
                 continue
-            obj = getattr(self, key)
             if isinstance(getattr(self, key), DataContainer):
                 setattr(self, key, DataContainer({}))
 
@@ -262,6 +261,7 @@ class VisClean(object):
             edgecut_hi : int, number of bins to consider zero-padded at high-side of the FFT axis,
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
+            zeropad : int, number of bins to zeropad on both sides of FFT axis.
             clean_* : str, attach output model, resid, etc, as clean_* to self
             add_clean_residual : bool, if True, adds the CLEAN residual within the CLEAN bounds
                 in fourier space to the CLEAN model. Note that the residual actually returned is
@@ -326,8 +326,8 @@ class VisClean(object):
             if ax == 'freq':
                 # zeropad the data
                 if zeropad > 0:
-                    d = _zeropad_array(d, zeropad, axis=1)
-                    w = _zeropad_array(w, zeropad, axis=1)
+                    d = zeropad_array(d, zeropad, axis=1)
+                    w = zeropad_array(w, zeropad, axis=1)
 
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
@@ -336,8 +336,8 @@ class VisClean(object):
 
                 # un-zeropad the data
                 if zeropad > 0:
-                    mdl = _zeropad_array(mdl, zeropad, axis=1, undo=True)
-                    res = _zeropad_array(res, zeropad, axis=1, undo=True)
+                    mdl = zeropad_array(mdl, zeropad, axis=1, undo=True)
+                    res = zeropad_array(res, zeropad, axis=1, undo=True)
 
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
@@ -354,8 +354,8 @@ class VisClean(object):
 
                 # zeropad the data
                 if zeropad > 0:
-                    d = _zeropad_array(d, zeropad, axis=0)
-                    w = _zeropad_array(w, zeropad, axis=0)
+                    d = zeropad_array(d, zeropad, axis=0)
+                    w = zeropad_array(w, zeropad, axis=0)
 
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=self.dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
@@ -363,8 +363,8 @@ class VisClean(object):
 
                 # un-zeropad the data
                 if zeropad > 0:
-                    mdl = _zeropad_array(mdl, zeropad, axis=0, undo=True)
-                    res = _zeropad_array(res, zeropad, axis=0, undo=True)
+                    mdl = zeropad_array(mdl, zeropad, axis=0, undo=True)
+                    res = zeropad_array(res, zeropad, axis=0, undo=True)
 
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
@@ -377,8 +377,8 @@ class VisClean(object):
                 if w.max() > 0.0:
                     # zeropad the data
                     if zeropad > 0:
-                        d = _zeropad_array(d, zeropad, axis=(0, 1))
-                        w = _zeropad_array(w, zeropad, axis=(0, 1))
+                        d = zeropad_array(d, zeropad, axis=(0, 1))
+                        w = zeropad_array(w, zeropad, axis=(0, 1))
 
                     mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, max_frate=max_frate[k], dt=self.dtime,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
@@ -387,8 +387,8 @@ class VisClean(object):
 
                     # un-zeropad the data
                     if zeropad > 0:
-                        mdl = _zeropad_array(mdl, zeropad, axis=(0, 1), undo=True)
-                        res = _zeropad_array(res, zeropad, axis=(0, 1), undo=True)
+                        mdl = zeropad_array(mdl, zeropad, axis=(0, 1), undo=True)
+                        res = zeropad_array(res, zeropad, axis=(0, 1), undo=True)
  
                     flgs = np.zeros_like(mdl, dtype=np.bool)
                 else:
@@ -647,7 +647,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         data *= win
 
         # zeropad
-        data = _zeropad_array(data, zeropad[i], axis=ax)
+        data = zeropad_array(data, zeropad[i], axis=ax)
 
         # ifftshift
         if ifftshift:
@@ -672,7 +672,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     return data, fourier_axes
 
 
-def _zeropad_array(data, zeropad=0, axis=-1, undo=False):
+def zeropad_array(data, zeropad=0, axis=-1, undo=False):
     """
     Zeropad data ndarray along axis.
 
