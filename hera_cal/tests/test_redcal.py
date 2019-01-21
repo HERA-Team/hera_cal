@@ -969,10 +969,46 @@ class TestRedundantCalibrator(unittest.TestCase):
             if len(key) == 3:
                 np.testing.assert_almost_equal(val, true_vis[key], 10)
 
+    def test_count_degen(self):
+        # 1 phase slope
+        antpos = build_linear_array(10)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 3)
+        reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='2pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 6)
+        reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 5)
+        reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 4)
+
+        # 2 phase slopes (fiducial case)
+        antpos = build_hex_array(3)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 4)
+        reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='2pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 8)
+        reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 6)
+        reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 5)
+
+        # 4 phase slopes (not traditionally redundantly calibratable)
+        antpos[0] += [5., 0, 0]
+        antpos[7] += [0, 5., 0]
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 6)
+        reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='2pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 12)
+        reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 8)
+        reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV')
+        self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 7)
+
     def test_count_redcal_degeneracies(self):
         pos = build_hex_array(3)
         self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=1), 4)
         pos[0] += [.5, 0, 0]
+        pos[7] += [0, .5, 0]
         self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=.1), 6)
         self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=1), 4)
 
@@ -1037,10 +1073,12 @@ class TestRunMethods(unittest.TestCase):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rv = om.redcal_iteration(hd, nInt_to_load=1)
+            rv = om.redcal_iteration(hd, nInt_to_load=1, flag_nchan_high=40, flag_nchan_low=30)
         for t in range(len(hd.times)):
             for flag in rv['gf_omnical'].values():
                 self.assertFalse(np.all(flag[t, :]))
+                self.assertTrue(np.all(flag[t, 0:30]))
+                self.assertTrue(np.all(flag[t, -40:]))
 
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
