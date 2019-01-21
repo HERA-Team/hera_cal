@@ -821,7 +821,7 @@ def to_HERAData(input_data, filetype='miriad'):
         raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
 
 
-def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
+def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False, **read_kwargs):
     '''Load miriad or uvfits files or UVData/HERAData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
@@ -835,6 +835,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
             where visibilities and flags are accessed as data[(0,1)]['xx']
+        read_kwargs : keyword arguments to pass to HERAData.read()
 
     Returns:
         if return_meta is True:
@@ -856,7 +857,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
     if hd.data_array is not None:
         d, f, n = hd.build_datacontainers()
     else:
-        d, f, n = hd.read()
+        d, f, n = hd.read(**read_kwargs)
 
     # remove autos if requested
     if pop_autos:

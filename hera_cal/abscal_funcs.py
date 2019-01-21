@@ -1447,7 +1447,6 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     keys = list(data.keys())
 
     # get data, wgts and ants
-    data = copy.deepcopy(data)
     pols = np.unique(list(map(lambda k: k[2], data.keys())))
     ants = np.unique(np.concatenate(keys))
     if wgts is None:

@@ -528,7 +528,7 @@ def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst
 
 
 def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_per_file=60,
-                  file_ext="{}.{}.{:7.5f}.uv", outdir=None, overwrite=False, history=' ', lst_start=0, 
+                  file_ext="{}.{}.{:7.5f}.uv", outdir=None, overwrite=False, history='', lst_start=0, 
                   fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
                   output_file_select=None, input_cals=None, **kwargs):
     """
@@ -557,12 +557,7 @@ def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_p
                Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
     outdir : type=str, output directory
     overwrite : type=bool, if True overwrite output files
-<<<<<<< HEAD
-=======
-
     history : history to insert into output files
-
->>>>>>> master
     rephase : type=bool, if True, rephase data points in LST bin to center of bin
     bin_kwargs : type=dictionary, keyword arguments for lst_bin.
     atol : type=float, absolute tolerance for LST bin float comparison

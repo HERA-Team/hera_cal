@@ -587,14 +587,14 @@ class Test_AbsCal:
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
-        gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False, filetype='miriad')
+        AC, gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False, filetype='miriad')
         # assert shapes and types
         nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
         nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
         # first freq bin should be flagged due to complete flagging in model and data
         nt.assert_true(flags[(24, 'Jxx')][:, 0].all())
         # solar flag run
-        gains, flags = abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False, filetype='miriad')
+        AC, gains, flags = abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, verbose=False, filetype='miriad')
         # all data should be flagged
         nt.assert_true(flags[(24, 'Jxx')].all())
         # write calfits
@@ -602,8 +602,8 @@ class Test_AbsCal:
         cf_name = "ex.calfits"
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
-        gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
-                                         return_gains=True, verbose=False, filetype='miriad')
+        AC, gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
+                                             verbose=False, filetype='miriad')
         nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
@@ -611,8 +611,8 @@ class Test_AbsCal:
         abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
                           match_red_bls=True, reweight=True, filetype='miriad')
         # check all calibration routines
-        gains, flags = abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True, delay_slope_cal=True, phase_slope_cal=True,
-                                         delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False, filetype='miriad')
+        AC, gains, flags = abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, delay_slope_cal=True, phase_slope_cal=True,
+                                             delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False, filetype='miriad')
         nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
         nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
         if os.path.exists('./ex.calfits'):
