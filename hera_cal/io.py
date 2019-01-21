@@ -183,7 +183,7 @@ class HERAData(UVData):
     HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols',
                       'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
 
-    def __init__(self, input_data, filetype='uvh5'):
+    def __init__(self, input_data, filetype='uvh5', **check_kwargs):
         '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
         useful metadata (see get_metadata_dict()), either as object attributes or,
         if input_data is a list, as dictionaries mapping string paths to metadata.
@@ -191,6 +191,8 @@ class HERAData(UVData):
         Arguments:
             input_data: string data file path or list of string data file paths
             filetype: supports 'uvh5' (defualt), 'miriad', 'uvfits'
+            check_kwargs : run_check, check_extra and run_check_acceptability
+                See UVData.read for more details.
         '''
         # initialize as empty UVData object
         super(HERAData, self).__init__()
@@ -215,17 +217,17 @@ class HERAData(UVData):
             # read all UVData metadata from first file
             temp_paths = copy.deepcopy(self.filepaths)
             self.filepaths = self.filepaths[0]
-            self.read(read_data=False)
+            self.read(read_data=False, **check_kwargs)
             self.filepaths = temp_paths
 
             if len(self.filepaths) > 1:  # save HERAData_metas in dicts
                 for meta in self.HERAData_metas:
                     setattr(self, meta, {})
-                for path in self.filepaths:
-                    hc = HERAData(path, filetype='uvh5')
+                for hd in self.filepaths:
+                    hc = HERAData(hd, filetype='uvh5', **check_kwargs)
                     meta_dict = self.get_metadata_dict()
                     for meta in self.HERAData_metas:
-                        getattr(self, meta)[path] = meta_dict[meta]
+                        getattr(self, meta)[hd] = meta_dict[meta]
             else:  # save HERAData_metas as attributes
                 self._writers = {}
                 for key, value in self.get_metadata_dict().items():
@@ -361,8 +363,9 @@ class HERAData(UVData):
 
         return data, flags, nsamples
 
-    def read(self, bls=None, polarizations=None, times=None,
-             frequencies=None, freq_chans=None, read_data=True, return_data=True):
+    def read(self, bls=None, polarizations=None, times=None, frequencies=None,
+             freq_chans=None, read_data=True, return_data=True, run_check=True,
+             check_extra=True, run_check_acceptability=True):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -384,6 +387,12 @@ class HERAData(UVData):
                 basic metadata will be read in and nothing will be returned. Results in an
                 incompletely defined object (check will not pass). Default True.
             return_data: bool, if True, return the output of build_datacontainers().
+            run_check: Option to check for the existence and proper shapes of
+                parameters after reading in the file. Default is True.
+            check_extra: Option to check optional parameters as well as required
+                ones. Default is True.
+            run_check_acceptability: Option to check acceptable range of the values of
+                parameters after reading in the file. Default is True.
 
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls
@@ -401,19 +410,25 @@ class HERAData(UVData):
             # load data
             if self.filetype == 'uvh5':
                 self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
-                               frequencies=frequencies, freq_chans=freq_chans, read_data=read_data)
+                               frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
+                               run_check=run_check, check_extra=check_extra,
+                               run_check_acceptability=run_check_acceptability)
             else:
                 if not read_data:
                     raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
                 if self.filetype == 'miriad':
-                    self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations)
+                    self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations,
+                                     run_check=run_check, check_extra=check_extra,
+                                     run_check_acceptability=run_check_acceptability)
                     if any([times is not None, frequencies is not None, freq_chans is not None]):
                         warnings.warn('miriad does not support partial loading for times and frequencies. '
                                       'Loading the file first and then performing select.')
                         self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
                 elif self.filetype == 'uvfits':
                     self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
-                                     times=times, frequencies=frequencies, freq_chans=freq_chans)
+                                     times=times, frequencies=frequencies, freq_chans=freq_chans,
+                                     run_check=run_check, check_extra=check_extra,
+                                     run_check_acceptability=run_check_acceptability)
                     self.unphase_to_drift()
 
         # process data into DataContainers
@@ -422,6 +437,53 @@ class HERAData(UVData):
             self._determine_pol_indexing()
         if read_data and return_data:
             return self.build_datacontainers()
+
+    def select(self, inplace=True, **kwargs):
+        """
+        Select-out parts of a HERAData object.
+
+        Args:
+            inplace: Overwrite self, otherwise return a copy.
+            kwargs : pyuvdata.UVData select keyword arguments.
+        """
+        # select
+        output = super(HERAData, self).select(inplace=inplace, **kwargs)
+        if inplace:
+            output = self
+
+        # recompute slices if necessary
+        names = ['antenna_nums', 'antenna_names', 'ant_str',
+                 'bls', 'times', 'blt_inds']
+        for n in names:
+            if n in kwargs and kwargs[n] is not None:
+                self._determine_blt_slicing()
+                break
+        if 'polarizations' in kwargs and kwargs['polarizations'] is not None:
+            self._determine_pol_indexing()
+
+        if not inplace:
+            return self
+
+    def __add__(self, other, inplace=False, **kwargs):
+        """
+        Combine two HERAData objects.
+
+        Combine along baseline-time, polarization or frequency.
+        See pyuvdata.UVData.__add__ for more details.
+
+        Args:
+            other : Another HERAData object
+            inplace: Overwrite self as we go, otherwise create a third object
+                as the sum of the two (default).
+            kwargs : UVData.__add__ keyword arguments
+        """
+        output = super(HERAData, self).__add__(other, inplace=inplace, **kwargs)
+        if inplace:
+            output = self
+        output._determine_blt_slicing()
+        output._determine_pol_indexing()
+        if not inplace:
+            return output
 
     def __getitem__(self, key):
         """
@@ -1198,7 +1260,6 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         if return_uvc: returns UVCal object
         else: returns None
     '''
-
     # get antenna info
     ant_array = np.unique(list(map(lambda k: k[0], gains.keys()))).astype(np.int)
     antenna_numbers = copy.copy(ant_array)
@@ -1206,9 +1267,10 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     Nants_data = len(ant_array)
     Nants_telescope = len(antenna_numbers)
 
-    # get polarization info
-    pol_array = np.array(sorted(set(map(lambda k: k[1], gains.keys()))))
-    jones_array = np.array(list(map(lambda p: jstr2num(p), pol_array)), np.int)
+    # get polarization info: ordering must be monotonic in Jones number
+    jones_array = np.array(list(set([jstr2num(k[1]) for k in gains.keys()])))
+    jones_array = jones_array[np.argsort(np.abs(jones_array))]
+    pol_array = np.array([jnum2str(j) for j in jones_array])
     Njones = len(jones_array)
 
     # get time info

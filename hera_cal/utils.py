@@ -113,35 +113,69 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11)):
     Returns:
         dlys : (Ntimes, 1) ndarray containing delay for each integration
     """
+    # setup
     Ntimes, Nfreqs = data.shape
+    fftfreqs = np.fft.fftfreq(Nfreqs, df)
+    dtau = fftfreqs[1] - fftfreqs[0]
     if wgts is None:
         wgts = np.float32(1)
+
     # smooth via median filter
     if medfilt:
         data.real = signal.medfilt(data.real, kernel_size=kernel)
         data.imag = signal.medfilt(data.imag, kernel_size=kernel)
-    # fft w/ window and find argmax
+
+    # fft w/ wgts
     dw = data * wgts
     dw[np.isnan(dw)] = 0
     vfft = np.fft.fft(dw, axis=1)
     amp = np.abs(vfft)
-    argmaxes = np.argmax(amp, axis=1)
-    fftfreqs = np.fft.fftfreq(Nfreqs, df)
-    dtau = fftfreqs[1] - fftfreqs[0]
-    dlys = np.zeros((Ntimes, 1), dtype=data.real.dtype)
-    # use parabolic peak interpolation: https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-    for i, mx in enumerate(argmaxes):
-        a, b, c = amp[i, mx - 1], amp[i, mx], amp[i, (mx + 1) % Nfreqs]
-        if np.abs(a - 2 * b + c) > 0 and np.abs(a - c) > 0:
-            shift = .5 * (a - c) / (a - 2 * b + c)
-        else:
-            shift = 0
-        # use peak shift to linearly interpolate to get appropriate delay
-        dlys[i] = (1.0 - np.abs(shift)) * fftfreqs[mx] + np.abs(shift) * (fftfreqs[mx] + np.sign(shift) * dtau)
+
+    # get interpolated peak and indices
+    inds, bin_shifts, peaks, interp_peaks = interp_peak(amp)
+    dlys = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
+
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df
-    offset = np.angle(np.mean(data * np.exp(-np.complex64(2j * np.pi) * dlys * freqs.reshape(1, -1)), axis=1))
-    return dlys, offset.reshape(-1, 1)
+    offset = np.angle(np.mean(data * np.exp(-np.complex64(2j * np.pi) * dlys * freqs), axis=1, keepdims=True))
+
+    return dlys, offset
+
+
+def interp_peak(data):
+    """
+    Use quadratic interpolation to get peak of data along last axis.
+
+    Args:
+        data : real-valued 2d ndarray, if fed as 1d array
+            will reshape into [1, N] array
+
+    Returns:
+        indices : index array holding argmax of data along last axis
+        bin_shifts : interpolated peak bin shift value [-1, 1] from indices
+        peaks : argmax of data corresponding to indices
+        new_peaks : interpolated peak value at indices + bin_shifts
+    """
+    # get properties
+    if data.ndim == 1:
+        data = data[None, :]
+    N1, N2 = data.shape
+
+    # get argmaxes along last axis
+    indices = np.argmax(data, axis=-1)
+    peaks = data[range(N1), indices]
+
+    # calculate shifted peak for sub-bin resolution
+    # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
+    # alpha = a, beta = b, gamma = g
+    a = data[range(N1), indices - 1]
+    g = data[range(N1), (indices + 1) % N2]
+    b = data[range(N1), indices]
+    denom = (a - 2 * b + g)
+    bin_shifts = 0.5 * np.true_divide((a - g), denom, where=~np.isclose(denom, 0.0))
+    new_peaks = b - 0.25 * (a - g) * bin_shifts
+
+    return indices, bin_shifts, peaks, new_peaks
 
 
 def echo(message, type=0, verbose=True):
