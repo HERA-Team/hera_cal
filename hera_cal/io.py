@@ -224,11 +224,11 @@ class HERAData(UVData):
             if len(self.filepaths) > 1:  # save HERAData_metas in dicts
                 for meta in self.HERAData_metas:
                     setattr(self, meta, {})
-                for hd in self.filepaths:
-                    hc = HERAData(hd, filetype='uvh5', **check_kwargs)
-                    meta_dict = self.get_metadata_dict()
+                for f in self.filepaths:
+                    hd = HERAData(f, filetype='uvh5', **check_kwargs)
+                    meta_dict = hd.get_metadata_dict()
                     for meta in self.HERAData_metas:
-                        getattr(self, meta)[hd] = meta_dict[meta]
+                        getattr(self, meta)[f] = meta_dict[meta]
             else:  # save HERAData_metas as attributes
                 self._writers = {}
                 for key, value in self.get_metadata_dict().items():
