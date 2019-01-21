@@ -123,14 +123,19 @@ class Test_HERAData(unittest.TestCase):
         # multiple uvh5 files
         files = [self.uvh5_1, self.uvh5_2]
         hd = HERAData(files)
+        individual_hds = {files[0]: HERAData(files[0]), files[1]: HERAData(files[1])}
         self.assertEqual(hd.filepaths, files)
         for meta in hd.HERAData_metas:
             self.assertIsNotNone(getattr(hd, meta))
         for f in files:
             self.assertEqual(len(hd.freqs[f]), 1024)
+            np.testing.assert_array_equal(hd.freqs[f], individual_hds[f].freqs)
             self.assertEqual(len(hd.bls[f]), 3)
+            np.testing.assert_array_equal(hd.bls[f], individual_hds[f].bls)
             self.assertEqual(len(hd.times[f]), 60)
+            np.testing.assert_array_equal(hd.times[f], individual_hds[f].times)
             self.assertEqual(len(hd.lsts[f]), 60)
+            np.testing.assert_array_equal(hd.lsts[f], individual_hds[f].lsts)
         self.assertFalse(hasattr(hd, '_writers'))
 
         # miriad
