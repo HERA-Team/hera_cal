@@ -409,13 +409,13 @@ class Test_AbsCal:
 
     def test_delay_lincal(self):
         # test w/o offsets
-        self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False, solve_offsets=False)
+        self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False)
         nt.assert_equal(self.AC.ant_dly[(24, 'Jxx')].shape, (60, 1))
         nt.assert_equal(self.AC.ant_dly_gain[(24, 'Jxx')].shape, (60, 64))
         nt.assert_equal(self.AC.ant_dly_arr.shape, (7, 60, 1, 1))
         nt.assert_equal(self.AC.ant_dly_gain_arr.shape, (7, 60, 64, 1))
         # test w/ offsets
-        self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False, solve_offsets=True)
+        self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False)
         nt.assert_equal(self.AC.ant_dly_phi[(24, 'Jxx')].shape, (60, 1))
         nt.assert_equal(self.AC.ant_dly_phi_gain[(24, 'Jxx')].shape, (60, 64))
         nt.assert_equal(self.AC.ant_dly_phi_arr.shape, (7, 60, 1, 1))
@@ -576,37 +576,6 @@ class Test_AbsCal:
         nt.assert_almost_equal(wgts[(25, 38, 'xx')][15, 20], 0)
         nt.assert_almost_equal(wgts[(25, 38, 'xx')][20, 15], 0)
 
-    def test_fft_dly(self):
-        # test basic execution
-        k = (24, 25, 'xx')
-        vis = self.AC.model[k] / self.AC.data[k]
-        abscal.fill_dict_nans(vis, nan_fill=0.0, inf_fill=0.0, array=True)
-        df = np.median(np.diff(self.AC.freqs))
-        # basic execution
-        dly, offset = abscal.fft_dly(vis, df, medfilt=False, solve_phase=False)
-        nt.assert_equal(dly.shape, (60, 1))
-        nt.assert_equal(offset, None)
-        # median filtering
-        dly, offset = abscal.fft_dly(vis, df, medfilt=True, solve_phase=False)
-        nt.assert_equal(dly.shape, (60, 1))
-        nt.assert_equal(offset, None)
-        # solve phase
-        dly, offset = abscal.fft_dly(vis, df, medfilt=True, solve_phase=True)
-        nt.assert_equal(dly.shape, (60, 1))
-        nt.assert_equal(offset.shape, (60, 1))
-        # test windows and edgecut
-        dly, offset = abscal.fft_dly(vis, df, medfilt=False, solve_phase=False, edge_cut=2, window='hann')
-        dly, offset = abscal.fft_dly(vis, df, medfilt=False, solve_phase=False, window='blackmanharris')
-        nt.assert_raises(ValueError, abscal.fft_dly, vis, df, window='foo')
-        nt.assert_raises(AssertionError, abscal.fft_dly, vis, df, edge_cut=1000)
-        # test mock data
-        tau = np.array([1.5e-8]).reshape(1, -1)  # 15 nanoseconds
-        f = np.linspace(0, 100e6, 1024)
-        df = np.median(np.diff(f))
-        r = np.exp(1j * 2 * np.pi * f * tau)
-        dly, offset = abscal.fft_dly(r, df, medfilt=True, kernel=(1, 5), solve_phase=False)
-        nt.assert_almost_equal(float(dly), 1.5e-8, delta=1e-9)
-
     def test_abscal_arg_parser(self):
         a = abscal.abscal_arg_parser()
 
@@ -618,14 +587,14 @@ class Test_AbsCal:
         model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
                        os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
         # blank run
-        gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False, filetype='miriad')
+        AC, gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False, filetype='miriad')
         # assert shapes and types
         nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
         nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
         # first freq bin should be flagged due to complete flagging in model and data
         nt.assert_true(flags[(24, 'Jxx')][:, 0].all())
         # solar flag run
-        gains, flags = abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, return_gains=True, verbose=False, filetype='miriad')
+        AC, gains, flags = abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, verbose=False, filetype='miriad')
         # all data should be flagged
         nt.assert_true(flags[(24, 'Jxx')].all())
         # write calfits
@@ -633,8 +602,8 @@ class Test_AbsCal:
         cf_name = "ex.calfits"
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
-        gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
-                                         return_gains=True, verbose=False, filetype='miriad')
+        AC, gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
+                                             verbose=False, filetype='miriad')
         nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
         if os.path.exists(os.path.join(outdir, cf_name)):
             os.remove(os.path.join(outdir, cf_name))
@@ -642,8 +611,8 @@ class Test_AbsCal:
         abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
                           match_red_bls=True, reweight=True, filetype='miriad')
         # check all calibration routines
-        gains, flags = abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, return_gains=True, delay_slope_cal=True, phase_slope_cal=True,
-                                         delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False, filetype='miriad')
+        AC, gains, flags = abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, delay_slope_cal=True, phase_slope_cal=True,
+                                             delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False, filetype='miriad')
         nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
         nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
         if os.path.exists('./ex.calfits'):

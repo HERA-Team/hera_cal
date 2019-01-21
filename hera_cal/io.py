@@ -17,6 +17,7 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 import aipy
 from astropy import units
+import h5py
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num
@@ -748,12 +749,7 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
             start += int_time / 2
             stop += int_time / 2
         elif filetype == 'uvh5':
-            hd = HERAData(f)
-            lsts = []
-            for l in hd.lst_array:
-                if l not in lsts:
-                    lsts.append(l)
-            lsts = np.unwrap(lsts)
+            lsts = np.unwrap(np.unique(h5py.File(f)[u'Header'][u'lst_array']))
             start, stop, int_time = lsts[0], lsts[-1], np.median(np.diff(lsts))
 
         # add integration buffer to end of file if desired
@@ -825,7 +821,7 @@ def to_HERAData(input_data, filetype='miriad'):
         raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
 
 
-def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False):
+def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False, **read_kwargs):
     '''Load miriad or uvfits files or UVData/HERAData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
@@ -839,6 +835,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
             where visibilities and flags are accessed as data[(0,1)]['xx']
+        read_kwargs : keyword arguments to pass to HERAData.read()
 
     Returns:
         if return_meta is True:
@@ -860,7 +857,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
     if hd.data_array is not None:
         d, f, n = hd.build_datacontainers()
     else:
-        d, f, n = hd.read()
+        d, f, n = hd.read(**read_kwargs)
 
     # remove autos if requested
     if pop_autos:

@@ -27,7 +27,7 @@ from . import redcal
 from . import io
 from . import apply_cal
 from .datacontainer import DataContainer
-from .utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, echo
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, echo, fft_dly
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
@@ -365,7 +365,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
 
 
 def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offsets=True, medfilt=True,
-                 kernel=(1, 5), verbose=True, antpos=None, four_pol=False, window=None, edge_cut=0):
+                 kernel=(1, 5), verbose=True, antpos=None, four_pol=False, edge_cut=0):
     """
     Solve for per-antenna delays according to the equation
 
@@ -397,9 +397,6 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
 
     df : type=float, frequency spacing between channels in Hz
 
-    solve_offsets : type=boolean, if True, setup a system of linear equations for per-antenna phase offset
-                    and solve.
-
     medfilt : type=boolean, median filter visiblity ratio before taking fft
 
     kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
@@ -407,9 +404,6 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
     four_pol : type=boolean, if True, fit multiple polarizations together
-
-    window : str, window to enact on data before FFT for dly solver, options=['blackmanharris', 'hann', None]
-        None is a top-hat window.
 
     edge_cut : int, number of channels to exclude at each band edge in FFT window
 
@@ -447,16 +441,14 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel,
-                              solve_phase=solve_offsets, window=window, edge_cut=edge_cut)
+        dly, offset = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
 
         # set nans to zero
         rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
         isnan = np.isnan(dly)
         dly[isnan] = 0.0
         rwgts[isnan] = 0.0
-        if solve_offsets:
-            offset[isnan] = 0.0
+        offset[isnan] = 0.0
 
         ratio_delays.append(dly)
         ratio_offsets.append(offset)
@@ -501,29 +493,27 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    # solve for offsets
-    if solve_offsets:
-        # setup linsolve parameters
-        ydata = odict(zip(keys, ratio_offsets))
-        eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], utils.split_pol(k[2])[0],
-                                                         k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
-        ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
-        ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
-        ls_design_matrix = odict()
-        for p in gain_pols:
-            ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
-            ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(list(ywgts.values())[0])
-        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
-        echo("...running linsolve", verbose=verbose)
-        offset_fit = sol.solve()
-        echo("...finished linsolve", verbose=verbose)
-        fit.update(offset_fit)
+    # setup linsolve parameters
+    ydata = odict(zip(keys, ratio_offsets))
+    eqns = odict([(k, 'phi_{}_{} - phi_{}_{}'.format(k[0], utils.split_pol(k[2])[0],
+                                                     k[1], utils.split_pol(k[2])[1])) for i, k in enumerate(keys)])
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
+    ls_design_matrix = odict()
+    for p in gain_pols:
+        ls_data['phi_{}_{}'.format(refant, p)] = np.zeros_like(list(ydata.values())[0])
+        ls_wgts['phi_{}_{}'.format(refant, p)] = np.ones_like(list(ywgts.values())[0])
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    offset_fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
+    fit.update(offset_fit)
 
     return fit
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True,
-                       kernel=(1, 5), verbose=True, four_pol=False, window=None, edge_cut=0):
+                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -562,9 +552,6 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
 
     four_pol : type=boolean, if True, fit multiple polarizations together
-
-    window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
-        None is a top-hat window.
 
     edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
 
@@ -608,8 +595,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, _ = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel,
-                         window=window, edge_cut=edge_cut)
+        dly, _ = fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
 
         # set nans to zero
         rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
@@ -983,95 +969,6 @@ def array_axis_to_data_key(data, array_index, array_keys, key_index=-1, copy_dic
         return new_data, new_copy
     else:
         return new_data
-
-
-def fft_dly(data, df, wgts=None, window=None, medfilt=False, kernel=(1, 11),
-            solve_phase=False, edge_cut=0):
-    """Get delay of visibility across band using FFT and quadratic fit to delay peak.
-
-    Arguments:
-        data : ndarray of complex data (e.g. gains or visibilities) of shape (Ntimes, Nfreqs)
-        df : frequency channel width in Hz
-        wgts : multiplicative wgts of the same shape as the data
-        medfilt : boolean, median filter data before fft
-        kernel : size of median filter kernel along (time, freq) axes
-        window : str, window to enact on data before FFT, options=['blackmanharris', 'hann', None]
-            None is a top-hat window.
-        solve_phase=False
-        edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
-
-    Returns:
-        dlys : (Ntimes, 1) ndarray containing delay for each integration
-        phi : ndarray containing phase of delay mode for each integration (or None if solve_phase is False)
-    """
-    Ntimes, Nfreqs = data.shape
-    if wgts is None:
-        wgts = np.ones_like(data, dtype=np.float)
-
-    # smooth via median filter
-    kernel += tuple(np.ones((data.ndim - len(kernel)), np.int))
-    if medfilt:
-        data = signal.medfilt(np.real(data), kernel_size=kernel) + 1j * signal.medfilt(np.imag(data), kernel_size=kernel)
-
-    # construct window
-    win = np.zeros_like(data, dtype=np.float)
-    assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
-    if window is None:  # tophat window
-        win[:, edge_cut:(Nfreqs - edge_cut)] = 1.0
-    elif window == 'blackmanharris':
-        win[:, edge_cut:(Nfreqs - edge_cut)] = signal.windows.blackmanharris(Nfreqs - 2 * edge_cut)
-    elif window == 'hann':
-        win[:, edge_cut:(Nfreqs - edge_cut)] = signal.windows.hann(Nfreqs - 2 * edge_cut)
-    else:
-        raise ValueError("didn't recognize window {} from ['blackmanharris', 'hann', None]".format(window))
-
-    # fft w/ window and find argmax
-    vfft = np.fft.fft(data * win * wgts, axis=1)
-    amp = np.abs(np.fft.fftshift(vfft, axes=1))
-    argmaxes = np.argmax(amp, axis=1)
-    fftfreqs = np.fft.fftshift(np.fft.fftfreq(Nfreqs, df))
-    dlys, peak_shifts = np.zeros((Ntimes, 1)), np.zeros((Ntimes, 1))
-    # use parabolic peak interpolation: https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-    for i in range(Ntimes):
-        a, b, c, = amp[i][(argmaxes[i] - 1) % len(amp[i])], amp[i][argmaxes[i]], amp[i][(argmaxes[i] + 1) % len(amp[i])]
-        if (np.abs(a - 2 * b + c) > 0) and (np.abs(a - c) > 0):
-            peak_shifts[i] = .5 * (a - c) / (a - 2 * b + c)
-        else:
-            peak_shifts[i] = 0
-        # use peak shift to linearly interpolate to get appropriate delay
-        dlys[i] = (1.0 - np.abs(peak_shifts[i])) * fftfreqs[argmaxes[i]] + np.abs(peak_shifts[i]) * \
-                  (fftfreqs[argmaxes[i]] + np.sign(peak_shifts[i]) * (fftfreqs[1] - fftfreqs[0]))
-
-    phi = None
-    if solve_phase:
-        # get phase offsets by interpolating real and imag component of FFT
-        argmax = np.moveaxis(np.argmax(np.abs(vfft), axis=1)[np.newaxis], 0, 1)
-        vfft_real = []
-        vfft_imag = []
-        for i, a in enumerate(argmax):
-            # get real and imag of each argmax
-            real = np.take(vfft.real, i, axis=0)
-            imag = np.take(vfft.imag, i, axis=0)
-
-            # wrap around
-            real = np.concatenate([real, real, real])
-            imag = np.concatenate([imag, imag, imag])
-            a += Nfreqs
-
-            # add interpolation component
-            rl = interpolate.interp1d(np.arange(Nfreqs * 3), real)(a + peak_shifts[i])
-            im = interpolate.interp1d(np.arange(Nfreqs * 3), imag)(a + peak_shifts[i])
-
-            # insert into arrays
-            vfft_real.append(rl)
-            vfft_imag.append(im)
-
-        vfft_real = np.moveaxis(np.array(vfft_real), 0, 0)
-        vfft_imag = np.moveaxis(np.array(vfft_imag), 0, 0)
-        vfft_interp = vfft_real + 1j * vfft_imag
-        phi = np.angle(vfft_interp)
-
-    return dlys, phi
 
 
 def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3, 9), array=False):
@@ -1550,7 +1447,6 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     keys = list(data.keys())
 
     # get data, wgts and ants
-    data = copy.deepcopy(data)
     pols = np.unique(list(map(lambda k: k[2], data.keys())))
     ants = np.unique(np.concatenate(keys))
     if wgts is None:
