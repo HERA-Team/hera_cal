@@ -426,7 +426,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         sol = info.firstcal(d, df=fqs[1] - fqs[0], medfilt=False)
         sol_degen = info.remove_degen_gains(sol, degen_gains=delays, mode='phase')
         for i in range(NANTS):
-            self.assertEqual(sol[(i, 'Jxx')].dtype, np.float32)
+            self.assertEqual(sol[(i, 'Jxx')].dtype, np.float64)
             self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
             self.assertTrue(np.allclose(np.round(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0), 0))
 
