@@ -1248,7 +1248,8 @@ def abscal_run(data_file, model_files, filetype='miriad', refant=None, input_cal
 
         # rephase model to match data lst grid
         if rephase_model:
-            new_model, model_flags = rephase_vis(model, model_lsts, data_lsts, bls, data_freqs, inplace=True,
+            model_bls = {k: model_antpos[k[0]] - model_antpos[k[1]] for k in model.keys()}
+            new_model, model_flags = rephase_vis(model, model_lsts, data_lsts, model_bls, data_freqs, inplace=True,
                                                  flags=model_flags, latitude=latitude, max_dlst=max_dlst)
             model_times = data_times
         else:
