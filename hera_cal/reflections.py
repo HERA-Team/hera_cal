@@ -69,7 +69,6 @@ import numpy as np
 import aipy
 import os
 import copy
-import matplotlib.pyplot as plt
 from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
 from scipy.signal import windows
