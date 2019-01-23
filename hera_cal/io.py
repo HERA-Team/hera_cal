@@ -776,6 +776,33 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
     return file_starts, file_stops, int_times
 
 
+def partial_time_io(hd, times):
+    '''Perform partial io with a time-select on a HERAData object, even if it is intialized
+    using multiple files, some of which do not contain any of the specified times.
+    
+    Arguments:
+        hd: HERAData object intialized with (usually multiple) uvh5 files
+        times: list of times in JD to load
+
+    Returns:
+        data: DataContainer mapping baseline keys to complex visibility waterfalls
+        flags: DataContainer mapping baseline keys to boolean flag waterfalls
+        nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls
+        '''
+    combined_hd = None
+    for f in hd.filepaths:
+        hd_here = io.HERAData(f)
+        times_here = [t for t in times if t in hd_here.times]
+        if len(times_here) > 0:
+            hd_here.read(times=times_here, return_data=False)
+            if combined_hd is None:
+                combined_hd = hd_here
+            else:
+                combined_hd += hd_here
+    combined_hd = io.to_HERAData(combined_hd) # re-runs the slicing and indexing
+    return combined_hd.build_datacontainers()
+
+
 #######################################################################
 #                             LEGACY CODE
 #######################################################################
