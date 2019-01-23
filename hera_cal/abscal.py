@@ -1488,3 +1488,31 @@ def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=F
     assert len(datacontainer) > 0, "no baselines were kept after baseline cut..."
 
     return datacontainer
+
+
+def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
+    '''Extract all times and lsts from a HERAData object
+
+    Arguments:
+        hd: HERAData object intialized with one ore more uvh5 file's metadata
+        solar_horizon: Solar altitude threshold [degrees]. Times are not returned when the Sun is above this altitude.
+        unwrap: increase all LSTs smaller than the first one by 2pi to avoid phase wrapping
+
+    Returns:
+        all_times: list of times in JD in the file or files
+        all_lsts: LSTs (in radians) corresponding to all_times
+    '''
+    all_times = hd.times
+    all_lsts = hd.lsts
+    if len(hd.filepaths) > 1:  # in this case, it's a dictionary
+        all_times = np.unique(all_times.values())
+        all_lsts = np.ravel(all_lsts.values())[np.argsort(all_times)]  
+    if unwrap:  # avoid phase wraps 
+        all_lsts[all_lsts < all_lsts[0]] += 2 * np.pi
+        
+    # remove times when sun was too high
+    lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
+    solar_alts = utils.get_sun_alt(all_times, latitude=lat, longitude=lon)
+    solar_flagged = solar_alts > solar_horizon
+    return all_times[~solar_flagged], all_lsts[~solar_flagged]
+
