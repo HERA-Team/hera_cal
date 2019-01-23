@@ -19,7 +19,6 @@ from scipy import signal
 from scipy import interpolate
 from scipy import spatial
 from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
 import linsolve
 
 from . import utils
@@ -27,7 +26,8 @@ from . import redcal
 from . import io
 from . import apply_cal
 from .datacontainer import DataContainer
-from .utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, echo, fft_dly
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, echo, fft_dly, split_pol, split_bl
+
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
