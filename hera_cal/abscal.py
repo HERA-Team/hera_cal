@@ -1519,3 +1519,36 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
     solar_flagged = solar_alts > solar_horizon
     return all_times[~solar_flagged], all_lsts[~solar_flagged]
 
+
+def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts):
+    '''Generate a dictionary that maps data times to model times via shared LSTs.
+
+    Arguments:
+        data_times: list of times in the data (in JD)
+        data_lsts: list of corresponding LSTs (in radians)
+        model_times: list of times in the mdoel (in JD)
+        model_lsts: list of corresponing LSTs (in radians)
+
+    Returns:
+        d2m_time_map: dictionary uniqely mapping times in the data to times in the model 
+            that are closest in LST. Each model time maps to at most one data time and 
+            each model time maps to at most one data time. Data times without corresponding
+            model times map to None.
+    '''
+    # first produce a map of indices using the LSTs
+    m2d_ind_map = {}  
+    for dind, dlst in enumerate(data_lsts):
+        nearest_mind = np.argmin(np.abs(model_lsts - dlst))
+        if nearest_mind in m2d_ind_map:
+            if np.abs(model_lsts[nearest_mind] < data_lsts[m2d_ind_map[nearest_mind]]):
+                m2d_ind_map[nearest_mind] = dind
+        else:
+            m2d_ind_map[nearest_mind] = dind
+
+    # now use those indicies to produce a map of times
+    d2m_time_map = {time: None for time in data_times}
+    for mind, dind in m2d_ind_map.items():
+        d2m_time_map[data_times[dind]] = model_times[mind]
+    return d2m_time_map
+
+
