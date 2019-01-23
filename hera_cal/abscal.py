@@ -29,8 +29,11 @@ from six.moves import map, range
 
 from . import version
 from . import flag_utils
+from .apply_cal import calibrate_in_place
+from .smooth_cal import pick_reference_antenna
+from .flag_utils import synthesize_ant_flags
+from .noise import predict_noise_variance_from_autos
 from .abscal_funcs import *
-from .utils import echo
 
 
 class AbsCal(object):
