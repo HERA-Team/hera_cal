@@ -790,6 +790,7 @@ def partial_time_io(hd, times, **kwargs):
         flags: DataContainer mapping baseline keys to boolean flag waterfalls
         nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls
         '''
+    assert hd.filetype == 'uvh5', 'This function only works for uvh5-based HERAData objects.'
     combined_hd = None
     for f in hd.filepaths:
         hd_here = HERAData(f)
