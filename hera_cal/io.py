@@ -776,13 +776,14 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
     return file_starts, file_stops, int_times
 
 
-def partial_time_io(hd, times):
+def partial_time_io(hd, times, **kwargs):
     '''Perform partial io with a time-select on a HERAData object, even if it is intialized
     using multiple files, some of which do not contain any of the specified times.
     
     Arguments:
         hd: HERAData object intialized with (usually multiple) uvh5 files
         times: list of times in JD to load
+        kwargs: other partial i/o kwargs (see io.HERAData.read)
 
     Returns:
         data: DataContainer mapping baseline keys to complex visibility waterfalls
@@ -794,7 +795,7 @@ def partial_time_io(hd, times):
         hd_here = HERAData(f)
         times_here = [t for t in times if t in hd_here.times]
         if len(times_here) > 0:
-            hd_here.read(times=times_here, return_data=False)
+            hd_here.read(times=times_here, return_data=False, **kwargs)
             if combined_hd is None:
                 combined_hd = hd_here
             else:
