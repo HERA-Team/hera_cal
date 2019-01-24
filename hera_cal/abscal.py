@@ -2821,8 +2821,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
         hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history and:
             - gains: abscal gains for times that could be calibrated, redcal gains otherwise (but flagged)
             - flags: redcal flags, with additional flagging if the data or model are flagged (see flag_utils.synthesize_ant_flags)
-            - quals: abscal chi^2 p
-            - total_qual: 
+            - quals: abscal chi^2 per antenna based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
+            - total_qual: abscal chi^2 based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
     '''
     # Raise error if output calfile already exists and clobber is False
     if os.path.exists(redcal_file.replace(*output_replace)) and not clobber:
