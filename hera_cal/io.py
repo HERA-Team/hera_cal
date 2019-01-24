@@ -799,7 +799,7 @@ def partial_time_io(hd, times):
                 combined_hd = hd_here
             else:
                 combined_hd += hd_here
-    combined_hd = io.to_HERAData(combined_hd) # re-runs the slicing and indexing
+    combined_hd = io.to_HERAData(combined_hd)  # re-runs the slicing and indexing
     return combined_hd.build_datacontainers()
 
 

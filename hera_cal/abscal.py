@@ -1716,8 +1716,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
                 echo('\n\nNow calibrating ' + pol + '-polarization...', verbose=verbose)
                 # loop over groups of time indices
                 for tinds in tind_groups:
-                    echo('\n    Now calibrating times ' + str(hd.times[tinds[0]]) + \
-                         ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
+                    echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
+                         + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
                     
                     # load data
                     data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=[pol])
@@ -1736,8 +1736,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
 
                         # apply calibration
                         data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
-                        rc_gains_subset = {k: rc_gains[k][tinds,:] for k in data_ants}
-                        rc_flags_subset = {k: rc_flags[k][tinds,:] for k in data_ants}
+                        rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
+                        rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
                         calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
                         
@@ -1768,7 +1768,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
                             abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
                             
         # impose a single reference antenna on the final antenna solution
-        refant=pick_reference_antenna(abscal_flags)
+        refant = pick_reference_antenna(abscal_flags)
         refant_phasor = (abscal_gains[refant] / np.abs(abscal_gains[refant]))
         for ant in abscal_gains.keys():
             abscal_gains[ant] /= refant_phasor
