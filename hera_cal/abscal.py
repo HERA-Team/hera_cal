@@ -2903,7 +2903,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                         delta_gains, AC = post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, edge_cut=edge_cut, 
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
-                                                             phs_conv_crit=phs_conv_crit, refant_num=refant[0], verbose=verbose)
+                                                             phs_conv_crit=phs_conv_crit, verbose=verbose,
+                                                             refant_num=(None if refant is None else refant[0]))
 
                         # abscal data (AC.data is already abscaled, but data is only redcaled) and generate abscal Chi^2
                         calibrate_in_place(data, delta_gains, data_flags=flags, 
