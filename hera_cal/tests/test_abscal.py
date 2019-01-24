@@ -639,7 +639,7 @@ class Test_Post_Redcal_Abscal_Run:
         for f in hd.lsts.keys():
             hd.lsts[f] += 4.75
         all_times, all_lsts = abscal.get_all_times_and_lsts(hd, unwrap=True)
-        nt.assert_true(all_lsts[-1] > 2*np.pi)
+        nt.assert_true(all_lsts[-1] > 2 * np.pi)
         np.testing.assert_array_equal(all_lsts, sorted(all_lsts))
         c = abscal.get_all_times_and_lsts(hd)
         nt.assert_true(all_lsts[0] < all_lsts[-1])
@@ -650,7 +650,6 @@ class Test_Post_Redcal_Abscal_Run:
         all_times, all_lsts = abscal.get_all_times_and_lsts(hd, solar_horizon=0.0)
         nt.assert_equal(len(all_times), 0)
         nt.assert_equal(len(all_lsts), 0)
-
 
     def test_abscal_run(self):
         pass
