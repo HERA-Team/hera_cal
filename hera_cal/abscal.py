@@ -2800,7 +2800,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     return abscal_delta_gains, AC
 
 
-def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=('.omni.', '.abs.'), nInt_to_load=None,
+def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None, nInt_to_load=None,
                            data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0, 
                            tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
@@ -2810,7 +2810,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
         redcal_file: string path to calfits file that redundantly calibrates the data_file
         model_files: list of string paths to externally calibrated data. Strings must be sortable 
             to produce a chronological list in LST (wrapping over 2*pi is OK)
-        output_replace: tuple of two strings to find and replace in redcal_file to produce the output calfits file
+        output_file: string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.')
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
         data_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.
         model_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the model, flag the integration.
@@ -2835,8 +2835,10 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
                 * total_qual: abscal chi^2 based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
     '''
     # Raise error if output calfile already exists and clobber is False
-    if os.path.exists(redcal_file.replace(*output_replace)) and not clobber:
-        raise IOError("{} exists, not overwriting.".format(redcal_file.replace(*output_replace)))
+    if output_file is None:
+        output_file = redcal_file.replace('.omni.', '.abs.')
+    if os.path.exists(output_file) and not clobber:
+        raise IOError("{} exists, not overwriting.".format(output_file))
 
     # Load redcal calibration
     hc = io.HERACal(redcal_file)
@@ -2937,7 +2939,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
     hc.quality_array[np.isnan(hc.quality_array)] = 0
     hc.total_quality_array[np.isnan(hc.total_quality_array)] = 0
     hc.history += version.history_string(add_to_history)
-    hc.write_calfits(redcal_file.replace(*output_replace), clobber=clobber)
+    hc.write_calfits(output_file, clobber=clobber)
     return hc
 
 
@@ -2948,7 +2950,7 @@ def post_redcal_abscal_argparser():
     a.add_argument("redcal_file", type=str, help="string path to calfits file that redundantly calibrates the data_file")
     a.add_argument("model_files", type=str, nargs='+', help="list of string paths to externally calibrated data. Strings must be sortable to produce a chronological list in LST \
                                                              (wrapping over 2*pi is OK)")
-    a.add_argument("--output_replace", default=('.omni.', '.abs.'), type=str, nargs=2, help="two strings to find and replace in redcal_file to produce the output calfits file")
+    a.add_argument("--output_file", default=None, type=str, help="string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.'")
     a.add_argument("--nInt_to_load", default=None, type=int, help="number of integrations to load and calibrate simultaneously. Default None loads all integrations.")
     a.add_argument("--data_solar_horizon", default=90.0, type=float, help="Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.")
     a.add_argument("--model_solar_horizon", default=90.0, type=float, help="Solar altitude threshold [degrees]. When the sun is too high in the model, flag the integration.")

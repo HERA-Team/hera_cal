@@ -779,7 +779,7 @@ class Test_Post_Redcal_Abscal_Run:
         os.remove(temp_outfile)
 
     def test_post_redcal_abscal_argparser(self):
-        sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--output_replace', '.e.', '.f.', '--verbose']
+        sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--nInt_to_load', '6', '--verbose']
         a = abscal.post_redcal_abscal_argparser()
         nt.assert_equal(a.data_file, 'a')
         nt.assert_equal(a.redcal_file, 'b')
@@ -787,8 +787,5 @@ class Test_Post_Redcal_Abscal_Run:
         nt.assert_equal(a.model_files[1], 'd')
         nt.assert_equal(len(a.model_files), 2)
         nt.assert_equal(type(a.model_files), list)
-        nt.assert_equal(a.output_replace[0], '.e.')
-        nt.assert_equal(a.output_replace[1], '.f.')
-        nt.assert_equal(len(a.output_replace), 2)
-        nt.assert_equal(type(a.output_replace), list)
+        nt.assert_equal(a.nInt_to_load, 6)
         nt.assert_true(a.verbose)
