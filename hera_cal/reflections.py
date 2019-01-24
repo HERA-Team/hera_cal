@@ -79,7 +79,7 @@ import argparse
 
 from . import io
 from . import version
-from . import abscal_funcs
+from .abscal import merge_gains
 from .datacontainer import DataContainer
 from .frf import FRFilter
 from . import vis_clean
@@ -283,7 +283,7 @@ class ReflectionFitter(FRFilter):
             gains, flags, quals, tquals = cal.read()
 
             # Merge gains
-            rgains = abscal_funcs.merge_gains([gains, rgains])
+            rgains = merge_gains([gains, rgains])
 
             # resolve possible broadcasting across time and freq
             if cal.Ntimes > self.Ntimes:

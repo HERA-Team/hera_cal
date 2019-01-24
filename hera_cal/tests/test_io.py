@@ -495,7 +495,7 @@ class Test_HERAData(unittest.TestCase):
 class Test_Visibility_IO_Legacy(unittest.TestCase):
 
     def test_load_vis(self):
-        # duplicated testing from abscal_funcs.UVData2AbsCalDict
+        # inheretied testing from the old abscal_funcs.UVData2AbsCalDict
 
         # load into pyuvdata object
         self.data_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
