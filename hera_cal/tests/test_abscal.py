@@ -651,6 +651,33 @@ class Test_Post_Redcal_Abscal_Run:
         nt.assert_equal(len(all_times), 0)
         nt.assert_equal(len(all_lsts), 0)
 
+    def test_get_d2m_time_map(self):
+        hd = io.HERAData(self.data_file)
+        hdm = io.HERAData(self.model_files)
+        all_data_times, all_data_lsts = abscal.get_all_times_and_lsts(hd)
+        all_model_times, all_model_lsts = abscal.get_all_times_and_lsts(hdm)
+        d2m_time_map = abscal.get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)
+        for dtime, mtime in d2m_time_map.items():
+            dlst = all_data_lsts[np.argwhere(all_data_times == dtime)[0][0]]
+            mlst = all_model_lsts[np.argwhere(all_model_times == mtime)[0][0]]
+            nt.assert_less(np.abs(dlst - mlst), np.median(np.ediff1d(all_data_lsts)))
+            nt.assert_equal(np.min(np.abs(all_data_lsts - mlst)), np.abs(dlst - mlst))
+            
+        hd = io.HERAData(self.data_file)
+        hdm = io.HERAData(self.model_files[0])
+        all_data_times, all_data_lsts = abscal.get_all_times_and_lsts(hd)
+        all_model_times, all_model_lsts = abscal.get_all_times_and_lsts(hdm)
+        d2m_time_map = abscal.get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)
+        for dtime, mtime in d2m_time_map.items():
+            dlst = all_data_lsts[np.argwhere(all_data_times == dtime)[0][0]]
+            if mtime is None:
+                for mlst in all_model_lsts:
+                    nt.assert_less(np.min(np.abs(all_data_lsts - mlst)), np.abs(dlst - mlst))
+            else:
+                mlst = all_model_lsts[np.argwhere(all_model_times == mtime)[0][0]]
+                nt.assert_less(np.abs(dlst - mlst), np.median(np.ediff1d(all_data_lsts)))
+                nt.assert_equal(np.min(np.abs(all_data_lsts - mlst)), np.abs(dlst - mlst))
+
     def test_abscal_run(self):
         pass
         # data_files = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
