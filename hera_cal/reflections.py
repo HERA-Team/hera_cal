@@ -704,10 +704,13 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
     ref_significance = np.true_divide(ref_peaks, avgmed, where=~np.isclose(avgmed, 0.0))
 
     # get peak value at tau near zero
-    peak, _ = fit_reflection_delay(dfft, (-np.abs(dly_range).min(), np.abs(dly_range).min()), dlys, return_peak=True)
+    fg_peak, fg_dly = fit_reflection_delay(dfft, (-np.abs(dly_range).min(), np.abs(dly_range).min()), dlys, return_peak=True)
 
     # get reflection amplitude
-    ref_amps = np.true_divide(ref_peaks, peak, where=~np.isclose(peak, 0.0))
+    ref_amps = np.true_divide(ref_peaks, fg_peak, where=~np.isclose(fg_peak, 0.0))
+
+    # update reflection delay given FG delay
+    ref_dlys -= fg_dly
 
     return ref_amps, ref_dlys, ref_dly_inds, ref_significance
 
