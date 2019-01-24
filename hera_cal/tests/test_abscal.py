@@ -796,3 +796,18 @@ class Test_Post_Redcal_Abscal_Run:
         # # assert refant phase is zero
         # nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
         # os.remove('./ex.calfits')
+
+    def test_post_redcal_abscal_argparser(self):
+        sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--output_replace', '.e.', '.f.', '--verbose']
+        a = abscal.post_redcal_abscal_argparser()
+        nt.assert_equal(a.data_file, 'a')
+        nt.assert_equal(a.redcal_file, 'b')
+        nt.assert_equal(a.model_files[0], 'c')
+        nt.assert_equal(a.model_files[1], 'd')
+        nt.assert_equal(len(a.model_files), 2)
+        nt.assert_equal(type(a.model_files), list)
+        nt.assert_equal(a.output_replace[0], '.e.')
+        nt.assert_equal(a.output_replace[1], '.f.')
+        nt.assert_equal(len(a.output_replace), 2)
+        nt.assert_equal(type(a.output_replace), list)
+        nt.assert_true(a.verbose)
