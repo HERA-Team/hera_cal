@@ -685,4 +685,3 @@ class Test_Post_Redcal_Abscal_Run:
         # # assert refant phase is zero
         # nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
         # os.remove('./ex.calfits')
-        
