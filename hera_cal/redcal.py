@@ -964,7 +964,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     return rv
 
 
-def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_horizon=0.0,
+def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_horizon=0.0,
                      flag_nchan_low=0, flag_nchan_high=0, conv_crit=1e-10, maxiter=500,
                      check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
@@ -972,7 +972,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
 
     Arguments:
         hd: HERAData object, instantiated with the datafile or files to calibrate. Must be loaded using uvh5.
-        nInt_to_load: number of integrations to load and calibrate simultaneously. Default -1 loads all integrations.
+        nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype for hd. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
@@ -1008,7 +1008,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
         'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jxx') to the average chisq
             for all visibilities that an antenna participates in.
     '''
-    if nInt_to_load > 0:
+    if nInt_to_load is not None:
         assert hd.filetype == 'uvh5', 'Partial loading only available for uvh5 filetype.'
     else:
         if hd.data_array is None:  # if data loading hasn't happened yet, load the whole file
@@ -1053,7 +1053,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
         if verbose:
             print('Now calibrating', pols, 'polarization(s)...')
         reds = filter_reds(all_reds, ex_ants=ex_ants, pols=pols)
-        if nInt_to_load > 0:  # split up the integrations to load nInt_to_load at a time
+        if nInt_to_load is not None:  # split up the integrations to load nInt_to_load at a time
             tind_groups = np.split(np.arange(nTimes)[~solar_flagged],
                                    np.arange(nInt_to_load, len(hd.times[~solar_flagged]), nInt_to_load))
         else:
@@ -1062,7 +1062,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
             if len(tinds) > 0:
                 if verbose:
                     print('    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...')
-                if nInt_to_load == -1:  # don't perform partial I/O
+                if nInt_to_load is None:  # don't perform partial I/O
                     data, _, _ = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
                     for bl in data:
                         data[bl] = data[bl][tinds, :]  # cut down size of DataContainers to match unflagged indices
@@ -1092,7 +1092,7 @@ def redcal_iteration(hd, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], solar_hor
 
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', omnivis_ext='.omni_vis.uvh5',
-               outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=-1, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0,
+               outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=None, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0,
                max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, conv_crit=1e-10, maxiter=500, check_every=10,
                check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
@@ -1109,7 +1109,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
             Used for finding ex_ants and is combined with antennas excluded via ex_ants.
         clobber: if True, overwrites existing files for the firstcal and omnical results
-        nInt_to_load: number of integrations to load and calibrate simultaneously. Default -1 loads all integrations.
+        nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
@@ -1139,7 +1139,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     '''
     if isinstance(input_data, str):
         hd = HERAData(input_data, filetype=filetype)
-        if filetype != 'uvh5' or nInt_to_load == -1:
+        if filetype != 'uvh5' or nInt_to_load is None:
             hd.read()
 
     elif isinstance(input_data, HERAData):
@@ -1229,7 +1229,8 @@ def redcal_argparser():
     redcal_opts.add_argument("--solar_horizon", type=float, default=0.0, help="When the Sun is above this altitude in degrees, calibration is skipped and the integrations are flagged.")
     redcal_opts.add_argument("--flag_nchan_low", type=int, default=0, help="integer number of channels at the low frequency end of the band to always flag (default 0)")
     redcal_opts.add_argument("--flag_nchan_high", type=int, default=0, help="integer number of channels at the high frequency end of the band to always flag (default 0)")
-    redcal_opts.add_argument("--nInt_to_load", type=int, default=8, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead.")
+    redcal_opts.add_argument("--nInt_to_load", type=int, default=None, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead. \
+                             Default None loads all integrations.")
     redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
     redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
     redcal_opts.add_argument("--max_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths longer than this length in meters")

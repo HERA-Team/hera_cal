@@ -2800,7 +2800,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     return abscal_delta_gains, AC
 
 
-def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=('.omni.', '.abs.'), nInt_to_load=-1,
+def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=('.omni.', '.abs.'), nInt_to_load=None,
                            data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0, 
                            tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
@@ -2811,7 +2811,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
         model_files: list of string paths to externally calibrated data. Strings must be sortable 
             to produce a chronological list in LST (wrapping over 2*pi is OK)
         output_replace: tuple of two strings to find and replace in redcal_file to produce the output calfits file
-        nInt_to_load: number of integrations to load and calibrate simultaneously. Default -1 loads all integrations.
+        nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
         data_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.
         model_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the model, flag the integration.
         min_bl_cut: minimum baseline separation [meters] to keep in data when calibrating. None or 0 means no mininum,
@@ -2864,7 +2864,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
         matched_tinds = [tind for tind, time in enumerate(hd.times) if time in d2m_time_map and d2m_time_map[time] is not None]
         if len(matched_tinds) > 0:
             tind_groups = np.array([matched_tinds])  # just load a single group
-            if nInt_to_load > 0:  # split up the integrations to load nInt_to_load at a time
+            if nInt_to_load is not None:  # split up the integrations to load nInt_to_load at a time
                 tind_groups = np.split(matched_tinds, np.arange(nInt_to_load, len(matched_tinds), nInt_to_load))
 
             # loop over polarizations
@@ -2949,7 +2949,7 @@ def post_redcal_abscal_argparser():
     a.add_argument("model_files", type=str, nargs='+', help="list of string paths to externally calibrated data. Strings must be sortable to produce a chronological list in LST \
                                                              (wrapping over 2*pi is OK)")
     a.add_argument("--output_replace", default=('.omni.', '.abs.'), type=str, nargs=2, help="two strings to find and replace in redcal_file to produce the output calfits file")
-    a.add_argument("--nInt_to_load", default=6, type=int, help="number of integrations to load and calibrate simultaneously. -1 loads all integrations.")
+    a.add_argument("--nInt_to_load", default=None, type=int, help="number of integrations to load and calibrate simultaneously. Default None loads all integrations.")
     a.add_argument("--data_solar_horizon", default=90.0, type=float, help="Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.")
     a.add_argument("--model_solar_horizon", default=90.0, type=float, help="Solar altitude threshold [degrees]. When the sun is too high in the model, flag the integration.")
     a.add_argument("--min_bl_cut", default=1.0, type=float, help="minimum baseline separation [meters] to keep in data when calibrating. None or 0 means no mininum, which will \
