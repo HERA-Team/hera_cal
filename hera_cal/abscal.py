@@ -2651,16 +2651,19 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
     all_times = hd.times
     all_lsts = hd.lsts
     if len(hd.filepaths) > 1:  # in this case, it's a dictionary
-        all_times = np.unique(all_times.values())
-        all_lsts = np.ravel(all_lsts.values())[np.argsort(all_times)]  
+        all_times = np.ravel([all_times[f] for f in hd.filepaths])
+        all_lsts = np.ravel([all_lsts[f] for f in hd.filepaths])[np.argsort(all_times)]
     if unwrap:  # avoid phase wraps 
         all_lsts[all_lsts < all_lsts[0]] += 2 * np.pi
         
     # remove times when sun was too high
-    lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
-    solar_alts = utils.get_sun_alt(all_times, latitude=lat, longitude=lon)
-    solar_flagged = solar_alts > solar_horizon
-    return all_times[~solar_flagged], all_lsts[~solar_flagged]
+    if solar_horizon < 90.0:
+        lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
+        solar_alts = utils.get_sun_alt(all_times, latitude=lat, longitude=lon)
+        solar_flagged = solar_alts > solar_horizon
+        return all_times[~solar_flagged], all_lsts[~solar_flagged]
+    else:  # skip this step for speed
+        return all_times, all_lsts
 
 
 def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts):
@@ -2776,7 +2779,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     # Global Phase Slope Calibration
     abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': tol, 'edge_cut': edge_cut},
                 [AC.custom_phs_slope_gain], [(rc_flags.keys(), data.antpos)], rc_flags,
-                gain_convention=gain_convention, max_iter=phs_max_iter, conv_crit=phs_conv_crit, verbose=verbose)
+                gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     # Per-Channel Absolute Amplitude Calibration
     abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {}, [AC.custom_abs_eta_gain], 
@@ -2785,7 +2788,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     # Per-Channel Tip-Tilt Phase Calibration
     abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
                 [(rc_flags.keys(), data.antpos), (rc_flags.keys(),)], rc_flags,
-                gain_convention=gain_convention, max_iter=phs_max_iter, conv_crit=phs_conv_crit, verbose=verbose)
+                gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     return abscal_delta_gains, AC
 
