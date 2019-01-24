@@ -622,6 +622,36 @@ class Test_AbsCal:
 
 class Test_Post_Redcal_Abscal_Run:
 
+    def setUp(self):
+        self.data_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.uvh5_downselected')
+        self.redcal_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.omni.calfits_downselected')
+        self.model_files = [os.path.join(DATA_PATH, 'test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected'),
+                            os.path.join(DATA_PATH, 'test_input/zen.2458042.61034.HH.uvRXLS.uvh5_downselected')]
+
+    def test_get_all_times_and_lsts(self):
+        hd = io.HERAData(self.model_files)
+
+        all_times, all_lsts = abscal.get_all_times_and_lsts(hd)
+        nt.assert_equal(len(all_times), 120)
+        nt.assert_equal(len(all_lsts), 120)
+        np.testing.assert_array_equal(all_times, sorted(all_times))
+
+        for f in hd.lsts.keys():
+            hd.lsts[f] += 4.75
+        all_times, all_lsts = abscal.get_all_times_and_lsts(hd, unwrap=True)
+        nt.assert_true(all_lsts[-1] > 2*np.pi)
+        np.testing.assert_array_equal(all_lsts, sorted(all_lsts))
+        c = abscal.get_all_times_and_lsts(hd)
+        nt.assert_true(all_lsts[0] < all_lsts[-1])
+
+        hd = io.HERAData(self.data_file)
+        hd.times = hd.times[0:4] + .5
+        hd.lsts = hd.lsts[0:4] + np.pi
+        all_times, all_lsts = abscal.get_all_times_and_lsts(hd, solar_horizon=0.0)
+        nt.assert_equal(len(all_times), 0)
+        nt.assert_equal(len(all_lsts), 0)
+
+
     def test_abscal_run(self):
         pass
         # data_files = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
