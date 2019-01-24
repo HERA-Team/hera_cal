@@ -1801,5 +1801,6 @@ def post_redcal_abscal_argparser():
     a.add_argument("--phs_max_iter", default=100, type=int, help="integer maximum number of iterations of phase_slope_cal or TT_phs_cal allowed")
     a.add_argument("--phs_conv_crit", default=1e-6, type=float, help="convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing abscal calfits file at the output path")
+    a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
     args = a.parse_args()
     return args
