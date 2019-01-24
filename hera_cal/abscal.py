@@ -2923,6 +2923,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
 
     # Save results to disk
     hc.update(gains=abscal_gains, flags=abscal_flags, quals=abscal_chisq_per_ant, total_qual=abscal_chisq)
+    hc.quality_array[np.isnan(hc.quality_array)] = 0
+    hc.total_quality_array[np.isnan(hc.total_quality_array)] = 0
     hc.history += version.history_string(add_to_history)
     hc.write_calfits(redcal_file.replace(*output_replace), clobber=clobber)
     return hc
