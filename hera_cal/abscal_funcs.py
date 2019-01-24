@@ -29,7 +29,6 @@ from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num, reverse_bl, echo, fft_dly, split_pol, split_bl
 
 
-
 def abs_amp_logcal(model, data, wgts=None, verbose=True):
     """
     calculate absolute (array-wide) gain amplitude scalar
