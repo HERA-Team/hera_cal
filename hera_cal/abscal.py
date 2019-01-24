@@ -2746,7 +2746,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     Arguments:
         model: DataContainer containing externally calibrated visibilities, LST-matched to the data
-        data: DataContainer containing redundantly but not absolutely calibrated visibilities
+        data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
         flags: DataContainer containing combined data and model flags
         rc_flags: dictionary mapping keys like (1, 'Jxx') to flag waterfalls from redundant calibration
         min_bl_cut : float, eliminate all visibilities with baseline separation lengths
@@ -2899,21 +2899,23 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
                         calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+                        auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
+                        autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
                         
                         # run absolute calibration, copying data because it gets modified internally
-                        delta_gains, AC = post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, edge_cut=edge_cut, 
+                        delta_gains, AC = post_redcal_abscal(model, data, flags, rc_flags_subset, edge_cut=edge_cut, 
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
                                                              phs_conv_crit=phs_conv_crit, verbose=verbose,
                                                              refant_num=(None if refant is None else refant[0]))
 
-                        # abscal data (AC.data is already abscaled, but data is only redcaled) and generate abscal Chi^2
-                        calibrate_in_place(data, delta_gains, data_flags=flags, 
+                        # calibrate autos, abscal them, and generate abscal Chi^2
+                        calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
                                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
                         chisq_wgts = {}
                         for bl in AC.data.keys():
                             dt = (np.median(np.ediff1d(hd.times_by_bl[bl[:2]])) * 86400.)
-                            noise_var = predict_noise_variance_from_autos(bl, data, dt=dt)
+                            noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=np.median(np.ediff1d(data.freqs)))
                             chisq_wgts[bl] = noise_var**-1 * (~flags[bl]).astype(np.float)
                         total_qual, nObs, quals, nObs_per_ant = utils.chisq(AC.data, AC.model, chisq_wgts,
                                                                             gain_flags=rc_flags_subset, split_by_antpol=True)
