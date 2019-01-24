@@ -2804,6 +2804,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                            data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0, 
                            tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
+    Does not work on data (or models) with baseline-dependant averaging.
     
     Arguments:
         data_file: string path to raw uvh5 visibility file
