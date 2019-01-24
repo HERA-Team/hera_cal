@@ -733,69 +733,50 @@ class Test_Post_Redcal_Abscal_Run:
         nt.assert_true(AC.TT_Phi is not None)
         nt.assert_true(AC.TT_Phi_arr is not None)
 
-    def test_abscal_run(self):
-        pass
-        # data_files = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        # model_files = [os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA"),
-        #                os.path.join(DATA_PATH, "zen.2458042.13298.xx.HH.uvXA")]
-        # # blank run
-        # AC, gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False, filetype='miriad')
-        # # assert shapes and types
-        # nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
-        # nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
-        # # first freq bin should be flagged due to complete flagging in model and data
-        # nt.assert_true(flags[(24, 'Jxx')][:, 0].all())
-        # # solar flag run
-        # AC, gains, flags = abscal.abscal_run(data_files, model_files, solar_horizon=0.0, gen_amp_cal=True, write_calfits=False, verbose=False, filetype='miriad')
-        # # all data should be flagged
-        # nt.assert_true(flags[(24, 'Jxx')].all())
-        # # write calfits
-        # outdir = "./"
-        # cf_name = "ex.calfits"
-        # if os.path.exists(os.path.join(outdir, cf_name)):
-        #     os.remove(os.path.join(outdir, cf_name))
-        # AC, gains, flags = abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=True, output_calfits_fname=cf_name, outdir=outdir,
-        #                                      verbose=False, filetype='miriad')
-        # nt.assert_true(os.path.exists(os.path.join(outdir, cf_name)))
-        # if os.path.exists(os.path.join(outdir, cf_name)):
-        #     os.remove(os.path.join(outdir, cf_name))
-        # # check match_red_bls and reweight
-        # abscal.abscal_run(data_files, model_files, gen_amp_cal=True, write_calfits=False, verbose=False,
-        #                   match_red_bls=True, reweight=True, filetype='miriad')
-        # # check all calibration routines
-        # AC, gains, flags = abscal.abscal_run(data_files, model_files, write_calfits=False, verbose=False, delay_slope_cal=True, phase_slope_cal=True,
-        #                                      delay_cal=True, avg_phs_cal=True, abs_amp_cal=True, TT_phs_cal=True, gen_amp_cal=False, gen_phs_cal=False, filetype='miriad')
-        # nt.assert_equal(gains[(24, 'Jxx')].dtype, np.complex)
-        # nt.assert_equal(gains[(24, 'Jxx')].shape, (60, 64))
-        # if os.path.exists('./ex.calfits'):
-        #     os.remove('./ex.calfits')
-        # # check exceptions
-        # nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
-        #                  output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, delay_cal=True, verbose=False, filetype='miriad')
-        # nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
-        #                  output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_phs_cal=True, verbose=False, filetype='miriad')
-        # nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, all_antenna_gains=True, outdir='./',
-        #                  output_calfits_fname='ex.calfits', abs_amp_cal=False, TT_phs_cal=False, gen_amp_cal=True, verbose=False, filetype='miriad')
-        # if os.path.exists('./ex.calfits'):
-        #     os.remove('./ex.calfits')
-        # # check all antenna gains run
-        # abscal.abscal_run(data_files, model_files, abs_amp_cal=True, all_antenna_gains=True, write_calfits=False, filetype='miriad')
-        # # test general bandpass solvers
-        # abscal.abscal_run(data_files, model_files, TT_phs_cal=False, abs_amp_cal=False, gen_amp_cal=True, gen_phs_cal=True, write_calfits=False, filetype='miriad')
-        # # test exception
-        # nt.assert_raises(ValueError, abscal.abscal_run, data_files, model_files, verbose=False, overwrite=True, filetype='miriad')
-        # # check blank & flagged calfits file written if no LST overlap
-        # bad_model_files = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458044.*.xx.HH.uvXRAA")))
-        # abscal.abscal_run(data_files, bad_model_files, write_calfits=True, overwrite=True, outdir='./',
-        #                   output_calfits_fname='ex.calfits', verbose=False, filetype='miriad', refant=38)
-        # uvc = UVCal()
-        # uvc.read_calfits('./ex.calfits')
-        # nt.assert_true(uvc.flag_array.min())
-        # nt.assert_almost_equal(uvc.gain_array.max(), 1.0)
+    def test_post_redcal_abscal_run(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files, phs_conv_crit=1e-4, 
+                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+        nt.assert_raises(IOError, abscal.post_redcal_abscal_run, self.data_file, self.redcal_file, self.model_files, clobber=False)
+        nt.assert_true(os.path.exists(self.redcal_file.replace('.omni.', '.abs.')))
+        os.remove(self.redcal_file.replace('.omni.', '.abs.'))
+        ac_gains, ac_flags, ac_quals, ac_total_qual = hca.build_calcontainers()
+        hcr = io.HERACal(self.redcal_file)
+        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
 
-        # # assert refant phase is zero
-        # nt.assert_true(np.isclose(np.angle(uvc.gain_array[uvc.ant_array.tolist().index(38)]), 0.0).all())
-        # os.remove('./ex.calfits')
+        nt.assert_true(hcr.history.replace('\n', '').replace(' ', '') in hca.history.replace('\n', '').replace(' ', ''))
+        nt.assert_true('testing' in hca.history.replace('\n', '').replace(' ', ''))
+        for k in rc_gains:
+            nt.assert_true(k in ac_gains)
+            nt.assert_equal(ac_gains[k].shape, rc_gains[k].shape)
+            nt.assert_equal(ac_gains[k].dtype, complex)
+        for k in rc_flags:
+            nt.assert_true(k in ac_flags)
+            nt.assert_equal(ac_flags[k].shape, rc_flags[k].shape)
+            nt.assert_equal(ac_flags[k].dtype, bool)
+            np.testing.assert_array_equal(ac_flags[k][rc_flags[k]], rc_flags[k][rc_flags[k]])
+        for pol in ['Jxx', 'Jyy']:
+            nt.assert_true(pol in ac_total_qual)
+            nt.assert_equal(ac_total_qual[pol].shape, rc_total_qual[pol].shape)
+            nt.assert_true(np.issubdtype(ac_total_qual[pol].dtype, np.floating))
+
+        hd = io.HERAData(self.model_files[0])
+        hd.read(return_data=False)
+        hd.lst_array += 1
+        temp_outfile = os.path.join(DATA_PATH, 'test_output/temp.uvh5')
+        hd.write_uvh5(temp_outfile, clobber=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4, 
+                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+        nt.assert_true(os.path.exists(self.redcal_file.replace('.omni.', '.abs.')))
+        np.testing.assert_array_equal(hca.total_quality_array, 0.0)
+        np.testing.assert_array_equal(hca.gain_array, hcr.gain_array)
+        np.testing.assert_array_equal(hca.flag_array, True)
+        np.testing.assert_array_equal(hca.quality_array, 0.0)
+        os.remove(self.redcal_file.replace('.omni.', '.abs.'))
+        os.remove(temp_outfile)
 
     def test_post_redcal_abscal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--output_replace', '.e.', '.f.', '--verbose']
