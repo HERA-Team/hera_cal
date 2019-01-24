@@ -2870,7 +2870,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
                     if not np.all(flags.values()):
                         # load model and rephase
                         model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-                        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load)
+                        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=[pol])
                         model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
                         utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
                                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
