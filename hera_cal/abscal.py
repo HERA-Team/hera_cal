@@ -2740,8 +2740,8 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
                 break
 
 
-def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, 
-                       tol=1.0, gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
+def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, 
+                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -2759,7 +2759,8 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
             otherwise, 'multiply'.
         phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
-            the updates to all 1.0s. 
+            the updates to all 1.0s.
+        refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
 
     Returns:
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jxx') to waterfalls containing 
@@ -2769,10 +2770,11 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
 
     # instantiate Abscal object
+    if refant_num is None:
+        refant_num = pick_reference_antenna(synthesize_ant_flags(flags))[0]
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
-    AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs, 
-                refant=pick_reference_antenna(synthesize_ant_flags(flags))[0],
-                min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
+    AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
+                refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
     AC.antpos = data.antpos
 
     # Global Delay Slope Calibration
@@ -2800,7 +2802,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
 def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=('.omni.', '.abs.'), nInt_to_load=-1,
                            data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0, 
-                           tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, clobber=True, add_to_history='', verbose=True):
+                           tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     
     Arguments:
@@ -2819,16 +2821,18 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
         tol: baseline match tolerance in units of baseline vectors (e.g. meters)
         phs_max_iter: integer maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.
+        refant: tuple of the form (0, 'Jxx') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
+        refant_pol: string reference antenna polarization (either 'Jxx' or 'Jyy'). See refant_num.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
 
     Returns:
         hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history.
             This HERACal object has been updated with the following properties accessible on hc.build_calcontainers():
-                - gains: abscal gains for times that could be calibrated, redcal gains otherwise (but flagged)
-                - flags: redcal flags, with additional flagging if the data or model are flagged (see flag_utils.synthesize_ant_flags)
-                - quals: abscal chi^2 per antenna based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
-                - total_qual: abscal chi^2 based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
+                * gains: abscal gains for times that could be calibrated, redcal gains otherwise (but flagged)
+                * flags: redcal flags, with additional flagging if the data or model are flagged (see flag_utils.synthesize_ant_flags)
+                * quals: abscal chi^2 per antenna based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
+                * total_qual: abscal chi^2 based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
     '''
     # Raise error if output calfile already exists and clobber is False
     if os.path.exists(redcal_file.replace(*output_replace)) and not clobber:
@@ -2897,7 +2901,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
                         delta_gains, AC = post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, edge_cut=edge_cut, 
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
-                                                             phs_conv_crit=phs_conv_crit, verbose=verbose)
+                                                             phs_conv_crit=phs_conv_crit, refant_num=refant[0], verbose=verbose)
 
                         # abscal data (AC.data is already abscaled, but data is only redcaled) and generate abscal Chi^2
                         calibrate_in_place(data, delta_gains, data_flags=flags, 
@@ -2920,7 +2924,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
                             abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
                             
         # impose a single reference antenna on the final antenna solution
-        refant = pick_reference_antenna(abscal_flags)
+        if refant is None:
+            refant = pick_reference_antenna(abscal_flags)
         refant_phasor = (abscal_gains[refant] / np.abs(abscal_gains[refant]))
         for ant in abscal_gains.keys():
             abscal_gains[ant] /= refant_phasor
