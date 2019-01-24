@@ -791,7 +791,7 @@ def partial_time_io(hd, times):
         '''
     combined_hd = None
     for f in hd.filepaths:
-        hd_here = io.HERAData(f)
+        hd_here = HERAData(f)
         times_here = [t for t in times if t in hd_here.times]
         if len(times_here) > 0:
             hd_here.read(times=times_here, return_data=False)
@@ -799,7 +799,7 @@ def partial_time_io(hd, times):
                 combined_hd = hd_here
             else:
                 combined_hd += hd_here
-    combined_hd = io.to_HERAData(combined_hd)  # re-runs the slicing and indexing
+    combined_hd = to_HERAData(combined_hd)  # re-runs the slicing and indexing
     return combined_hd.build_datacontainers()
 
 
