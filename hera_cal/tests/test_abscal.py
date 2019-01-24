@@ -19,11 +19,13 @@ from six.moves import map, zip
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 import pyuvdata.tests as uvtest
+import warnings
 
-from hera_cal import io, abscal, redcal
+from hera_cal import io, abscal, redcal, utils
 from hera_cal.data import DATA_PATH
 from hera_cal.datacontainer import DataContainer
 from hera_cal.utils import split_pol
+from hera_cal.apply_cal import calibrate_in_place
 
 
 class Test_AbsCal_Funcs:
@@ -677,6 +679,59 @@ class Test_Post_Redcal_Abscal_Run:
                 mlst = all_model_lsts[np.argwhere(all_model_times == mtime)[0][0]]
                 nt.assert_less(np.abs(dlst - mlst), np.median(np.ediff1d(all_data_lsts)))
                 nt.assert_equal(np.min(np.abs(all_data_lsts - mlst)), np.abs(dlst - mlst))
+
+    def test_post_redcal_abscal(self):
+        hd = io.HERAData(self.data_file)
+        hdm = io.HERAData(self.model_files)
+        hc = io.HERACal(self.redcal_file)
+        rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
+        all_data_times, all_data_lsts = abscal.get_all_times_and_lsts(hd)
+        all_model_times, all_model_lsts = abscal.get_all_times_and_lsts(hdm)
+        d2m_time_map = abscal.get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)
+        tinds = [0, 1, 2]
+        data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=['xx'])
+        model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
+        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=['xx'])
+        model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
+        utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
+                          lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
+        for k in flags.keys():
+            if k in model_flags:
+                flags[k] += model_flags[k]
+        data_ants = set([ant for bl in data.keys() for ant in utils.split_bl(bl)])
+        rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
+        rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
+        calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
+                           cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            delta_gains, AC = abscal.post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, min_bl_cut=1, verbose=False)
+        calibrate_in_place(data, delta_gains, data_flags=flags, 
+                           cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+
+        for k in rc_gains.keys():
+            if k[1] == 'Jxx':
+                nt.assert_true(k in delta_gains)
+                nt.assert_equal(delta_gains[k].shape, (3, rc_gains[k].shape[1]))
+                nt.assert_true(delta_gains[k].dtype == np.complex)
+        for k in AC.model.keys():
+            np.testing.assert_array_equal(model[k], AC.model[k])
+        for k in AC.data.keys():
+            np.testing.assert_array_almost_equal(data[k][~flags[k]], AC.data[k][~flags[k]], 4)
+        nt.assert_true(AC.ant_dly is None)
+        nt.assert_true(AC.ant_dly_arr is None)
+        nt.assert_true(AC.ant_dly_phi is None)
+        nt.assert_true(AC.ant_dly_phi_arr is None)
+        nt.assert_true(AC.dly_slope is not None)
+        nt.assert_true(AC.dly_slope_arr is not None)
+        nt.assert_true(AC.phs_slope is not None)
+        nt.assert_true(AC.dly_slope_arr is not None)
+        nt.assert_true(AC.abs_eta is not None)
+        nt.assert_true(AC.abs_eta_arr is not None)
+        nt.assert_true(AC.abs_psi is not None)
+        nt.assert_true(AC.abs_psi_arr is not None)
+        nt.assert_true(AC.TT_Phi is not None)
+        nt.assert_true(AC.TT_Phi_arr is not None)
 
     def test_abscal_run(self):
         pass
