@@ -1780,3 +1780,26 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
     hc.history += version.history_string(add_to_history)
     hc.write_calfits(redcal_file.replace(*output_replace), clobber=clobber)
     return hc
+
+
+def post_redcal_abscal_argparser():
+    ''' Argparser for commandline operation of hera_cal.abscal.post_redcal_abscal_run() '''
+    a = argparse.ArgumentParser(description="Command-line drive script for post-redcal absolute calibration using hera_cal.abscal module")
+    a.add_argument("data_file", type=str, help="string path to raw uvh5 visibility file")
+    a.add_argument("redcal_file", type=str, help="string path to calfits file that redundantly calibrates the data_file")
+    a.add_argument("model_files", type=str, nargs='+', help="list of string paths to externally calibrated data. Strings must be sortable to produce a chronological list in LST \
+                                                             (wrapping over 2*pi is OK)")
+    a.add_argument("--output_replace", default=('.omni.', '.abs.'), type=str, nargs=2, help="two strings to find and replace in redcal_file to produce the output calfits file")
+    a.add_argument("--nInt_to_load", default=6, type=int, help="number of integrations to load and calibrate simultaneously. -1 loads all integrations.")
+    a.add_argument("--data_solar_horizon", default=90.0, type=float, help="Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.")
+    a.add_argument("--model_solar_horizon", default=90.0, type=float, help="Solar altitude threshold [degrees]. When the sun is too high in the model, flag the integration.")
+    a.add_argument("--min_bl_cut", default=1.0, type=float, help="minimum baseline separation [meters] to keep in data when calibrating. None or 0 means no mininum, which will \
+                                                                  include autocorrelations in the absolute calibration. Usually this is not desired, so the default is 1.0.")
+    a.add_argument("--max_bl_cut", default=None, type=float, help="maximum baseline separation [meters] to keep in data when calibrating. None (default) means no maximum.")
+    a.add_argument("--edge_cut", default=0, type=int, help="integer number of channels to exclude at each band edge in delay and global phase solvers")
+    a.add_argument("--tol", default=1.0, type=float, help="baseline match tolerance in units of baseline vectors (e.g. meters)")
+    a.add_argument("--phs_max_iter", default=100, type=int, help="integer maximum number of iterations of phase_slope_cal or TT_phs_cal allowed")
+    a.add_argument("--phs_conv_crit", default=1e-6, type=float, help="convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.")
+    a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing abscal calfits file at the output path")
+    args = a.parse_args()
+    return args
