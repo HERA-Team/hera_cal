@@ -1234,8 +1234,7 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=N
     new_flags : DataContainer with new flags
     """
     # unravel LST array if necessary
-    if data_lsts.max() < data_lsts.min():
-        data_lsts[data_lsts]
+    data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
 
     # get nearest neighbor model points
     lst_nn = np.array(list(map(lambda x: np.argmin(np.abs(model_lsts - x)), data_lsts)))
