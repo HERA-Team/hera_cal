@@ -2666,7 +2666,7 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
         return all_times, all_lsts
 
 
-def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts):
+def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True):
     '''Generate a dictionary that maps data times to model times via shared LSTs.
 
     Arguments:
@@ -2674,6 +2674,7 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts):
         data_lsts: list of corresponding LSTs (in radians)
         model_times: list of times in the mdoel (in JD)
         model_lsts: list of corresponing LSTs (in radians)
+        unwrap: increase all LSTs smaller than the first one by 2pi to avoid phase wrapping
 
     Returns:
         d2m_time_map: dictionary uniqely mapping times in the data to times in the model 
@@ -2681,6 +2682,10 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts):
             each model time maps to at most one data time. Data times without corresponding
             model times map to None.
     '''
+    if unwrap:  # avoid phase wraps
+        data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
+        model_lsts[model_lsts < model_lsts[0]] += 2 * np.pi
+
     # first produce a map of indices using the LSTs
     m2d_ind_map = {}  
     for dind, dlst in enumerate(data_lsts):
@@ -2730,7 +2735,7 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
         if max_iter > 1:
             crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for 
                                              k in gains_here.keys()], axis=(0, 1)))
-            echo("phase_slope_cal convergence criterion: " + str(crit), verbose=verbose)
+            echo(AC_func.__name__ + " convergence criterion: " + str(crit), verbose=verbose)
             if crit < phs_conv_crit:
                 break
 
@@ -2818,11 +2823,12 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_replace=(
         add_to_history: string to add to history of output abscal file
 
     Returns:
-        hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history and:
-            - gains: abscal gains for times that could be calibrated, redcal gains otherwise (but flagged)
-            - flags: redcal flags, with additional flagging if the data or model are flagged (see flag_utils.synthesize_ant_flags)
-            - quals: abscal chi^2 per antenna based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
-            - total_qual: abscal chi^2 based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
+        hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history.
+            This HERACal object has been updated with the following properties accessible on hc.build_calcontainers():
+                - gains: abscal gains for times that could be calibrated, redcal gains otherwise (but flagged)
+                - flags: redcal flags, with additional flagging if the data or model are flagged (see flag_utils.synthesize_ant_flags)
+                - quals: abscal chi^2 per antenna based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
+                - total_qual: abscal chi^2 based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
     '''
     # Raise error if output calfile already exists and clobber is False
     if os.path.exists(redcal_file.replace(*output_replace)) and not clobber:
