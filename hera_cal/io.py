@@ -749,7 +749,11 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
             start += int_time / 2
             stop += int_time / 2
         elif filetype == 'uvh5':
-            lsts = np.unwrap(np.unique(h5py.File(f)[u'Header'][u'lst_array']))
+            # get lsts directly from uhv5 file's header, much faster than using empty HERAData object
+            lst_array = np.array(h5py.File(f)[u'Header'][u'lst_array'])
+            lst_indices = np.unique(lst_array.ravel(), return_index=True)[1]
+            # resort by their appearance in lst_array, then unwrap
+            lsts = np.unwrap(lst_array.ravel()[np.sort(lst_indices)])
             start, stop, int_time = lsts[0], lsts[-1], np.median(np.diff(lsts))
 
         # add integration buffer to end of file if desired
