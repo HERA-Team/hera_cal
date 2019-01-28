@@ -277,9 +277,11 @@ class VisClean(object):
                 raise ValueError("if time cleaning, must feed max_frate parameter")
 
         # initialize containers
-        for dc in [clean_model, clean_resid, clean_flags, clean_info, clean_data]:
+        for dc in [clean_model, clean_resid, clean_flags, clean_data]:
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
+        if not hasattr(self, clean_info):
+            setattr(self, clean_info, {})
 
         # select DataContainers
         if data is None:
