@@ -36,13 +36,11 @@ First install dependencies.
 
 * numpy >= 1.10
 * scipy
-* matplotlib
 * astropy >=1.2
 * pyephem
 * [uvtools](https://github.com/HERA-Team/uvtools)
 * [aipy](https://github.com/HERA-Team/aipy/)
 * [pyuvdata](https://github.com/HERA-Team/pyuvdata/)
-* [omnical](https://github.com/HERA-Team/omnical/) >= 5.0.2
 * [linsolve](https://github.com/HERA-Team/linsolve)
 * [hera_qm](https://github.com/HERA-Team/hera_qm)
 
