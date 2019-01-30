@@ -938,10 +938,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     # update omnical flags and then remove degeneracies
     rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
     rv['gf_omnical'] = {ant: ~np.isfinite(g) for ant, g in rv['g_omnical'].items()}
-    rv['vf_omnical'] = {bl: ~np.isfinite(v) for bl, v in rv['v_omnical'].items()}
+    rv['vf_omnical'] = DataContainer({bl: ~np.isfinite(v) for bl, v in rv['v_omnical'].items()})
     make_sol_finite(omni_sol)
     rd_sol = rc.remove_degen(omni_sol, degen_sol=rv['g_firstcal'])
     rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(rd_sol)
+    rv['v_omnical'] = DataContainer(rv['v_omnical'])
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
@@ -1038,8 +1039,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
     all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
                         pols=set([pol for pols in pol_load_list for pol in pols]))
     all_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
-    rv['v_omnical'] = {red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds}
-    rv['vf_omnical'] = {red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds}
+    rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds})
+    rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
 
     # solar flagging
     lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
