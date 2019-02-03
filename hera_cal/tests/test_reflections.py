@@ -161,12 +161,20 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   ref_sig_cut=100, overwrite=True)
 
+        # try filtering the visibilities
+        RF.vis_clean(data=RF.data, ax='freq', min_dly=100, overwrite=True, window='blackmanharris', alpha=0.1, tol=1e-8, keys=[bl_k])
+        RF.model_auto_reflections(RF.clean_resid, (100, 200), clean_data=RF.clean_data, keys=[bl_k],
+                                  window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 150.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=2e-1).all())
+
         # try clear
         RF.clear(exclude=['data'])
         nt.assert_equal(len(RF.ref_eps), 0)
         nt.assert_equal(len(RF.ref_gains), 0)
         nt.assert_true(len(RF.data) > 0)
-        nt.assert_equal(len(RF.dfft), 0)
+        nt.assert_equal(len(RF.rfft), 0)
 
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)

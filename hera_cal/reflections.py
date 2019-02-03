@@ -10,12 +10,12 @@ is the correlation of two voltage spectra
 
     V_12 = v_1 v_2^*
 
-an "auto-reflection" is defined as an additive term in either
+a "signal chain reflection" is defined as an additive term in either
 v_1 or v_2 that introduces another copy of the voltage as
 
     v_1 <= v_1 + eps * v_1 = v_1 (1 + eps)
 
-This kind of auto-reflection could be, for example, a cable
+This could be, for example, a cable
 reflection or dish-to-feed reflection.
 
 The reflection itself (eps) can be decomposed into three parameters:
@@ -23,7 +23,7 @@ its amplitude (A), delay (tau) and phase offset (phi)
 
     eps = A * exp(2pi * i * tau * nu + i * phi).
 
-Auto-reflections can be removed from the data within the framework
+Reflections can be removed from the data within the framework
 of standard antenna-based calibration
 
     V_12^data = V_12^model g_1 g_2^*
@@ -42,7 +42,7 @@ and the calibration equation becomes
 
 Reflections that couple other voltage signals into v_1 cannot
 be described in this formalism (for example, over-the-air aka
-feed-to-feed reflections). We refer to these as "cross-reflections"
+feed-to-feed reflections). We refer to these as "voltage cross couplings"
 and their behavior is to introduce a copy of the autocorrelation
 into the cross correlation. If an antenna voltage becomes:
 
@@ -54,7 +54,7 @@ then the cross correlation is proportional to
 
 where we see that the V_22 = v_2 v_2^* autocorrelation is now
 present in the V_12 cross correlation. V_22 is a non-fringing
-term but time-dependent term, meaning it will introduce an
+but still time-dependent term, meaning it will introduce an
 offset in the visibility at a specific delay that will have
 some time-dependent amplitude. This cannot be corrected
 via antenna-based calibration. However, we can in principle
@@ -151,55 +151,91 @@ class ReflectionFitter(FRFilter):
             if "ref_" in key:
                 setattr(self, key, {})
 
-    def model_auto_reflections(self, clean_data, dly_range, clean_flags=None, keys=None, Nphs=500,
-                               edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
-                               fthin=10, ref_sig_cut=2.0, overwrite=False, verbose=True):
+    def model_auto_reflections(self, clean_resid, dly_range, clean_flags=None, clean_data=None, 
+                               keys=None, Nphs=500, edgecut_low=0, edgecut_hi=0, window='none',
+                               alpha=0.1, zeropad=0, fthin=10, ref_sig_cut=2.0,
+                               overwrite=False, verbose=True):
         """
         Model reflections in (ideally RFI-free) autocorrelation data.
 
         Recommended to set zeropad to at least as large as Nfreqs/2.
-        This function attaches the result to self. See Results below.
+        This function attaches the result to self. See results below.
         To CLEAN data of RFI gaps see the self.vis_clean() function.
 
         Args:
-            clean_data : DataContainer, (CLEANed) data to find reflections in.
-            dly_range : len-2 tuple of delay range [nanoseconds] to search
-                within for reflections. Must be either both positive or both negative.
-            clean_flags : DataContainer, flags of (CLEANed) data. Default is None.
-            keys : list of len-3 tuples, ant-pair-pols to operate on. Default
-                is to use all auto-correlation keys.
-            edgecut_low : int, Nbins to flag and exclude from windowing function on low-side of the band
-            edgecut_hi : int, Nbins to flag and exclude from windowing function on low-side of the band
-            window : str, tapering function to apply across freq before FFT. See dspec.gen_window for options
-            alpha : float, if taper is Tukey, this is its alpha parameter
-            zeropad : int, number of channels to pad band edges with zeros before FFT
-            fthin : int, scaling factor to down-select frequency axis when solving for phase
-            ref_sig_cut : float, if max reflection significance is not above this, do not record solution
-            overwrite : bool, if True, overwrite dictionaries
+            clean_resid : DataContainer
+                Autocorrelation data (in frequency space) to find reflections in.
+                Ideally this is the CLEAN residual, having cleaned out structure
+                at delays less than the min(abs(dly_range)). If this is the
+                CLEAN residual, you must feed the unfiltered CLEAN data as "clean_data"
+                to properly estimate the reflection amplitude.
+            dly_range : len-2 tuple
+                delay range [nanoseconds] to search within for reflections.
+                Must be either both positive or both negative.
+            clean_flags : DataContainer
+                Flags of the (CLEANed) data. Default is None.
+            clean_data : DataContainer
+                If clean_resid is fed as the CLEAN residual (and not CLEAN data),
+                this should be the unfiltered CLEAN data output.
+            keys : list of len-3 tuples
+                ant-pair-pols to operate on. Default is to use all auto-corr & auto-pol keys.
+            edgecut_low : int
+                Nbins to flag and exclude from windowing function on low-side of the band
+            edgecut_hi : int
+                Nbins to flag and exclude from windowing function on low-side of the band
+            window : str
+                windwoing function to apply across freq before FFT. See dspec.gen_window for options
+            alpha : float
+                if taper is Tukey, this is its alpha parameter
+            zeropad : int
+                number of channels to pad band edges with zeros before FFT
+            fthin : int
+                scaling factor to down-select frequency axis when solving for phase
+            ref_sig_cut : float
+                if max reflection significance is not above this, do not record solution
+            overwrite : bool
+                if True, overwrite dictionaries
 
         Result:
-            self.ref_eps : dict, reflection epsilon term with (ant, pol) keys and ndarray values
-            self.ref_amp : dict, reflection amplitude with (ant, pol) keys and ndarray values
-            self.ref_phs : dict, reflection phase [radians] with (ant, pol) keys and ndarray values
-            self.ref_dly : dict, reflection delay [nanosec] with (ant, pol) keys and ndarray values
-            self.ref_flags : dict, reflection flags [bool] with (ant, pol) keys and ndarray values
-            self.ref_significance : dict, reflection significance with (ant, pol) keys and ndarray values
+            self.ref_eps : dict
+                reflection epsilon term with (ant, pol) keys and ndarray values
+            self.ref_amp : dict
+                reflection amplitude with (ant, pol) keys and ndarray values
+            self.ref_phs : dict
+                reflection phase [radians] with (ant, pol) keys and ndarray values
+            self.ref_dly : dict
+                reflection delay [nanosec] with (ant, pol) keys and ndarray values
+            self.ref_flags : dict
+                reflection flags [bool] with (ant, pol) keys and ndarray values
+            self.ref_significance : dict
+                reflection significance with (ant, pol) keys and ndarray values.
                 Significance is max|Vfft| / median|Vfft| near the reflection peak
-            self.ref_gains : dict, reflection gains spanning all keys in clean_data. keys that
+            self.ref_gains : dict
+                reflection gains spanning all keys in clean_resid. keys that
                 weren't included in input or didn't have a significant reflection have a gain of 1.0
         """
         # get flags
         if clean_flags is None:
-            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]))
+            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_resid[k], dtype=np.bool)) for k in clean_resid]))
 
         # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
-            keys = [k for k in clean_data.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
+            keys = [k for k in clean_resid.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
 
-        # Take FFT of data
-        self.fft_data(clean_data, flags=clean_flags, keys=keys, assign='dfft', ax='freq', window=window, alpha=alpha,
+        # Take FFT of clean_resid
+        self.fft_data(clean_resid, flags=clean_flags, keys=keys, assign='rfft', ax='freq', window=window, alpha=alpha,
                       edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True,
                       ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
+
+        if clean_data is not None:
+            # Take FFT of clean_data
+            self.fft_data(clean_data, flags=clean_flags, keys=keys, assign='_dfft', ax='freq', window=window, alpha=alpha,
+                          edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True,
+                          ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
+            _dfft = self._dfft
+        else:
+            _dfft = None 
+
 
         # iterate over keys
         for k in keys:
@@ -213,7 +249,11 @@ class ReflectionFitter(FRFilter):
             echo("...Modeling reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)
 
             # fit for reflection delays and amplitude
-            amp, dly, inds, sig = fit_reflection_delay(self.dfft[k], dly_range, self.delays, return_peak=False)
+            if _dfft is not None:
+                dfft = _dfft[k]
+            else:
+                dfft = None
+            amp, dly, inds, sig = fit_reflection_delay(self.rfft[k], dly_range, self.delays, dfft=dfft, return_peak=False)
 
             # make significance cut
             if np.max(sig) < ref_sig_cut:
@@ -224,7 +264,7 @@ class ReflectionFitter(FRFilter):
 
             else:
                 # solve for phase (slowest step)
-                phs = fit_reflection_phase(self.dfft[k], dly_range, self.delays, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
+                phs = fit_reflection_phase(self.rfft[k], dly_range, self.delays, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
 
                 # anchor phase to 0 Hz
                 phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
@@ -250,7 +290,7 @@ class ReflectionFitter(FRFilter):
     def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False,
                                write_npz=False, add_to_history='', verbose=True):
         """
-        Write auto reflection gain terms from self.ref_gains.
+        Write reflection gain terms from self.ref_gains.
 
         If input_calfits is provided, merge its gains with the reflection
         gains before writing to disk. Flags, quality and total_quality
@@ -659,30 +699,43 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
     return eps
 
 
-def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
+def fit_reflection_delay(rfft, dly_range, dlys, dfft=None, return_peak=False):
     """
     Take FFT'd data and fit for peak delay and amplitude.
 
     Args:
+        rfft : complex 2D array with shape (Ntimes, Ndlys)
+            The FFT of the clean residual, having CLEANed-out
+            structure at delays less than dly_range.
+            If the reflection is significantly isolated, this works
+            fine as the FFT of the clean data.
+        dly_range : len-2 tuple
+            Specifying range of delays [nanosec] to look for reflection within.
+        dlys : 1D array
+            data delays [nanosec]
         dfft : complex 2D array with shape (Ntimes, Ndlys)
-        dly_range : len-2 tuple specifying range of delays [nanosec]
-            to look for reflection within.
-        dlys : 1D array of data delays [nanosec]
-        return_peak : bool, if True, just return peak delay and amplitude
+            The FFT of the unfiltered clean data to use in fitting for
+            the main foreground amplitude and delay, if rfft is
+            FFT of clean residual.
+        return_peak : bool
+            if True, just return peak delay and amplitude and rfft
 
     Returns:
         if return_peak:
-            ref_peaks : peak amplitude
-            ref_dlys : peak delay [nanosec]
+            ref_peaks : rfft peak amplitude within dly_range
+            ref_dlys : rfft peak delay [nanosec] within dly_range
         else:
             ref_amps : reflection amplitudes (Ntimes, 1)
             ref_dlys : reflection delays [nanosec] (Ntimes, 1)
-            ref_inds : reflection peak indicies of input dfft array
+            ref_inds : reflection peak indicies of input rfft array
             ref_sig : reflection significance, SNR of peak relative to neighbors
     """
     # get fft
-    assert dfft.ndim == 2, "input dfft must be 2-dimensional with shape [Ntimes, Ndlys]"
-    Ntimes, Ndlys = dfft.shape
+    assert rfft.ndim == 2, "input rfft must be 2-dimensional with shape [Ntimes, Ndlys]"
+    if dfft is None:
+        dfft = rfft
+    assert dfft.shape == rfft.shape, "input dfft shape must match rfft shape"
+    Ntimes, Ndlys = rfft.shape
 
     # select delay range
     select = np.where((dlys > dly_range[0]) & (dlys < dly_range[1]))[0]
@@ -690,17 +743,17 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
         raise ValueError("No delays in specified range {} ns".format(dly_range))
 
     # locate peak bin within dly range
-    abs_dfft = np.abs(dfft)[:, select]
-    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_dfft)
+    abs_rfft = np.abs(rfft)[:, select]
+    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_rfft)
     ref_dly_inds += select.min()
-    ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(np.diff(dlys))
+    ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(np.abs(np.diff(dlys)))
     ref_peaks = ref_peaks[:, None]
 
     if return_peak:
         return ref_peaks, ref_dlys
 
     # get reflection significance, defined as max|V| / med|V|
-    avgmed = np.median(abs_dfft, axis=1, keepdims=True)
+    avgmed = np.median(abs_rfft, axis=1, keepdims=True)
     ref_significance = np.true_divide(ref_peaks, avgmed, where=~np.isclose(avgmed, 0.0))
 
     # get peak value at tau near zero
