@@ -919,10 +919,11 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
     flags = RF.flags
     nsamples = RF.nsamples
     times = RF.times
+    lsts = RF.lsts
 
     # time average file
     if time_avg:
-        RF.timeavg_data(1e10, data=data, flags=flags, nsamples=nsamples)
+        RF.timeavg_data(data, times, lsts, 1e10, flags=flags, nsamples=nsamples)
         data = RF.avg_data
         flags = RF.avg_flags
         nsamples = RF.avg_nsamples

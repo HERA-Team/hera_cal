@@ -271,7 +271,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         abl1 = (37, 37, 'xx')
         abl2 = (38, 38, 'xx')
         # time average the data
-        RF.timeavg_data(30, rephase=False)
+        RF.timeavg_data(RF.data, RF.times, RF.lsts, 30, rephase=False)
 
         # fft data
         RF.fft_data(data=RF.avg_data, window='blackmanharris', overwrite=True)
