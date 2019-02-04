@@ -86,17 +86,22 @@ class Test_FRFilter:
         self.F.read()
 
     def test_timeavg_data(self):
-        self.F.timeavg_data(35, rephase=True)
+        self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35, rephase=True, keys=[(24, 25, 'xx')])
         nt.assert_equal(self.F.Navg, 3)
+        nt.assert_equal(len(self.F.avg_data), 1)
+        nt.assert_equal(self.F.avg_data[(24, 25, 'xx')].shape, (20, 64))
 
-        self.F.timeavg_data(1e10, rephase=True, verbose=False)
+        self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 1e10, rephase=True, verbose=False, overwrite=False)
         nt.assert_equal(self.F.Navg, 60)
+        nt.assert_equal(len(self.F.avg_data), 28)
+        nt.assert_equal(self.F.avg_data[(24, 25, 'xx')].shape, (20, 64))
+        nt.assert_equal(self.F.avg_data[(24, 37, 'xx')].shape, (1, 64))
 
         # exceptions
-        nt.assert_raises(AssertionError, self.F.timeavg_data, 1.0)
+        nt.assert_raises(AssertionError, self.F.timeavg_data, self.F.data, self.F.times, self.F.lsts, 1.0)
 
     def test_write_data(self):
-        self.F.timeavg_data(35, rephase=False, verbose=False)
+        self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35, rephase=False, verbose=False)
         u = self.F.write_data("./out.uv", write_avg=True, filetype='miriad', overwrite=True, add_to_history='testing')
         nt.assert_true(os.path.exists("./out.uv"))
         hd = hc.io.HERAData('./out.uv', filetype='miriad')

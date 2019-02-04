@@ -186,10 +186,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
         for a in extra_arrays:
             avg_extra_arrays['avg_{}'.format(a)].append(np.mean(extra_arrays[a][start:end]))
 
-    avg_data = np.array(avg_data, np.complex)
-    win_flags = np.array(win_flags, np.bool)
-    avg_nsamples = np.array(avg_nsamples, np.float)
-    avg_lsts = np.array(avg_lsts, np.float)
+    avg_data = np.asarray(avg_data, np.complex)
+    win_flags = np.asarray(win_flags, np.bool)
+    avg_nsamples = np.asarray(avg_nsamples, np.float)
+    avg_lsts = np.asarray(avg_lsts, np.float)
 
     # wrap lsts
     avg_lsts = avg_lsts % (2 * np.pi)
@@ -199,84 +199,99 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
 
 class FRFilter(VisClean):
     """
-    Fringe Rate Filter object.
+    Fringe Rate Filter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
 
-    def timeavg_data(self, t_avg, rephase=False, data=None, flags=None, nsamples=None, verbose=True):
+    def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, rephase=False,
+                     verbose=True, output_prefix='avg', keys=None, overwrite=False):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
-        The time-averaged data, flags, time arrays, etc. are stored in avg_* attributes.
-        Note that although denoted avg_flags for consistency, this array stores the AND
-        of flags in each averaging window.
+        The resultant averaged data, flags, time arrays, etc. are attached to self
+        with the name "{}_data".format(output_prefix), etc
 
-        The t_avg provided will be rounded to the nearest time that makes Navg
-        an integer, and is stored as self.t_avg.
+        Note: The t_avg provided will be rounded to the nearest time that makes Navg
+            an integer, and is stored as self.t_avg and self.Navg.
 
-        Parameters
-        ----------
-        t_avg : float
-            Width of time-averaging window in seconds.
+        Note: Time-averaging data with differing time-dependent flags per freq channel
+            can create artificial spectral structure in the averaged data products.
+            One can mitigate this by factorizing the flags into time-freq separable masks,
+            see self.factorize_flags.
 
-        rephase : bool
-            If True, rephase data in averaging window to window-center.
-
-        data : DataContainer
-            data to use in averaging. Default is self.data.
-            Must be consistent with self.lsts, self.freqs, etc.
-
-        flags : DataContainer
-            flags to use in averaging. Default is self.flags.
-            Must be consistent with self.lsts, self.freqs, etc.
-
-        nsamples : DataContainer
-            nsamples to use in averaging. Default is self.nsamples.
-            Must be consistent with self.lsts, self.freqs, etc.
-
-        Result
-        ------
-        self.avg_data, self.avg_flags, self.avg_nsamples, self.avg_lsts
-        self.avg_times
+        Args : 
+            data : DataContainer
+                data to time average, must be consistent with self.lsts and self.freqs
+            times : 1D array
+                Holds Julian Date time array for input data
+            lsts : 1D array
+                Holds LST time array for input data
+            t_avg : float
+                Width of time-averaging window in seconds.
+            flags : DataContainer
+                flags to use in averaging. Default is None.
+                Must be consistent with self.lsts, self.freqs, etc.
+            nsamples : DataContainer
+                nsamples to use in averaging. Default is None.
+                Must be consistent with self.lsts, self.freqs, etc.
+            rephase : bool
+                If True, rephase data in averaging window to the window-center.
+            keys : list of len-3 antpair-pol tuples
+                List of data keys to operate on.
+            overwrite : bool
+                If True, overwrite existing keys in output DataContainers.
         """
-        # turn t_avg into Navg given dtime
-        Navg = int(np.round((t_avg / self.dtime)))
+        # turn t_avg into Navg
+        Ntimes = len(times)
+        dtime = np.median(np.abs(np.diff(times))) * 24 * 3600
+        Navg = int(np.round((t_avg / dtime)))
         assert Navg > 0, "A t_avg of {:0.5f} makes Navg=0, which is too small.".format(t_avg)
-        if Navg > self.Ntimes:
-            Navg = self.Ntimes
+        if Navg > Ntimes:
+            Navg = Ntimes
         old_t_avg = t_avg
-        t_avg = Navg * self.dtime
+        t_avg = Navg * dtime
 
         if verbose:
             print("The t_avg provided of {:.3f} has been shifted to {:.3f} to make Navg = {:d}".format(
                 old_t_avg, t_avg, Navg))
 
-        # setup lists
-        avg_data = DataContainer({})
-        avg_flags = DataContainer({})
-        avg_nsamples = DataContainer({})
+        # setup containers
+        for n in ['data', 'flags', 'nsamples']:
+            name = "{}_{}".format(output_prefix, n)
+            if not hasattr(self, name):
+                setattr(self, name, DataContainer({}))
+            if n == 'data':
+                avg_data = getattr(self, name)
+            elif n == 'flags':
+                avg_flags = getattr(self, name)
+            elif n == 'nsamples':
+                avg_nsamples = getattr(self, name)
 
         # setup averaging quantities
-        if data is None:
-            data = self.data
         if flags is None:
-            flags = self.flags
+            f = np.zeros((Ntimes, self.Nfreqs), dtype=np.bool)
+            flags = DataContainer(dict([(k, f) for k in data]))
         if nsamples is None:
-            nsamples = self.nsamples
+            n = np.ones((Ntimes, self.Nfreqs), dtype=np.float)
+            nsamples = DataContainer(dict([(k, n) for k in data]))
+
+        if keys is None:
+            keys = data.keys()
 
         # iterate over keys
-        for i, k in enumerate(data.keys()):
+        al = None
+        for i, k in enumerate(keys):
+            if k in avg_data and not overwrite:
+                utils.echo("{} exists in ouput DataContainer and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
             (ad, af, an, al,
              ea) = timeavg_waterfall(data[k], Navg, flags=flags[k], nsamples=nsamples[k],
-                                     rephase=rephase, lsts=self.lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
-                                     lat=self.lat, extra_arrays=dict(times=self.times), verbose=verbose)
+                                     rephase=rephase, lsts=lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
+                                     lat=self.lat, extra_arrays=dict(times=times), verbose=verbose)
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
+            self.avg_lsts = al
+            self.avg_times = np.asarray(ea['avg_times'])
 
-        self.avg_data = DataContainer(avg_data)
-        self.avg_flags = DataContainer(avg_flags)
-        self.avg_nsamples = DataContainer(avg_nsamples)
-        self.avg_lsts = al
-        self.avg_times = np.asarray(ea['avg_times'])
         self.t_avg = t_avg
         self.Navg = Navg
 

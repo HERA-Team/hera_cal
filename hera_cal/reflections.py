@@ -236,7 +236,6 @@ class ReflectionFitter(FRFilter):
         else:
             _dfft = None 
 
-
         # iterate over keys
         for k in keys:
             # get gain key
