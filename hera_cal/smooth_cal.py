@@ -211,8 +211,9 @@ def pick_reference_antenna(gains, flags, freqs):
     median_angle_noise_as_refeant = {}
     for refant in refant_candidates:
         refant_rephasor = np.abs(gains[refant] * rephasors[refant]) / (gains[refant] * rephasors[refant])
-        median_phase_noise = [np.median(interleaved_noise_variance_estimate(np.angle(gains[ant] * rephasors[ant] * refant_rephasor)))
-                              for ant in gains.keys() if not np.all(flags[ant])]
+        median_phase_noise = [np.median(interleaved_noise_variance_estimate(
+                              np.angle(gains[ant] * rephasors[ant] * refant_rephasor))[~(flags[ant] | flags[refant])])
+                              for ant in gains.keys() if not np.all(flags[ant] | flags[refant])]
         median_angle_noise_as_refeant[refant] = np.median(median_phase_noise)
     return sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
 
