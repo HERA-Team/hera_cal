@@ -98,11 +98,14 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
             ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='blah')
 
     def test_pick_reference_antenna(self):
-        flags = {ant: np.random.randn(10, 10) > 0 for ant in [(0, 'Jxx'), (1, 'Jxx')]}
-        if np.sum(flags[0, 'Jxx']) > np.sum(flags[1, 'Jxx']):
-            self.assertEqual(smooth_cal.pick_reference_antenna(flags), (1, 'Jxx'))
-        else:
-            self.assertEqual(smooth_cal.pick_reference_antenna(flags), (0, 'Jxx'))
+        gains = {(n, 'Jxx'): np.ones((10,10), dtype=complex) for n in range(10)}
+        flags = {(n, 'Jxx'): np.zeros((10,10), dtype=bool) for n in range(10)}
+        freqs = np.linspace(100e6, 200e6, 10)
+        for n in range(0, 7): # add flags to disqualify antennas 0, 1, 2, 3, 4, 5, 6
+            flags[(n, 'Jxx')][:,4] = True
+        for n in range(6, 9): # add phase noise to disqualify antennas 6, 7, 8
+            gains[(n,'Jxx')] *= np.exp(2j * np.pi * np.random.rand(10,10))
+        self.assertEqual(smooth_cal.pick_reference_antenna(gains, flags, freqs), (9, 'Jxx'))
 
     def test_rephase_to_refant(self):
         gains = {(0, 'Jxx'): np.array([1. + 1.0j, 1. - 1.0j]),
