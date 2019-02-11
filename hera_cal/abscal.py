@@ -2771,7 +2771,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # instantiate Abscal object
     if refant_num is None:
-        refant_num = pick_reference_antenna(synthesize_ant_flags(flags))[0]
+        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs)[0]
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
     AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
@@ -2823,7 +2823,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         phs_max_iter: integer maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.
         refant: tuple of the form (0, 'Jxx') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
-        refant_pol: string reference antenna polarization (either 'Jxx' or 'Jyy'). See refant_num.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
 
@@ -2930,7 +2929,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                             
         # impose a single reference antenna on the final antenna solution
         if refant is None:
-            refant = pick_reference_antenna(abscal_flags)
+            refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs)
         refant_phasor = (abscal_gains[refant] / np.abs(abscal_gains[refant]))
         for ant in abscal_gains.keys():
             abscal_gains[ant] /= refant_phasor
