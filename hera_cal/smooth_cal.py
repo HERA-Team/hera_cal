@@ -18,6 +18,7 @@ from . import io
 from . import version
 from . import utils
 from . import flag_utils
+from .noise import interleaved_noise_variance_estimate
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
@@ -181,18 +182,39 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     return filtered / rephasor, info
 
 
-def pick_reference_antenna(flags):
-    '''Pick a refrence antenna that has the minimum number of per-antenna flags.
+def pick_reference_antenna(gains, flags, freqs):
+    '''Pick a refrence antenna that has the minimum number of per-antenna flags and produces
+    the least noisy phases on other antennas when used as a reference antenna.
 
     Arguments:
+        gains: Dictionary mapping antenna keys to gain waterfalls.
         flags: dictionary mapping antenna keys to flag waterfall where True means flagged
+        freqs: ndarray of frequency channels in Hz
 
     Returns:
-        refant: key of the antenna with the minimum number of flags. Tie goes to the first in a sorted list of keys.
+        refant: key of the antenna with the minimum number of flags and the least noisy phases
     '''
+    # pick antennas with the mininum number of flags
     flags_per_ant = {ant: np.sum(f) for ant, f in flags.items()}
-    refant = sorted([ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))])[0]
-    return refant
+    refant_candidates = [ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))]
+    
+    # compute delay and phase for all gains to flatten them as well as possible. Average  over times.
+    df = np.median(np.diff(freqs))
+    rephasors = {}
+    for ant in gains.keys():
+        wgts = np.array(~(flags[ant]), dtype=float)
+        (dlys, phis) = utils.fft_dly(gains[ant], df, wgts, medfilt=False)
+        rephasors[ant] = np.exp(-2.0j * np.pi * np.mean(dlys), freqs - 1.0j * np.mean(phis))
+
+    # assess each candidate reference antenna: estimate the median noise of the angle after rephasing to a given refant
+    # (after taking out delays from both to minimize phase wraps) and return least noisy refant
+    median_angle_noise_as_refeant = {}
+    for refant in refant_candidates:
+        refant_rephasor = np.abs(gains[refant] * rephasors[refant]) / (gains[refant] * rephasors[refant])
+        median_phase_noise = [np.median(interleaved_noise_variance_estimate(np.angle(gains[ant] * rephasors[ant] * refant_rephasor)))
+                              for ant in gains.keys() if not np.all(flags[ant])]
+        median_angle_noise_as_refeant[refant] = np.median(median_phase_noise)
+    return sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
 
 
 def rephase_to_refant(gains, refant, flags=None):
@@ -283,7 +305,7 @@ class CalibrationSmoother():
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
-            self.refant = pick_reference_antenna(self.flag_grids)
+            self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs)
             self.rephase_to_refant()
 
     def check_consistency(self):
