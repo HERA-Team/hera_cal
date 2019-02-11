@@ -13,7 +13,6 @@ import sys
 import shutil
 from six.moves import zip
 from scipy import stats
-from matplotlib import pyplot as plt
 from pyuvdata import UVCal, UVData
 import operator
 import functools

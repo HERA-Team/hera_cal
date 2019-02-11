@@ -2878,8 +2878,16 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                     echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
                          + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
                     
-                    # load data
+                    # load data and apply calibration
                     data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=[pol])
+                    data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
+                    rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
+                    rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
+                    calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
+                                       cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+                    auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
+                    autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
+
                     if not np.all(flags.values()):
                         # load model and rephase
                         model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
@@ -2893,15 +2901,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                             if k in model_flags:
                                 flags[k] += model_flags[k]
 
-                        # apply calibration
-                        data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
-                        rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
-                        rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
-                        calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
-                                           cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
-                        auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
-                        autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
-                        
                         # run absolute calibration, copying data because it gets modified internally
                         delta_gains, AC = post_redcal_abscal(model, data, flags, rc_flags_subset, edge_cut=edge_cut, 
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
