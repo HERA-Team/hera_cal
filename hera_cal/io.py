@@ -457,13 +457,13 @@ class HERAData(UVData):
                  'bls', 'times', 'blt_inds']
         for n in names:
             if n in kwargs and kwargs[n] is not None:
-                self._determine_blt_slicing()
+                output._determine_blt_slicing()
                 break
         if 'polarizations' in kwargs and kwargs['polarizations'] is not None:
-            self._determine_pol_indexing()
+            output._determine_pol_indexing()
 
         if not inplace:
-            return self
+            return output
 
     def __add__(self, other, inplace=False, **kwargs):
         """
