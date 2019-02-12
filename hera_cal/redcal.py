@@ -254,6 +254,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
                                                        and (max_bl_cut is None or l < max_bl_cut))]
     return reds
 
+
 def extract_cutbls(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None,
                    pols=None, ex_pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None):
     '''
@@ -283,14 +284,15 @@ def extract_cutbls(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=No
     Return:
         cutbls: list of lists of redundant baselines that were cut in the same form as input reds.
     '''
-    filter_bls =  filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
-                               ex_ubls=None, pols=pols, ex_pols=ex_pols, antpos=antpos)
+    filter_bls = filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, 
+                             ex_ubls=None, pols=pols, ex_pols=ex_pols, antpos=antpos)
     if min_bl_cut is not None or max_bl_cut is not None:
         assert antpos is not None, 'antpos must be passed in if min_bl_cut or max_bl_cut is specified.'
         lengths = [np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp]) for gp in filter_bls]
-        cut_bls = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l < min_bl_cut)
-                                                       and (max_bl_cut is None or l > max_bl_cut))]
+        cut_bls = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l < min_bl_cut) 
+                                                          and (max_bl_cut is None or l > max_bl_cut))]
     return cut_bls
+
 
 def reds_to_antpos(reds, tol=1e-10):
     '''Computes a set of antenna positions consistent with the given redundancies.
@@ -1121,22 +1123,23 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                 for bl in cal['v_omnical'].keys():
                     rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
                     rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
-                                # fill in model visibilities for cut baselines
+                    # fill in model visibilities for cut baselines
                 if fill_cutbls:
                     unfiltered_reds = get_reds(generate_antdict(hd))
-                    cutbls = extract_cutbls(unfiltered_reds, antpos=generate_antdict(hd), ex_ants=ex_ants,pols=pols,
+                    cutbls = extract_cutbls(unfiltered_reds, antpos=generate_antdict(hd), ex_ants=ex_ants, pols=pols,
                                             **filter_reds_kwargs)
                     for cgp in cutbls:
                         k = 0
                         for cbl in cgp:
-                            if k == 1: break
-                            cal_key0 = (cbl[0] , 'J{}'.format(cbl[2]))
-                            cal_key1 = (cbl[1] , 'J{}'.format(cbl[2]))
+                            if k == 1: 
+                                break
+                            cal_key0 = (cbl[0], 'J{}'.format(cbl[2]))
+                            cal_key1 = (cbl[1], 'J{}'.format(cbl[2]))
                             try:
-                                rv['v_omnical'][cbl] = hd.get_data(cbl)[tinds, fSlice] / cal['g_omnical'][cal_key0] \
-                                                                                            * cal['g_omnical'][cal_key1]
-                                rv['vf_omnical'][cbl] = np.logical_or(hd.get_flags(cbl)[tinds, fSlice], \
-                                                        cal['gf_omnical'][cal_key0], cal['gf_omnical'][cal_key1])
+                                v_omnical = hd.get_data(cbl)[tinds, fSlice] / cal['g_omnical'][cal_key0] * cal['g_omnical'][cal_key1]
+                                rv['v_omnical'][cbl] = v_omnical
+                                rv['vf_omnical'][cbl] = np.logical_or(hd.get_flags(cbl)[tinds, fSlice],
+                                                                      cal['gf_omnical'][cal_key0], cal['gf_omnical'][cal_key1])
                                 k += 1
                             except KeyError:
                                 continue

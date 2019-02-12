@@ -249,7 +249,7 @@ class TestMethods(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='2pol')
         r = om.extract_cutbls(reds, min_bl_cut=15, antpos=antpos)
         self.assertEqual(r, [[(0, 1, 'xx'), (1, 2, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')],
-                            [(0, 1, 'yy'), (1, 2, 'yy'), (2, 3, 'yy'), (3, 4, 'yy'), (4, 5, 'yy'), (5, 6, 'yy')]])
+                         [(0, 1, 'yy'), (1, 2, 'yy'), (2, 3, 'yy'), (3, 4, 'yy'), (4, 5, 'yy'), (5, 6, 'yy')]])
         # extracting baselines greater than 60 m
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         r = om.extract_cutbls(reds, max_bl_cut=60, antpos=antpos)
@@ -259,8 +259,8 @@ class TestMethods(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         r = om.extract_cutbls(reds, min_bl_cut=15, antpos=antpos)
         self.assertEqual(r, [[(0, 3, 'xx'), (1, 4, 'xx'), (2, 5, 'xx'), (3, 6, 'xx')],
-                            [(0, 2, 'xx'), (1, 3, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')],
-                            [(0, 1, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (5, 6, 'xx')]])
+                         [(0, 2, 'xx'), (1, 3, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')],
+                         [(0, 1, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (5, 6, 'xx')]])
 
     def test_filter_reds_2pol(self):
         antpos = build_linear_array(4)
@@ -1119,14 +1119,14 @@ class TestRunMethods(unittest.TestCase):
             np.testing.assert_array_equal(flag, True)
 
         rv = om.redcal_iteration(hd, min_bl_cut=30)
-        if not (1, 12, 'xx') in rv['v_omnical'].keys(): stm=True
+        stm = True if not (1, 12, 'xx') in rv['v_omnical'].keys()
         self.assertIs(stm, True)
-        if not (1, 12, 'xx') in rv['vf_omnical'].keys(): stm = True
+        stm = True if not (1, 12, 'xx') in rv['vf_omnical'].keys()
         self.assertIs(stm, True)
         rv = om.redcal_iteration(hd, min_bl_cut=30, fill_cutbls=True)
-        if (1, 12, 'xx') in rv['v_omnical'].keys(): stm = True
+        stm = True if (1, 12, 'xx') in rv['v_omnical'].keys()
         self.assertIs(stm, True)
-        if (1, 12, 'xx') in rv['vf_omnical'].keys(): stm = True
+        stm = True if (1, 12, 'xx') in rv['vf_omnical'].keys()
         self.assertIs(stm, True)
 
     def test_redcal_run(self):
