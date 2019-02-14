@@ -1094,45 +1094,22 @@ class TestRunMethods(unittest.TestCase):
             np.testing.assert_array_equal(flag, True)
         for flag in rv['vf_omnical'].values():
             np.testing.assert_array_equal(flag, True)
-   
-        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')) 
-        rv = om.redcal_iteration(hd, pol_mode='1pol')
-        self.assertTrue((1, 12, 'xx') in rv['v_omnical'].keys())
-        self.assertTrue((1, 12, 'xx') in rv['vf_omnical'].keys())
-        self.assertTrue((1, 12, 'yy') in rv['v_omnical'].keys())
-        self.assertTrue((1, 12, 'yy') in rv['vf_omnical'].keys())
+        for nsamples in rv['vns_omnical'].values():
+            np.testing.assert_array_equal(nsamples, 0)
 
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
-        rv = om.redcal_iteration(hd, pol_mode='1pol', min_bl_cut=15)
-        self.assertTrue((1, 12, 'xx') in rv['v_omnical'].keys())
-        self.assertTrue((1, 12, 'xx') in rv['vf_omnical'].keys())
-        self.assertTrue((1, 12, 'yy') in rv['v_omnical'].keys())
-        self.assertTrue((1, 12, 'yy') in rv['vf_omnical'].keys())
-
-        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
-        rv = om.redcal_iteration(hd, ex_bls=[(23, 27)])
-        self.assertTrue((23, 27, 'xx') in rv['v_omnical'].keys())
-        self.assertTrue((23, 27, 'xx') in rv['vf_omnical'].keys())
-        self.assertTrue((23, 27, 'yy') in rv['v_omnical'].keys())
-        self.assertTrue((23, 27, 'yy') in rv['vf_omnical'].keys())
-     
-        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
-        rv = om.redcal_iteration(hd, ex_bls=[(23, 26)])
-        self.assertFalse((23, 26, 'xx') in rv['v_omnical'].keys())
-        self.assertFalse((23, 26, 'xx') in rv['vf_omnical'].keys())
-        self.assertFalse((23, 26, 'yy') in rv['v_omnical'].keys())
-        self.assertFalse((23, 26, 'yy') in rv['vf_omnical'].keys())
-   
-        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
-        rv = om.redcal_iteration(hd, ex_bls=[(11, 14), (23, 26)])
-        self.assertTrue((11, 14, 'xx') in rv['v_omnical'].keys())
-        self.assertTrue((11, 14, 'xx') in rv['vf_omnical'].keys())
-        self.assertTrue((11, 14, 'yy') in rv['v_omnical'].keys())
-        self.assertTrue((11, 14, 'yy') in rv['vf_omnical'].keys())
-        self.assertFalse((23, 26, 'xx') in rv['v_omnical'].keys())
-        self.assertFalse((23, 26, 'xx') in rv['vf_omnical'].keys())
-        self.assertFalse((23, 26, 'yy') in rv['v_omnical'].keys())
-        self.assertFalse((23, 26, 'yy') in rv['vf_omnical'].keys())    
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            rv = om.redcal_iteration(hd, pol_mode='2pol', ex_ants=[1, 27], min_bl_cut=15)
+        for pol in ['xx', 'yy']:
+            for key in ['v_omnical', 'vf_omnical', 'vns_omnical']:
+                # test that the unique baseline is keyed by the first entry in all_reds, not filtered_reds
+                self.assertTrue((1, 12, pol) in rv[key].keys())
+                # test that completely excluded baselines from redcal are still represented
+                self.assertTrue((23, 27, pol) in rv[key].keys())
+            # test redundant baseline counting
+            np.testing.assert_array_equal(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]], 4.0)
+            np.testing.assert_array_equal(rv['vns_omnical'][(23, 27, pol)], 0.0)
 
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
@@ -1175,6 +1152,7 @@ class TestRunMethods(unittest.TestCase):
         for bl in data.keys():
             np.testing.assert_array_almost_equal(data[bl], cal['v_omnical'][bl])
             np.testing.assert_array_almost_equal(flags[bl], cal['vf_omnical'][bl])
+            np.testing.assert_array_almost_equal(nsamples[bl], cal['vns_omnical'][bl])
         self.assertTrue('testing' in hd.history.replace('\n', '').replace(' ', ''))
         self.assertTrue('Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', ''))
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
