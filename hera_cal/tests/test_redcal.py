@@ -239,29 +239,6 @@ class TestMethods(unittest.TestCase):
         # exclude crosspols
         # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
 
-    def test_extract_cutbls(self):
-        antpos = build_linear_array(7)
-        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
-        # extractng baselines shorter than 15 m
-        r = om.extract_cutbls(reds, min_bl_cut=15, antpos=antpos)
-        self.assertEqual(r, [[(0, 1, 'xx'), (1, 2, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')]])
-        antpos = build_linear_array(7)
-        reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='2pol')
-        r = om.extract_cutbls(reds, min_bl_cut=15, antpos=antpos)
-        self.assertEqual(r, [[(0, 1, 'xx'), (1, 2, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (4, 5, 'xx'), (5, 6, 'xx')],
-                         [(0, 1, 'yy'), (1, 2, 'yy'), (2, 3, 'yy'), (3, 4, 'yy'), (4, 5, 'yy'), (5, 6, 'yy')]])
-        # extracting baselines greater than 60 m
-        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
-        r = om.extract_cutbls(reds, max_bl_cut=60, antpos=antpos)
-        self.assertEqual(r, [[(0, 5, 'xx'), (1, 6, 'xx')], [(0, 6, 'xx')]])
-
-        antpos = build_hex_array(2)
-        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
-        r = om.extract_cutbls(reds, min_bl_cut=15, antpos=antpos)
-        self.assertEqual(r, [[(0, 3, 'xx'), (1, 4, 'xx'), (2, 5, 'xx'), (3, 6, 'xx')],
-                         [(0, 2, 'xx'), (1, 3, 'xx'), (3, 5, 'xx'), (4, 6, 'xx')],
-                         [(0, 1, 'xx'), (2, 3, 'xx'), (3, 4, 'xx'), (5, 6, 'xx')]])
-
     def test_filter_reds_2pol(self):
         antpos = build_linear_array(4)
         reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='1pol')
@@ -1117,17 +1094,45 @@ class TestRunMethods(unittest.TestCase):
             np.testing.assert_array_equal(flag, True)
         for flag in rv['vf_omnical'].values():
             np.testing.assert_array_equal(flag, True)
+   
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')) 
+        rv = om.redcal_iteration(hd, pol_mode='1pol')
+        self.assertTrue((1, 12, 'xx') in rv['v_omnical'].keys())
+        self.assertTrue((1, 12, 'xx') in rv['vf_omnical'].keys())
+        self.assertTrue((1, 12, 'yy') in rv['v_omnical'].keys())
+        self.assertTrue((1, 12, 'yy') in rv['vf_omnical'].keys())
 
-        rv = om.redcal_iteration(hd, min_bl_cut=30)
-        stm = True if not (1, 12, 'xx') in rv['v_omnical'].keys()
-        self.assertIs(stm, True)
-        stm = True if not (1, 12, 'xx') in rv['vf_omnical'].keys()
-        self.assertIs(stm, True)
-        rv = om.redcal_iteration(hd, min_bl_cut=30, fill_cutbls=True)
-        stm = True if (1, 12, 'xx') in rv['v_omnical'].keys()
-        self.assertIs(stm, True)
-        stm = True if (1, 12, 'xx') in rv['vf_omnical'].keys()
-        self.assertIs(stm, True)
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
+        rv = om.redcal_iteration(hd, pol_mode='1pol', min_bl_cut=15)
+        self.assertTrue((1, 12, 'xx') in rv['v_omnical'].keys())
+        self.assertTrue((1, 12, 'xx') in rv['vf_omnical'].keys())
+        self.assertTrue((1, 12, 'yy') in rv['v_omnical'].keys())
+        self.assertTrue((1, 12, 'yy') in rv['vf_omnical'].keys())
+
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
+        rv = om.redcal_iteration(hd, ex_bls=[(23, 27)])
+        self.assertTrue((23, 27, 'xx') in rv['v_omnical'].keys())
+        self.assertTrue((23, 27, 'xx') in rv['vf_omnical'].keys())
+        self.assertTrue((23, 27, 'yy') in rv['v_omnical'].keys())
+        self.assertTrue((23, 27, 'yy') in rv['vf_omnical'].keys())
+     
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
+        rv = om.redcal_iteration(hd, ex_bls=[(23, 26)])
+        self.assertFalse((23, 26, 'xx') in rv['v_omnical'].keys())
+        self.assertFalse((23, 26, 'xx') in rv['vf_omnical'].keys())
+        self.assertFalse((23, 26, 'yy') in rv['v_omnical'].keys())
+        self.assertFalse((23, 26, 'yy') in rv['vf_omnical'].keys())
+   
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
+        rv = om.redcal_iteration(hd, ex_bls=[(11, 14), (23, 26)])
+        self.assertTrue((11, 14, 'xx') in rv['v_omnical'].keys())
+        self.assertTrue((11, 14, 'xx') in rv['vf_omnical'].keys())
+        self.assertTrue((11, 14, 'yy') in rv['v_omnical'].keys())
+        self.assertTrue((11, 14, 'yy') in rv['vf_omnical'].keys())
+        self.assertFalse((23, 26, 'xx') in rv['v_omnical'].keys())
+        self.assertFalse((23, 26, 'xx') in rv['vf_omnical'].keys())
+        self.assertFalse((23, 26, 'yy') in rv['v_omnical'].keys())
+        self.assertFalse((23, 26, 'yy') in rv['vf_omnical'].keys())    
 
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
@@ -1170,8 +1175,6 @@ class TestRunMethods(unittest.TestCase):
         for bl in data.keys():
             np.testing.assert_array_almost_equal(data[bl], cal['v_omnical'][bl])
             np.testing.assert_array_almost_equal(flags[bl], cal['vf_omnical'][bl])
-            self.assertFalse(bl[0] in bad_ants)
-            self.assertFalse(bl[1] in bad_ants)
         self.assertTrue('testing' in hd.history.replace('\n', '').replace(' ', ''))
         self.assertTrue('Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', ''))
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')

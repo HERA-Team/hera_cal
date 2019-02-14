@@ -255,45 +255,6 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     return reds
 
 
-def extract_cutbls(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None,
-                   pols=None, ex_pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None):
-    '''
-    Extracts all baselines that was filtered out using min_bl_cut ot max_bl_cut. These baselines
-    do not include those that were excluded using 
-    Args:
-        reds: list of lists of redundant (i,j,pol) baseline tuples, e.g. the output of get_reds()
-        bls (optional): baselines to include. Baselines of the form (i,j,pol) include that specific
-            visibility.  Baselines of the form (i,j) are broadcast across all polarizations present in reds.
-        ex_bls (optional): same as bls, but excludes baselines.
-        ants (optional): antennas to include. Only baselines where both antenna indices are in ants
-            are included.  Antennas of the form (i,pol) include that antenna/pol. Antennas of the form i are
-            broadcast across all polarizations present in reds.
-        ex_ants (optional): same as ants, but excludes antennas.
-        ubls (optional): redundant (unique baseline) groups to include. Each baseline in ubls is taken to
-            represent the redundant group containing it. Baselines of the form (i,j) are broadcast across all
-            polarizations, otherwise (i,j,pol) selects a specific redundant group.
-        ex_ubls (optional): same as ubls, but excludes groups.
-        pols (optional): polarizations to include in reds. e.g. ['xx','yy','xy','yx']. Default includes all
-            polarizations in reds.
-        ex_pols (optional): same as pols, but excludes polarizations.
-        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}. 1D and 2D also OK.
-        min_bl_cut: cut redundant groups with average baseline lengths shorter than this. Same units as antpos
-            which must be specified.
-        max_bl_cut: cut redundant groups with average baselines lengths longer than this. Same units as antpos
-            which must be specified.
-    Return:
-        cutbls: list of lists of redundant baselines that were cut in the same form as input reds.
-    '''
-    filter_bls = filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, 
-                             ex_ubls=None, pols=pols, ex_pols=ex_pols, antpos=antpos)
-    if min_bl_cut is not None or max_bl_cut is not None:
-        assert antpos is not None, 'antpos must be passed in if min_bl_cut or max_bl_cut is specified.'
-        lengths = [np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp]) for gp in filter_bls]
-        cut_bls = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l < min_bl_cut) 
-                                                          and (max_bl_cut is None or l > max_bl_cut))]
-    return cut_bls
-
-
 def reds_to_antpos(reds, tol=1e-10):
     '''Computes a set of antenna positions consistent with the given redundancies.
     Useful for projecting out phase slope degeneracies, see https://arxiv.org/abs/1712.07212
@@ -1006,7 +967,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_horizon=0.0,
                      flag_nchan_low=0, flag_nchan_high=0, conv_crit=1e-10, maxiter=500,
-                     check_every=10, check_after=50, gain=.4, verbose=False, fill_cutbls=False, **filter_reds_kwargs):
+                     check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
@@ -1028,8 +989,6 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
-        fill_cutbls: applies the omnical solutions to get the model visibilities for baselines that were 
-                     disregarded while running redcal.
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
@@ -1079,9 +1038,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
     # get reds and then intitialize omnical visibility solutions to all 1s and all flagged
     all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
                         pols=set([pol for pols in pol_load_list for pol in pols]))
-    all_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
-    rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds})
-    rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
+    filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
+    rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in filtered_reds})
+    rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in filtered_reds})
 
     # solar flagging
     lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
@@ -1090,11 +1049,31 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
     if verbose and np.any(solar_flagged):
         print(len(hd.times[solar_flagged]), 'integrations flagged due to sun above', solar_horizon, 'degrees.')
 
+    # function to fill visibilities for missing baselines
+    def fill_in_missing_ubl(all_reds, rv, data):
+        for blg in all_reds:
+            n = 0
+            for blp in blg:
+                if blp in rv['v_omnical'].keys():
+                    break
+                else:
+                    if n == 1:
+                        break
+                    cal_key0 = (blp[0], 'J{}'.format(blp[2]))
+                    cal_key1 = (blp[1], 'J{}'.format(blp[2]))
+                    try:
+                        rv['v_omnical'][blp] = data[blp] / rv['g_omnical'][cal_key0] * rv['g_omnical'][cal_key1]
+                        rv['vf_omnical'][blp] = np.logical_or(rv['gf_omnical'][cal_key0], rv['gf_omnical'][cal_key1])
+                        n += 1
+                    except KeyError:
+                        rv['v_omnical'][blp] = data[blp]
+                        rv['vf_omnical'][blp] = np.ones((nTimes, nFreqs), dtype=bool)
+
     # loop over polarizations and times, performing partial loading if desired
     for pols in pol_load_list:
         if verbose:
             print('Now calibrating', pols, 'polarization(s)...')
-        reds = filter_reds(all_reds, ex_ants=ex_ants, pols=pols)
+        reds = filter_reds(filtered_reds, ex_ants=ex_ants, pols=pols)
         if nInt_to_load is not None:  # split up the integrations to load nInt_to_load at a time
             tind_groups = np.split(np.arange(nTimes)[~solar_flagged],
                                    np.arange(nInt_to_load, len(hd.times[~solar_flagged]), nInt_to_load))
@@ -1123,27 +1102,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                 for bl in cal['v_omnical'].keys():
                     rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
                     rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
-                    # fill in model visibilities for cut baselines
-                if fill_cutbls:
-                    unfiltered_reds = get_reds(generate_antdict(hd))
-                    cutbls = extract_cutbls(unfiltered_reds, antpos=generate_antdict(hd), ex_ants=ex_ants, pols=pols,
-                                            **filter_reds_kwargs)
-                    for cgp in cutbls:
-                        k = 0
-                        for cbl in cgp:
-                            if k == 1: 
-                                break
-                            cal_key0 = (cbl[0], 'J{}'.format(cbl[2]))
-                            cal_key1 = (cbl[1], 'J{}'.format(cbl[2]))
-                            try:
-                                v_omnical = hd.get_data(cbl)[tinds, fSlice] / cal['g_omnical'][cal_key0] * cal['g_omnical'][cal_key1]
-                                rv['v_omnical'][cbl] = v_omnical
-                                rv['vf_omnical'][cbl] = np.logical_or(hd.get_flags(cbl)[tinds, fSlice],
-                                                                      cal['gf_omnical'][cal_key0], cal['gf_omnical'][cal_key1])
-                                k += 1
-                            except KeyError:
-                                continue
-
+                # fill in model visibilities for cut baselines
+                fill_in_missing_ubl(all_reds, rv, data)
                 if pol_mode in ['1pol', '2pol']:
                     for antpol in cal['chisq'].keys():
                         rv['chisq'][antpol][tinds, fSlice] = cal['chisq'][antpol]
