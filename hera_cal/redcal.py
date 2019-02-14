@@ -905,13 +905,13 @@ def expand_omni_vis(cal, all_reds, data, flags, nsamples):
     for red in all_reds:
         omni_keys = [bl for bl in red if bl in cal['v_omnical']]
         assert len(omni_keys) <= 1, "The input calibration's 'v_omnical' entry can have at most visibility per unique baseline group."
-        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * (1.0 - flags[bl]) for bl in red], axis=0)
+        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * (1.0 - flags[bl]) for bl in red], axis=0).astype(np.float32)
 
         if len(omni_keys) == 0:  # the omnical solution doesn't have this baseline, so compute it by averaging the calibrated data
-            cal['v_omnical'][red[0]] = np.sum([data[bl] * (1.0 - flags[bl]) * nsamples[bl] for bl in red], axis=0)
+            cal['v_omnical'][red[0]] = np.sum([data[bl] * (1.0 - flags[bl]) * nsamples[bl] for bl in red], axis=0).astype(np.complex64)
             cal['v_omnical'][red[0]] /= cal['vns_omnical'][red[0]]
             cal['vf_omnical'][red[0]] = np.logical_or(cal['vns_omnical'][red[0]] == 0, ~np.isfinite(cal['v_omnical'][red[0]]))
-            cal['v_omnical'][red[0]][~np.isfinite(cal['v_omnical'][red[0]])] = 1.0 + 0.0j
+            cal['v_omnical'][red[0]][~np.isfinite(cal['v_omnical'][red[0]])] = np.complex64(1.)
         elif omni_keys[0] != red[0]:  # the omnical solution has the baseline, but it's keyed by something other than red[0]
             cal['v_omnical'][red[0]] = deepcopy(cal['v_omnical'][omni_keys[0]])
             cal['vf_omnical'][red[0]] = deepcopy(cal['vf_omnical'][omni_keys[0]])
@@ -1087,7 +1087,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                         pols=set([pol for pols in pol_load_list for pol in pols]))
     rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds})
     rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
-    rv['vns_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
+    rv['vns_omnical'] = DataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
     filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
 
     # solar flagging
