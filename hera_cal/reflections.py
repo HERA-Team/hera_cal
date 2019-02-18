@@ -72,6 +72,7 @@ import copy
 from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
 from scipy.signal import windows
+from scipy.optimize import minimize
 from sklearn import gaussian_process as gp
 from uvtools import dspec
 import argparse
@@ -151,8 +152,8 @@ class ReflectionFitter(FRFilter):
                 setattr(self, key, {})
 
     def model_auto_reflections(self, clean_resid, dly_range, clean_flags=None, clean_data=None, 
-                               keys=None, Nphs=500, edgecut_low=0, edgecut_hi=0, window='none',
-                               alpha=0.1, zeropad=0, fthin=10, ref_sig_cut=2.0,
+                               keys=None, edgecut_low=0, edgecut_hi=0, window='none',
+                               alpha=0.1, zeropad=0, fthin=10, Nphs=300, ref_sig_cut=2.0,
                                overwrite=False, verbose=True):
         """
         Model reflections in (ideally RFI-free) autocorrelation data.
@@ -190,6 +191,8 @@ class ReflectionFitter(FRFilter):
                 number of channels to pad band edges with zeros before FFT
             fthin : int
                 scaling factor to down-select frequency axis when solving for phase
+            Nphs : int
+                Number of samples from 0 - 2pi to estimate reflection phase at.
             ref_sig_cut : float
                 if max reflection significance is not above this, do not record solution
             overwrite : bool
@@ -221,20 +224,6 @@ class ReflectionFitter(FRFilter):
         if keys is None:
             keys = [k for k in clean_resid.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
 
-        # Take FFT of clean_resid
-        self.fft_data(clean_resid, flags=clean_flags, keys=keys, assign='rfft', ax='freq', window=window, alpha=alpha,
-                      edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True,
-                      ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
-
-        if clean_data is not None:
-            # Take FFT of clean_data
-            self.fft_data(clean_data, flags=clean_flags, keys=keys, assign='_dfft', ax='freq', window=window, alpha=alpha,
-                          edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True,
-                          ifftshift=False, zeropad=zeropad, verbose=verbose, overwrite=overwrite)
-            _dfft = self._dfft
-        else:
-            _dfft = None 
-
         # iterate over keys
         for k in keys:
             # get gain key
@@ -243,29 +232,16 @@ class ReflectionFitter(FRFilter):
             else:
                 rkey = (k[1], uvutils.parse_jpolstr(k[2][1]))
 
-            # find reflection
+            # model reflection
             echo("...Modeling reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)
-
-            # fit for reflection delays and amplitude
-            if _dfft is not None:
-                dfft = _dfft[k]
+            if clean_data is not None:
+                cd = clean_data[k]
             else:
-                dfft = None
-            amp, dly, inds, sig = fit_reflection_delay(self.rfft[k], dly_range, self.delays, dfft=dfft, return_peak=False)
-
-            # make significance cut
-            if np.max(sig) < ref_sig_cut:
-                # set reflection parameters to zero
-                amp[:] = 0.0
-                dly[:] = 0.0
-                phs = np.zeros_like(amp)
-
-            else:
-                # solve for phase (slowest step)
-                phs = fit_reflection_phase(self.rfft[k], dly_range, self.delays, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
-
-                # anchor phase to 0 Hz
-                phs = (phs - 2 * np.pi * dly / 1e9 * (self.freqs[0] - zeropad * self.dnu)) % (2 * np.pi)
+                cd = None
+            amp, dly, phs, sig = fit_reflection_params(clean_resid[k], dly_range, self.freqs, clean_flags=clean_flags[k],
+                                                       clean_data=cd, window=window, alpha=alpha, edgecut_low=edgecut_low,
+                                                       edgecut_hi=edgecut_hi, zeropad=zeropad, ref_sig_cut=ref_sig_cut,
+                                                       fthin=fthin, Nphs=Nphs)
 
             # form epsilon term
             eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=False)
@@ -284,6 +260,126 @@ class ReflectionFitter(FRFilter):
                 k = (a, uvutils.parse_jpolstr(p)) 
                 if k not in self.ref_gains:
                     self.ref_gains[k] = np.ones((self.Ntimes, self.Nfreqs), dtype=np.complex)
+
+    def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs,
+                                keys=None, clean_flags=None, clean_model=None,
+                                fix_amp=False, fix_dly=False, fix_phs=False,
+                                edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
+                                skip_frac=0.9, maxiter=50, method='BFGS', tol=1e-2, verbose=True):
+        """
+        Refine reflection parameters via some minimization technique.
+
+        Iteratively perturbs reflection parameters in ref_* dictionaries,
+        and applies to input clean_data until reflection bump amplitude
+        inside dly_range is minimimzed to within a tolerance.
+ 
+        Args:
+            clean_data : 2D ndarray of shape (Ntimes, Nfreqs)
+                CLEANed auto-correlation visibility data
+            dly_range : len-2 tuple
+                Range in delay [ns] to search for reflections
+            freqs : 1D array of shape (Nfreqs,)
+                Frequency array [Hz]
+            ref_amp : dictionary
+                Initial guess for reflection amplitude
+            ref_dly : dictionary
+                Initial guess for reflection delay [ns]
+            ref_phs : dictionary
+                Initial guess for reflection phase [radian]
+            keys : list
+                List of ant-pair-pol tuples in clean_data to iterate over
+            clean_model : 2D ndarray of shape (Ntimes, Nfreqs)
+                CLEAN model with CLEAN boundary out to at most min(|dly_range|)
+                If reflection is well-isolated from foreground power, this is not necessary.
+            clean_flags : 2D ndarray boolean of shape (Ntimes, Nfreqs)
+                CLEAN flags for FFT
+            fix_amp : bool
+                If True, fix amplitude solution at ref_amp
+            fix_dly : bool
+                If True, fix delay solution at ref_dly
+            fix_phs : bool
+                If True, fix delay solution at ref_phs
+            method : str
+                Optimization algorithm. See scipy.optimize.minimize for options
+            skip_frac : float in range [0, 1]
+                fraction of flagged channels (excluding edge flags) above which skip the integration
+            tol : float
+                Optimization stopping tolerance
+            maxiter : int
+                Optimization max iterations
+
+        Returns:
+            ref_amp : dictionary
+                Reflection amplitude
+            ref_dly : dictionary
+                Reflection delay [ns]
+            ref_phs : dictionary
+                Reflection phase [radian]
+            ref_info : dictionary
+                Optimization success [bool]
+            ref_eps : dictionary
+                Reflection coefficient
+            ref_gains : dictionary
+                Reflection gains
+        """
+        # check inputs
+        if clean_flags is None:
+            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]))
+        if clean_model is None:
+            clean_model = DataContainer(dict([(k, np.zeros_like(clean_data[k])) for k in clean_data]))            
+
+        # get keys: only use auto correlations and auto pols to model reflections
+        if keys is None:
+            keys = [k for k in clean_data.keys() if k[0] == k[1] and k[2][0] == k[2][1]]
+
+        # setup reflection dictionaries
+        out_ref_eps = {}
+        out_ref_amp = {}
+        out_ref_dly = {}
+        out_ref_phs = {}
+        out_ref_info = {}
+
+        # iterate over keys
+        for k in keys:
+            # get gain key
+            if dly_range[0] >= 0:
+                rkey = (k[0], uvutils.parse_jpolstr(k[2][0]))
+            else:
+                rkey = (k[1], uvutils.parse_jpolstr(k[2][1]))
+
+            # Ensure they exist in reflection dictionaries
+            if not ref_amp.has_key(rkey) or not ref_amp.has_key(rkey) or not ref_amp.has_key(rkey):
+                echo("...{} doesn't exist in ref_* dictionaries, skipping".format(rkey), verbose=verbose)
+                continue
+
+            # run optimization
+            echo("...Optimizing reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)
+            amp = ref_amp[rkey]
+            dly = ref_dly[rkey]
+            phs = ref_phs[rkey]
+            (opt_amp, opt_dly, opt_phs,
+             opt_info) = reflection_param_minimization(clean_data[k], dly_range, self.freqs, amp, dly, phs, fix_amp=fix_amp, fix_dly=fix_dly,
+                                                       fix_phs=fix_phs, clean_model=clean_model[k], clean_flags=clean_flags[k],
+                                                       method=method, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
+                                                       edgecut_hi=edgecut_hi, edgecut_low=edgecut_low, zeropad=zeropad)
+
+            amp = np.reshape(opt_amp, amp.shape)
+            dly = np.reshape(opt_dly, dly.shape)
+            phs = np.reshape(opt_phs, phs.shape)
+
+            # form epsilon term
+            eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=False)
+
+            out_ref_eps[rkey] = eps
+            out_ref_amp[rkey] = amp
+            out_ref_phs[rkey] = phs
+            out_ref_dly[rkey] = dly
+            out_ref_info[rkey] = opt_info
+
+        # form gains
+        out_ref_gains = form_gains(out_ref_eps)
+
+        return out_ref_amp, out_ref_dly, out_ref_phs, out_ref_info, out_ref_eps, out_ref_gains
 
     def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False,
                                write_npz=False, add_to_history='', verbose=True):
@@ -689,6 +785,17 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
         eps : complex (or real) valued reflection across
             input frequencies.
     """
+    # reshape if necessary
+    if isinstance(amp, np.ndarray):
+        if amp.ndim == 1:
+            amp = np.reshape(amp, (-1, 1))
+    if isinstance(tau, np.ndarray):
+        if tau.ndim == 1:
+            tau = np.reshape(tau, (-1, 1))
+    if isinstance(phs, np.ndarray):
+        if phs.ndim == 1:
+            phs = np.reshape(phs, (-1, 1))
+
     # make reflection
     eps = amp * np.exp(2j * np.pi * tau * freqs + 1j * phs)
     if real:
@@ -766,7 +873,7 @@ def fit_reflection_delay(rfft, dly_range, dlys, dfft=None, return_peak=False):
     return ref_amps, ref_dlys, ref_dly_inds, ref_significance
 
 
-def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=500, ifft=False, ifftshift=True):
+def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=250, ifft=False, ifftshift=True):
     """
     Fit for reflection phases.
 
@@ -823,6 +930,256 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=500, iff
     return ref_phs
 
 
+def fit_reflection_params(clean_resid, dly_range, freqs, clean_flags=None, clean_data=None, window=None, alpha=0.2,
+                          edgecut_low=0, edgecut_hi=0, zeropad=0, ref_sig_cut=2.0, fthin=1, Nphs=250):
+    """
+    Fit for reflection parameters in CLEANed visibility.
+
+    Args:
+        clean_resid : 2D ndarray shape (Ntimes, Nfreqs)
+            Autocorrelation data (in frequency space) to find reflections in.
+            Ideally this is the CLEAN residual, having cleaned out structure
+            at delays less than the min(abs(dly_range)). If this is the
+            CLEAN residual, you must feed the unfiltered CLEAN data as "clean_data"
+            to properly estimate the reflection amplitude.
+        dly_range : len-2 tuple
+            delay range [nanoseconds] to search within for reflections.
+            Must be either both positive or both negative.
+        freqs : 1D ndarray
+            Frequency array in Hz
+        clean_flags : 2D ndarray shape (Ntimes, Nfreqs)
+            Flags of the (CLEANed) data. Default is None.
+        clean_data : 2D ndarray shape (Ntimes, Nfreqs)
+            If clean_resid is fed as the CLEAN residual (and not CLEAN data),
+            this should be the unfiltered CLEAN data output.
+        window : str
+            windwoing function to apply across freq before FFT. See dspec.gen_window for options
+        alpha : float
+            if taper is Tukey, this is its alpha parameter
+        edgecut_low : int
+            Nbins to flag and exclude from windowing function on low-side of the band
+        edgecut_hi : int
+            Nbins to flag and exclude from windowing function on low-side of the band
+        zeropad : int
+            number of channels to pad band edges with zeros before FFT
+        fthin : int
+            scaling factor to down-select frequency axis when solving for phase
+        Nphs : int
+            Number of samples from 0 - 2pi to estimate reflection phase at.
+        ref_sig_cut : float
+            if max reflection significance is not above this, do not record solution,
+            where significance is defined as max(fft) / median(fft).
+
+    Returns:
+        amp : reflection amplitude
+        dly : reflection delay [nanosec]
+        phs : reflection phase [radians]
+        sig : reflection significance, defined as max(fft) / median(fft) in dly_range
+    """
+    # get info
+    dnu = np.diff(freqs)[0]
+
+    # get wgts
+    if clean_flags is None:
+        wgts = np.ones_like(clean_resid, dtype=np.float)
+    else:
+        wgts = (~clean_flags).astype(np.float)
+
+    # fourier transform
+    rfft, delays = vis_clean.fft_data(clean_resid, dnu, wgts=wgts, axis=-1, window=window, alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True, zeropad=zeropad)
+    delays *= 1e9
+    if clean_data is None:
+        dfft = rfft
+    else:
+        dfft, _ = vis_clean.fft_data(clean_data, dnu, wgts=wgts, axis=-1, window=window, alpha=alpha, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, fftshift=True, zeropad=zeropad)
+    assert rfft.shape == dfft.shape, "clean_resid and clean_data must have same shape"
+
+    # fit for reflection delays and amplitude
+    amp, dly, inds, sig = fit_reflection_delay(rfft, dly_range, delays, dfft=dfft, return_peak=False)
+
+    # make significance cut
+    if np.max(sig) < ref_sig_cut:
+        # set reflection parameters to zero
+        amp[:] = 0.0
+        dly[:] = 0.0
+        phs = np.zeros_like(amp)
+
+    else:
+        # solve for phase (slowest step)
+        phs = fit_reflection_phase(rfft, dly_range, delays, dly, fthin=fthin, Nphs=Nphs, ifft=True, ifftshift=True)
+
+        # anchor phase to 0 Hz
+        phs = (phs - 2 * np.pi * dly / 1e9 * (freqs[0] - zeropad * dnu)) % (2 * np.pi)
+
+    return amp, dly, phs, sig
+
+
+def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0,
+                                  fix_amp=False, fix_dly=False, fix_phs=False, clean_model=None,
+                                  clean_flags=None, method='BFGS', skip_frac=0.9,
+                                  tol=1e-4, maxiter=100, **fft_kwargs):
+    """
+    Perturb reflection parameters to minimize residual in data.
+
+    Args:
+        clean_data : 2D ndarray of shape (Ntimes, Nfreqs)
+            CLEANed auto-correlation visibility data
+        dly_range : len-2 tuple
+            Range in delay [ns] to search for reflections
+        freqs : 1D array of shape (Nfreqs,)
+            Frequency array [Hz]
+        amp0 : float or ndarray
+            Initial guess for reflection amplitude
+        dly0 : float or ndarray
+            Initial guess for reflection delay [ns]
+        phs0 : float or ndarray
+            Initial guess for reflection phase [radian]
+        fix_amp : bool
+            If True, fix amplitude solution at amp0
+        fix_dly : bool
+            If True, fix delay solution at dly0
+        fix_phs : bool
+            If True, fix delay solution at phs0
+        clean_model : 2D ndarray of shape (Ntimes, Nfreqs)
+            CLEAN model with CLEAN boundary out to at most min(|dly_range|)
+            If reflection is well-isolated from foreground power, this is not necessary.
+        clean_flags : 2D ndarray boolean of shape (Ntimes, Nfreqs)
+            CLEAN flags for FFT
+        method : str
+            Optimization algorithm. See scipy.optimize.minimize for options
+        skip_frac : float in range [0, 1]
+            fraction of flagged channels (excluding edge flags) above which skip the integration
+        tol : float
+            Optimization stopping tolerance
+        maxiter : int
+            Optimization max iterations
+        fft_kwargs : kwargs to pass to vis_clean.fft_data
+            except for axis, wgts, ifft, fftshift
+
+    Returns:
+        amp : ndarray
+            Reflection amplitude solution
+        dly : ndarray
+            Reflection delay solution [ns]
+        phs : ndarray
+            Reflection phase solution [rad]
+        info : list
+            Optimization success [bool]
+    """
+    # define removal metric
+    def L(x, amp, dly, phs, clean_data, clean_model, clean_wgts, dly_range, freqs, fft_kwargs):
+        """
+        Metric to minimize is max(dfft) in delay range
+
+        x : ndarray, amp, and/or dly [ns], and/or phs [rad] parameters in this order.
+            If any are fed as their own argument below, exclude them from x.
+        amp : ndarray, amplitude to hold fixed if not fed in x.
+            If fed in x, this should be None
+        dly : ndarray, delay [ns] to hold fixed if not fed in x.
+            If fed in x, this should be None
+        phs : ndarray, phase [rad] to hold fixed if not fed in x.
+            If fed in x, this should be None
+        clean_data : ndarray, CLEANed visibility data
+        clean_model : ndarray, CLEAN visibility model
+        clean_wgts : ndarray, FFT weights
+        dly_range : len-2 tuple [ns]
+        freqs : ndarray, frequency array [Hz]
+        fft_kwargs : dictionary, kwargs to pass to fft_data
+        """
+        # form gains and apply to data
+        Nparams = (amp is None) + (dly is None) + (phs is None)
+        x = np.reshape(x, (Nparams, -1))
+        if amp is None:
+            amp = x[0]
+            x = x[1:]
+        if dly is None:
+            dly = x[0]
+            x = x[1:]
+        if phs is None:
+            phs = x[0]
+
+        # construct reflection and divide gain from data
+        eps = construct_reflection(freqs, amp, dly / 1e9, phs, real=False)
+        gain = 1 + eps
+        cal_data = clean_data / (gain * np.conj(gain))
+
+        # fft to delay space
+        dnu = np.diff(freqs)[0]
+        dfft, delays = vis_clean.fft_data(cal_data - clean_model, dnu, axis=-1, wgts=clean_wgts, ifft=False, fftshift=True, **fft_kwargs)
+        delays *= 1e9
+
+        select = (delays > dly_range[0]) & (delays < dly_range[1])
+        metric = np.median(np.max(np.abs(dfft[:, select]), axis=1), axis=0)
+
+        return metric
+
+    # input checks
+    Ntimes = len(clean_data)
+    if clean_model is None:
+        clean_model = np.zeros_like(clean_data)
+    if clean_flags is None:
+        clean_wgts = np.ones_like(clean_data)
+    else:
+        clean_wgts = (~clean_flags).astype(np.float)
+    edge_flags = np.isclose(np.mean(clean_wgts, axis=0), 0.0)
+    edge_flags[np.argmin(edge_flags):-np.argmin(edge_flags[::-1])] = False
+    if fix_amp and fix_dly and fix_phs:
+        raise ValueError("Can't hold amp, dly and phs fixed")
+
+    # iterate over times
+    amp, dly, phs, info = [], [], [], []
+    for i in range(Ntimes):
+        # skip frac
+        if edge_flags.all() or (skip_frac < 1 - np.mean(clean_wgts[i][~edge_flags])):
+            amp.append(0)
+            dly.append(0)
+            phs.append(0)
+            info.append(False)
+            continue
+
+        # setup starting guess
+        x0 = []
+        if fix_amp:
+            _amp = amp0[i]
+        else:
+            x0.append(amp0[i])
+            _amp = None
+        if fix_dly:
+            _dly = dly0[i]
+        else:
+            x0.append(dly0[i])
+            _dly = None
+        if fix_phs:
+            _phs = phs0[i]
+        else:
+            x0.append(phs0[i])
+            _phs = None
+        x0 = np.array(x0)
+
+        # optimize
+        res = minimize(L, x0, args=(_amp, _dly, _phs, clean_data[i], clean_model[i], clean_wgts[i], dly_range, freqs, fft_kwargs), method=method, tol=tol, options=dict(maxiter=maxiter))
+
+        # collect output
+        xf = res.x
+        if fix_amp:
+            amp.append(amp0[i])
+        else:
+            amp.append(xf[0])
+            xf = xf[1:]
+        if fix_dly:
+            dly.append(dly0[i])
+        else:
+            dly.append(xf[0])
+            xf = xf[1:]
+        if fix_phs:
+            phs.append(phs0[i])
+        else:
+            phs.append(xf[0])
+        info.append(res.success)
+
+    return np.array(amp), np.array(dly), np.array(phs), np.array(info)
+
+
 def auto_reflection_argparser():
     a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections from auto-correlation visibilities')
     a.add_argument("clean_data", nargs='*', type=str, help="CLEAN data file paths to run auto reflection modeling on")
@@ -851,6 +1208,10 @@ def auto_reflection_argparser():
     a.add_argument("--ref_sig_cut", default=2, type=float, help="Reflection minimum 'significance' threshold for fitting.")
     a.add_argument("--add_to_history", default='', type=str, help="String to append to file history")
     a.add_argument("--time_avg", default=False, action='store_true', help='Time average file before reflection fitting.')
+    a.add_argument("--opt_maxiter", default=0, type=int, help="Optimization max Niter. Default is no optimization")
+    a.add_argument("--opt_method", default='BFGS', type=str, help="Optimization algorithm. See scipy.optimize.minimize for details")
+    a.add_argument("--opt_tol", default=1e-3, type=float, help="Optimization stopping tolerance.")
+    a.add_argument("--skip_frac", default=0.9, type=float, help="Float in range [0, 1]. Fraction of (non-edge) flagged channels above which integration is skipped in optimization.")
     return a
 
 
@@ -858,10 +1219,10 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
                         write_npz=False, antenna_numbers=None, polarizations=None,
                         window='None', alpha=0.2, edgecut_low=0, edgecut_hi=0, zeropad=0,
                         tol=1e-6, gain=1e-1, maxiter=100, skip_wgt=0.2, horizon=1.0, standoff=0.0,
-                        min_dly=100.0, Nphs=500, fthin=10, ref_sig_cut=2.0, add_to_history='',
-                        overwrite=False):
+                        min_dly=100.0, Nphs=300, fthin=10, ref_sig_cut=2.0, add_to_history='',
+                        skip_frac=0.9, opt_maxiter=0, opt_method='BFGS', opt_tol=1e-3, overwrite=False):
     """
-    Run auto reflection modeling on files.
+    Run auto-correlation reflection modeling on files.
 
     Args:
         data : str or UVData subclass, data to operate on
@@ -885,16 +1246,23 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
         skip_wgt : float, flagged threshold for skipping integration, see delay_filter.py
         standoff : float ,fixed additional delay beyond the horizon (in nanosec) to CLEAN
         horizon : float, coefficient to baseline horizon where 1 is the horizon
-        min_dly : float, CLEAN area boundary (in nanosec) used for freq CLEAN is never below this
+        min_dly : float, upper CLEAN boundary is never below min_dly [ns]
         Nphs : int, Number of points in phase [0=2pi] to evaluate for reflection phase solution
         fthin : int, Thinning number across frequency axis when solving for phase
         ref_sig_cut : float, if max reflection significance is not above this, do not record solution
         add_to_history : str, notes to add to history
+        opt_maxiter : int, optimization max iterations. Default is no optimization
+        opt_method : str, optimization algorithm. See scipy.optimize.minimize for options
+        opt_tol : float, Optimization stopping tolerance
+        skip_frac : float in range [0, 1], fraction of flagged channels (excluding edge flags) above which skip the integration
         overwrite : bool, if True, overwrite output files.
 
     Result:
         A calfits written to output_fname, and if write_npz, an NPZ with the
         same path and filename, except for the .npz suffix.
+
+    Notes:
+        The CLEAN min_dly should always be less than the lower boundary of dly_range.
     """
     # initialize reflection fitter
     RF = ReflectionFitter(data, filetype=filetype, input_cal=input_cal)
@@ -910,8 +1278,8 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
     # read data
     RF.read(bls=bls, polarizations=polarizations)
 
-    # get all autocorr keys
-    keys = [k for k in RF.data if k[0] == k[1]]
+    # get all autocorr & autopol keys
+    keys = [k for k in RF.data if (k[0] == k[1]) and (k[2][0] == k[2][1])]
 
     # assign Containers
     data = RF.data
@@ -936,6 +1304,14 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
     RF.model_auto_reflections(RF.clean_data, dly_range, clean_flags=RF.clean_flags, edgecut_low=edgecut_low,
                               edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
                               zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
+
+    # refine reflections
+    if opt_maxiter > 0:
+        (RF.ref_amp, RF.ref_dly, RF.ref_phs, info, RF.ref_eps,
+         RF.ref_gains) = RF.refine_auto_reflections(RF.clean_data, dly_range, RF.ref_amp, RF.ref_dly, RF.ref_phs,
+                                                    keys=keys, window=window, alpha=alpha, edgecut_low=edgecut_low,
+                                                    edgecut_hi=edgecut_hi, clean_flags=RF.clean_flags, clean_model=RF.clean_model,
+                                                    skip_frac=skip_frac, maxiter=opt_maxiter, method=opt_method, tol=opt_tol)
 
     # write reflections
     RF.write_auto_reflections(output_fname, overwrite=overwrite, add_to_history=add_to_history,

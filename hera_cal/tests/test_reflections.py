@@ -67,7 +67,7 @@ def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_
     ant_dist = dict(zip(ants, map(np.linalg.norm, antpos)))
 
     # get antenna signals and noise
-    n = dict([(a, noise(s1.size, 1e-3).reshape(s1.shape)) for a in ants])
+    n = dict([(a, noise(s1.size, 1e-8).reshape(s1.shape)) for a in ants])  # set noise to essentially zero
     s = dict([(a, s1 * functools.reduce(operator.add, [src_a * fringe(freqs, bl_len=ant_dist[a], theta=theta + src_t) * beam(theta + src_t) for src_t, src_a in zip(src_theta, src_amp)])) for a in ants])
 
     # iterate over bls
@@ -116,7 +116,7 @@ def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_
 
 class Test_ReflectionFitter_Cables(unittest.TestCase):
     uvd_clean = simulate_reflections(add_cable=False, add_xtalk=False)
-    uvd = simulate_reflections(cdelay=150.0, cphase=2.0, camp=1e-2, add_cable=True, cable_ants=[37], add_xtalk=False)
+    uvd = simulate_reflections(cdelay=155.0, cphase=2.0, camp=1e-2, add_cable=True, cable_ants=[37], add_xtalk=False)
 
     def test_model_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
@@ -124,37 +124,18 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         g_k = (37, 'Jxx')
         RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 150.0, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=2e-1).all())
-
-        # now reverse delay range
-        RF.model_auto_reflections(RF.data, (-200, -100), keys=[bl_k], window='blackmanharris',
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), -150.0, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2 * np.pi - 2.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 155.0, atol=1e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
 
         # try with a small edgecut
         RF = reflections.ReflectionFitter(self.uvd)
         edgecut = 5
         RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True, edgecut_low=edgecut, edgecut_hi=edgecut)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 150.0, atol=5e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=3e-1).all())
-
-        # exceptions
-        nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (1000, 2000), window='none', overwrite=True, edgecut_low=edgecut)
-        nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (100, 300), overwrite=False, edgecut_low=edgecut)
-
-        # non-even Nfreqs
-        RF = reflections.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:-1], inplace=False))
-        RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 150.0, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 155.0, atol=1e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
 
         # try a high ref_sig cut
         RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
@@ -164,16 +145,69 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         RF.vis_clean(data=RF.data, ax='freq', min_dly=100, overwrite=True, window='blackmanharris', alpha=0.1, tol=1e-8, keys=[bl_k])
         RF.model_auto_reflections(RF.clean_resid, (100, 200), clean_data=RF.clean_data, keys=[bl_k],
                                   window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 150.0, atol=2e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-2).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=2e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 155.0, atol=1e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
+
+        # try optimization on time-averaged data
+        RF.timeavg_data(RF.data, RF.times, RF.lsts, 200, keys=None, overwrite=True)
+        RF.model_auto_reflections(RF.avg_data, (100, 200), keys=[bl_k], window='blackmanharris',
+                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+        output = RF.refine_auto_reflections(RF.avg_data, (125, 175), RF.ref_amp, RF.ref_dly, RF.ref_phs,
+                                            keys=[bl_k], window='blackmanharris', zeropad=100,
+                                            maxiter=100, method='BFGS', tol=1e-5)
+        ref_amp = output[0]
+        ref_dly = output[1]
+        ref_phs = output[2]
+        # assert equivalence to higher precision
+        nt.assert_true(np.isclose(np.ravel(list(ref_dly.values())), 155.0, atol=1e-3).all())
+        nt.assert_true(np.isclose(np.ravel(list(ref_amp.values())), 1e-2, atol=1e-6).all())
+        nt.assert_true(np.isclose(np.ravel(list(ref_phs.values())), 2.0, atol=1e-2).all())
+
+        # now reverse delay range
+        RF.model_auto_reflections(RF.avg_data, (-200, -100), keys=[bl_k], window='blackmanharris',
+                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), -155.0, atol=1e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2 * np.pi - 2.0, atol=1e-1).all())
+
+        output = RF.refine_auto_reflections(RF.avg_data, (-175, -125), RF.ref_amp, RF.ref_dly, RF.ref_phs,
+                                            keys=[bl_k, (39, 39, 'xx')], window='blackmanharris', zeropad=100,
+                                            maxiter=100, method='BFGS', tol=1e-5)
+        ref_amp = output[0]
+        ref_dly = output[1]
+        ref_phs = output[2]
+        # assert equivalence to higher precision
+        nt.assert_true(np.isclose(np.ravel(list(ref_dly.values())), -155.0, atol=1e-3).all())
+        nt.assert_true(np.isclose(np.ravel(list(ref_amp.values())), 1e-2, atol=1e-6).all())
+        nt.assert_true(np.isclose(np.ravel(list(ref_phs.values())), 2 * np.pi - 2.0, atol=1e-2).all())
+
+        # test flagged data
+        _bl = (38, 38, 'xx')
+        RF.model_auto_reflections(RF.avg_data, (-200, -100), keys=[_bl], window='blackmanharris',
+                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+        RF.avg_flags[_bl][:] = True
+        output = RF.refine_auto_reflections(RF.avg_data, (-175, -125), RF.ref_amp, RF.ref_dly, RF.ref_phs,
+                                            keys=[_bl], window='blackmanharris', zeropad=100, clean_flags=RF.avg_flags,
+                                            maxiter=100, method='BFGS', tol=1e-5)
+        nt.assert_false(output[3][(38, 'Jxx')].any())
+
+        # non-even Nfreqs
+        RF = reflections.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:-1], inplace=False))
+        RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
+                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 155.0, atol=1e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
+
+        # exceptions
+        nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (1000, 2000), window='none', overwrite=True, edgecut_low=edgecut)
 
         # try clear
         RF.clear(exclude=['data'])
         nt.assert_equal(len(RF.ref_eps), 0)
         nt.assert_equal(len(RF.ref_gains), 0)
         nt.assert_true(len(RF.data) > 0)
-        nt.assert_equal(len(RF.rfft), 0)
 
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
