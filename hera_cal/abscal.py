@@ -2773,19 +2773,20 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     if refant_num is None:
         refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs)[0]
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
-    AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
+    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
+    AC = AbsCal(model, data, wgts=wgts, antpos=idealized_antpos, freqs=data.freqs,
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
-    AC.antpos = data.antpos
+    AC.antpos = idealized_antpos
 
     # Global Delay Slope Calibration
     for time_avg in [True, False]:
         abscal_step(abscal_delta_gains, AC, AC.delay_slope_lincal, {'time_avg': time_avg, 'edge_cut': edge_cut, 'verbose': verbose},
-                    [AC.custom_dly_slope_gain], [(rc_flags.keys(), data.antpos)], rc_flags,
+                    [AC.custom_dly_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                     gain_convention=gain_convention, verbose=verbose)
 
     # Global Phase Slope Calibration
     abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': tol, 'edge_cut': edge_cut, 'verbose': verbose},
-                [AC.custom_phs_slope_gain], [(rc_flags.keys(), data.antpos)], rc_flags,
+                [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     # Per-Channel Absolute Amplitude Calibration
@@ -2794,7 +2795,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # Per-Channel Tip-Tilt Phase Calibration
     abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
-                [(rc_flags.keys(), data.antpos), (rc_flags.keys(),)], rc_flags,
+                [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     return abscal_delta_gains, AC
