@@ -39,7 +39,7 @@ import linsolve
 
 from . import version
 from .apply_cal import calibrate_in_place
-from .smooth_cal import pick_reference_antenna
+from .smooth_cal import pick_reference_antenna, rephase_to_refant
 from .flag_utils import synthesize_ant_flags
 from .noise import predict_noise_variance_from_autos
 from . import utils
@@ -2771,7 +2771,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # instantiate Abscal object
     if refant_num is None:
-        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs)[0]
+        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
     AC = AbsCal(model, data, wgts=wgts, antpos=idealized_antpos, freqs=data.freqs,
@@ -2930,10 +2930,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                             
         # impose a single reference antenna on the final antenna solution
         if refant is None:
-            refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs)
-        refant_phasor = (abscal_gains[refant] / np.abs(abscal_gains[refant]))
-        for ant in abscal_gains.keys():
-            abscal_gains[ant] /= refant_phasor
+            refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
+        rephase_to_refant(abscal_gains, refant, flags=abscal_flags)
     else:
         echo("No model files overlap with data files in LST. Result will be fully flagged.", verbose=verbose)
 
