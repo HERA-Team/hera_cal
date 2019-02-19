@@ -182,7 +182,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     return filtered / rephasor, info
 
 
-def pick_reference_antenna(gains, flags, freqs):
+def pick_reference_antenna(gains, flags, freqs, per_pol=True):
     '''Pick a refrence antenna that has the minimum number of per-antenna flags and produces
     the least noisy phases on other antennas when used as a reference antenna.
 
@@ -192,13 +192,12 @@ def pick_reference_antenna(gains, flags, freqs):
         freqs: ndarray of frequency channels in Hz
 
     Returns:
-        refant: key of the antenna with the minimum number of flags and the least noisy phases
+        refant: key(s) of the antenna(s) with the minimum number of flags and the least noisy phases
+            if per_pol: dictionary mapping gain polarizations string to ant-pol tuples
+            else: ant-pol tuple e.g. (0, 'Jxx')
     '''
-    # pick antennas with the mininum number of flags
-    flags_per_ant = {ant: np.sum(f) for ant, f in flags.items()}
-    refant_candidates = [ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))]
-    
-    # compute delay and phase for all gains to flatten them as well as possible. Average  over times.
+
+    # compute delay and phase for all gains to flatten them as well as possible. Average over times.
     df = np.median(np.diff(freqs))
     rephasors = {}
     for ant in gains.keys():
@@ -206,16 +205,29 @@ def pick_reference_antenna(gains, flags, freqs):
         (dlys, phis) = utils.fft_dly(gains[ant], df, wgts, medfilt=False)
         rephasors[ant] = np.exp(-2.0j * np.pi * np.mean(dlys), freqs - 1.0j * np.mean(phis))
 
-    # assess each candidate reference antenna: estimate the median noise of the angle after rephasing to a given refant
-    # (after taking out delays from both to minimize phase wraps) and return least noisy refant
-    median_angle_noise_as_refeant = {}
-    for refant in refant_candidates:
-        refant_rephasor = np.abs(gains[refant] * rephasors[refant]) / (gains[refant] * rephasors[refant])
-        median_phase_noise = [np.median(interleaved_noise_variance_estimate(
-                              np.angle(gains[ant] * rephasors[ant] * refant_rephasor))[~(flags[ant] | flags[refant])])
-                              for ant in gains.keys() if not np.all(flags[ant] | flags[refant])]
-        median_angle_noise_as_refeant[refant] = np.median(median_phase_noise)
-    return sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
+    # loop over pols (if per_pol)
+    refants = {}
+    pols = set([ant[1] for ant in gains])
+    for pol in (pols if per_pol else [pols]):
+        # pick antennas with the mininum number of flags
+        flags_per_ant = {ant: np.sum(f) for ant, f in flags.items() if ant[1] in pol}
+        refant_candidates = [ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))]
+        
+        # assess each candidate reference antenna: estimate the median noise of the angle after rephasing to a given refant
+        # (after taking out delays from both to minimize phase wraps) and return least noisy refant
+        median_angle_noise_as_refeant = {}
+        for refant in refant_candidates:
+            refant_rephasor = np.abs(gains[refant] * rephasors[refant]) / (gains[refant] * rephasors[refant])
+            median_phase_noise = [np.median(interleaved_noise_variance_estimate(
+                                  np.angle(gains[ant] * rephasors[ant] * refant_rephasor))[~(flags[ant] | flags[refant])])
+                                  for ant in gains.keys() if (not np.all(flags[ant] | flags[refant]) and (ant[1] in pol))]
+            median_angle_noise_as_refeant[refant] = np.median(median_phase_noise)
+        
+        if not per_pol:
+            return sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
+        else:
+            refants[pol] = sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
+    return refants
 
 
 def rephase_to_refant(gains, refant, flags=None):
