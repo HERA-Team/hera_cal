@@ -105,7 +105,8 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
             flags[(n, 'Jxx')][:, 4] = True
         for n in range(6, 9):  # add phase noise to disqualify antennas 6, 7, 8
             gains[(n, 'Jxx')] *= np.exp(2j * np.pi * np.random.rand(10, 10))
-        self.assertEqual(smooth_cal.pick_reference_antenna(gains, flags, freqs), (9, 'Jxx'))
+        self.assertEqual(smooth_cal.pick_reference_antenna(gains, flags, freqs, per_pol=False), (9, 'Jxx'))
+        self.assertEqual(smooth_cal.pick_reference_antenna(gains, flags, freqs), {'Jxx': (9, 'Jxx')})
 
     def test_rephase_to_refant(self):
         gains = {(0, 'Jxx'): np.array([1. + 1.0j, 1. - 1.0j]),
@@ -129,7 +130,7 @@ class Test_Calibration_Smoother(unittest.TestCase):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         flag_file_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
         cs = smooth_cal.CalibrationSmoother(calfits_list, flag_file_list=flag_file_list, flag_filetype='npz', pick_refant=True)
-        self.assertEqual(cs.refant, (54, 'Jxx'))
+        self.assertEqual(cs.refant['Jxx'], (54, 'Jxx'))
         cs.time_freq_2D_filter(window='tukey', alpha=.45)
         cs.rephase_to_refant()
         np.testing.assert_array_almost_equal(np.imag(cs.filtered_gain_grids[54, 'Jxx']),
