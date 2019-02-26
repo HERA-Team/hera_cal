@@ -416,7 +416,7 @@ class VisClean(object):
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
                  overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
-                 zeropad=0, verbose=True):
+                 zeropad=0, dtime=None, dnu=None, verbose=True):
         """
         Take FFT of data and attach to self.
 
@@ -450,6 +450,9 @@ class VisClean(object):
             ifftshift : bool, if True, ifftshift data along FT axis before FFT.
             fftshift : bool, if True, fftshift along FFT axes.
             zeropad : int, number of zero-valued channels to append to each side of FFT axis.
+            dtime : float, time spacing of input data [sec], not necessarily integration time!
+                Default is self.dtime.
+            dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             overwrite : bool
                 If dfft[key] already exists, overwrite its contents.
         """
@@ -480,13 +483,26 @@ class VisClean(object):
 
         # get delta bin
         if ax == 'freq':
-            delta_bin = self.dnu
+            if dnu is None:
+                delta_bin = self.dnu
+            else:
+                delta_bin = dnu
             axis = 1
         elif ax == 'time':
-            delta_bin = self.dtime
+            if dtime is None:
+                delta_bin = self.dtime
+            else:
+                delta_bin = dtime
             axis = 0
         else:
-            delta_bin = (self.dtime, self.dnu)
+            if dtime is None:
+                delta_bin = (self.dtime,)
+            else:
+                delta_bin = (dtime,)
+            if dnu is None:
+                delta_bin += (self.dnu,)
+            else:
+                delta_bin += (dnu,)
             axis = (0, 1)
 
         # iterate over keys
