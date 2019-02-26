@@ -519,7 +519,7 @@ class ReflectionFitter(FRFilter):
             # append to containers: keeping Nmodes b/c otherwise their eventual outerproduct fails
             self.umodes[k] = u[:, :Nmodes]
             self.vmodes[k] = v[:Nmodes, :]
-            self.svals[k] = svals
+            self.svals[k] = svals[:Nmodes]
             self.uflags[k] = np.min(flags[k], axis=1, keepdims=True)
 
         # append relevant metadata
@@ -528,6 +528,46 @@ class ReflectionFitter(FRFilter):
             self.vmodes.times = dfft.times
             self.svals.times = dfft.times
             self.uflags.times = dfft.times
+
+    def project_svd_modes(self, dfft, umodes=None, svals=None, vmodes=None):
+        """
+        Given two of the SVD output matrices, project the input dfft data onto
+        the last remaining SVD matrix.
+
+        Args:
+
+
+        Returns:
+            output : DataContainer, last remaining SVD matrix
+        """
+        output = DataContainer({})
+        if umodes is None:
+            assert svals is not None and vmodes is not None, "Must feed two of the SVD output matrices"
+            # compute umodes
+            for k in dfft:
+                if k not in svals or k not in vmodes:
+                    continue
+                output[k] = dfft[k].dot(np.linalg.pinv(vmodes[k]).dot(svals[k] * np.eye(len(svals[k]))))
+
+        elif svals is None:
+            assert umodes is not None and vmodes is not None, "Must feed two of the SVD output matrices"
+            for k in dfft:
+                if k not in umodes or k not in vmodes:
+                    continue
+                output[k] = np.linalg.pinv(umodes[k]).dot(dfft[k].dot(np.linalg.pinv(vmodes[k])))
+
+        elif vmodes is None:
+            assert umodes is not None and svals is not None, "Must feed two of the SVD output matrices"
+            # compute vmodes
+            for k in dfft:
+                if k not in svals or k not in vmodes:
+                    continue
+                output[k] = np.linalg.pinv(svals[k] * np.eye(len(svals[k]))).dot(np.linalg.pinv(umodes[k]).dot(dfft[k]))
+
+        else:
+            raise AssertionError("Must feed two of the SVD output matrices")
+
+        return output
 
     def build_pc_model(self, umodes, vmodes, svals, keys=None, Nkeep=None, overwrite=False, increment=False, verbose=True):
         """
