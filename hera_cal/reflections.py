@@ -531,14 +531,17 @@ class ReflectionFitter(FRFilter):
 
     def project_svd_modes(self, dfft, umodes=None, svals=None, vmodes=None):
         """
-        Given two of the SVD output matrices, project the input dfft data onto
-        the last remaining SVD matrix.
+        Given two of the 3 SVD output vectors, project the input dfft data onto
+        the last remaining SVD vector.
 
         Args:
-
+            dfft : DataContainer, holds time-delay waterfall visibilities
+            umodes : DataContainer, holds SVD umodes
+            svals : DataContainer, holds SVD singular values
+            vmodes : DataContainer, holds SVD vmodes
 
         Returns:
-            output : DataContainer, last remaining SVD matrix
+            output : DataContainer, dfft projected onto last remaining SVD vector
         """
         output = DataContainer({})
         if umodes is None:
@@ -560,7 +563,7 @@ class ReflectionFitter(FRFilter):
             assert umodes is not None and svals is not None, "Must feed two of the SVD output matrices"
             # compute vmodes
             for k in dfft:
-                if k not in svals or k not in vmodes:
+                if k not in svals or k not in umodes:
                     continue
                 output[k] = np.linalg.pinv(svals[k] * np.eye(len(svals[k]))).dot(np.linalg.pinv(umodes[k]).dot(dfft[k]))
 
