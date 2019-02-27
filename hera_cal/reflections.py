@@ -100,9 +100,9 @@ class ReflectionFitter(FRFilter):
         self.ref_gains : dictionary, see model_auto_reflections()
         self.ref_flags : dictionary, see model_auto_reflections()
 
-        self.umodes : DataContainer, see pca_decomp()
-        self.vmodes : DataContainer, see pca_decomp()
-        self.svals : DataContainer, see pca_decomp()
+        self.umodes : DataContainer, see sv_decomp()
+        self.vmodes : DataContainer, see sv_decomp()
+        self.svals : DataContainer, see sv_decomp()
         self.umode_interp : DataContainer, see interp_u()
         self.pcomp_model : DataContainer, see build_pc_model()
         self.pcomp_model_fft : DataContainer, see subtract_model()
@@ -453,22 +453,57 @@ class ReflectionFitter(FRFilter):
 
         return uvc
 
-    def pca_decomp(self, dfft, dly_range, flags=None, side='both', keys=None, Nkeep=None,
+    def svd_weights(self, dfft, delays, horizon=1.0, standoff=0.0, min_dly=None, max_dly=None, side='both'):
+        """
+        Form wgts windowing DataContainer for sv_decomp.
+
+        Args:
+            dfft : DataContainer, holding visibilities in time & delay space
+            delays : ndarray, 1D array of dfft delays [ns]
+            horizon : float, coefficient of baseline geometric horizon
+                to set as *lower* delay boundary of window (opposite of CLEANing convention)
+            standoff : float, buffer [nanosec] added to baseline horizon
+                for lower delay boundary of window
+            min_dly : float, minimum delay of window
+            max_dly : float, maximum delay of window
+            side : str, options=['pos', 'neg', 'both']
+                Specifies window as spanning only positive delays, only negative delays or both.
+ 
+        Returns:
+            wgts : DataContainer, holding sv_decomp weights
+        """
+        wgts = DataContainer({})
+        for k in dfft:
+            w = np.ones_like(dfft[k], dtype=np.float)
+            # get horizon
+            h = np.linalg.norm(self.antpos[k[1]] - self.antpos[k[0]]) / 2.99e8 * 1e9 * horizon + standoff
+            if min_dly is not None:
+                h = np.max([h, min_dly])
+            w[:, np.abs(delays) < h] = 0.0
+            if max_dly is not None:
+                w[:, np.abs(delays) > max_dly] = 0.0
+            if side == 'neg':
+                w[:, delays > 0.0] = 0.0
+            elif side == 'pos':
+                w[:, delays < 0.0] = 0.0
+            wgts[k] = w
+
+        return wgts
+
+    def sv_decomp(self, dfft, wgts=None, flags=None, keys=None, Nkeep=None,
                    overwrite=False, verbose=True):
         """
-        Create a PCA-based model of the FFT data in dfft.
+        Create a SVD-based model of the FFT data in dfft.
 
         This is done via Singular Value Decomposition on the input delay waterfall data
-        and results in self.umodes, self.vmodes, self.svals, and self.uflags.
-        The input dly_range forms the bounds of a tophat windowing applied to dfft
-        before taking the SVD, to narrow the information-content of the PCs to certain delays.
+        times the wgts and stores results in self.umodes, self.vmodes, self.svals, and self.uflags.
 
         Args:
             dfft : DataContainer, holding delay-transformed data.
+            wgts : DataContainer, holding weights to multiply with dfft before taking SVD
+                See self.svd_weights()
             dly_range : len-2 tuple of positive delays in nanosec
             flags : DataContainer, holding dfft flags (e.g. skip_wgts). Default is None.
-            side : str, options=['pos', 'neg', 'both']
-                Specifies dly_range as positive delays, negative delays or both.
             keys : list of tuples
                 List of datacontainer baseline-pol tuples to create model for.
             Nkeep : int, number of modes to keep out of total Ntimes number of modes.
@@ -486,17 +521,13 @@ class ReflectionFitter(FRFilter):
         if flags is None:
             flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=np.bool)) for k in dfft]))
 
+        # get weights
+        if wgts is None:
+            wgts = DataContainer(dict([(k, np.ones_like(dfft[k], dtype=np.float)) for k in dfft]))
+
         # get keys
         if keys is None:
             keys = dfft.keys()
-
-        # get selection function
-        if side == 'pos':
-            select = np.where((self.delays >= dly_range[0]) & (self.delays <= dly_range[1]))[0]
-        elif side == 'neg':
-            select = np.where((self.delays >= -dly_range[1]) & (self.delays <= -dly_range[0]))[0]
-        elif side == 'both':
-            select = np.where((np.abs(self.delays) > dly_range[0]) & (np.abs(self.delays) < dly_range[1]))[0]
 
         # iterate over keys
         for k in keys:
@@ -508,18 +539,12 @@ class ReflectionFitter(FRFilter):
                 continue
 
             # perform svd to get principal components
-            d = np.zeros_like(dfft[k])
-            d[:, select] = dfft[k][:, select]
-            u, svals, v = np.linalg.svd(d)
-            if Nkeep is None:
-                Nmodes = len(svals)
-            else:
-                Nmodes = Nkeep
+            u, svals, v = np.linalg.svd(dfft[k] * wgts[k], full_matrices=False)
 
             # append to containers: keeping Nmodes b/c otherwise their eventual outerproduct fails
-            self.umodes[k] = u[:, :Nmodes]
-            self.vmodes[k] = v[:Nmodes, :]
-            self.svals[k] = svals[:Nmodes]
+            self.umodes[k] = u[:, :Nkeep]
+            self.vmodes[k] = v[:Nkeep, :]
+            self.svals[k] = svals[:Nkeep]
             self.uflags[k] = np.min(flags[k], axis=1, keepdims=True)
 
         # append relevant metadata
@@ -581,11 +606,11 @@ class ReflectionFitter(FRFilter):
 
         Args:
             umodes : DataContainer
-                SVD u-modes from self.pca_decomp().
+                SVD u-modes from self.sv_decomp().
             vmodes : DataContainer
-                SVD v-modes from self.pca_decomp().
+                SVD v-modes from self.sv_decomp().
             svals : DataContainer
-                SVD singular values from self.pca_decomp().
+                SVD singular values from self.sv_decomp().
             keys : list of tuples
                 List of ant-pair-pol tuples to operate on.
             Nkeep : int
@@ -638,7 +663,7 @@ class ReflectionFitter(FRFilter):
         residual of data with self.data_pcmodel_resid. 
 
         Note: The windowing parameters should be the *same* as those that were used
-        in constructing the dfft that pca_decomp operated on.
+        in constructing the dfft that sv_decomp operated on.
 
         Args:
             data : DataContainer
@@ -719,7 +744,7 @@ class ReflectionFitter(FRFilter):
 
         Args:
             umomdes : DataContainer
-                u-mode container to interpolate, see self.pca_decomp()
+                u-mode container to interpolate, see self.sv_decomp()
             times : 1D array
                 Holds time_array of input umodes.
             full_times : 1D array
