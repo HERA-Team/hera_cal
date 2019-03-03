@@ -18,6 +18,7 @@ import unittest
 
 import hera_cal as hc
 from hera_cal.data import DATA_PATH
+from scipy import stats
 
 
 def test_timeavg_waterfall():
@@ -78,6 +79,29 @@ def test_timeavg_waterfall():
     nt.assert_true(np.allclose(al, al2 - 1.52917804))
 
 
+def test_frfilters():
+    # convert a high-pass frprofile to an FIR filter
+    frbins = np.linspace(-40e-3, 40e-3, 1024)
+    frp = np.ones(1024)
+    frp[512-9:512+10] = 0.0
+    fir, tbins = hc.frf.frp_to_fir(frp, dfr=np.diff(frbins)[0])
+    # confirm its purely real
+    nt.assert_false(np.isclose(np.abs(fir.real), 0.0).any())
+    nt.assert_true(np.isclose(np.abs(fir.imag), 0.0).all())
+
+    # convert back
+    _frp, _frbins = hc.frf.fir_to_frp(fir, dt=np.diff(tbins)[0])
+    np.testing.assert_array_almost_equal(frp, _frp.real)
+    np.testing.assert_array_almost_equal(np.diff(frbins), np.diff(_frbins))
+    nt.assert_true(np.isclose(np.abs(_frp.imag), 0.0).all())
+
+    # test noise averaging properties
+    frp = np.zeros(1024)
+    frp[512] = 1.0
+    t_ratio = hc.frf.fr_tavg(frp)
+    nt.assert_true(np.isclose(t_ratio, 1024).all())
+
+
 class Test_FRFilter:
 
     def setUp(self):
@@ -99,6 +123,38 @@ class Test_FRFilter:
 
         # exceptions
         nt.assert_raises(AssertionError, self.F.timeavg_data, self.F.data, self.F.times, self.F.lsts, 1.0)
+
+    def test_frfilter_data(self):
+        # construct high-pass filter
+        frates = np.fft.fftshift(np.fft.fftfreq(self.F.Ntimes, self.F.dtime)) * 1e3
+        w = np.ones((self.F.Ntimes, self.F.Nfreqs), dtype=np.float)
+        w[np.abs(frates) < 20] = 0.0
+        frps = hc.datacontainer.DataContainer(dict([(k, w) for k in self.F.data]))
+
+        # make gaussian random noise
+        bl = (24, 25, 'xx')
+        window = 'blackmanharris'
+        ec = 0
+        np.random.seed(0)
+        self.F.data[bl] = np.reshape(stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs) \
+                                    + 1j * stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs), (self.F.Ntimes, self.F.Nfreqs))
+        # fr filter noise
+        self.F.frfilter_data(self.F.data, self.F.times, self.F.lsts, frps,
+                             overwrite=True, verbose=False)
+
+        # check key continue w/ ridiculous edgecut
+        self.F.frfilter_data(self.F.data, self.F.times, self.F.lsts, frps,
+                             overwrite=False, verbose=False, keys=[bl], edgecut_low=100)
+
+        # fft
+        self.F.fft_data(data=self.F.data, assign='dfft', ax='freq', window=window, edgecut_low=ec, edgecut_hi=ec, overwrite=True)
+        self.F.fft_data(data=self.F.frf_data, assign='rfft', ax='freq', window=window, edgecut_low=ec, edgecut_hi=ec, overwrite=True)
+
+        # ensure drop in noise power is reflective of frf_nsamples
+        dfft = np.mean(np.abs(self.F.dfft[bl]), axis=0)
+        rfft = np.mean(np.abs(self.F.rfft[bl]), axis=0)
+        r = np.mean(dfft / rfft)
+        nt.assert_almost_equal(r, np.sqrt(np.mean(self.F.frf_nsamples[bl])), places=1)
 
     def test_write_data(self):
         self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35, rephase=False, verbose=False)

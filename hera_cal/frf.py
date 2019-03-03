@@ -7,11 +7,11 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
 import copy
-from .datacontainer import DataContainer
 import os
 from six.moves import range
 from pyuvdata import UVData
 import pyuvdata.utils as uvutils
+from uvtools import dspec
 
 from . import io
 from . import version
@@ -197,6 +197,127 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     return avg_data, win_flags, avg_nsamples, avg_lsts, avg_extra_arrays
 
 
+def apply_fir(data, fir, wgts=None):
+    """
+    Applies an FIR filter to data across zeroth axis.
+
+    Convolve data against an FIR filter across time (zeroth) axis.
+    If fir is 1D, will repeat along frequency to match shape of data.
+
+    Args:
+        data : complex ndarray of shape (Ntimes, Nfreqs)
+        fir : complex 1d or 2d array of shape (Ntimes,) or (Ntimes, Nfreqs)
+            Holds FIR filter to convolve against data
+        wgts : float ndarray of shape (Ntimes, Nfreqs)
+            Default is all ones.
+
+    Returns:
+        new_data : complex ndarray of shape (Ntimes, Nfreqs)
+            Contains data convolved with fir across
+            time for each frequency channel independently.
+    """
+    # shape checks
+    Ntimes, Nfreqs = data.shape
+    assert isinstance(fir, np.ndarray), "fir must be an ndarray"
+    if fir.ndim == 1:
+        fir = np.repeat(fir[:, None], Nfreqs, axis=1)
+    assert (Ntimes, Nfreqs) == fir.shape, "fir shape must match input data along time and frequency"
+
+    # get weights
+    if wgts is None:
+        wgts = np.ones_like(data, dtype=np.float)
+
+    new_data = np.empty_like(data)
+
+    for i in range(Nfreqs):
+        new_data[:, i] = np.convolve(data[:, i] * wgts[:, i], fir[:, i], mode='same')
+
+    return new_data
+
+
+def fir_to_frp(fir, dt=None):
+    '''
+    Transform a FIR filter (time domain fr filter) to a fringe rate profile.
+
+    This function assumes the convention of fft for time->fringe-rate and
+    ifft for fringe-rate->time. The input FIR must have a monotonically increasing time axis.
+
+    Args:
+        fir : 1D or 2D ndarray of the FIR filter with shape (Ntimes,) or (Ntimes, Nfreqs)
+        dt : Time spacing [sec] of the time axis.
+
+    Returns:
+        frp : 1D or 2D ndarray of the fringe-rate profile.
+        frbins : 1D ndarray of fringe-rate bins [Hz] if dt is provided, else is None.
+    '''
+    # generate frp
+    fir = np.fft.ifftshift(fir, axes=0)
+    frp = np.fft.fft(fir, axis=0)
+    frp = np.fft.fftshift(frp, axes=0)
+
+    # generate frbins
+    if dt is None:
+        frbins = None
+    else:
+        frbins = np.fft.fftshift(np.fft.fftfreq(len(fir), dt), axes=0)
+
+    return frp, frbins
+
+
+def frp_to_fir(frp, dfr=None):
+    '''
+    Transform a fringe-rate profile into an FIR filter.
+
+    This function assumes the convention of fft for time->fringe-rate and
+    ifft for fringe-rate->time. The input FR profile must have a monotonically increasing FR axis.
+
+    Args:
+        frp : 1D or 2D ndarray of the FR profile with shape (Nfrates,) or (Nfrates, Nfreqs)
+        dfr : Fringe-rate spacing [Hz] of the fringe-rate axis.
+
+    Returns:
+        fir : 1D or 2D ndarray of the FIR filter.
+        tbins : 1D ndarray of time bins [sec] if dfr is provided, else is None.
+    '''
+    # generate fir
+    frp = np.fft.ifftshift(frp, axes=0)
+    fir = np.fft.ifft(frp, axis=0)
+    fir = np.fft.fftshift(fir, axes=0)
+
+    # generate frbins
+    if dfr is None:
+        tbins = None
+    else:
+        tbins = np.fft.fftshift(np.fft.fftfreq(len(frp), dfr), axes=0)
+
+    return fir, tbins
+
+
+def fr_tavg(frp, noise_amp=None):
+    """
+    Calculate the attenuation induced by an FR filter on a noise signal.
+
+    See Ali et al. 2015 Eqn (9)
+
+    Args:
+        frp : A 2D fringe-rate profile of shape (Nfrates, Nfreqs)
+        noise_amp : The noise amplitude (stand dev. not variance) in frate space
+            with shape matching input frp
+
+    Returns:
+        t_ratio : ndarray, effective integration t_after / t_before with shape (Nfrates, Nfreqs)
+    """
+    if frp.ndim == 1:
+        frp = np.reshape(frp, (-1, 1))
+    if noise_amp is None:
+        noise_amp = np.ones_like(frp, dtype=np.float)
+
+    t_ratio = np.sum(np.abs(noise_amp)**2, axis=0, keepdims=True) / np.sum(np.abs(frp)**2 * np.abs(noise_amp)**2, axis=0, keepdims=True).clip(1e-10, np.inf)
+    t_ratio = np.repeat(t_ratio, len(frp), axis=0)
+
+    return t_ratio
+
+
 class FRFilter(VisClean):
     """
     Fringe Rate Filter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
@@ -267,17 +388,16 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            f = np.zeros((Ntimes, self.Nfreqs), dtype=np.bool)
-            flags = DataContainer(dict([(k, f) for k in data]))
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
         if nsamples is None:
-            n = np.ones((Ntimes, self.Nfreqs), dtype=np.float)
-            nsamples = DataContainer(dict([(k, n) for k in data]))
+            nsamples = DataContainer(dict([(k, np.ones_like(data[k], np.float)) for k in data]))
 
         if keys is None:
             keys = data.keys()
 
         # iterate over keys
         al = None
+        at = None
         for i, k in enumerate(keys):
             if k in avg_data and not overwrite:
                 utils.echo("{} exists in ouput DataContainer and overwrite == False, skipping...".format(k), verbose=verbose)
@@ -289,11 +409,89 @@ class FRFilter(VisClean):
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
-            self.avg_lsts = al
-            self.avg_times = np.asarray(ea['avg_times'])
+            at = ea['avg_times']
 
+        setattr(self, "{}_times".format(output_prefix), at)
+        setattr(self, "{}_lsts".format(output_prefix), al)
         self.t_avg = t_avg
         self.Navg = Navg
+
+    def frfilter_data(self, data, times, lsts, frps, flags=None, nsamples=None,
+                      output_prefix='frf', keys=None, overwrite=False,
+                      edgecut_low=0, edgecut_hi=0, verbose=True):
+        """
+        Fringe-rate filter (i.e. apply an FIR filter) to data.
+
+        Args : 
+            data : DataContainer
+                data to time average, must be consistent with self.lsts and self.freqs
+            times : 1D array
+                Holds Julian Date time array for input data
+            lsts : 1D array
+                Holds LST time array for input data
+            frps : DataContainer
+                DataContainer holding 2D fringe-rate profiles for each key in data,
+                with values the same shape as data.
+            flags : DataContainer
+                flags to use in averaging. Default is None.
+                Must be consistent with self.lsts, self.freqs, etc.
+            nsamples : DataContainer
+                nsamples to use in averaging. Default is None.
+                Must be consistent with self.lsts, self.freqs, etc.
+            keys : list of len-3 antpair-pol tuples
+                List of data keys to operate on.
+            overwrite : bool
+                If True, overwrite existing keys in output DataContainers.
+            edgecut_low : int, number of bins to flag on low side of time axis
+            edgecut_hi : int, number of bins to flag on high side of time axis
+        """
+        # setup containers
+        for n in ['data', 'flags', 'nsamples']:
+            name = "{}_{}".format(output_prefix, n)
+            if not hasattr(self, name):
+                setattr(self, name, DataContainer({}))
+            if n == 'data':
+                avg_data = getattr(self, name)
+            elif n == 'flags':
+                avg_flags = getattr(self, name)
+            elif n == 'nsamples':
+                avg_nsamples = getattr(self, name)
+
+        # setup averaging quantities
+        if flags is None:
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
+        if nsamples is None:
+            nsamples = DataContainer(dict([(k, np.ones_like(data[k], np.float)) for k in data]))
+
+        if keys is None:
+            keys = data.keys()
+
+        # iterate over keys
+        for i, k in enumerate(keys):
+            if k in avg_data and not overwrite:
+                utils.echo("{} exists in ouput DataContainer and overwrite == False, skipping...".format(k), verbose=verbose)
+                continue
+
+            # setup FIR
+            fir, _ = frp_to_fir(frps[k])
+
+            # get wgts
+            w = (~flags[k]).astype(np.float)
+            w *= dspec.gen_window('none', len(w), edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)[:, None]
+            f = np.isclose(w, 0.0)
+
+            # calculate effective nsamples
+            eff_nsamples = np.zeros_like(nsamples[k])
+            eff_nsamples += np.sum(nsamples[k] * w, axis=0, keepdims=True) / np.sum(w, axis=0, keepdims=True).clip(1e-10, np.inf)
+            eff_nsamples *= fr_tavg(frps[k]) * np.sum(w, axis=0, keepdims=True).clip(1e-10, np.inf) / len(w)
+
+            # apply fir
+            avg_data[k] = apply_fir(data[k], fir, wgts=w)
+            avg_flags[k] = f
+            avg_nsamples[k] = eff_nsamples
+
+        setattr(self, "{}_times".format(output_prefix), times)
+        setattr(self, "{}_lsts".format(output_prefix), lsts)
 
     def write_data(self, outfilename, write_avg=True, filetype='uvh5', add_to_history='', overwrite=False,
                    run_check=True):
