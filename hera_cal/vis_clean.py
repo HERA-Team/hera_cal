@@ -71,7 +71,7 @@ class VisClean(object):
                 to self.hd, and all attributes specified in references.
         """
         # make a new object w/ only copies of metadata
-        newobj = VisClean(self.hd, link_data=False)
+        newobj = self.__class__(self.hd, link_data=False)
         newobj.hd = self.hd
         newobj.data = self.data
         newobj.flags = self.flags

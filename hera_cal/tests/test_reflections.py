@@ -209,6 +209,10 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         nt.assert_equal(len(RF.ref_gains), 0)
         nt.assert_true(len(RF.data) > 0)
 
+        # try soft copy
+        RF2 = RF.soft_copy()
+        nt.assert_true(RF2.__class__, reflections.ReflectionFitter)
+
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (37, 37, 'xx')
