@@ -200,13 +200,13 @@ class VisClean(object):
         # attach data
         self.attach_data()
 
-    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, filetype='uvh5',
-                   partial_write=False, add_to_history='', verbose=True, **kwargs):
+    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, 
+                   times=None, lsts=None, filetype='uvh5', partial_write=False,
+                   add_to_history='', verbose=True, **kwargs):
         """
-        Write data attached to object to file.
+        Write data to file.
 
-        If data or flags are fed as DataContainers,
-        create a new HERAData with those data and write that to file. Can only write
+        Create a new HERAData and update it with data and write to file. Can only write
         data that has associated metadata in the self.hd HERAData object.
 
         Args:
@@ -215,6 +215,8 @@ class VisClean(object):
             overwrite : bool, if True, overwrite output file if it exists
             flags : DataContainer, boolean flag arrays to write to disk with data.
             nsamples : DataContainer, float nsample arrays to write to disk with data.
+            times : ndarray, list of Julian Date times to replace in HD
+            lsts : ndarray, list of LST times [radian] to replace in HD
             filetype : string, output filetype. ['miriad', 'uvh5', 'uvfits'] supported.
             partial_write : bool, if True, begin (or continue) a partial write to
             the output filename and store file descriptor in self.hd._writers.
@@ -228,13 +230,28 @@ class VisClean(object):
         if nsamples is not None:
             keys = [k for k in keys if nsamples.has_key(k)]
 
+        # if time_array is fed, select out appropriate times
+        if times is not None:
+            assert lsts is not None, "Both times and lsts must be fed"
+            _times = np.unique(self.hd.time_array)[:len(times)]
+        else:
+            _times = None
+
         # select out a copy of hd
-        hd = self.hd.select(bls=keys, inplace=False)
+        hd = self.hd.select(bls=keys, inplace=False, times=_times)
         hd._determine_blt_slicing()
         hd._determine_pol_indexing()
 
-        # update HERAData
+        # update HERAData data arrays
         hd.update(data=data, flags=flags, nsamples=nsamples)
+
+        # update extra blt arrays
+        for ap in hd.get_antpairs():
+            s = hd._blt_slices[ap]
+            if times is not None:
+                hd.time_array[s] = times
+            if lsts is not None:
+                hd.lst_array[s] = lsts
 
         # add history
         hd.history += version.history_string(add_to_history)

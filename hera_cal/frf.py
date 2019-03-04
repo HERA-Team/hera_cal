@@ -197,17 +197,14 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     return avg_data, win_flags, avg_nsamples, avg_lsts, avg_extra_arrays
 
 
-def apply_fir(data, fir, wgts=None):
+def apply_fir(data, fir, wgts=None, axis=0):
     """
-    Applies an FIR filter to data across zeroth axis.
-
-    Convolve data against an FIR filter across time (zeroth) axis.
-    If fir is 1D, will repeat along frequency to match shape of data.
+    Convolves an FIR filter with visibility data.
 
     Args:
         data : complex ndarray of shape (Ntimes, Nfreqs)
-        fir : complex 1d or 2d array of shape (Ntimes,) or (Ntimes, Nfreqs)
-            Holds FIR filter to convolve against data
+        fir : complex 2d array of shape (Ntimes, Nfreqs)
+            holding FIR filter to convolve against data
         wgts : float ndarray of shape (Ntimes, Nfreqs)
             Default is all ones.
 
@@ -217,10 +214,16 @@ def apply_fir(data, fir, wgts=None):
             time for each frequency channel independently.
     """
     # shape checks
-    Ntimes, Nfreqs = data.shape
+    shape = list(data.shape)
+    Ntimes, Nfreqs = shape
     assert isinstance(fir, np.ndarray), "fir must be an ndarray"
     if fir.ndim == 1:
-        fir = np.repeat(fir[:, None], Nfreqs, axis=1)
+        # try to broadcast given axis
+        if axis == 0:
+            fir = np.repeat(fir[:, None], Nfreqs, axis=1)
+        elif axis == 1:
+            fir = np.repeat(fir[None, :], Ntimes, axis=0)
+
     assert (Ntimes, Nfreqs) == fir.shape, "fir shape must match input data along time and frequency"
 
     # get weights
@@ -229,98 +232,76 @@ def apply_fir(data, fir, wgts=None):
 
     new_data = np.empty_like(data)
 
-    for i in range(Nfreqs):
-        new_data[:, i] = np.convolve(data[:, i] * wgts[:, i], fir[:, i], mode='same')
+    shape.pop(axis)
+    for i in range(shape[0]):
+        slices = [i, i]
+        slices[axis] = slice(None)
+        slices = tuple(slices)
+        new_data[slices] = np.convolve(data[slices] * wgts[slices], fir[slices], mode='same')
 
     return new_data
 
 
-def fir_to_frp(fir, dt=None):
+def frp_to_fir(frp, delta_bin=None, axis=0, undo=False):
     '''
-    Transform a FIR filter (time domain fr filter) to a fringe rate profile.
+    Transform a fourier profile to an FIR, or vice versa.
 
-    This function assumes the convention of fft for time->fringe-rate and
-    ifft for fringe-rate->time. The input FIR must have a monotonically increasing time axis.
+    This function assumes the convention of fft for real->fourier space and ifft
+    for fourier->real space. The input fourier profile must have monotonically increasing fourier bins.
 
     Args:
-        fir : 1D or 2D ndarray of the FIR filter with shape (Ntimes,) or (Ntimes, Nfreqs)
-        dt : Time spacing [sec] of the time axis.
+        frp : 1D or 2D ndarray of the fourier profile.
+        delta_bin : frp bin width along axis of fourier transform.
+        axis : int, axis of frp along which to take fourier transform
+        undo : bool, if True converts an fir to frp, else converts frp to fir
 
     Returns:
-        frp : 1D or 2D ndarray of the fringe-rate profile.
-        frbins : 1D ndarray of fringe-rate bins [Hz] if dt is provided, else is None.
-    '''
-    # generate frp
-    fir = np.fft.ifftshift(fir, axes=0)
-    frp = np.fft.fft(fir, axis=0)
-    frp = np.fft.fftshift(frp, axes=0)
-
-    # generate frbins
-    if dt is None:
-        frbins = None
-    else:
-        frbins = np.fft.fftshift(np.fft.fftfreq(len(fir), dt), axes=0)
-
-    return frp, frbins
-
-
-def frp_to_fir(frp, dfr=None):
-    '''
-    Transform a fringe-rate profile into an FIR filter.
-
-    This function assumes the convention of fft for time->fringe-rate and
-    ifft for fringe-rate->time. The input FR profile must have a monotonically increasing FR axis.
-
-    Args:
-        frp : 1D or 2D ndarray of the FR profile with shape (Nfrates,) or (Nfrates, Nfreqs)
-        dfr : Fringe-rate spacing [Hz] of the fringe-rate axis.
-
-    Returns:
-        fir : 1D or 2D ndarray of the FIR filter.
-        tbins : 1D ndarray of time bins [sec] if dfr is provided, else is None.
+        fir : ndarray of the FIR filter, else undo == True then ndarray of frp
+        frbins : 1D ndarray of fourier bins [1/delta_bin] if delta_bin is provided, else is None.
     '''
     # generate fir
-    frp = np.fft.ifftshift(frp, axes=0)
-    fir = np.fft.ifft(frp, axis=0)
-    fir = np.fft.fftshift(fir, axes=0)
+    frp = np.fft.ifftshift(frp, axes=axis)
+    if undo:
+        fir = np.fft.fft(frp, axis=axis)
+    else:
+        fir = np.fft.ifft(frp, axis=axis)
+    fir = np.fft.fftshift(fir, axes=axis)
 
     # generate frbins
-    if dfr is None:
-        tbins = None
+    if delta_bin is None:
+        frbins = None
     else:
-        tbins = np.fft.fftshift(np.fft.fftfreq(len(frp), dfr), axes=0)
+        frbins = np.fft.fftshift(np.fft.fftfreq(len(frp), delta_bin), axes=axis)
 
-    return fir, tbins
+    return fir, frbins
 
 
-def fr_tavg(frp, noise_amp=None):
+def fr_tavg(frp, noise_amp=None, axis=0):
     """
-    Calculate the attenuation induced by an FR filter on a noise signal.
+    Calculate the attenuation induced by fourier filtering a noise signal.
 
     See Ali et al. 2015 Eqn (9)
 
     Args:
-        frp : A 2D fringe-rate profile of shape (Nfrates, Nfreqs)
+        frp : A 1D or 2D fourier profile
         noise_amp : The noise amplitude (stand dev. not variance) in frate space
             with shape matching input frp
+        axis : int, axis of frp along which filtering is done
 
     Returns:
-        t_ratio : ndarray, effective integration t_after / t_before with shape (Nfrates, Nfreqs)
+        t_ratio : ndarray, effective integration ratio t_after / t_before
     """
-    if frp.ndim == 1:
-        frp = np.reshape(frp, (-1, 1))
     if noise_amp is None:
         noise_amp = np.ones_like(frp, dtype=np.float)
 
-    t_ratio = np.sum(np.abs(noise_amp)**2, axis=0, keepdims=True) / np.sum(np.abs(frp)**2 * np.abs(noise_amp)**2, axis=0, keepdims=True).clip(1e-10, np.inf)
-    t_ratio = np.repeat(t_ratio, len(frp), axis=0)
+    t_ratio = np.sum(np.abs(noise_amp)**2, axis=axis, keepdims=True) / np.sum(np.abs(frp)**2 * np.abs(noise_amp)**2, axis=axis, keepdims=True).clip(1e-10, np.inf)
 
     return t_ratio
 
 
 class FRFilter(VisClean):
     """
-    Fringe Rate Filter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
+    FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
 
     def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, rephase=False,
@@ -411,24 +392,20 @@ class FRFilter(VisClean):
             avg_nsamples[k] = an
             at = ea['avg_times']
 
-        setattr(self, "{}_times".format(output_prefix), at)
-        setattr(self, "{}_lsts".format(output_prefix), al)
+        setattr(self, "{}_times".format(output_prefix), np.asarray(at))
+        setattr(self, "{}_lsts".format(output_prefix), np.asarray(al))
         self.t_avg = t_avg
         self.Navg = Navg
 
-    def frfilter_data(self, data, times, lsts, frps, flags=None, nsamples=None,
-                      output_prefix='frf', keys=None, overwrite=False,
-                      edgecut_low=0, edgecut_hi=0, verbose=True):
+    def filter_data(self, data, frps, flags=None, nsamples=None,
+                    output_prefix='filt', keys=None, overwrite=False,
+                    edgecut_low=0, edgecut_hi=0, axis=0, verbose=True):
         """
-        Fringe-rate filter (i.e. apply an FIR filter) to data.
+        Apply an FIR filter to data.
 
         Args : 
             data : DataContainer
                 data to time average, must be consistent with self.lsts and self.freqs
-            times : 1D array
-                Holds Julian Date time array for input data
-            lsts : 1D array
-                Holds LST time array for input data
             frps : DataContainer
                 DataContainer holding 2D fringe-rate profiles for each key in data,
                 with values the same shape as data.
@@ -442,8 +419,8 @@ class FRFilter(VisClean):
                 List of data keys to operate on.
             overwrite : bool
                 If True, overwrite existing keys in output DataContainers.
-            edgecut_low : int, number of bins to flag on low side of time axis
-            edgecut_hi : int, number of bins to flag on high side of time axis
+            edgecut_low : int, number of bins to flag on low side of axis
+            edgecut_hi : int, number of bins to flag on high side of axis
         """
         # setup containers
         for n in ['data', 'flags', 'nsamples']:
@@ -451,11 +428,11 @@ class FRFilter(VisClean):
             if not hasattr(self, name):
                 setattr(self, name, DataContainer({}))
             if n == 'data':
-                avg_data = getattr(self, name)
+                filt_data = getattr(self, name)
             elif n == 'flags':
-                avg_flags = getattr(self, name)
+                filt_flags = getattr(self, name)
             elif n == 'nsamples':
-                avg_nsamples = getattr(self, name)
+                filt_nsamples = getattr(self, name)
 
         # setup averaging quantities
         if flags is None:
@@ -468,117 +445,27 @@ class FRFilter(VisClean):
 
         # iterate over keys
         for i, k in enumerate(keys):
-            if k in avg_data and not overwrite:
+            if k in filt_data and not overwrite:
                 utils.echo("{} exists in ouput DataContainer and overwrite == False, skipping...".format(k), verbose=verbose)
                 continue
 
             # setup FIR
-            fir, _ = frp_to_fir(frps[k])
+            fir, _ = frp_to_fir(frps[k], axis=axis, undo=False)
 
             # get wgts
             w = (~flags[k]).astype(np.float)
-            w *= dspec.gen_window('none', len(w), edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)[:, None]
+            shape = [1, 1]
+            shape[axis] = -1
+            w *= dspec.gen_window('none', w.shape[axis], edgecut_low=edgecut_low, edgecut_hi=edgecut_hi).reshape(tuple(shape))
             f = np.isclose(w, 0.0)
 
             # calculate effective nsamples
             eff_nsamples = np.zeros_like(nsamples[k])
-            eff_nsamples += np.sum(nsamples[k] * w, axis=0, keepdims=True) / np.sum(w, axis=0, keepdims=True).clip(1e-10, np.inf)
-            eff_nsamples *= fr_tavg(frps[k]) * np.sum(w, axis=0, keepdims=True).clip(1e-10, np.inf) / len(w)
+            eff_nsamples += np.sum(nsamples[k] * w, axis=axis, keepdims=True) / np.sum(w, axis=axis, keepdims=True).clip(1e-10, np.inf)
+            eff_nsamples *= fr_tavg(frps[k], axis=axis) * np.sum(w, axis=axis, keepdims=True).clip(1e-10, np.inf) / w.shape[axis]
 
             # apply fir
-            avg_data[k] = apply_fir(data[k], fir, wgts=w)
-            avg_flags[k] = f
-            avg_nsamples[k] = eff_nsamples
+            filt_data[k] = apply_fir(data[k], fir, wgts=w, axis=axis)
+            filt_flags[k] = f
+            filt_nsamples[k] = eff_nsamples
 
-        setattr(self, "{}_times".format(output_prefix), times)
-        setattr(self, "{}_lsts".format(output_prefix), lsts)
-
-    def write_data(self, outfilename, write_avg=True, filetype='uvh5', add_to_history='', overwrite=False,
-                   run_check=True):
-        """
-        Write data in FRFringe object.
-
-        If write_avg == True, write the self.avg_data dictionary,
-        else write the self.data dictionary.
-
-        Parameters
-        ----------
-        outfilename : str
-            Path to output visibility data.
-
-        write_avg : bool
-            If True, write the avg_data dictionary, else write the data dictionary.
-
-        filetype : str
-            Output file format. Currently only miriad is supported.
-
-        add_to_history : str
-            History string to add to the HERAData object before writing to disk.
-
-        overwrite : bool
-            If True, overwrite output if it exists.
-
-        run_check : bool
-            If True, run UVData check before write.
-
-        Returns
-        -------
-        new_hd : HERAData object
-            A copy of the hd object, but with updated data
-            and relevant metadata.
-        """
-        # check output
-        if os.path.exists(outfilename) and not overwrite:
-            print("{} already exists, not overwriting...".format(outfilename))
-            return
-
-        # create new HERAData object
-        new_hd = copy.deepcopy(self.hd)
-        new_hd.history += version.history_string(add_to_history)
-
-        # set write data references
-        if write_avg:
-            data = self.avg_data
-            flags = self.avg_flags
-            nsamples = self.avg_nsamples
-            lsts = self.avg_lsts
-            times = self.avg_times
-        else:
-            data = self.data
-            flags = self.flags
-            nsamples = self.nsamples
-            lsts = self.lsts
-            times = self.times
-
-        # strip down to appropriate Ntimes
-        Ntimes = len(times)
-        new_hd.select(times=self.times[:Ntimes], inplace=True)
-
-        # get telescope coords
-        lat, lon, alt = new_hd.telescope_location_lat_lon_alt
-        lat = lat * 180 / np.pi
-        lon = lon * 180 / np.pi
-
-        # Overwrite data
-        for k in data.keys():
-            blts_inds = new_hd.antpair2ind(*k[:2])
-            p = uvutils.polstr2num(k[2])
-            pol_ind = np.argmax(p in new_hd.polarization_array)
-            new_hd.data_array[blts_inds, 0, :, pol_ind] = data[k]
-            new_hd.flag_array[blts_inds, 0, :, pol_ind] = flags[k]
-            new_hd.nsample_array[blts_inds, 0, :, pol_ind] = nsamples[k]
-            new_hd.time_array[blts_inds] = times
-            new_hd.lst_array[blts_inds] = lsts
-
-        if run_check:
-            new_hd.check()
-
-        # write data
-        if filetype == 'miriad':
-            new_hd.write_miriad(outfilename, clobber=True)
-        elif filetype == 'uvh5':
-            new_hd.write_uvh5(outfilename, clobber=True)
-        else:
-            raise NotImplementedError("filetype {} not recognized".format(filetype))
-
-        return new_hd
