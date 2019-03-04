@@ -371,7 +371,7 @@ class VisClean(object):
             max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
 
         if max_frate is not None:
-            max_frate /= 1e3
+            max_frate = max_frate * 1e-3
         min_dly /= 1e9
         standoff /= 1e9
 

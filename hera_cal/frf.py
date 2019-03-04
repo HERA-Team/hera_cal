@@ -449,9 +449,6 @@ class FRFilter(VisClean):
                 utils.echo("{} exists in ouput DataContainer and overwrite == False, skipping...".format(k), verbose=verbose)
                 continue
 
-            # setup FIR
-            fir, _ = frp_to_fir(frps[k], axis=axis, undo=False)
-
             # get wgts
             w = (~flags[k]).astype(np.float)
             shape = [1, 1]
@@ -464,8 +461,14 @@ class FRFilter(VisClean):
             eff_nsamples += np.sum(nsamples[k] * w, axis=axis, keepdims=True) / np.sum(w, axis=axis, keepdims=True).clip(1e-10, np.inf)
             eff_nsamples *= fr_tavg(frps[k], axis=axis) * np.sum(w, axis=axis, keepdims=True).clip(1e-10, np.inf) / w.shape[axis]
 
+            # setup FIR
+            fir, _ = frp_to_fir(frps[k], axis=axis, undo=False)
+
             # apply fir
-            filt_data[k] = apply_fir(data[k], fir, wgts=w, axis=axis)
+            dfilt = apply_fir(data[k], fir, wgts=w, axis=axis)
+
+            # append
+            filt_data[k] = dfilt
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
 
