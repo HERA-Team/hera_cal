@@ -14,10 +14,11 @@ import shutil
 from six.moves import range
 
 import hera_cal.redcal as om
-from hera_cal import io
+from hera_cal import io, abscal
 from hera_cal.utils import split_pol, conj_pol
 from hera_cal.apply_cal import calibrate_in_place
 from hera_cal.data import DATA_PATH
+from hera_cal.datacontainer import DataContainer
 
 np.random.seed(0)
 
@@ -1018,6 +1019,53 @@ class TestRedundantCalibrator(unittest.TestCase):
         pos[0] += [.5, 0, 0]
         self.assertFalse(om.is_redundantly_calibratable(pos, bl_error_tol=.1))
         self.assertTrue(om.is_redundantly_calibratable(pos, bl_error_tol=1))
+
+
+class TestRedcalAndAbscal(unittest.TestCase):
+    
+    def test_post_redcal_abscal(self):
+        # Simulate Redundant Data
+        np.random.seed(21)
+        antpos = build_hex_array(3)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        freqs = np.linspace(1e8, 2e8, 128)  # note that for some seeds, this isn't enough frequency resolution to figure out delays
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)))
+        fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
+        for ant1, ant2, pol in d.keys():
+            d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+        true_gains = deepcopy(gains)
+        for ant in antpos.keys():
+            for pol in ['xx']:
+                d[ant, ant, pol] = np.ones_like(d[0, 1, 'xx'])
+        d.freqs = freqs
+        d.times_by_bl = {bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in d.keys()}
+        d.antpos = antpos
+
+        # run redcal
+        cal = om.redundantly_calibrate(d, reds)
+
+        # set up abscal
+        d_omnicaled = deepcopy(d)
+        f_omnicaled = DataContainer({bl: np.zeros_like(d[bl], dtype=bool) for bl in d.keys()})
+        calibrate_in_place(d_omnicaled, cal['g_omnical'], data_flags=f_omnicaled, cal_flags=cal['gf_omnical'])
+        model = DataContainer({bl: true_vis[red[0]] for red in reds for bl in red})
+        
+        # run abscal
+        abscal_delta_gains, AC = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=False)
+
+        # evaluate solutions
+        abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
+        refant = {'Jxx': (0, 'Jxx'), 'Jyy': (0, 'Jyy')}
+        agr = {ant: abscal_gains[ant] * np.abs(abscal_gains[refant[ant[1]]]) / abscal_gains[refant[ant[1]]] 
+               for ant in abscal_gains.keys()}
+        tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
+               for ant in true_gains.keys()}
+        gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
+        np.testing.assert_almost_equal(np.mean(np.abs(gain_errors)), 0)
 
 
 class TestRunMethods(unittest.TestCase):
