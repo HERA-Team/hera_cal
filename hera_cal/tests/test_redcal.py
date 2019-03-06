@@ -1067,7 +1067,7 @@ class TestRedcalAndAbscal(unittest.TestCase):
         tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
                for ant in true_gains.keys()}
         gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
-        self.assertLess(np.mean(np.abs(gain_errors)), 1e-12)
+        self.assertLess(np.max(np.abs(gain_errors)), 1e-12)
 
 
 class TestRunMethods(unittest.TestCase):
