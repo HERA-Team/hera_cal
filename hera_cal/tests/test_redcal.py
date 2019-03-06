@@ -1024,6 +1024,8 @@ class TestRedundantCalibrator(unittest.TestCase):
 class TestRedcalAndAbscal(unittest.TestCase):
     
     def test_post_redcal_abscal(self):
+        '''This test shows that performing a combination of redcal and abscal recovers the exact input gains
+        up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
         np.random.seed(21)
         antpos = build_hex_array(3)
@@ -1040,7 +1042,7 @@ class TestRedcalAndAbscal(unittest.TestCase):
         true_gains = deepcopy(gains)
         for ant in antpos.keys():
             for pol in ['xx']:
-                d[ant, ant, pol] = np.ones_like(d[0, 1, 'xx'])
+                d[ant, ant, pol] = np.ones_like(d[0, 1, 'xx'])  # these are used only for calculating chi^2 and not relevant
         d.freqs = freqs
         d.times_by_bl = {bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in d.keys()}
         d.antpos = antpos
@@ -1057,7 +1059,7 @@ class TestRedcalAndAbscal(unittest.TestCase):
         # run abscal
         abscal_delta_gains, AC = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=False)
 
-        # evaluate solutions
+        # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
         refant = {'Jxx': (0, 'Jxx'), 'Jyy': (0, 'Jyy')}
         agr = {ant: abscal_gains[ant] * np.abs(abscal_gains[refant[ant[1]]]) / abscal_gains[refant[ant[1]]] 
@@ -1065,7 +1067,7 @@ class TestRedcalAndAbscal(unittest.TestCase):
         tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
                for ant in true_gains.keys()}
         gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
-        np.testing.assert_almost_equal(np.mean(np.abs(gain_errors)), 0)
+        self.assertLess(np.mean(np.abs(gain_errors)), 1e-12)
 
 
 class TestRunMethods(unittest.TestCase):
