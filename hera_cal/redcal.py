@@ -594,7 +594,7 @@ class RedundantCalibrator:
         """
         Nfreqs = data[next(iter(data))].shape[1]  # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
-            wgts = {k: np.float32(1) for k in data}
+            wgts = {k: np.ones_like(data[k], dtype=np.float32) for k in data}
         wgts = DataContainer(wgts)
         taus_offs, twgts = {}, {}
         for bls in self.reds:
