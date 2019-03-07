@@ -491,7 +491,7 @@ class ReflectionFitter(FRFilter):
         return wgts
 
     def sv_decomp(self, dfft, wgts=None, flags=None, keys=None, Nkeep=None,
-                   overwrite=False, verbose=True):
+                  overwrite=False, verbose=True):
         """
         Create a SVD-based model of the FFT data in dfft.
 

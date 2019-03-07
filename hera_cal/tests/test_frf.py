@@ -83,7 +83,7 @@ def test_fir_filtering():
     # convert a high-pass frprofile to an FIR filter
     frbins = np.linspace(-40e-3, 40e-3, 1024)
     frp = np.ones(1024)
-    frp[512-9:512+10] = 0.0
+    frp[512 - 9:512 + 10] = 0.0
     fir, tbins = hc.frf.frp_to_fir(frp, delta_bin=np.diff(frbins)[0])
     # confirm its purely real
     nt.assert_false(np.isclose(np.abs(fir.real), 0.0).any())
@@ -136,8 +136,8 @@ class Test_FRFilter:
         window = 'blackmanharris'
         ec = 0
         np.random.seed(0)
-        self.F.data[bl] = np.reshape(stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs) \
-                                    + 1j * stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs), (self.F.Ntimes, self.F.Nfreqs))
+        self.F.data[bl] = np.reshape(stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs)
+                                                    + 1j * stats.norm.rvs(0, 1, self.F.Ntimes * self.F.Nfreqs), (self.F.Ntimes, self.F.Nfreqs))
         # fr filter noise
         self.F.filter_data(self.F.data, frps, overwrite=True, verbose=False, axis=0, keys=[bl])
 

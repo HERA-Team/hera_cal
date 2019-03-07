@@ -471,4 +471,3 @@ class FRFilter(VisClean):
             filt_data[k] = dfilt
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
-
