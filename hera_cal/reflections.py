@@ -348,7 +348,7 @@ class ReflectionFitter(FRFilter):
                 rkey = (k[1], uvutils.parse_jpolstr(k[2][1]))
 
             # Ensure they exist in reflection dictionaries
-            if not ref_amp.has_key(rkey) or not ref_amp.has_key(rkey) or not ref_amp.has_key(rkey):
+            if not rkey in ref_amp or not rkey in ref_dly or not rkey in ref_phs:
                 echo("...{} doesn't exist in ref_* dictionaries, skipping".format(rkey), verbose=verbose)
                 continue
 
