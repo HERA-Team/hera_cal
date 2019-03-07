@@ -150,13 +150,17 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     return dlys, offset
 
 
-def interp_peak(ft_data):
+def interp_peak(data, method='quinn'):
     """
-    Use Quinn's Second Method to get the peak and amplitude of   interpolation to get peak of data along last axis.
+    Use Quinn's Second Method to get the peak and amplitude of data along last axis.
 
     Args:
-        ft_data : complex 2d ndarray in Fourier space.
+        data : complex 2d ndarray in Fourier space.
             If fed as 1d array will reshape into [1, N] array.
+            Quinn's method usually operates on complex data (eg. fft'ed data) while the 
+            quadratic method operates on real data (generally absolute values).
+        method : either 'quinn' (see https://ieeexplore.ieee.org/document/558515) or 'quadratic'
+            (see https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html).
 
     Returns:
         indices : index array holding argmax of data along last axis
@@ -165,38 +169,48 @@ def interp_peak(ft_data):
         new_peaks : estimated peak value at indices + bin_shifts
     """
     # get properties
-    if ft_data.ndim == 1:
-        ft_data = ft_data[None, :]
-    N1, N2 = ft_data.shape
+    if data.ndim == 1:
+        data = data[None, :]
+    N1, N2 = data.shape
 
     # get argmaxes along last axis
-    indices = np.argmax(np.abs(ft_data)**2, axis=-1)
-    peaks = ft_data[range(N1), indices]
+    if method == 'quinn':
+        indices = np.argmax(np.abs(data)**2, axis=-1)
+    elif method == 'quadratic':
+        indices = np.argmax(data, axis=-1)
+    else:
+        raise ValueError("'{}' is not a recognized peak interpolation method.".format(method))
+    peaks = data[range(N1), indices]
 
     # calculate shifted peak for sub-bin resolution
-    # https://ieeexplore.ieee.org/document/558515
-    k0 = ft_data[range(N1), indices - 1]
-    k1 = ft_data[range(N1), indices]
-    k2 = ft_data[range(N1), (indices + 1) % N2]
+    k0 = data[range(N1), indices - 1]
+    k1 = data[range(N1), indices]
+    k2 = data[range(N1), (indices + 1) % N2]
     
-    def tau(x):
-        t = .25 * np.log(3 * x**2 + 6 * x + 1) 
-        t -= 6**.5 / 24 * np.log((x + 1 - (2. / 3.)**.5) / (x + 1 + (2. / 3.)**.5))
-        return t
+    if method == 'quinn':
+        def tau(x):
+            t = .25 * np.log(3 * x**2 + 6 * x + 1) 
+            t -= 6**.5 / 24 * np.log((x + 1 - (2. / 3.)**.5) / (x + 1 + (2. / 3.)**.5))
+            return t
 
-    alpha1 = (k0 / k1).real
-    alpha2 = (k2 / k1).real
-    delta1 = alpha1 / (1 - alpha1)
-    delta2 = -alpha2 / (1 - alpha2)
-    d = (delta1 + delta2) / 2 + tau(delta1**2) - tau(delta2**2)
-    d[~np.isfinite(d)] = 0.
-    
-    ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k), 
-                                  where=~(d == 0)) for k in [-1, 0, 1]])
-    rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck**2))
-    rho[d == 0] = np.abs(k1[d == 0])
-    
-    return indices, d, np.abs(peaks), rho
+        alpha1 = (k0 / k1).real
+        alpha2 = (k2 / k1).real
+        delta1 = alpha1 / (1 - alpha1)
+        delta2 = -alpha2 / (1 - alpha2)
+        d = (delta1 + delta2) / 2 + tau(delta1**2) - tau(delta2**2)
+        d[~np.isfinite(d)] = 0.
+        
+        ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k), 
+                                      where=~(d == 0)) for k in [-1, 0, 1]])
+        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck**2))
+        rho[d == 0] = np.abs(k1[d == 0])
+        return indices, d, np.abs(peaks), rho
+
+    elif method == 'quadratic':
+        denom = (k0 - 2 * k1 + k2)
+        bin_shifts = 0.5 * np.true_divide((k0 - k2), denom, where=~np.isclose(denom, 0.0))
+        new_peaks = k1 - 0.25 * (k0 - k2) * bin_shifts
+        return indices, bin_shifts, peaks, new_peaks
 
 
 def echo(message, type=0, verbose=True):
