@@ -191,8 +191,10 @@ def interp_peak(ft_data):
     d = (delta1 + delta2) / 2 + tau(delta1**2) - tau(delta2**2)
     d[~np.isfinite(d)] = 0.
     
-    ck = np.array([(np.exp(2.0j * np.pi * d) - 1) / (2.0j * np.pi * (d - k)) for k in [-1, 0, 1]])
+    ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k), 
+                                  where=~(d == 0)) for k in [-1, 0, 1]])
     rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck**2))
+    rho[d == 0] = np.abs(k1[d == 0])
     
     return indices, d, np.abs(peaks), rho
 
