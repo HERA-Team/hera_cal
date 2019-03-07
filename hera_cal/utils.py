@@ -118,10 +118,8 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     """
     # setup
     Ntimes, Nfreqs = data.shape
-    fftfreqs = np.fft.fftfreq(Nfreqs, df)
-    dtau = fftfreqs[1] - fftfreqs[0]
     if wgts is None:
-        wgts = np.float32(1)
+        wgts = np.ones_like(data, dtype=np.float32)
 
     # smooth via median filter
     if medfilt:
@@ -132,9 +130,10 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     dw = data * wgts
     if edge_cut > 0:
         assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
-        dw[:, :edge_cut] = 0
-        dw[:, -edge_cut:] = 0
+        dw = dw[:, edge_cut:(-edge_cut + 1)]
     dw[np.isnan(dw)] = 0
+    fftfreqs = np.fft.fftfreq(dw.shape[1], df)
+    dtau = fftfreqs[1] - fftfreqs[0]
     vfft = np.fft.fft(dw, axis=1)
 
     # get interpolated peak and indices
@@ -144,7 +143,9 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df  + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
-    offset = np.angle(np.mean(data[:, fSlice] * np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)), axis=1, keepdims=True))
+    offset = np.angle(np.sum(wgts[:, fSlice] * data[:, fSlice] * 
+                             np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)), 
+                             axis=1, keepdims=True) / np.sum(wgts[:, fSlice], axis=1, keepdims=True))
 
     return dlys, offset
 
