@@ -169,6 +169,12 @@ class TestFftDly(object):
         dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt=True, f0=freqs[0])
         nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 2)  # median accuracy better than 2 ns
 
+    def test_error(self):
+        true_dlys = np.random.uniform(-200, 200, size=60)
+        true_dlys.shape = (60, 1)
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
+        nt.assert_raises(ValueError, utils.interp_peak, np.fft.fft(data), method='blah')
+
 
 class TestAAFromUV(object):
     def setUp(self):
