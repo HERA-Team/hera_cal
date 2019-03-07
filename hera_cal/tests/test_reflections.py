@@ -178,8 +178,8 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         ref_dly = output[1]
         ref_phs = output[2]
         # assert equivalence to higher precision
-        nt.assert_true(np.isclose(np.ravel(list(ref_dly.values())), -155.0, atol=1e-3).all())
-        nt.assert_true(np.isclose(np.ravel(list(ref_amp.values())), 1e-2, atol=1e-6).all())
+        nt.assert_true(np.isclose(np.ravel(list(ref_dly.values())), -155.0, atol=1e-2).all())
+        nt.assert_true(np.isclose(np.ravel(list(ref_amp.values())), 1e-2, atol=1e-5).all())
         nt.assert_true(np.isclose(np.ravel(list(ref_phs.values())), 2 * np.pi - 2.0, atol=1e-2).all())
 
         # test flagged data
