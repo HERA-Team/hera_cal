@@ -102,12 +102,13 @@ def make_bl(*args):
     return (i, j, _comply_vispol(pol))
 
 
-def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11), edge_cut=0):
+def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
     """Get delay of visibility across band using FFT and quadratic fit to delay peak.
     Arguments:
         data : ndarray of complex data (e.g. gains or visibilities) of shape (Ntimes, Nfreqs)
         df : frequency channel width in Hz
         wgts : multiplicative wgts of the same shape as the data
+        f0 : float lowest frequency channel. Optional parameter used in getting the offset correct.
         medfilt : boolean, median filter data before fft
         kernel : size of median filter kernel along (time, freq) axes
         edge_cut : int, number of channels to exclude at each band edge of data in FFT window
@@ -141,7 +142,7 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11), edge_cut=0):
     dlys = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
 
     # Now that we know the slope, estimate the remaining phase offset
-    freqs = np.arange(Nfreqs, dtype=data.dtype) * df
+    freqs = np.arange(Nfreqs, dtype=data.dtype) * df  + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
     offset = np.angle(np.mean(data[:, fSlice] * np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)), axis=1, keepdims=True))
 
