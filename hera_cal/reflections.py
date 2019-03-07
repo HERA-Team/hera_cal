@@ -690,7 +690,7 @@ def fit_reflection_delay(dfft, dly_range, dlys, return_peak=False):
 
     # locate peak bin within dly range
     abs_dfft = np.abs(dfft)[:, select]
-    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_dfft)
+    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(dfft[:, select])
     ref_dly_inds += select.min()
     ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(np.diff(dlys))
     ref_peaks = ref_peaks[:, None]
