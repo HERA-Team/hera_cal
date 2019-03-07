@@ -96,37 +96,38 @@ class TestFftDly(object):
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         df = np.median(np.diff(self.freqs))
-        dlys, offs = utils.fft_dly(data, df)
-        np.testing.assert_almost_equal(5 * dlys, 5 * true_dlys, -1)  # accuracy of 2 ns
-        np.testing.assert_almost_equal(offs, 0, -2)
-        dlys, offs = utils.fft_dly(data, df, medfilt=True)
-        np.testing.assert_almost_equal(5 * dlys, 5 * true_dlys, -1)  # accuracy of 2 ns
+        dlys, offs = utils.fft_dly(data, df, f0=self.freqs[0])
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-5)  # median accuracy of 10 fs
+        np.testing.assert_almost_equal(offs, 0, 4)
+        dlys, offs = utils.fft_dly(data, df, medfilt=True, f0=self.freqs[0])
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-2)  # median accuracy of 10 ps
 
     def test_ideal_offset(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
         data = np.exp(2j * np.pi * self.freqs * true_dlys + 1j * 0.123)
         df = np.median(np.diff(self.freqs))
-        dlys, offs = utils.fft_dly(data, df)
-        np.testing.assert_almost_equal(5 * dlys, 5 * true_dlys, -1)  # accuracy of 2 ns
-        np.testing.assert_almost_equal(offs, 0.123, -2)
-        dlys, offs = utils.fft_dly(data, df, edge_cut=100)
-        np.testing.assert_almost_equal(5 * dlys, 5 * true_dlys, -1)  # accuracy of 2 ns
-        np.testing.assert_almost_equal(offs, 0.123, -2)
-        dlys, offs = utils.fft_dly(data, df, medfilt=True)
-        np.testing.assert_almost_equal(5 * dlys, 5 * true_dlys, -1)  # accuracy of 2 ns
+        dlys, offs = utils.fft_dly(data, df, f0=self.freqs[0])
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-5)  # median accuracy of 10 fs
+        np.testing.assert_almost_equal(offs, 0.123, 4)
         mdl = np.exp(2j * np.pi * self.freqs * dlys + 1j * offs)
-        np.testing.assert_almost_equal(np.angle(data * mdl.conj()), 0, -1)
+        np.testing.assert_almost_equal(np.angle(data * mdl.conj()), 0, 5)
+        dlys, offs = utils.fft_dly(data, df, edge_cut=100, f0=self.freqs[0])
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-4)  # median accuracy of 100 fs
+        np.testing.assert_almost_equal(offs, 0.123, 4)
+        dlys, offs = utils.fft_dly(data, df, medfilt=True, f0=self.freqs[0])
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-2)  # median accuracy of 10 ps
+        np.testing.assert_almost_equal(offs, 0.123, 1)
 
     def test_noisy(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
-        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * noise((60, 1024))
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5*noise((60, 1024))
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
-        np.testing.assert_almost_equal(1. * dlys, 1. * true_dlys, -1)  # accuracy of 10 ns
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1)  # median accuracy of 1 ns
         dlys, offs = utils.fft_dly(data, df, medfilt=True)
-        np.testing.assert_almost_equal(1. * dlys, 1. * true_dlys, -1)  # accuracy of 10 ns
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1)  # median accuracy of 1 ns
 
     def test_rfi(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
@@ -135,7 +136,7 @@ class TestFftDly(object):
         data[:, ::16] = 1000.
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df, medfilt=True)
-        np.testing.assert_almost_equal(5. * dlys, 5. * true_dlys, -1)  # accuracy of 2 ns
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-2)  # median accuracy of 10 ps
 
     def test_nan(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
@@ -144,7 +145,7 @@ class TestFftDly(object):
         data[:, ::16] = np.nan
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
-        np.testing.assert_almost_equal(5. * dlys, 5. * true_dlys, -1)  # accuracy of 2 ns
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-3) # median accuracy of 1 ps
 
     def test_realistic(self):
         # load into pyuvdata object
@@ -152,22 +153,21 @@ class TestFftDly(object):
         model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         # make custom gain keys
         d, fl, antpos, a, freqs, t, l, p = io.load_vis(data_fname, return_meta=True, pick_data_ants=False)
-        freqs /= 1e9
+        freqs /= 1e9 # in GHz
         # test basic execution
         k1 = (24, 25, 'xx')
         k2 = (37, 38, 'xx')
         flat_phs = d[k1] * d[k2].conj()
         df = np.median(np.diff(freqs))
         # basic execution
-        dlys, offs = utils.fft_dly(flat_phs, df, medfilt=True)
+        dlys, offs = utils.fft_dly(flat_phs, df, medfilt=True, f0=freqs[0]) # dlys in ns
         nt.assert_equal(dlys.shape, (60, 1))
-        np.testing.assert_almost_equal(dlys, .25, 1)
+        nt.assert_true(np.all(np.abs(dlys) < 1)) # all delays near zero
         true_dlys = np.random.uniform(-20, 20, size=60)
         true_dlys.shape = (60, 1)
-        phs = np.exp(2j * np.pi * freqs.reshape((1, -1)) * (true_dlys - .25))
-        dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt=True)
-        np.testing.assert_almost_equal(5. * dlys, 5. * true_dlys, -1)
-
+        phs = np.exp(2j * np.pi * freqs.reshape((1, -1)) * (true_dlys + dlys))
+        dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt=True, f0=freqs[0])
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 2) # median accuracy better than 2 ns
 
 class TestAAFromUV(object):
     def setUp(self):
