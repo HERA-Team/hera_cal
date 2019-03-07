@@ -135,10 +135,9 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11), edge_cut=0):
         dw[:, -edge_cut:] = 0
     dw[np.isnan(dw)] = 0
     vfft = np.fft.fft(dw, axis=1)
-    amp = np.abs(vfft)
 
     # get interpolated peak and indices
-    inds, bin_shifts, peaks, interp_peaks = interp_peak(amp)
+    inds, bin_shifts, peaks, interp_peaks = interp_peak(vfft)
     dlys = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
 
     # Now that we know the slope, estimate the remaining phase offset
@@ -149,40 +148,50 @@ def fft_dly(data, df, wgts=None, medfilt=False, kernel=(1, 11), edge_cut=0):
     return dlys, offset
 
 
-def interp_peak(data):
+def interp_peak(ft_data):
     """
-    Use quadratic interpolation to get peak of data along last axis.
+    Use Quinn's Second Method to get the peak and amplitude of   interpolation to get peak of data along last axis.
 
     Args:
-        data : real-valued 2d ndarray, if fed as 1d array
-            will reshape into [1, N] array
+        ft_data : complex 2d ndarray in Fourier space.
+            If fed as 1d array will reshape into [1, N] array.
 
     Returns:
         indices : index array holding argmax of data along last axis
-        bin_shifts : interpolated peak bin shift value [-1, 1] from indices
+        bin_shifts : estimated peak bin shift value [-1, 1] from indices
         peaks : argmax of data corresponding to indices
-        new_peaks : interpolated peak value at indices + bin_shifts
+        new_peaks : estimated peak value at indices + bin_shifts
     """
     # get properties
-    if data.ndim == 1:
-        data = data[None, :]
-    N1, N2 = data.shape
+    if ft_data.ndim == 1:
+        ft_data = ft_data[None, :]
+    N1, N2 = ft_data.shape
 
     # get argmaxes along last axis
-    indices = np.argmax(data, axis=-1)
-    peaks = data[range(N1), indices]
+    indices = np.argmax(np.abs(ft_data)**2, axis=-1)
+    peaks = ft_data[range(N1), indices]
 
     # calculate shifted peak for sub-bin resolution
-    # https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-    # alpha = a, beta = b, gamma = g
-    a = data[range(N1), indices - 1]
-    g = data[range(N1), (indices + 1) % N2]
-    b = data[range(N1), indices]
-    denom = (a - 2 * b + g)
-    bin_shifts = 0.5 * np.true_divide((a - g), denom, where=~np.isclose(denom, 0.0))
-    new_peaks = b - 0.25 * (a - g) * bin_shifts
+    # https://ieeexplore.ieee.org/document/558515
+    k0 = ft_data[range(N1), indices - 1]
+    k1 = ft_data[range(N1), indices]
+    k2 = ft_data[range(N1), (indices + 1) % N2]
+    
+    def tau(x):
+        t = .25 * np.log(3 * x**2 + 6 * x + 1) 
+        t -= 6**.5 / 24 * np.log((x + 1 - (2. / 3.)**.5) / (x + 1 + (2. / 3.)**.5))
+        return t
 
-    return indices, bin_shifts, peaks, new_peaks
+    alpha1 = (k0 / k1).real
+    alpha2 = (k2 / k1).real
+    delta1 = alpha1 / (1 - alpha1)
+    delta2 = -alpha2 / (1 - alpha2)
+    d = (delta1 + delta2) / 2 + tau(delta1**2) - tau(delta2**2)
+    
+    ck = np.array([(np.exp(2.0j*np.pi*d) - 1) / (2.0j * np.pi * (d - k)) for k in [-1, 0, 1]])
+    rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck**2))
+    
+    return indices, d, np.abs(peaks), rho
 
 
 def echo(message, type=0, verbose=True):
