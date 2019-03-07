@@ -384,7 +384,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     return fit
 
 
-def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offsets=True, medfilt=True,
+def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solve_offsets=True, medfilt=True,
                  kernel=(1, 5), verbose=True, antpos=None, four_pol=False, edge_cut=0):
     """
     Solve for per-antenna delays according to the equation
@@ -416,6 +416,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         zero across all freqs. By default use the first key in data.
 
     df : type=float, frequency spacing between channels in Hz
+
+    f0 : type=float, frequency of the first channel in the data (used for offsets)
 
     medfilt : type=boolean, median filter visiblity ratio before taking fft
 
@@ -461,7 +463,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, solve_offse
         wgts[k][inf_select] = 0.0
 
         # get delays
-        dly, offset = utils.fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
+        dly, offset = utils.fft_dly(ratio, df, f0=f0, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
 
         # set nans to zero
         rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
@@ -2030,7 +2032,7 @@ class AbsCal(object):
 
         # run delay_lincal
         fit = delay_lincal(model, data, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df, 
-                           kernel=kernel, verbose=verbose, edge_cut=edge_cut)
+                           f0=self.freqs[0], kernel=kernel, verbose=verbose, edge_cut=edge_cut)
 
         # time average
         if time_avg:
