@@ -122,7 +122,7 @@ class TestFftDly(object):
     def test_noisy(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
-        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5*noise((60, 1024))
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * noise((60, 1024))
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
         nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1)  # median accuracy of 1 ns
@@ -145,7 +145,7 @@ class TestFftDly(object):
         data[:, ::16] = np.nan
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
-        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-3) # median accuracy of 1 ps
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 1e-3)  # median accuracy of 1 ps
 
     def test_realistic(self):
         # load into pyuvdata object
@@ -153,21 +153,22 @@ class TestFftDly(object):
         model_fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         # make custom gain keys
         d, fl, antpos, a, freqs, t, l, p = io.load_vis(data_fname, return_meta=True, pick_data_ants=False)
-        freqs /= 1e9 # in GHz
+        freqs /= 1e9  # in GHz
         # test basic execution
         k1 = (24, 25, 'xx')
         k2 = (37, 38, 'xx')
         flat_phs = d[k1] * d[k2].conj()
         df = np.median(np.diff(freqs))
         # basic execution
-        dlys, offs = utils.fft_dly(flat_phs, df, medfilt=True, f0=freqs[0]) # dlys in ns
+        dlys, offs = utils.fft_dly(flat_phs, df, medfilt=True, f0=freqs[0])  # dlys in ns
         nt.assert_equal(dlys.shape, (60, 1))
-        nt.assert_true(np.all(np.abs(dlys) < 1)) # all delays near zero
+        nt.assert_true(np.all(np.abs(dlys) < 1))  # all delays near zero
         true_dlys = np.random.uniform(-20, 20, size=60)
         true_dlys.shape = (60, 1)
         phs = np.exp(2j * np.pi * freqs.reshape((1, -1)) * (true_dlys + dlys))
         dlys, offs = utils.fft_dly(flat_phs * phs, df, medfilt=True, f0=freqs[0])
-        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 2) # median accuracy better than 2 ns
+        nt.assert_true(np.median(np.abs(dlys - true_dlys)) < 2)  # median accuracy better than 2 ns
+
 
 class TestAAFromUV(object):
     def setUp(self):
