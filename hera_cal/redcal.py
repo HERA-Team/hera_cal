@@ -1114,7 +1114,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                 if nInt_to_load is None:  # don't perform partial I/O
                     data, flags, nsamples = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
                     for bl in data:
-                        data[bl] = data[bl][tinds, :]  # cut down size of DataContainers to match unflagged indices
+                        data[bl] = data[bl][tinds, fSlice]  # cut down size of DataContainers to match unflagged indices
+                        flags[bl] = flags[bl][tinds, fSlice]
+                        nsamples[bl] = nsamples[bl][tinds, fSlice] 
                 else:  # perform partial i/o
                     data, flags, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
