@@ -18,6 +18,7 @@ from . import io
 from . import version
 from . import utils
 from . import flag_utils
+from .noise import interleaved_noise_variance_estimate
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
@@ -181,17 +182,50 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     return filtered / rephasor, info
 
 
-def pick_reference_antenna(flags):
-    '''Pick a refrence antenna that has the minimum number of per-antenna flags.
+def pick_reference_antenna(gains, flags, freqs, per_pol=True):
+    '''Pick a refrence antenna that has the minimum number of per-antenna flags and produces
+    the least noisy phases on other antennas when used as a reference antenna.
 
     Arguments:
+        gains: Dictionary mapping antenna keys to gain waterfalls.
         flags: dictionary mapping antenna keys to flag waterfall where True means flagged
+        freqs: ndarray of frequency channels in Hz
 
     Returns:
-        refant: key of the antenna with the minimum number of flags. Tie goes to the first in a sorted list of keys.
+        refant: key(s) of the antenna(s) with the minimum number of flags and the least noisy phases
+            if per_pol: dictionary mapping gain polarizations string to ant-pol tuples
+            else: ant-pol tuple e.g. (0, 'Jxx')
     '''
-    flags_per_ant = {ant: np.sum(f) for ant, f in flags.items()}
-    refant = sorted([ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))])[0]
+    # compute delay and phase for all gains to flatten them as well as possible. Average over times.
+    df = np.median(np.diff(freqs))
+    rephasors = {}
+    for ant in gains.keys():
+        wgts = np.array(~(flags[ant]), dtype=float)
+        (dlys, phis) = utils.fft_dly(gains[ant], df, wgts, medfilt=False)
+        rephasors[ant] = np.exp(-2.0j * np.pi * np.mean(dlys), freqs - 1.0j * np.mean(phis))
+
+    # loop over pols (if per_pol)
+    refant = {}
+    pols = set([ant[1] for ant in gains])
+    for pol in (pols if per_pol else [pols]):
+        # pick antennas with the mininum number of flags
+        flags_per_ant = {ant: np.sum(f) for ant, f in flags.items() if ant[1] in pol}
+        refant_candidates = [ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))]
+        
+        # assess each candidate reference antenna: estimate the median noise of the angle after rephasing to a given refant
+        # (after taking out delays from both to minimize phase wraps) and return least noisy refant
+        median_angle_noise_as_refeant = {}
+        for ref in refant_candidates:
+            refant_rephasor = np.abs(gains[ref] * rephasors[ref]) / (gains[ref] * rephasors[ref])
+            median_phase_noise = [np.median(interleaved_noise_variance_estimate(
+                                  np.angle(gains[ant] * rephasors[ant] * refant_rephasor))[~(flags[ant] | flags[ref])])
+                                  for ant in gains.keys() if (not np.all(flags[ant] | flags[ref]) and (ant[1] in pol))]
+            median_angle_noise_as_refeant[ref] = np.median(median_phase_noise)
+        
+        if not per_pol:
+            return sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
+        else:
+            refant[pol] = sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
     return refant
 
 
@@ -200,17 +234,19 @@ def rephase_to_refant(gains, refant, flags=None):
 
     Arguments:
         gains: Dictionary mapping antenna keys to gain waterfalls. Modified in place.
-        refant: Antenna key of antenna to make the reference antenna
+        refant: Antenna key of antenna to make the reference antenna (or dictionary mapping pols to keys)
         flags: Optional dictionary mapping antenna keys to flag waterfall.
             Used only to verify that all gains are flagged where the refant is flagged.
     '''
-    refant_phasor = gains[refant] / np.abs(gains[refant])
-    for ant in gains.keys():
-        if flags is not None and np.any(flags[refant][np.logical_not(flags[ant])]):
-            raise ValueError('The chosen reference antenna', refant, 'is flagged in at least one place where antenna',
-                             ant, 'is not, so automatic reference antenna selection has failed.')
-        else:
-            gains[ant] = gains[ant] / refant_phasor
+    for pol, ref in (refant.items() if not isinstance(refant, tuple) else [(None, refant)]):
+        refant_phasor = gains[ref] / np.abs(gains[ref])
+        for ant in gains.keys():
+            if ((pol is None) or (ant[1] == pol)):
+                if flags is not None and np.any(flags[ref][np.logical_not(flags[ant])]):
+                    raise ValueError('The chosen reference antenna', refant, 'is flagged in at least one place where antenna',
+                                     ant, 'is not, so automatic reference antenna selection has failed.')
+                else:
+                    gains[ant] = gains[ant] / refant_phasor
 
 
 class CalibrationSmoother():
@@ -229,8 +265,8 @@ class CalibrationSmoother():
                 and frequency. Must have all baselines for all times. Flags on baselines are broadcast to both
                 antennas involved, unless either antenna is completely flagged for all times and frequencies.
             flag_filetype: filetype of flag_file_list to pass into io.load_flags. Either 'h5' (default) or legacy 'npz'.
-            pick_refant: if True, automatically pick as the reference anteanna the antenna with the fewest total
-                flags and then rephase all gains so that that reference antenna has purely real gains.
+            pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
+                fewest total flags and causes the least noisy phases on other antennas when made the phase reference.
             antflag_thresh: float, fraction of flagged pixels across all visibilities (with a common antenna)
                 needed to flag that antenna gain at a particular time and frequency. antflag_thresh=0.0 is
                 aggressive flag broadcasting, antflag_thresh=1.0 is conservative flag_broadcasting.
@@ -283,7 +319,7 @@ class CalibrationSmoother():
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
-            self.refant = pick_reference_antenna(self.flag_grids)
+            self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
             self.rephase_to_refant()
 
     def check_consistency(self):
@@ -433,8 +469,8 @@ def smooth_cal_argparser():
     a.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged pixels across all visibilities (with a common antenna) \
                    needed to flag that antenna gain at a particular time and frequency. 0.0 is aggressive flag broadcasting, while 1.0 is \
                    conservative flag broadcasting.")
-    a.add_argument("--pick_refant", default=False, action="store_true", help='automatically pick as the reference anteanna the antenna with the \
-                  fewest total flags and then rephase all gains so that that reference antenna has purely real gains.')
+    a.add_argument("--pick_refant", default=False, action="store_true", help='Automatically picks one reference anteanna per polarization. \
+                   The refants chosen have the fewest total flags and causes the least noisy phases on other antennas when made the phase reference.')
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
 

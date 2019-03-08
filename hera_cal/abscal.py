@@ -39,7 +39,7 @@ import linsolve
 
 from . import version
 from .apply_cal import calibrate_in_place
-from .smooth_cal import pick_reference_antenna
+from .smooth_cal import pick_reference_antenna, rephase_to_refant
 from .flag_utils import synthesize_ant_flags
 from .noise import predict_noise_variance_from_autos
 from . import utils
@@ -2771,21 +2771,22 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # instantiate Abscal object
     if refant_num is None:
-        refant_num = pick_reference_antenna(synthesize_ant_flags(flags))[0]
+        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
-    AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
+    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
+    AC = AbsCal(model, data, wgts=wgts, antpos=idealized_antpos, freqs=data.freqs,
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
-    AC.antpos = data.antpos
+    AC.antpos = idealized_antpos
 
     # Global Delay Slope Calibration
     for time_avg in [True, False]:
         abscal_step(abscal_delta_gains, AC, AC.delay_slope_lincal, {'time_avg': time_avg, 'edge_cut': edge_cut, 'verbose': verbose},
-                    [AC.custom_dly_slope_gain], [(rc_flags.keys(), data.antpos)], rc_flags,
+                    [AC.custom_dly_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                     gain_convention=gain_convention, verbose=verbose)
 
     # Global Phase Slope Calibration
     abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': tol, 'edge_cut': edge_cut, 'verbose': verbose},
-                [AC.custom_phs_slope_gain], [(rc_flags.keys(), data.antpos)], rc_flags,
+                [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     # Per-Channel Absolute Amplitude Calibration
@@ -2794,7 +2795,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # Per-Channel Tip-Tilt Phase Calibration
     abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
-                [(rc_flags.keys(), data.antpos), (rc_flags.keys(),)], rc_flags,
+                [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     return abscal_delta_gains, AC
@@ -2823,7 +2824,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         phs_max_iter: integer maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.
         refant: tuple of the form (0, 'Jxx') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
-        refant_pol: string reference antenna polarization (either 'Jxx' or 'Jyy'). See refant_num.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
 
@@ -2930,10 +2930,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                             
         # impose a single reference antenna on the final antenna solution
         if refant is None:
-            refant = pick_reference_antenna(abscal_flags)
-        refant_phasor = (abscal_gains[refant] / np.abs(abscal_gains[refant]))
-        for ant in abscal_gains.keys():
-            abscal_gains[ant] /= refant_phasor
+            refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
+        rephase_to_refant(abscal_gains, refant, flags=abscal_flags)
     else:
         echo("No model files overlap with data files in LST. Result will be fully flagged.", verbose=verbose)
 

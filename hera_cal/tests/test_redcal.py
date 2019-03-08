@@ -14,10 +14,11 @@ import shutil
 from six.moves import range
 
 import hera_cal.redcal as om
-from hera_cal import io
+from hera_cal import io, abscal
 from hera_cal.utils import split_pol, conj_pol
 from hera_cal.apply_cal import calibrate_in_place
 from hera_cal.data import DATA_PATH
+from hera_cal.datacontainer import DataContainer
 
 np.random.seed(0)
 
@@ -1020,6 +1021,55 @@ class TestRedundantCalibrator(unittest.TestCase):
         self.assertTrue(om.is_redundantly_calibratable(pos, bl_error_tol=1))
 
 
+class TestRedcalAndAbscal(unittest.TestCase):
+    
+    def test_post_redcal_abscal(self):
+        '''This test shows that performing a combination of redcal and abscal recovers the exact input gains
+        up to an overall phase (which is handled by using a reference antenna).'''
+        # Simulate Redundant Data
+        np.random.seed(21)
+        antpos = build_hex_array(3)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        freqs = np.linspace(1e8, 2e8, 128)  # note that for some seeds, this isn't enough frequency resolution to figure out delays
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)))
+        fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
+        for ant1, ant2, pol in d.keys():
+            d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+        true_gains = deepcopy(gains)
+        for ant in antpos.keys():
+            for pol in ['xx']:
+                d[ant, ant, pol] = np.ones_like(d[0, 1, 'xx'])  # these are used only for calculating chi^2 and not relevant
+        d.freqs = freqs
+        d.times_by_bl = {bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in d.keys()}
+        d.antpos = antpos
+
+        # run redcal
+        cal = om.redundantly_calibrate(d, reds)
+
+        # set up abscal
+        d_omnicaled = deepcopy(d)
+        f_omnicaled = DataContainer({bl: np.zeros_like(d[bl], dtype=bool) for bl in d.keys()})
+        calibrate_in_place(d_omnicaled, cal['g_omnical'], data_flags=f_omnicaled, cal_flags=cal['gf_omnical'])
+        model = DataContainer({bl: true_vis[red[0]] for red in reds for bl in red})
+        
+        # run abscal
+        abscal_delta_gains, AC = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=False)
+
+        # evaluate solutions, rephasing to antenna 0 as a reference
+        abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
+        refant = {'Jxx': (0, 'Jxx'), 'Jyy': (0, 'Jyy')}
+        agr = {ant: abscal_gains[ant] * np.abs(abscal_gains[refant[ant[1]]]) / abscal_gains[refant[ant[1]]] 
+               for ant in abscal_gains.keys()}
+        tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
+               for ant in true_gains.keys()}
+        gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
+        self.assertLess(np.max(np.abs(gain_errors)), 1e-12)
+
+
 class TestRunMethods(unittest.TestCase):
 
     def test_get_pol_load_list(self):
@@ -1094,6 +1144,22 @@ class TestRunMethods(unittest.TestCase):
             np.testing.assert_array_equal(flag, True)
         for flag in rv['vf_omnical'].values():
             np.testing.assert_array_equal(flag, True)
+        for nsamples in rv['vns_omnical'].values():
+            np.testing.assert_array_equal(nsamples, 0)
+
+        hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            rv = om.redcal_iteration(hd, pol_mode='2pol', ex_ants=[1, 27], min_bl_cut=15)
+        for pol in ['xx', 'yy']:
+            for key in ['v_omnical', 'vf_omnical', 'vns_omnical']:
+                # test that the unique baseline is keyed by the first entry in all_reds, not filtered_reds
+                self.assertTrue((1, 12, pol) in rv[key].keys())
+                # test that completely excluded baselines from redcal are still represented
+                self.assertTrue((23, 27, pol) in rv[key].keys())
+            # test redundant baseline counting
+            np.testing.assert_array_equal(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]], 4.0)
+            np.testing.assert_array_equal(rv['vns_omnical'][(23, 27, pol)], 0.0)
 
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
@@ -1136,8 +1202,7 @@ class TestRunMethods(unittest.TestCase):
         for bl in data.keys():
             np.testing.assert_array_almost_equal(data[bl], cal['v_omnical'][bl])
             np.testing.assert_array_almost_equal(flags[bl], cal['vf_omnical'][bl])
-            self.assertFalse(bl[0] in bad_ants)
-            self.assertFalse(bl[1] in bad_ants)
+            np.testing.assert_array_almost_equal(nsamples[bl], cal['vns_omnical'][bl])
         self.assertTrue('testing' in hd.history.replace('\n', '').replace(' ', ''))
         self.assertTrue('Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', ''))
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')

@@ -875,13 +875,58 @@ def _get_pol_load_list(pols, pol_mode='1pol'):
     return pol_load_list
 
 
+def expand_omni_vis(cal, all_reds, data, flags, nsamples):
+    '''This function expands and harmonizes a calibration solution produced by redcal.redundantly_calibrate
+    to a set of un-filtered redundancies. This only affects omnical visibility solutions. It has three effects:
+        1) Visibility solutions are now keyed by the first entry in each red in all_reds, even if they were
+            originally keyed by a different entry.
+        2) Unique baselines that were exluded from the redundant calibration are filled in by averaging
+            unflagged calibrated visibilities.
+        3) cal gets a new entry, cal['vns_omnical'] which is a nsamples data container of the number of 
+            visibilites that went into each unique baseline solution/average. 
+
+    Arguments:
+        cal: dictionary of redundant calibration solutions produced by redcal.redundantly_calibrate. 
+            Modified in place, including adding an entry with key 'vns_omnical' that gives a number of
+            samples that went into each unique baseline visibility solution
+        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+            item in each list will be treated as the key for the unique baseline. Must be a superset of
+            the reds used for producing cal
+        data: DataContainer mapping baseline-pol tuples like (0,1,'xx') to complex data of 
+            shape (Nt, Nf). Calibrated in place using cal['g_omnical'] and cal['gf_omnical']
+        flags: DataContainer mapping baseline-pol tuples like (0,1,'xx') to boolean flags of
+            shape (Nt, Nf). Modified in place using cal['gf_omnical']
+        nsamples: DataContainer mapping baseline-pol tuples like (0,1,'xx') to float number of samples.
+            Used for counting the number of non-flagged visibilities that went into each redundant group.
+    '''
+    calibrate_in_place(data, cal['g_omnical'], data_flags=flags, cal_flags=cal['gf_omnical'])
+    cal['vns_omnical'] = {}
+
+    for red in all_reds:
+        omni_keys = [bl for bl in red if bl in cal['v_omnical']]
+        assert len(omni_keys) <= 1, "The input calibration's 'v_omnical' entry can have at most visibility per unique baseline group."
+        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * (1.0 - flags[bl]) for bl in red], axis=0).astype(np.float32)
+
+        if len(omni_keys) == 0:  # the omnical solution doesn't have this baseline, so compute it by averaging the calibrated data
+            cal['v_omnical'][red[0]] = np.sum([data[bl] * (1.0 - flags[bl]) * nsamples[bl] for bl in red], axis=0).astype(np.complex64)
+            cal['v_omnical'][red[0]] /= cal['vns_omnical'][red[0]]
+            cal['vf_omnical'][red[0]] = np.logical_or(cal['vns_omnical'][red[0]] == 0, ~np.isfinite(cal['v_omnical'][red[0]]))
+            cal['v_omnical'][red[0]][~np.isfinite(cal['v_omnical'][red[0]])] = np.complex64(1.)
+        elif omni_keys[0] != red[0]:  # the omnical solution has the baseline, but it's keyed by something other than red[0]
+            cal['v_omnical'][red[0]] = deepcopy(cal['v_omnical'][omni_keys[0]])
+            cal['vf_omnical'][red[0]] = deepcopy(cal['vf_omnical'][omni_keys[0]])
+            del cal['v_omnical'][omni_keys[0]], cal['vf_omnical'][omni_keys[0]]
+    
+    cal['vns_omnical'] = DataContainer(cal['vns_omnical'])
+
+
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e-10,
                           maxiter=500, check_every=10, check_after=50, gain=.4):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
         data: dictionary or DataContainer mapping baseline-pol tuples like (0,1,'xx') to
-            complex data of shape
+            complex data of shape. Asummed to have no flags.
         reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
             item in each list will be treated as the key for the unique baseline.
         freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
@@ -973,6 +1018,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
 
     Arguments:
         hd: HERAData object, instantiated with the datafile or files to calibrate. Must be loaded using uvh5.
+            Assumed to have no prior flags.
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype for hd. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
@@ -1002,6 +1048,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
         'v_omnical': omnical visibility solutions dictionary with baseline-pol tuple keys that are the
             first elements in each of the sub-lists of reds. Flagged visibilities will be 0.0s.
         'vf_omnical': omnical visibility flag dictionary in the same format. Flags arise from NaNs.
+        'vns_omnical': omnical visibility nsample dictionary that counts the number of unflagged redundancies.
         'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
             from autocorrelations. If the inferred pol_mode from reds (see redcal.parse_pol_mode) is
             '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jxx') to chi^2.
@@ -1038,9 +1085,10 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
     # get reds and then intitialize omnical visibility solutions to all 1s and all flagged
     all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
                         pols=set([pol for pols in pol_load_list for pol in pols]))
-    all_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
     rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds})
     rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
+    rv['vns_omnical'] = DataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
+    filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
 
     # solar flagging
     lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
@@ -1053,7 +1101,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
     for pols in pol_load_list:
         if verbose:
             print('Now calibrating', pols, 'polarization(s)...')
-        reds = filter_reds(all_reds, ex_ants=ex_ants, pols=pols)
+        reds = filter_reds(filtered_reds, ex_ants=ex_ants, pols=pols)
         if nInt_to_load is not None:  # split up the integrations to load nInt_to_load at a time
             tind_groups = np.split(np.arange(nTimes)[~solar_flagged],
                                    np.arange(nInt_to_load, len(hd.times[~solar_flagged]), nInt_to_load))
@@ -1064,14 +1112,16 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                 if verbose:
                     print('    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...')
                 if nInt_to_load is None:  # don't perform partial I/O
-                    data, _, _ = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
+                    data, flags, nsamples = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
                     for bl in data:
                         data[bl] = data[bl][tinds, :]  # cut down size of DataContainers to match unflagged indices
                 else:  # perform partial i/o
-                    data, _, _ = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
+                    data, flags, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             conv_crit=conv_crit, maxiter=maxiter,
                                             check_every=check_every, check_after=check_after, gain=gain)
+                expand_omni_vis(cal, filter_reds(all_reds, pols=pols), data, flags, nsamples)
+                
                 # gather results
                 for ant in cal['g_omnical'].keys():
                     rv['g_firstcal'][ant][tinds, fSlice] = cal['g_firstcal'][ant]
@@ -1082,6 +1132,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                 for bl in cal['v_omnical'].keys():
                     rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
                     rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
+                    rv['vns_omnical'][bl][tinds, fSlice] = cal['vns_omnical'][bl]
                 if pol_mode in ['1pol', '2pol']:
                     for antpol in cal['chisq'].keys():
                         rv['chisq'][antpol][tinds, fSlice] = cal['chisq'][antpol]
@@ -1202,7 +1253,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, filename_no_ext + omnivis_ext))
     hd.read(bls=cal['v_omnical'].keys())
-    hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'])
+    hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
     hd.history += version.history_string(add_to_history + '\n' + high_z_ant_hist)
     hd.write_uvh5(os.path.join(outdir, filename_no_ext + omnivis_ext), clobber=True)
 
