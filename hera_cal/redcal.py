@@ -1127,7 +1127,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                 # gather results
                 for ant in cal['g_omnical'].keys():
                     rv['g_firstcal'][ant][tinds, fSlice] = cal['g_firstcal'][ant]
-                    rv['gf_firstcal'][ant][tinds, fSlice] = cal['g_firstcal'][ant]
+                    rv['gf_firstcal'][ant][tinds, fSlice] = cal['gf_firstcal'][ant]
                     rv['g_omnical'][ant][tinds, fSlice] = cal['g_omnical'][ant]
                     rv['gf_omnical'][ant][tinds, fSlice] = cal['gf_omnical'][ant]
                     rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
