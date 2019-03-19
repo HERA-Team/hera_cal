@@ -569,29 +569,23 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def firstcal(self, data, df, f0=0.0, wgts={}, sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
-        """Solves for a per-antenna delay by fitting a line to the phase difference between
-        nominally redundant measurements.  To turn these delays into gains, you need to do:
-        np.exp(2j * np.pi * delay * freqs)
-
-        Args:
-            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+    def _firstcal_iteration(self, data, df, f0=0.0, wgts={}, offsets_only=False,
+                            sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
+        '''Runs a single iteration of firstcal, which uses phase differences between nominally
+        redundant meausrements to solve for delays and phase offsets that produce gains of the
+        form: np.exp(2j * np.pi * delay * freqs + 1j * offset).
+        
+        Arguments:
             df: frequency change between data bins, scales returned delays by 1/df.
-            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
-            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
-            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
-                Suggest using 'default' unless solver is having stability (convergence) problems.
-                More documentation of modes in linsolve.LinearSolver.solve().
-            norm: calculate delays from just the phase information (not the amplitude) of the data.
-                This is a pretty effective way to get reliable delay even in the presence of RFI.
-            medfilt : boolean, median filter data before fft.  This can work for data containing
-                unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
-            kernel : size of median filter kernel along (time, freq) axes
+            f0: frequency of the first channel in the data
+            offsets_only: only solve for phase offsets, dly_sol will be {}
+            For all other arguments, see RedundantCalibrator.firstcal()
 
         Returns:
-            sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
+            dly_sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
                 format.  All delays are multiplied by 1/df, so use that to set physical scale.
-        """
+            off_sol: dictionary of per antenna phase offsets (in radians) in the same format.
+        '''
         Nfreqs = data[next(iter(data))].shape[1]  # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
             wgts = {k: np.ones_like(data[k], dtype=np.float32) for k in data}
