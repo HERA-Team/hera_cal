@@ -2735,8 +2735,8 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
         for k in gains_to_update.keys():
             gains_to_update[k] *= gains_here[k]
         if max_iter > 1:
-            crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for 
-                                             k in gains_here.keys()], axis=(0, 1)))
+            crit = np.max(np.linalg.norm([gains_here[k] - 1.0 for 
+                                          k in gains_here.keys()], axis=(0, 1)))
             echo(AC_func.__name__ + " convergence criterion: " + str(crit), verbose=verbose)
             if crit < phs_conv_crit:
                 break
