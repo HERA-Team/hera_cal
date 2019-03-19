@@ -969,10 +969,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    d_fc = rc.firstcal(data, df=np.median(np.ediff1d(freqs)))
+    d_fc, o_fc = rc.firstcal(data, df=np.median(np.ediff1d(freqs)))
     d_fc_rd = rc.remove_degen_gains(d_fc)
-    rv['g_firstcal'] = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)), dtype=np.complex64)
-                        for ant, dly in d_fc_rd.items()}
+    o_fc_rd = rc.remove_degen_gains(o_fc)
+    rv['g_firstcal'] = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs) + 1.0j * o_fc_rd[ant]), 
+                                      dtype=np.complex64) for ant, dly in d_fc_rd.items()}
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
     # perform logcal and omnical
