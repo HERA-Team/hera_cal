@@ -569,7 +569,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def firstcal(self, data, df, wgts={}, sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
+    def firstcal(self, data, df, f0=0.0, wgts={}, sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
         """Solves for a per-antenna delay by fitting a line to the phase difference between
         nominally redundant measurements.  To turn these delays into gains, you need to do:
         np.exp(2j * np.pi * delay * freqs)
@@ -606,7 +606,7 @@ class RedundantCalibrator:
                         ad12 = np.abs(d12)
                         d12 /= np.where(ad12 == 0, np.float32(1), ad12)
                     w12 = w1 * wgts[bl2]
-                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
+                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt, kernel=kernel)
                     twgts[(bl1, bl2)] = np.sum(w12)
         d_ls, w_ls = {}, {}
         for (bl1, bl2), tau_off_ij in taus_offs.items():
@@ -618,8 +618,9 @@ class RedundantCalibrator:
             w_ls[eq_key] = twgts[(bl1, bl2)]
         ls = linsolve.LinearSolver(d_ls, wgts=w_ls, sparse=sparse)
         sol = ls.solve(mode=mode)
-        sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}  # ignoring offset
-        return sol
+        dly_sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
+        off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
+        return dly_sol, off_sol
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
