@@ -727,7 +727,8 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
 
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
-    solver : TODO: explain
+    solver : 'linfit' uses linsolve to fit phase slope across the array,
+             'dft' uses a spatial Fourier transform to find a phase slope 
 
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
@@ -2188,13 +2189,16 @@ class AbsCal(object):
         self._dly_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
         self._dly_slope_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._dly_slope[k][0], self._dly_slope[k][1]]), pk)), self._gain_keys)), 0, -1)
 
-    def global_phase_slope_logcal(self, tol=1.0, edge_cut=0, verbose=True):
+    def global_phase_slope_logcal(self, solver='linfit', tol=1.0, edge_cut=0, verbose=True):
         """
         Solve for a frequency-independent spatial phase slope (a subset of the omnical degeneracies) by calling
         abscal_funcs.global_phase_slope_logcal method. See abscal_funcs.global_phase_slope_logcal for details.
 
         Parameters:
         -----------
+        solver : 'linfit' uses linsolve to fit phase slope across the array,
+                 'dft' uses a spatial Fourier transform to find a phase slope 
+
         tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
 
         edge_cut : int, number of channels to exclude at each band edge in phase slope solver
@@ -2218,7 +2222,8 @@ class AbsCal(object):
         antpos = self.antpos
 
         # run global_phase_slope_logcal
-        fit = global_phase_slope_logcal(model, data, antpos, wgts=wgts, refant=self.refant, verbose=verbose, tol=tol, edge_cut=edge_cut)
+        fit = global_phase_slope_logcal(model, data, antpos, solver=solver, wgts=wgts,
+                                        refant=self.refant, verbose=verbose, tol=tol, edge_cut=edge_cut)
 
         # form result
         self._phs_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
