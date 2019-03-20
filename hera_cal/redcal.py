@@ -616,7 +616,7 @@ class RedundantCalibrator:
         off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
         return dly_sol, off_sol
 
-    def firstcal(self, data, freqs, wgts={}, max_iter=25, conv_crit=1e-8,
+    def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-8,
                  sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redudant measurements. 
@@ -627,7 +627,7 @@ class RedundantCalibrator:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
             freqs: numpy array of frequencies in the data
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
-            max_iter: maximum number of phase offset solver iterations
+            maxiter: maximum number of phase offset solver iterations
             conv_crit: convergence criterion for iterative offset solver, defined as the L2 norm
                 of the changes in phase (in radians) over all times and antennas
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
@@ -646,17 +646,17 @@ class RedundantCalibrator:
         """
         # Run firstcal with both delay and offset solving:
         df = np.median(np.ediff1d(freqs))
-        dly_fc, off_fc = _firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, sparse=sparse, 
-                                             mode=mode, norm=norm, medfilt=medfilt, kernel=kernel)
+        dly_fc, off_fc = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, sparse=sparse, 
+                                                  mode=mode, norm=norm, medfilt=medfilt, kernel=kernel)
         g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs) + 1.0j * off_fc[ant]), 
                               dtype=np.complex64) for ant, dly in dly_fc.items()}
         calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
         
-        for i in range(max_iter-1):
+        for i in range(maxiter-1):
             # iteratively solve for offsets to account for phase wrapping
-            _, delta_off = _firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
-                                               offsets_only=True, sparse=sparse, mode=mode, 
-                                               norm=norm, medfilt=medfilt, kernel=kernel)
+            _, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
+                                                    offsets_only=True, sparse=sparse, mode=mode, 
+                                                    norm=norm, medfilt=medfilt, kernel=kernel)
             if np.linalg.norm(delta_off.values()) < conv_crit:
                 break
             delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
@@ -707,7 +707,7 @@ class RedundantCalibrator:
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             conv_crit: maximum allowed relative change in solutions to be considered converged
-            max_iter: maximum number of lincal iterations allowed before it gives up
+            maxiter: maximum number of lincal iterations allowed before it gives up
             verbose: print stuff
             mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
                 Suggest using 'default' unless solver is having stability (convergence) problems.
@@ -1015,11 +1015,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    d_fc, o_fc = rc.firstcal(data, df=np.median(np.ediff1d(freqs)))
-    d_fc_rd = rc.remove_degen_gains(d_fc)
-    o_fc_rd = rc.remove_degen_gains(o_fc)
-    rv['g_firstcal'] = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs) + 1.0j * o_fc_rd[ant]), 
-                                      dtype=np.complex64) for ant, dly in d_fc_rd.items()}
+    rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=maxiter, conv_crit=conv_crit)
+    rv['g_firstcal'] = rc.remove_degen_gains(rv['g_firstcal'])
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
     # perform logcal and omnical
