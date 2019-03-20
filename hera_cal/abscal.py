@@ -670,11 +670,13 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
 
 def dft_phase_slope_solver(xs, ys, data):
-    '''TODO: document
+    '''Solve for sptial phase slopes across an array by looking for the peak in the DFT.
+    This is analogous to the method in utils.fft_dly(), except its in 2D and does not 
+    assume a regular grid for xs and ys.
 
     Arguments:
-        xs: 1D array of x positions
-        ys: 1D array of y positions
+        xs: 1D array of x positions (e.g. of antennas or baselines)
+        ys: 1D array of y positions (must be same length as xs)
         data: ndarray of complex numbers to fit with a phase slope. The first dimension must match 
             xs and ys, but subsequent dimensions will be preserved and solved independently
 
@@ -691,12 +693,12 @@ def dft_phase_slope_solver(xs, ys, data):
 
     # define cost function
     def dft_abs(k, x, y, z):
-        return -np.abs(np.dot(z, np.exp(-2j*np.pi*x*k[0] + -2j*np.pi*y*k[1])))
+        return -np.abs(np.dot(z, np.exp(-2.0j * np.pi * (x * k[0] + y * k[1]))))
 
     # loop over data, minimizing the cost function
-    dflat = data.reshape((len(xs),-1))
-    slope_x = np.zeros_like(dflat[0,:].real)
-    slope_y = np.zeros_like(dflat[0,:].real)
+    dflat = data.reshape((len(xs), -1))
+    slope_x = np.zeros_like(dflat[0, :].real)
+    slope_y = np.zeros_like(dflat[0, :].real)
     for i in range(dflat.shape[1]):
         dft_peak = brute(dft_abs, (search_slice, search_slice), (xs, ys, dflat[:, i]), finish=minimize)
         slope_x[i] = dft_peak[0]
@@ -704,7 +706,8 @@ def dft_phase_slope_solver(xs, ys, data):
     return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
 
 
-def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, verbose=True, tol=1.0, edge_cut=0):
+def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, 
+                              refant=None, verbose=True, tol=1.0, edge_cut=0):
     """
     Solve for a frequency-independent spatial phase slope using the equation
 
@@ -813,20 +816,21 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, r
         echo("...running linsolve", verbose=verbose)
         fit = solver.solve()
         echo("...finished linsolve", verbose=verbose)
-        return fit
 
     elif solver == 'dft':  # look for a peak angle space by 2D DFTing across baselines
         if not np.all([split_pol(pol)[0] == split_pol(pol)[1] for pol in data.pols()]):
-            raise NotImplementedError('DFT solving of global phase slopes only implemented for 1-pol and 2-pol abscal.')
-        keys = bls.keys()
-        blx = np.array([bls[k][0] for k in keys])
-        bly = np.array([bls[k][1] for k in keys])
-        wd = np.array([ls_wgts[k] * ls_data[k] for k in keys])
+            raise NotImplementedError('DFT solving of global phase not implemented for abscal with cross-polarizations.')
+        fit = {}
+        for pol in data.pols():
+            keys = [k for k in bls.keys() if k[2] == pol]
+            blx = np.array([bls[k][0] for k in keys])
+            bly = np.array([bls[k][1] for k in keys])
+            wd = np.array([ls_wgts[k] * ls_data[k] for k in keys])
+            slope_x, slope_y = dft_phase_slope_solver(blx, bly, wd)
+            fit['Phi_ew_{}'.format(split_pol(pol)[0])] = slope_x
+            fit['Phi_ns_{}'.format(split_pol(pol)[0])] = slope_y
 
-        def dft_abs(k, x, y, z):
-            return -np.abs(np.dot(z, np.exp(-2j*np.pi*x*k[0] + -2j*np.pi*y*k[1])))
-
-
+    return fit
 
 
 def merge_gains(gains):
