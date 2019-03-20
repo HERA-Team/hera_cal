@@ -34,6 +34,7 @@ import operator
 from functools import reduce
 from six.moves import map, range, zip
 from scipy import signal, interpolate, spatial
+from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
 import linsolve
 
@@ -668,7 +669,42 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     return fit
 
 
-def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, tol=1.0, edge_cut=0):
+def dft_phase_slope_solver(xs, ys, data):
+    '''TODO: document
+
+    Arguments:
+        xs: 1D array of x positions
+        ys: 1D array of y positions
+        data: ndarray of complex numbers to fit with a phase slope. The first dimension must match 
+            xs and ys, but subsequent dimensions will be preserved and solved independently
+
+    Returns:
+        slope_x, slope_y: phase slopes in units of 1/[xs] where the best fit phase slope plane
+            is np.exp(2.0j * np.pi * (xs * slope_x + ys * slope_y)). Both have the same shape 
+            the data after collapsing along the first dimension.
+    '''
+
+    # find the range of k values in DFT space to explore and the appropriate sampling
+    min_len = np.min(np.sqrt(np.array(xs)**2 + np.array(ys)**2))
+    nsamples = 2 * np.max(np.sqrt(np.array(xs)**2 + np.array(ys)**2)) / min_len
+    search_slice = slice(-1.0 / (2 * min_len), 1.0 / (2 * min_len), 1.0 / (nsamples * min_len))
+
+    # define cost function
+    def dft_abs(k, x, y, z):
+        return -np.abs(np.dot(z, np.exp(-2j*np.pi*x*k[0] + -2j*np.pi*y*k[1])))
+
+    # loop over data, minimizing the cost function
+    dflat = data.reshape((len(xs),-1))
+    slope_x = np.zeros_like(dflat[0,:].real)
+    slope_y = np.zeros_like(dflat[0,:].real)
+    for i in range(dflat.shape[1]):
+        dft_peak = brute(dft_abs, (search_slice, search_slice), (xs, ys, dflat[:, i]), finish=minimize)
+        slope_x[i] = dft_peak[0]
+        slope_y[i] = dft_peak[1]
+    return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
+
+
+def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, verbose=True, tol=1.0, edge_cut=0):
     """
     Solve for a frequency-independent spatial phase slope using the equation
 
@@ -687,6 +723,8 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
            complex ndarray visibilities matching shape of model
 
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
+
+    solver : TODO: explain
 
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
@@ -709,7 +747,13 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
     fit : dictionary containing frequency-indpendent phase slope, e.g. Phi_ns_x
           for each position component and polarization [radians / meter].
     """
-    echo("...configuring linsolve data for global_phase_slope_logcal", verbose=verbose)
+    # check solver and edgecut
+    if solver == 'linfit':
+        echo("...configuring linsolve data for global_phase_slope_logcal", verbose=verbose)
+    elif solver == 'dft':
+        echo("...finding global phase slopes using the DFT method", verbose=verbose)
+    else:
+        raise ValueError("Unrecognized solver {}. Must be either 'linfit' or 'dft'.".format(solver))
     assert 2 * edge_cut < list(data.values())[0].shape[1] - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
 
     # get keys from model and data dictionaries
@@ -735,19 +779,19 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
         red = [bl for bl in _red if bl in keys]
         if len(red) > 0:
             reds.append(red)
-
     avg_data, avg_wgts, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}),
                                                            antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
     avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}),
                                               antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
 
-    # build linear system
-    ls_data, ls_wgts = {}, {}
+    ls_data, ls_wgts, bls, pols = {}, {}, {}, {}
     for rk in red_keys:
         # build equation string
         eqn_str = '{}*Phi_ew_{} + {}*Phi_ns_{} - {}*Phi_ew_{} - {}*Phi_ns_{}'
         eqn_str = eqn_str.format(antpos[rk[0]][0], split_pol(rk[2])[0], antpos[rk[0]][1], split_pol(rk[2])[0],
                                  antpos[rk[1]][0], split_pol(rk[2])[1], antpos[rk[1]][1], split_pol(rk[2])[1])
+        bls[eqn_str] = antpos[rk[0]] - antpos[rk[1]]
+        pols[eqn_str] = rk[2]
 
         # calculate median of unflagged angle(data/model)
         # ls_weights are sum of non-binary weights
@@ -763,12 +807,26 @@ def global_phase_slope_logcal(model, data, antpos, wgts=None, refant=None, verbo
         ls_wgts[eqn_str][np.isnan(ls_data[eqn_str])] = 0
         ls_data[eqn_str][np.isnan(ls_data[eqn_str])] = 0
 
-    # setup linsolve and run
-    solver = linsolve.LinearSolver(ls_data, wgts=ls_wgts)
-    echo("...running linsolve", verbose=verbose)
-    fit = solver.solve()
-    echo("...finished linsolve", verbose=verbose)
-    return fit
+    if solver == 'linfit':  # build linear system for phase slopes and solve with linsolve
+        # setup linsolve and run
+        solver = linsolve.LinearSolver(ls_data, wgts=ls_wgts)
+        echo("...running linsolve", verbose=verbose)
+        fit = solver.solve()
+        echo("...finished linsolve", verbose=verbose)
+        return fit
+
+    elif solver == 'dft':  # look for a peak angle space by 2D DFTing across baselines
+        if not np.all([split_pol(pol)[0] == split_pol(pol)[1] for pol in data.pols()]):
+            raise NotImplementedError('DFT solving of global phase slopes only implemented for 1-pol and 2-pol abscal.')
+        keys = bls.keys()
+        blx = np.array([bls[k][0] for k in keys])
+        bly = np.array([bls[k][1] for k in keys])
+        wd = np.array([ls_wgts[k] * ls_data[k] for k in keys])
+
+        def dft_abs(k, x, y, z):
+            return -np.abs(np.dot(z, np.exp(-2j*np.pi*x*k[0] + -2j*np.pi*y*k[1])))
+
+
 
 
 def merge_gains(gains):
