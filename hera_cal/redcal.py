@@ -652,7 +652,7 @@ class RedundantCalibrator:
                               dtype=np.complex64) for ant, dly in dly_fc.items()}
         calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
         
-        for i in range(maxiter-1):
+        for i in range(maxiter - 1):
             # iteratively solve for offsets to account for phase wrapping
             _, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
                                                     offsets_only=True, sparse=sparse, mode=mode, 
@@ -666,7 +666,6 @@ class RedundantCalibrator:
 
         calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
         return g_fc
-
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
