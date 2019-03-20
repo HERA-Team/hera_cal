@@ -616,6 +616,58 @@ class RedundantCalibrator:
         off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
         return dly_sol, off_sol
 
+    def firstcal(self, data, freqs, wgts={}, max_iter=25, conv_crit=1e-8,
+                 sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
+        """Solve for a calibration solution parameterized by a single delay and phase offset
+        per antenna using the phase difference between nominally redudant measurements. 
+        Delays are solved in a single iteration, but phase offsets are solved for 
+        iteratively to account for phase wraps.
+
+        Args:
+            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+            freqs: numpy array of frequencies in the data
+            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
+            max_iter: maximum number of phase offset solver iterations
+            conv_crit: convergence criterion for iterative offset solver, defined as the L2 norm
+                of the changes in phase (in radians) over all times and antennas
+            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
+            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
+                Suggest using 'default' unless solver is having stability (convergence) problems.
+                More documentation of modes in linsolve.LinearSolver.solve().
+            norm: calculate delays from just the phase information (not the amplitude) of the data.
+                This is a pretty effective way to get reliable delay even in the presence of RFI.
+            medfilt : boolean, median filter data before fft.  This can work for data containing
+                unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
+            kernel : size of median filter kernel along (time, freq) axes
+
+        Returns:
+            g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the 
+                {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
+        """
+        # Run firstcal with both delay and offset solving:
+        df = np.median(np.ediff1d(freqs))
+        dly_fc, off_fc = _firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, sparse=sparse, 
+                                             mode=mode, norm=norm, medfilt=medfilt, kernel=kernel)
+        g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs) + 1.0j * off_fc[ant]), 
+                              dtype=np.complex64) for ant, dly in dly_fc.items()}
+        calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
+        
+        for i in range(max_iter-1):
+            # iteratively solve for offsets to account for phase wrapping
+            _, delta_off = _firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
+                                               offsets_only=True, sparse=sparse, mode=mode, 
+                                               norm=norm, medfilt=medfilt, kernel=kernel)
+            if np.linalg.norm(delta_off.values()) < conv_crit:
+                break
+            delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
+                                         dtype=np.complex64) for ant in g_fc.keys()}
+            calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
+            g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
+
+        calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
+        return g_fc
+
+
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
 
