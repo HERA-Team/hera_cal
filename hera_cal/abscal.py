@@ -833,7 +833,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
             keys = [k for k in bls.keys() if pols[k] == pol]
             blx = np.array([bls[k][0] for k in keys])
             bly = np.array([bls[k][1] for k in keys])
-            data_array = np.array([ls_data[k] / (ls_wgts[k] == 0) for k in keys])  # is np.nan if all flagged
+            data_array = np.array([ls_data[k] / (ls_wgts[k] > 0) for k in keys])  # is np.nan if all flagged
             with np.errstate(divide='ignore'):  # is np.nan if all flagged
                 data_array = np.array([ls_data[k] / (ls_wgts[k] > 0) for k in keys])
             slope_x, slope_y = dft_phase_slope_solver(blx, bly, data_array)
