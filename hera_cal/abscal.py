@@ -2856,6 +2856,10 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
     AC.antpos = idealized_antpos
 
+    # Per-Channel Absolute Amplitude Calibration
+    abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {'verbose': verbose}, [AC.custom_abs_eta_gain], 
+                [(rc_flags.keys(),)], rc_flags, gain_convention=gain_convention, verbose=verbose)
+
     # Global Delay Slope Calibration
     for time_avg in [True, False]:
         abscal_step(abscal_delta_gains, AC, AC.delay_slope_lincal, {'time_avg': time_avg, 'edge_cut': edge_cut, 'verbose': verbose},
@@ -2866,10 +2870,6 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': tol, 'edge_cut': edge_cut, 'verbose': verbose},
                 [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
-
-    # Per-Channel Absolute Amplitude Calibration
-    abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {'verbose': verbose}, [AC.custom_abs_eta_gain], 
-                [(rc_flags.keys(),)], rc_flags, gain_convention=gain_convention, verbose=verbose)
 
     # Per-Channel Tip-Tilt Phase Calibration
     abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
