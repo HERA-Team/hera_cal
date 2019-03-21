@@ -1015,7 +1015,6 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
 
     # perform firstcal
     rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=maxiter, conv_crit=conv_crit)
-    rv['g_firstcal'] = rc.remove_degen_gains(rv['g_firstcal'])
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
     # perform logcal and omnical
