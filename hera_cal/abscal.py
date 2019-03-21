@@ -678,7 +678,8 @@ def dft_phase_slope_solver(xs, ys, data):
         xs: 1D array of x positions (e.g. of antennas or baselines)
         ys: 1D array of y positions (must be same length as xs)
         data: ndarray of complex numbers to fit with a phase slope. The first dimension must match 
-            xs and ys, but subsequent dimensions will be preserved and solved independently
+            xs and ys, but subsequent dimensions will be preserved and solved independently. 
+            Any np.nan in data is interpreted as a flag.
 
     Returns:
         slope_x, slope_y: phase slopes in units of 1/[xs] where the best fit phase slope plane
@@ -700,9 +701,12 @@ def dft_phase_slope_solver(xs, ys, data):
     slope_x = np.zeros_like(dflat[0, :].real)
     slope_y = np.zeros_like(dflat[0, :].real)
     for i in range(dflat.shape[1]):
-        dft_peak = brute(dft_abs, (search_slice, search_slice), (xs, ys, dflat[:, i]), finish=minimize)
-        slope_x[i] = dft_peak[0]
-        slope_y[i] = dft_peak[1]
+        if not np.all(np.isnan(dflat[:, i])):
+            dft_peak = brute(dft_abs, (search_slice, search_slice), 
+                             (xs[~np.isnan(dflat[:, i])], ys[~np.isnan(dflat[:, i])], 
+                              dflat[:, i][~np.isnan(dflat[:, i])]), finish=minimize)
+            slope_x[i] = dft_peak[0]
+            slope_y[i] = dft_peak[1]
     return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
 
 
