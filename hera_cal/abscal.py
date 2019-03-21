@@ -1892,15 +1892,7 @@ class AbsCal(object):
         self.refant = refant
 
         # setup antenna positions
-        self.antpos = antpos
-        self.antpos_arr = None
-        self.bls = None
-        if self.antpos is not None:
-            # center antpos about reference antenna
-            self.antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[self.refant]), self.ants)))
-            self.bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in self.keys])
-            self.antpos_arr = np.array(list(map(lambda x: self.antpos[x], self.ants)))
-            self.antpos_arr -= np.median(self.antpos_arr, axis=0)
+        self._overwrite_antpos(antpos)
 
         # setup gain solution keys
         self._gain_keys = list(map(lambda p: list(map(lambda a: (a, p), self.ants)), self.gain_pols))
@@ -1927,6 +1919,19 @@ class AbsCal(object):
             # iterate over baselines
             for k in self.wgts.keys():
                 self.wgts[k] *= taper(np.linalg.norm(self.bls[k]) / bl_taper_fwhm)
+
+    def _overwrite_antpos(self, antpos):
+        '''Helper function for replacing self.antpos, self.bls, and self.antpos_arr without affecting tapering or baseline cuts.
+        Useful for replacing true antenna positions with idealized ones derived from the redundancies.'''
+        self.antpos = antpos
+        self.antpos_arr = None
+        self.bls = None
+        if self.antpos is not None:
+            # center antpos about reference antenna
+            self.antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[self.refant]), self.ants)))
+            self.bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in self.keys])
+            self.antpos_arr = np.array(list(map(lambda x: self.antpos[x], self.ants)))
+            self.antpos_arr -= np.median(self.antpos_arr, axis=0)
 
     def amp_logcal(self, verbose=True):
         """
@@ -2785,10 +2790,12 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     if refant_num is None:
         refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
-    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
-    AC = AbsCal(model, data, wgts=wgts, antpos=idealized_antpos, freqs=data.freqs,
+    AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
-    AC.antpos = idealized_antpos
+    
+    # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
+    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
+    AC._overwrite_antpos(idealized_antpos)
 
     # Per-Channel Absolute Amplitude Calibration
     abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {'verbose': verbose}, [AC.custom_abs_eta_gain], 
@@ -2801,10 +2808,10 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                     gain_convention=gain_convention, verbose=verbose)
 
     # Global Phase Slope Calibration (first using dft, then using linfit)
-    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'solver': 'dft', 'tol': tol,
+    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'solver': 'dft', 'tol': 1e-8,
                 'edge_cut': edge_cut, 'verbose': verbose}, [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], 
                 rc_flags, gain_convention=gain_convention, verbose=verbose)
-    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': tol, 'edge_cut': edge_cut, 'verbose': verbose},
+    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': 1e-8, 'edge_cut': edge_cut, 'verbose': verbose},
                 [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
