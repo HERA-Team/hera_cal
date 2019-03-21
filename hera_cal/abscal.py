@@ -803,13 +803,16 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
 
         # calculate median of unflagged angle(data/model)
         # ls_weights are sum of non-binary weights
-        delta_phi = np.angle(avg_data[rk] / avg_model[rk])
+        dm_ratio = avg_data[rk] / avg_model[rk]
         binary_flgs = np.isclose(avg_wgts[rk], 0.0)
-        delta_phi[binary_flgs] *= np.nan
-        avg_wgts[rk][np.isinf(delta_phi) + np.isnan(delta_phi)] = 0.0
-        delta_phi[np.isinf(delta_phi) + np.isnan(delta_phi)] *= np.nan
-        ls_data[eqn_str] = np.nanmedian(delta_phi[:, edge_cut:(delta_phi.shape[1] - edge_cut)], axis=1, keepdims=True)
-        ls_wgts[eqn_str] = np.sum(avg_wgts[rk][:, edge_cut:(delta_phi.shape[1] - edge_cut)], axis=1, keepdims=True)
+        dm_ratio[binary_flgs] *= np.nan
+        avg_wgts[rk][np.isinf(dm_ratio) + np.isnan(dm_ratio)] = 0.0
+        dm_ratio[np.isinf(dm_ratio) + np.isnan(dm_ratio)] *= np.nan
+        if solver == 'linfit':  # we want to fit the angles
+            ls_data[eqn_str] = np.nanmedian(np.angle(dm_ratio[:, edge_cut:(dm_ratio.shape[1] - edge_cut)]), axis=1, keepdims=True)
+        elif solver == 'dft':  # we want the full complex number
+            ls_data[eqn_str] = np.nanmedian(dm_ratio[:, edge_cut:(dm_ratio.shape[1] - edge_cut)], axis=1, keepdims=True)
+        ls_wgts[eqn_str] = np.sum(avg_wgts[rk][:, edge_cut:(dm_ratio.shape[1] - edge_cut)], axis=1, keepdims=True)
 
         # set unobserved data to 0 with 0 weight
         ls_wgts[eqn_str][np.isnan(ls_data[eqn_str])] = 0
@@ -827,13 +830,15 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
             raise NotImplementedError('DFT solving of global phase not implemented for abscal with cross-polarizations.')
         fit = {}
         for pol in data.pols():
-            keys = [k for k in bls.keys() if k[2] == pol]
+            keys = [k for k in bls.keys() if pols[k] == pol]
             blx = np.array([bls[k][0] for k in keys])
             bly = np.array([bls[k][1] for k in keys])
-            wd = np.array([ls_wgts[k] * ls_data[k] for k in keys])
-            slope_x, slope_y = dft_phase_slope_solver(blx, bly, wd)
-            fit['Phi_ew_{}'.format(split_pol(pol)[0])] = slope_x
-            fit['Phi_ns_{}'.format(split_pol(pol)[0])] = slope_y
+            data_array = np.array([ls_data[k] / (ls_wgts[k] == 0) for k in keys])  # is np.nan if all flagged
+            with np.errstate(divide='ignore'):  # is np.nan if all flagged
+                data_array = np.array([ls_data[k] / (ls_wgts[k] > 0) for k in keys])
+            slope_x, slope_y = dft_phase_slope_solver(blx, bly, data_array)
+            fit['Phi_ew_{}'.format(split_pol(pol)[0])] = slope_x * 2.0 * np.pi  # 2pi matches custom_phs_slope_gain
+            fit['Phi_ns_{}'.format(split_pol(pol)[0])] = slope_y * 2.0 * np.pi
 
     return fit
 
