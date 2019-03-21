@@ -2866,7 +2866,10 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                     [AC.custom_dly_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                     gain_convention=gain_convention, verbose=verbose)
 
-    # Global Phase Slope Calibration
+    # Global Phase Slope Calibration (first using dft, then using linfit)
+    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'solver': 'dft', 'tol': tol,
+                'edge_cut': edge_cut, 'verbose': verbose}, [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], 
+                rc_flags, gain_convention=gain_convention, verbose=verbose)
     abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': tol, 'edge_cut': edge_cut, 'verbose': verbose},
                 [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
