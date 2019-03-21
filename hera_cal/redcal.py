@@ -646,10 +646,11 @@ class RedundantCalibrator:
         """
         # Run firstcal with both delay and offset solving:
         df = np.median(np.ediff1d(freqs))
+        dtype = np.find_common_type([d.dtype for d in data.values()],[])
         dly_fc, off_fc = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, sparse=sparse, 
                                                   mode=mode, norm=norm, medfilt=medfilt, kernel=kernel)
         g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs) + 1.0j * off_fc[ant]), 
-                              dtype=np.complex64) for ant, dly in dly_fc.items()}
+                              dtype=dtype) for ant, dly in dly_fc.items()}
         calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
         
         for i in range(maxiter - 1):
@@ -660,7 +661,7 @@ class RedundantCalibrator:
             if np.linalg.norm(delta_off.values()) < conv_crit:
                 break
             delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
-                                         dtype=np.complex64) for ant in g_fc.keys()}
+                                         dtype=dtype) for ant in g_fc.keys()}
             calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
             g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
 
