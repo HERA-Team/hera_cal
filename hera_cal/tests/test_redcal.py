@@ -408,7 +408,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         info._solver(solver, d)
         info._solver(solver, d, w)
 
-    def test_firstcal(self):
+    def test_firstcal_iteration(self):
         NANTS = 18
         NFREQ = 64
         antpos = build_linear_array(NANTS)
@@ -424,11 +424,11 @@ class TestRedundantCalibrator(unittest.TestCase):
         gains = {k: v.astype(np.complex64) for k, v in gains.items()}
         calibrate_in_place(d, gains, old_gains=g, gain_convention='multiply')
         d = {k: v.astype(np.complex64) for k, v in d.items()}
-        sol = info.firstcal(d, df=fqs[1] - fqs[0], medfilt=False)
-        sol_degen = info.remove_degen_gains(sol, degen_gains=delays, mode='phase')
+        dly_sol, off_sol = info._firstcal_iteration(d, df=fqs[1] - fqs[0], medfilt=False)
+        sol_degen = info.remove_degen_gains(dly_sol, degen_gains=delays, mode='phase')
         for i in range(NANTS):
-            self.assertEqual(sol[(i, 'Jxx')].dtype, np.float64)
-            self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
+            self.assertEqual(dly_sol[(i, 'Jxx')].dtype, np.float64)
+            self.assertEqual(dly_sol[(i, 'Jxx')].shape, (1, 1))
             self.assertTrue(np.allclose(np.round(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0), 0))
 
     def test_logcal(self):
