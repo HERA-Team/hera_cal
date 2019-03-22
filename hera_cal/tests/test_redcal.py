@@ -431,6 +431,42 @@ class TestRedundantCalibrator(unittest.TestCase):
             self.assertEqual(dly_sol[(i, 'Jxx')].shape, (1, 1))
             self.assertTrue(np.allclose(np.round(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0), 0))
 
+    def test_firstcal(self):
+        np.random.seed(21)
+        antpos = build_hex_array(2)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        freqs = np.linspace(1e8, 2e8, 1024)
+        
+        # test firstcal where the degeneracies of the phases and delays have already been removed so no abscal is necessary
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
+        fc_delays = {ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()}  # in s
+        fc_delays = rc.remove_degen_gains(fc_delays)
+        fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
+        fc_offsets = rc.remove_degen_gains(fc_offsets)
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs))) 
+                    for ant, delay in fc_delays.items()}
+        for ant1, ant2, pol in d.keys():
+            d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+        g_fc = rc.firstcal(d, freqs, conv_crit=0)
+        np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, 3)
+
+        # test firstcal with only phases (no delays)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
+        fc_delays = {ant: [[0 * np.random.randn()]] for ant in gains.keys()}  # in s
+        fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
+        fc_offsets = rc.remove_degen_gains(fc_offsets)
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs))) 
+                    for ant, delay in fc_delays.items()}
+        for ant1, ant2, pol in d.keys():
+            d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+        g_fc = rc.firstcal(d, freqs, conv_crit=0)
+        np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, 10) # much higher precision
+
     def test_logcal(self):
         NANTS = 18
         antpos = build_linear_array(NANTS)
