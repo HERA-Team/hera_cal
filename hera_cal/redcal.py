@@ -659,7 +659,7 @@ class RedundantCalibrator:
                                                     offsets_only=True, sparse=sparse, mode=mode, 
                                                     norm=norm, medfilt=medfilt, kernel=kernel)
             print('fc conv crit', np.linalg.norm(delta_off.values()), conv_crit)
-            if np.linalg.norm(delta_off.values()) < conv_crit:
+            if np.linalg.norm(list(delta_off.values())) < conv_crit:
                 break
             delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
                                          dtype=dtype) for ant in g_fc.keys()}
