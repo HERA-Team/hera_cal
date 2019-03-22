@@ -1064,13 +1064,15 @@ class TestRedcalAndAbscal(unittest.TestCase):
         up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
         np.random.seed(21)
-        antpos = build_hex_array(3)
+        antpos = build_hex_array(2)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
-        freqs = np.linspace(1e8, 2e8, 128)  # note that for some seeds, this isn't enough frequency resolution to figure out delays
+        freqs = np.linspace(1e8, 2e8, 1024)
         gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)))
         fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
-        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
+        fc_offsets = {ant: 2 * np.pi * np.random.rand() for ant in gains.keys()}  # random phase offsets
+        fc_gains = {ant: np.reshape(np.exp(2.0j * np.pi * freqs * delay + 1.0j * fc_offsets[ant]), 
+                                    (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
@@ -1093,7 +1095,7 @@ class TestRedcalAndAbscal(unittest.TestCase):
         model = DataContainer({bl: true_vis[red[0]] for red in reds for bl in red})
         
         # run abscal
-        abscal_delta_gains, AC = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=False)
+        abscal_delta_gains, AC = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=True)
 
         # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
@@ -1103,7 +1105,7 @@ class TestRedcalAndAbscal(unittest.TestCase):
         tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
                for ant in true_gains.keys()}
         gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
-        self.assertLess(np.max(np.abs(gain_errors)), 1e-12)
+        np.testing.assert_array_almost_equal(np.abs(gain_errors), 0, 10)
 
 
 class TestRunMethods(unittest.TestCase):
