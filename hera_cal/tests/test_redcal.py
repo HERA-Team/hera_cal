@@ -465,7 +465,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         for ant in gains.keys():
             gains[ant] *= fc_gains[ant]
         g_fc = rc.firstcal(d, freqs, conv_crit=0)
-        np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, 10) # much higher precision
+        np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, 10)  # much higher precision
 
     def test_logcal(self):
         NANTS = 18
