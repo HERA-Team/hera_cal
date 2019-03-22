@@ -646,7 +646,7 @@ class RedundantCalibrator:
         """
         # Run firstcal with both delay and offset solving:
         df = np.median(np.ediff1d(freqs))
-        dtype = np.find_common_type([d.dtype for d in data.values()],[])
+        dtype = np.find_common_type([d.dtype for d in data.values()], [])
         dly_fc, off_fc = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, sparse=sparse, 
                                                   mode=mode, norm=norm, medfilt=medfilt, kernel=kernel)
         g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs) + 1.0j * off_fc[ant]), 
