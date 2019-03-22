@@ -616,7 +616,7 @@ class RedundantCalibrator:
         off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
         return dly_sol, off_sol
 
-    def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-8,
+    def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
                  sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redudant measurements. 
@@ -658,6 +658,7 @@ class RedundantCalibrator:
             _, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
                                                     offsets_only=True, sparse=sparse, mode=mode, 
                                                     norm=norm, medfilt=medfilt, kernel=kernel)
+            print('fc conv crit', np.linalg.norm(delta_off.values()), conv_crit)
             if np.linalg.norm(delta_off.values()) < conv_crit:
                 break
             delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
@@ -967,7 +968,7 @@ def expand_omni_vis(cal, all_reds, data, flags, nsamples):
     cal['vns_omnical'] = DataContainer(cal['vns_omnical'])
 
 
-def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-10, fc_maxiter=50, 
+def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
                           oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
@@ -1057,7 +1058,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
 
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
-                     flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-10, fc_maxiter=50, oc_conv_crit=1e-10, 
+                     flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, 
                      oc_maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
@@ -1198,7 +1199,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', 
                omnivis_ext='.omni_vis.uvh5', outdir=None, ant_metrics_file=None, clobber=False, 
                nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, 
-               max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-10, 
+               max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
                fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, 
                add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
@@ -1348,7 +1349,7 @@ def redcal_argparser():
     redcal_opts.add_argument("--max_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths longer than this length in meters")
 
     omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
-    omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-10, help="maximum allowed changed in firstcal phases for convergence")
+    omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-6, help="maximum allowed changed in firstcal phases for convergence")
     omni_opts.add_argument("--fc_maxiter", type=int, default=50, help="maximum number of firstcal iterations allowed for finding per-antenna phases")
     omni_opts.add_argument("--oc_conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
     omni_opts.add_argument("--oc_maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
