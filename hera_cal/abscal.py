@@ -804,6 +804,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
         # calculate median of unflagged angle(data/model)
         # ls_weights are sum of non-binary weights
         dm_ratio = avg_data[rk] / avg_model[rk]
+        dm_ratio /= np.abs(dm_ratio)  # This gives all channels roughly equal weight, moderating the effect of RFI (as in firstcal)
         binary_flgs = np.isclose(avg_wgts[rk], 0.0)
         dm_ratio[binary_flgs] *= np.nan
         avg_wgts[rk][np.isinf(dm_ratio) + np.isnan(dm_ratio)] = 0.0
