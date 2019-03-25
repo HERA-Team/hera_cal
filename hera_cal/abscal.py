@@ -120,7 +120,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def TT_phs_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, 
+def TT_phs_logcal(model, data, antpos, solver='linfit', tol=1.0, wgts=None, refant=None, 
                   verbose=True, zero_psi=True, four_pol=False):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
@@ -156,6 +156,9 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None,
 
     solver : 'linfit' uses linsolve to fit phase slope across the array,
              'dft' uses a spatial Fourier transform to find a phase slope 
+
+    tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
+          Only used for dft solver.
 
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
@@ -194,14 +197,25 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None,
     keys = sorted(set(model.keys()) & set(data.keys()))
     ants = np.unique(list(antpos.keys()))
 
-    # angle of phs ratio is ydata independent variable (take angle later)
-    ydata = odict([(k, data[k] / model[k]) for k in keys])
-
     # make weights if None
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
+            wgts[k] = np.ones_like(data[k], dtype=np.float)
+
+    # (angle of) phs ratio is ydata independent variable
+    if solver == 'linfit':
+        ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
+    if solver == 'dft':  # average over redundant baselines for speed in the dft method (meant for a first stab)
+        reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
+        reds = redcal.filter_reds(reds, bls=keys)
+        avg_data, avg_wgts, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}),
+                                                               antpos, wgts=wgts, broadcast_wgts=False, reds=reds)
+        avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}),
+                                                  antpos, wgts=wgts, broadcast_wgts=False, reds=reds)
+        keys = red_keys
+        wgts = avg_wgts
+        ydata = odict([(k, np.angle(avg_data[k] / avg_model[k])) for k in keys])
 
     # fill nans and infs
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
@@ -238,7 +252,7 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None,
             ls_design_matrix.update({"a1": 1.0, "a2": 1.0})
 
         # setup linsolve dictionaries
-        ls_data = odict([(eqns[k], np.angle(ydata[k])) for i, k in enumerate(keys)])
+        ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
         ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
 
         # setup linsolve and run
@@ -807,16 +821,12 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
     antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
     # average data over baselines
-    _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
-    reds = []
-    for _red in _reds:
-        red = [bl for bl in _red if bl in keys]
-        if len(red) > 0:
-            reds.append(red)
+    reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
+    reds = redcal.filter_reds(reds, bls=keys)
     avg_data, avg_wgts, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}),
-                                                           antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
+                                                           antpos, wgts=wgts, broadcast_wgts=False, reds=reds)
     avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}),
-                                              antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
+                                              antpos, wgts=wgts, broadcast_wgts=False, reds=reds)
 
     ls_data, ls_wgts, bls, pols = {}, {}, {}, {}
     for rk in red_keys:
@@ -2231,12 +2241,18 @@ class AbsCal(object):
         self._abs_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys))))
         self._abs_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_eta[k], pk)), self._gain_keys)), 0, -1)
 
-    def TT_phs_logcal(self, solver='linfit', verbose=True, zero_psi=True, four_pol=False):
+    def TT_phs_logcal(self, solver='linfit', tol=1.0, verbose=True, zero_psi=True, four_pol=False):
         """
         call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
+        solver : 'linfit' uses linsolve to fit phase slope across the array,
+                 'dft' uses a spatial Fourier transform to find a phase slope 
+
+        tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
+              Only used for dft solver.
+
         zero_psi : type=boolean, set overall gain phase (psi) to identically zero in linsolve equations.
             This is separate than the reference antenna's absolute phase being set to zero, as it can account
             for absolute phase offsets between polarizations.
@@ -2842,7 +2858,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     # Per-Channel Tip-Tilt Phase Calibration (first using dft, then using linfit)
-    abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'solver': 'dft', 'verbose': verbose}, 
+    abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'solver': 'dft', 'tol': 1e-8, 'verbose': verbose}, 
                 [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], 
                 rc_flags, gain_convention=gain_convention, verbose=verbose)
     abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
