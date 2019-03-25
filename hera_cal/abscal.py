@@ -214,7 +214,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
         eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
                        "".format(split_pol(k[2])[0], split_pol(k[2])[1], split_pol(k[2])[0],
                                  r_ew[k[0]], split_pol(k[2])[0], r_ns[k[0]], split_pol(k[2])[1],
-                                 r_ew[k[1]], k[2][1], r_ns[k[1]])) for i, k in enumerate(keys)])
+                                 r_ew[k[1]], split_pol(k[2])[1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
     # set design matrix entries
     ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
