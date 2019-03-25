@@ -120,8 +120,8 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zero_psi=True,
-                  four_pol=False):
+def TT_phs_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, 
+                  verbose=True, zero_psi=True, four_pol=False):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
     with a linear solver applied to the logarithmically linearized equation:
@@ -149,6 +149,14 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
+    antpos : antenna position vectors, type=dictionary
+          keys are antenna integers, values are 2D
+          antenna vectors in meters (preferably centered at center of array),
+          with [0] index containing east-west separation and [1] index north-south separation
+
+    solver : 'linfit' uses linsolve to fit phase slope across the array,
+             'dft' uses a spatial Fourier transform to find a phase slope 
+
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
@@ -156,11 +164,6 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     refant : antenna number integer to use as a reference,
         The antenna position coordaintes are centered at the reference, such that its phase
         is identically zero across all frequencies. If None, use the first key in data as refant.
-
-    antpos : antenna position vectors, type=dictionary
-          keys are antenna integers, values are 2D
-          antenna vectors in meters (preferably centered at center of array),
-          with [0] index containing east-west separation and [1] index north-south separation
 
     zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
 
@@ -176,15 +179,23 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
             phase slopes across the EW and NS directions of the array. There is a set of each
             of these variables per polarization.
     """
-    echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
-
+    if solver == 'linfit':
+        echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
+    elif solver == 'dft':
+        echo("...finding per-channel tip/tilt phase slopes using the DFT method", verbose=verbose)
+        if not np.all([split_pol(pol)[0] == split_pol(pol)[1] for pol in data.pols()]):
+            raise NotImplementedError('DFT solving of tip/tilt phases not implemented for abscal with cross-polarizations.')
+        if not zero_psi:
+            raise NotImplementedError('DFT solving of tip/tilt phases not implemented for zero_psi = False')
+    else:
+        raise ValueError("Unrecognized solver {}. Must be either 'linfit' or 'dft'.".format(solver))
+    
     # get keys from model dictionary
     keys = sorted(set(model.keys()) & set(data.keys()))
     ants = np.unique(list(antpos.keys()))
 
-    # angle of phs ratio is ydata independent variable
-    # angle after divide
-    ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
+    # angle of phs ratio is ydata independent variable (take angle later)
+    ydata = odict([(k, data[k] / model[k]) for k in keys])
 
     # make weights if None
     if wgts is None:
@@ -205,35 +216,50 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
     r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
 
-    # setup linsolve equations
-    if four_pol:
-        eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
-                       "".format(split_pol(k[2])[0], split_pol(k[2])[1], r_ew[k[0]],
-                                 r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
-    else:
-        eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
-                       "".format(split_pol(k[2])[0], split_pol(k[2])[1], split_pol(k[2])[0],
-                                 r_ew[k[0]], split_pol(k[2])[0], r_ns[k[0]], split_pol(k[2])[1],
-                                 r_ew[k[1]], split_pol(k[2])[1], r_ns[k[1]])) for i, k in enumerate(keys)])
+    if solver == 'linfit':
+        # setup linsolve equations
+        if four_pol:
+            eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
+                           "".format(split_pol(k[2])[0], split_pol(k[2])[1], r_ew[k[0]],
+                                     r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
+        else:
+            eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
+                           "".format(split_pol(k[2])[0], split_pol(k[2])[1], split_pol(k[2])[0],
+                                     r_ew[k[0]], split_pol(k[2])[0], r_ns[k[0]], split_pol(k[2])[1],
+                                     r_ew[k[1]], split_pol(k[2])[1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
-    # set design matrix entries
-    ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
-    ls_design_matrix.update(odict(list(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants))))
+        # set design matrix entries
+        ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
+        ls_design_matrix.update(odict(list(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants))))
 
-    if zero_psi:
-        ls_design_matrix.update({"a1": 0.0, "a2": 0.0})
-    else:
-        ls_design_matrix.update({"a1": 1.0, "a2": 1.0})
+        if zero_psi:
+            ls_design_matrix.update({"a1": 0.0, "a2": 0.0})
+        else:
+            ls_design_matrix.update({"a1": 1.0, "a2": 1.0})
 
-    # setup linsolve dictionaries
-    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
-    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
+        # setup linsolve dictionaries
+        ls_data = odict([(eqns[k], np.angle(ydata[k])) for i, k in enumerate(keys)])
+        ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
 
-    # setup linsolve and run
-    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
-    echo("...running linsolve", verbose=verbose)
-    fit = sol.solve()
-    echo("...finished linsolve", verbose=verbose)
+        # setup linsolve and run
+        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
+        echo("...running linsolve", verbose=verbose)
+        fit = sol.solve()
+        echo("...finished linsolve", verbose=verbose)
+
+    elif solver == 'dft':
+        fit = {}
+        for pol in data.pols():
+            keys_here = [k for k in keys if k[2] == pol]
+            blx = np.array([r_ew[k[0]] - r_ew[k[1]] for k in keys_here])
+            bly = np.array([r_ns[k[0]] - r_ns[k[1]] for k in keys_here])
+            with np.errstate(divide='ignore'):  # is np.nan if all flagged
+                data_array = np.array([ydata[k] / (ls_wgts[k] > 0) for k in keys])
+            slope_x, slope_y = dft_phase_slope_solver(blx, bly, data_array)
+            jstr = split_pol(pol)[0]  # only looking at xx or yy, so this is fine
+            fit['Phi_ew_' + jstr] = slope_x * 2.0 * np.pi  # 2pi matches custom_phs_slope_gain
+            fit['Phi_ns_' + jstr] = slope_y * 2.0 * np.pi
+            fit['psi_' + jstr] = np.zeros_like(fit['Phi_ew_' + jstr])  # enforces zero_psi
 
     return fit
 
@@ -834,7 +860,6 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
             keys = [k for k in bls.keys() if pols[k] == pol]
             blx = np.array([bls[k][0] for k in keys])
             bly = np.array([bls[k][1] for k in keys])
-            data_array = np.array([ls_data[k] / (ls_wgts[k] > 0) for k in keys])  # is np.nan if all flagged
             with np.errstate(divide='ignore'):  # is np.nan if all flagged
                 data_array = np.array([ls_data[k] / (ls_wgts[k] > 0) for k in keys])
             slope_x, slope_y = dft_phase_slope_solver(blx, bly, data_array)
