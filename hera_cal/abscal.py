@@ -120,8 +120,8 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
-def TT_phs_logcal(model, data, antpos, solver='linfit', tol=1.0, wgts=None, refant=None, 
-                  verbose=True, zero_psi=True, four_pol=False):
+def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zero_psi=True,
+                  four_pol=False):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
     with a linear solver applied to the logarithmically linearized equation:
@@ -149,17 +149,6 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', tol=1.0, wgts=None, refa
            keys are antenna pair + pol tuples (must match model), values are
            complex ndarray visibilities matching shape of model
 
-    antpos : antenna position vectors, type=dictionary
-          keys are antenna integers, values are 2D
-          antenna vectors in meters (preferably centered at center of array),
-          with [0] index containing east-west separation and [1] index north-south separation
-
-    solver : 'linfit' uses linsolve to fit phase slope across the array,
-             'dft' uses a spatial Fourier transform to find a phase slope 
-
-    tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
-          Only used for dft solver.
-
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
@@ -167,6 +156,11 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', tol=1.0, wgts=None, refa
     refant : antenna number integer to use as a reference,
         The antenna position coordaintes are centered at the reference, such that its phase
         is identically zero across all frequencies. If None, use the first key in data as refant.
+
+    antpos : antenna position vectors, type=dictionary
+          keys are antenna integers, values are 2D
+          antenna vectors in meters (preferably centered at center of array),
+          with [0] index containing east-west separation and [1] index north-south separation
 
     zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
 
@@ -182,40 +176,21 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', tol=1.0, wgts=None, refa
             phase slopes across the EW and NS directions of the array. There is a set of each
             of these variables per polarization.
     """
-    if solver == 'linfit':
-        echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
-    elif solver == 'dft':
-        echo("...finding per-channel tip/tilt phase slopes using the DFT method", verbose=verbose)
-        if not np.all([split_pol(pol)[0] == split_pol(pol)[1] for pol in data.pols()]):
-            raise NotImplementedError('DFT solving of tip/tilt phases not implemented for abscal with cross-polarizations.')
-        if not zero_psi:
-            raise NotImplementedError('DFT solving of tip/tilt phases not implemented for zero_psi = False')
-    else:
-        raise ValueError("Unrecognized solver {}. Must be either 'linfit' or 'dft'.".format(solver))
-    
+    echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
+
     # get keys from model dictionary
     keys = sorted(set(model.keys()) & set(data.keys()))
     ants = np.unique(list(antpos.keys()))
+
+    # angle of phs ratio is ydata independent variable
+    # angle after divide
+    ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
 
     # make weights if None
     if wgts is None:
         wgts = odict()
         for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(data[k], dtype=np.float)
-
-    # (angle of) phs ratio is ydata independent variable
-    if solver == 'linfit':
-        ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
-    if solver == 'dft':  # average over redundant baselines for speed in the dft method (meant for a first stab)
-        reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
-        reds = redcal.filter_reds(reds, bls=keys)
-        avg_data, avg_wgts, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}),
-                                                               antpos, wgts=wgts, broadcast_wgts=False, reds=reds)
-        avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}),
-                                                  antpos, wgts=wgts, broadcast_wgts=False, reds=reds)
-        keys = red_keys
-        wgts = avg_wgts
-        ydata = odict([(k, np.angle(avg_data[k] / avg_model[k])) for k in keys])
+            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
 
     # fill nans and infs
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
@@ -226,54 +201,39 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', tol=1.0, wgts=None, refa
     assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
     antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
-    if solver == 'linfit':
-        # setup antenna position terms
-        r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
-        r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
+    # setup antenna position terms
+    r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
+    r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
 
-        # setup linsolve equations
-        if four_pol:
-            eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
-                           "".format(split_pol(k[2])[0], split_pol(k[2])[1], r_ew[k[0]],
-                                     r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
-        else:
-            eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
-                           "".format(split_pol(k[2])[0], split_pol(k[2])[1], split_pol(k[2])[0],
-                                     r_ew[k[0]], split_pol(k[2])[0], r_ns[k[0]], split_pol(k[2])[1],
-                                     r_ew[k[1]], split_pol(k[2])[1], r_ns[k[1]])) for i, k in enumerate(keys)])
+    # setup linsolve equations
+    if four_pol:
+        eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
+                       "".format(split_pol(k[2])[0], split_pol(k[2])[1], r_ew[k[0]],
+                                 r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
+    else:
+        eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
+                       "".format(split_pol(k[2])[0], split_pol(k[2])[1], split_pol(k[2])[0],
+                                 r_ew[k[0]], split_pol(k[2])[0], r_ns[k[0]], split_pol(k[2])[1],
+                                 r_ew[k[1]], split_pol(k[2])[1], r_ns[k[1]])) for i, k in enumerate(keys)])
 
-        # set design matrix entries
-        ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
-        ls_design_matrix.update(odict(list(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants))))
+    # set design matrix entries
+    ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
+    ls_design_matrix.update(odict(list(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants))))
 
-        if zero_psi:
-            ls_design_matrix.update({"a1": 0.0, "a2": 0.0})
-        else:
-            ls_design_matrix.update({"a1": 1.0, "a2": 1.0})
+    if zero_psi:
+        ls_design_matrix.update({"a1": 0.0, "a2": 0.0})
+    else:
+        ls_design_matrix.update({"a1": 1.0, "a2": 1.0})
 
-        # setup linsolve dictionaries
-        ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
-        ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
+    # setup linsolve dictionaries
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
 
-        # setup linsolve and run
-        sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
-        echo("...running linsolve", verbose=verbose)
-        fit = sol.solve()
-        echo("...finished linsolve", verbose=verbose)
-
-    elif solver == 'dft':
-        fit = {}
-        for pol in data.pols():
-            keys_here = [k for k in keys if k[2] == pol]
-            blx = np.array([antpos[k[0]][0] - antpos[k[1]][0] for k in keys_here])
-            bly = np.array([antpos[k[0]][1] - antpos[k[1]][1] for k in keys_here])
-            with np.errstate(divide='ignore'):  # is np.nan if all flagged
-                data_array = np.array([ydata[k] / (wgts[k] > 0) for k in keys])
-            slope_x, slope_y = dft_phase_slope_solver(blx, bly, data_array)
-            jstr = split_pol(pol)[0]  # only looking at xx or yy, so this is fine
-            fit['Phi_ew_' + jstr] = slope_x * 2.0 * np.pi  # 2pi matches custom_phs_slope_gain
-            fit['Phi_ns_' + jstr] = slope_y * 2.0 * np.pi
-            fit['psi_' + jstr] = np.zeros_like(fit['Phi_ew_' + jstr])  # enforces zero_psi
+    # setup linsolve and run
+    sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
 
     return fit
 
@@ -821,12 +781,16 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
     antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
     # average data over baselines
-    reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
-    reds = redcal.filter_reds(reds, bls=keys)
+    _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
+    reds = []
+    for _red in _reds:
+        red = [bl for bl in _red if bl in keys]
+        if len(red) > 0:
+            reds.append(red)
     avg_data, avg_wgts, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}),
-                                                           antpos, wgts=wgts, broadcast_wgts=False, reds=reds)
+                                                           antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
     avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}),
-                                              antpos, wgts=wgts, broadcast_wgts=False, reds=reds)
+                                              antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
 
     ls_data, ls_wgts, bls, pols = {}, {}, {}, {}
     for rk in red_keys:
@@ -870,6 +834,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
             keys = [k for k in bls.keys() if pols[k] == pol]
             blx = np.array([bls[k][0] for k in keys])
             bly = np.array([bls[k][1] for k in keys])
+            data_array = np.array([ls_data[k] / (ls_wgts[k] > 0) for k in keys])  # is np.nan if all flagged
             with np.errstate(divide='ignore'):  # is np.nan if all flagged
                 data_array = np.array([ls_data[k] / (ls_wgts[k] > 0) for k in keys])
             slope_x, slope_y = dft_phase_slope_solver(blx, bly, data_array)
@@ -2241,18 +2206,12 @@ class AbsCal(object):
         self._abs_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys))))
         self._abs_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_eta[k], pk)), self._gain_keys)), 0, -1)
 
-    def TT_phs_logcal(self, solver='linfit', tol=1.0, verbose=True, zero_psi=True, four_pol=False):
+    def TT_phs_logcal(self, verbose=True, zero_psi=True, four_pol=False):
         """
         call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
 
         Parameters:
         -----------
-        solver : 'linfit' uses linsolve to fit phase slope across the array,
-                 'dft' uses a spatial Fourier transform to find a phase slope 
-
-        tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
-              Only used for dft solver.
-
         zero_psi : type=boolean, set overall gain phase (psi) to identically zero in linsolve equations.
             This is separate than the reference antenna's absolute phase being set to zero, as it can account
             for absolute phase offsets between polarizations.
@@ -2282,7 +2241,7 @@ class AbsCal(object):
         antpos = self.antpos
 
         # run TT_phs_logcal
-        fit = TT_phs_logcal(model, data, antpos, solver=solver, wgts=wgts, refant=self.refant, verbose=verbose, zero_psi=zero_psi, four_pol=four_pol)
+        fit = TT_phs_logcal(model, data, antpos, wgts=wgts, refant=self.refant, verbose=verbose, zero_psi=zero_psi, four_pol=four_pol)
 
         # manipulate if four_pol
         if four_pol:
@@ -2857,10 +2816,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                 [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
-    # Per-Channel Tip-Tilt Phase Calibration (first using dft, then using linfit)
-    abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'solver': 'dft', 'tol': 1e-8, 'verbose': verbose}, 
-                [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], 
-                rc_flags, gain_convention=gain_convention, verbose=verbose)
+    # Per-Channel Tip-Tilt Phase Calibration
     abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
                 [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
