@@ -212,11 +212,11 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None,
     assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
     antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
-    # setup antenna position terms
-    r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
-    r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
-
     if solver == 'linfit':
+        # setup antenna position terms
+        r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
+        r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
+
         # setup linsolve equations
         if four_pol:
             eqns = odict([(k, "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
@@ -251,10 +251,10 @@ def TT_phs_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None,
         fit = {}
         for pol in data.pols():
             keys_here = [k for k in keys if k[2] == pol]
-            blx = np.array([r_ew[k[0]] - r_ew[k[1]] for k in keys_here])
-            bly = np.array([r_ns[k[0]] - r_ns[k[1]] for k in keys_here])
+            blx = np.array([antpos[k[0]][0] - antpos[k[1]][0] for k in keys_here])
+            bly = np.array([antpos[k[0]][1] - antpos[k[1]][1] for k in keys_here])
             with np.errstate(divide='ignore'):  # is np.nan if all flagged
-                data_array = np.array([ydata[k] / (ls_wgts[k] > 0) for k in keys])
+                data_array = np.array([ydata[k] / (wgts[k] > 0) for k in keys])
             slope_x, slope_y = dft_phase_slope_solver(blx, bly, data_array)
             jstr = split_pol(pol)[0]  # only looking at xx or yy, so this is fine
             fit['Phi_ew_' + jstr] = slope_x * 2.0 * np.pi  # 2pi matches custom_phs_slope_gain
