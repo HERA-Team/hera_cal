@@ -2231,7 +2231,7 @@ class AbsCal(object):
         self._abs_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys))))
         self._abs_eta_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: self._abs_eta[k], pk)), self._gain_keys)), 0, -1)
 
-    def TT_phs_logcal(self, verbose=True, zero_psi=True, four_pol=False):
+    def TT_phs_logcal(self, solver='linfit', verbose=True, zero_psi=True, four_pol=False):
         """
         call abscal_funcs.TT_phs_logcal() method. see its docstring for more details.
 
@@ -2266,7 +2266,7 @@ class AbsCal(object):
         antpos = self.antpos
 
         # run TT_phs_logcal
-        fit = TT_phs_logcal(model, data, antpos, wgts=wgts, refant=self.refant, verbose=verbose, zero_psi=zero_psi, four_pol=four_pol)
+        fit = TT_phs_logcal(model, data, antpos, solver=solver, wgts=wgts, refant=self.refant, verbose=verbose, zero_psi=zero_psi, four_pol=four_pol)
 
         # manipulate if four_pol
         if four_pol:
@@ -2841,7 +2841,10 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                 [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
-    # Per-Channel Tip-Tilt Phase Calibration
+    # Per-Channel Tip-Tilt Phase Calibration (first using dft, then using linfit)
+    abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'solver': 'dft', 'verbose': verbose}, 
+                [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], 
+                rc_flags, gain_convention=gain_convention, verbose=verbose)
     abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
                 [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
