@@ -76,6 +76,7 @@ from scipy.optimize import minimize
 from sklearn import gaussian_process as gp
 from uvtools import dspec
 import argparse
+import ast
 
 from . import io
 from . import version
@@ -736,7 +737,7 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
-                 mode='gpr', gp_len=1e-2, gp_nl=1e-4, optimizer=None, verbose=True):
+                 mode='gpr', gp_frate=1.0, gp_frate_degrade=0.1, gp_nl=1e-8, optimizer=None, verbose=True):
         """
         Interpolate u modes along time, inserts into self.umode_interp.
 
@@ -757,12 +758,20 @@ class ReflectionFitter(FRFilter):
                 If True, overwrite output data if it exists.
             mode : str
                 Interpolation mode. Options=['gpr']
+            gp_frate : float or DataContainer
+                Fringe rate [mHz] associated with GP length scale in time.
+                If fed as a DataContainer, must have keys matching umodes.
+            gp_frate_degrade : float
+                gp_frate * gp_frate_degrade is subtracted from gp_frate before
+                being converted to a time length scale to prevent slight
+                overfitting of excess frate structure by fall-off of GP covariance
+                beyond the set length scale.
             gp_len : float
                 length-scale of GPR in units of input times.
             gp_nl : float
                 GPR noise-level in units of input umodes.
             optimizer : str
-                GPR optimizer for kernel hyperparameter solution.
+                GPR optimizer for kernel hyperparameter solution. Default is no regression.
                 See sklearn.gaussian_process.GaussianProcessRegressor for details.
             verbose : bool
                 If True, report feedback to stdout.
@@ -784,6 +793,10 @@ class ReflectionFitter(FRFilter):
         if keys is None:
             keys = umodes.keys()
 
+        # parse gp_frate
+        if isinstance(gp_frate, (int, np.integer, float, np.float)):
+            gp_frate = DataContainer(dict([(k, gp_frate) for k in umodes.keys()]))
+
         # setup X predict
         Xmean = np.median(times)
         Xpredict = full_times[:, None] - Xmean
@@ -796,6 +809,10 @@ class ReflectionFitter(FRFilter):
                 continue
 
             if mode == 'gpr':
+                # get length scale in time
+                gp_f = gp_frate[k] * (1 - gp_frate_degrade)
+                gp_len = 1.0 / (gp_f * 1e-3) / (24.0 * 3600.0)
+
                 # setup GP kernel
                 kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
                 GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=True)
@@ -1252,7 +1269,7 @@ def auto_reflection_argparser():
     a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections from auto-correlation visibilities')
     a.add_argument("clean_data", nargs='*', type=str, help="CLEAN data file paths to run auto reflection modeling on")
     a.add_argument("--output_fname", type=str, help="Full path to the output .calfits file")
-    a.add_argument("--dly_range", type=float, nargs='*', help='lower and upper delay [nanosec] within which to search for reflections.')
+    a.add_argument("--dly_ranges", type=str, nargs='*', help='list of 2 comma-delimited delays (ex. 200,300 400,500) specifying delay range to search for reflections [nanosec].')
     a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of datafile")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output file if it already exists")
     a.add_argument("--write_npz", default=False, action='store_true', help="Write NPZ file with reflection params with same path name as output calfits.")
@@ -1283,7 +1300,7 @@ def auto_reflection_argparser():
     return a
 
 
-def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_cal=None, time_avg=False,
+def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_cal=None, time_avg=False,
                         write_npz=False, antenna_numbers=None, polarizations=None,
                         window='None', alpha=0.2, edgecut_low=0, edgecut_hi=0, zeropad=0,
                         tol=1e-6, gain=1e-1, maxiter=100, skip_wgt=0.2, horizon=1.0, standoff=0.0,
@@ -1294,7 +1311,7 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
 
     Args:
         data : str or UVData subclass, data to operate on
-        dly_range : len-2 tuple, min and max delay range [ns] to fit reflections
+        dly_ranges : list, len-2 tuples specifying min and max delay range [ns] to fit for reflections
         output_fname : str, full path to output calfits file
         filetype : str, filetype if data is a str, options=['uvh5', 'miriad', 'uvfits']
         input_cal : str or UVCal subclass, calibration to apply to data on-the-fly
@@ -1332,6 +1349,16 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
     Notes:
         The CLEAN min_dly should always be less than the lower boundary of dly_range.
     """
+    # dly_ranges type check
+    if isinstance(dly_ranges, (str, np.str)):
+        dly_ranges = [ast.literal_eval(dly_ranges)]
+    if isinstance(dly_ranges, tuple):
+        dly_ranges = [dly_ranges]
+    if isinstance(dly_ranges, list):
+        for i, dlyr in enumerate(dly_ranges):
+            if isinstance(dlyr, (str, np.str)):
+                dly_ranges[i] = ast.literal_eval(dlyr)
+
     # initialize reflection fitter
     RF = ReflectionFitter(data, filetype=filetype, input_cal=input_cal)
 
@@ -1368,18 +1395,29 @@ def auto_reflection_run(data, dly_range, output_fname, filetype='uvh5', input_ca
                  horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol, maxiter=maxiter,
                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)
 
-    # model auto reflections in clean data
-    RF.model_auto_reflections(RF.clean_data, dly_range, clean_flags=RF.clean_flags, edgecut_low=edgecut_low,
-                              edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
-                              zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
+    # iterate over dly_ranges
+    for i, dly_range in enumerate(dly_ranges):
+        if i == 0:
+            _RF = RF
+        else:
+            _RF = RF.soft_copy()
 
-    # refine reflections
-    if opt_maxiter > 0:
-        (RF.ref_amp, RF.ref_dly, RF.ref_phs, info, RF.ref_eps,
-         RF.ref_gains) = RF.refine_auto_reflections(RF.clean_data, dly_range, RF.ref_amp, RF.ref_dly, RF.ref_phs,
-                                                    keys=keys, window=window, alpha=alpha, edgecut_low=edgecut_low,
-                                                    edgecut_hi=edgecut_hi, clean_flags=RF.clean_flags, clean_model=RF.clean_model,
-                                                    skip_frac=skip_frac, maxiter=opt_maxiter, method=opt_method, tol=opt_tol)
+        # model auto reflections in clean data
+        _RF.model_auto_reflections(RF.clean_data, dly_range, clean_flags=RF.clean_flags, edgecut_low=edgecut_low,
+                                  edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
+                                  zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
+
+        # refine reflections
+        if opt_maxiter > 0:
+            (_RF.ref_amp, _RF.ref_dly, _RF.ref_phs, info, _RF.ref_eps,
+             _RF.ref_gains) = RF.refine_auto_reflections(RF.clean_data, dly_range, _RF.ref_amp, _RF.ref_dly, _RF.ref_phs,
+                                                        keys=keys, window=window, alpha=alpha, edgecut_low=edgecut_low,
+                                                        edgecut_hi=edgecut_hi, clean_flags=RF.clean_flags, clean_model=RF.clean_model,
+                                                        skip_frac=skip_frac, maxiter=opt_maxiter, method=opt_method, tol=opt_tol)
+
+        # merge gains
+        if i > 0:
+            RF.ref_gains = merge_gains([RF.ref_gains, _RF.ref_gains])
 
     # write reflections
     RF.write_auto_reflections(output_fname, overwrite=overwrite, add_to_history=add_to_history,

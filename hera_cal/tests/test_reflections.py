@@ -87,11 +87,22 @@ def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_
 
         # add a cable reflection term s1 * eps_11
         if add_cable:
-            e = s1 * camp * np.exp(2j * np.pi * freqs * cdelay * 1e-9 + cphase * 1j)
+            if isinstance(cdelay, (float, np.float, int, np.int)):
+                cdelay = [cdelay]
+            if isinstance(camp, (float, np.float, int, np.int)):
+                camp = [camp]
+            if isinstance(cphase, (float, np.float, int, np.int)):
+                cphase = [cphase]
+
+            g = 1.0
+            for ca, cd, cp in zip(camp, cdelay, cphase):
+                g *= 1 + ca * np.exp(2j * np.pi * freqs * cd * 1e-9 + cp * 1j)
             if antpair[0] in cable_ants:
-                v1 += e
+                v1 *= g
+                #v1 += e
             if antpair[1] in cable_ants:
-                v2 += e
+                v2 *= g
+                #v2 += e
 
         # form visibility
         V = v1 * v2.conj()
@@ -240,19 +251,35 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         os.remove('./ex.calfits')
 
     def test_auto_reflection_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--output_fname', 'ex.calfits', '--dly_range', '10', '20', '--overwrite']
+        sys.argv = [sys.argv[0], 'a', '--output_fname', 'ex.calfits', '--dly_ranges', '10,20', '10,20', '--overwrite']
         parser = reflections.auto_reflection_argparser()
         a = parser.parse_args()
         nt.assert_equal(a.clean_data[0], 'a')
         nt.assert_equal(a.output_fname, 'ex.calfits')
+        nt.assert_equal(a.dly_ranges[0], '10,20')
+        nt.assert_equal(len(a.dly_ranges), 2)
 
     def test_auto_reflection_run(self):
-        # code tests have been done above, this is just to ensure this wrapper function runs
-        reflections.auto_reflection_run(self.uvd, (100, 200), "./ex.calfits", time_avg=True, window='blackmanharris', write_npz=True)
+        # most of the code tests have been done above, this is just to ensure this wrapper function runs
+        uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[2.0, 2.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[37], add_xtalk=False)
+        reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, window='blackmanharris', write_npz=True, overwrite=True, ref_sig_cut=1.0)
         nt.assert_true(os.path.exists("./ex.calfits"))
         nt.assert_true(os.path.exists("./ex.npz"))
+
+        # ensure gains have two humps at 150 and 250 ns
+        uvc = UVCal()
+        uvc.read_calfits('./ex.calfits')
+        aind = np.argmin(np.abs(uvc.ant_array - 37))
+        g = uvc.gain_array[aind, 0, :, :, 0].T
+        delays = np.fft.fftfreq(uvc.Nfreqs, np.diff(uvc.freq_array[0])[0]) * 1e9
+        gfft = np.mean(np.abs(np.fft.fft(g, axis=1)), axis=0)
+
+        nt.assert_true(delays[np.argmax(gfft[(delays > 100) & (delays < 200)])], 150)
+        nt.assert_true(delays[np.argmax(gfft[(delays > 200) & (delays < 300)])], 250)
+
         os.remove("./ex.calfits")
         os.remove("./ex.npz")
+
 
 
 class Test_ReflectionFitter_XTalk(unittest.TestCase):
@@ -321,11 +348,11 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl, abl1, abl2], overwrite=True)
 
         # test interpolation of umodes
-        RF.interp_u(RF.umodes, RF.avg_times, overwrite=True, mode='gpr', gp_len=100, gp_nl=0.01, optimizer=None)
+        RF.interp_u(RF.umodes, RF.avg_times, overwrite=True, mode='gpr', gp_frate=0.4, gp_nl=0.01, optimizer=None)
         nt.assert_true(RF.umode_interp[bl].shape, (20, 20))
 
         # assert broadcasting to full time resolution worked
-        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_len=100, gp_nl=0.01, optimizer=None)
+        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=0.01, optimizer=None)
         nt.assert_true(RF.umode_interp[bl].shape, (60, 60))
 
         # exceptions

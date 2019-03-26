@@ -230,7 +230,7 @@ def apply_fir(data, fir, wgts=None, axis=0):
     if wgts is None:
         wgts = np.ones_like(data, dtype=np.float)
 
-    new_data = np.empty_like(data)
+    new_data = np.empty_like(data, dtype=np.complex)
 
     shape.pop(axis)
     for i in range(shape[0]):
