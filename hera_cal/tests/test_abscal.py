@@ -248,7 +248,7 @@ class Test_AbsCal_Funcs:
                 i += 1
 
         phase_slopes_x = (.2 * np.random.rand(5, 2) - .1)  # not too many phase wraps over the array
-        phase_slopes_y = (.2 * np.random.rand(5, 2) - .1)
+        phase_slopes_y = (.2 * np.random.rand(5, 2) - .1)  # (i.e. avoid undersampling of very fast slopes)
         data = np.array([np.exp(2.0j * np.pi * x * phase_slopes_x
                                 + 2.0j * np.pi * y * phase_slopes_y) for x, y in zip(xs, ys)])
 
