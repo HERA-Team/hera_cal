@@ -619,7 +619,7 @@ class RedundantCalibrator:
     def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
                  sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
         """Solve for a calibration solution parameterized by a single delay and phase offset
-        per antenna using the phase difference between nominally redudant measurements. 
+        per antenna using the phase difference between nominally redundant measurements. 
         Delays are solved in a single iteration, but phase offsets are solved for 
         iteratively to account for phase wraps.
 
@@ -644,20 +644,19 @@ class RedundantCalibrator:
             g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the 
                 {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
         """
-        # Run firstcal with both delay and offset solving:
         df = np.median(np.ediff1d(freqs))
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
-        dly_fc, off_fc = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, sparse=sparse, 
-                                                  mode=mode, norm=norm, medfilt=medfilt, kernel=kernel)
-        g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs) + 1.0j * off_fc[ant]), 
-                              dtype=dtype) for ant, dly in dly_fc.items()}
-        calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
         
-        for i in range(maxiter - 1):
-            # iteratively solve for offsets to account for phase wrapping
-            _, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
-                                                    offsets_only=True, sparse=sparse, mode=mode, 
-                                                    norm=norm, medfilt=medfilt, kernel=kernel)
+        # iteratively solve for offsets to account for phase wrapping
+        for i in range(maxiter):
+            dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
+                                                       offsets_only=(i > 0), sparse=sparse, mode=mode, 
+                                                       norm=norm, medfilt=medfilt, kernel=kernel)
+            if i == 0:  # only solve for delays on the first iteration
+                g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)),
+                                      dtype=dtype) for ant, dly in dlys.items()}
+                calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
+            
             if np.linalg.norm(list(delta_off.values())) < conv_crit:
                 break
             delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
