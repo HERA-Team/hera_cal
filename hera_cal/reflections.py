@@ -934,7 +934,7 @@ def fit_reflection_delay(rfft, dly_range, dlys, dfft=None, return_peak=False):
 
     # locate peak bin within dly range
     abs_rfft = np.abs(rfft)[:, select]
-    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_rfft)
+    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_rfft, method='quadratic')
     ref_dly_inds += select.min()
     ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(np.abs(np.diff(dlys)))
     ref_peaks = ref_peaks[:, None]
@@ -997,7 +997,7 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=250, iff
     residuals = np.sum((filt[None, :, ::fthin].real - cosines.real)**2, axis=-1)
 
     # quadratic interp of residuals to get reflection phase
-    inds, bin_shifts, _, _ = interp_peak(-residuals.T)
+    inds, bin_shifts, _, _ = interp_peak(-residuals.T, method='quadratic')
     ref_phs = (phases[inds] + bin_shifts * np.median(np.diff(phases)))[:, None] % (2 * np.pi)
 
     # get reflection phase by interpolation: this didn't work well in practice

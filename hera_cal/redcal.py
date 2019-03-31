@@ -594,7 +594,7 @@ class RedundantCalibrator:
         """
         Nfreqs = data[next(iter(data))].shape[1]  # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
-            wgts = {k: np.float32(1) for k in data}
+            wgts = {k: np.ones_like(data[k], dtype=np.float32) for k in data}
         wgts = DataContainer(wgts)
         taus_offs, twgts = {}, {}
         for bls in self.reds:
@@ -1114,7 +1114,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                 if nInt_to_load is None:  # don't perform partial I/O
                     data, flags, nsamples = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
                     for bl in data:
-                        data[bl] = data[bl][tinds, :]  # cut down size of DataContainers to match unflagged indices
+                        data[bl] = data[bl][tinds, fSlice]  # cut down size of DataContainers to match unflagged indices
+                        flags[bl] = flags[bl][tinds, fSlice]
+                        nsamples[bl] = nsamples[bl][tinds, fSlice] 
                 else:  # perform partial i/o
                     data, flags, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
