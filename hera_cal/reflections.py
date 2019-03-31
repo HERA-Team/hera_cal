@@ -737,7 +737,7 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
-                 mode='gpr', gp_frate=1.0, gp_frate_degrade=0.1, gp_nl=1e-8, optimizer=None, verbose=True):
+                 mode='gpr', gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-8, optimizer=None, verbose=True):
         """
         Interpolate u modes along time, inserts into self.umode_interp.
 
@@ -810,7 +810,7 @@ class ReflectionFitter(FRFilter):
 
             if mode == 'gpr':
                 # get length scale in time
-                gp_f = gp_frate[k] * (1 - gp_frate_degrade)
+                gp_f = np.max([0.0, gp_frate[k] * (1 - gp_frate_degrade)])
                 gp_len = 1.0 / (gp_f * 1e-3) / (24.0 * 3600.0)
 
                 # setup GP kernel
