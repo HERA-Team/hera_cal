@@ -569,29 +569,23 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def firstcal(self, data, df, wgts={}, sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
-        """Solves for a per-antenna delay by fitting a line to the phase difference between
-        nominally redundant measurements.  To turn these delays into gains, you need to do:
-        np.exp(2j * np.pi * delay * freqs)
-
-        Args:
-            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+    def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False,
+                            sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
+        '''Runs a single iteration of firstcal, which uses phase differences between nominally
+        redundant meausrements to solve for delays and phase offsets that produce gains of the
+        form: np.exp(2j * np.pi * delay * freqs + 1j * offset).
+        
+        Arguments:
             df: frequency change between data bins, scales returned delays by 1/df.
-            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
-            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
-            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
-                Suggest using 'default' unless solver is having stability (convergence) problems.
-                More documentation of modes in linsolve.LinearSolver.solve().
-            norm: calculate delays from just the phase information (not the amplitude) of the data.
-                This is a pretty effective way to get reliable delay even in the presence of RFI.
-            medfilt : boolean, median filter data before fft.  This can work for data containing
-                unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
-            kernel : size of median filter kernel along (time, freq) axes
+            f0: frequency of the first channel in the data
+            offsets_only: only solve for phase offsets, dly_sol will be {}
+            For all other arguments, see RedundantCalibrator.firstcal()
 
         Returns:
-            sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
+            dly_sol: dictionary of per-antenna delay solutions in the {(index,antpol): np.array}
                 format.  All delays are multiplied by 1/df, so use that to set physical scale.
-        """
+            off_sol: dictionary of per antenna phase offsets (in radians) in the same format.
+        '''
         Nfreqs = data[next(iter(data))].shape[1]  # hardcode freq is axis 1 (time is axis 0)
         if len(wgts) == 0:
             wgts = {k: np.ones_like(data[k], dtype=np.float32) for k in data}
@@ -606,7 +600,7 @@ class RedundantCalibrator:
                         ad12 = np.abs(d12)
                         d12 /= np.where(ad12 == 0, np.float32(1), ad12)
                     w12 = w1 * wgts[bl2]
-                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, wgts=w12, medfilt=medfilt, kernel=kernel)
+                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt, kernel=kernel)
                     twgts[(bl1, bl2)] = np.sum(w12)
         d_ls, w_ls = {}, {}
         for (bl1, bl2), tau_off_ij in taus_offs.items():
@@ -618,8 +612,60 @@ class RedundantCalibrator:
             w_ls[eq_key] = twgts[(bl1, bl2)]
         ls = linsolve.LinearSolver(d_ls, wgts=w_ls, sparse=sparse)
         sol = ls.solve(mode=mode)
-        sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}  # ignoring offset
-        return sol
+        dly_sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
+        off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
+        return dly_sol, off_sol
+
+    def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
+                 sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
+        """Solve for a calibration solution parameterized by a single delay and phase offset
+        per antenna using the phase difference between nominally redundant measurements. 
+        Delays are solved in a single iteration, but phase offsets are solved for 
+        iteratively to account for phase wraps.
+
+        Args:
+            data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
+            freqs: numpy array of frequencies in the data
+            wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
+            maxiter: maximum number of phase offset solver iterations
+            conv_crit: convergence criterion for iterative offset solver, defined as the L2 norm
+                of the changes in phase (in radians) over all times and antennas
+            sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
+            mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
+                Suggest using 'default' unless solver is having stability (convergence) problems.
+                More documentation of modes in linsolve.LinearSolver.solve().
+            norm: calculate delays from just the phase information (not the amplitude) of the data.
+                This is a pretty effective way to get reliable delay even in the presence of RFI.
+            medfilt : boolean, median filter data before fft.  This can work for data containing
+                unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
+            kernel : size of median filter kernel along (time, freq) axes
+
+        Returns:
+            g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the 
+                {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
+        """
+        df = np.median(np.ediff1d(freqs))
+        dtype = np.find_common_type([d.dtype for d in data.values()], [])
+        
+        # iteratively solve for offsets to account for phase wrapping
+        for i in range(maxiter):
+            dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
+                                                       offsets_only=(i > 0), sparse=sparse, mode=mode, 
+                                                       norm=norm, medfilt=medfilt, kernel=kernel)
+            if i == 0:  # only solve for delays on the first iteration
+                g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)),
+                                      dtype=dtype) for ant, dly in dlys.items()}
+                calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
+            
+            if np.linalg.norm(list(delta_off.values())) < conv_crit:
+                break
+            delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
+                                         dtype=dtype) for ant in g_fc.keys()}
+            calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
+            g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
+
+        calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
+        return g_fc
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
@@ -660,7 +706,7 @@ class RedundantCalibrator:
             wgts: dictionary of linear weights in the same format as data. Defaults to equal wgts.
             sparse: represent the A matrix (visibilities to parameters) sparsely in linsolve
             conv_crit: maximum allowed relative change in solutions to be considered converged
-            max_iter: maximum number of lincal iterations allowed before it gives up
+            maxiter: maximum number of lincal iterations allowed before it gives up
             verbose: print stuff
             mode: solving mode passed to the linsolve linear solver ('default', 'lsqr', 'pinv', or 'solve')
                 Suggest using 'default' unless solver is having stability (convergence) problems.
@@ -920,8 +966,8 @@ def expand_omni_vis(cal, all_reds, data, flags, nsamples):
     cal['vns_omnical'] = DataContainer(cal['vns_omnical'])
 
 
-def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e-10,
-                          maxiter=500, check_every=10, check_after=50, gain=.4):
+def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
+                          oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -935,8 +981,10 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
         times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data DataContainer, but must be provided if data is a dictionary,
             if it doesn't have .times_by_bl, or if the length of any list of times is 1.
-        conv_crit: maximum allowed relative change in omnical solutions for convergence
-        maxiter: maximum number of omnical iterations allowed before it gives up
+        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
+        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
+        oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
+        oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
@@ -968,16 +1016,13 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    d_fc = rc.firstcal(data, df=np.median(np.ediff1d(freqs)))
-    d_fc_rd = rc.remove_degen_gains(d_fc)
-    rv['g_firstcal'] = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)), dtype=np.complex64)
-                        for ant, dly in d_fc_rd.items()}
+    rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit)
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
     # perform logcal and omnical
     log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
-    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, conv_crit=conv_crit, maxiter=maxiter,
+    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
                                            check_every=check_every, check_after=check_after, gain=gain)
 
     # update omnical flags and then remove degeneracies
@@ -1010,9 +1055,9 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, conv_crit=1e
     return rv
 
 
-def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_horizon=0.0,
-                     flag_nchan_low=0, flag_nchan_high=0, conv_crit=1e-10, maxiter=500,
-                     check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
+def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
+                     flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, 
+                     oc_maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
@@ -1023,14 +1068,18 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
             Partial io requires 'uvh5' filetype for hd. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
+        bl_error_tol: the largest allowable difference between baselines in a redundant group
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
             antenna-polarization tuples. In the former case, all pols for an antenna will be excluded.
         solar_horizon: float, Solar altitude flagging threshold [degrees]. When the Sun is above
             this altitude, calibration is skipped and the integrations are flagged.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        conv_crit: maximum allowed relative change in omnical solutions for convergence
-        maxiter: maximum number of omnical iterations allowed before it gives up
+        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
+        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
+        oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
+        oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
@@ -1083,8 +1132,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
     rv['chisq_per_ant'] = {ant: np.zeros((nTimes, nFreqs), dtype=np.float32) for ant in ants}
 
     # get reds and then intitialize omnical visibility solutions to all 1s and all flagged
-    all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, pol_mode=pol_mode,
-                        pols=set([pol for pols in pol_load_list for pol in pols]))
+    all_reds = get_reds({ant: hd.antpos[ant] for ant in ant_nums}, bl_error_tol=bl_error_tol,
+                        pol_mode=pol_mode, pols=set([pol for pols in pol_load_list for pol in pols]))
     rv['v_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=np.complex64) for red in all_reds})
     rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
     rv['vns_omnical'] = DataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
@@ -1120,8 +1169,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
                 else:  # perform partial i/o
                     data, flags, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                            conv_crit=conv_crit, maxiter=maxiter,
-                                            check_every=check_every, check_after=check_after, gain=gain)
+                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, 
+                                            oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after, gain=gain)
                 expand_omni_vis(cal, filter_reds(all_reds, pols=pols), data, flags, nsamples)
                 
                 # gather results
@@ -1145,10 +1194,12 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', ex_ants=[], solar_h
     return rv
 
 
-def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', omnivis_ext='.omni_vis.uvh5',
-               outdir=None, ant_metrics_file=None, clobber=False, nInt_to_load=None, pol_mode='2pol', ex_ants=[], ant_z_thresh=4.0,
-               max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, conv_crit=1e-10, maxiter=500, check_every=10,
-               check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
+def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', 
+               omnivis_ext='.omni_vis.uvh5', outdir=None, ant_metrics_file=None, clobber=False, 
+               nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, 
+               max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
+               fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, 
+               add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1167,6 +1218,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             Partial io requires 'uvh5' filetype. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
             See recal.get_reds for more information.
+        bl_error_tol: the largest allowable difference between baselines in a redundant group
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         ex_ants: list of antennas to exclude from calibration and flag. Can be either antenna numbers or
             antenna-polarization tuples. In the former case, all pols for an antenna will be excluded.
         ant_z_thresh: threshold of modified z-score (like number of sigmas but with medians) for chi^2 per
@@ -1178,8 +1231,10 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             this altitude, calibration is skipped and the integrations are flagged.
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
-        conv_crit: maximum allowed relative change in omnical solutions for convergence
-        maxiter: maximum number of omnical iterations allowed before it gives up
+        fc_conv_crit: maximum allowed changed in firstcal phases for convergence
+        fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
+        oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
+        oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
@@ -1216,8 +1271,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         # Run redundant calibration
         if verbose:
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
-        cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, ex_ants=ex_ants, solar_horizon=solar_horizon,
-                               flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high, conv_crit=conv_crit, maxiter=maxiter, 
+        cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants, 
+                               solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high, 
+                               fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, 
                                check_every=check_every, check_after=check_after, gain=gain, verbose=verbose, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
@@ -1286,12 +1342,15 @@ def redcal_argparser():
     redcal_opts.add_argument("--nInt_to_load", type=int, default=None, help="number of integrations to load and calibrate simultaneously. Lower numbers save memory, but incur a CPU overhead. \
                              Default None loads all integrations.")
     redcal_opts.add_argument("--pol_mode", type=str, default='2pol', help="polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'. See recal.get_reds documentation.")
+    redcal_opts.add_argument("--bl_error_tol", type=float, default=1.0, help="the largest allowable difference between baselines in a redundant group")
     redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
     redcal_opts.add_argument("--max_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths longer than this length in meters")
 
-    omni_opts = a.add_argument_group(title='Omnical-Specific Options')
-    omni_opts.add_argument("--conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
-    omni_opts.add_argument("--maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
+    omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
+    omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-6, help="maximum allowed changed in firstcal phases for convergence")
+    omni_opts.add_argument("--fc_maxiter", type=int, default=50, help="maximum number of firstcal iterations allowed for finding per-antenna phases")
+    omni_opts.add_argument("--oc_conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
+    omni_opts.add_argument("--oc_maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
     omni_opts.add_argument("--check_every", type=int, default=10, help="compute omnical convergence every Nth iteration (saves computation).")
     omni_opts.add_argument("--check_after", type=int, default=50, help="start computing omnical convergence only after N iterations (saves computation).")
     omni_opts.add_argument("--gain", type=float, default=.4, help="The fractional step made toward the new solution each omnical iteration. Values in the range 0.1 to 0.5 are generally safe.")

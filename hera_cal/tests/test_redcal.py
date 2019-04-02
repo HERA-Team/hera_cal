@@ -408,7 +408,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         info._solver(solver, d)
         info._solver(solver, d, w)
 
-    def test_firstcal(self):
+    def test_firstcal_iteration(self):
         NANTS = 18
         NFREQ = 64
         antpos = build_linear_array(NANTS)
@@ -424,12 +424,48 @@ class TestRedundantCalibrator(unittest.TestCase):
         gains = {k: v.astype(np.complex64) for k, v in gains.items()}
         calibrate_in_place(d, gains, old_gains=g, gain_convention='multiply')
         d = {k: v.astype(np.complex64) for k, v in d.items()}
-        sol = info.firstcal(d, df=fqs[1] - fqs[0], medfilt=False)
-        sol_degen = info.remove_degen_gains(sol, degen_gains=delays, mode='phase')
+        dly_sol, off_sol = info._firstcal_iteration(d, df=fqs[1] - fqs[0], f0=fqs[0], medfilt=False)
+        sol_degen = info.remove_degen_gains(dly_sol, degen_gains=delays, mode='phase')
         for i in range(NANTS):
-            self.assertEqual(sol[(i, 'Jxx')].dtype, np.float64)
-            self.assertEqual(sol[(i, 'Jxx')].shape, (1, 1))
+            self.assertEqual(dly_sol[(i, 'Jxx')].dtype, np.float64)
+            self.assertEqual(dly_sol[(i, 'Jxx')].shape, (1, 1))
             self.assertTrue(np.allclose(np.round(sol_degen[(i, 'Jxx')] - delays[(i, 'Jxx')], 0), 0))
+
+    def test_firstcal(self):
+        np.random.seed(21)
+        antpos = build_hex_array(2)
+        reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        freqs = np.linspace(1e8, 2e8, 1024)
+        
+        # test firstcal where the degeneracies of the phases and delays have already been removed so no abscal is necessary
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
+        fc_delays = {ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()}  # in s
+        fc_delays = rc.remove_degen_gains(fc_delays)
+        fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
+        fc_offsets = rc.remove_degen_gains(fc_offsets)
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs))) 
+                    for ant, delay in fc_delays.items()}
+        for ant1, ant2, pol in d.keys():
+            d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+        g_fc = rc.firstcal(d, freqs, conv_crit=0)
+        np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, 3)
+
+        # test firstcal with only phases (no delays)
+        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
+        fc_delays = {ant: [[0 * np.random.randn()]] for ant in gains.keys()}  # in s
+        fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
+        fc_offsets = rc.remove_degen_gains(fc_offsets)
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs))) 
+                    for ant, delay in fc_delays.items()}
+        for ant1, ant2, pol in d.keys():
+            d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
+        for ant in gains.keys():
+            gains[ant] *= fc_gains[ant]
+        g_fc = rc.firstcal(d, freqs, conv_crit=0)
+        np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, 10)  # much higher precision
 
     def test_logcal(self):
         NANTS = 18
@@ -1028,13 +1064,15 @@ class TestRedcalAndAbscal(unittest.TestCase):
         up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
         np.random.seed(21)
-        antpos = build_hex_array(3)
+        antpos = build_hex_array(2)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
-        freqs = np.linspace(1e8, 2e8, 128)  # note that for some seeds, this isn't enough frequency resolution to figure out delays
+        freqs = np.linspace(1e8, 2e8, 1024)
         gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)))
         fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
-        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
+        fc_offsets = {ant: 2 * np.pi * np.random.rand() for ant in gains.keys()}  # random phase offsets
+        fc_gains = {ant: np.reshape(np.exp(2.0j * np.pi * freqs * delay + 1.0j * fc_offsets[ant]), 
+                                    (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
@@ -1057,7 +1095,7 @@ class TestRedcalAndAbscal(unittest.TestCase):
         model = DataContainer({bl: true_vis[red[0]] for red in reds for bl in red})
         
         # run abscal
-        abscal_delta_gains, AC = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=False)
+        abscal_delta_gains, AC = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=True)
 
         # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
@@ -1067,7 +1105,7 @@ class TestRedcalAndAbscal(unittest.TestCase):
         tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
                for ant in true_gains.keys()}
         gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
-        self.assertLess(np.max(np.abs(gain_errors)), 1e-10)
+        np.testing.assert_array_almost_equal(np.abs(gain_errors), 0, 10)
 
 
 class TestRunMethods(unittest.TestCase):

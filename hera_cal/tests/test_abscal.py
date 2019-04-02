@@ -234,6 +234,28 @@ class Test_AbsCal_Funcs:
         abscal.cut_bls(_data2, min_bl_cut=20.0, inplace=True)
         nt.assert_true(len(_data2), 12)
 
+    def test_dft_phase_slope_solver(self):
+        np.random.seed(21)
+
+        # build a perturbed grid
+        xs = np.zeros(100)
+        ys = np.zeros(100)
+        i = 0
+        for x in np.arange(0, 100, 10):
+            for y in np.arange(0, 100, 10):
+                xs[i] = x + 5 * (.5 - np.random.rand())
+                ys[i] = y + 5 * (.5 - np.random.rand())
+                i += 1
+
+        phase_slopes_x = (.2 * np.random.rand(5, 2) - .1)  # not too many phase wraps over the array
+        phase_slopes_y = (.2 * np.random.rand(5, 2) - .1)  # (i.e. avoid undersampling of very fast slopes)
+        data = np.array([np.exp(2.0j * np.pi * x * phase_slopes_x
+                                + 2.0j * np.pi * y * phase_slopes_y) for x, y in zip(xs, ys)])
+
+        x_slope_est, y_slope_est = abscal.dft_phase_slope_solver(xs, ys, data)
+        np.testing.assert_array_almost_equal(phase_slopes_x - x_slope_est, 0, 7)
+        np.testing.assert_array_almost_equal(phase_slopes_y - y_slope_est, 0, 7)
+
 
 class Test_AbsCal:
 
@@ -491,29 +513,30 @@ class Test_AbsCal:
         AC.delay_slope_lincal(verbose=False)
 
     def test_global_phase_slope_logcal(self):
-        # test w/o offsets
-        self.AC.global_phase_slope_logcal(verbose=False, edge_cut=31)
-        nt.assert_equal(self.AC.phs_slope[(24, 'Jxx')].shape, (2, 60, 1))
-        nt.assert_equal(self.AC.phs_slope_gain[(24, 'Jxx')].shape, (60, 64))
-        nt.assert_equal(self.AC.phs_slope_arr.shape, (7, 2, 60, 1, 1))
-        nt.assert_equal(self.AC.phs_slope_gain_arr.shape, (7, 60, 64, 1))
-        nt.assert_equal(self.AC.phs_slope_ant_phs_arr.shape, (7, 60, 1, 1))
-        nt.assert_true(np.isclose(np.angle(self.AC.phs_slope_gain[(24, 'Jxx')]), 0.0).all())
-        g = self.AC.custom_phs_slope_gain(self.gk, self.ap)
-        nt.assert_equal(g[(0, 'Jxx')].shape, (60, 64))
-        # test Nones
-        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
-        nt.assert_equal(AC.phs_slope, None)
-        nt.assert_equal(AC.phs_slope_gain, None)
-        nt.assert_equal(AC.phs_slope_arr, None)
-        nt.assert_equal(AC.phs_slope_gain_arr, None)
-        nt.assert_equal(AC.phs_slope_ant_phs_arr, None)
-        AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
-        AC.wgts[(24, 25, 'xx')] *= 0
-        AC.global_phase_slope_logcal(verbose=False)
-        # test w/ no wgts
-        AC.wgts = None
-        AC.global_phase_slope_logcal(verbose=False)
+        for solver in ['dft', 'linfit']:
+            # test w/o offsets
+            self.AC.global_phase_slope_logcal(verbose=False, edge_cut=31, solver=solver)
+            nt.assert_equal(self.AC.phs_slope[(24, 'Jxx')].shape, (2, 60, 1))
+            nt.assert_equal(self.AC.phs_slope_gain[(24, 'Jxx')].shape, (60, 64))
+            nt.assert_equal(self.AC.phs_slope_arr.shape, (7, 2, 60, 1, 1))
+            nt.assert_equal(self.AC.phs_slope_gain_arr.shape, (7, 60, 64, 1))
+            nt.assert_equal(self.AC.phs_slope_ant_phs_arr.shape, (7, 60, 1, 1))
+            nt.assert_true(np.isclose(np.angle(self.AC.phs_slope_gain[(24, 'Jxx')]), 0.0).all())
+            g = self.AC.custom_phs_slope_gain(self.gk, self.ap)
+            nt.assert_equal(g[(0, 'Jxx')].shape, (60, 64))
+            # test Nones
+            AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
+            nt.assert_equal(AC.phs_slope, None)
+            nt.assert_equal(AC.phs_slope_gain, None)
+            nt.assert_equal(AC.phs_slope_arr, None)
+            nt.assert_equal(AC.phs_slope_gain_arr, None)
+            nt.assert_equal(AC.phs_slope_ant_phs_arr, None)
+            AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
+            AC.wgts[(24, 25, 'xx')] *= 0
+            AC.global_phase_slope_logcal(verbose=False, solver=solver)
+            # test w/ no wgts
+            AC.wgts = None
+            AC.global_phase_slope_logcal(verbose=False, solver=solver)
 
     def test_merge_gains(self):
         self.AC.abs_amp_logcal(verbose=False)
@@ -530,33 +553,6 @@ class Test_AbsCal:
         nt.assert_almost_equal(np.abs(gains[k][0, 0]), np.abs(self.AC.abs_eta_gain[k] * self.AC.ant_eta_gain[k])[0, 0])
         nt.assert_almost_equal(np.angle(gains[k][0, 0]), np.angle(self.AC.TT_Phi_gain[k] * self.AC.abs_psi_gain[k]
                                                                   * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
-
-    def test_apply_gains(self):
-        # test basic execution
-        self.AC.abs_amp_logcal(verbose=False)
-        self.AC.TT_phs_logcal(verbose=False)
-        self.AC.delay_lincal(verbose=False)
-        self.AC.phs_logcal(verbose=False)
-        self.AC.amp_logcal(verbose=False)
-        gains = (self.AC.abs_eta_gain, self.AC.TT_Phi_gain, self.AC.abs_psi_gain,
-                 self.AC.ant_dly_gain, self.AC.ant_eta_gain, self.AC.ant_phi_gain)
-        corr_data = abscal.apply_gains(self.AC.data, gains, gain_convention='multiply')
-        nt.assert_equal(corr_data[(24, 25, 'xx')].shape, (60, 64))
-        nt.assert_equal(corr_data[(24, 25, 'xx')].dtype, np.complex)
-        nt.assert_almost_equal(corr_data[(24, 25, 'xx')][0, 0], (self.AC.data[(24, 25, 'xx')]
-                                                                 * self.AC.abs_eta_gain[(24, 'Jxx')] * self.AC.abs_eta_gain[(25, 'Jxx')] * self.AC.ant_eta_gain[(24, 'Jxx')]
-                                                                 * self.AC.ant_eta_gain[(25, 'Jxx')])[0, 0])
-        corr_data = abscal.apply_gains(self.AC.data, gains, gain_convention='divide')
-        nt.assert_equal(corr_data[(24, 25, 'xx')].shape, (60, 64))
-        nt.assert_equal(corr_data[(24, 25, 'xx')].dtype, np.complex)
-        nt.assert_almost_equal(corr_data[(24, 25, 'xx')][0, 0], (self.AC.data[(24, 25, 'xx')]
-                                                                 / self.AC.abs_eta_gain[(24, 'Jxx')] / self.AC.abs_eta_gain[(25, 'Jxx')] / self.AC.ant_eta_gain[(24, 'Jxx')]
-                                                                 / self.AC.ant_eta_gain[(25, 'Jxx')])[0, 0])
-        # test for missing data
-        gains = copy.deepcopy(self.AC.abs_eta_gain)
-        del gains[(24, 'Jxx')]
-        corr_data = abscal.apply_gains(self.AC.data, gains)
-        nt.assert_true((24, 25, 'xx') not in corr_data)
 
     def test_fill_dict_nans(self):
         data = copy.deepcopy(self.AC.data)
