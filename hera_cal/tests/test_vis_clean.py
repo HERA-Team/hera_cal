@@ -58,6 +58,17 @@ class Test_VisClean(unittest.TestCase):
         V2.apply_calibration(V2.hc, unapply=True)
         nt.assert_almost_equal(V1.data[bl][30, 30], V2.data[bl][30, 30], places=5)
 
+        # test soft copy
+        V1.hello = 'hi'
+        V1.hello_there = 'bye'
+        V1.foo = 'bar'
+        V3 = V1.soft_copy(references=["hello*"])
+        nt.assert_equal(hex(id(V1.data[(52, 53, 'xx')])), hex(id(V3.data[(52, 53, 'xx')])))
+        nt.assert_true(hasattr(V3, 'hello'))
+        nt.assert_true(hasattr(V3, 'hello_there'))
+        nt.assert_false(hasattr(V3, 'foo'))
+        nt.assert_equal(V3.__class__, VisClean)
+
         # test clear
         V1.clear_containers()
         nt.assert_true(np.all([len(getattr(V1, c)) == 0 for c in ['data', 'flags', 'nsamples']]))
