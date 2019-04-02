@@ -569,7 +569,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def _firstcal_iteration(self, data, df, f0=0.0, wgts={}, offsets_only=False,
+    def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False,
                             sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
         '''Runs a single iteration of firstcal, which uses phase differences between nominally
         redundant meausrements to solve for delays and phase offsets that produce gains of the

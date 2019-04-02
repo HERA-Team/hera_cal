@@ -424,7 +424,7 @@ class TestRedundantCalibrator(unittest.TestCase):
         gains = {k: v.astype(np.complex64) for k, v in gains.items()}
         calibrate_in_place(d, gains, old_gains=g, gain_convention='multiply')
         d = {k: v.astype(np.complex64) for k, v in d.items()}
-        dly_sol, off_sol = info._firstcal_iteration(d, df=fqs[1] - fqs[0], medfilt=False)
+        dly_sol, off_sol = info._firstcal_iteration(d, df=fqs[1] - fqs[0], f0=fqs[0], medfilt=False)
         sol_degen = info.remove_degen_gains(dly_sol, degen_gains=delays, mode='phase')
         for i in range(NANTS):
             self.assertEqual(dly_sol[(i, 'Jxx')].dtype, np.float64)
