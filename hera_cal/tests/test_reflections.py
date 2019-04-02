@@ -99,10 +99,8 @@ def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_
                 g *= 1 + ca * np.exp(2j * np.pi * freqs * cd * 1e-9 + cp * 1j)
             if antpair[0] in cable_ants:
                 v1 *= g
-                #v1 += e
             if antpair[1] in cable_ants:
                 v2 *= g
-                #v2 += e
 
         # form visibility
         V = v1 * v2.conj()
@@ -279,7 +277,6 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
         os.remove("./ex.calfits")
         os.remove("./ex.npz")
-
 
 
 class Test_ReflectionFitter_XTalk(unittest.TestCase):

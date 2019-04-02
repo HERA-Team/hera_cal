@@ -77,6 +77,7 @@ from sklearn import gaussian_process as gp
 from uvtools import dspec
 import argparse
 import ast
+from astropy import constants
 
 from . import io
 from . import version
@@ -279,8 +280,6 @@ class ReflectionFitter(FRFilter):
                 CLEANed auto-correlation visibility data
             dly_range : len-2 tuple
                 Range in delay [ns] to search for reflections
-            freqs : 1D array of shape (Nfreqs,)
-                Frequency array [Hz]
             ref_amp : dictionary
                 Initial guess for reflection amplitude
             ref_dly : dictionary
@@ -477,7 +476,7 @@ class ReflectionFitter(FRFilter):
         for k in dfft:
             w = np.ones_like(dfft[k], dtype=np.float)
             # get horizon
-            h = np.linalg.norm(self.antpos[k[1]] - self.antpos[k[0]]) / 2.99e8 * 1e9 * horizon + standoff
+            h = np.linalg.norm(self.antpos[k[1]] - self.antpos[k[0]]) / constants.c.value * 1e9 * horizon + standoff
             if min_dly is not None:
                 h = np.max([h, min_dly])
             w[:, np.abs(delays) < h] = 0.0
@@ -503,7 +502,6 @@ class ReflectionFitter(FRFilter):
             dfft : DataContainer, holding delay-transformed data.
             wgts : DataContainer, holding weights to multiply with dfft before taking SVD
                 See self.svd_weights()
-            dly_range : len-2 tuple of positive delays in nanosec
             flags : DataContainer, holding dfft flags (e.g. skip_wgts). Default is None.
             keys : list of tuples
                 List of datacontainer baseline-pol tuples to create model for.
@@ -540,9 +538,10 @@ class ReflectionFitter(FRFilter):
                 continue
 
             # perform svd to get principal components
+            # full_matrices = False truncates u or v depending on which has more modes
             u, svals, v = np.linalg.svd(dfft[k] * wgts[k], full_matrices=False)
 
-            # append to containers: keeping Nmodes b/c otherwise their eventual outerproduct fails
+            # append to containers only modes one desires. Default is all modes.
             self.umodes[k] = u[:, :Nkeep]
             self.vmodes[k] = v[:Nkeep, :]
             self.svals[k] = svals[:Nkeep]
@@ -1404,16 +1403,16 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
 
         # model auto reflections in clean data
         _RF.model_auto_reflections(RF.clean_data, dly_range, clean_flags=RF.clean_flags, edgecut_low=edgecut_low,
-                                  edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
-                                  zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
+                                   edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
+                                   zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
 
         # refine reflections
         if opt_maxiter > 0:
             (_RF.ref_amp, _RF.ref_dly, _RF.ref_phs, info, _RF.ref_eps,
              _RF.ref_gains) = RF.refine_auto_reflections(RF.clean_data, dly_range, _RF.ref_amp, _RF.ref_dly, _RF.ref_phs,
-                                                        keys=keys, window=window, alpha=alpha, edgecut_low=edgecut_low,
-                                                        edgecut_hi=edgecut_hi, clean_flags=RF.clean_flags, clean_model=RF.clean_model,
-                                                        skip_frac=skip_frac, maxiter=opt_maxiter, method=opt_method, tol=opt_tol)
+                                                         keys=keys, window=window, alpha=alpha, edgecut_low=edgecut_low,
+                                                         edgecut_hi=edgecut_hi, clean_flags=RF.clean_flags, clean_model=RF.clean_model,
+                                                         skip_frac=skip_frac, maxiter=opt_maxiter, method=opt_method, tol=opt_tol)
 
         # merge gains
         if i > 0:

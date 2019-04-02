@@ -207,6 +207,8 @@ def apply_fir(data, fir, wgts=None, axis=0):
             holding FIR filter to convolve against data
         wgts : float ndarray of shape (Ntimes, Nfreqs)
             Default is all ones.
+        axis : int
+            data axis along which to apply FIR
 
     Returns:
         new_data : complex ndarray of shape (Ntimes, Nfreqs)
