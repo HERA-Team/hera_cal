@@ -11,6 +11,7 @@ from six.moves import range, zip
 from uvtools import dspec
 from astropy import constants
 import copy
+import fnmatch
 
 from . import io
 from . import apply_cal
@@ -25,7 +26,7 @@ class VisClean(object):
     VisClean object for visibility CLEANing and filtering.
     """
 
-    def __init__(self, input_data, filetype='uvh5', input_cal=None):
+    def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True):
         """
         Initialize the object.
 
@@ -37,6 +38,8 @@ class VisClean(object):
             input_cal : string, UVCal or HERACal object holding
                 gain solutions to apply to DataContainers
                 as they are built.
+            link_data : bool, if True, attempt to link DataContainers
+                from HERAData object, otherwise only link metadata if possible.
         """
         # attach HERAData
         self.clear_containers()
@@ -47,14 +50,52 @@ class VisClean(object):
             self.attach_calibration(input_cal)
 
         # attach data and/or metadata to object if exists
-        self.attach_data()
+        self.attach_data(link_data=link_data)
 
-    def attach_data(self):
+    def soft_copy(self, references=[]):
+        """
+        Make and return a new object with references (not copies)
+        to the data objects in self.
+
+        By default, self.hd, self.data, self.flags and self.nsamples
+        are referenced into the new object. Additional attributes
+        can be specified by references.
+
+        Args:
+            references : list of string
+                List of extra attributes to copy references from self to output.
+                Accepts wildcard * and ? values.
+
+        Returns:
+            VisClean object : A VisClean object with references
+                to self.hd, and all attributes specified in references.
+        """
+        # make a new object w/ only copies of metadata
+        newobj = self.__class__(self.hd, link_data=False)
+        newobj.hd = self.hd
+        newobj.data = self.data
+        newobj.flags = self.flags
+        newobj.nsamples = self.nsamples
+
+        # iterate through extra attributes
+        refs = list(self.__dict__.keys())
+        for ref in references:
+            atrs = fnmatch.filter(refs, ref)
+            for atr in atrs:
+                setattr(newobj, atr, getattr(self, atr))
+
+        return newobj
+
+    def attach_data(self, link_data=True):
         """
         Attach DataContainers to self.
 
         If they exist, attach metadata and/or data from self.hd
         and apply calibration solutions from self.hc if it exists.
+
+        Args:
+            link_data : bool, if True, attempt to link DataContainers
+                from HERAData object, otherwise only link metadata if possible.
         """
         # link the metadata if they exist
         if self.hd.antenna_numbers is not None:
@@ -78,7 +119,7 @@ class VisClean(object):
             self.lon = self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi  # degrees
 
         # link the data if they exist
-        if self.hd.data_array is not None:
+        if self.hd.data_array is not None and link_data:
             data, flags, nsamples = self.hd.build_datacontainers()
             self.data = data
             self.flags = flags
@@ -159,13 +200,13 @@ class VisClean(object):
         # attach data
         self.attach_data()
 
-    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, filetype='uvh5',
-                   partial_write=False, add_to_history='', verbose=True, **kwargs):
+    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, 
+                   times=None, lsts=None, filetype='uvh5', partial_write=False,
+                   add_to_history='', verbose=True, **kwargs):
         """
-        Write data attached to object to file.
+        Write data to file.
 
-        If data or flags are fed as DataContainers,
-        create a new HERAData with those data and write that to file. Can only write
+        Create a new HERAData and update it with data and write to file. Can only write
         data that has associated metadata in the self.hd HERAData object.
 
         Args:
@@ -174,6 +215,8 @@ class VisClean(object):
             overwrite : bool, if True, overwrite output file if it exists
             flags : DataContainer, boolean flag arrays to write to disk with data.
             nsamples : DataContainer, float nsample arrays to write to disk with data.
+            times : ndarray, list of Julian Date times to replace in HD
+            lsts : ndarray, list of LST times [radian] to replace in HD
             filetype : string, output filetype. ['miriad', 'uvh5', 'uvfits'] supported.
             partial_write : bool, if True, begin (or continue) a partial write to
             the output filename and store file descriptor in self.hd._writers.
@@ -187,13 +230,28 @@ class VisClean(object):
         if nsamples is not None:
             keys = [k for k in keys if nsamples.has_key(k)]
 
+        # if time_array is fed, select out appropriate times
+        if times is not None:
+            assert lsts is not None, "Both times and lsts must be fed"
+            _times = np.unique(self.hd.time_array)[:len(times)]
+        else:
+            _times = None
+
         # select out a copy of hd
-        hd = self.hd.select(bls=keys, inplace=False)
+        hd = self.hd.select(bls=keys, inplace=False, times=_times)
         hd._determine_blt_slicing()
         hd._determine_pol_indexing()
 
-        # update HERAData
+        # update HERAData data arrays
         hd.update(data=data, flags=flags, nsamples=nsamples)
+
+        # update extra blt arrays
+        for ap in hd.get_antpairs():
+            s = hd._blt_slices[ap]
+            if times is not None:
+                hd.time_array[s] = times
+            if lsts is not None:
+                hd.lst_array[s] = lsts
 
         # add history
         hd.history += version.history_string(add_to_history)
@@ -222,7 +280,7 @@ class VisClean(object):
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, clean_model='clean_model', clean_resid='clean_resid',
                   clean_data='clean_data', clean_flags='clean_flags', clean_info='clean_info',
-                  add_clean_residual=False, verbose=True):
+                  add_clean_residual=False, dtime=None, dnu=None, verbose=True):
         """
         Perform a CLEAN deconvolution.
 
@@ -266,6 +324,9 @@ class VisClean(object):
             add_clean_residual : bool, if True, adds the CLEAN residual within the CLEAN bounds
                 in fourier space to the CLEAN model. Note that the residual actually returned is
                 not the CLEAN residual, but the residual of data - model in real (data) space.
+            dtime : float, time spacing of input data [sec], not necessarily integration time!
+                Default is self.dtime.
+            dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             verbose: If True print feedback to stdout
         """
         # type checks
@@ -297,6 +358,9 @@ class VisClean(object):
         if wgts is None:
             wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
 
+        # get delta bin
+        dtime, dnu = self._get_delta_bin(dtime=dtime, dnu=dnu)
+
         # parse max_frate if fed
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.float)):
@@ -307,7 +371,7 @@ class VisClean(object):
             max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
 
         if max_frate is not None:
-            max_frate /= 1e3
+            max_frate = max_frate * 1e-3
         min_dly /= 1e9
         standoff /= 1e9
 
@@ -331,7 +395,7 @@ class VisClean(object):
                     d = zeropad_array(d, zeropad, axis=1)
                     w = zeropad_array(w, zeropad, axis=1)
 
-                mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, standoff=standoff, horizon=horizon,
+                mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
                                                   gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                                                   edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual)
@@ -359,7 +423,7 @@ class VisClean(object):
                     d = zeropad_array(d, zeropad, axis=0)
                     w = zeropad_array(w, zeropad, axis=0)
 
-                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=self.dtime, tol=tol, maxiter=maxiter,
+                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                                                   edgecut_hi=edgecut_hi)
 
@@ -382,7 +446,7 @@ class VisClean(object):
                         d = zeropad_array(d, zeropad, axis=(0, 1))
                         w = zeropad_array(w, zeropad, axis=(0, 1))
 
-                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=self.dnu, max_frate=max_frate[k], dt=self.dtime,
+                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
                                                       alpha=alpha, gain=gain, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
                                                       filt2d_mode=filt2d_mode)
@@ -416,7 +480,7 @@ class VisClean(object):
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
                  overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
-                 zeropad=0, verbose=True):
+                 zeropad=0, dtime=None, dnu=None, verbose=True):
         """
         Take FFT of data and attach to self.
 
@@ -450,6 +514,9 @@ class VisClean(object):
             ifftshift : bool, if True, ifftshift data along FT axis before FFT.
             fftshift : bool, if True, fftshift along FFT axes.
             zeropad : int, number of zero-valued channels to append to each side of FFT axis.
+            dtime : float, time spacing of input data [sec], not necessarily integration time!
+                Default is self.dtime.
+            dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             overwrite : bool
                 If dfft[key] already exists, overwrite its contents.
         """
@@ -480,13 +547,13 @@ class VisClean(object):
 
         # get delta bin
         if ax == 'freq':
-            delta_bin = self.dnu
+            _, delta_bin = self._get_delta_bin(dtime=dtime, dnu=dnu)
             axis = 1
         elif ax == 'time':
-            delta_bin = self.dtime
+            delta_bin, _ = self._get_delta_bin(dtime=dtime, dnu=dnu)
             axis = 0
         else:
-            delta_bin = (self.dtime, self.dnu)
+            delta_bin = self._get_delta_bin(dtime=dtime, dnu=dnu)
             axis = (0, 1)
 
         # iterate over keys
@@ -564,6 +631,23 @@ class VisClean(object):
 
         if not inplace:
             return flags
+
+    def _get_delta_bin(self, dtime=None, dnu=None):
+        """
+        Get visibility time & frequency spacing.
+        Defaults are self.dtime and self.dnu
+        Args:
+            dtime : float, time spacing [sec]
+            dnu : float, frequency spacing [Hz]
+        Returns:
+            (dtime, dnu)
+
+        """
+        if dtime is None:
+            dtime = self.dtime
+        if dnu is None:
+            dnu = self.dnu
+        return dtime, dnu
 
 
 def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
