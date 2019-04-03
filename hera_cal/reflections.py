@@ -736,7 +736,7 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
-                 mode='gpr', gp_frate=1.0, gp_frate_degrade=0.0, gp_var=1e3, gp_nl=1e-12, kernels=None,
+                 mode='gpr', gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None,
                  optimizer=None, verbose=True):
         """
         Interpolate u modes along time, inserts into self.umode_interp.
@@ -766,8 +766,6 @@ class ReflectionFitter(FRFilter):
                 being converted to a time length scale to prevent slight
                 overfitting of excess frate structure by fall-off of GP covariance
                 beyond the set length scale.
-            gp_var : float
-                Amplitude of GP variance
             gp_nl : float
                 GPR noise-level in units of input umodes.
             kernels : dictionary or sklearn.gaussian_process.kernels.Kernel object
@@ -825,24 +823,32 @@ class ReflectionFitter(FRFilter):
                     gp_len = 1.0 / (gp_f * 1e-3) / (24.0 * 3600.0)
 
                     # setup GP kernel
-                    kernel = gp_var * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
+                    kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
 
                 # setup GP
-                GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=True)
+                GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False)
 
                 # setup regression data: get unflagged data
                 select = ~np.max(uflags[k], axis=1)
                 X = times[select, None] - Xmean
-                y = umodes[k][select, :]
+                Y = umodes[k][select, :].copy()
 
-                # fit gp and predict
-                GP.fit(X, y.real)
-                ypredict_real = GP.predict(Xpredict)
-                GP.fit(X, y.imag)
-                ypredict_imag = GP.predict(Xpredict)
+                # do real and imag separately
+                ypredict = []
+                for y in [Y.real, Y.imag]:
+                    # shift by median and normalize by MAD
+                    ymed = np.median(y, axis=0, keepdims=True)
+                    ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
+                    y = (y - ymed) / ymad
 
-                # append
-                self.umode_interp[k] = ypredict_real + 1j * ypredict_imag
+                    # fit gp and predict
+                    GP.fit(X, y)
+                    ypred = GP.predict(Xpredict)
+
+                    # append
+                    ypredict.append(ypred * ymad + ymed)
+
+                self.umode_interp[k] = ypredict[0] + 1j * ypredict[1]
 
             else:
                 raise ValueError("didn't recognize interp mode {}".format(mode))
