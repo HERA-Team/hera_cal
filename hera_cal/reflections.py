@@ -737,7 +737,7 @@ class ReflectionFitter(FRFilter):
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
                  mode='gpr', gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None,
-                 optimizer=None, verbose=True):
+                 gp_mirror=False, optimizer=None, verbose=True):
         """
         Interpolate u modes along time, inserts into self.umode_interp.
 
@@ -771,6 +771,8 @@ class ReflectionFitter(FRFilter):
             kernels : dictionary or sklearn.gaussian_process.kernels.Kernel object
                 Dictionary containing sklearn kernels for each key in umodes.
                 If kernels is fed, then gp_frate, gp_frate_degrade gp_var and gp_nl are ignored.
+            gp_mirror : bool
+                If True, mirror bottom and top half of umode about itself before prediction.
             optimizer : str
                 GPR optimizer for kernel hyperparameter solution. Default is no regression.
                 See sklearn.gaussian_process.GaussianProcessRegressor for details.
@@ -832,6 +834,13 @@ class ReflectionFitter(FRFilter):
                 select = ~np.max(uflags[k], axis=1)
                 X = times[select, None] - Xmean
                 Y = umodes[k][select, :].copy()
+                Npix = Y.shape[0]
+
+                # mirror X axis
+                if mirror:
+                    lower = X[:Npix//2][::-1]
+                    upper = X[-Npix//2:][::-1]
+                    X = np.concatenate([-(lower-lower.min())[:-1] + X.min(), X, -(upper-upper.max())[1:] + X.max()], axis=0)
 
                 # do real and imag separately
                 ypredict = []
@@ -840,6 +849,14 @@ class ReflectionFitter(FRFilter):
                     ymed = np.median(y, axis=0, keepdims=True)
                     ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
                     y = (y - ymed) / ymad
+
+                    # mirror signal
+                    if gp_mirror:
+                        lower = y[:Npix//2][::-1]
+                        lower = -(lower-lower[-1:]) + lower[-1:]
+                        upper = y[-Npix//2:][::-1]
+                        upper = -(upper - upper[:1]) + upper[:1]
+                        y = np.concatenate([lower[:-1], y, upper[1:]], axis=0)
 
                     # fit gp and predict
                     GP.fit(X, y)
