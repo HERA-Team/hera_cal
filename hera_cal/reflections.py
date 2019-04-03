@@ -837,7 +837,7 @@ class ReflectionFitter(FRFilter):
                 Npix = Y.shape[0]
 
                 # mirror X axis
-                if mirror:
+                if gp_mirror:
                     lower = X[:Npix//2][::-1]
                     upper = X[-Npix//2:][::-1]
                     X = np.concatenate([-(lower-lower.min())[:-1] + X.min(), X, -(upper-upper.max())[1:] + X.max()], axis=0)
