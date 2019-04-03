@@ -736,14 +736,15 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
-                 mode='gpr', gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-8, optimizer=None, verbose=True):
+                 mode='gpr', gp_frate=1.0, gp_frate_degrade=0.0, gp_var=1e3, gp_nl=1e-12, kernels=None,
+                 optimizer=None, verbose=True):
         """
         Interpolate u modes along time, inserts into self.umode_interp.
 
         Currently only a Gaussian Process interpolator is supported.
 
         Args:
-            umomdes : DataContainer
+            umodes : DataContainer
                 u-mode container to interpolate, see self.sv_decomp()
             times : 1D array
                 Holds time_array of input umodes.
@@ -765,10 +766,13 @@ class ReflectionFitter(FRFilter):
                 being converted to a time length scale to prevent slight
                 overfitting of excess frate structure by fall-off of GP covariance
                 beyond the set length scale.
-            gp_len : float
-                length-scale of GPR in units of input times.
+            gp_var : float
+                Amplitude of GP variance
             gp_nl : float
                 GPR noise-level in units of input umodes.
+            kernels : dictionary or sklearn.gaussian_process.kernels.Kernel object
+                Dictionary containing sklearn kernels for each key in umodes.
+                If kernels is fed, then gp_frate, gp_frate_degrade gp_var and gp_nl are ignored.
             optimizer : str
                 GPR optimizer for kernel hyperparameter solution. Default is no regression.
                 See sklearn.gaussian_process.GaussianProcessRegressor for details.
@@ -800,6 +804,10 @@ class ReflectionFitter(FRFilter):
         Xmean = np.median(times)
         Xpredict = full_times[:, None] - Xmean
 
+        # parse kernels
+        if kernels is not None and isinstance(kernels, gp.kernels.Kernel):
+            kernels = dict([(k, kernels) for k in keys])
+
         # iterate over keys
         for k in keys:
             # check overwrite
@@ -808,12 +816,18 @@ class ReflectionFitter(FRFilter):
                 continue
 
             if mode == 'gpr':
-                # get length scale in time
-                gp_f = np.max([0.0, gp_frate[k] * (1 - gp_frate_degrade)])
-                gp_len = 1.0 / (gp_f * 1e-3) / (24.0 * 3600.0)
+                # get kernel
+                if kernels is not None:
+                    kernel = kernels[k]
+                else:
+                    # get length scale in time
+                    gp_f = np.max([0.0, gp_frate[k] * (1 - gp_frate_degrade)])
+                    gp_len = 1.0 / (gp_f * 1e-3) / (24.0 * 3600.0)
 
-                # setup GP kernel
-                kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
+                    # setup GP kernel
+                    kernel = gp_var * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
+
+                # setup GP
                 GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=True)
 
                 # setup regression data: get unflagged data

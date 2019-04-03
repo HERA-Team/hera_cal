@@ -16,6 +16,7 @@ from scipy import stats
 from pyuvdata import UVCal, UVData
 import operator
 import functools
+from sklearn.gaussian_process import kernels
 
 from hera_cal import io
 from hera_cal import reflections
@@ -345,12 +346,18 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl, abl1, abl2], overwrite=True)
 
         # test interpolation of umodes
-        RF.interp_u(RF.umodes, RF.avg_times, overwrite=True, mode='gpr', gp_frate=0.4, gp_nl=0.01, optimizer=None)
-        nt.assert_true(RF.umode_interp[bl].shape, (20, 20))
+        RF.interp_u(RF.umodes, RF.avg_times, overwrite=True, mode='gpr', gp_frate=0.4, gp_nl=1e-10, optimizer=None)
+        nt.assert_equal(RF.umode_interp[bl].shape, (20, 20))
 
         # assert broadcasting to full time resolution worked
-        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=0.01, optimizer=None)
-        nt.assert_true(RF.umode_interp[bl].shape, (60, 60))
+        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=1e-10, optimizer=None)
+        nt.assert_equal(RF.umode_interp[bl].shape, (60, 20))
+
+        # assert custom kernel works
+        gp_len = 1.0 / (0.4 * 1e-3) / (24.0 * 3600.0)
+        kernel = 1**2 * kernels.RBF(gp_len) + kernels.WhiteKernel(1e-10)
+        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', kernels=kernel, optimizer=None)
+        nt.assert_equal(RF.umode_interp[bl].shape, (60, 20))
 
         # exceptions
         nt.assert_raises(ValueError, RF.interp_u, RF.umodes, RF.times, overwrite=True, mode='foo')
