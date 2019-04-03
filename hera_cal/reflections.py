@@ -737,7 +737,7 @@ class ReflectionFitter(FRFilter):
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
                  mode='gpr', gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None,
-                 gp_mirror=False, optimizer=None, verbose=True):
+                 Nmirror=0, optimizer=None, verbose=True):
         """
         Interpolate u modes along time, inserts into self.umode_interp.
 
@@ -771,8 +771,8 @@ class ReflectionFitter(FRFilter):
             kernels : dictionary or sklearn.gaussian_process.kernels.Kernel object
                 Dictionary containing sklearn kernels for each key in umodes.
                 If kernels is fed, then gp_frate, gp_frate_degrade gp_var and gp_nl are ignored.
-            gp_mirror : bool
-                If True, mirror bottom and top half of umode about itself before prediction.
+            Nmirror : int
+                Number of time bins to mirror about top and bottom half of umode. Default is None.
             optimizer : str
                 GPR optimizer for kernel hyperparameter solution. Default is no regression.
                 See sklearn.gaussian_process.GaussianProcessRegressor for details.
@@ -808,6 +808,8 @@ class ReflectionFitter(FRFilter):
         if kernels is not None and isinstance(kernels, gp.kernels.Kernel):
             kernels = dict([(k, kernels) for k in keys])
 
+        assert Nmirror <= len(times) - 1, "Nmirror can't be > Ntimes"
+
         # iterate over keys
         for k in keys:
             # check overwrite
@@ -837,10 +839,10 @@ class ReflectionFitter(FRFilter):
                 Npix = Y.shape[0]
 
                 # mirror X axis
-                if gp_mirror:
-                    lower = X[:Npix//2][::-1]
-                    upper = X[-Npix//2:][::-1]
-                    X = np.concatenate([-(lower-lower.min())[:-1] + X.min(), X, -(upper-upper.max())[1:] + X.max()], axis=0)
+                if Nmirror > 0:
+                    lower = X[:Nmirror + 1][::-1]
+                    upper = X[-Nmirror - 1:][::-1]
+                    X = np.concatenate([-(lower - lower.min())[:-1] + X.min(), X, -(upper - upper.max())[1:] + X.max()], axis=0)
 
                 # do real and imag separately
                 ypredict = []
@@ -851,10 +853,10 @@ class ReflectionFitter(FRFilter):
                     y = (y - ymed) / ymad
 
                     # mirror signal
-                    if gp_mirror:
-                        lower = y[:Npix//2][::-1]
-                        lower = -(lower-lower[-1:]) + lower[-1:]
-                        upper = y[-Npix//2:][::-1]
+                    if Nmirror > 0:
+                        lower = y[:Nmirror + 1][::-1]
+                        lower = -(lower - lower[-1:]) + lower[-1:]
+                        upper = y[-Nmirror - 1:][::-1]
                         upper = -(upper - upper[:1]) + upper[:1]
                         y = np.concatenate([lower[:-1], y, upper[1:]], axis=0)
 

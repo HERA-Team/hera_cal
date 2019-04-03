@@ -359,6 +359,10 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', kernels=kernel, optimizer=None)
         nt.assert_equal(RF.umode_interp[bl].shape, (60, 20))
 
+        # test mirror
+        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, Nmirror=10, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=1e-10, optimizer=None)
+        nt.assert_equal(RF.umode_interp[bl].shape, (60, 20))
+
         # exceptions
         nt.assert_raises(ValueError, RF.interp_u, RF.umodes, RF.times, overwrite=True, mode='foo')
 
