@@ -1064,10 +1064,10 @@ class TestRedcalAndAbscal(unittest.TestCase):
         up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
         np.random.seed(21)
-        antpos = build_hex_array(2)
+        antpos = build_hex_array(3)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
-        freqs = np.linspace(1e8, 2e8, 1024)
+        freqs = np.linspace(1e8, 2e8, 256)
         gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)))
         fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
         fc_offsets = {ant: 2 * np.pi * np.random.rand() for ant in gains.keys()}  # random phase offsets
