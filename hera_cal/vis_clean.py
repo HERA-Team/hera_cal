@@ -632,6 +632,26 @@ class VisClean(object):
         if not inplace:
             return flags
 
+    def zeropad_data(self, data, xaxis=None, zeropad=0, axis=-1, undo=False):
+        """
+        Iterate through DataContainer "data" and zeropad it inplace.
+
+        Args:
+            data : DataContainer to zero-pad (or un-pad)
+            xaxis : x axis for data (e.g. times or freqs) to also pad out
+                by relevant amount. If axis is an iterable, xaxis must also be
+            zeropad : int, number of bins on each axis to pad
+                If axis is an iterable, zeropad must be also be
+            axis : int, axis to zeropad. Can be a tuple
+                to zeropad mutliple axes.
+            undo : If True, remove zero-padded edges along axis.
+        """
+        # iterate over data
+        for k in data:
+            data[k], xax = zeropad_array(data[k], xaxis=xaxis, zeropad=zeropad, axis=axis, undo=undo)
+
+        data.xaxis = xax
+
     def _get_delta_bin(self, dtime=None, dnu=None):
         """
         Get visibility time & frequency spacing.

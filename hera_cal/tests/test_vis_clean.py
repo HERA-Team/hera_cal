@@ -206,6 +206,11 @@ class Test_VisClean(unittest.TestCase):
         nt.assert_equal(d.shape, (60, 64))
         nt.assert_equal((xax[0].size, xax[1].size), (60, 64))
 
+        # test VisClean method
+        V.zeropad_data(V.data, xaxis=V.times, zeropad=10, axis=0, undo=False)
+        nt.assert_equal(V.data[(24, 25, 'xx')].shape, (80, 64))
+        nt.assert_equal(V.data.xaxis.size, 80)
+
         # exceptions
         nt.assert_raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'xx')], axis=(0, 1), zeropad=0)
         nt.assert_raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'xx')], axis=(0, 1), zeropad=(0,))
