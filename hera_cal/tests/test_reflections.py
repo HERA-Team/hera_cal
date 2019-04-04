@@ -17,6 +17,7 @@ from pyuvdata import UVCal, UVData
 import operator
 import functools
 from sklearn.gaussian_process import kernels
+import hera_sim as hs
 
 from hera_cal import io
 from hera_cal import reflections
@@ -25,113 +26,90 @@ from hera_cal.data import DATA_PATH
 from hera_cal import apply_cal
 
 
-def simulate_reflections(camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_ants=None,
+def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_ants=None,
                          xamp=1e-2, xdelay=300, xphase=0, add_xtalk=False):
     # create a simulated dataset
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA'))
+    if uvd is None:
+        uvd = UVData()
+        uvd.read(os.path.join(DATA_PATH, 'PyGSM_Jy_downselect.uvh5'))
+    else:
+        if isinstance(uvd, (str, np.str)):
+            _uvd = UVData()
+            _uvd.read(uvd)
+            uvd = _uvd
+        elif isinstance(uvd, UVData):
+            uvd = deepcopy(uvd)
 
-    sim_uvd = uvd.select(inplace=False, antenna_nums=[37, 38, 39])
-    sim_uvd.flag_array[:] = False
-    sim_uvd.nsample_array[:] = 1.0
-    sim_uvd.integration_time[:] = 10.0
-    freqs = np.unique(sim_uvd.freq_array)
-    Nbls = len(np.unique(sim_uvd.baseline_array))
+    # TODO: use hera_sim.simulate.Simulator
+    freqs = np.unique(uvd.freq_array)
+    Nbls = len(np.unique(uvd.baseline_array))
 
     if cable_ants is None:
-        cable_ants = sim_uvd.antenna_numbers
-
-    def fringe(freqs, bl_len=15.0, theta=np.pi / 3):
-        """ theta is radians from horizon, bl_len is meters """
-        tau = bl_len * np.cos(theta) / 2.99e8
-        return np.exp(-2j * np.pi * tau * freqs)
+        cable_ants = uvd.antenna_numbers
 
     def noise(n, sig):
         return stats.norm.rvs(0, sig / np.sqrt(2), n) + 1j * stats.norm.rvs(0, sig / np.sqrt(2), n)
 
-    def beam(theta):
-        """ theta is radians from horizon """
-        return np.exp(-((theta - np.pi / 2) / (np.pi / 6))**2)
-
     np.random.seed(0)
-    s1 = np.sqrt(np.ones((sim_uvd.Ntimes, sim_uvd.Nfreqs), dtype=np.complex128) * 100 * (freqs / 150e6)**-1)
-    theta = np.pi / 2  # pointing
-    dnu = np.median(np.diff(freqs))
-
-    # get source fluxes and positions
-    src_theta = stats.norm.rvs(0, np.pi / 6, 2)
-    src_amp = stats.norm.rvs(1, 0.1, 2)
 
     # get antenna vectors
-    antpos, ants = sim_uvd.get_ENU_antpos(center=True, pick_data_ants=True)
+    antpos, ants = uvd.get_ENU_antpos(center=True, pick_data_ants=True)
     antpos_d = dict(zip(ants, antpos))
     ant_dist = dict(zip(ants, map(np.linalg.norm, antpos)))
 
-    # get antenna signals and noise
-    n = dict([(a, noise(s1.size, 1e-8).reshape(s1.shape)) for a in ants])  # set noise to essentially zero
-    s = dict([(a, s1 * functools.reduce(operator.add, [src_a * fringe(freqs, bl_len=ant_dist[a], theta=theta + src_t) * beam(theta + src_t) for src_t, src_a in zip(src_theta, src_amp)])) for a in ants])
+    # get autocorr
+    autocorr = uvd.get_data(23, 23, 'xx')
+
+    # form cable gains
+    if add_cable:
+        if isinstance(cdelay, (float, np.float, int, np.int)):
+            cdelay = [cdelay]
+        if isinstance(camp, (float, np.float, int, np.int)):
+            camp = [camp]
+        if isinstance(cphase, (float, np.float, int, np.int)):
+            cphase = [cphase]
+
+        cable_gains = dict([(k, np.ones((uvd.Ntimes, uvd.Nfreqs), dtype=np.complex)) for k in uvd.antenna_numbers])
+
+        for ca, cd, cp in zip(camp, cdelay, cphase):
+            cg = hs.sigchain.gen_reflection_gains(freqs / 1e9, cable_ants, amp=[ca for a in cable_ants],
+                                                  dly=[cd for a in cable_ants], phs=[cp for a in cable_ants])
+            for k in cg:
+                cable_gains[k] *= cg[k]
 
     # iterate over bls
-    for i, bl in enumerate(np.unique(sim_uvd.baseline_array)):
-        bl_inds = np.where(sim_uvd.baseline_array == bl)[0]
-        antpair = sim_uvd.baseline_to_antnums(bl)
+    for i, bl in enumerate(np.unique(uvd.baseline_array)):
+        bl_inds = np.where(uvd.baseline_array == bl)[0]
+        antpair = uvd.baseline_to_antnums(bl)
 
-        # get point source signal
-        s1, s2 = s[antpair[0]], s[antpair[1]]
+        # add xtalk
+        if add_xtalk:
+            if antpair[0] != antpair[1]:
+                # add xtalk to both pos and neg delays
+                xt = hs.sigchain.gen_cross_coupling_xtalk(freqs / 1e9, autocorr, amp=xamp, dly=xdelay, phs=xphase)
+                xt += hs.sigchain.gen_cross_coupling_xtalk(freqs / 1e9, autocorr, amp=xamp, dly=xdelay, phs=xphase, conj=True)
+                uvd.data_array[bl_inds, 0] += xt[:, :, None]
 
-        # get noise
-        n1, n2 = n[antpair[0]], n[antpair[1]]
-
-        # form signal chain quantities
-        v1 = s1 + n1
-        v2 = s2 + n2
-
-        # add a cable reflection term s1 * eps_11
+        # add a cable reflection term eps_11
         if add_cable:
-            if isinstance(cdelay, (float, np.float, int, np.int)):
-                cdelay = [cdelay]
-            if isinstance(camp, (float, np.float, int, np.int)):
-                camp = [camp]
-            if isinstance(cphase, (float, np.float, int, np.int)):
-                cphase = [cphase]
+            gain = cable_gains[antpair[0]] * np.conj(cable_gains[antpair[1]])
+            uvd.data_array[bl_inds, 0] *= gain[:, :, None]
 
-            g = 1.0
-            for ca, cd, cp in zip(camp, cdelay, cphase):
-                g *= 1 + ca * np.exp(2j * np.pi * freqs * cd * 1e-9 + cp * 1j)
-            if antpair[0] in cable_ants:
-                v1 *= g
-            if antpair[1] in cable_ants:
-                v2 *= g
+    # get fourier modes
+    uvd.frates = np.fft.fftshift(np.fft.fftfreq(uvd.Ntimes, np.diff(np.unique(uvd.time_array))[0] * 24 * 3600)) * 1e3
+    uvd.delays = np.fft.fftshift(np.fft.fftfreq(uvd.Nfreqs, uvd.channel_width)) * 1e9
 
-        # form visibility
-        V = v1 * v2.conj()
-        sim_uvd.data_array[bl_inds, 0, :, 0] = V
-
-    # add xtalk
-    if add_xtalk:
-        antpairs = sim_uvd.get_antpairs()
-        for ap in antpairs:
-            if ap[0] == ap[1]:
-                continue
-            blt_inds = sim_uvd.antpair2ind(ap, ordered=False)
-            blt_inds1 = sim_uvd.antpair2ind((ap[0], ap[0]), ordered=False)
-            blt_inds2 = sim_uvd.antpair2ind((ap[1], ap[1]), ordered=False)
-            e = (xamp * np.exp(2j * np.pi * freqs * xdelay * 1e-9 + xphase * 1j))
-            a1 = sim_uvd.data_array[blt_inds1] * e[:, None]
-            a2 = sim_uvd.data_array[blt_inds2] * e[:, None]
-            sim_uvd.data_array[blt_inds] += a1 + a2.conj()
-
-    return sim_uvd
+    return uvd
 
 
 class Test_ReflectionFitter_Cables(unittest.TestCase):
     uvd_clean = simulate_reflections(add_cable=False, add_xtalk=False)
-    uvd = simulate_reflections(cdelay=155.0, cphase=2.0, camp=1e-2, add_cable=True, cable_ants=[37], add_xtalk=False)
+    uvd = simulate_reflections(cdelay=155.0, cphase=2.0, camp=1e-2, add_cable=True, cable_ants=[23], add_xtalk=False)
 
     def test_model_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
-        bl_k = (37, 37, 'xx')
-        g_k = (37, 'Jxx')
+        bl_k = (23, 23, 'xx')
+        g_k = (23, 'Jxx')
         RF.model_auto_reflections(RF.data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 155.0, atol=1e-1).all())
@@ -160,7 +138,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
 
         # try optimization on time-averaged data
-        RF.timeavg_data(RF.data, RF.times, RF.lsts, 200, keys=None, overwrite=True)
+        RF.timeavg_data(RF.data, RF.times, RF.lsts, 5000, keys=None, overwrite=True)
         RF.model_auto_reflections(RF.avg_data, (100, 200), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
         output = RF.refine_auto_reflections(RF.avg_data, (125, 175), RF.ref_amp, RF.ref_dly, RF.ref_phs,
@@ -193,14 +171,14 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         nt.assert_true(np.isclose(np.ravel(list(ref_phs.values())), 2 * np.pi - 2.0, atol=1e-2).all())
 
         # test flagged data
-        _bl = (38, 38, 'xx')
+        _bl = (23, 24, 'xx')
         RF.model_auto_reflections(RF.avg_data, (-200, -100), keys=[_bl], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
         RF.avg_flags[_bl][:] = True
         output = RF.refine_auto_reflections(RF.avg_data, (-175, -125), RF.ref_amp, RF.ref_dly, RF.ref_phs,
                                             keys=[_bl], window='blackmanharris', zeropad=100, clean_flags=RF.avg_flags,
                                             maxiter=100, method='BFGS', tol=1e-5)
-        nt.assert_false(output[3][(38, 'Jxx')].any())
+        nt.assert_false(output[3][(24, 'Jxx')].any())
 
         # non-even Nfreqs
         RF = reflections.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:-1], inplace=False))
@@ -211,7 +189,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
 
         # exceptions
-        nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (1000, 2000), window='none', overwrite=True, edgecut_low=edgecut)
+        nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (4000, 5000), window='none', overwrite=True, edgecut_low=edgecut)
 
         # try clear
         RF.clear(exclude=['data'])
@@ -225,20 +203,20 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
-        bl_k = (37, 37, 'xx')
+        bl_k = (23, 23, 'xx')
         RF.model_auto_reflections(RF.data, (100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True)
-        nt.assert_equal(uvc.Ntimes, 60)
-        np.testing.assert_array_equal(len(uvc.ant_array), 47)
+        nt.assert_equal(uvc.Ntimes, 100)
+        np.testing.assert_array_equal(len(uvc.ant_array), 65)
         nt.assert_true(np.isclose(uvc.gain_array[0], 1.0).all())
-        nt.assert_false(np.isclose(uvc.gain_array[uvc.ant_array.tolist().index(37)], 1.0).all())
+        nt.assert_false(np.isclose(uvc.gain_array[uvc.ant_array.tolist().index(23)], 1.0).all())
 
         # test w/ input calfits
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits="./ex.calfits", overwrite=True)
         RF.model_auto_reflections(RF.data, (100, 200), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
-        nt.assert_equal(uvc.Ntimes, 60)
-        np.testing.assert_array_equal(len(uvc.ant_array), 47)
+        nt.assert_equal(uvc.Ntimes, 100)
+        np.testing.assert_array_equal(len(uvc.ant_array), 65)
 
         # test data is corrected by taking ratio w/ clean data
         data = deepcopy(RF.data)
@@ -260,7 +238,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
     def test_auto_reflection_run(self):
         # most of the code tests have been done above, this is just to ensure this wrapper function runs
-        uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[2.0, 2.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[37], add_xtalk=False)
+        uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[2.0, 2.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[23], add_xtalk=False)
         reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, window='blackmanharris', write_npz=True, overwrite=True, ref_sig_cut=1.0)
         nt.assert_true(os.path.exists("./ex.calfits"))
         nt.assert_true(os.path.exists("./ex.npz"))
@@ -268,7 +246,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         # ensure gains have two humps at 150 and 250 ns
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
-        aind = np.argmin(np.abs(uvc.ant_array - 37))
+        aind = np.argmin(np.abs(uvc.ant_array - 23))
         g = uvc.gain_array[aind, 0, :, :, 0].T
         delays = np.fft.fftfreq(uvc.Nfreqs, np.diff(uvc.freq_array[0])[0]) * 1e9
         gfft = np.mean(np.abs(np.fft.fft(g, axis=1)), axis=0)
@@ -281,16 +259,17 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
 
 class Test_ReflectionFitter_XTalk(unittest.TestCase):
-    uvd = simulate_reflections(add_cable=False, xdelay=250.0, xphase=0, xamp=.1, add_xtalk=True)
+    # simulate
+    uvd = simulate_reflections(add_cable=False, xdelay=250.0, xphase=0, xamp=1e-3, add_xtalk=True)
 
     def test_svd_functions(self):
         RF = reflections.ReflectionFitter(self.uvd)
-        bl = (37, 38, 'xx')
+        bl = (23, 24, 'xx')
 
         # fft data
         RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
 
-        # test sv_decomposition
+        # test sv_decomposition on positive side
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='pos')
         RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl], overwrite=True)
 
@@ -303,65 +282,83 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         nt.assert_true(RF.svals[bl][0] / RF.svals[bl][1] > 20)
 
         # assert its a good fit to the xtalk at 250 ns delay
-        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 57].real**2))
-        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 57].real)**2))
+        ind = np.argmin(np.abs(RF.delays - 250))
+        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real**2))
+        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real)**2))
         # says that residual is small compared to original array
         nt.assert_true(Rrms / Vrms < 0.01)
 
-        # increment the model 
+        # increment the model
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='neg')
         RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True)
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=True)
-        # says that the two are similar to each other, which they should be
-        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 7].real**2))
-        nt.assert_true(np.sqrt(np.mean((RF.dfft[bl][:, 7].real - RF.pcomp_model[bl][:, 7].real)**2)) / Vrms < .01)
+        # says that the two are similar to each other at -250 ns, which they should be
+        ind = np.argmin(np.abs(RF.delays - -250))
+        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real**2))
+        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real)**2))
+        # says that residual is small compared to original array
+        nt.assert_true(Rrms / Vrms < 0.01)
 
-        # overwrite the model
+        # overwrite the model with double side modeling
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='both')
         RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True)
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=2, increment=False, overwrite=True)
         # says the residual is small compared to original array
-        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, 57].real**2))
-        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, 57].real - RF.pcomp_model[bl][:, 57].real)**2))
+        ind = np.argmin(np.abs(RF.delays - 250))
+        Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real**2))
+        Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real)**2))
         nt.assert_true(Rrms / Vrms < 0.01)
 
         # subtract the model from the data
         RF.subtract_model(RF.data, overwrite=True)
-        nt.assert_equal(RF.pcomp_model_fft[bl].shape, (60, 64))
-        nt.assert_equal(RF.data_pcmodel_resid[bl].shape, (60, 64))
+        nt.assert_equal(RF.pcomp_model_fft[bl].shape, (100, 128))
+        nt.assert_equal(RF.data_pcmodel_resid[bl].shape, (100, 128))
 
     def test_misc_svd_funcs(self):
+        # setup RF object
         RF = reflections.ReflectionFitter(self.uvd)
-        bl = (37, 38, 'xx')
-        abl1 = (37, 37, 'xx')
-        abl2 = (38, 38, 'xx')
-        # time average the data
-        RF.timeavg_data(RF.data, RF.times, RF.lsts, 30, rephase=False)
+        bl = (23, 24, 'xx')
 
         # fft data
-        RF.fft_data(data=RF.avg_data, window='blackmanharris', overwrite=True)
+        RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
 
         # sv decomp
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='both')
-        RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl, abl1, abl2], overwrite=True)
+        RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl], overwrite=True, Nkeep=10)
+        nt.assert_equal(RF.umodes[bl].shape, (100, 10))
+        nt.assert_equal(RF.vmodes[bl].shape, (10, 128))
 
         # test interpolation of umodes
-        RF.interp_u(RF.umodes, RF.avg_times, overwrite=True, mode='gpr', gp_frate=0.4, gp_nl=1e-10, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (20, 20))
+        gp_frate = 0.2
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, mode='gpr', gp_frate=gp_frate, gp_nl=1e-10,
+                    optimizer=None, Nmirror=50)
+        nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
 
-        # assert broadcasting to full time resolution worked
-        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=1e-10, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (60, 20))
+        # get fft and assert a good match within gp_frate
+        RF.fft_data(data=RF.umodes, assign='ufft', window='blackmanharris', ax='time', overwrite=True)
+        RF.fft_data(data=RF.umode_interp, assign='uifft', window='blackmanharris', ax='time', overwrite=True)
+        select = np.abs(RF.frates) < gp_frate
+        nt.assert_true(np.mean(np.abs(RF.umodes[bl][select, 0] - RF.umode_interp[bl][select, 0]) / np.abs(RF.umodes[bl][select, 0])) < 0.01)
+        # plt.plot(RF.frates, np.abs(RF.ufft[bl][:, 0]));plt.plot(RF.frates, np.abs(RF.uifft[bl][:, 0]));plt.yscale('log')
 
         # assert custom kernel works
         gp_len = 1.0 / (0.4 * 1e-3) / (24.0 * 3600.0)
         kernel = 1**2 * kernels.RBF(gp_len) + kernels.WhiteKernel(1e-10)
-        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', kernels=kernel, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (60, 20))
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, mode='gpr', kernels=kernel, optimizer=None)
+        nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
 
         # test mirror
-        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, Nmirror=10, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=1e-10, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (60, 20))
+        RF.interp_u(RF.umodes, RF.times, full_times=RF.times, Nmirror=10, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=1e-10, optimizer=None)
+        nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
+
+        # assert broadcasting to full time resolution worked
+        RF.timeavg_data(RF.data, RF.times, RF.lsts, 500, overwrite=True, verbose=False)
+        RF.fft_data(data=RF.avg_data, window='blackmanharris', overwrite=True, assign='adfft', dtime=np.diff(RF.avg_times)[0] * 24 * 3600)
+        wgts = RF.svd_weights(RF.adfft, RF.delays, min_dly=200, max_dly=300, side='both')
+        RF.sv_decomp(RF.adfft, wgts=wgts, keys=[bl], overwrite=True)
+        nt.assert_equal(RF.umodes[bl].shape, (34, 34))
+        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=1e-10, optimizer=None)
+        nt.assert_equal(RF.umode_interp[bl].shape, (100, 34))
 
         # exceptions
         nt.assert_raises(ValueError, RF.interp_u, RF.umodes, RF.times, overwrite=True, mode='foo')

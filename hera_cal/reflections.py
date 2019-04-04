@@ -464,8 +464,8 @@ class ReflectionFitter(FRFilter):
                 to set as *lower* delay boundary of window (opposite of CLEANing convention)
             standoff : float, buffer [nanosec] added to baseline horizon
                 for lower delay boundary of window
-            min_dly : float, minimum delay of window
-            max_dly : float, maximum delay of window
+            min_dly : float, minimum |delay| of window
+            max_dly : float, maximum |delay| of window
             side : str, options=['pos', 'neg', 'both']
                 Specifies window as spanning only positive delays, only negative delays or both.
  
@@ -747,9 +747,9 @@ class ReflectionFitter(FRFilter):
             umodes : DataContainer
                 u-mode container to interpolate, see self.sv_decomp()
             times : 1D array
-                Holds time_array of input umodes.
+                Holds time_array of input umodes in Julian Date.
             full_times : 1D array
-                time_array to interpolate onto. Default is times.
+                Full time_array to interpolate onto in Julian Date. Default is times.
             uflags : DataContainer
                 Object to pull target u flags from. Default is None.
             keys : list of tuples
@@ -844,32 +844,30 @@ class ReflectionFitter(FRFilter):
                     upper = X[-Nmirror - 1:][::-1]
                     X = np.concatenate([-(lower - lower.min())[:-1] + X.min(), X, -(upper - upper.max())[1:] + X.max()], axis=0)
 
-                # try real and imag together
                 # do real and imag separately
-                # ypredict = []
-                # for y in [Y.real, Y.imag]:
-                # shift by median and normalize by MAD
-                y = Y
-                ymed = np.median(y, axis=0, keepdims=True)
-                ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
-                y = (y - ymed) / ymad
+                ypredict = []
+                for y in [Y.real, Y.imag]:
+                    # shift by median and normalize by MAD
+                    ymed = np.median(y, axis=0, keepdims=True)
+                    ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
+                    y = (y - ymed) / ymad
 
-                # mirror signal
-                if Nmirror > 0:
-                    lower = y[:Nmirror + 1][::-1]
-                    lower = -(lower - lower[-1:]) + lower[-1:]
-                    upper = y[-Nmirror - 1:][::-1]
-                    upper = -(upper - upper[:1]) + upper[:1]
-                    y = np.concatenate([lower[:-1], y, upper[1:]], axis=0)
+                    # mirror signal
+                    if Nmirror > 0:
+                        lower = y[:Nmirror + 1][::-1]
+                        lower = -(lower - lower[-1:]) + lower[-1:]
+                        upper = y[-Nmirror - 1:][::-1]
+                        upper = -(upper - upper[:1]) + upper[:1]
+                        y = np.concatenate([lower[:-1], y, upper[1:]], axis=0)
 
-                # fit gp and predict
-                GP.fit(X, y)
-                ypred = GP.predict(Xpredict)
+                    # fit gp and predict
+                    GP.fit(X, y)
+                    ypred = GP.predict(Xpredict)
 
-                #    # append
-                #    ypredict.append(ypred * ymad + ymed)
+                    # append
+                    ypredict.append(ypred * ymad + ymed)
 
-                self.umode_interp[k] = ypred # ypredict[0] + 1j * ypredict[1]
+                self.umode_interp[k] = ypredict[0] + 1j * ypredict[1]
 
             else:
                 raise ValueError("didn't recognize interp mode {}".format(mode))
