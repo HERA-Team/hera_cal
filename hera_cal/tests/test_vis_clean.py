@@ -163,15 +163,51 @@ class Test_VisClean(unittest.TestCase):
         V = VisClean(fname, filetype='miriad')
         V.read()
 
-        # zeropad
+        # fft
         V.fft_data(zeropad=30, ifft=False)
         nt.assert_equal(V.dfft[(24, 25, 'xx')].shape, (60, 124))
-        d = vis_clean.zeropad_array(V.dfft[(24, 25, 'xx')], zeropad=30, axis=-1, undo=True)
-        nt.assert_equal(d.shape, (60, 64))
 
         # exceptions
         nt.assert_raises(ValueError, V.fft_data, ax='foo')
         nt.assert_raises(ValueError, V.fft_data, keys=[])
         nt.assert_raises(ValueError, V.fft_data, keys=[('foo')])
-        nt.assert_raises(ValueError, vis_clean.zeropad_array, d, axis=(0, 1), zeropad=0)
-        nt.assert_raises(ValueError, vis_clean.zeropad_array, d, axis=(0, 1), zeropad=(0,))
+
+    def test_zeropad(self):
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.uvXRAA")
+        V = VisClean(fname, filetype='miriad')
+        V.read()
+
+        # test basic zeropad
+        d, _ = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=30, axis=-1, undo=False)
+        nt.assert_equal(d.shape, (60, 124))
+        nt.assert_true(np.isclose(d[:, :30], 0.0).all())
+        nt.assert_true(np.isclose(d[:, -30:], 0.0).all())        
+        d, _ = vis_clean.zeropad_array(d, zeropad=30, axis=-1, undo=True)
+        nt.assert_equal(d.shape, (60, 64))
+
+        # test zeropad with bool
+        f, _ = vis_clean.zeropad_array(V.flags[(24, 25, 'xx')], zeropad=30, axis=-1, undo=False)
+        nt.assert_equal(f.shape, (60, 124))
+        nt.assert_true(np.all(f[:, :30] == True))
+        nt.assert_true(np.all(f[:, -30:] == True))
+
+        # zeropad with xaxis
+        d, xax = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=30, axis=0, xaxis=V.times)
+        nt.assert_almost_equal(np.median(np.diff(V.times)), np.median(np.diff(xax)))
+        nt.assert_equal(len(xax), 120)
+
+        # 2d zeropad
+        d, xax = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=(30, 10), axis=(0, 1), xaxis=[V.times, V.freqs])
+        nt.assert_equal(d.shape, (120, 84))
+        nt.assert_equal((xax[0].size, xax[1].size), (120, 84))
+
+        # un-pad with xax
+        d, xax = vis_clean.zeropad_array(d, zeropad=(30, 10), axis=(0, 1), xaxis=xax, undo=True)
+        nt.assert_equal(d.shape, (60, 64))
+        nt.assert_equal((xax[0].size, xax[1].size), (60, 64))
+
+        # exceptions
+        nt.assert_raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'xx')], axis=(0, 1), zeropad=0)
+        nt.assert_raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'xx')], axis=(0, 1), zeropad=(0,))
+
+

@@ -392,8 +392,8 @@ class VisClean(object):
             if ax == 'freq':
                 # zeropad the data
                 if zeropad > 0:
-                    d = zeropad_array(d, zeropad, axis=1)
-                    w = zeropad_array(w, zeropad, axis=1)
+                    d, _ = zeropad_array(d, zeropad, axis=1)
+                    w, _ = zeropad_array(w, zeropad, axis=1)
 
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
@@ -402,8 +402,8 @@ class VisClean(object):
 
                 # un-zeropad the data
                 if zeropad > 0:
-                    mdl = zeropad_array(mdl, zeropad, axis=1, undo=True)
-                    res = zeropad_array(res, zeropad, axis=1, undo=True)
+                    mdl, _ = zeropad_array(mdl, zeropad, axis=1, undo=True)
+                    res, _ = zeropad_array(res, zeropad, axis=1, undo=True)
 
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
@@ -420,8 +420,8 @@ class VisClean(object):
 
                 # zeropad the data
                 if zeropad > 0:
-                    d = zeropad_array(d, zeropad, axis=0)
-                    w = zeropad_array(w, zeropad, axis=0)
+                    d, _ = zeropad_array(d, zeropad, axis=0)
+                    w, _ = zeropad_array(w, zeropad, axis=0)
 
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
@@ -429,8 +429,8 @@ class VisClean(object):
 
                 # un-zeropad the data
                 if zeropad > 0:
-                    mdl = zeropad_array(mdl, zeropad, axis=0, undo=True)
-                    res = zeropad_array(res, zeropad, axis=0, undo=True)
+                    mdl, _ = zeropad_array(mdl, zeropad, axis=0, undo=True)
+                    res, _ = zeropad_array(res, zeropad, axis=0, undo=True)
 
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
@@ -443,8 +443,8 @@ class VisClean(object):
                 if w.max() > 0.0:
                     # zeropad the data
                     if zeropad > 0:
-                        d = zeropad_array(d, zeropad, axis=(0, 1))
-                        w = zeropad_array(w, zeropad, axis=(0, 1))
+                        d, _ = zeropad_array(d, zeropad, axis=(0, 1))
+                        w, _ = zeropad_array(w, zeropad, axis=(0, 1))
 
                     mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
@@ -453,8 +453,8 @@ class VisClean(object):
 
                     # un-zeropad the data
                     if zeropad > 0:
-                        mdl = zeropad_array(mdl, zeropad, axis=(0, 1), undo=True)
-                        res = zeropad_array(res, zeropad, axis=(0, 1), undo=True)
+                        mdl, _ = zeropad_array(mdl, zeropad, axis=(0, 1), undo=True)
+                        res, _ = zeropad_array(res, zeropad, axis=(0, 1), undo=True)
  
                     flgs = np.zeros_like(mdl, dtype=np.bool)
                 else:
@@ -635,18 +635,22 @@ class VisClean(object):
     def _get_delta_bin(self, dtime=None, dnu=None):
         """
         Get visibility time & frequency spacing.
+
         Defaults are self.dtime and self.dnu
+
         Args:
             dtime : float, time spacing [sec]
             dnu : float, frequency spacing [Hz]
+
         Returns:
             (dtime, dnu)
-
         """
         if dtime is None:
             dtime = self.dtime
+
         if dnu is None:
             dnu = self.dnu
+
         return dtime, dnu
 
 
@@ -733,7 +737,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         data *= win
 
         # zeropad
-        data = zeropad_array(data, zeropad[i], axis=ax)
+        data, _ = zeropad_array(data, zeropad[i], axis=ax)
 
         # ifftshift
         if ifftshift:
@@ -758,23 +762,36 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     return data, fourier_axes
 
 
-def zeropad_array(data, zeropad=0, axis=-1, undo=False):
+def zeropad_array(data, xaxis=None, zeropad=0, axis=-1, undo=False):
     """
     Zeropad data ndarray along axis.
 
+    If data is float, int or complex, zeropads with zero.
+    If data is boolean, zeropads with True.
+
     Args:
         data : ndarray to zero-pad (or un-pad)
+        xaxis : x axis for data (e.g. times or freqs) to also pad out
+            by relevant amount. If axis is an iterable, xaxis must also be
         zeropad : int, number of bins on each axis to pad
-            If axis is a tuple, zeropad must be a tuple
+            If axis is an iterable, zeropad must be also be
         axis : int, axis to zeropad. Can be a tuple
             to zeropad mutliple axes.
         undo : If True, remove zero-padded edges along axis.
 
     Returns:
-        zdata : zero-padded (or un-padded) data
+        padded_data : zero-padded (or un-padded) data
+        padded_xaxis : xaxis array(s) padded (or un-padded) if xaxis is fed, otherwise None
     """
+    # get data type
+    bool_dtype = np.issubdtype(data.dtype, np.bool_)
+
+    # type checks
     if not isinstance(axis, (list, tuple, np.ndarray)):
         axis = [axis]
+    xaxis = copy.deepcopy(xaxis)
+    if not isinstance(xaxis, (list, tuple)):
+        xaxis = [xaxis]
     if not isinstance(zeropad, (list, tuple, np.ndarray)):
         zeropad = [zeropad]
     if isinstance(axis, (list, tuple, np.ndarray)) and not isinstance(zeropad, (list, tuple, np.ndarray)):
@@ -788,10 +805,24 @@ def zeropad_array(data, zeropad=0, axis=-1, undo=False):
                 s = [slice(None) for j in range(data.ndim)]
                 s[ax] = slice(zeropad[i], -zeropad[i])
                 data = data[s]
+                if xaxis[i] is not None:
+                    xaxis[i] = xaxis[i][s[i]]
+
             else:
                 zshape = list(data.shape)
                 zshape[ax] = zeropad[i]
-                z = np.zeros(zshape)
+                if bool_dtype:
+                    z = np.ones(zshape, np.bool)
+                else:
+                    z = np.zeros(zshape, data.dtype)
                 data = np.concatenate([z, data, z], axis=ax)
+                if xaxis[i] is not None:
+                    dx = np.median(np.diff(xaxis[i]))
+                    Nbin = xaxis[i].size
+                    z = np.arange(1, zeropad[i] + 1)
+                    xaxis[i] = np.concatenate([xaxis[i][0] - z[::-1] * dx, xaxis[i], xaxis[i][-1] + z * dx])
 
-    return data
+    if len(xaxis) == 1:
+        xaxis = xaxis[0]
+
+    return data, xaxis
