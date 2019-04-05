@@ -206,6 +206,8 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
 
     # least noisy phases in other antennas when its the reference antenna (after taking out delays)
     def narrow_refant_candidates(candidates):
+    '''Helper function for comparing refant candidates to another another looking for the one with the 
+    least noisy phases in other antennas when its the reference antenna (after taking out delays)'''
         median_angle_noise_as_refant = {}
         for ref in candidates:
             refant_rephasor = np.abs(gains[ref] * rephasors[ref]) / (gains[ref] * rephasors[ref])
