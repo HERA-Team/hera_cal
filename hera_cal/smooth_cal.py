@@ -204,28 +204,32 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         (dlys, phis) = utils.fft_dly(gains[ant], df, wgts, medfilt=False, f0=freqs[0])
         rephasors[ant] = np.exp(-2.0j * np.pi * np.mean(dlys), freqs - 1.0j * np.mean(phis))
 
+    # least noisy phases in other antennas when its the reference antenna (after taking out delays)
+    def narrow_refant_candidates(candidates):
+        median_angle_noise_as_refant = {}
+        for ref in candidates:
+            refant_rephasor = np.abs(gains[ref] * rephasors[ref]) / (gains[ref] * rephasors[ref])
+            angle_noise = [interleaved_noise_variance_estimate(np.angle(gains[ant] * rephasors[ant] * refant_rephasor),
+                           kernel=[[-.5, 1, -.5]])[~(flags[ant] | flags[ref])] for ant in candidates]
+            median_angle_noise_as_refant[ref] = np.median(angle_noise)
+        return sorted(median_angle_noise_as_refant, key=median_angle_noise_as_refant.__getitem__)[0]
+
     # loop over pols (if per_pol)
     refant = {}
     pols = set([ant[1] for ant in gains])
     for pol in (pols if per_pol else [pols]):
         # pick antennas with the mininum number of flags
         flags_per_ant = {ant: np.sum(f) for ant, f in flags.items() if ant[1] in pol}
-        refant_candidates = [ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))]
-        
-        # assess each candidate reference antenna: estimate the median noise of the angle after rephasing to a given refant
-        # (after taking out delays from both to minimize phase wraps) and return least noisy refant
-        median_angle_noise_as_refeant = {}
-        for ref in refant_candidates:
-            refant_rephasor = np.abs(gains[ref] * rephasors[ref]) / (gains[ref] * rephasors[ref])
-            median_phase_noise = [np.median(interleaved_noise_variance_estimate(
-                                  np.angle(gains[ant] * rephasors[ant] * refant_rephasor))[~(flags[ant] | flags[ref])])
-                                  for ant in gains.keys() if (not np.all(flags[ant] | flags[ref]) and (ant[1] in pol))]
-            median_angle_noise_as_refeant[ref] = np.median(median_phase_noise)
-        
+        refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items() 
+                                    if nflags == np.min(list(flags_per_ant.values()))])
+        while len(refant_candidates) > 1:  # loop over groups of 3 (the smallest, non-trivial size)
+            refant_candidates = [narrow_refant_candidates(candidates) for candidates in [refant_candidates[i:i + 3]
+                                 for i in range(0, len(refant_candidates), 3)]]
         if not per_pol:
-            return sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
+            return refant_candidates[0]
         else:
-            refant[pol] = sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
+            refant[pol] = refant_candidates[0]
+
     return refant
 
 
@@ -275,6 +279,7 @@ class CalibrationSmoother():
         self.verbose = verbose
 
         # load calibration files
+        utils.echo('Now loading calibration files...', verbose=self.verbose)
         self.cals = calfits_list
         gains, cal_flags, self.cal_freqs, self.cal_times = odict(), odict(), odict(), odict()
         for cal in self.cals:
@@ -285,6 +290,7 @@ class CalibrationSmoother():
         # load flag files
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
+            utils.echo('Now loading external flag files...', verbose=self.verbose)
             self.ext_flags, self.flag_freqs, self.flag_times = odict(), odict(), odict()
             for ff in self.flag_files:
                 flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
@@ -294,6 +300,7 @@ class CalibrationSmoother():
 
         # set up time grid (note that it is offset by .5 dt so that times always map to the same
         # index, even if they are slightly different between the flag_files and the calfits files)
+        utils.echo('Now setting up gain and flag grids...', verbose=self.verbose)
         all_file_times = sorted(np.array([t for times in self.cal_times.values() for t in times]))
         self.dt = np.median(np.diff(all_file_times))
         self.time_grid = np.arange(all_file_times[0] + self.dt / 2.0, all_file_times[-1] + self.dt, self.dt)
@@ -324,7 +331,7 @@ class CalibrationSmoother():
         if pick_refant:
             utils.echo('Now picking reference antenna(s)...', verbose=self.verbose)
             self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
-            utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0] + ' selected for ' + pol + '.') 
+            utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.' 
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
             self.rephase_to_refant()
 
