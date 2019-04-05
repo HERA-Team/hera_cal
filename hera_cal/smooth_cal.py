@@ -204,7 +204,6 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         (dlys, phis) = utils.fft_dly(gains[ant], df, wgts, medfilt=False, f0=freqs[0])
         rephasors[ant] = np.exp(-2.0j * np.pi * np.mean(dlys), freqs - 1.0j * np.mean(phis))
 
-    # least noisy phases in other antennas when its the reference antenna (after taking out delays)
     def narrow_refant_candidates(candidates):
     '''Helper function for comparing refant candidates to another another looking for the one with the 
     least noisy phases in other antennas when its the reference antenna (after taking out delays)'''
