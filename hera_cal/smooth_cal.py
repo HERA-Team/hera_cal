@@ -224,6 +224,7 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items() 
                                     if nflags == np.min(list(flags_per_ant.values()))])
         while len(refant_candidates) > 1:  # loop over groups of 3 (the smallest, non-trivial size)
+            # compare phase noise imparted by reference antenna candidates on two other reference antenna candidates
             refant_candidates = [narrow_refant_candidates(candidates) for candidates in [refant_candidates[i:i + 3]
                                  for i in range(0, len(refant_candidates), 3)]]
         if not per_pol:
