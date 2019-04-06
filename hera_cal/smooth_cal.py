@@ -448,7 +448,7 @@ class CalibrationSmoother():
         # loop over all antennas that are not completely flagged and filter
         for ant, gain_grid in self.filtered_gain_grids.items():
             if not np.all(self.filtered_flag_grids[ant]):
-                utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
+                utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
                 wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
