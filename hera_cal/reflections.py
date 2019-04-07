@@ -265,7 +265,7 @@ class ReflectionFitter(FRFilter):
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
-                                fix_dly=False, fix_phs=False, peak_min=False,
+                                fix_dly=False, fix_phs=False,
                                 edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
                                 skip_frac=0.9, maxiter=50, method='BFGS', tol=1e-2, verbose=True):
         """
@@ -278,8 +278,9 @@ class ReflectionFitter(FRFilter):
         Args:
             clean_data : 2D ndarray of shape (Ntimes, Nfreqs)
                 CLEANed auto-correlation visibility data
-            dly_range : len-2 tuple
-                Range in delay [ns] to search for reflections
+            dly_range : float or len-2 tuple of floats
+                Additive delay [ns] offset (-, +) from ref_dly to create range of
+                delays used in objective minimization
             ref_amp : dictionary
                 Initial guess for reflection amplitude
             ref_dly : dictionary
@@ -299,9 +300,6 @@ class ReflectionFitter(FRFilter):
                 If True, fix delay solution at ref_dly
             fix_phs : bool
                 If True, fix delay solution at ref_phs
-            peak_min : bool
-                If True, narrow the delay range used for minimimzing the objective function to be
-                only for delays next to the peak value of the initial guess.
             method : str
                 Optimization algorithm. See scipy.optimize.minimize for options
             skip_frac : float in range [0, 1]
@@ -345,9 +343,8 @@ class ReflectionFitter(FRFilter):
         # iterate over keys
         for k in keys:
             # get gain key
-            if dly_range[0] >= 0:
-                rkey = (k[0], uvutils.parse_jpolstr(k[2][0]))
-            else:
+            rkey = (k[0], uvutils.parse_jpolstr(k[2][0]))
+            if rkey not in ref_amp:
                 rkey = (k[1], uvutils.parse_jpolstr(k[2][1]))
 
             # Ensure they exist in reflection dictionaries
@@ -363,7 +360,7 @@ class ReflectionFitter(FRFilter):
             (opt_amp, opt_dly, opt_phs,
              opt_info) = reflection_param_minimization(clean_data[k], dly_range, self.freqs, amp, dly, phs, fix_amp=fix_amp, fix_dly=fix_dly,
                                                        fix_phs=fix_phs, clean_model=clean_model[k], clean_flags=clean_flags[k],
-                                                       method=method, tol=tol, maxiter=maxiter, window=window, alpha=alpha, peak_min=peak_min,
+                                                       method=method, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
                                                        edgecut_hi=edgecut_hi, edgecut_low=edgecut_low, zeropad=zeropad)
 
             amp = np.reshape(opt_amp, amp.shape)
@@ -1118,15 +1115,16 @@ def fit_reflection_params(clean_resid, dly_range, freqs, clean_flags=None, clean
 def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0,
                                   fix_amp=False, fix_dly=False, fix_phs=False, clean_model=None,
                                   clean_flags=None, method='BFGS', skip_frac=0.9,
-                                  tol=1e-4, maxiter=100, peak_min=False, **fft_kwargs):
+                                  tol=1e-4, maxiter=100, **fft_kwargs):
     """
     Perturb reflection parameters to minimize residual in data.
 
     Args:
         clean_data : 2D ndarray of shape (Ntimes, Nfreqs)
             CLEANed auto-correlation visibility data
-        dly_range : len-2 tuple
-            Range in delay [ns] to search for reflections
+        dly_range : float or len-2 tuple of floats
+            Additive delay [ns] offset (-, +) from dly0 to create range of
+            delays used in objective minimization
         freqs : 1D array of shape (Nfreqs,)
             Frequency array [Hz]
         amp0 : float or ndarray
@@ -1142,7 +1140,7 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
         fix_phs : bool
             If True, fix delay solution at phs0
         clean_model : 2D ndarray of shape (Ntimes, Nfreqs)
-            CLEAN model with CLEAN boundary out to at most min(|dly_range|)
+            CLEAN model with CLEAN boundary out to at most min(|dly0 - dly_range|)
             If reflection is well-isolated from foreground power, this is not necessary.
         clean_flags : 2D ndarray boolean of shape (Ntimes, Nfreqs)
             CLEAN flags for FFT
@@ -1154,9 +1152,6 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
             Optimization stopping tolerance
         maxiter : int
             Optimization max iterations
-        peak_min : bool
-            If True, narrow the delay range used for minimimzing the objective function to be
-            only for delays next to the peak value of the initial guess.
         fft_kwargs : kwargs to pass to vis_clean.fft_data
             except for axis, wgts, ifft, fftshift
 
@@ -1212,7 +1207,7 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
         dfft, delays = vis_clean.fft_data(cal_data - clean_model, dnu, axis=-1, wgts=clean_wgts, ifft=False, fftshift=True, **fft_kwargs)
         delays *= 1e9
 
-        select = (delays > dly_range[0]) & (delays < dly_range[1])
+        select = (delays >= dly_range[0]) & (delays <= dly_range[1])
         metric = np.median(np.max(np.abs(dfft[:, select]), axis=1), axis=0)
 
         return metric
@@ -1230,11 +1225,10 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
     if fix_amp and fix_dly and fix_phs:
         raise ValueError("Can't hold amp, dly and phs fixed")
 
-    # check peak_min
-    if peak_min:
-        delays = np.fft.fftshift(np.fft.fftfreq(freqs.size, np.diff(freqs)[0]))
-        dly_range = (delays[np.argmin(np.abs(delays - np.median(dly0)))] - 1.0,
-                     delays[np.argmin(np.abs(delays - np.median(dly0)))] + 1.0)
+    # create delay range
+    if isinstance(dly_range, (int, np.int, float, np.float)):
+        dly_range = [dly_range, dly_range]
+    dly_range = (np.nanmedian(dly0) - np.abs(dly_range[0]), np.nanmedian(dly0) + np.abs(dly_range[1]))
 
     # iterate over times
     amp, dly, phs, info = [], [], [], []

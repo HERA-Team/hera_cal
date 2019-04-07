@@ -746,7 +746,6 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     data *= wgts
 
     # iterate over axis
-    print(zeropad)
     for i, ax in enumerate(axis):
         Nbins = data.shape[ax]
 
