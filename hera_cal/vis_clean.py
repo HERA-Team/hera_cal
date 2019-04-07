@@ -392,8 +392,8 @@ class VisClean(object):
             if ax == 'freq':
                 # zeropad the data
                 if zeropad > 0:
-                    d, _ = zeropad_array(d, zeropad, axis=1)
-                    w, _ = zeropad_array(w, zeropad, axis=1)
+                    d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
+                    w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
 
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
@@ -402,8 +402,8 @@ class VisClean(object):
 
                 # un-zeropad the data
                 if zeropad > 0:
-                    mdl, _ = zeropad_array(mdl, zeropad, axis=1, undo=True)
-                    res, _ = zeropad_array(res, zeropad, axis=1, undo=True)
+                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
+                    res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
 
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
@@ -420,8 +420,8 @@ class VisClean(object):
 
                 # zeropad the data
                 if zeropad > 0:
-                    d, _ = zeropad_array(d, zeropad, axis=0)
-                    w, _ = zeropad_array(w, zeropad, axis=0)
+                    d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
+                    w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
 
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
@@ -429,8 +429,8 @@ class VisClean(object):
 
                 # un-zeropad the data
                 if zeropad > 0:
-                    mdl, _ = zeropad_array(mdl, zeropad, axis=0, undo=True)
-                    res, _ = zeropad_array(res, zeropad, axis=0, undo=True)
+                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
+                    res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
 
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
@@ -443,8 +443,8 @@ class VisClean(object):
                 if w.max() > 0.0:
                     # zeropad the data
                     if zeropad > 0:
-                        d, _ = zeropad_array(d, zeropad, axis=(0, 1))
-                        w, _ = zeropad_array(w, zeropad, axis=(0, 1))
+                        d, _ = zeropad_array(d, zeropad=zeropad, axis=(0, 1))
+                        w, _ = zeropad_array(w, zeropad=zeropad, axis=(0, 1))
 
                     mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
@@ -453,8 +453,8 @@ class VisClean(object):
 
                     # un-zeropad the data
                     if zeropad > 0:
-                        mdl, _ = zeropad_array(mdl, zeropad, axis=(0, 1), undo=True)
-                        res, _ = zeropad_array(res, zeropad, axis=(0, 1), undo=True)
+                        mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=(0, 1), undo=True)
+                        res, _ = zeropad_array(res, zeropad=zeropad, axis=(0, 1), undo=True)
  
                     flgs = np.zeros_like(mdl, dtype=np.bool)
                 else:
@@ -746,6 +746,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     data *= wgts
 
     # iterate over axis
+    print(zeropad)
     for i, ax in enumerate(axis):
         Nbins = data.shape[ax]
 
@@ -757,7 +758,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         data *= win
 
         # zeropad
-        data, _ = zeropad_array(data, zeropad[i], axis=ax)
+        data, _ = zeropad_array(data, zeropad=zeropad[i], axis=ax)
 
         # ifftshift
         if ifftshift:

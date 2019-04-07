@@ -264,8 +264,8 @@ class ReflectionFitter(FRFilter):
                     self.ref_gains[k] = np.ones((self.Ntimes, self.Nfreqs), dtype=np.complex)
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs,
-                                keys=None, clean_flags=None, clean_model=None,
-                                fix_amp=False, fix_dly=False, fix_phs=False,
+                                keys=None, clean_flags=None, clean_model=None, fix_amp=False,
+                                fix_dly=False, fix_phs=False, peak_min=False,
                                 edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
                                 skip_frac=0.9, maxiter=50, method='BFGS', tol=1e-2, verbose=True):
         """
@@ -299,6 +299,9 @@ class ReflectionFitter(FRFilter):
                 If True, fix delay solution at ref_dly
             fix_phs : bool
                 If True, fix delay solution at ref_phs
+            peak_min : bool
+                If True, narrow the delay range used for minimimzing the objective function to be
+                only for delays next to the peak value of the initial guess.
             method : str
                 Optimization algorithm. See scipy.optimize.minimize for options
             skip_frac : float in range [0, 1]
@@ -360,7 +363,7 @@ class ReflectionFitter(FRFilter):
             (opt_amp, opt_dly, opt_phs,
              opt_info) = reflection_param_minimization(clean_data[k], dly_range, self.freqs, amp, dly, phs, fix_amp=fix_amp, fix_dly=fix_dly,
                                                        fix_phs=fix_phs, clean_model=clean_model[k], clean_flags=clean_flags[k],
-                                                       method=method, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
+                                                       method=method, tol=tol, maxiter=maxiter, window=window, alpha=alpha, peak_min=peak_min,
                                                        edgecut_hi=edgecut_hi, edgecut_low=edgecut_low, zeropad=zeropad)
 
             amp = np.reshape(opt_amp, amp.shape)
@@ -736,12 +739,11 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
-                 mode='gpr', gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None,
-                 Nmirror=0, optimizer=None, verbose=True):
+                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, verbose=True):
         """
-        Interpolate u modes along time, inserts into self.umode_interp.
+        Interpolate u modes along time with a Gaussian Process.
 
-        Currently only a Gaussian Process interpolator is supported.
+        Inserts results into self.umode_interp.
 
         Args:
             umodes : DataContainer
@@ -756,8 +758,6 @@ class ReflectionFitter(FRFilter):
                 List of baseline-pol DataContainer tuples to operate on.
             overwrite : bool
                 If True, overwrite output data if it exists.
-            mode : str
-                Interpolation mode. Options=['gpr']
             gp_frate : float or DataContainer
                 Fringe rate [mHz] associated with GP length scale in time.
                 If fed as a DataContainer, must have keys matching umodes.
@@ -771,8 +771,6 @@ class ReflectionFitter(FRFilter):
             kernels : dictionary or sklearn.gaussian_process.kernels.Kernel object
                 Dictionary containing sklearn kernels for each key in umodes.
                 If kernels is fed, then gp_frate, gp_frate_degrade gp_var and gp_nl are ignored.
-            Nmirror : int
-                Number of time bins to mirror about top and bottom half of umode. Default is None.
             optimizer : str
                 GPR optimizer for kernel hyperparameter solution. Default is no regression.
                 See sklearn.gaussian_process.GaussianProcessRegressor for details.
@@ -808,8 +806,6 @@ class ReflectionFitter(FRFilter):
         if kernels is not None and isinstance(kernels, gp.kernels.Kernel):
             kernels = dict([(k, kernels) for k in keys])
 
-        assert Nmirror <= len(times) - 1, "Nmirror can't be > Ntimes"
-
         # iterate over keys
         for k in keys:
             # check overwrite
@@ -817,60 +813,42 @@ class ReflectionFitter(FRFilter):
                 echo("{} in umode_interp and overwrite == False, skipping...".format(k), verbose=verbose)
                 continue
 
-            if mode == 'gpr':
-                # get kernel
-                if kernels is not None:
-                    kernel = kernels[k]
-                else:
-                    # get length scale in time
-                    gp_f = np.max([0.0, gp_frate[k] * (1 - gp_frate_degrade)])
-                    gp_len = 1.0 / (gp_f * 1e-3) / (24.0 * 3600.0)
-
-                    # setup GP kernel
-                    kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
-
-                # setup GP
-                GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False)
-
-                # setup regression data: get unflagged data
-                select = ~np.max(uflags[k], axis=1)
-                X = times[select, None] - Xmean
-                Y = umodes[k][select, :].copy()
-                Npix = Y.shape[0]
-
-                # mirror X axis
-                if Nmirror > 0:
-                    lower = X[:Nmirror + 1][::-1]
-                    upper = X[-Nmirror - 1:][::-1]
-                    X = np.concatenate([-(lower - lower.min())[:-1] + X.min(), X, -(upper - upper.max())[1:] + X.max()], axis=0)
-
-                # do real and imag separately
-                ypredict = []
-                for y in [Y.real, Y.imag]:
-                    # shift by median and normalize by MAD
-                    ymed = np.median(y, axis=0, keepdims=True)
-                    ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
-                    y = (y - ymed) / ymad
-
-                    # mirror signal
-                    if Nmirror > 0:
-                        lower = y[:Nmirror + 1][::-1]
-                        lower = -(lower - lower[-1:]) + lower[-1:]
-                        upper = y[-Nmirror - 1:][::-1]
-                        upper = -(upper - upper[:1]) + upper[:1]
-                        y = np.concatenate([lower[:-1], y, upper[1:]], axis=0)
-
-                    # fit gp and predict
-                    GP.fit(X, y)
-                    ypred = GP.predict(Xpredict)
-
-                    # append
-                    ypredict.append(ypred * ymad + ymed)
-
-                self.umode_interp[k] = ypredict[0] + 1j * ypredict[1]
-
+            # get kernel
+            if kernels is not None:
+                kernel = kernels[k]
             else:
-                raise ValueError("didn't recognize interp mode {}".format(mode))
+                # get length scale in time
+                gp_f = np.max([0.0, gp_frate[k] * (1 - gp_frate_degrade)])
+                gp_len = 1.0 / (gp_f * 1e-3) / (24.0 * 3600.0)
+
+                # setup GP kernel
+                kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
+
+            # setup GP
+            GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False)
+
+            # setup regression data: get unflagged data
+            select = ~np.max(uflags[k], axis=1)
+            X = times[select, None] - Xmean
+            Y = umodes[k][select, :].copy()
+            Npix = Y.shape[0]
+
+            # do real and imag separately
+            ypredict = []
+            for y in [Y.real, Y.imag]:
+                # shift by median and normalize by MAD
+                ymed = np.median(y, axis=0, keepdims=True)
+                ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
+                y = (y - ymed) / ymad**2
+
+                # fit gp and predict
+                GP.fit(X, y)
+                ypred = GP.predict(Xpredict)
+
+                # append
+                ypredict.append(ypred * ymad**2 + ymed)
+
+            self.umode_interp[k] = ypredict[0] + 1j * ypredict[1]
 
 
 def form_gains(epsilon):
@@ -1140,7 +1118,7 @@ def fit_reflection_params(clean_resid, dly_range, freqs, clean_flags=None, clean
 def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0,
                                   fix_amp=False, fix_dly=False, fix_phs=False, clean_model=None,
                                   clean_flags=None, method='BFGS', skip_frac=0.9,
-                                  tol=1e-4, maxiter=100, **fft_kwargs):
+                                  tol=1e-4, maxiter=100, peak_min=False, **fft_kwargs):
     """
     Perturb reflection parameters to minimize residual in data.
 
@@ -1176,6 +1154,9 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
             Optimization stopping tolerance
         maxiter : int
             Optimization max iterations
+        peak_min : bool
+            If True, narrow the delay range used for minimimzing the objective function to be
+            only for delays next to the peak value of the initial guess.
         fft_kwargs : kwargs to pass to vis_clean.fft_data
             except for axis, wgts, ifft, fftshift
 
@@ -1248,6 +1229,12 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
     edge_flags[np.argmin(edge_flags):-np.argmin(edge_flags[::-1])] = False
     if fix_amp and fix_dly and fix_phs:
         raise ValueError("Can't hold amp, dly and phs fixed")
+
+    # check peak_min
+    if peak_min:
+        delays = np.fft.fftshift(np.fft.fftfreq(freqs.size, np.diff(freqs)[0]))
+        dly_range = (delays[np.argmin(np.abs(delays - np.median(dly0)))] - 1.0,
+                     delays[np.argmin(np.abs(delays - np.median(dly0)))] + 1.0)
 
     # iterate over times
     amp, dly, phs, info = [], [], [], []

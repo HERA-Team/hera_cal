@@ -330,8 +330,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
 
         # test interpolation of umodes
         gp_frate = 0.2
-        RF.interp_u(RF.umodes, RF.times, overwrite=True, mode='gpr', gp_frate=gp_frate, gp_nl=1e-10,
-                    optimizer=None, Nmirror=50)
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None)
         nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
 
         # get fft and assert a good match within gp_frate
@@ -344,11 +343,11 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         # assert custom kernel works
         gp_len = 1.0 / (0.4 * 1e-3) / (24.0 * 3600.0)
         kernel = 1**2 * kernels.RBF(gp_len) + kernels.WhiteKernel(1e-10)
-        RF.interp_u(RF.umodes, RF.times, overwrite=True, mode='gpr', kernels=kernel, optimizer=None)
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, kernels=kernel, optimizer=None)
         nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
 
         # test mirror
-        RF.interp_u(RF.umodes, RF.times, full_times=RF.times, Nmirror=10, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=1e-10, optimizer=None)
+        RF.interp_u(RF.umodes, RF.times, full_times=RF.times, overwrite=True, gp_frate=1.0, gp_nl=1e-10, optimizer=None)
         nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
 
         # assert broadcasting to full time resolution worked
@@ -357,11 +356,8 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         wgts = RF.svd_weights(RF.adfft, RF.delays, min_dly=200, max_dly=300, side='both')
         RF.sv_decomp(RF.adfft, wgts=wgts, keys=[bl], overwrite=True)
         nt.assert_equal(RF.umodes[bl].shape, (34, 34))
-        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, mode='gpr', gp_frate=1.0, gp_nl=1e-10, optimizer=None)
+        RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, gp_frate=1.0, gp_nl=1e-10, optimizer=None)
         nt.assert_equal(RF.umode_interp[bl].shape, (100, 34))
-
-        # exceptions
-        nt.assert_raises(ValueError, RF.interp_u, RF.umodes, RF.times, overwrite=True, mode='foo')
 
 
 if __name__ == '__main__':
