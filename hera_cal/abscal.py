@@ -880,6 +880,71 @@ def merge_gains(gains):
     return merged_gains
 
 
+def apply_gains(data, gains, gain_convention='divide'):
+    """
+    Apply gain solutions to data. If a requested antenna doesn't
+    exist in gains, eliminate associated visibilities from new_data.
+
+    Parameters:
+    -----------
+    data : type=DataContainer, holds complex visibility data.
+        keys are antenna-pair tuples + pol tuples.
+        values are ndarray complex visibility data.
+
+    gains : type=dictionary, holds complex, per-antenna gain data.
+            keys are antenna integer + gain pol tuples, Ex. (1, 'x').
+            values are complex ndarrays
+            with shape matching data's visibility ndarrays
+            Optionally, can be a tuple holding multiple gains dictionaries
+            that will all be multiplied together.
+
+    gain_convention : type=str, options=['multiply', 'divide']
+                      option to multiply in or divide in gain solutions to data.
+
+    Output:
+    -------
+    new_data : type=DataContainer, data with gains applied
+
+    Notes:
+    ------
+    gain convention == 'divide' means that the gains need to be divided out of the observation
+    to get the model/truth, i.e. that V_obs = gi gj* V_true. 'multiply' means that the gains need
+    to be multiplied into the observation to get the model/truth, i.e. that V_true = gi gj* V_obs.
+    In Abscal (as on omnical and redcal), the standard gain convention is 'divide'.
+    """
+    # form new dictionary
+    new_data = odict()
+
+    # get keys
+    keys = list(data.keys())
+
+    # merge gains if multiple gain dictionaries fed
+    if isinstance(gains, list) or isinstance(gains, tuple) or isinstance(gains, np.ndarray):
+        gains = merge_gains(gains)
+
+    # iterate over keys:
+    for i, k in enumerate(keys):
+        # get gain keys
+        g1 = (k[0], split_pol(k[-1])[0])
+        g2 = (k[1], split_pol(k[-1])[1])
+
+        # ensure keys are in gains
+        if g1 not in gains or g2 not in gains:
+            continue
+
+        # form visbility gain product
+        vis_gain = gains[g1] * np.conj(gains[g2])
+
+        # apply to data
+        if gain_convention == "multiply":
+            new_data[k] = data[k] * vis_gain
+
+        elif gain_convention == "divide":
+            new_data[k] = data[k] / vis_gain
+
+    return DataContainer(new_data)
+
+
 def data_key_to_array_axis(data, key_index, array_index=-1, avg_dict=None):
     """
     move an index of data.keys() into the data axes
