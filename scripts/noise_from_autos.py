@@ -11,5 +11,5 @@ import sys
 
 a = noise.noise_std_argparser()
 args = a.parse_args()
-autos.write_per_antenna_noise_std_from_autos(args.infile, args.outfile, calfile=args.calfile, gain_convention=args.gain_convention, 
+noise.write_per_antenna_noise_std_from_autos(args.infile, args.outfile, calfile=args.calfile, gain_convention=args.gain_convention, 
                                              add_to_history=' '.join(sys.argv), clobber=args.clobber)
