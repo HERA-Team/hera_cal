@@ -1266,7 +1266,7 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
 
 def auto_reflection_argparser():
     a = argparse.ArgumentParser(description='Model auto (e.g. cable) reflections from auto-correlation visibilities')
-    a.add_argument("clean_data", nargs='*', type=str, help="CLEAN data file paths to run auto reflection modeling on")
+    a.add_argument("data", nargs='*', type=str, help="data file paths to CLEAN and run auto reflection modeling on")
     a.add_argument("--output_fname", type=str, help="Full path to the output .calfits file")
     a.add_argument("--dly_ranges", type=str, nargs='*', help='list of 2 comma-delimited delays (ex. 200,300 400,500) specifying delay range to search for reflections [nanosec].')
     a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of datafile")
