@@ -853,14 +853,16 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
     return fit
 
 
-def merge_gains(gains):
+def merge_gains(gains, merge_shared=True):
     """
-    merge multiple gain dictionaries. will merge only shared keys.
+    Merge a list of gain dictionaries.
 
     Parameters:
     -----------
     gains : type=list or tuple, series of gain dictionaries with (ant, pol) keys
             and complex ndarrays as values.
+    merge_shared : type=bool, If True merge only shared keys, eliminating the others.
+        Otherwise, merge all keys.
 
     Output:
     -------
@@ -868,19 +870,22 @@ def merge_gains(gains):
                    structure as input gain dictionaries.
     """
     # get shared keys
-    keys = sorted(reduce(operator.and_, list(map(lambda g: set(g.keys()), gains))))
+    if merge_shared:
+        keys = sorted(set(reduce(operator.and_, [set(g.keys()) for g in gains])))
+    else:
+        keys = sorted(set(reduce(operator.add, [g.keys() for g in gains])))
 
     # form merged_gains dict
     merged_gains = odict()
 
     # iterate over keys
     for i, k in enumerate(keys):
-        merged_gains[k] = reduce(operator.mul, list(map(lambda g: g.get(k, 1.0), gains)))
+        merged_gains[k] = reduce(operator.mul, [g.get(k, 1.0) for g in gains])
 
     return merged_gains
 
 
-def apply_gains(data, gains, gain_convention='divide'):
+def apply_gains(data, gains, gain_convention='divide', rm_missing=True):
     """
     Apply gain solutions to data. If a requested antenna doesn't
     exist in gains, eliminate associated visibilities from new_data.
@@ -900,6 +905,10 @@ def apply_gains(data, gains, gain_convention='divide'):
 
     gain_convention : type=str, options=['multiply', 'divide']
                       option to multiply in or divide in gain solutions to data.
+
+    rm_missing : type=bool
+        If True, remove keys from data if any of their corresponding antenna keys
+        are missing in gains. Otherwise, keep keys in data with unapplied gains.
 
     Output:
     -------
@@ -930,7 +939,11 @@ def apply_gains(data, gains, gain_convention='divide'):
 
         # ensure keys are in gains
         if g1 not in gains or g2 not in gains:
-            continue
+            if rm_missing:
+                continue
+            else:
+                new_data[k] = copy.copy(data[k])
+                continue
 
         # form visbility gain product
         vis_gain = gains[g1] * np.conj(gains[g2])

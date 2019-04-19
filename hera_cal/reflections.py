@@ -150,7 +150,15 @@ class ReflectionFitter(FRFilter):
             obj = getattr(self, key)
             if isinstance(getattr(self, key), DataContainer):
                 setattr(self, key, DataContainer({}))
-            if "ref_" in key:
+        self._clear_ref()
+
+    def _clear_ref(self):
+        """
+        Clear all reflection dictionaries
+        """
+        keys = list(self.__dict__.keys())
+        for key in keys:
+            if key[:4] == "ref_":
                 setattr(self, key, {})
 
     def model_auto_reflections(self, clean_resid, dly_range, clean_flags=None, clean_data=None, 
@@ -253,7 +261,7 @@ class ReflectionFitter(FRFilter):
             self.ref_phs[rkey] = phs
             self.ref_dly[rkey] = dly
             self.ref_significance[rkey] = sig
-            self.ref_flags[rkey] = np.min(clean_flags[k], axis=1, keepdims=True)
+            self.ref_flags[rkey] = np.min(clean_flags[k], axis=1, keepdims=True) + sig < ref_sig_cut
 
         # form gains
         self.ref_gains = form_gains(self.ref_eps)
@@ -261,9 +269,9 @@ class ReflectionFitter(FRFilter):
             for p in self.pols:
                 k = (a, uvutils.parse_jpolstr(p)) 
                 if k not in self.ref_gains:
-                    self.ref_gains[k] = np.ones((self.Ntimes, self.Nfreqs), dtype=np.complex)
+                    self.ref_gains[k] = np.ones(clean_resid.values()[0].shape, dtype=np.complex)
 
-    def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs,
+    def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs, ref_flags=None,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
                                 fix_dly=False, fix_phs=False,
                                 edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
@@ -287,6 +295,8 @@ class ReflectionFitter(FRFilter):
                 Initial guess for reflection delay [ns]
             ref_phs : dictionary
                 Initial guess for reflection phase [radian]
+            ref_flags : dictionary
+                Flags for reflection fits.
             keys : list
                 List of ant-pair-pol tuples in clean_data to iterate over
             clean_model : 2D ndarray of shape (Ntimes, Nfreqs)
@@ -352,6 +362,12 @@ class ReflectionFitter(FRFilter):
                 echo("...{} doesn't exist in ref_* dictionaries, skipping".format(rkey), verbose=verbose)
                 continue
 
+            # get reflection flags
+            if ref_flags is None:
+                rflags = False
+            else:
+                rflags = ref_flags[rkey]
+
             # run optimization
             echo("...Optimizing reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)
             amp = ref_amp[rkey]
@@ -359,7 +375,7 @@ class ReflectionFitter(FRFilter):
             phs = ref_phs[rkey]
             (opt_amp, opt_dly, opt_phs,
              opt_info) = reflection_param_minimization(clean_data[k], dly_range, self.freqs, amp, dly, phs, fix_amp=fix_amp, fix_dly=fix_dly,
-                                                       fix_phs=fix_phs, clean_model=clean_model[k], clean_flags=clean_flags[k],
+                                                       fix_phs=fix_phs, clean_model=clean_model[k], clean_flags=clean_flags[k] + rflags,
                                                        method=method, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
                                                        edgecut_hi=edgecut_hi, edgecut_low=edgecut_low, zeropad=zeropad)
 
@@ -1013,6 +1029,9 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=250, iff
     inds, bin_shifts, _, _ = interp_peak(-residuals.T, method='quadratic')
     ref_phs = (phases[inds] + bin_shifts * np.median(np.diff(phases)))[:, None] % (2 * np.pi)
 
+    # fill nans
+    ref_phs[np.isnan(ref_phs)] = 0.0
+
     # get reflection phase by interpolation: this didn't work well in practice
     # when the reflection delay wasn't directly centered in a sampled delay bin,
     # but leaving it here for possible future use b/c it should be much faster.
@@ -1196,6 +1215,10 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
             x = x[1:]
         if phs is None:
             phs = x[0]
+
+        # return large number if amp is negative
+        if amp < 0:
+            return 1e10
 
         # construct reflection and divide gain from data
         eps = construct_reflection(freqs, amp, dly / 1e9, phs, real=False)

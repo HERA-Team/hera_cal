@@ -127,9 +127,16 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
 
-        # try a high ref_sig cut
+        # try a high ref_sig cut: assert ref_flags are True
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',
                                   ref_sig_cut=100, overwrite=True)
+        nt.assert_true(RF.ref_flags[g_k].all())
+
+        # assert refinement uses flags to return zeros
+        output = RF.refine_auto_reflections(RF.data, (20, 80), RF.ref_amp, RF.ref_dly, RF.ref_phs,
+                                            keys=[bl_k], ref_flags=RF.ref_flags, window='blackmanharris', zeropad=100,
+                                            maxiter=100, method='Nelder-Mead', tol=1e-5)
+        nt.assert_true(np.isclose(output[0][g_k], 0.0).all())
 
         # try filtering the visibilities
         RF.vis_clean(data=RF.data, ax='freq', min_dly=100, overwrite=True, window='blackmanharris', alpha=0.1, tol=1e-8, keys=[bl_k])
