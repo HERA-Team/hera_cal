@@ -164,7 +164,7 @@ class ReflectionFitter(FRFilter):
     def model_auto_reflections(self, clean_resid, dly_range, clean_flags=None, clean_data=None, 
                                keys=None, edgecut_low=0, edgecut_hi=0, window='none',
                                alpha=0.1, zeropad=0, fthin=10, Nphs=300, ref_sig_cut=2.0,
-                               overwrite=False, verbose=True):
+                               overwrite=False, reject_edges=True, verbose=True):
         """
         Model reflections in (ideally RFI-free) autocorrelation data.
 
@@ -205,6 +205,8 @@ class ReflectionFitter(FRFilter):
                 Number of samples from 0 - 2pi to estimate reflection phase at.
             ref_sig_cut : float
                 if max reflection significance is not above this, do not record solution
+            reject_edges : bool
+                If True, reject peak solutions at delay edges
             overwrite : bool
                 if True, overwrite dictionaries
 
@@ -251,7 +253,7 @@ class ReflectionFitter(FRFilter):
             amp, dly, phs, sig = fit_reflection_params(clean_resid[k], dly_range, self.freqs, clean_flags=clean_flags[k],
                                                        clean_data=cd, window=window, alpha=alpha, edgecut_low=edgecut_low,
                                                        edgecut_hi=edgecut_hi, zeropad=zeropad, ref_sig_cut=ref_sig_cut,
-                                                       fthin=fthin, Nphs=Nphs)
+                                                       fthin=fthin, Nphs=Nphs, reject_edges=reject_edges)
 
             # form epsilon term
             eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=False)
@@ -918,7 +920,7 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
     return eps
 
 
-def fit_reflection_delay(rfft, dly_range, dlys, dfft=None, return_peak=False):
+def fit_reflection_delay(rfft, dly_range, dlys, dfft=None, return_peak=False, reject_edges=True):
     """
     Take FFT'd data and fit for peak delay and amplitude.
 
@@ -937,7 +939,9 @@ def fit_reflection_delay(rfft, dly_range, dlys, dfft=None, return_peak=False):
             the main foreground amplitude and delay, if rfft is
             FFT of clean residual.
         return_peak : bool
-            if True, just return peak delay and amplitude and rfft
+            If True, just return peak delay and amplitude and rfft
+        reject_edges : bool
+            If True, reject peak solutions at delay edges
 
     Returns:
         if return_peak:
@@ -963,7 +967,7 @@ def fit_reflection_delay(rfft, dly_range, dlys, dfft=None, return_peak=False):
 
     # locate peak bin within dly range
     abs_rfft = np.abs(rfft)[:, select]
-    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_rfft, method='quadratic')
+    ref_dly_inds, bin_shifts, _, ref_peaks = interp_peak(abs_rfft, method='quadratic', reject_edges=reject_edges)
     ref_dly_inds += select.min()
     ref_dlys = dlys[ref_dly_inds, None] + bin_shifts[:, None] * np.median(np.abs(np.diff(dlys)))
     ref_peaks = ref_peaks[:, None]
@@ -1026,7 +1030,8 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=250, iff
     residuals = np.sum((filt[None, :, ::fthin].real - cosines.real)**2, axis=-1)
 
     # quadratic interp of residuals to get reflection phase
-    inds, bin_shifts, _, _ = interp_peak(-residuals.T, method='quadratic')
+    resids = -residuals.T
+    inds, bin_shifts, _, _ = interp_peak(resids + np.abs(resids.min()), method='quadratic')
     ref_phs = (phases[inds] + bin_shifts * np.median(np.diff(phases)))[:, None] % (2 * np.pi)
 
     # fill nans
@@ -1048,7 +1053,7 @@ def fit_reflection_phase(dfft, dly_range, dlys, ref_dlys, fthin=1, Nphs=250, iff
 
 
 def fit_reflection_params(clean_resid, dly_range, freqs, clean_flags=None, clean_data=None, window=None, alpha=0.2,
-                          edgecut_low=0, edgecut_hi=0, zeropad=0, ref_sig_cut=2.0, fthin=1, Nphs=250):
+                          edgecut_low=0, edgecut_hi=0, zeropad=0, ref_sig_cut=2.0, fthin=1, Nphs=250, reject_edges=True):
     """
     Fit for reflection parameters in CLEANed visibility.
 
@@ -1086,6 +1091,8 @@ def fit_reflection_params(clean_resid, dly_range, freqs, clean_flags=None, clean
         ref_sig_cut : float
             if max reflection significance is not above this, do not record solution,
             where significance is defined as max(fft) / median(fft).
+        reject_edges : bool
+            If True, reject peak solutions at delay edges
 
     Returns:
         amp : reflection amplitude
@@ -1112,7 +1119,7 @@ def fit_reflection_params(clean_resid, dly_range, freqs, clean_flags=None, clean
     assert rfft.shape == dfft.shape, "clean_resid and clean_data must have same shape"
 
     # fit for reflection delays and amplitude
-    amp, dly, inds, sig = fit_reflection_delay(rfft, dly_range, delays, dfft=dfft, return_peak=False)
+    amp, dly, inds, sig = fit_reflection_delay(rfft, dly_range, delays, dfft=dfft, return_peak=False, reject_edges=reject_edges)
 
     # make significance cut
     if np.max(sig) < ref_sig_cut:

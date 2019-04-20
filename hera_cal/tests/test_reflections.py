@@ -121,7 +121,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         # try with a small edgecut
         RF = reflections.ReflectionFitter(self.uvd)
         edgecut = 5
-        RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',
+        RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris', reject_edges=False,
                                   zeropad=100, overwrite=True, fthin=1, verbose=True, edgecut_low=edgecut, edgecut_hi=edgecut)
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1).all())
         nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
@@ -199,6 +199,22 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
         # exceptions
         nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (4000, 5000), window='none', overwrite=True, edgecut_low=edgecut)
+
+        # test reject_edges: choose dly_range to make max on edge
+        # assert peak is in main lobe, not at actual reflection delay
+        RF.model_auto_reflections(RF.data, (25, 300), keys=[bl_k], window='blackmanharris', reject_edges=False,
+                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+        nt.assert_true(np.all(np.ravel(list(RF.ref_dly.values())) < 200))
+        # assert peak is correct
+        RF.model_auto_reflections(RF.data, (25, 300), keys=[bl_k], window='blackmanharris', reject_edges=True,
+                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
+        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
+        # assert valley results in flagged reflection (make sure zeropad=0)
+        RF.model_auto_reflections(RF.data, (25, 225), keys=[bl_k], window='blackmanharris', reject_edges=True,
+                                  zeropad=0, overwrite=True, fthin=1, verbose=True)
+        nt.assert_true(np.all(RF.ref_flags[g_k]))
 
         # try clear
         RF.clear(exclude=['data'])

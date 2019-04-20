@@ -188,8 +188,8 @@ class Test_VisClean(unittest.TestCase):
         # test zeropad with bool
         f, _ = vis_clean.zeropad_array(V.flags[(24, 25, 'xx')], zeropad=30, axis=-1, undo=False)
         nt.assert_equal(f.shape, (60, 124))
-        nt.assert_true(np.all(f[:, :30] is True))
-        nt.assert_true(np.all(f[:, -30:] is True))
+        nt.assert_true(np.all(f[:, :30]))
+        nt.assert_true(np.all(f[:, -30:]))
 
         # zeropad with xaxis
         d, xax = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=30, axis=0, xaxis=V.times)
