@@ -257,7 +257,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         sys.argv = [sys.argv[0], 'a', '--output_fname', 'ex.calfits', '--dly_ranges', '10,20', '10,20', '--overwrite', '--opt_buffer', '25', '75']
         parser = reflections.auto_reflection_argparser()
         a = parser.parse_args()
-        nt.assert_equal(a.clean_data[0], 'a')
+        nt.assert_equal(a.data[0], 'a')
         nt.assert_equal(a.output_fname, 'ex.calfits')
         nt.assert_equal(a.dly_ranges[0], '10,20')
         nt.assert_equal(len(a.dly_ranges), 2)

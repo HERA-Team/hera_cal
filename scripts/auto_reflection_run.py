@@ -10,7 +10,7 @@ a = parser.parse_args()
 
 kwargs = dict(vars(a))
 kwargs.pop('data')
-kwargs.pop('dly_range')
 kwargs.pop('output_fname')
+kwargs.pop('dly_ranges')
 
-reflections.auto_reflection_run(a.data, a.dly_range, a.output_fname, **kwargs)
+reflections.auto_reflection_run(a.data, a.dly_ranges, a.output_fname, **kwargs)

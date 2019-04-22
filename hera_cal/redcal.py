@@ -49,8 +49,8 @@ def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
     """
 
     data, true_vis = {}, {}
-    ants = list(set([ant for bls in reds for bl in bls for ant in
-                    [(bl[0], split_pol(bl[2])[0]), (bl[1], split_pol(bl[2])[1])]]))
+    ants = sorted(list(set([ant for bls in reds for bl in bls for ant in
+                  [(bl[0], split_pol(bl[2])[0]), (bl[1], split_pol(bl[2])[1])]])))
     if gains is None:
         gains = {}
     else:

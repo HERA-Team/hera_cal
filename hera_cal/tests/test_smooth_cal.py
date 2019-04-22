@@ -104,7 +104,7 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         for n in range(0, 7):  # add flags to disqualify antennas 0, 1, 2, 3, 4, 5, 6
             flags[(n, 'Jxx')][:, 4] = True
         for n in range(6, 9):  # add phase noise to disqualify antennas 6, 7, 8
-            gains[(n, 'Jxx')] *= np.exp(2j * np.pi * np.random.rand(10, 10))
+            gains[(n, 'Jxx')] *= np.exp(.1j * np.pi * np.random.rand(10, 10))  # want this to be << 2pi to avoid phase wraps
         self.assertEqual(smooth_cal.pick_reference_antenna(gains, flags, freqs, per_pol=False), (9, 'Jxx'))
         self.assertEqual(smooth_cal.pick_reference_antenna(gains, flags, freqs), {'Jxx': (9, 'Jxx')})
 

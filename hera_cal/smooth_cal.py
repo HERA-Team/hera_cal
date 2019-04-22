@@ -204,28 +204,34 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         (dlys, phis) = utils.fft_dly(gains[ant], df, wgts, medfilt=False, f0=freqs[0])
         rephasors[ant] = np.exp(-2.0j * np.pi * np.mean(dlys), freqs - 1.0j * np.mean(phis))
 
+    def narrow_refant_candidates(candidates):
+        '''Helper function for comparing refant candidates to another another looking for the one with the 
+        least noisy phases in other antennas when its the reference antenna (after taking out delays)'''
+        median_angle_noise_as_refant = {}
+        for ref in candidates:
+            refant_rephasor = np.abs(gains[ref] * rephasors[ref]) / (gains[ref] * rephasors[ref])
+            angle_noise = [interleaved_noise_variance_estimate(np.angle(gains[ant] * rephasors[ant] * refant_rephasor),
+                           kernel=[[-.5, 1, -.5]])[~(flags[ant] | flags[ref])] for ant in candidates]
+            median_angle_noise_as_refant[ref] = np.median(angle_noise)
+        return sorted(median_angle_noise_as_refant, key=median_angle_noise_as_refant.__getitem__)[0]
+
     # loop over pols (if per_pol)
     refant = {}
     pols = set([ant[1] for ant in gains])
     for pol in (pols if per_pol else [pols]):
         # pick antennas with the mininum number of flags
         flags_per_ant = {ant: np.sum(f) for ant, f in flags.items() if ant[1] in pol}
-        refant_candidates = [ant for ant, nflags in flags_per_ant.items() if nflags == np.min(list(flags_per_ant.values()))]
-        
-        # assess each candidate reference antenna: estimate the median noise of the angle after rephasing to a given refant
-        # (after taking out delays from both to minimize phase wraps) and return least noisy refant
-        median_angle_noise_as_refeant = {}
-        for ref in refant_candidates:
-            refant_rephasor = np.abs(gains[ref] * rephasors[ref]) / (gains[ref] * rephasors[ref])
-            median_phase_noise = [np.median(interleaved_noise_variance_estimate(
-                                  np.angle(gains[ant] * rephasors[ant] * refant_rephasor))[~(flags[ant] | flags[ref])])
-                                  for ant in gains.keys() if (not np.all(flags[ant] | flags[ref]) and (ant[1] in pol))]
-            median_angle_noise_as_refeant[ref] = np.median(median_phase_noise)
-        
+        refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items() 
+                                    if nflags == np.min(list(flags_per_ant.values()))])
+        while len(refant_candidates) > 1:  # loop over groups of 3 (the smallest, non-trivial size)
+            # compare phase noise imparted by reference antenna candidates on two other reference antenna candidates
+            refant_candidates = [narrow_refant_candidates(candidates) for candidates in [refant_candidates[i:i + 3]
+                                 for i in range(0, len(refant_candidates), 3)]]
         if not per_pol:
-            return sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
+            return refant_candidates[0]
         else:
-            refant[pol] = sorted(median_angle_noise_as_refeant, key=median_angle_noise_as_refeant.__getitem__)[0]
+            refant[pol] = refant_candidates[0]
+
     return refant
 
 
@@ -251,7 +257,7 @@ def rephase_to_refant(gains, refant, flags=None):
 
 class CalibrationSmoother():
 
-    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', pick_refant=False, antflag_thresh=0.0):
+    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', pick_refant=False, antflag_thresh=0.0, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -270,8 +276,12 @@ class CalibrationSmoother():
             antflag_thresh: float, fraction of flagged pixels across all visibilities (with a common antenna)
                 needed to flag that antenna gain at a particular time and frequency. antflag_thresh=0.0 is
                 aggressive flag broadcasting, antflag_thresh=1.0 is conservative flag_broadcasting.
+            verbose: print status updates
         '''
+        self.verbose = verbose
+
         # load calibration files
+        utils.echo('Now loading calibration files...', verbose=self.verbose)
         self.cals = calfits_list
         gains, cal_flags, self.cal_freqs, self.cal_times = odict(), odict(), odict(), odict()
         for cal in self.cals:
@@ -282,6 +292,7 @@ class CalibrationSmoother():
         # load flag files
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
+            utils.echo('Now loading external flag files...', verbose=self.verbose)
             self.ext_flags, self.flag_freqs, self.flag_times = odict(), odict(), odict()
             for ff in self.flag_files:
                 flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
@@ -291,6 +302,7 @@ class CalibrationSmoother():
 
         # set up time grid (note that it is offset by .5 dt so that times always map to the same
         # index, even if they are slightly different between the flag_files and the calfits files)
+        utils.echo('Now setting up gain and flag grids...', verbose=self.verbose)
         all_file_times = sorted(np.array([t for times in self.cal_times.values() for t in times]))
         self.dt = np.median(np.diff(all_file_times))
         self.time_grid = np.arange(all_file_times[0] + self.dt / 2.0, all_file_times[-1] + self.dt, self.dt)
@@ -319,7 +331,10 @@ class CalibrationSmoother():
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
+            utils.echo('Now picking reference antenna(s)...', verbose=self.verbose)
             self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
+            utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.' 
+                                  for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
             self.rephase_to_refant()
 
     def check_consistency(self):
@@ -372,6 +387,7 @@ class CalibrationSmoother():
 
         # Now loop through and apply running Gaussian averages
         for ant, gain_grid in self.filtered_gain_grids.items():
+            utils.echo('    Now smoothing antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in time...', verbose=self.verbose)
             if not np.all(self.filtered_flag_grids[ant]):
                 wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
                 self.filtered_gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
@@ -397,6 +413,7 @@ class CalibrationSmoother():
 
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.filtered_gain_grids.items():
+            utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
             wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
             self.filtered_gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
                                                               filter_scale=filter_scale, tol=tol, window=window,
@@ -431,6 +448,7 @@ class CalibrationSmoother():
         # loop over all antennas that are not completely flagged and filter
         for ant, gain_grid in self.filtered_gain_grids.items():
             if not np.all(self.filtered_flag_grids[ant]):
+                utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
                 wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
@@ -448,6 +466,7 @@ class CalibrationSmoother():
             kwargs: dictionary mapping updated attributes to their new values.
                 See pyuvdata.UVCal documentation for more info.
         '''
+        utils.echo('Now writing results to disk...', verbose=self.verbose)
         for cal in self.cals:
             outfilename = cal.replace(output_replace[0], output_replace[1])
             out_gains = {ant: self.filtered_gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
@@ -473,6 +492,7 @@ def smooth_cal_argparser():
                    The refants chosen have the fewest total flags and causes the least noisy phases on other antennas when made the phase reference.')
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
+    a.add_argument("--verbose", default=False, action="store_true", help="Print status updates while smoothing.")
 
     # Options relating to performing the filter in time and frequency
     filter_options = a.add_argument_group(title='Filtering options.')
