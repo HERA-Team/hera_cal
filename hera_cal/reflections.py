@@ -81,7 +81,7 @@ from astropy import constants
 
 from . import io
 from . import version
-from .abscal import merge_gains
+from .abscal import merge_gains, apply_gains
 from .datacontainer import DataContainer
 from .frf import FRFilter
 from . import vis_clean
@@ -275,7 +275,7 @@ class ReflectionFitter(FRFilter):
             for p in self.pols:
                 k = (a, uvutils.parse_jpolstr(p)) 
                 if k not in self.ref_gains:
-                    self.ref_gains[k] = np.ones(clean_resid.values()[0].shape, dtype=np.complex)
+                    self.ref_gains[k] = np.ones(clean_resid[keys[0]], dtype=np.complex)
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs, ref_flags=None,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
@@ -1349,7 +1349,7 @@ def auto_reflection_argparser():
     a.add_argument("--opt_maxiter", default=0, type=int, help="Optimization max Niter. Default is no optimization")
     a.add_argument("--opt_method", default='BFGS', type=str, help="Optimization algorithm. See scipy.optimize.minimize for details")
     a.add_argument("--opt_tol", default=1e-3, type=float, help="Optimization stopping tolerance.")
-    a.add_argument("--opt_buffer", default=[25, 75], type=float, nargs='*', help="delay buffer [ns] +/- initial guess for setting range of objective function")
+    a.add_argument("--opt_buffer", default=[25, 25], type=float, nargs='*', help="delay buffer [ns] +/- initial guess for setting range of objective function")
     a.add_argument("--skip_frac", default=0.9, type=float, help="Float in range [0, 1]. Fraction of (non-edge) flagged channels above which integration is skipped in optimization.")
     return a
 
@@ -1358,8 +1358,8 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
                         write_npz=False, antenna_numbers=None, polarizations=None, window='None', alpha=0.2,
                         edgecut_low=0, edgecut_hi=0, zeropad=0, tol=1e-6, gain=1e-1, maxiter=100,
                         skip_wgt=0.2, horizon=1.0, standoff=0.0, min_dly=100.0, Nphs=300, fthin=10, 
-                        ref_sig_cut=2.0, add_to_history='', skip_frac=0.9, opt_maxiter=0, opt_method='BFGS',
-                        opt_tol=1e-3, opt_buffer=(25, 75), overwrite=False):
+                        ref_sig_cut=2.0, add_to_history='', skip_frac=0.9, reject_edges=True, opt_maxiter=0,
+                        opt_method='BFGS', opt_tol=1e-3, opt_buffer=(25, 25), overwrite=False):
     """
     Run auto-correlation reflection modeling on files.
 
@@ -1395,6 +1395,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         opt_tol : float, Optimization stopping tolerance
         opt_buffer : float or len-2 tuple, delay buffer [ns] +/- initial guess for setting range of objective function in delay
         skip_frac : float in range [0, 1], fraction of flagged channels (excluding edge flags) above which skip the integration
+        reject_edges : bool, If True, reject peak solutions at delay edges
         overwrite : bool, if True, overwrite output files.
 
     Result:
@@ -1452,29 +1453,36 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
         model = RF.avgm_data
 
     # iterate over dly_ranges
+    gains = []
     for i, dly_range in enumerate(dly_ranges):
+        _output_fname = list(os.path.splitext(output_fname))
+        _output_fname[0] = "{}.ref{}".format(_output_fname[0], i + 1)
+        _output_fname = ''.join(_output_fname)
         if i == 0:
             _RF = RF
+            _output_fname = output_fname
+            cdata = data
         else:
             _RF = RF.soft_copy()
+            cdata = apply_gains(data, merge_gains(gains, merge_shared=False), rm_missing=False)
 
         # model auto reflections in clean data
-        _RF.model_auto_reflections(data, dly_range, clean_flags=flags, edgecut_low=edgecut_low,
+        _RF.model_auto_reflections(cdata, dly_range, clean_flags=flags, edgecut_low=edgecut_low,
                                    edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
-                                   zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut)
+                                   zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut, reject_edges=reject_edges)
 
         # refine reflections
         if opt_maxiter > 0:
             (_RF.ref_amp, _RF.ref_dly, _RF.ref_phs, info, _RF.ref_eps,
-             _RF.ref_gains) = RF.refine_auto_reflections(data, opt_buffer, _RF.ref_amp, _RF.ref_dly, _RF.ref_phs,
+             _RF.ref_gains) = RF.refine_auto_reflections(cdata, opt_buffer, _RF.ref_amp, _RF.ref_dly, _RF.ref_phs, ref_flags=_RF.ref_flags,
                                                          keys=keys, window=window, alpha=alpha, edgecut_low=edgecut_low,
                                                          edgecut_hi=edgecut_hi, clean_flags=flags, clean_model=model,
                                                          skip_frac=skip_frac, maxiter=opt_maxiter, method=opt_method, tol=opt_tol)
 
-        # merge gains
-        if i > 0:
-            RF.ref_gains = merge_gains([RF.ref_gains, _RF.ref_gains])
+        # write gains
+        RF.ref_gains = _RF.ref_gains
+        RF.write_auto_reflections(_output_fname, overwrite=overwrite, add_to_history=add_to_history,
+                                  write_npz=write_npz)
 
-    # write reflections
-    RF.write_auto_reflections(output_fname, overwrite=overwrite, add_to_history=add_to_history,
-                              write_npz=write_npz)
+        # append gains
+        gains.append(RF.ref_gains)

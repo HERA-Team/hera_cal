@@ -873,7 +873,7 @@ def merge_gains(gains, merge_shared=True):
     if merge_shared:
         keys = sorted(set(reduce(operator.and_, [set(g.keys()) for g in gains])))
     else:
-        keys = sorted(set(reduce(operator.add, [g.keys() for g in gains])))
+        keys = sorted(set(reduce(operator.add, [list(g.keys()) for g in gains])))
 
     # form merged_gains dict
     merged_gains = odict()
