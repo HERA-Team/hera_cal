@@ -278,9 +278,8 @@ class VisClean(object):
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
-                  overwrite=False, clean_model='clean_model', clean_resid='clean_resid',
-                  clean_data='clean_data', clean_flags='clean_flags', clean_info='clean_info',
-                  add_clean_residual=False, dtime=None, dnu=None, verbose=True):
+                  overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
+                  verbose=True):
         """
         Perform a CLEAN deconvolution.
 
@@ -320,7 +319,7 @@ class VisClean(object):
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
             zeropad : int, number of bins to zeropad on both sides of FFT axis.
-            clean_* : str, attach output model, resid, etc, as clean_* to self
+            output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
             add_clean_residual : bool, if True, adds the CLEAN residual within the CLEAN bounds
                 in fourier space to the CLEAN model. Note that the residual actually returned is
                 not the CLEAN residual, but the residual of data - model in real (data) space.
@@ -338,6 +337,8 @@ class VisClean(object):
                 raise ValueError("if time cleaning, must feed max_frate parameter")
 
         # initialize containers
+        (clean_model, clean_resid, clean_flags, clean_data,
+         clean_info) = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'info']]
         for dc in [clean_model, clean_resid, clean_flags, clean_data]:
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))

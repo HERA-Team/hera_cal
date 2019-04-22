@@ -110,6 +110,7 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (23, 23, 'xx')
         g_k = (23, 'Jxx')
+        RF.fft_data(window='blackmanharris', overwrite=True, ax='freq')  # for inspection
 
         # basic run through
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',

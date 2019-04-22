@@ -255,6 +255,10 @@ class ReflectionFitter(FRFilter):
                                                        edgecut_hi=edgecut_hi, zeropad=zeropad, ref_sig_cut=ref_sig_cut,
                                                        fthin=fthin, Nphs=Nphs, reject_edges=reject_edges)
 
+            # check for amplitudes greater than 1.0: flag them
+            bad_sols = amp > 1.0
+            amp[bad_sols] = 0.0
+
             # form epsilon term
             eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=False)
 
@@ -263,7 +267,7 @@ class ReflectionFitter(FRFilter):
             self.ref_phs[rkey] = phs
             self.ref_dly[rkey] = dly
             self.ref_significance[rkey] = sig
-            self.ref_flags[rkey] = np.min(clean_flags[k], axis=1, keepdims=True) + sig < ref_sig_cut
+            self.ref_flags[rkey] = np.min(clean_flags[k], axis=1, keepdims=True) + (sig < ref_sig_cut) + bad_sols
 
         # form gains
         self.ref_gains = form_gains(self.ref_eps)
