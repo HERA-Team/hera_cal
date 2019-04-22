@@ -559,7 +559,7 @@ class Test_AbsCal:
         nt.assert_equal(mgains[k].dtype, np.complex)
         nt.assert_almost_equal(np.abs(mgains[k][0, 0]), np.abs(self.AC.abs_eta_gain[k] * self.AC.ant_eta_gain[k])[0, 0])
         nt.assert_almost_equal(np.angle(mgains[k][0, 0]), np.angle(self.AC.TT_Phi_gain[k] * self.AC.abs_psi_gain[k]
-                                                                  * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
+                                                                   * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
 
     def test_apply_gains(self):
         # test basic execution
