@@ -275,7 +275,7 @@ class ReflectionFitter(FRFilter):
             for p in self.pols:
                 k = (a, uvutils.parse_jpolstr(p)) 
                 if k not in self.ref_gains:
-                    self.ref_gains[k] = np.ones(clean_resid[keys[0]], dtype=np.complex)
+                    self.ref_gains[k] = np.ones_like(clean_resid[keys[0]], dtype=np.complex)
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs, ref_flags=None,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
