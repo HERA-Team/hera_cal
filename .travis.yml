@@ -36,6 +36,8 @@ install:
   - pip install git+https://github.com/HERA-Team/hera_qm.git
   - pip install git+https://github.com/HERA-Team/uvtools.git
   - pip install git+https://github.com/HERA-Team/hera_sim.git
+  - conda list
+  - python --version  
 script:
   - nosetests hera_cal --with-coverage --cover-package=hera_cal
   - pycodestyle . --ignore=E501,W291,W293,W503,W601
