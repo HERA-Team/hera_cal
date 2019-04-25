@@ -899,34 +899,25 @@ class RedundantCalibrator:
                            for A in [solver.ls_amp.get_A(), solver.ls_phs.get_A()]])
 
 
-def count_redcal_degeneracies(antpos, bl_error_tol=1.0):
+def is_redundantly_calibratable(antpos, bl_error_tol=1.0, require_coplanarity=True):
     """Figures out whether an array is redundantly calibratable.
 
     Args:
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
-
-    Returns:
-        int: the number of 1-pol redundant calibration degeneracies (<=4 is traditionally redundantly calibratable)
-    """
-    reds = get_reds(antpos, pol_mode='1pol', bl_error_tol=bl_error_tol)
-    cal = RedundantCalibrator(reds)
-    return cal.count_degens()
-
-
-def is_redundantly_calibratable(antpos, bl_error_tol=1.0):
-    """Figures out whether an array is redundantly calibratable.
-
-    Args:
-        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
-        bl_error_tol: the largest allowable difference between baselines in a redundant group
-            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+        require_coplanarity: if True, require that the array have 2 or fewer phase slope degeneracies
+            (i.e. that it is a classic monolithic coplanar redundant array)
 
     Returns:
         boolean: true if the number of 1pol degeneracies is <=4 and thus the array is redundantly calibratable
     """
-    return count_redcal_degeneracies(antpos, bl_error_tol=bl_error_tol) <= 4
+    reds = get_reds(antpos, pol_mode='1pol', bl_error_tol=bl_error_tol)
+    rc = RedundantCalibrator(reds)
+    if require_coplanarity:
+        if len(list(reds_to_antpos(reds).values())[0]) > 2:  # not a monolithic, coplanar array
+            return False
+    return (rc.count_degens() == rc.count_degens(assume_redundant=False))
 
 
 def _get_pol_load_list(pols, pol_mode='1pol'):
