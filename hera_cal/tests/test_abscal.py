@@ -752,6 +752,7 @@ class Test_Post_Redcal_Abscal_Run:
             nt.assert_equal(ac_flags[k].shape, rc_flags[k].shape)
             nt.assert_equal(ac_flags[k].dtype, bool)
             np.testing.assert_array_equal(ac_flags[k][rc_flags[k]], rc_flags[k][rc_flags[k]])
+        nt.assert_false(np.all(list(ac_flags.values())))
         for pol in ['Jxx', 'Jyy']:
             nt.assert_true(pol in ac_total_qual)
             nt.assert_equal(ac_total_qual[pol].shape, rc_total_qual[pol].shape)
