@@ -2920,7 +2920,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                     auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
                     autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
 
-                    if not np.all(flags.values()):
+                    if not np.all(list(flags.values())):
                         # load model and rephase
                         model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
                         model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=[pol])
