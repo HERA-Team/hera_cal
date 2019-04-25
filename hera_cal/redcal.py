@@ -484,17 +484,27 @@ class OmnicalSolver(linsolve.LinProductSolver):
 
 class RedundantCalibrator:
 
-    def __init__(self, reds):
+    def __init__(self, reds, check_redundancy=False):
         """Initialization of a class object for performing redundant calibration with logcal
         and lincal, both utilizing linsolve, and also degeneracy removal.
 
         Args:
             reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol). The first
                 item in each list will be treated as the key for the unique baseline
+            check_redundancy: if True, raise an error if the array is not redundantly calibratable, 
+                allowing an arbitrary number of phase slope degeneracies.
         """
 
         self.reds = reds
         self.pol_mode = parse_pol_mode(self.reds)
+
+        if check_redundancy:
+            nDegens = self.count_degens(assume_redundant=False)
+            nDegensExpected = self.count_degens()
+            if nDegens != nDegensExpected:
+                nPhaseSlopes = len(list(reds_to_antpos(self.reds).values())[0])
+                raise ValueError('{} degeneracies found, but {} '.format(nDegens, nDegensExpected) +
+                                 'degeneracies expected (assuming {} phase slopes).'.format(nPhaseSlopes))
 
     def build_eqs(self, dc=None):
         """Function for generating linsolve equation strings. Optionally takes in a DataContainer to check
