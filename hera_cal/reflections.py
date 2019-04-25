@@ -81,7 +81,8 @@ from astropy import constants
 
 from . import io
 from . import version
-from .abscal import merge_gains, apply_gains
+from .abscal import merge_gains
+from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
 from .frf import FRFilter
 from . import vis_clean
@@ -1464,7 +1465,8 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
             cdata = data
         else:
             _RF = RF.soft_copy()
-            cdata = apply_gains(data, merge_gains(gains, merge_shared=False), rm_missing=False)
+            cdata = copy.deepcopy(data)
+            calibrate_in_place(cdata, merge_gains(gains, merge_shared=False))
 
         # model auto reflections in clean data
         _RF.model_auto_reflections(cdata, dly_range, clean_flags=flags, edgecut_low=edgecut_low,
