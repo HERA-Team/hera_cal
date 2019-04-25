@@ -265,24 +265,31 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
 
     def test_auto_reflection_run(self):
         # most of the code tests have been done above, this is just to ensure this wrapper function runs
-        uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[2.0, 2.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[23], add_xtalk=False)
+        uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[0.0, 0.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[23], add_xtalk=False)
         reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, window='blackmanharris', write_npz=True, overwrite=True, ref_sig_cut=1.0)
         nt.assert_true(os.path.exists("./ex.calfits"))
         nt.assert_true(os.path.exists("./ex.npz"))
+        nt.assert_true(os.path.exists("./ex.ref2.calfits"))
+        nt.assert_true(os.path.exists("./ex.ref2.npz"))
 
         # ensure gains have two humps at 150 and 250 ns
         uvc = UVCal()
         uvc.read_calfits('./ex.calfits')
+        uvc2 = UVCal()
+        uvc2.read_calfits('./ex.ref2.calfits')
+        uvc.gain_array *= uvc2.gain_array
         aind = np.argmin(np.abs(uvc.ant_array - 23))
         g = uvc.gain_array[aind, 0, :, :, 0].T
         delays = np.fft.fftfreq(uvc.Nfreqs, np.diff(uvc.freq_array[0])[0]) * 1e9
         gfft = np.mean(np.abs(np.fft.fft(g, axis=1)), axis=0)
 
-        nt.assert_true(delays[np.argmax(gfft[(delays > 100) & (delays < 200)])], 150)
-        nt.assert_true(delays[np.argmax(gfft[(delays > 200) & (delays < 300)])], 250)
+        nt.assert_equal(delays[np.argmax(gfft * ((delays > 100) & (delays < 200)))], 150)
+        nt.assert_equal(delays[np.argmax(gfft * ((delays > 200) & (delays < 300)))], 250)
 
         os.remove("./ex.calfits")
         os.remove("./ex.npz")
+        os.remove("./ex.ref2.calfits")
+        os.remove("./ex.ref2.npz")
 
 
 class Test_ReflectionFitter_XTalk(unittest.TestCase):
