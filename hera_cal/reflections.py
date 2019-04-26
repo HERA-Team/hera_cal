@@ -86,7 +86,7 @@ from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
 from .frf import FRFilter
 from . import vis_clean
-from .utils import echo, interp_peak
+from .utils import echo, interp_peak, split_pol
 
 
 class ReflectionFitter(FRFilter):
@@ -241,9 +241,9 @@ class ReflectionFitter(FRFilter):
         for k in keys:
             # get gain key
             if dly_range[0] >= 0:
-                rkey = (k[0], uvutils.parse_jpolstr(k[2][0]))
+                rkey = (k[0], split_pol(k[2])[0])
             else:
-                rkey = (k[1], uvutils.parse_jpolstr(k[2][1]))
+                rkey = (k[1], split_pol(k[2])[1])
 
             # model reflection
             echo("...Modeling reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)

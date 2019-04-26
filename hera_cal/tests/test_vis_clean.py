@@ -191,25 +191,25 @@ class Test_VisClean(unittest.TestCase):
         nt.assert_true(np.all(f[:, :30]))
         nt.assert_true(np.all(f[:, -30:]))
 
-        # zeropad with xaxis
-        d, xax = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=30, axis=0, xaxis=V.times)
-        nt.assert_almost_equal(np.median(np.diff(V.times)), np.median(np.diff(xax)))
-        nt.assert_equal(len(xax), 120)
+        # zeropad with binvals
+        d, bval = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=30, axis=0, binvals=V.times)
+        nt.assert_almost_equal(np.median(np.diff(V.times)), np.median(np.diff(bval)))
+        nt.assert_equal(len(bval), 120)
 
         # 2d zeropad
-        d, xax = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=(30, 10), axis=(0, 1), xaxis=[V.times, V.freqs])
+        d, bval = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=(30, 10), axis=(0, 1), binvals=[V.times, V.freqs])
         nt.assert_equal(d.shape, (120, 84))
-        nt.assert_equal((xax[0].size, xax[1].size), (120, 84))
+        nt.assert_equal((bval[0].size, bval[1].size), (120, 84))
 
-        # un-pad with xax
-        d, xax = vis_clean.zeropad_array(d, zeropad=(30, 10), axis=(0, 1), xaxis=xax, undo=True)
+        # un-pad with bval
+        d, bval = vis_clean.zeropad_array(d, zeropad=(30, 10), axis=(0, 1), binvals=bval, undo=True)
         nt.assert_equal(d.shape, (60, 64))
-        nt.assert_equal((xax[0].size, xax[1].size), (60, 64))
+        nt.assert_equal((bval[0].size, bval[1].size), (60, 64))
 
         # test VisClean method
-        V.zeropad_data(V.data, xaxis=V.times, zeropad=10, axis=0, undo=False)
+        V.zeropad_data(V.data, binvals=V.times, zeropad=10, axis=0, undo=False)
         nt.assert_equal(V.data[(24, 25, 'xx')].shape, (80, 64))
-        nt.assert_equal(V.data.xaxis.size, 80)
+        nt.assert_equal(V.data.binvals.size, 80)
 
         # exceptions
         nt.assert_raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'xx')], axis=(0, 1), zeropad=0)

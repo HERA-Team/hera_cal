@@ -158,7 +158,7 @@ def interp_peak(data, method='quinn', reject_edges=False):
         data : complex 2d ndarray in Fourier space.
             If fed as 1d array will reshape into [1, N] array.
             Quinn's method usually operates on complex data (eg. fft'ed data) while the 
-            quadratic method operates on real data (generally absolute values).
+            quadratic method operates on real-valued data (generally absolute values).
         method : either 'quinn' (see https://ieeexplore.ieee.org/document/558515) or 'quadratic'
             (see https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html).
         reject_edges : bool, if True, reject solution if it isn't a true "peak", in other words
@@ -176,7 +176,7 @@ def interp_peak(data, method='quinn', reject_edges=False):
     N1, N2 = data.shape
 
     # get abs
-    dabs = np.abs(data)**2
+    dabs = np.abs(data)
 
     # ensure edge cases are handled is requested
     if reject_edges:
@@ -192,7 +192,7 @@ def interp_peak(data, method='quinn', reject_edges=False):
 
     # get argmaxes along last axis
     if method == 'quinn':
-        indices = np.argmax(dabs**2, axis=-1)
+        indices = np.argmax(dabs, axis=-1)
     elif method == 'quadratic':
         indices = np.argmax(dabs, axis=-1)
     else:

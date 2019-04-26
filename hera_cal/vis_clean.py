@@ -633,14 +633,14 @@ class VisClean(object):
         if not inplace:
             return flags
 
-    def zeropad_data(self, data, xaxis=None, zeropad=0, axis=-1, undo=False):
+    def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
         """
         Iterate through DataContainer "data" and zeropad it inplace.
 
         Args:
             data : DataContainer to zero-pad (or un-pad)
-            xaxis : x axis for data (e.g. times or freqs) to also pad out
-                by relevant amount. If axis is an iterable, xaxis must also be
+            binvals : bin for data (e.g. times or freqs) to also pad out
+                by relevant amount. If axis is an iterable, binvals must also be
             zeropad : int, number of bins on each axis to pad
                 If axis is an iterable, zeropad must be also be
             axis : int, axis to zeropad. Can be a tuple
@@ -649,9 +649,9 @@ class VisClean(object):
         """
         # iterate over data
         for k in data:
-            data[k], xax = zeropad_array(data[k], xaxis=xaxis, zeropad=zeropad, axis=axis, undo=undo)
+            data[k], bvals = zeropad_array(data[k], binvals=binvals, zeropad=zeropad, axis=axis, undo=undo)
 
-        data.xaxis = xax
+        data.binvals = bvals
 
     def _get_delta_bin(self, dtime=None, dnu=None):
         """
@@ -783,7 +783,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     return data, fourier_axes
 
 
-def zeropad_array(data, xaxis=None, zeropad=0, axis=-1, undo=False):
+def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
     """
     Zeropad data ndarray along axis.
 
@@ -792,8 +792,8 @@ def zeropad_array(data, xaxis=None, zeropad=0, axis=-1, undo=False):
 
     Args:
         data : ndarray to zero-pad (or un-pad)
-        xaxis : x axis for data (e.g. times or freqs) to also pad out
-            by relevant amount. If axis is an iterable, xaxis must also be
+        binvals : bin values for data (e.g. times or freqs) to also pad out
+            by relevant amount. If axis is an iterable, binvals must also be
         zeropad : int, number of bins on each axis to pad
             If axis is an iterable, zeropad must be also be
         axis : int, axis to zeropad. Can be a tuple
@@ -802,7 +802,7 @@ def zeropad_array(data, xaxis=None, zeropad=0, axis=-1, undo=False):
 
     Returns:
         padded_data : zero-padded (or un-padded) data
-        padded_xaxis : xaxis array(s) padded (or un-padded) if xaxis is fed, otherwise None
+        padded_bvals : bin array(s) padded (or un-padded) if binvals is fed, otherwise None
     """
     # get data type
     bool_dtype = np.issubdtype(data.dtype, np.bool_)
@@ -810,9 +810,9 @@ def zeropad_array(data, xaxis=None, zeropad=0, axis=-1, undo=False):
     # type checks
     if not isinstance(axis, (list, tuple, np.ndarray)):
         axis = [axis]
-    xaxis = copy.deepcopy(xaxis)
-    if not isinstance(xaxis, (list, tuple)):
-        xaxis = [xaxis]
+    binvals = copy.deepcopy(binvals)
+    if not isinstance(binvals, (list, tuple)):
+        binvals = [binvals]
     if not isinstance(zeropad, (list, tuple, np.ndarray)):
         zeropad = [zeropad]
     if isinstance(axis, (list, tuple, np.ndarray)) and not isinstance(zeropad, (list, tuple, np.ndarray)):
@@ -826,8 +826,8 @@ def zeropad_array(data, xaxis=None, zeropad=0, axis=-1, undo=False):
                 s = [slice(None) for j in range(data.ndim)]
                 s[ax] = slice(zeropad[i], -zeropad[i])
                 data = data[s]
-                if xaxis[i] is not None:
-                    xaxis[i] = xaxis[i][s[i]]
+                if binvals[i] is not None:
+                    binvals[i] = binvals[i][s[i]]
 
             else:
                 zshape = list(data.shape)
@@ -837,13 +837,13 @@ def zeropad_array(data, xaxis=None, zeropad=0, axis=-1, undo=False):
                 else:
                     z = np.zeros(zshape, data.dtype)
                 data = np.concatenate([z, data, z], axis=ax)
-                if xaxis[i] is not None:
-                    dx = np.median(np.diff(xaxis[i]))
-                    Nbin = xaxis[i].size
+                if binvals[i] is not None:
+                    dx = np.median(np.diff(binvals[i]))
+                    Nbin = binvals[i].size
                     z = np.arange(1, zeropad[i] + 1)
-                    xaxis[i] = np.concatenate([xaxis[i][0] - z[::-1] * dx, xaxis[i], xaxis[i][-1] + z * dx])
+                    binvals[i] = np.concatenate([binvals[i][0] - z[::-1] * dx, binvals[i], binvals[i][-1] + z * dx])
 
-    if len(xaxis) == 1:
-        xaxis = xaxis[0]
+    if len(binvals) == 1:
+        binvals = binvals[0]
 
-    return data, xaxis
+    return data, binvals
