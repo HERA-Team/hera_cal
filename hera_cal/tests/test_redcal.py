@@ -349,6 +349,24 @@ class TestMethods(unittest.TestCase):
 
 class TestRedundantCalibrator(unittest.TestCase):
 
+    def test_init(self):
+        # test a very small array
+        pos = build_hex_array(3)
+        pos = {ant: pos[ant] for ant in range(4)}
+        reds = om.get_reds(pos)
+        rc = om.RedundantCalibrator(reds)
+        with self.assertRaises(ValueError):
+            rc = om.RedundantCalibrator(reds, check_redundancy=True)
+
+        # test disconnected redundant array
+        pos = build_hex_array(5)
+        pos = {ant: pos[ant] for ant in pos if ant in [0, 1, 5, 6, 54, 55, 59, 60]}
+        reds = om.get_reds(pos)
+        try:
+            rc = om.RedundantCalibrator(reds, check_redundancy=True)
+        except ValueError:
+            self.fail('This array is actually redundant, so check_redundancy should not raise a ValueError.')
+
     def test_build_eq(self):
         antpos = build_linear_array(3)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
@@ -1041,20 +1059,23 @@ class TestRedundantCalibrator(unittest.TestCase):
         reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV')
         self.assertEqual(om.RedundantCalibrator(reds).count_degens(), 7)
 
-    def test_count_redcal_degeneracies(self):
-        pos = build_hex_array(3)
-        self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=1), 4)
-        pos[0] += [.5, 0, 0]
-        pos[7] += [0, .5, 0]
-        self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=.1), 6)
-        self.assertEqual(om.count_redcal_degeneracies(pos, bl_error_tol=1), 4)
-
     def test_is_redundantly_calibratable(self):
         pos = build_hex_array(3)
         self.assertTrue(om.is_redundantly_calibratable(pos, bl_error_tol=1))
         pos[0] += [.5, 0, 0]
         self.assertFalse(om.is_redundantly_calibratable(pos, bl_error_tol=.1))
         self.assertTrue(om.is_redundantly_calibratable(pos, bl_error_tol=1))
+
+        # test a very small array
+        pos = build_hex_array(3)
+        pos = {ant: pos[ant] for ant in range(4)}
+        self.assertFalse(om.is_redundantly_calibratable(pos))
+
+        # test disconnected redundant array
+        pos = build_hex_array(5)
+        pos = {ant: pos[ant] for ant in pos if ant in [0, 1, 5, 6, 54, 55, 59, 60]}
+        self.assertFalse(om.is_redundantly_calibratable(pos))
+        self.assertTrue(om.is_redundantly_calibratable(pos, require_coplanarity=False))
 
 
 class TestRedcalAndAbscal(unittest.TestCase):
