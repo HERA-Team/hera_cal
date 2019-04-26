@@ -492,7 +492,7 @@ class RedundantCalibrator:
             reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol). The first
                 item in each list will be treated as the key for the unique baseline
             check_redundancy: if True, raise an error if the array is not redundantly calibratable, 
-                allowing an arbitrary number of phase slope degeneracies.
+                even when allowing for an arbitrary number of phase slope degeneracies.
         """
 
         self.reds = reds
