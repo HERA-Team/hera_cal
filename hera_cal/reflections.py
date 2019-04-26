@@ -526,7 +526,7 @@ class ReflectionFitter(FRFilter):
 
         # get keys
         if keys is None:
-            keys = dfft.keys()
+            keys = list(dfft.keys())
 
         # iterate over keys
         for k in keys:
@@ -628,7 +628,7 @@ class ReflectionFitter(FRFilter):
         """
         # get keys
         if keys is None:
-            keys = svals.keys()
+            keys = list(svals.keys())
 
         # iterate over keys
         for k in keys:
@@ -696,7 +696,7 @@ class ReflectionFitter(FRFilter):
         """
         # get keys
         if keys is None:
-            keys = self.pcomp_model.keys()
+            keys = list(self.pcomp_model.keys())
 
         if not hasattr(self, 'pcomp_model_fft'):
             self.pcomp_model_fft = DataContainer({})
@@ -790,7 +790,7 @@ class ReflectionFitter(FRFilter):
 
         # get keys
         if keys is None:
-            keys = umodes.keys()
+            keys = list(umodes.keys())
 
         # parse gp_frate
         if isinstance(gp_frate, (int, np.integer, float, np.float)):
@@ -1363,9 +1363,9 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
 
     # get antennas if possible
     if antenna_numbers is None and hasattr(RF, 'ants'):
-        bls = zip(RF.ants, RF.ants)
+        bls = [(ant, ant) for ant in RF.ants]
     elif antenna_numbers is not None:
-        bls = zip(antenna_numbers, antenna_numbers)
+        bls = [(ant, ant) for ant in antenna_numbers]
     else:
         bls = None
 
