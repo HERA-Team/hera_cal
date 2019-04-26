@@ -503,8 +503,8 @@ class RedundantCalibrator:
             nDegensExpected = self.count_degens()
             if nDegens != nDegensExpected:
                 nPhaseSlopes = len(list(reds_to_antpos(self.reds).values())[0])
-                raise ValueError('{} degeneracies found, but {} '.format(nDegens, nDegensExpected) +
-                                 'degeneracies expected (assuming {} phase slopes).'.format(nPhaseSlopes))
+                raise ValueError('{} degeneracies found, but {} '.format(nDegens, nDegensExpected)
+                                 + 'degeneracies expected (assuming {} phase slopes).'.format(nPhaseSlopes))
 
     def build_eqs(self, dc=None):
         """Function for generating linsolve equation strings. Optionally takes in a DataContainer to check
@@ -893,7 +893,7 @@ class RedundantCalibrator:
             else:  # '4pol_minV'
                 return 2 + 1 + nPhaseSlopes  # 4pol_minV ties overall phase together, so just 1 overall phase
         else:
-            dummy_data = DataContainer({bl: np.ones((1,1), dtype=np.complex) for red in self.reds for bl in red})
+            dummy_data = DataContainer({bl: np.ones((1, 1), dtype=np.complex) for red in self.reds for bl in red})
             solver = self._solver(linsolve.LogProductSolver, dummy_data)
             return np.sum([A.shape[1] - np.linalg.matrix_rank(np.dot(np.squeeze(A).T, np.squeeze(A)))
                            for A in [solver.ls_amp.get_A(), solver.ls_phs.get_A()]])
