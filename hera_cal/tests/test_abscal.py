@@ -544,15 +544,22 @@ class Test_AbsCal:
         self.AC.delay_lincal(verbose=False)
         self.AC.phs_logcal(verbose=False)
         self.AC.amp_logcal(verbose=False)
-        gains = (self.AC.abs_eta_gain, self.AC.TT_Phi_gain, self.AC.abs_psi_gain,
-                 self.AC.ant_dly_gain, self.AC.ant_eta_gain, self.AC.ant_phi_gain)
-        gains = abscal.merge_gains(gains)
+        gains = [self.AC.abs_eta_gain, self.AC.TT_Phi_gain, self.AC.abs_psi_gain,
+                 self.AC.ant_dly_gain, self.AC.ant_eta_gain, self.AC.ant_phi_gain]
+        gains[0][(99, 'Jxx')] = 1.0
+        # merge shared keys
+        mgains = abscal.merge_gains(gains, merge_shared=True)
+        nt.assert_false((99, 'Jxx') in mgains)
+        # merge all keys
+        mgains = abscal.merge_gains(gains, merge_shared=False)
+        nt.assert_true((99, 'Jxx') in mgains)
+        # test merge
         k = (53, 'Jxx')
-        nt.assert_equal(gains[k].shape, (60, 64))
-        nt.assert_equal(gains[k].dtype, np.complex)
-        nt.assert_almost_equal(np.abs(gains[k][0, 0]), np.abs(self.AC.abs_eta_gain[k] * self.AC.ant_eta_gain[k])[0, 0])
-        nt.assert_almost_equal(np.angle(gains[k][0, 0]), np.angle(self.AC.TT_Phi_gain[k] * self.AC.abs_psi_gain[k]
-                                                                  * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
+        nt.assert_equal(mgains[k].shape, (60, 64))
+        nt.assert_equal(mgains[k].dtype, np.complex)
+        nt.assert_almost_equal(np.abs(mgains[k][0, 0]), np.abs(self.AC.abs_eta_gain[k] * self.AC.ant_eta_gain[k])[0, 0])
+        nt.assert_almost_equal(np.angle(mgains[k][0, 0]), np.angle(self.AC.TT_Phi_gain[k] * self.AC.abs_psi_gain[k]
+                                                                   * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
 
     def test_fill_dict_nans(self):
         data = copy.deepcopy(self.AC.data)

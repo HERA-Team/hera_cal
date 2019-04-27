@@ -30,10 +30,12 @@ install:
   - source activate test-environment
   - conda install -c conda-forge healpy aipy pycodestyle
   - pip install coveralls
+  - pip install cached_property
   - pip install git+https://github.com/HERA-Team/pyuvdata.git
   - pip install git+https://github.com/HERA-Team/linsolve.git
   - pip install git+https://github.com/HERA-Team/hera_qm.git
   - pip install git+https://github.com/HERA-Team/uvtools.git
+  - pip install git+https://github.com/HERA-Team/hera_sim.git
   - conda list
   - python --version  
 script:

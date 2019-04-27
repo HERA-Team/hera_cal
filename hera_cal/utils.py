@@ -150,17 +150,19 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     return dlys, offset
 
 
-def interp_peak(data, method='quinn'):
+def interp_peak(data, method='quinn', reject_edges=False):
     """
-    Use Quinn's Second Method to get the peak and amplitude of data along last axis.
+    Spectral interpolation for finding peak and amplitude of data along last axis.
 
     Args:
         data : complex 2d ndarray in Fourier space.
             If fed as 1d array will reshape into [1, N] array.
             Quinn's method usually operates on complex data (eg. fft'ed data) while the 
-            quadratic method operates on real data (generally absolute values).
+            quadratic method operates on real-valued data (generally absolute values).
         method : either 'quinn' (see https://ieeexplore.ieee.org/document/558515) or 'quadratic'
             (see https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html).
+        reject_edges : bool, if True, reject solution if it isn't a true "peak", in other words
+            if it is along the axis edges
 
     Returns:
         indices : index array holding argmax of data along last axis
@@ -173,13 +175,29 @@ def interp_peak(data, method='quinn'):
         data = data[None, :]
     N1, N2 = data.shape
 
+    # get abs
+    dabs = np.abs(data)
+
+    # ensure edge cases are handled is requested
+    if reject_edges:
+        # scroll through diffs and set monotonically decreasing edges to zero
+        forw_diff = dabs[:, 1:] - dabs[:, :-1]
+        for i, fd in enumerate(forw_diff):
+            ncut = np.argmax(fd > 0)
+            if ncut > 0:
+                dabs[i, :ncut] = 0.0
+            ncut = N2 - np.argmax(fd[::-1] < 0)
+            if ncut > 0:
+                dabs[i, ncut:] = 0.0
+
     # get argmaxes along last axis
     if method == 'quinn':
-        indices = np.argmax(np.abs(data)**2, axis=-1)
+        indices = np.argmax(dabs, axis=-1)
     elif method == 'quadratic':
-        indices = np.argmax(data, axis=-1)
+        indices = np.argmax(dabs, axis=-1)
     else:
         raise ValueError("'{}' is not a recognized peak interpolation method.".format(method))
+
     peaks = data[range(N1), indices]
 
     # calculate shifted peak for sub-bin resolution

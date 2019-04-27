@@ -853,14 +853,16 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
     return fit
 
 
-def merge_gains(gains):
+def merge_gains(gains, merge_shared=True):
     """
-    merge multiple gain dictionaries. will merge only shared keys.
+    Merge a list of gain dictionaries.
 
     Parameters:
     -----------
     gains : type=list or tuple, series of gain dictionaries with (ant, pol) keys
             and complex ndarrays as values.
+    merge_shared : type=bool, If True merge only shared keys, eliminating the others.
+        Otherwise, merge all keys.
 
     Output:
     -------
@@ -868,14 +870,17 @@ def merge_gains(gains):
                    structure as input gain dictionaries.
     """
     # get shared keys
-    keys = sorted(reduce(operator.and_, list(map(lambda g: set(g.keys()), gains))))
+    if merge_shared:
+        keys = sorted(set(reduce(operator.and_, [set(g.keys()) for g in gains])))
+    else:
+        keys = sorted(set(reduce(operator.add, [list(g.keys()) for g in gains])))
 
     # form merged_gains dict
     merged_gains = odict()
 
     # iterate over keys
     for i, k in enumerate(keys):
-        merged_gains[k] = reduce(operator.mul, list(map(lambda g: g.get(k, 1.0), gains)))
+        merged_gains[k] = reduce(operator.mul, [g.get(k, 1.0) for g in gains])
 
     return merged_gains
 

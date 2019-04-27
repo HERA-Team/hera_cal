@@ -175,6 +175,26 @@ class TestFftDly(object):
         data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys)
         nt.assert_raises(ValueError, utils.interp_peak, np.fft.fft(data), method='blah')
 
+    def test_interp_peak(self):
+        # code testing is done in TestFftDly, so just check optional parameters here
+        # check reject_edges
+        x = np.linspace(0, 10, 101)
+        y = (x - 5)**2 + np.isclose(x, 5.0).astype(np.float)
+        # check peak is zeroth bin
+        inds, bs, peaks, p = utils.interp_peak(y[None, :], method='quadratic', reject_edges=False)
+        nt.assert_equal(inds[0], 0)
+        # check peak is middle bin with reject_edges
+        inds, bs, peaks, p = utils.interp_peak(y[None, :], method='quadratic', reject_edges=True)
+        nt.assert_equal(inds[0], np.argmax(y - (x - 5)**2))
+        # check peak is last bin even w/ reject_edges
+        y = x * 1.0
+        inds, bs, peaks, p = utils.interp_peak(y[None, :], method='quadratic', reject_edges=True)
+        nt.assert_equal(inds[0], np.argmax(y))
+        # check peak is zero bin even w/ reject_edges
+        y = np.abs(-x * 1.0 + 10)
+        inds, bs, peaks, p = utils.interp_peak(y[None, :], method='quadratic', reject_edges=True)
+        nt.assert_equal(inds[0], np.argmax(y))
+
 
 class TestAAFromUV(object):
     def setUp(self):

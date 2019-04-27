@@ -278,9 +278,8 @@ class VisClean(object):
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
-                  overwrite=False, clean_model='clean_model', clean_resid='clean_resid',
-                  clean_data='clean_data', clean_flags='clean_flags', clean_info='clean_info',
-                  add_clean_residual=False, dtime=None, dnu=None, verbose=True):
+                  overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
+                  verbose=True):
         """
         Perform a CLEAN deconvolution.
 
@@ -320,7 +319,7 @@ class VisClean(object):
                 such that the windowing function smoothly approaches zero. If ax is 'both',
                 can feed as a tuple specifying for 0th and 1st FFT axis.
             zeropad : int, number of bins to zeropad on both sides of FFT axis.
-            clean_* : str, attach output model, resid, etc, as clean_* to self
+            output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
             add_clean_residual : bool, if True, adds the CLEAN residual within the CLEAN bounds
                 in fourier space to the CLEAN model. Note that the residual actually returned is
                 not the CLEAN residual, but the residual of data - model in real (data) space.
@@ -338,6 +337,8 @@ class VisClean(object):
                 raise ValueError("if time cleaning, must feed max_frate parameter")
 
         # initialize containers
+        (clean_model, clean_resid, clean_flags, clean_data,
+         clean_info) = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'info']]
         for dc in [clean_model, clean_resid, clean_flags, clean_data]:
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
@@ -392,8 +393,8 @@ class VisClean(object):
             if ax == 'freq':
                 # zeropad the data
                 if zeropad > 0:
-                    d = zeropad_array(d, zeropad, axis=1)
-                    w = zeropad_array(w, zeropad, axis=1)
+                    d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
+                    w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
 
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
@@ -402,8 +403,8 @@ class VisClean(object):
 
                 # un-zeropad the data
                 if zeropad > 0:
-                    mdl = zeropad_array(mdl, zeropad, axis=1, undo=True)
-                    res = zeropad_array(res, zeropad, axis=1, undo=True)
+                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
+                    res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
 
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
@@ -420,8 +421,8 @@ class VisClean(object):
 
                 # zeropad the data
                 if zeropad > 0:
-                    d = zeropad_array(d, zeropad, axis=0)
-                    w = zeropad_array(w, zeropad, axis=0)
+                    d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
+                    w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
 
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
@@ -429,8 +430,8 @@ class VisClean(object):
 
                 # un-zeropad the data
                 if zeropad > 0:
-                    mdl = zeropad_array(mdl, zeropad, axis=0, undo=True)
-                    res = zeropad_array(res, zeropad, axis=0, undo=True)
+                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
+                    res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
 
                 flgs = np.zeros_like(mdl, dtype=np.bool)
                 for i, _info in enumerate(info):
@@ -443,8 +444,8 @@ class VisClean(object):
                 if w.max() > 0.0:
                     # zeropad the data
                     if zeropad > 0:
-                        d = zeropad_array(d, zeropad, axis=(0, 1))
-                        w = zeropad_array(w, zeropad, axis=(0, 1))
+                        d, _ = zeropad_array(d, zeropad=zeropad, axis=(0, 1))
+                        w, _ = zeropad_array(w, zeropad=zeropad, axis=(0, 1))
 
                     mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
@@ -453,8 +454,8 @@ class VisClean(object):
 
                     # un-zeropad the data
                     if zeropad > 0:
-                        mdl = zeropad_array(mdl, zeropad, axis=(0, 1), undo=True)
-                        res = zeropad_array(res, zeropad, axis=(0, 1), undo=True)
+                        mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=(0, 1), undo=True)
+                        res, _ = zeropad_array(res, zeropad=zeropad, axis=(0, 1), undo=True)
  
                     flgs = np.zeros_like(mdl, dtype=np.bool)
                 else:
@@ -632,21 +633,45 @@ class VisClean(object):
         if not inplace:
             return flags
 
+    def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
+        """
+        Iterate through DataContainer "data" and zeropad it inplace.
+
+        Args:
+            data : DataContainer to zero-pad (or un-pad)
+            binvals : bin for data (e.g. times or freqs) to also pad out
+                by relevant amount. If axis is an iterable, binvals must also be
+            zeropad : int, number of bins on each axis to pad
+                If axis is an iterable, zeropad must be also be
+            axis : int, axis to zeropad. Can be a tuple
+                to zeropad mutliple axes.
+            undo : If True, remove zero-padded edges along axis.
+        """
+        # iterate over data
+        for k in data:
+            data[k], bvals = zeropad_array(data[k], binvals=binvals, zeropad=zeropad, axis=axis, undo=undo)
+
+        data.binvals = bvals
+
     def _get_delta_bin(self, dtime=None, dnu=None):
         """
         Get visibility time & frequency spacing.
+
         Defaults are self.dtime and self.dnu
+
         Args:
             dtime : float, time spacing [sec]
             dnu : float, frequency spacing [Hz]
+
         Returns:
             (dtime, dnu)
-
         """
         if dtime is None:
             dtime = self.dtime
+
         if dnu is None:
             dnu = self.dnu
+
         return dtime, dnu
 
 
@@ -733,7 +758,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         data *= win
 
         # zeropad
-        data = zeropad_array(data, zeropad[i], axis=ax)
+        data, _ = zeropad_array(data, zeropad=zeropad[i], axis=ax)
 
         # ifftshift
         if ifftshift:
@@ -758,23 +783,36 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     return data, fourier_axes
 
 
-def zeropad_array(data, zeropad=0, axis=-1, undo=False):
+def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
     """
     Zeropad data ndarray along axis.
 
+    If data is float, int or complex, zeropads with zero.
+    If data is boolean, zeropads with True.
+
     Args:
         data : ndarray to zero-pad (or un-pad)
+        binvals : bin values for data (e.g. times or freqs) to also pad out
+            by relevant amount. If axis is an iterable, binvals must also be
         zeropad : int, number of bins on each axis to pad
-            If axis is a tuple, zeropad must be a tuple
+            If axis is an iterable, zeropad must be also be
         axis : int, axis to zeropad. Can be a tuple
             to zeropad mutliple axes.
         undo : If True, remove zero-padded edges along axis.
 
     Returns:
-        zdata : zero-padded (or un-padded) data
+        padded_data : zero-padded (or un-padded) data
+        padded_bvals : bin array(s) padded (or un-padded) if binvals is fed, otherwise None
     """
+    # get data type
+    bool_dtype = np.issubdtype(data.dtype, np.bool_)
+
+    # type checks
     if not isinstance(axis, (list, tuple, np.ndarray)):
         axis = [axis]
+    binvals = copy.deepcopy(binvals)
+    if not isinstance(binvals, (list, tuple)):
+        binvals = [binvals]
     if not isinstance(zeropad, (list, tuple, np.ndarray)):
         zeropad = [zeropad]
     if isinstance(axis, (list, tuple, np.ndarray)) and not isinstance(zeropad, (list, tuple, np.ndarray)):
@@ -788,10 +826,24 @@ def zeropad_array(data, zeropad=0, axis=-1, undo=False):
                 s = [slice(None) for j in range(data.ndim)]
                 s[ax] = slice(zeropad[i], -zeropad[i])
                 data = data[s]
+                if binvals[i] is not None:
+                    binvals[i] = binvals[i][s[i]]
+
             else:
                 zshape = list(data.shape)
                 zshape[ax] = zeropad[i]
-                z = np.zeros(zshape)
+                if bool_dtype:
+                    z = np.ones(zshape, np.bool)
+                else:
+                    z = np.zeros(zshape, data.dtype)
                 data = np.concatenate([z, data, z], axis=ax)
+                if binvals[i] is not None:
+                    dx = np.median(np.diff(binvals[i]))
+                    Nbin = binvals[i].size
+                    z = np.arange(1, zeropad[i] + 1)
+                    binvals[i] = np.concatenate([binvals[i][0] - z[::-1] * dx, binvals[i], binvals[i][-1] + z * dx])
 
-    return data
+    if len(binvals) == 1:
+        binvals = binvals[0]
+
+    return data, binvals
