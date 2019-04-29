@@ -43,6 +43,7 @@ First install dependencies.
 * [pyuvdata](https://github.com/HERA-Team/pyuvdata/)
 * [linsolve](https://github.com/HERA-Team/linsolve)
 * [hera_qm](https://github.com/HERA-Team/hera_qm)
+* [hera_sim](https://github.com/HERA-Team/hera_sim) (Only required for unit tests.)
 
 ## Install hera_cal
 Install with ```python setup.py install```
