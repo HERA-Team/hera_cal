@@ -164,7 +164,7 @@ class VisClean(object):
 
     def apply_calibration(self, input_cal, unapply=False):
         """
-        Apply self.hc calibration to self.data.
+        Apply input_cal self.data.
 
         Args:
             input_cal : UVCal, HERACal or filepath to calfits file
