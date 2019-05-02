@@ -1236,7 +1236,7 @@ class TestRunMethods(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
-            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.0, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
+            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.5, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
             sys.stdout = sys.__stdout__
 
         bad_ants = [50, 12] # this is based on experiments with this particular file
