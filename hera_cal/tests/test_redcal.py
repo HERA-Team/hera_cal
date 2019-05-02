@@ -1254,9 +1254,12 @@ class TestRunMethods(unittest.TestCase):
         hc = io.HERACal(os.path.splitext(input_data)[0] + '.omni.calfits')
         gains, flags, quals, total_qual = hc.read()
         for ant in gains.keys():
-            np.testing.assert_array_almost_equal(gains[ant], cal['g_omnical'][ant])
-            np.testing.assert_array_almost_equal(flags[ant], cal['gf_omnical'][ant])
-            np.testing.assert_array_almost_equal(quals[ant], cal['chisq_per_ant'][ant])
+            zero_check = np.isclose(cal['g_omnical'][ant], 0, rtol=1e-10, atol=1e-10)
+            np.testing.assert_array_almost_equal(gains[ant][~zero_check], cal['g_omnical'][ant][~zero_check])
+            np.testing.assert_array_almost_equal(flags[ant][~zero_check], cal['gf_omnical'][ant][~zero_check])
+            if np.sum(zero_check) > 0:
+                np.testing.assert_array_equal(flags[ant][zero_check], True)
+            np.testing.assert_array_almost_equal(quals[ant][~zero_check], cal['chisq_per_ant'][ant][~zero_check])
             if ant[0] in bad_ants:
                 np.testing.assert_array_equal(gains[ant], 1.0)
                 np.testing.assert_array_equal(flags[ant], True)
