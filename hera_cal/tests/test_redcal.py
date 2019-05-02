@@ -1239,7 +1239,7 @@ class TestRunMethods(unittest.TestCase):
             cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.0, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
             sys.stdout = sys.__stdout__
 
-        bad_ants = [25, 11, 12, 14]  # this is based on experiments with this particular file
+        bad_ants = [50, 12] # this is based on experiments with this particular file
         hc = io.HERACal(os.path.splitext(input_data)[0] + '.first.calfits')
         gains, flags, quals, total_qual = hc.read()
         for ant in gains.keys():
