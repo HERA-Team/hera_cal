@@ -1266,7 +1266,7 @@ class TestRunMethods(unittest.TestCase):
         for antpol in total_qual.keys():
             np.testing.assert_array_almost_equal(total_qual[antpol], cal['chisq'][antpol])
         self.assertTrue('testing' in hc.history.replace('\n', '').replace(' ', ''))
-        self.assertTrue('Throwingoutantenna14' in hc.history.replace('\n', '').replace(' ', ''))
+        self.assertTrue('Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', ''))
         self.assertTrue('Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', ''))
 
         hd = io.HERAData(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
