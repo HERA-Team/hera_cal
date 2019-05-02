@@ -1034,7 +1034,9 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     # perform logcal and omnical
     log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
-    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
+    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
+                                                                     * SEC_PER_DAY))**-1 for bl in data.keys()}
+    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
                                            check_every=check_every, check_after=check_after, gain=gain)
 
     # update omnical flags and then remove degeneracies
@@ -1048,8 +1050,6 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
-                                                                     * SEC_PER_DAY))**-1 for bl in data.keys()}
     rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
                                                                        gains=rv['g_omnical'], reds=reds,
                                                                        split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
