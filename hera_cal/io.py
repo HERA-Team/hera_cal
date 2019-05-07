@@ -138,7 +138,7 @@ class HERACal(UVCal):
 
 def get_blt_slices(uvo):
     '''For a pyuvdata-style UV object, get the mapping from antenna pair to blt slice.
-    
+
     Arguments:
         uvo: a "UV-Object" like UVData or baseline-type UVFlag
 
@@ -634,15 +634,15 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
     '''Load flags from a file and returns them as a DataContainer (for per-visibility flags)
     or dictionary (for per-antenna or per-polarization flags). More than one spectral window
     is not supported. Assumes times are evenly-spaced and in order for each baseline.
-    
+
     Arguments:
         flagfile: path to file containing flags and flagging metadata
         filetype: either 'h5' or 'npz'. 'h5' assumes the file is readable as a hera_qm
-            UVFlag object in the 'flag' mode (could be by baseline, by antenna, or by 
+            UVFlag object in the 'flag' mode (could be by baseline, by antenna, or by
             polarization). 'npz' provides legacy support for the IDR2.1 flagging npzs,
             but only for per-visibility flags.
         return_meta: if True, return a metadata dictionary with, e.g., 'times', 'freqs', 'history'
-        
+
     Returns:
         flags: dictionary or DataContainer mapping keys to Ntimes x Nfreqs numpy arrays.
             if 'h5' and 'baseline' mode or 'npz': DataContainer with keys like (0,1,'xx')
@@ -653,9 +653,9 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
     flags = {}
     if filetype not in ['h5', 'npz']:
         raise ValueError("filetype must be 'h5' or 'npz'.")
-    
+
     elif filetype == 'h5':
-        from hera_qm import UVFlag
+        from pyuvdata import UVFlag
         uvf = UVFlag(flagfile)
         assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
         assert np.issubdtype(uvf.polarization_array.dtype, np.signedinteger), \
@@ -668,7 +668,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             blt_slices = get_blt_slices(uvf)
             for ip, polnum in enumerate(uvf.polarization_array):
                 for (ant1, ant2), blt_slice in blt_slices.items():
-                    flags[(ant1, ant2, polnum2str(polnum))] = uvf.flag_array[blt_slice, 0, :, ip] 
+                    flags[(ant1, ant2, polnum2str(polnum))] = uvf.flag_array[blt_slice, 0, :, ip]
             flags = DataContainer(flags)
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
             for i, ant in enumerate(uvf.ant_array):
@@ -692,7 +692,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             for n, (i, j) in enumerate(npz['antpairs']):
                 flags[i, j, pol] = flag_array[:, n, :]
         flags = DataContainer(flags)
-    
+
     if return_meta:
         return flags, {'freqs': freqs, 'times': times, 'history': history}
     else:
@@ -783,7 +783,7 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
 def partial_time_io(hd, times, **kwargs):
     '''Perform partial io with a time-select on a HERAData object, even if it is intialized
     using multiple files, some of which do not contain any of the specified times.
-    
+
     Arguments:
         hd: HERAData object intialized with (usually multiple) uvh5 files
         times: list of times in JD to load
