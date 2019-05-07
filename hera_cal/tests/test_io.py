@@ -491,6 +491,16 @@ class Test_HERAData(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             next(hd.iterate_over_times())
 
+    def test_uvflag_compatibility():
+        # Test that UVFlag is able to successfully init from the HERAData object
+        uv = UVData()
+        uv.read_uvh5(self.uvh5_1)
+        uvf1 = UVFlag(uv)
+        hd = HERAData(self.uvh5_1)
+        hd.read()
+        uvf2 = UVFlag(hd)
+        nt.assert_equal(uvf1, uvf2)
+
 
 class Test_Visibility_IO_Legacy(unittest.TestCase):
 
