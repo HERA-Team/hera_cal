@@ -15,7 +15,7 @@ import copy
 from collections import OrderedDict as odict
 from six.moves import range, zip
 import pyuvdata
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, UVFlag
 from pyuvdata.utils import parse_polstr, parse_jpolstr
 import nose.tools as nt
 import glob
