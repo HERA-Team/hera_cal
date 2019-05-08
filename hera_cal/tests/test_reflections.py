@@ -364,7 +364,9 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
 
         # test interpolation of umodes
         gp_frate = 0.2
-        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None)
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=2)
+        nt.assert_equal(RF.umode_interp[bl].shape, (100, 2))
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=None)
         nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
 
         # get fft and assert a good match within gp_frate
@@ -378,10 +380,6 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         gp_len = 1.0 / (0.4 * 1e-3) / (24.0 * 3600.0)
         kernel = 1**2 * kernels.RBF(gp_len) + kernels.WhiteKernel(1e-10)
         RF.interp_u(RF.umodes, RF.times, overwrite=True, kernels=kernel, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
-
-        # test mirror
-        RF.interp_u(RF.umodes, RF.times, full_times=RF.times, overwrite=True, gp_frate=1.0, gp_nl=1e-10, optimizer=None)
         nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
 
         # assert broadcasting to full time resolution worked

@@ -64,7 +64,6 @@ The code here models the time and delay dependent behavior
 through a combination of SVD and fringe-rate filtering.
 """
 from __future__ import print_function, division, absolute_import
-
 import numpy as np
 import aipy
 import os
@@ -162,7 +161,7 @@ class ReflectionFitter(FRFilter):
             if key[:4] == "ref_":
                 setattr(self, key, {})
 
-    def model_auto_reflections(self, clean_resid, dly_range, clean_flags=None, clean_data=None, 
+    def model_auto_reflections(self, clean_resid, dly_range, clean_flags=None, clean_data=None,
                                keys=None, edgecut_low=0, edgecut_hi=0, window='none',
                                alpha=0.1, zeropad=0, fthin=10, Nphs=300, ref_sig_cut=2.0,
                                overwrite=False, reject_edges=True, verbose=True):
@@ -274,7 +273,7 @@ class ReflectionFitter(FRFilter):
         self.ref_gains = form_gains(self.ref_eps)
         for a in self.ants:
             for p in self.pols:
-                k = (a, uvutils.parse_jpolstr(p)) 
+                k = (a, uvutils.parse_jpolstr(p))
                 if k not in self.ref_gains:
                     self.ref_gains[k] = np.ones_like(clean_resid[keys[0]], dtype=np.complex)
 
@@ -289,7 +288,7 @@ class ReflectionFitter(FRFilter):
         Iteratively perturbs reflection parameters in ref_* dictionaries,
         and applies to input clean_data until reflection bump amplitude
         inside dly_range is minimimzed to within a tolerance.
- 
+
         Args:
             clean_data : 2D ndarray of shape (Ntimes, Nfreqs)
                 CLEANed auto-correlation visibility data
@@ -344,7 +343,7 @@ class ReflectionFitter(FRFilter):
         if clean_flags is None:
             clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]))
         if clean_model is None:
-            clean_model = DataContainer(dict([(k, np.zeros_like(clean_data[k])) for k in clean_data]))            
+            clean_model = DataContainer(dict([(k, np.zeros_like(clean_data[k])) for k in clean_data]))
 
         # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
@@ -420,7 +419,7 @@ class ReflectionFitter(FRFilter):
         Args:
             output_calfits : str, filepath to write output calfits file to
             input_calfits : str, filepath to input calfits file to multiply in with
-                reflection gains. 
+                reflection gains.
             overwrite : bool, if True, overwrite output file
             write_npz : bool, if True, write an NPZ file holding reflection
                 params with the same pathname as output_calfits
@@ -491,7 +490,7 @@ class ReflectionFitter(FRFilter):
             max_dly : float, maximum |delay| of window
             side : str, options=['pos', 'neg', 'both']
                 Specifies window as spanning only positive delays, only negative delays or both.
- 
+
         Returns:
             wgts : DataContainer, holding sv_decomp weights
         """
@@ -662,7 +661,7 @@ class ReflectionFitter(FRFilter):
             # form principal components
             pcomps = np.einsum("ij,jk->jik", umodes[k], vmodes[k])
 
-            # multiply by svals and sum 
+            # multiply by svals and sum
             pc_model = np.einsum("i,i...->...", svals[k][:Nkeep], pcomps[:Nkeep])
 
             # add to pcomp_model
@@ -682,8 +681,8 @@ class ReflectionFitter(FRFilter):
         Subtract pcomp_model from data.
 
         FFT pcomp_model to frequency space, divide by window, and subtract from data.
-        Inserts FFT of pcomp_model into self.pcomp_model_fft and 
-        residual of data with self.data_pcmodel_resid. 
+        Inserts FFT of pcomp_model into self.pcomp_model_fft and
+        residual of data with self.data_pcmodel_resid.
 
         Note: The windowing parameters should be the *same* as those that were used
         in constructing the dfft that sv_decomp operated on.
@@ -758,7 +757,7 @@ class ReflectionFitter(FRFilter):
             self.pcomp_model_fft[k] = model_fft
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
-    def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False,
+    def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False, Ninterp=None,
                  gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, verbose=True):
         """
         Interpolate u modes along time with a Gaussian Process.
@@ -778,6 +777,8 @@ class ReflectionFitter(FRFilter):
                 List of baseline-pol DataContainer tuples to operate on.
             overwrite : bool
                 If True, overwrite output data if it exists.
+            Ninterp : int
+                Number of modes to interpolate. Default (None) is all modes.
             gp_frate : float or DataContainer
                 Fringe rate [mHz] associated with GP length scale in time.
                 If fed as a DataContainer, must have keys matching umodes.
@@ -850,7 +851,7 @@ class ReflectionFitter(FRFilter):
             # setup regression data: get unflagged data
             select = ~np.max(uflags[k], axis=1)
             X = times[select, None] - Xmean
-            Y = umodes[k][select, :].copy()
+            Y = umodes[k][select, :Ninterp].copy()
             Npix = Y.shape[0]
 
             # do real and imag separately
@@ -1358,7 +1359,7 @@ def auto_reflection_argparser():
 def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_cal=None, time_avg=False,
                         write_npz=False, antenna_numbers=None, polarizations=None, window='None', alpha=0.2,
                         edgecut_low=0, edgecut_hi=0, zeropad=0, tol=1e-6, gain=1e-1, maxiter=100,
-                        skip_wgt=0.2, horizon=1.0, standoff=0.0, min_dly=100.0, Nphs=300, fthin=10, 
+                        skip_wgt=0.2, horizon=1.0, standoff=0.0, min_dly=100.0, Nphs=300, fthin=10,
                         ref_sig_cut=2.0, add_to_history='', skip_frac=0.9, reject_edges=True, opt_maxiter=0,
                         opt_method='BFGS', opt_tol=1e-3, opt_buffer=(25, 25), overwrite=False):
     """

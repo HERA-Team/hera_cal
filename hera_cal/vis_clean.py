@@ -20,7 +20,6 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 
-
 class VisClean(object):
     """
     VisClean object for visibility CLEANing and filtering.
@@ -200,7 +199,7 @@ class VisClean(object):
         # attach data
         self.attach_data()
 
-    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None, 
+    def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None,
                    times=None, lsts=None, filetype='uvh5', partial_write=False,
                    add_to_history='', verbose=True, **kwargs):
         """
@@ -456,7 +455,7 @@ class VisClean(object):
                     if zeropad > 0:
                         mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=(0, 1), undo=True)
                         res, _ = zeropad_array(res, zeropad=zeropad, axis=(0, 1), undo=True)
- 
+
                     flgs = np.zeros_like(mdl, dtype=np.bool)
                 else:
                     # flagged baseline
