@@ -44,66 +44,45 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
     Parameters:
     -----------
-    data_list : type=list, list of DataContainer dictionaries holding complex visibility data
-
+    data_list : type=list, list of DataContainer dictionaries holding
+        complex visibility data for each night to average.
     lst_list : type=list, list of ndarrays holding LST bin centers of each data dictionary in data_list.
         These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
-
     flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
         in data_list. Flagged data do not contribute to the average of an LST bin.
-
     dlst : type=float, delta-LST spacing for lst_grid. If None, will use the delta-LST of the first
         array in lst_list.
-
     lst_start : type=float, starting LST for making the lst_grid, extending from
         [lst_start, lst_start+2pi). Default is lst_start = 0 radians.
-
-    lst_low : type=float, lower bound on LST bin centers used for contructing LST grid
-
-    lst_hi : type=float, upper bound on LST bin centers used for contructing LST grid
-
+    lst_low : type=float, truncate lst_grid below this lower bound on the LST bin center
+    lst_hi : type=float, truncate lst_grid above this upper bound on the LST bin center
     flag_thresh : type=float, minimum fraction of flagged points in an LST bin needed to
         flag the entire bin.
-
     atol : type=float, absolute tolerance for comparing LST bin center floats
-
     median : type=boolean, if True use median for LST binning. Warning: this is slower.
-
-    truncate_empty : type=boolean, if True, truncate output time integrations that have no data
-        in them.
-
+    truncate_empty : type=boolean, if True, truncate output time bins that have
+        no averaged data in them.
     sig_clip : type=boolean, if True, perform a sigma clipping algorithm of the LST bins on the
-        real and imag components separately. Warning: This is considerably slow.
-
+        real and imag components separately. Resultant clip flags are OR'd between real and imag.
+        Warning: This is considerably slow.
     sigma : type=float, input sigma threshold to use for sigma clipping algorithm.
-
-    min_N : type=int, minimum number of points in an LST bin to perform sigma clipping
-
+    min_N : type=int, minimum number of points in averaged LST bin needed to perform sigma clipping
     return_no_avg : type=boolean, if True, return binned but un-averaged data and flags.
-
-    rephase : type=bool, if True, phase data to center of LST bin before binning.
-        Note that this produces a copy of the data.
-
+    rephase : type=bool, if True, phase data to center of the LST bin before binning.
+        Note this produces a copy of the data.
     antpos : type=dictionary, holds antenna position vectors in ENU frame in meters with
         antenna integers as keys and 3D ndarrays as values. See io.load_vis(). Needed for rephase.
-
     freq_array : type=ndarray, 1D array of unique data frequencies channels in Hz. Needed for rephase.
-
     lat : type=float, latitude of array in degrees North. Needed for rephase.
-
     verbose : type=bool, if True report feedback to stdout
 
     Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
     lst_bins : ndarray containing final lst grid of data (marks bin centers)
-
     data_avg : dictionary of data having averaged in each LST bin
-
     flags_min : dictionary of minimum of data flags in each LST bin
-
     data_std : dictionary of data with real component holding LST bin std along real axis
                and imag component holding std along imag axis
-
     data_count : dictionary containing the number count of data points averaged in each LST bin.
 
     if return_no_avg:
@@ -172,7 +151,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 raise ValueError("freq_array and antpos is needed for rephase")
 
             # form baseline dictionary
-            bls = odict(list(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), d.keys())))
+            bls = odict([(k, antpos[k[0]] - antpos[k[1]]) for k in d.keys()])
 
             # get appropriate lst_shift for each integration, then rephase
             lst_shift = lst_grid[grid_indices] - li
@@ -194,7 +173,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 if flags_list is not None:
                     flags_list[i][key] = flags_list[i][switch_bl(key)]
             else:
-                # if key or conj(key) not in data, insert key into data
+                # if key or conj(key) not in data, insert key into data as an odict
                 data[key] = odict()
                 flags[key] = odict()
 
@@ -246,15 +225,11 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
 
     # return un-averaged data if desired
     if return_no_avg:
-        # return all binned data instead of just bin average
-        data_bin = odict(list(map(lambda k: (k, np.array(list(odict(list(map(lambda k2: (k2, data[k][k2]),
-                                                                             sorted(data[k].keys())))).values()))),
-                                  sorted(data.keys()))))
-        flags_bin = odict(list(map(lambda k: (k, np.array(list(odict(list(map(lambda k2: (k2, flags[k][k2]),
-                                                                              sorted(flags[k].keys())))).values()))),
-                                   sorted(flags.keys()))))
+        # return all binned data instead of just the bin average
+        data_bins = odict([(k1, [data[k1][k2] for k2 in data[k1].keys()]) for k1 in data.keys()])
+        flag_bins = odict([(k1, [flags[k1][k2] for k2 in flags[k1].keys()]) for k1 in flags.keys()])
 
-        return lst_bins, data_bin, flags_bin
+        return lst_bins, data_bins, flag_bins
 
     # iterate over data keys (baselines) and get statistics
     for i, key in enumerate(data.keys()):
@@ -276,7 +251,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             f[np.isnan(f)] = True
 
             # replace flagged data with nan
-            d[f] *= np.nan
+            d[f] *= np.nan  # multiplication (instead of assignment) gets real and imag
 
             # sigma clip if desired
             if sig_clip:
@@ -286,16 +261,16 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
                 # clip imag
                 imag_f = sigma_clip(d.imag, sigma=sigma, min_N=min_N, axis=0)
 
-                # get real +  imag flags
+                # get real + imag flags
                 clip_flags = real_f + imag_f
 
-                # flag data
+                # set clipped data to nan
                 d[clip_flags] *= np.nan
 
                 # merge clip flags
-                f += (real_f + imag_f)
+                f += clip_flags
 
-            # check flag thresholds
+            # check thresholds for flagging entire output LST bins
             if len(f) == 1:
                 flag_bin = np.zeros(f.shape[1], np.bool)
             else:
@@ -303,7 +278,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
             d[:, flag_bin] *= np.nan
             f[:, flag_bin] = True
 
-            # take bin average
+            # take bin average: real and imag separately
             if median:
                 real_avg.append(np.nanmedian(d.real, axis=0))
                 imag_avg.append(np.nanmedian(d.imag, axis=0))
@@ -527,10 +502,10 @@ def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst
     return data_times, lst_grid, dlst, file_lsts, start_lst
 
 
-def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_per_file=60,
+def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{}.{}.{:7.5f}.uv", outdir=None, overwrite=False, history='', lst_start=0, 
                   fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
-                  output_file_select=None, input_cals=None, **kwargs):
+                  output_file_select=None, **kwargs):
     """
     LST bin a series of files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
@@ -544,8 +519,8 @@ def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_p
     Parameters:
     -----------
     data_files : type=list of lists: nested set of lists, with each nested list containing
-                 paths to files from a particular night. These files should be sorted
-                 by ascending Julian Date. Frequency axis of each file must be identical.
+        paths to files from a particular night. These files should be sorted
+        by ascending Julian Date. Frequency axis of each file must be identical.
     filetype : str, options=['uvh5', 'miriad']
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
@@ -553,8 +528,8 @@ def lst_bin_files(data_files, filetype='uvh5', dlst=None, verbose=True, ntimes_p
         record. Otherwise, LST grid starts at LST of first data record.
     ntimes_per_file : type=int, number of LST bins in a single output file
     file_ext : type=str, extension to "zen." for output files. This must have three
-               formatting placeholders, first for polarization(s), second for type of file
-               Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
+        formatting placeholders, first for polarization(s), second for type of file
+        Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
     outdir : type=str, output directory
     overwrite : type=bool, if True overwrite output files
     history : history to insert into output files
