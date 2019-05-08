@@ -503,7 +503,7 @@ def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst
 
 
 def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
-                  file_ext="{}.{}.{:7.5f}.uv", outdir=None, overwrite=False, history='', lst_start=0, 
+                  file_ext="{pol}.{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=0, 
                   fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
                   output_file_select=None, **kwargs):
     """
@@ -527,9 +527,10 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
     fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
         record. Otherwise, LST grid starts at LST of first data record.
     ntimes_per_file : type=int, number of LST bins in a single output file
-    file_ext : type=str, extension to "zen." for output files. This must have three
-        formatting placeholders, first for polarization(s), second for type of file
-        Ex. ["LST", "STD", "NUM"] and third for starting LST bin of file.
+    file_ext : type=str, extension to "zen." for output files. This must have at least a ".{type}." field
+        where either "LST" or "STD" is inserted for data average or data standard dev., and also a ".{time:7.5f}"
+        field where the starting time of the data file is inserted. If this also has a ".{pol}." field, then
+        the polarizations of data is also inserted. Example: "{pol}.{type}.{time:7.5f}.uvh5"
     outdir : type=str, output directory
     overwrite : type=bool, if True overwrite output files
     history : history to insert into output files
@@ -696,12 +697,15 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
         # assign old f_select
         old_f_select = copy.copy(f_select)
 
-        # get polarizations
-        pols = bin_data.pols()
+        # file in data ext
+        fkwargs = {"type": "LST", "time": bin_lst[0] - dlst / 2.0}
+        if "{pol}" in file_ext:
+            fkwargs['pol'] = '.'.join(bin_data.pols())
 
         # configure filenames
-        bin_file = "zen.{}".format(file_ext.format('.'.join(pols), "LST", bin_lst[0] - dlst / 2.0))
-        std_file = "zen.{}".format(file_ext.format('.'.join(pols), "STD", bin_lst[0] - dlst / 2.0))
+        bin_file = "zen." + file_ext.format(**fkwargs)
+        fkwargs['type'] = 'STD'
+        std_file = "zen." + file_ext.format(**fkwargs)
 
         # check for overwrite
         if os.path.exists(bin_file) and overwrite is False:
