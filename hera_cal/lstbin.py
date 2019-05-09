@@ -404,7 +404,7 @@ def lst_bin_arg_parser():
     a.add_argument("--lst_start", type=float, default=0, help="starting LST for binner as it sweeps across 2pi LST")
     a.add_argument("--fixed_lst_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
-    a.add_argument("--file_ext", type=str, default="{}.{}.{:7.5f}.uv", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
+    a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uv", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
     a.add_argument("--outdir", default=None, type=str, help="directory for writing output")
     a.add_argument("--overwrite", default=False, action='store_true', help="overwrite output files")
     a.add_argument("--sig_clip", default=False, action='store_true', help="perform robust sigma clipping before binning")
@@ -503,7 +503,7 @@ def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst
 
 
 def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
-                  file_ext="{pol}.{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=0, 
+                  file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=0, 
                   fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
                   output_file_select=None, **kwargs):
     """
@@ -530,7 +530,7 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
     file_ext : type=str, extension to "zen." for output files. This must have at least a ".{type}." field
         where either "LST" or "STD" is inserted for data average or data standard dev., and also a ".{time:7.5f}"
         field where the starting time of the data file is inserted. If this also has a ".{pol}." field, then
-        the polarizations of data is also inserted. Example: "{pol}.{type}.{time:7.5f}.uvh5"
+        the polarizations of data is also inserted. Example: "{type}.{time:7.5f}.uvh5"
     outdir : type=str, output directory
     overwrite : type=bool, if True overwrite output files
     history : history to insert into output files
