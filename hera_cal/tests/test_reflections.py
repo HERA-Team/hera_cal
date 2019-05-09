@@ -406,6 +406,19 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         nt.assert_true(np.all(np.isclose(_svals[bl], RF.svals[bl], atol=1e-10)))  
         nt.assert_true(np.all(np.isclose(_umodes[bl][:, 0], RF.umodes[bl][:, 0], atol=1e-10)))  
 
+        # try with and without Nmirror
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=0)
+        uinterp1 = copy.deepcopy(RF.umode_interp)
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=25)
+        uinterp2 = copy.deepcopy(RF.umode_interp)
+        # assert higher order umodes don't diverge as much at time boundaries with Nmirror > 0
+        for i in range(3, 10):
+            nt.assert_true(np.mean(np.abs(uinterp1[bl][:2, i]) / np.abs(uinterp2[bl][:2, i])) > 1.0)
+            nt.assert_true(np.mean(np.abs(uinterp1[bl][-2:, i]) / np.abs(uinterp2[bl][-2:, i])) > 1.0)
+
+        # test too large Nmirror
+        nt.assert_raises(AssertionError, RF.interp_u, RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=100)
+
         # assert custom kernel works
         gp_len = 1.0 / (0.4 * 1e-3) / (24.0 * 3600.0)
         kernel = 1**2 * kernels.RBF(gp_len) + kernels.WhiteKernel(1e-10)
