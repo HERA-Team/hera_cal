@@ -377,7 +377,7 @@ class VisClean(object):
 
         # iterate over keys
         for k in keys:
-            if k in data and overwrite is False:
+            if k in getattr(self, clean_model) and overwrite is False:
                 echo("{} exists in clean_model and overwrite is False, skipping...".format(k), verbose=verbose)
                 continue
             echo("Starting CLEAN of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)

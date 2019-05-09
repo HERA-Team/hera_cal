@@ -271,11 +271,15 @@ class ReflectionFitter(FRFilter):
 
         # form gains
         self.ref_gains = form_gains(self.ref_eps)
-        for a in self.ants:
-            for p in self.pols:
-                k = (a, uvutils.parse_jpolstr(p))
-                if k not in self.ref_gains:
-                    self.ref_gains[k] = np.ones_like(clean_resid[keys[0]], dtype=np.complex)
+
+        # if ref_gains not empty, fill in missing antenna and polarizations with unity gains
+        if len(self.ref_gains) > 0:
+            _keys = list(self.ref_gains.keys())
+            for a in self.ants:
+                for p in self.pols:
+                    k = (a, uvutils.parse_jpolstr(p))
+                    if k not in self.ref_gains:
+                        self.ref_gains[k] = np.ones_like(self.ref_gains[_keys[0]], dtype=np.complex)
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs, ref_flags=None,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
@@ -578,17 +582,24 @@ class ReflectionFitter(FRFilter):
 
     def project_svd_modes(self, dfft, umodes=None, svals=None, vmodes=None):
         """
-        Given two of the 3 SVD output vectors, project the input dfft data onto
-        the last remaining SVD vector.
+        Given two of the 3 SVD output matrices, project them onto the input dfft data
+        to estimate the last remaining SVD matrix. Note U and V are unitary matrices.
+
+        If
+            D = U S V
+        then
+            U = D V_dagger S_inv
+            S = U_dagger D V_dagger
+            V = S_inv U_dagger D
 
         Args:
             dfft : DataContainer, holds time-delay waterfall visibilities
-            umodes : DataContainer, holds SVD umodes
-            svals : DataContainer, holds SVD singular values
-            vmodes : DataContainer, holds SVD vmodes
+            umodes : DataContainer, holds SVD umodes, shape (Ntimes, Nmodes)
+            svals : DataContainer, holds SVD singular values, shape (Nmodes,)
+            vmodes : DataContainer, holds SVD vmodes, shape (Nmodes, Nfreqs)
 
         Returns:
-            output : DataContainer, dfft projected onto last remaining SVD vector
+            output : DataContainer, estimate of remaining SVD matrix
         """
         output = DataContainer({})
         if umodes is None:
@@ -597,14 +608,14 @@ class ReflectionFitter(FRFilter):
             for k in dfft:
                 if k not in svals or k not in vmodes:
                     continue
-                output[k] = dfft[k].dot(np.linalg.pinv(vmodes[k]).dot(svals[k] * np.eye(len(svals[k]))))
+                output[k] = dfft[k].dot(np.conj(vmodes[k].T).dot(np.eye(len(svals[k])) / svals[k]))
 
         elif svals is None:
             assert umodes is not None and vmodes is not None, "Must feed two of the SVD output matrices"
             for k in dfft:
                 if k not in umodes or k not in vmodes:
                     continue
-                output[k] = np.linalg.pinv(umodes[k]).dot(dfft[k].dot(np.linalg.pinv(vmodes[k])))
+                output[k] = np.abs(np.conj(umodes[k].T).dot(dfft[k].dot(np.conj(vmodes[k].T))).diagonal())
 
         elif vmodes is None:
             assert umodes is not None and svals is not None, "Must feed two of the SVD output matrices"
@@ -612,7 +623,7 @@ class ReflectionFitter(FRFilter):
             for k in dfft:
                 if k not in svals or k not in umodes:
                     continue
-                output[k] = np.linalg.pinv(svals[k] * np.eye(len(svals[k]))).dot(np.linalg.pinv(umodes[k]).dot(dfft[k]))
+                output[k] = (np.eye(len(svals[k])) / svals[k]).dot(np.conj(umodes[k]).T).dot(dfft[k])
 
         else:
             raise AssertionError("Must feed two of the SVD output matrices")
@@ -1471,7 +1482,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
 
         # model auto reflections in clean data
         _RF.model_auto_reflections(cdata, dly_range, clean_flags=flags, edgecut_low=edgecut_low,
-                                   edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
+                                   edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha, overwrite=True,
                                    zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut, reject_edges=reject_edges)
 
         # refine reflections
@@ -1479,7 +1490,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
             (_RF.ref_amp, _RF.ref_dly, _RF.ref_phs, info, _RF.ref_eps,
              _RF.ref_gains) = RF.refine_auto_reflections(cdata, opt_buffer, _RF.ref_amp, _RF.ref_dly, _RF.ref_phs, ref_flags=_RF.ref_flags,
                                                          keys=keys, window=window, alpha=alpha, edgecut_low=edgecut_low,
-                                                         edgecut_hi=edgecut_hi, clean_flags=flags, clean_model=model,
+                                                         edgecut_hi=edgecut_hi, clean_flags=flags, clean_model=model, overwrite=True,
                                                          skip_frac=skip_frac, maxiter=opt_maxiter, method=opt_method, tol=opt_tol)
 
         # write gains
