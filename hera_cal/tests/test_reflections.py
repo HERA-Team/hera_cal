@@ -357,7 +357,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         np.random.seed(0)
         Namp = 3e0
         for k in RF.data:
-            RF.data += stats.norm.rvs(0, Namp, RF.Ntimes*RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs) + 1j * stats.norm.rvs(0, Namp, RF.Ntimes*RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs)
+            RF.data += stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs) + 1j * stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs)
         bl = (23, 24, 'xx')
 
         # fft data
@@ -385,7 +385,8 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
 
         # test mode projection after interpolation (smoothing)
         umodes = copy.deepcopy(RF.umodes)
-        for k in umodes: umodes[k][:, :10] = RF.umode_interp[k][:, :10]  # fill in umodes with smoothed components
+        for k in umodes:
+            umodes[k][:, :10] = RF.umode_interp[k][:, :10]  # fill in umodes with smoothed components
         vmodes = RF.project_svd_modes(RF.dfft * svd_wgts, umodes=umodes, svals=RF.svals)
 
         # build systematic models with original vmodes and projected vmodes

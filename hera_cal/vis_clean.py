@@ -20,6 +20,7 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 
+
 class VisClean(object):
     """
     VisClean object for visibility CLEANing and filtering.

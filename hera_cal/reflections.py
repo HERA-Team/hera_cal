@@ -769,7 +769,7 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False, Ninterp=None,
-                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, verbose=True):
+                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0, verbose=True):
         """
         Interpolate u modes along time with a Gaussian Process.
 
@@ -806,6 +806,8 @@ class ReflectionFitter(FRFilter):
             optimizer : str
                 GPR optimizer for kernel hyperparameter solution. Default is no regression.
                 See sklearn.gaussian_process.GaussianProcessRegressor for details.
+            Nmirror : int
+                Number of time bins to mirror at ends of input time axis. Default is no mirroring.
             verbose : bool
                 If True, report feedback to stdout.
 
@@ -859,10 +861,22 @@ class ReflectionFitter(FRFilter):
             # setup GP
             GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False)
 
+            # setup regression data
+            X = times - Xmean
+            Y = umodes[k][:, :Ninterp].copy()
+            F = uflags[k].copy()
+
+            # mirror if desired
+            if Nmirror > 0:
+                assert Nmirror < X.size, "Nmirror can't be equal or larger than Ntimes"
+                _, X = vis_clean.zeropad_array(Y, binvals=X, zeropad=Nmirror, axis=0)
+                Y = np.concatenate([Y[1:Nmirror + 1, :][::-1, :], Y, Y[-Nmirror - 1:-1, :][::-1, :]], axis=0)
+                F = np.concatenate([F[1:Nmirror + 1, :][::-1, :], F, F[-Nmirror - 1:-1, :][::-1, :]], axis=0)
+
             # setup regression data: get unflagged data
-            select = ~np.max(uflags[k], axis=1)
-            X = times[select, None] - Xmean
-            Y = umodes[k][select, :Ninterp].copy()
+            select = ~np.max(F, axis=1)
+            X = X[select, None]
+            Y = Y[select, :]
             Npix = Y.shape[0]
 
             # do real and imag separately
