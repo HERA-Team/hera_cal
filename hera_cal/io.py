@@ -658,25 +658,42 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         from pyuvdata import UVFlag
         uvf = UVFlag(flagfile)
         assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
-        assert np.issubdtype(uvf.polarization_array.dtype, np.signedinteger), \
-            "The input h5-based UVFlag object's polarization_array must be integers."
+        assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
+                or np.issubsctype(uvf.polarization_array.dtype, np.bites_)), \
+            "The input h5-based UVFlag object's polarization_array must be integers or byte strings."
         freqs = np.unique(uvf.freq_array)
         times = np.unique(uvf.time_array)
         history = uvf.history
-        pol_indices = {polnum2str(polnum): i for i, polnum in enumerate(uvf.polarization_array)}
+
         if uvf.type == 'baseline':  # one time x freq waterfall per baseline
             blt_slices = get_blt_slices(uvf)
-            for ip, polnum in enumerate(uvf.polarization_array):
+            for ip, pol in enumerate(uvf.polarization_array):
+                if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
+                    pol = polnum2str(pol)  # convert to string if possible
+                else:
+                    pol = ','.join([polnum2str(int(p)) for p in pol.split(b',')])
                 for (ant1, ant2), blt_slice in blt_slices.items():
-                    flags[(ant1, ant2, polnum2str(polnum))] = uvf.flag_array[blt_slice, 0, :, ip]
-            flags = DataContainer(flags)
+                    flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, 0, :, ip]
+            # data container only supports standard polarizations strings
+            if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger): 
+                flags = DataContainer(flags)
+        
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
             for i, ant in enumerate(uvf.ant_array):
-                for ip, jnum in enumerate(uvf.polarization_array):
-                    flags[(ant, jnum2str(jnum))] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
-        elif uvf.type == 'waterfall':  # one time x freq waterfall per visibility polarization
-            for ip, jnum in enumerate(uvf.polarization_array):
-                flags[jnum2str(jnum)] = uvf.flag_array[:, :, ip]
+                for ip, jpol in enumerate(uvf.polarization_array):
+                    if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
+                        jpol = jnum2str(jpol)  # convert to string if possible
+                    else:
+                        jpol = ','.join([jnum2str(int(p)) for p in jpol.split(b',')])
+                    flags[(ant, jpol)] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
+        
+        elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
+            for ip, jpol in enumerate(uvf.polarization_array):
+                if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
+                    jpol = jnum2str(jpol)  # convert to string if possible
+                else:
+                    jpol = ','.join([jnum2str(int(p)) for p in jpol.split(b',')])
+                flags[jpol] = uvf.flag_array[:, :, ip]
 
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
         npz = np.load(flagfile)
