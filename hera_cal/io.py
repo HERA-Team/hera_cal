@@ -659,7 +659,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         uvf = UVFlag(flagfile)
         assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
         assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
-                or np.issubsctype(uvf.polarization_array.dtype, np.bites_)), \
+                or np.issubsctype(uvf.polarization_array.dtype, np.bytes_)), \
             "The input h5-based UVFlag object's polarization_array must be integers or byte strings."
         freqs = np.unique(uvf.freq_array)
         times = np.unique(uvf.time_array)
