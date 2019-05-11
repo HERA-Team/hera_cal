@@ -157,7 +157,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     if not np.all(np.abs(taus) < 1e-16):  # this breaks CLEAN, but it means we don't need smoothing anyway
         taus = uvtools.dspec.high_pass_fourier_filter(taus.T, np.sum(wgts, axis=1, keepdims=True).T,
                                                       fringe_scale, dt, tol=tol, maxiter=maxiter)[0].T  # 0th index is the CLEAN components
-    rephasor = np.exp(-2.0j * np.pi * np.outer(np.abs(taus), freqs))
+    rephasor = np.exp(-2.0j * np.pi * np.outer(np.real(taus), freqs))
 
     # Build fourier space image and kernel for deconvolution
     window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
