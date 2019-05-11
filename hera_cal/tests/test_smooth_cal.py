@@ -75,23 +75,23 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         self.assertTrue(info[0]['skipped'])
 
     def test_time_freq_2D_filter(self):
-        gains = np.ones((10, 10), dtype=complex)
+        gains = np.ones((100, 100), dtype=complex)
         gains[3, 5] = 10.0
-        wgts = np.ones((10, 10), dtype=float)
+        wgts = np.ones((100, 100), dtype=float)
         wgts[3, 5] = 0
-        freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
-        times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 10, endpoint=False)
+        freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
+        times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 100, endpoint=False)
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='rect')
-        np.testing.assert_array_almost_equal(ff, np.ones((10, 10), dtype=complex))
+        np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='plus')
-        np.testing.assert_array_almost_equal(ff, np.ones((10, 10), dtype=complex))
+        np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
 
         # test rephasing
-        gains = np.ones((10, 10), dtype=complex)
-        wgts = np.ones((10, 10), dtype=float)
-        gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(10), freqs))
+        gains = np.ones((100, 100), dtype=complex)
+        wgts = np.ones((100, 100), dtype=float)
+        gains *= np.exp(2.0j * np.pi * np.outer(-151e-9 * np.ones(100), freqs))
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times)
-        np.testing.assert_array_almost_equal(ff, gains)
+        np.testing.assert_array_almost_equal(ff, gains, 4)
 
         # test errors
         with self.assertRaises(ValueError):
