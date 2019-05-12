@@ -540,33 +540,45 @@ def smooth_cal_argparser():
     '''Arg parser for commandline operation of 2D calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
     a.add_argument("calfits_list", type=str, nargs='+', help="list of paths to chronologically sortable calfits files (usually a full day)")
-    a.add_argument("--flag_file_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
-                   sortable flag files (usually a full day)")
-    a.add_argument("--flag_filetype", type=str, default='h5', help="filetype of flag_file_list (either 'h5' or legacy 'npz'")
     a.add_argument("--infile_replace", type=str, default='.abs.', help="substring of files in calfits_list to replace for output files")
     a.add_argument("--outfile_replace", type=str, default='.smooth_abs.', help="replacement substring for output files")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at cal_outfile (default False)')
-    a.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged pixels across all visibilities (with a common antenna) \
-                   needed to flag that antenna gain at a particular time and frequency. 0.0 is aggressive flag broadcasting, while 1.0 is \
-                   conservative flag broadcasting.")
     a.add_argument("--pick_refant", default=False, action="store_true", help='Automatically picks one reference anteanna per polarization. \
                    The refants chosen have the fewest total flags and causes the least noisy phases on other antennas when made the phase reference.')
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
     a.add_argument("--verbose", default=False, action="store_true", help="Print status updates while smoothing.")
 
+    # Options relating to optional external flags and flag thresholding and broadcasting
+    flg_opts = a.add_argument_group(title='Flagging options.')
+    flg_opts.add_argument("--flag_file_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
+                                  sortable flag files (usually a full day)")
+    flg_opts.add_argument("--flag_filetype", type=str, default='h5', help="filetype of flag_file_list (either 'h5' or legacy 'npz'")
+    flg_opts.add_argument("--antflag_thresh", default=0.0, type=float, help="fraction of flagged pixels across all visibilities (with a common antenna) \
+                                  needed to flag that antenna gain at a particular time and frequency. 0.0 is aggressive flag broadcasting, while 1.0 is \
+                                  conservative flag broadcasting.")
+    flg_opts.add_argument("--freq_threshold", default=0.35, type=float, help="Finds the times that flagged for all antennas at a single channel but not \
+                          flagged for all channels. If the ratio of of such times for a given channel compared to all times that are not completely flagged \
+                          is greater than freq_threshold, flag the entire channel for all antennas. 1.0 means no additional flagging (default 0.35).")
+    flg_opts.add_argument("--time_threshold", default=0.5, type=float, help="Finds the channels that flagged for all antennas at a single time but not \
+                          flagged for all times. If the ratio of of such channels for a given time compared to all channels that are not completely flagged \
+                          is greater than time_threshold, flag the entire time for all antennas. 1.0 means no additional flagging (default 0.5).")
+    flg_opts.add_argument("--ant_threshold", default=0.5, type=float, help="If, after time and freq thesholding and broadcasting, an antenna is left \
+                          unflagged for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that antenna for all \
+                          times and channels. 1.0 means no additional flagging (default 0.5).")
+
     # Options relating to performing the filter in time and frequency
-    filter_options = a.add_argument_group(title='Filtering options.')
-    filter_options.add_argument("--freq_scale", type=float, default=10.0, help="frequency scale in MHz for the low-pass filter\
-                              (default 10.0 MHz, i.e. a 100 ns delay filter)")
-    filter_options.add_argument("--time_scale", type=float, default=1800.0, help="time scale in seconds, defined analogously to freq_scale (default 1800 s).")
-    filter_options.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
-    filter_options.add_argument("--filter_mode", type=str, default="rect", help='Mode for CLEAN algorithm that defines the shape of the area that can have\
-                                non-zero CLEAN components. Default "rect". "plus" creates calibration solutions that are separable in time and frequency.')
-    filter_options.add_argument("--window", type=str, default="tukey", help='window function for frequency filtering (default "tukey",\
-                                see aipy.dsp.gen_window for options')
-    filter_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
-    filter_options.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
+    flt_opts = a.add_argument_group(title='Filtering options.')
+    flt_opts.add_argument("--freq_scale", type=float, default=10.0, help="frequency scale in MHz for the low-pass filter\
+                          (default 10.0 MHz, i.e. a 100 ns delay filter)")
+    flt_opts.add_argument("--time_scale", type=float, default=1800.0, help="time scale in seconds, defined analogously to freq_scale (default 1800 s).")
+    flt_opts.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
+    flt_opts.add_argument("--filter_mode", type=str, default="rect", help='Mode for CLEAN algorithm that defines the shape of the area that can have\
+                          non-zero CLEAN components. Default "rect". "plus" creates calibration solutions that are separable in time and frequency.')
+    flt_opts.add_argument("--window", type=str, default="tukey", help='window function for frequency filtering (default "tukey",\
+                          see aipy.dsp.gen_window for options')
+    flt_opts.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
 
     args = a.parse_args()
     return args
