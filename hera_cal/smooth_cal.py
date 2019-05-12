@@ -182,6 +182,50 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     return filtered / rephasor, info
 
 
+def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=0.5):
+    '''Thesholds and broadcast flags along three axes. First, it loops through frequency and time thresholding
+    until no new flags are found. Then it does antenna thresholding.
+
+    Arguments:
+        flags: dictionary mapping antenna keys (e.g. (0, 'Jxx')) to Ntimes x Nfreq flag waterfalls. 
+            Modified in place.
+        freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
+            for all channels. If the ratio of of such times for a given channel compared to all times that are not
+             completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
+             Setting this to 1.0 means no additional flagging.
+        time_threshold: float. Finds the channels that flagged for all antennas at a single time but not flagged
+            for all times. If the ratio of of such channels for a given time compared to all channels that are not
+            completely flagged is greater than time_threshold, flag the entire time for all antennas.
+            Setting this to 1.0 means no additional flagging.
+        ant_threshold: float. If, after time and freq thesholding and broadcasting, an antenna is left unflagged
+            for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that
+            antenna for all times and channels. Setting this to 1.0 means no additional flagging.
+    '''
+    # figure out which frequencies and times are flagged for all antennas
+    all_flagged = np.mean(1.0 - np.array(list(flags.values())), axis=0) == 0
+    sum_flagged = 0
+
+    # apply thresholding for times and frequencies and keep looping until no new flags are produced
+    while np.sum(all_flagged) > sum_flagged:
+        sum_flagged = np.sum(all_flagged)
+        # consider times that are not flagged for all chans, then flag chans that are flagged too often
+        flagged_chans = np.mean(all_flagged, axis=0) == 1
+        all_flagged[np.mean(all_flagged[:, ~flagged_chans], axis=1) > freq_threshold, :] = True
+        # consider chans that are not flagged for all times, then flag times that are flagged too often
+        flagged_times = np.mean(all_flagged, axis=1) == 1
+        all_flagged[:, np.mean(all_flagged[~flagged_times, :], axis=0) > time_threshold] = True
+
+    # apply flags to all antennas
+    for ant in flags.keys():
+        flags[ant] |= all_flagged
+
+    # flag antennas with fewer unflagged visibilities than the maximum times 1 - ant_threshold
+    most_unflagged = np.max([np.sum(~f) for f in flags.values()])
+    for ant in flags.keys():
+        if np.sum(~flags[ant]) < (1.0 - ant_threshold) * most_unflagged:
+            flags[ant] |= np.ones_like(flags[ant])  # flag the whole antenna
+
+
 def pick_reference_antenna(gains, flags, freqs, per_pol=True):
     '''Pick a refrence antenna that has the minimum number of per-antenna flags and produces
     the least noisy phases on other antennas when used as a reference antenna.
