@@ -394,9 +394,9 @@ class CalibrationSmoother():
             self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
             utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.' 
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
-            self.rephase_to_refant()
 
         self.reset_filtering()  # initializes self.filtered_gain_grids and self.filtered_flag_grids
+        self.rephase_to_refant()  # will skip if self.refant is not assigned
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
@@ -420,9 +420,10 @@ class CalibrationSmoother():
                     '{} and {} have different frequencies.'.format(ff, self.cals[0])
 
     def rephase_to_refant(self):
-        '''If the CalibrationSmoother object has a refant attribute, this function rephases to it.'''
+        '''If the CalibrationSmoother object has a refant attribute, this function rephases the
+        filtered gains to it.'''
         if hasattr(self, 'refant'):
-            rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
+            rephase_to_refant(self.filtered_gain_grids, self.refant, flags=self.filtered_flag_grids)
 
     def reset_filtering(self):
         '''Reset gain smoothing to the original input gains (though still possibly rephased and thresholded).'''
