@@ -191,8 +191,8 @@ def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5,
             Modified in place.
         freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
             for all channels. If the ratio of of such times for a given channel compared to all times that are not
-             completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
-             Setting this to 1.0 means no additional flagging.
+            completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
+            Setting this to 1.0 means no additional flagging.
         time_threshold: float. Finds the channels that flagged for all antennas at a single time but not flagged
             for all times. If the ratio of of such channels for a given time compared to all channels that are not
             completely flagged is greater than time_threshold, flag the entire time for all antennas.
@@ -301,26 +301,40 @@ def rephase_to_refant(gains, refant, flags=None):
 
 class CalibrationSmoother():
 
-    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', pick_refant=False, antflag_thresh=0.0, verbose=False):
+    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0,
+                 pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
         Gains and flags are assigned to the nearest gridpoint using np.searchsorted. It is assumed that:
         1) All calfits and flag files have the same frequencies
         2) The flag times and calfits time map one-to-one to the same set of integrations
-
+        Also contains functionality to broadcasting flags beyond certain thresholds and for automatically picking
+        a reference antenna for the whole day.
+    
         Arguments:
             calfits_list: list of string paths to calfits files containing calibration solutions and flags
             flag_file_list: list of string paths to files containing flags as a function of baseline, times
                 and frequency. Must have all baselines for all times. Flags on baselines are broadcast to both
                 antennas involved, unless either antenna is completely flagged for all times and frequencies.
             flag_filetype: filetype of flag_file_list to pass into io.load_flags. Either 'h5' (default) or legacy 'npz'.
-            pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
-                fewest total flags and causes the least noisy phases on other antennas when made the phase reference.
             antflag_thresh: float, fraction of flagged pixels across all visibilities (with a common antenna)
                 needed to flag that antenna gain at a particular time and frequency. antflag_thresh=0.0 is
                 aggressive flag broadcasting, antflag_thresh=1.0 is conservative flag_broadcasting.
-            verbose: print status updates
+                Only used for converting per-baseline flags to per-antenna flags if flag_file_list is specified.
+            pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
+                fewest total flags and causes the least noisy phases on other antennas when made the phase reference.
+            freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
+                for all channels. If the ratio of of such times for a given channel compared to all times that are not
+                completely flagged is greater than freq_threshold, flag the entire channel for all antennas.
+                Default1.0 means no additional flagging.
+            time_threshold: float. Finds the channels that flagged for all antennas at a single time but not flagged
+                for all times. If the ratio of of such channels for a given time compared to all channels that are not
+                completely flagged is greater than time_threshold, flag the entire time for all antennas.
+                Default 1.0 means no additional flagging.
+            ant_threshold: float. If, after time and freq thesholding and broadcasting, an antenna is left unflagged
+                for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that
+                antenna for all times and channels. Default 1.0 means no additional flagging.
         '''
         self.verbose = verbose
 
@@ -369,9 +383,10 @@ class CalibrationSmoother():
                     if ant in self.ext_flags[ff]:
                         self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
 
-        # perform data quality checks
+        # perform data quality checks and flag thresholding
         self.check_consistency()
-        self.reset_filtering()
+        flag_threshold_and_broadcast(self.flag_grids, freq_threshold=freq_threshold,
+                                     time_threshold=time_threshold, ant_threshold=time_threshold)
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
@@ -380,6 +395,8 @@ class CalibrationSmoother():
             utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.' 
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
             self.rephase_to_refant()
+
+        self.reset_filtering()  # initializes self.filtered_gain_grids and self.filtered_flag_grids
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
@@ -402,15 +419,15 @@ class CalibrationSmoother():
                 assert np.all(np.abs(self.flag_freqs[ff] - self.freqs) < 1e-4), \
                     '{} and {} have different frequencies.'.format(ff, self.cals[0])
 
-    def reset_filtering(self):
-        '''Reset gain smoothing to the original input gains.'''
-        self.filtered_gain_grids = deepcopy(self.gain_grids)
-        self.filtered_flag_grids = deepcopy(self.flag_grids)
-
     def rephase_to_refant(self):
         '''If the CalibrationSmoother object has a refant attribute, this function rephases to it.'''
         if hasattr(self, 'refant'):
-            rephase_to_refant(self.filtered_gain_grids, self.refant, flags=self.flag_grids)
+            rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
+
+    def reset_filtering(self):
+        '''Reset gain smoothing to the original input gains (though still possibly rephased and thresholded).'''
+        self.filtered_gain_grids = deepcopy(self.gain_grids)
+        self.filtered_flag_grids = deepcopy(self.flag_grids)
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
