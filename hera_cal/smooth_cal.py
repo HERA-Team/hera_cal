@@ -418,11 +418,13 @@ class CalibrationSmoother():
                 assert np.all(np.abs(self.flag_freqs[ff] - self.freqs) < 1e-4), \
                     '{} and {} have different frequencies.'.format(ff, self.cals[0])
 
-    def rephase_to_refant(self):
+    def rephase_to_refant(self, warn=True):
         '''If the CalibrationSmoother object has a refant attribute, this function rephases the
         filtered gains to it.'''
         if hasattr(self, 'refant'):
             rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
+        elif warn:
+            warnings.warn('No rephasing done because self.refant has not been set.', RuntimeWarning)
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
@@ -478,7 +480,7 @@ class CalibrationSmoother():
             for i, info_dict in enumerate(info):
                 if info_dict.get('skipped', False):
                     self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
-        self.rephase_to_refant()
+        self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09,
                             filter_mode='rect', window='tukey', maxiter=100, **win_kwargs):
@@ -510,7 +512,7 @@ class CalibrationSmoother():
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, **win_kwargs)
                 self.gain_grids[ant] = filtered
-        self.rephase_to_refant()
+        self.rephase_to_refant(warn=False)
 
     def write_smoothed_cal(self, output_replace=('.abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
