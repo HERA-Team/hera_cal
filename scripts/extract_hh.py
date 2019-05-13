@@ -29,8 +29,14 @@ if os.path.exists(fn_out) and not args.overwrite:
 print("scanning {}...".format(fn_in))
 uvd.read_uvh5(fn_in, read_data=False, run_check=False)
 
-# figure out which antennas have valid data and perform select-on-read
-ant_nums = np.unique(uvd.ant_1_array)
+# Figure out which antennas have valid data and perform select-on-read.
+# Here, "valid data" means data that comes from actual SNAP inputs
+# (instead of dummy placeholder data). The way that the correlator
+# denotes valid SNAP input is to change the antenna number in the
+# object's ant_[1,2]_array to a value less than 350 (the maximum number
+# of valid antennas for HERA). We find all such antenna numbers
+# corresponding to valid input, and downselect to keep only those.
+ant_nums = np.unique(np.concatenate((uvd.ant_1_array, uvd.ant_2_array)))
 inds = np.where(ant_nums < 350)
 data_ants = ant_nums[inds]
 print("reading {}...".format(fn_in))
