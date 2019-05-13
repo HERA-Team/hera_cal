@@ -395,9 +395,7 @@ class CalibrationSmoother():
             self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
             utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.' 
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
-
-        self.reset_filtering()  # initializes self.filtered_gain_grids and self.filtered_flag_grids
-        self.rephase_to_refant()  # will skip if self.refant is not assigned
+            self.rephase_to_refant()
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
@@ -424,12 +422,8 @@ class CalibrationSmoother():
         '''If the CalibrationSmoother object has a refant attribute, this function rephases the
         filtered gains to it.'''
         if hasattr(self, 'refant'):
-            rephase_to_refant(self.filtered_gain_grids, self.refant, flags=self.filtered_flag_grids)
+            rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
 
-    def reset_filtering(self):
-        '''Reset gain smoothing to the original input gains (though still possibly rephased and thresholded).'''
-        self.filtered_gain_grids = deepcopy(self.gain_grids)
-        self.filtered_flag_grids = deepcopy(self.flag_grids)
 
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
@@ -449,11 +443,11 @@ class CalibrationSmoother():
             nMirrors += 1
 
         # Now loop through and apply running Gaussian averages
-        for ant, gain_grid in self.filtered_gain_grids.items():
+        for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now smoothing antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in time...', verbose=self.verbose)
-            if not np.all(self.filtered_flag_grids[ant]):
-                wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
-                self.filtered_gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
+            if not np.all(self.flag_grids[ant]):
+                wgts_grid = np.logical_not(self.flag_grids[ant]).astype(float)
+                self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                             filter_scale=filter_scale, nMirrors=nMirrors)
 
     def freq_filter(self, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, **win_kwargs):
@@ -467,7 +461,7 @@ class CalibrationSmoother():
             window: window function for filtering applied to the filtered axis. Default tukey has alpha=0.5.
                 See aipy.dsp.gen_window for options.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-                filtered_gains are left unchanged and self.wgts and self.filtered_flag_grids are set to 0 and True,
+                gains are left unchanged and self.wgts and self.flag_grids are set to 0 and True,
                 respectively. Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
@@ -475,16 +469,16 @@ class CalibrationSmoother():
         '''
 
         # Loop over all antennas and perform a low-pass delay filter on gains
-        for ant, gain_grid in self.filtered_gain_grids.items():
+        for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
-            wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
-            self.filtered_gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
+            wgts_grid = np.logical_not(self.flag_grids[ant]).astype(float)
+            self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
                                                               filter_scale=filter_scale, tol=tol, window=window,
                                                               skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
             # flag all channels for any time that triggers the skip_wgt
             for i, info_dict in enumerate(info):
                 if info_dict.get('skipped', False):
-                    self.filtered_flag_grids[ant][i, :] = np.ones_like(self.filtered_flag_grids[ant][i, :])
+                    self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
         self.rephase_to_refant()
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09,
@@ -509,14 +503,14 @@ class CalibrationSmoother():
                 Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
         # loop over all antennas that are not completely flagged and filter
-        for ant, gain_grid in self.filtered_gain_grids.items():
-            if not np.all(self.filtered_flag_grids[ant]):
+        for ant, gain_grid in self.gain_grids.items():
+            if not np.all(self.flag_grids[ant]):
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
-                wgts_grid = np.logical_not(self.filtered_flag_grids[ant]).astype(float)
+                wgts_grid = np.logical_not(self.flag_grids[ant]).astype(float)
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, **win_kwargs)
-                self.filtered_gain_grids[ant] = filtered
+                self.gain_grids[ant] = filtered
         self.rephase_to_refant()
 
     def write_smoothed_cal(self, output_replace=('.abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
@@ -532,8 +526,8 @@ class CalibrationSmoother():
         utils.echo('Now writing results to disk...', verbose=self.verbose)
         for cal in self.cals:
             outfilename = cal.replace(output_replace[0], output_replace[1])
-            out_gains = {ant: self.filtered_gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
-            out_flags = {ant: self.filtered_flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
+            out_gains = {ant: self.gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
+            out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             io.update_cal(cal, outfilename, gains=out_gains, flags=out_flags,
                           add_to_history=version.history_string(add_to_history), clobber=clobber, **kwargs)
 
