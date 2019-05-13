@@ -335,6 +335,7 @@ class CalibrationSmoother():
             ant_threshold: float. If, after time and freq thesholding and broadcasting, an antenna is left unflagged
                 for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that
                 antenna for all times and channels. Default 1.0 means no additional flagging.
+            verbose: print status updates
         '''
         self.verbose = verbose
 
