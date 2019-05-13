@@ -97,6 +97,22 @@ class Test_Smooth_Cal_Helper_Functions(unittest.TestCase):
         with self.assertRaises(ValueError):
             ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='blah')
 
+    def flag_threshold_and_broadcast(self):
+        flags = {(i, 'Jxx'): np.zeros((10, 10), dtype=bool) for i in range(3)}
+        for ant in flags.keys():
+            flags[ant][4, 0:6] = True
+            flags[ant][0:4, 4] = True
+        flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5, ant_threshold=1.0)
+        for ant in flags.keys():
+            self.assertTrue(np.all(flags[ant][4, :]))
+            self.assertTrue(np.all(flags[ant][:, 4]))
+
+        self.assertFalse(np.all(flags[(0, 'Jxx')]))
+        flags[(0, 'Jxx')][0:8, :] = True
+        flag_threshold_and_broadcast(flags, freq_threshold=1.0, time_threshold=1.0, ant_threshold=0.5)
+        self.assertTrue(np.all(flags[0, 'Jxx']))
+        self.assertFalse(np.all(flags[1, 'Jxx']))
+
     def test_pick_reference_antenna(self):
         gains = {(n, 'Jxx'): np.ones((10, 10), dtype=complex) for n in range(10)}
         flags = {(n, 'Jxx'): np.zeros((10, 10), dtype=bool) for n in range(10)}
