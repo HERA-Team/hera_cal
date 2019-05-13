@@ -424,7 +424,6 @@ class CalibrationSmoother():
         if hasattr(self, 'refant'):
             rephase_to_refant(self.gain_grids, self.refant, flags=self.flag_grids)
 
-
     def time_filter(self, filter_scale=1800.0, mirror_kernel_min_sigmas=5):
         '''Time-filter calibration solutions with a rolling Gaussian-weighted average. Allows
         the mirroring of gains and flags and appending the mirrored gains and wgts to both ends,
@@ -448,7 +447,7 @@ class CalibrationSmoother():
             if not np.all(self.flag_grids[ant]):
                 wgts_grid = np.logical_not(self.flag_grids[ant]).astype(float)
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
-                                                            filter_scale=filter_scale, nMirrors=nMirrors)
+                                                   filter_scale=filter_scale, nMirrors=nMirrors)
 
     def freq_filter(self, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, **win_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
@@ -473,8 +472,8 @@ class CalibrationSmoother():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
             wgts_grid = np.logical_not(self.flag_grids[ant]).astype(float)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
-                                                              filter_scale=filter_scale, tol=tol, window=window,
-                                                              skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
+                                                     filter_scale=filter_scale, tol=tol, window=window,
+                                                     skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
             # flag all channels for any time that triggers the skip_wgt
             for i, info_dict in enumerate(info):
                 if info_dict.get('skipped', False):
