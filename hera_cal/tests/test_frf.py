@@ -4,7 +4,7 @@
 
 from __future__ import print_function, division, absolute_import
 
-import nose.tools as nt
+import pytest
 import os
 import shutil
 import numpy as np
@@ -16,11 +16,12 @@ from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 import unittest
 
-import hera_cal as hc
-from hera_cal.data import DATA_PATH
+from .. import datacontainer, io, frf
+from ..data import DATA_PATH
 from scipy import stats
 
 
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 def test_timeavg_waterfall():
     fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
 
@@ -41,42 +42,42 @@ def test_timeavg_waterfall():
     blv = antpos[ants.tolist().index(24)] - antpos[ants.tolist().index(25)]
 
     # test basic execution
-    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 25, verbose=False)
-    nt.assert_equal(ad.shape, (3, 64))
-    nt.assert_equal(af.shape, (3, 64))
-    nt.assert_equal(an.shape, (3, 64))
-    nt.assert_false(np.any(af))
-    nt.assert_almost_equal(an[1, 0], 25.0)
-    nt.assert_almost_equal(an[2, 0], 10.0)
+    ad, af, an, al, aea = frf.timeavg_waterfall(d, 25, verbose=False)
+    assert ad.shape == (3, 64)
+    assert af.shape == (3, 64)
+    assert an.shape == (3, 64)
+    assert not np.any(af)
+    assert np.allclose(an[1, 0], 25.0)
+    assert np.allclose(an[2, 0], 10.0)
 
     # test rephase
-    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 25, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
-                                                   nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    ad, af, an, al, aea = frf.timeavg_waterfall(d, 25, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
+                                                nsamples=n, extra_arrays=dict(times=t), verbose=False)
 
-    nt.assert_equal(ad.shape, (3, 64))
-    nt.assert_equal(af.shape, (3, 64))
-    nt.assert_equal(an.shape, (3, 64))
-    nt.assert_true(np.any(af))
-    nt.assert_equal(len(al), 3)
-    nt.assert_equal(len(aea['avg_times']), 3)
-    nt.assert_almost_equal(an.max(), 25.0)
+    assert ad.shape == (3, 64)
+    assert af.shape == (3, 64)
+    assert an.shape == (3, 64)
+    assert np.any(af)
+    assert len(al) == 3
+    assert len(aea['avg_times']) == 3
+    assert np.allclose(an.max(), 25.0)
 
     # test various Navgs
-    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 1, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
-                                                   nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    ad, af, an, al, aea = frf.timeavg_waterfall(d, 1, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
+                                                nsamples=n, extra_arrays=dict(times=t), verbose=False)
 
-    nt.assert_equal(ad.shape, (60, 64))
-    ad, af, an, al, aea = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
-                                                   nsamples=n, extra_arrays=dict(times=t), verbose=False)
-    nt.assert_equal(ad.shape, (1, 64))
+    assert ad.shape == (60, 64)
+    ad, af, an, al, aea = frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=lsts, freqs=fr, bl_vec=blv,
+                                                nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    assert ad.shape == (1, 64)
 
     # wrap lst
-    ad2, af2, an2, al2, aea2 = hc.frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=lsts + 1.52917804, freqs=fr, bl_vec=blv,
-                                                        nsamples=n, extra_arrays=dict(times=t), verbose=False)
+    ad2, af2, an2, al2, aea2 = frf.timeavg_waterfall(d, 60, flags=f, rephase=True, lsts=lsts + 1.52917804, freqs=fr, bl_vec=blv,
+                                                     nsamples=n, extra_arrays=dict(times=t), verbose=False)
 
-    nt.assert_equal(ad.shape, (1, 64))
-    nt.assert_true(np.isclose(ad, ad2).all())
-    nt.assert_true(np.allclose(al, al2 - 1.52917804))
+    assert ad.shape == (1, 64)
+    assert np.allclose(ad, ad2)
+    assert np.allclose(al, al2 - 1.52917804)
 
 
 def test_fir_filtering():
@@ -84,52 +85,52 @@ def test_fir_filtering():
     frbins = np.linspace(-40e-3, 40e-3, 1024)
     frp = np.ones(1024)
     frp[512 - 9:512 + 10] = 0.0
-    fir, tbins = hc.frf.frp_to_fir(frp, delta_bin=np.diff(frbins)[0])
+    fir, tbins = frf.frp_to_fir(frp, delta_bin=np.diff(frbins)[0])
     # confirm its purely real
-    nt.assert_false(np.isclose(np.abs(fir.real), 0.0).any())
-    nt.assert_true(np.isclose(np.abs(fir.imag), 0.0).all())
+    assert not np.isclose(np.abs(fir.real), 0.0).any()
+    assert np.isclose(np.abs(fir.imag), 0.0).all()
 
     # convert back
-    _frp, _frbins = hc.frf.frp_to_fir(fir, delta_bin=np.diff(tbins)[0], undo=True)
-    np.testing.assert_array_almost_equal(frp, _frp.real)
-    np.testing.assert_array_almost_equal(np.diff(frbins), np.diff(_frbins))
-    nt.assert_true(np.isclose(np.abs(_frp.imag), 0.0).all())
+    _frp, _frbins = frf.frp_to_fir(fir, delta_bin=np.diff(tbins)[0], undo=True)
+    assert np.allclose(frp, _frp.real)
+    assert np.allclose(np.diff(frbins), np.diff(_frbins))
+    assert np.allclose(np.abs(_frp.imag), 0.0)
 
     # test noise averaging properties
     frp = np.zeros(1024)
     frp[512] = 1.0
-    t_ratio = hc.frf.fr_tavg(frp)
-    nt.assert_true(np.isclose(t_ratio, 1024).all())
+    t_ratio = frf.fr_tavg(frp)
+    assert np.allclose(t_ratio, 1024)
 
 
-class Test_FRFilter:
-
-    def setUp(self):
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
+class Test_FRFilter(object):
+    def setup_method(self, method):
         self.fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
-        self.F = hc.frf.FRFilter(self.fname, filetype='miriad')
+        self.F = frf.FRFilter(self.fname, filetype='miriad')
         self.F.read()
 
     def test_timeavg_data(self):
         self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35, rephase=True, keys=[(24, 25, 'xx')])
-        nt.assert_equal(self.F.Navg, 3)
-        nt.assert_equal(len(self.F.avg_data), 1)
-        nt.assert_equal(self.F.avg_data[(24, 25, 'xx')].shape, (20, 64))
+        assert self.F.Navg == 3
+        assert len(self.F.avg_data) == 1
+        assert self.F.avg_data[(24, 25, 'xx')].shape == (20, 64)
 
         self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 1e10, rephase=True, verbose=False, overwrite=False)
-        nt.assert_equal(self.F.Navg, 60)
-        nt.assert_equal(len(self.F.avg_data), 28)
-        nt.assert_equal(self.F.avg_data[(24, 25, 'xx')].shape, (20, 64))
-        nt.assert_equal(self.F.avg_data[(24, 37, 'xx')].shape, (1, 64))
+        assert self.F.Navg == 60
+        assert len(self.F.avg_data) == 28
+        assert self.F.avg_data[(24, 25, 'xx')].shape == (20, 64)
+        assert self.F.avg_data[(24, 37, 'xx')].shape == (1, 64)
 
         # exceptions
-        nt.assert_raises(AssertionError, self.F.timeavg_data, self.F.data, self.F.times, self.F.lsts, 1.0)
+        pytest.raises(AssertionError, self.F.timeavg_data, self.F.data, self.F.times, self.F.lsts, 1.0)
 
     def test_filter_data(self):
         # construct high-pass filter
         frates = np.fft.fftshift(np.fft.fftfreq(self.F.Ntimes, self.F.dtime)) * 1e3
         w = np.ones((self.F.Ntimes, self.F.Nfreqs), dtype=np.float)
         w[np.abs(frates) < 20] = 0.0
-        frps = hc.datacontainer.DataContainer(dict([(k, w) for k in self.F.data]))
+        frps = datacontainer.DataContainer(dict([(k, w) for k in self.F.data]))
 
         # make gaussian random noise
         bl = (24, 25, 'xx')
@@ -152,18 +153,18 @@ class Test_FRFilter:
         dfft = np.mean(np.abs(self.F.dfft[bl]), axis=0)
         rfft = np.mean(np.abs(self.F.rfft[bl]), axis=0)
         r = np.mean(dfft / rfft)
-        nt.assert_almost_equal(r, np.sqrt(np.mean(self.F.filt_nsamples[bl])), places=1)
+        assert np.allclose(r, np.sqrt(np.mean(self.F.filt_nsamples[bl])), atol=1e-1)
 
     def test_write_data(self):
         self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35, rephase=False, verbose=False)
         self.F.write_data(self.F.avg_data, "./out.uv", filetype='miriad', overwrite=True,
                           add_to_history='testing', times=self.F.avg_times, lsts=self.F.avg_lsts)
-        nt.assert_true(os.path.exists("./out.uv"))
-        hd = hc.io.HERAData('./out.uv', filetype='miriad')
+        assert os.path.exists("./out.uv")
+        hd = io.HERAData('./out.uv', filetype='miriad')
         hd.read()
-        nt.assert_true('testing' in hd.history.replace('\n', '').replace(' ', ''))
-        nt.assert_true('Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', ''))
+        assert 'testing' in hd.history.replace('\n', '').replace(' ', '')
+        assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         shutil.rmtree("./out.uv")
 
-        nt.assert_raises(AssertionError, self.F.write_data, self.F.avg_data, "./out.uv", times=self.F.avg_times)
-        nt.assert_raises(ValueError, self.F.write_data, self.F.data, "hi", filetype='foo')
+        pytest.raises(AssertionError, self.F.write_data, self.F.avg_data, "./out.uv", times=self.F.avg_times)
+        pytest.raises(ValueError, self.F.write_data, self.F.data, "hi", filetype='foo')
