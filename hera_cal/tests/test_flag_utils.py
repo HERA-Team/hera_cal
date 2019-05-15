@@ -5,19 +5,17 @@
 
 from __future__ import print_function, division, absolute_import
 
-import nose.tools as nt
+import pytest
 import numpy as np
 import os
 import copy
 from pyuvdata import UVData
 
-from hera_cal import flag_utils
-from hera_cal import utils
-from hera_cal import io
-from hera_cal import datacontainer
-from hera_cal.data import DATA_PATH
+from .. import datacontainer, flag_utils, io, utils
+from ..data import DATA_PATH
 
 
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 def test_solar_flag():
     data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
     uvd = UVData()
@@ -25,22 +23,22 @@ def test_solar_flag():
     data, flags, antp, ant, f, t, l, p = io.load_vis(uvd, return_meta=True)
     # get solar altitude
     a = utils.get_sun_alt(2458043)
-    nt.assert_true(isinstance(a, (float, np.float, np.float64)))
+    assert isinstance(a, (float, np.float, np.float64))
     a = utils.get_sun_alt([2458043, 2458043.5])
-    nt.assert_true(isinstance(a, (np.ndarray)))
+    assert isinstance(a, (np.ndarray))
     # test solar flag
     bl = (24, 25, 'xx')
     _flags = flag_utils.solar_flag(flags, times=t, flag_alt=20.0, inplace=False)
-    nt.assert_true(_flags[bl][:41].all())
-    nt.assert_false(flags[bl][:41].all())
+    assert _flags[bl][:41].all()
+    assert not flags[bl][:41].all()
     # test ndarray
     flag_utils.solar_flag(flags[bl], times=t, flag_alt=20.0, inplace=True)
-    nt.assert_true(flags[bl][:41].all())
+    assert flags[bl][:41].all()
     # test uvd
     flag_utils.solar_flag(uvd, flag_alt=20.0, inplace=True)
-    nt.assert_true(uvd.get_flags(bl)[:41].all())
+    assert uvd.get_flags(bl)[:41].all()
     # test exception
-    nt.assert_raises(AssertionError, flag_utils.solar_flag, flags)
+    pytest.raises(AssertionError, flag_utils.solar_flag, flags)
 
 
 def test_synthesize_ant_flags():
@@ -67,6 +65,7 @@ def test_synthesize_ant_flags():
     np.testing.assert_array_equal(ant_flags[(2, 'Jxx')][3:, 4], False)
 
 
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 def test_factorize_flags():
     # load data
     data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -75,24 +74,24 @@ def test_factorize_flags():
 
     # run on ndarray
     f = flag_utils.factorize_flags(flags[(24, 25, 'xx')].copy(), time_thresh=1.5 / 60, inplace=False)
-    nt.assert_true(f[52].all())
-    nt.assert_true(f[:, 60:62].all())
+    assert f[52].all()
+    assert f[:, 60:62].all()
 
     f = flag_utils.factorize_flags(flags[(24, 25, 'xx')].copy(), spw_ranges=[(45, 60)],
                                    time_thresh=0.5 / 60, inplace=False)
-    nt.assert_true(f[:, 48].all())
-    nt.assert_false(np.min(f, axis=1).any())
-    nt.assert_false(f[:, 24].all())
+    assert f[:, 48].all()
+    assert not np.min(f, axis=1).any()
+    assert not f[:, 24].all()
 
     f = flags[(24, 25, 'xx')].copy()
     flag_utils.factorize_flags(f, time_thresh=0.5 / 60, inplace=True)
-    nt.assert_true(f[:, 48].all())
-    nt.assert_false(np.min(f, axis=1).any())
+    assert f[:, 48].all()
+    assert not np.min(f, axis=1).any()
 
     # run on datacontainer
     f2 = flag_utils.factorize_flags(copy.deepcopy(flags), time_thresh=0.5 / 60, inplace=False)
-    np.testing.assert_array_equal(f2[(24, 25, 'xx')], f)
+    assert np.allclose(f2[(24, 25, 'xx')], f)
 
     # test exceptions
-    nt.assert_raises(ValueError, flag_utils.factorize_flags, flags, spw_ranges=(0, 1))
-    nt.assert_raises(ValueError, flag_utils.factorize_flags, 'hi')
+    pytest.raises(ValueError, flag_utils.factorize_flags, flags, spw_ranges=(0, 1))
+    pytest.raises(ValueError, flag_utils.factorize_flags, 'hi')
