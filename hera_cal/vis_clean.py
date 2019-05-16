@@ -828,6 +828,7 @@ def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
             if undo:
                 s = [slice(None) for j in range(data.ndim)]
                 s[ax] = slice(zeropad[i], -zeropad[i])
+                s = tuple(s)
                 data = data[s]
                 if binvals[i] is not None:
                     binvals[i] = binvals[i][s[i]]
