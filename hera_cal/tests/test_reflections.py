@@ -4,8 +4,7 @@
 
 from __future__ import print_function, division, absolute_import
 
-import unittest
-import nose.tools as nt
+import pytest
 import numpy as np
 from copy import deepcopy
 import os
@@ -20,11 +19,8 @@ from sklearn.gaussian_process import kernels
 import hera_sim as hs
 import copy
 
-from hera_cal import io
-from hera_cal import reflections
-from hera_cal import datacontainer
-from hera_cal.data import DATA_PATH
-from hera_cal import apply_cal
+from .. import apply_cal, datacontainer, io, reflections
+from ..data import DATA_PATH
 
 
 def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=True, cable_ants=None,
@@ -103,7 +99,9 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
     return uvd
 
 
-class Test_ReflectionFitter_Cables(unittest.TestCase):
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
+@pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
+class Test_ReflectionFitter_Cables(object):
     uvd_clean = simulate_reflections(add_cable=False, add_xtalk=False)
     uvd = simulate_reflections(cdelay=255.0, cphase=2.0, camp=1e-2, add_cable=True, cable_ants=[23], add_xtalk=False)
 
@@ -116,37 +114,37 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         # basic run through
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
+        assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
+        assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
+        assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
 
         # try with a small edgecut
         RF = reflections.ReflectionFitter(self.uvd)
         edgecut = 5
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris', reject_edges=False,
                                   zeropad=100, overwrite=True, fthin=1, verbose=True, edgecut_low=edgecut, edgecut_hi=edgecut)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
+        assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
+        assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
+        assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
 
         # try a high ref_sig cut: assert ref_flags are True
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',
                                   ref_sig_cut=100, overwrite=True)
-        nt.assert_true(RF.ref_flags[g_k].all())
+        assert np.all(RF.ref_flags[g_k])
 
         # assert refinement uses flags to return zeros
         output = RF.refine_auto_reflections(RF.data, (20, 80), RF.ref_amp, RF.ref_dly, RF.ref_phs,
                                             keys=[bl_k], ref_flags=RF.ref_flags, window='blackmanharris', zeropad=100,
                                             maxiter=100, method='Nelder-Mead', tol=1e-5)
-        nt.assert_true(np.isclose(output[0][g_k], 0.0).all())
+        assert np.allclose(output[0][g_k], 0.0)
 
         # try filtering the visibilities
         RF.vis_clean(data=RF.data, ax='freq', min_dly=100, overwrite=True, window='blackmanharris', alpha=0.1, tol=1e-8, keys=[bl_k])
         RF.model_auto_reflections(RF.clean_resid, (200, 300), clean_data=RF.clean_data, keys=[bl_k],
                                   window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
+        assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
+        assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
+        assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
 
         # try optimization on time-averaged data
         RF.timeavg_data(RF.data, RF.times, RF.lsts, 5000, keys=None, overwrite=True)
@@ -159,16 +157,16 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         ref_dly = output[1]
         ref_phs = output[2]
         # assert equivalence to higher precision
-        nt.assert_true(np.isclose(np.ravel(list(ref_dly.values())), 255.0, atol=1e-2).all())
-        nt.assert_true(np.isclose(np.ravel(list(ref_amp.values())), 1e-2, atol=1e-5).all())
-        nt.assert_true(np.isclose(np.ravel(list(ref_phs.values())), 2.0, atol=1e-2).all())
+        assert np.allclose(np.ravel(list(ref_dly.values())), 255.0, atol=1e-2)
+        assert np.allclose(np.ravel(list(ref_amp.values())), 1e-2, atol=1e-5)
+        assert np.allclose(np.ravel(list(ref_phs.values())), 2.0, atol=1e-2)
 
         # now reverse delay range
         RF.model_auto_reflections(RF.avg_data, (-300, -200), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), -255.0, atol=1e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2 * np.pi - 2.0, atol=1e-1).all())
+        assert np.allclose(np.ravel(list(RF.ref_dly.values())), -255.0, atol=1e-1)
+        assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
+        assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2 * np.pi - 2.0, atol=1e-1)
 
         output = RF.refine_auto_reflections(RF.avg_data, (80, 20), RF.ref_amp, RF.ref_dly, RF.ref_phs,
                                             keys=[bl_k, (39, 39, 'xx')], window='blackmanharris', zeropad=100,
@@ -177,9 +175,9 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         ref_dly = output[1]
         ref_phs = output[2]
         # assert equivalence to higher precision
-        nt.assert_true(np.isclose(np.ravel(list(ref_dly.values())), -255.0, atol=1e-2).all())
-        nt.assert_true(np.isclose(np.ravel(list(ref_amp.values())), 1e-2, atol=1e-5).all())
-        nt.assert_true(np.isclose(np.ravel(list(ref_phs.values())), 2 * np.pi - 2.0, atol=1e-2).all())
+        assert np.allclose(np.ravel(list(ref_dly.values())), -255.0, atol=1e-2)
+        assert np.allclose(np.ravel(list(ref_amp.values())), 1e-2, atol=1e-5)
+        assert np.allclose(np.ravel(list(ref_phs.values())), 2 * np.pi - 2.0, atol=1e-2)
 
         # test flagged data
         RF.model_auto_reflections(RF.avg_data, (-300, -200), keys=[bl_k], window='blackmanharris',
@@ -188,69 +186,69 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         output = RF.refine_auto_reflections(RF.avg_data, (80, 20), RF.ref_amp, RF.ref_dly, RF.ref_phs,
                                             keys=[bl_k], window='blackmanharris', zeropad=100, clean_flags=RF.avg_flags,
                                             maxiter=100, method='BFGS', tol=1e-5)
-        nt.assert_false(output[3][(23, 'Jxx')].any())
+        assert not np.any(output[3][(23, 'Jxx')])
         RF.avg_flags[bl_k][:] = False
 
         # non-even Nfreqs
         RF = reflections.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:-1], inplace=False))
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
+        assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
+        assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
+        assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
 
         # exceptions
-        nt.assert_raises(ValueError, RF.model_auto_reflections, RF.data, (4000, 5000), window='none', overwrite=True, edgecut_low=edgecut)
+        pytest.raises(ValueError, RF.model_auto_reflections, RF.data, (4000, 5000), window='none', overwrite=True, edgecut_low=edgecut)
 
         # test reject_edges: choose dly_range to make max on edge
         # assert peak is in main lobe, not at actual reflection delay
         RF.model_auto_reflections(RF.data, (25, 300), keys=[bl_k], window='blackmanharris', reject_edges=False,
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.all(np.ravel(list(RF.ref_dly.values())) < 200))
+        assert np.all(np.ravel(list(RF.ref_dly.values())) < 200)
         # assert peak is correct
         RF.model_auto_reflections(RF.data, (25, 300), keys=[bl_k], window='blackmanharris', reject_edges=True,
                                   zeropad=100, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4).all())
-        nt.assert_true(np.isclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1).all())
+        assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
+        assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
+        assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
         # assert valley results in flagged reflection (make sure zeropad=0)
         RF.model_auto_reflections(RF.data, (25, 225), keys=[bl_k], window='blackmanharris', reject_edges=True,
                                   zeropad=0, overwrite=True, fthin=1, verbose=True)
-        nt.assert_true(np.all(RF.ref_flags[g_k]))
+        assert np.all(RF.ref_flags[g_k])
 
         # try clear
         RF.clear(exclude=['data'])
-        nt.assert_equal(len(RF.ref_eps), 0)
-        nt.assert_equal(len(RF.ref_gains), 0)
-        nt.assert_true(len(RF.data) > 0)
+        assert len(RF.ref_eps) == 0
+        assert len(RF.ref_gains) == 0
+        assert len(RF.data) > 0
 
         # try soft copy
         RF2 = RF.soft_copy()
-        nt.assert_true(RF2.__class__, reflections.ReflectionFitter)
+        assert RF2.__class__ == reflections.ReflectionFitter
 
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (23, 23, 'xx')
         RF.model_auto_reflections(RF.data, (200, 300), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True)
-        nt.assert_equal(uvc.Ntimes, 100)
-        np.testing.assert_array_equal(len(uvc.ant_array), 65)
-        nt.assert_true(np.isclose(uvc.gain_array[0], 1.0).all())
-        nt.assert_false(np.isclose(uvc.gain_array[uvc.ant_array.tolist().index(23)], 1.0).all())
+        assert uvc.Ntimes == 100
+        assert len(uvc.ant_array) == 65
+        assert np.allclose(uvc.gain_array[0], 1.0)
+        assert not np.allclose(uvc.gain_array[uvc.ant_array.tolist().index(23)], 1.0)
 
         # test w/ input calfits
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits="./ex.calfits", overwrite=True)
         RF.model_auto_reflections(RF.data, (200, 300), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
-        nt.assert_equal(uvc.Ntimes, 100)
-        np.testing.assert_array_equal(len(uvc.ant_array), 65)
+        assert uvc.Ntimes == 100
+        assert len(uvc.ant_array) == 65
 
         # test data is corrected by taking ratio w/ clean data
         data = deepcopy(RF.data)
         g = reflections.form_gains(RF.ref_eps)
         apply_cal.calibrate_in_place(data, g, gain_convention='divide')
         r = data[bl_k] / self.uvd_clean.get_data(bl_k)
-        nt.assert_true(np.abs(np.mean(r) - 1) < 1e-1)
+        assert np.abs(np.mean(r) - 1) < 1e-1
 
         os.remove('./ex.calfits')
 
@@ -258,20 +256,20 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         sys.argv = [sys.argv[0], 'a', '--output_fname', 'ex.calfits', '--dly_ranges', '10,20', '10,20', '--overwrite', '--opt_buffer', '25', '75']
         parser = reflections.auto_reflection_argparser()
         a = parser.parse_args()
-        nt.assert_equal(a.data[0], 'a')
-        nt.assert_equal(a.output_fname, 'ex.calfits')
-        nt.assert_equal(a.dly_ranges[0], '10,20')
-        nt.assert_equal(len(a.dly_ranges), 2)
-        nt.assert_true(np.isclose(a.opt_buffer, [25, 75]).all())
+        assert a.data[0] == 'a'
+        assert a.output_fname == 'ex.calfits'
+        assert a.dly_ranges[0] == '10,20'
+        assert len(a.dly_ranges) == 2
+        assert np.allclose(a.opt_buffer, [25, 75])
 
     def test_auto_reflection_run(self):
         # most of the code tests have been done above, this is just to ensure this wrapper function runs
         uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[0.0, 0.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[23], add_xtalk=False)
         reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, window='blackmanharris', write_npz=True, overwrite=True, ref_sig_cut=1.0)
-        nt.assert_true(os.path.exists("./ex.calfits"))
-        nt.assert_true(os.path.exists("./ex.npz"))
-        nt.assert_true(os.path.exists("./ex.ref2.calfits"))
-        nt.assert_true(os.path.exists("./ex.ref2.npz"))
+        assert os.path.exists("./ex.calfits")
+        assert os.path.exists("./ex.npz")
+        assert os.path.exists("./ex.ref2.calfits")
+        assert os.path.exists("./ex.ref2.npz")
 
         # ensure gains have two humps at 150 and 250 ns
         uvc = UVCal()
@@ -284,8 +282,8 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         delays = np.fft.fftfreq(uvc.Nfreqs, np.diff(uvc.freq_array[0])[0]) * 1e9
         gfft = np.mean(np.abs(np.fft.fft(g, axis=1)), axis=0)
 
-        nt.assert_equal(delays[np.argmax(gfft * ((delays > 100) & (delays < 200)))], 150)
-        nt.assert_equal(delays[np.argmax(gfft * ((delays > 200) & (delays < 300)))], 250)
+        assert delays[np.argmax(gfft * ((delays > 100) & (delays < 200)))] == 150
+        assert delays[np.argmax(gfft * ((delays > 200) & (delays < 300)))] == 250
 
         os.remove("./ex.calfits")
         os.remove("./ex.npz")
@@ -293,7 +291,8 @@ class Test_ReflectionFitter_Cables(unittest.TestCase):
         os.remove("./ex.ref2.npz")
 
 
-class Test_ReflectionFitter_XTalk(unittest.TestCase):
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
+class Test_ReflectionFitter_XTalk(object):
     # simulate
     uvd = simulate_reflections(add_cable=False, xdelay=250.0, xphase=0, xamp=1e-3, add_xtalk=True)
 
@@ -312,16 +311,16 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=False, overwrite=True)
 
         # test containers exist
-        nt.assert_true(np.all([hasattr(RF, o) for o in ['umodes', 'vmodes', 'svals', 'uflags', 'pcomp_model', 'dfft']]))
+        assert np.all([hasattr(RF, o) for o in ['umodes', 'vmodes', 'svals', 'uflags', 'pcomp_model', 'dfft']])
         # test good information compression
-        nt.assert_true(RF.svals[bl][0] / RF.svals[bl][1] > 20)
+        assert RF.svals[bl][0] / RF.svals[bl][1] > 20
 
         # assert its a good fit to the xtalk at 250 ns delay
         ind = np.argmin(np.abs(RF.delays - 250))
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real**2))
         Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real)**2))
         # says that residual is small compared to original array
-        nt.assert_true(Rrms / Vrms < 0.01)
+        assert Rrms / Vrms < 0.01
 
         # increment the model
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='neg')
@@ -333,7 +332,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real**2))
         Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real)**2))
         # says that residual is small compared to original array
-        nt.assert_true(Rrms / Vrms < 0.01)
+        assert Rrms / Vrms < 0.01
 
         # overwrite the model with double side modeling
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='both')
@@ -343,12 +342,12 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         ind = np.argmin(np.abs(RF.delays - 250))
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real**2))
         Rrms = np.sqrt(np.mean((RF.dfft[bl][:, ind].real - RF.pcomp_model[bl][:, ind].real)**2))
-        nt.assert_true(Rrms / Vrms < 0.01)
+        assert Rrms / Vrms < 0.01
 
         # subtract the model from the data
         RF.subtract_model(RF.data, overwrite=True)
-        nt.assert_equal(RF.pcomp_model_fft[bl].shape, (100, 128))
-        nt.assert_equal(RF.data_pcmodel_resid[bl].shape, (100, 128))
+        assert RF.pcomp_model_fft[bl].shape == (100, 128)
+        assert RF.data_pcmodel_resid[bl].shape == (100, 128)
 
     def test_misc_svd_funcs(self):
         # setup RF object
@@ -366,21 +365,21 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         # sv decomp
         svd_wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=150, max_dly=500, side='both')
         RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=None)
-        nt.assert_equal(RF.umodes[bl].shape, (100, 100))
-        nt.assert_equal(RF.vmodes[bl].shape, (100, 128))
+        assert RF.umodes[bl].shape == (100, 100)
+        assert RF.vmodes[bl].shape == (100, 128)
 
         # test interpolation of umodes
         gp_frate = 0.2
         RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (100, 100))
+        assert RF.umode_interp[bl].shape == (100, 100)
         RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10)
-        nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
+        assert RF.umode_interp[bl].shape == (100, 10)
 
         # get fft and assert a good match within gp_frate
         RF.fft_data(data=RF.umodes, assign='ufft', window='blackmanharris', ax='time', overwrite=True, edgecut_low=5, edgecut_hi=5)
         RF.fft_data(data=RF.umode_interp, assign='uifft', window='blackmanharris', ax='time', overwrite=True, edgecut_low=5, edgecut_hi=5)
         select = np.abs(RF.frates) < gp_frate / 2
-        nt.assert_true(np.mean(np.abs(RF.ufft[bl][select, 0] - RF.uifft[bl][select, 0]) / np.abs(RF.ufft[bl][select, 0])) < 0.01)
+        assert np.mean(np.abs(RF.ufft[bl][select, 0] - RF.uifft[bl][select, 0]) / np.abs(RF.ufft[bl][select, 0])) < 0.01
         # plt.plot(RF.frates, np.abs(RF.ufft[bl][:, 0]));plt.plot(RF.frates, np.abs(RF.uifft[bl][:, 0]));plt.yscale('log')
 
         # test mode projection after interpolation (smoothing)
@@ -423,17 +422,13 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         gp_len = 1.0 / (0.4 * 1e-3) / (24.0 * 3600.0)
         kernel = 1**2 * kernels.RBF(gp_len) + kernels.WhiteKernel(1e-10)
         RF.interp_u(RF.umodes, RF.times, overwrite=True, kernels=kernel, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (100, 100))
+        assert RF.umode_interp[bl].shape == (100, 100)
 
         # assert broadcasting to full time resolution worked
         RF.timeavg_data(RF.data, RF.times, RF.lsts, 500, overwrite=True, verbose=False)
         RF.fft_data(data=RF.avg_data, window='blackmanharris', overwrite=True, assign='adfft', dtime=np.diff(RF.avg_times)[0] * 24 * 3600)
         wgts = RF.svd_weights(RF.adfft, RF.delays, min_dly=200, max_dly=300, side='both')
         RF.sv_decomp(RF.adfft, wgts=wgts, keys=[bl], overwrite=True)
-        nt.assert_equal(RF.umodes[bl].shape, (34, 34))
+        assert RF.umodes[bl].shape == (34, 34)
         RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, gp_frate=1.0, gp_nl=1e-10, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (100, 34))
-
-
-if __name__ == '__main__':
-    unittest.main()
+        assert RF.umode_interp[bl].shape == (100, 34)
