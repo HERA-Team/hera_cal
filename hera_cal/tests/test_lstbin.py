@@ -31,7 +31,7 @@ from ..data import DATA_PATH
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in greater")
 class Test_lstbin(object):
-    def setup_method(self, method):
+    def setup_method(self):
         # load data
         np.random.seed(0)
         self.data_files = [sorted(glob.glob(DATA_PATH + '/zen.2458043.4*XRAA.uvh5')),

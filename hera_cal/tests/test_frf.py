@@ -105,7 +105,7 @@ def test_fir_filtering():
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_FRFilter(object):
-    def setup_method(self, method):
+    def setup_method(self):
         self.fname = os.path.join(DATA_PATH, "zen.2458042.12552.xx.HH.uvXA")
         self.F = frf.FRFilter(self.fname, filetype='miriad')
         self.F.read()
