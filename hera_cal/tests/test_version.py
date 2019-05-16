@@ -6,15 +6,15 @@
 
 from __future__ import print_function, division, absolute_import
 
-import nose.tools as nt
+import pytest
 import sys
 import os
 import six
 import subprocess
 import json
 
-import hera_cal
-from hera_cal.data import DATA_PATH
+from .. import version, __version__
+from ..data import DATA_PATH
 
 
 def test_get_gitinfo_file():
@@ -24,7 +24,7 @@ def test_get_gitinfo_file():
     if not os.path.exists(git_file):
         # write a file to read in
         temp_git_file = os.path.join(DATA_PATH, 'test_output/GIT_INFO')
-        version_info = hera_cal.version.construct_version_info()
+        version_info = version.construct_version_info()
         data = [version_info['git_origin'], version_info['git_origin'],
                 version_info['git_origin'], version_info['git_origin']]
         with open(temp_git_file, 'w') as outfile:
@@ -32,7 +32,7 @@ def test_get_gitinfo_file():
         git_file = temp_git_file
 
     with open(git_file) as data_file:
-        data = [hera_cal.version._unicode_to_str(x) for x in json.loads(data_file.read().strip())]
+        data = [version._unicode_to_str(x) for x in json.loads(data_file.read().strip())]
         git_origin = data[0]
         git_hash = data[1]
         git_description = data[2]
@@ -42,12 +42,12 @@ def test_get_gitinfo_file():
                       'git_description': git_description, 'git_branch': git_branch}
 
     if 'temp_git_file' in locals():
-        file_info = hera_cal.version._get_gitinfo_file(git_file=temp_git_file)
+        file_info = version._get_gitinfo_file(git_file=temp_git_file)
         os.remove(temp_git_file)
     else:
-        file_info = hera_cal.version._get_gitinfo_file()
+        file_info = version._get_gitinfo_file()
 
-    nt.assert_equal(file_info, test_file_info)
+    assert file_info == test_file_info
 
 
 def test_construct_version_info():
@@ -102,39 +102,39 @@ def test_construct_version_info():
             git_description = ''
             git_branch = ''
 
-    test_version_info = {'version': hera_cal.__version__, 'git_origin': git_origin,
+    test_version_info = {'version': __version__, 'git_origin': git_origin,
                          'git_hash': git_hash, 'git_description': git_description,
                          'git_branch': git_branch}
 
-    nt.assert_equal(hera_cal.version.construct_version_info(), test_version_info)
+    assert version.construct_version_info() == test_version_info
 
 
 def test_history_string():
-    hs = hera_cal.version.history_string()
-    nt.assert_true('function test_history_string() in test_version.py' in hs)
-    version_info = hera_cal.version.construct_version_info()
+    hs = version.history_string()
+    assert 'function test_history_string() in test_version.py' in hs
+    version_info = version.construct_version_info()
     for k, v in version_info.items():
-        nt.assert_true(k in hs)
-        nt.assert_true(v in hs)
-    hs = hera_cal.version.history_string('stuff')
-    nt.assert_true('stuff' in hs)
-    nt.assert_true('Notes' in hs)
+        assert k in hs
+        assert v in hs
+    hs = version.history_string('stuff')
+    assert 'stuff' in hs
+    assert 'Notes' in hs
 
 
 def test_main():
-    version_info = hera_cal.version.construct_version_info()
+    version_info = version.construct_version_info()
 
     saved_stdout = sys.stdout
     try:
         out = six.StringIO()
         sys.stdout = out
-        hera_cal.version.main()
+        version.main()
         output = out.getvalue()
-        nt.assert_equal(output, 'Version = {v}\ngit origin = {o}\n'
-                        'git branch = {b}\ngit description = {d}\n'
-                        .format(v=version_info['version'],
-                                o=version_info['git_origin'],
-                                b=version_info['git_branch'],
-                                d=version_info['git_description']))
+        assert output == ('Version = {v}\ngit origin = {o}\n'
+                          'git branch = {b}\ngit description = {d}\n'
+                          .format(v=version_info['version'],
+                                  o=version_info['git_origin'],
+                                  b=version_info['git_branch'],
+                                  d=version_info['git_description']))
     finally:
         sys.stdout = saved_stdout
