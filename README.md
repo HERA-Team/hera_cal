@@ -47,3 +47,7 @@ First install dependencies.
 
 ## Install hera_cal
 Install with ```python setup.py install```
+
+## Running tests
+Tests use the `pytest` framework. To run all tests, call `pytest` or
+`python -m pytest` from the base directory of the repo.
