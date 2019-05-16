@@ -311,7 +311,7 @@ class TestDataContainer(object):
         d, f = io.load_vis(test_file, pop_autos=True)
         f[(24, 25, 'xx')][:, 0] = False
         f2 = f * f
-        assert f2[(24, 25, 'xx')][0, 0] == False
+        assert np.isclose(f2[(24, 25, 'xx')][0, 0], False)
         # test exception
         d2, f2 = io.load_vis(test_file, pop_autos=True)
         d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:, :10]

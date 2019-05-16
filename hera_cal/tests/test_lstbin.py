@@ -65,11 +65,11 @@ class Test_lstbin(object):
         dlst = 0.0007830490163484
         # test basic execution
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
-                                   median=True, lst_low=0, lst_hi=np.pi, verbose=False)
+                                median=True, lst_low=0, lst_hi=np.pi, verbose=False)
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
-                                   verbose=False)
+                                verbose=False)
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
-                                   verbose=False)
+                                verbose=False)
         # check shape and dtype
         assert output[1][(24, 25, 'xx')].dtype == np.complex
         assert output[1][(24, 25, 'xx')].shape == (224, 64)
@@ -112,7 +112,7 @@ class Test_lstbin(object):
         assert len(output[0]) == 175
         # test appropriate data_count
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=dlst, lst_low=0.25, lst_hi=0.3,
-                                   verbose=False)
+                                verbose=False)
         assert np.allclose(output[4][(24, 25, 'xx')], 3.0)
 
     def test_lst_align(self):
@@ -289,23 +289,23 @@ class Test_lstbin(object):
         x[10] = 4
         x[11] = -4
         arr = lstbin.sigma_clip(x, sigma=2.0)
-        assert arr[10] == True
-        assert arr[11] == True
+        assert np.isclose(arr[10], True)
+        assert np.isclose(arr[11], True)
         # test array performance
         x = np.array(list(map(lambda s: stats.norm.rvs(0, s, 100), np.arange(1, 5.1, 1))))
         x[0, 50] = 100
         x[4, 50] = 5
         arr = lstbin.sigma_clip(x, sigma=2.0)
-        assert arr[0, 50] == True
-        assert arr[4, 50] == False
+        assert np.isclose(arr[0, 50], True)
+        assert np.isclose(arr[4, 50], False)
         # test flags
         arr = stats.norm.rvs(0, 1, 10).reshape(2, 5)
         flg = np.zeros_like(arr, np.bool)
         flg[0, 3] = True
         out = lstbin.sigma_clip(arr, flags=flg, min_N=5)
-        assert out[0, 3] == False
+        assert np.isclose(out[0, 3], False)
         out = lstbin.sigma_clip(arr, flags=flg, min_N=1)
-        assert out[0, 3] == True
+        assert np.isclose(out[0, 3], True)
 
     def test_switch_bl(self):
         # test basic execution
