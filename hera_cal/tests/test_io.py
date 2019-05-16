@@ -28,7 +28,7 @@ from hera_qm.data import DATA_PATH as QM_DATA_PATH
 
 
 class Test_HERACal(object):
-    def setup_method(self, method):
+    def setup_method(self):
         self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
         self.fname_both = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
@@ -100,7 +100,7 @@ class Test_HERACal(object):
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in double_scalars")
 class Test_HERAData(object):
-    def setup_method(self, method):
+    def setup_method(self):
         self.uvh5_1 = os.path.join(DATA_PATH, "zen.2458116.61019.xx.HH.XRS_downselected.uvh5")
         self.uvh5_2 = os.path.join(DATA_PATH, "zen.2458116.61765.xx.HH.XRS_downselected.uvh5")
         self.miriad_1 = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")

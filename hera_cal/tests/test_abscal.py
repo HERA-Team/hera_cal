@@ -30,7 +30,7 @@ from ..apply_cal import calibrate_in_place
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
 class Test_AbsCal_Funcs(object):
-    def setup_method(self, method):
+    def setup_method(self):
         np.random.seed(0)
 
         # load into pyuvdata object
@@ -263,7 +263,7 @@ class Test_AbsCal_Funcs(object):
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in log")
 class Test_AbsCal(object):
-    def setup_method(self, method):
+    def setup_method(self):
         np.random.seed(0)
         # load into pyuvdata object
         self.data_fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -603,7 +603,7 @@ class Test_AbsCal(object):
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class Test_Post_Redcal_Abscal_Run(object):
-    def setup_method(self, method):
+    def setup_method(self):
         self.data_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.uvh5_downselected')
         self.redcal_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.omni.calfits_downselected')
         self.model_files = [os.path.join(DATA_PATH, 'test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected'),

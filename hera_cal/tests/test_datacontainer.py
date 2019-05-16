@@ -15,7 +15,7 @@ from ..data import DATA_PATH
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class TestDataContainer(object):
-    def setup_method(self, method):
+    def setup_method(self):
         self.antpairs = [(1, 2), (2, 3), (3, 4), (1, 3), (2, 4)]  # not (1,4)
         self.pols = ['xx', 'yy']
         self.blpol = {}
