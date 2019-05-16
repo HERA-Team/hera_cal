@@ -1210,11 +1210,11 @@ class TestRunMethods(object):
         hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  # move array longitude
         rv = om.redcal_iteration(hd, solar_horizon=0.0)
         for flag in rv['gf_firstcal'].values():
-            assert np.all(flag == True)
+            assert np.all(flag)
         for flag in rv['gf_omnical'].values():
-            assert np.all(flag == True)
+            assert np.all(flag)
         for flag in rv['vf_omnical'].values():
-            assert np.all(flag == True)
+            assert np.all(flag)
         for nsamples in rv['vns_omnical'].values():
             assert np.all(nsamples == 0)
 
@@ -1249,7 +1249,7 @@ class TestRunMethods(object):
             assert np.allclose(flags[ant], cal['gf_firstcal'][ant])
             if ant[0] in bad_ants:
                 assert np.all(gains[ant] == 1.0)
-                assert np.all(flags[ant] == True)
+                assert np.all(flags[ant])
         assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
         assert 'Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', '')
 
@@ -1260,11 +1260,11 @@ class TestRunMethods(object):
             assert np.allclose(gains[ant][~zero_check], cal['g_omnical'][ant][~zero_check])
             assert np.allclose(flags[ant][~zero_check], cal['gf_omnical'][ant][~zero_check])
             if np.sum(zero_check) > 0:
-                assert np.all(flags[ant][zero_check] == True)
+                assert np.all(flags[ant][zero_check])
             assert np.allclose(quals[ant][~zero_check], cal['chisq_per_ant'][ant][~zero_check], equal_nan=True)
             if ant[0] in bad_ants:
                 assert np.all(gains[ant] == 1.0)
-                assert np.all(flags[ant] == True)
+                assert np.all(flags[ant])
         for antpol in total_qual.keys():
             assert np.allclose(total_qual[antpol], cal['chisq'][antpol], equal_nan=True)
         assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
