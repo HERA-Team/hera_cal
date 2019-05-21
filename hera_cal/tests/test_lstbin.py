@@ -254,6 +254,13 @@ class Test_lstbin:
 
     def test_lst_bin_arg_parser(self):
         a = hc.lstbin.lst_bin_arg_parser()
+        args = a.parse_args(["--filetype", "miriad",
+                             "--input_cals", "zen.2458043.12552.HH.uvA.omni.calfits", "zen.2458043.12552.xx.HH.uvORA.abs.calfits",
+                             "--overwrite", "zen.2458042.12552.xx.HH.uvXA", "zen.2458042.12552.xx.HH.uvXA"])
+
+        nt.assert_true(args.filetype, 'miriad')
+        nt.assert_true(len(args.input_cals), 2)
+        nt.assert_true(len(args.data_files), 2)
 
     def test_sigma_clip(self):
         # test basic execution
