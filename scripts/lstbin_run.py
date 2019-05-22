@@ -51,9 +51,10 @@ data_files = [sorted(glob.glob(s.strip("'").strip('"'))) for s in args.data_file
 del kwargs['data_files']
 
 # configure input_cals
-if kwargs['input_cals'] is not None:
+input_cals = kwargs['input_cals']
+del kwargs['input_cals']
+if input_cals is not None:
     input_cals = [sorted(glob.glob(s.strip("'").strip('"'))) for s in args.input_cals]
-    del kwargs['input_cals']
 
 # ensure data_files is a set of nested lists
 if not isinstance(data_files[0], list):
