@@ -607,7 +607,7 @@ class Test_Visibility_IO_Legacy(unittest.TestCase):
     def test_write_vis(self):
         # get data
         uvd = UVData()
-        uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458044.41632.xx.HH.uvXRAA"))
+        uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458044.41632.xx.HH.XRAA.uvh5"))
         data, flgs, ap, a, f, t, l, p = io.load_vis(uvd, return_meta=True)
         nsample = copy.deepcopy(data)
         for k in nsample.keys():
@@ -894,23 +894,24 @@ class Test_Flags_IO(unittest.TestCase):
 def test_get_file_lst_range():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
     # test execution
-    starts, stops, ints = io.get_file_lst_range(filepaths, filetype='miriad', add_int_buffer=False)
+    starts, stops, ints, larrs, tarrs = io.get_file_lst_range(filepaths, filetype='miriad', add_int_buffer=False)
     nt.assert_almost_equal(starts[0], 4.7293432458811866)
     nt.assert_almost_equal(stops[0], 4.7755393587036084)
     nt.assert_almost_equal(ints[0], 0.00078298496309189868)
     nt.assert_equal(len(starts), 2)
     nt.assert_equal(len(stops), 2)
     nt.assert_equal(len(ints), 2)
+    nt.assert_equal(len(arrs[0]), 60)
     # test with integration buffer
-    _starts, _stops, _ints = io.get_file_lst_range(filepaths, filetype='miriad', add_int_buffer=True)
+    _starts, _stops, _ints, _larrs, _tarrs = io.get_file_lst_range(filepaths, filetype='miriad', add_int_buffer=True)
     nt.assert_almost_equal(starts[0], _starts[0])
     nt.assert_almost_equal(_stops[0] - _ints[0], stops[0])
     # test if fed as a str
-    starts, stops, ints = io.get_file_lst_range(filepaths[0], filetype='miriad')
+    starts, stops, ints, larrs, tarrs = io.get_file_lst_range(filepaths[0], filetype='miriad')
 
     # test uvh5
     fp = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
-    start, stop, int_time = io.get_file_lst_range(fp, filetype='uvh5', add_int_buffer=False)
+    start, stop, int_time, larrs, tarrs = io.get_file_lst_range(fp, filetype='uvh5', add_int_buffer=False)
     nt.assert_almost_equal(start, 1.3356485363481176)
     nt.assert_almost_equal(stop, 1.3669679333582787)
     nt.assert_almost_equal(int_time, 0.015659698505080533)

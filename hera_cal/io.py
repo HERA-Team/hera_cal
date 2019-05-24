@@ -718,7 +718,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 
 def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
     """
-    Get a file's start, stop and dlst in radians.
+    Get a file's start, stop, dlst and lst_array in radians.
 
     Start and stop are bin center. Miriad standard is bin start,
     so shift by int_time / 2 is done. UVH5 standard is bin center,
@@ -736,6 +736,8 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
         file_starts : file starting point (bin center) in LST [radians]
         file_stops : file ending point (bin center) in LST [radians]
         int_times : integration duration in LST [radians]
+        file_lst_arrays : ndarrays of file lst_array [radians]
+        file_time_arrays : ndarray of file time_array [Julian Date]
     """
     _array = True
     # check filepaths type
@@ -749,6 +751,8 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
     file_starts = []
     file_stops = []
     int_times = []
+    file_lst_arrays = []
+    file_time_arrays = []
 
     # get Nfiles
     Nfiles = len(filepaths)
@@ -758,20 +762,27 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
         if filetype == 'miriad':
             uv = aipy.miriad.UV(f)
             # get integration time
-            int_time = uv['inttime'] * 2 * np.pi / (units.si.sday.in_units(units.si.s))
+            int_time = uv['inttime'] / (units.si.day.in_units(units.si.s))
+            int_time_rad = uv['inttime'] * 2 * np.pi / (units.si.sday.in_units(units.si.s))
             # get start and stop
             start = uv['lst']
-            stop = start + (uv['ntimes'] - 1) * int_time
+            stop = start + (uv['ntimes'] - 1) * int_time_rad
             # add half an integration to get center of integration
-            start += int_time / 2
-            stop += int_time / 2
+            start += int_time_rad / 2
+            stop += int_time_rad / 2
+            # form time arrays
+            lst_array = (start + np.arange(uv['ntimes']) * int_time) % (2 * np.pi)
+            time_array = uv['time'] + np.arange(0.5, uv['ntimes'] + 0.5) * int_time
+
         elif filetype == 'uvh5':
-            # get lsts directly from uhv5 file's header, much faster than using empty HERAData object
-            lst_array = np.array(h5py.File(f, mode='r')[u'Header'][u'lst_array'])
+            # get lsts directly from uvh5 file's header, much faster than using empty HERAData object
+            with h5py.File(f, mode='r') as _f:
+                lst_array = np.ravel(_f[u'Header'][u'lst_array'])
+                time_array = np.unique(_f[u'Header'][u'time_array'])
             lst_indices = np.unique(lst_array.ravel(), return_index=True)[1]
             # resort by their appearance in lst_array, then unwrap
-            lsts = np.unwrap(lst_array.ravel()[np.sort(lst_indices)])
-            start, stop, int_time = lsts[0], lsts[-1], np.median(np.diff(lsts))
+            lst_array = np.unwrap(lst_array.ravel()[np.sort(lst_indices)])
+            start, stop, int_time = lst_array[0], lst_array[-1], np.median(np.diff(lst_array))
 
         # add integration buffer to end of file if desired
         if add_int_buffer:
@@ -780,10 +791,14 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
         file_starts.append(start)
         file_stops.append(stop)
         int_times.append(int_time)
+        file_lst_arrays.append(lst_array)
+        file_time_arrays.append(time_array)
 
-    file_starts = np.array(file_starts)
-    file_stops = np.array(file_stops)
-    int_times = np.array(int_times)
+    file_starts = np.asarray(file_starts)
+    file_stops = np.asarray(file_stops)
+    int_times = np.asarray(int_times)
+    file_lst_arrays = np.asarray(file_lst_arrays)
+    file_time_arrays = np.asarray(file_time_arrays)
 
     # make sure times don't wrap
     file_starts[np.where(file_starts < 0)] += 2 * np.pi
@@ -793,8 +808,10 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
         file_starts = file_starts[0]
         file_stops = file_stops[0]
         int_times = int_times[0]
+        file_lst_arrays = file_lst_arrays[0]
+        file_time_arrays = file_time_arrays[0]
 
-    return file_starts, file_stops, int_times
+    return file_starts, file_stops, int_times, file_lst_arrays, file_time_arrays
 
 
 def partial_time_io(hd, times, **kwargs):

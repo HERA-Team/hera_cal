@@ -24,7 +24,7 @@ class Test_VisClean(unittest.TestCase):
 
     def test_init(self):
         # test basic init w/ miriad
-        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.uvXRAA")
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.XRAA.uvh5")
         V = VisClean(fname, filetype='miriad')
         nt.assert_false(hasattr(V, 'data'))
         nt.assert_false(hasattr(V, 'antpos'))
@@ -104,7 +104,7 @@ class Test_VisClean(unittest.TestCase):
         os.remove('ex.uvh5')
 
     def test_vis_clean(self):
-        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.uvXRAA")
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='miriad')
         V.read()
 
@@ -159,7 +159,7 @@ class Test_VisClean(unittest.TestCase):
         nt.assert_true(flags[(24, 25, 'xx')][:, 5].all())
 
     def test_fft_data(self):
-        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.uvXRAA")
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='miriad')
         V.read()
 
@@ -173,7 +173,7 @@ class Test_VisClean(unittest.TestCase):
         nt.assert_raises(ValueError, V.fft_data, keys=[('foo')])
 
     def test_zeropad(self):
-        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.uvXRAA")
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='miriad')
         V.read()
 
