@@ -416,6 +416,7 @@ def lst_bin_arg_parser():
     a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
     a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers ot run on. Default is all output files.")
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
+    a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in input data files.")
     return a
 
 
@@ -440,7 +441,6 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
 
     Returns
     -------
-    data_times : ndarray holding start and stop lst
     lst_grid : float ndarray holding LST bin centers
     dlst : float, LST bin width of output lst_grid
     file_lsts : list, contains the lst grid of each output file
@@ -450,43 +450,32 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
     """
     # get dlst from first data file if None
     if dlst is None:
-        start, stop, int_time, lst_arr, time_arr = io.get_file_lst_range(data_files[0][0], filetype='uvh5')
-        dlst = int_time
+        dlst, dtime, lst_arr, time_arr = io.get_file_times(data_files[0][0], filetype='uvh5')
 
-    # get start and stop times for each list of files in data_files.
-    # add_int_buffer adds an integration to the end time of df[:-1] files,
-    # and the %(2pi) ensures everything is within a 2pi LST grid.
-    data_times = []
+    # get time arrays for each file
     lst_arrays = []
     time_arrays = []
-    for df in data_files:
-        fstart, fstop, int_t, larr, tarr = io.get_file_lst_range(df, add_int_buffer=True, filetype='uvh5')
-        data_times.append(np.array([fstart, fstop]).T % (2 * np.pi))
-        lst_arrays.append(larr)
-        time_arrays.append(tarr)
-    data_times = np.asarray(data_times)
+    for dfs in data_files:
+        dlsts, dtimes, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
+        lst_arrays.append(larrs)
+        time_arrays.append(tarrs)
     lst_arrays = np.asarray(lst_arrays)
     time_arrays = np.asarray(time_arrays)
 
-    # unwrap data_times less than lst_start, get starting and ending lst
+    # unwrap times relative to lst_start, and get global start and end lst
     start_lst = 100
     end_lst = -1
-    for dt, la in zip(data_times, lst_arrays):
-        # unwrap starts below lst_start
-        dt[dt[:, 0] < lst_start - atol] += 2 * np.pi
-        for _la in la:
-            if _la[0] < (lst_start - atol):
-                _la += 2 * np.pi
-
-        # get start and end lst
-        start_lst = np.min(np.append(start_lst, dt[:, 0]))
-        end_lst = np.max(np.append(end_lst, dt.ravel()))
+    for larrs in lst_arrays:
+        for la in larrs:
+            if la[0] < (lst_start - atol):
+                la += 2 * np.pi
+        start_lst = np.min(np.append(start_lst, larrs.ravel()))
+        end_lst = np.max(np.append(end_lst, larrs.ravel()))
 
     # ensure start_lst isn't beyond 2pi
     if start_lst >= (2 * np.pi):
         start_lst -= 2 * np.pi
         end_lst -= 2 * np.pi
-        data_times -= 2 * np.pi
         lst_arrays -= 2 * np.pi
 
     # create lst_grid
@@ -509,13 +498,13 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
     # get output file lsts
     file_lsts = [lst_grid[start_index:end_index][ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
 
-    return data_times, lst_grid, dlst, file_lsts, start_lst, lst_arrays, time_arrays
+    return lst_grid, dlst, file_lsts, start_lst, lst_arrays, time_arrays
 
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=0, 
                   fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
-                  output_file_select=None, Nblgroups=1, **kwargs):
+                  output_file_select=None, Nblgroups=1, ignore_flags=False, **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
@@ -554,6 +543,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         If no apply cal is desired for a particular file, feed as None in input_cals.
     Nblgroups : int, default=1, Number of baseline groups to form and run in serial out of the total list
         of baselines in order to reduce instantaneous memory loads
+    ignore_flags : bool, if True, ignore the flags associated with input files
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
@@ -562,7 +552,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
     # get file lst arrays
-    (data_times, lst_grid, dlst, file_lsts, start_lst, lst_arrs,
+    (lst_grid, dlst, file_lsts, start_lst, lst_arrs,
      time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
                                        ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
@@ -660,6 +650,11 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                             utils.echo("Opening and applying {}".format(input_cals[j][k]), verbose=verbose)
                             uvc = io.to_HERACal(input_cals[j][k])
                             gains, cal_flags, quals, totquals = uvc.read()
+                            # down select times in necessary
+                            if False in tinds and uvc.Ntimes > 1:
+                                # If uvc has Ntimes == 1, then broadcast across time will work automatically
+                                uvc.select(times=uvc.time_array[tinds])
+                                gains, cal_flags, quals, totquals = uvc.read()
                             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
                                                          gain_convention=uvc.gain_convention)
 
@@ -686,6 +681,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 continue
 
             # pass through lst-bin function
+            if ignore_flags:
+                flgs_list = None
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, lst_start=start_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip,

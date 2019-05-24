@@ -129,19 +129,23 @@ class Test_lstbin:
         # basic execution
         file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, file_ext=file_ext)
+                                verbose=False, file_ext=file_ext, ignore_flags=True)
         output_lst_file = "./zen.xx.LST.0.20124.uvh5"
         output_std_file = "./zen.xx.STD.0.20124.uvh5"
         nt.assert_true(os.path.exists(output_lst_file))
         nt.assert_true(os.path.exists(output_std_file))
         uv1 = UVData()
         uv1.read(output_lst_file)
+        # assert nsample w.r.t time follows 1-2-3-2-1 pattern
+        nsamps = np.mean(uv1.get_nsamples(52, 52, 'xx'), axis=1)
+        expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(21)]).astype(np.float)
+        nt.assert_true(np.isclose(nsamps, expectation).all())
         os.remove(output_lst_file)
         os.remove(output_std_file)
 
         # test with multiple blgroups
         hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                                verbose=False, file_ext=file_ext, Nblgroups=3)
+                                verbose=False, file_ext=file_ext, Nblgroups=3, ignore_flags=True)
         nt.assert_true(os.path.exists(output_lst_file))
         nt.assert_true(os.path.exists(output_std_file))
         uv2 = UVData()
@@ -241,6 +245,19 @@ class Test_lstbin:
         output_std_file = "./zen.xx.STD.0.20124.uvh5"
         nt.assert_true(os.path.exists(output_lst_file))
         nt.assert_true(os.path.exists(output_std_file))
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
+
+        # test input_cal with only one Ntimes
+        input_cals = []
+        for dfiles in self.data_files:
+            input_cals.append([uvc.select(times=uvc.time_array[:1], inplace=False) for df in dfiles])
+        hc.lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                                verbose=False, input_cals=input_cals, file_ext=file_ext)
+        nt.assert_true(os.path.exists(output_lst_file))
+        nt.assert_true(os.path.exists(output_std_file))
+        os.remove(output_lst_file)
+        os.remove(output_std_file)
 
         # assert gains and flags were propagated
         lstb = UVData()
@@ -295,4 +312,4 @@ class Test_lstbin:
         output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
         for of in output_files:
             if os.path.exists(of):
-                shutil.rmtree(of)
+                os.remove(of)

@@ -23,11 +23,10 @@ from hera_cal.data import DATA_PATH
 class Test_VisClean(unittest.TestCase):
 
     def test_init(self):
-        # test basic init w/ miriad
-        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.XRAA.uvh5")
-        V = VisClean(fname, filetype='miriad')
+        # test basic init
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        V = VisClean(fname, filetype='uvh5')
         nt.assert_false(hasattr(V, 'data'))
-        nt.assert_false(hasattr(V, 'antpos'))
         V.read(bls=[(24, 25, 'xx')])
         nt.assert_true(hasattr(V, 'data'))
         nt.assert_true(hasattr(V, 'antpos'))
@@ -38,7 +37,6 @@ class Test_VisClean(unittest.TestCase):
         fname = os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5')
         V = VisClean(fname, filetype='uvh5')
         nt.assert_false(hasattr(V, 'data'))
-        nt.assert_true(hasattr(V, 'antpos'))
         V.read(bls=[(13, 14, 'xx')])
         nt.assert_equal(set(V.hd.ant_1_array), set([13]))
         nt.assert_true(isinstance(V.hd, io.HERAData))
@@ -105,7 +103,7 @@ class Test_VisClean(unittest.TestCase):
 
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
-        V = VisClean(fname, filetype='miriad')
+        V = VisClean(fname, filetype='uvh5')
         V.read()
 
         # just need to make sure various kwargs run through
@@ -160,7 +158,7 @@ class Test_VisClean(unittest.TestCase):
 
     def test_fft_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
-        V = VisClean(fname, filetype='miriad')
+        V = VisClean(fname, filetype='uvh5')
         V.read()
 
         # fft
@@ -174,7 +172,7 @@ class Test_VisClean(unittest.TestCase):
 
     def test_zeropad(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
-        V = VisClean(fname, filetype='miriad')
+        V = VisClean(fname, filetype='uvh5')
         V.read()
 
         # test basic zeropad
