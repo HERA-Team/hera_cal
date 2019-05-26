@@ -578,7 +578,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['overwrite'] = overwrite
 
     # get metadata from the zeroth data file in the last day
-    hd = HERAData(data_files[-1][0])
+    hd = io.HERAData(data_files[-1][0])
 
     # get metadata
     freq_array = hd.freqs
@@ -590,7 +590,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
 
     # get baselines from data and form baseline groups
-    bls = sorted(uv.get_antpairs())
+    bls = sorted(hd.get_antpairs())
     Nbls = len(bls)
     if Nbls_to_load is None:
         Nbls_to_load = Nbls

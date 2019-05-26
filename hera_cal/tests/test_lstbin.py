@@ -256,8 +256,6 @@ class Test_lstbin:
                                 verbose=False, input_cals=input_cals, file_ext=file_ext)
         nt.assert_true(os.path.exists(output_lst_file))
         nt.assert_true(os.path.exists(output_std_file))
-        os.remove(output_lst_file)
-        os.remove(output_std_file)
 
         # assert gains and flags were propagated
         lstb = UVData()
