@@ -1638,7 +1638,7 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
         matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
     """
     # get lst arrays
-    data_dlst, data_dtime, data_lst, data_times = io.get_file_times(datafile, filetype=filetype)
+    data_dlst, data_dtime, data_lsts, data_times = io.get_file_times(datafile, filetype=filetype)
     model_dlsts, model_dtimes, model_lsts, model_times = io.get_file_times(modelfiles, filetype=filetype)
 
     # shift model files relative to first file & first index if needed
@@ -1651,12 +1651,12 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
     model_ends = np.asarray([ml[-1] + md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
 
     # shift data relative to model if needed
-    if data_lst[-1] < model_starts[0]:
-        data_lst += 2 * np.pi
+    if data_lsts[-1] < model_starts[0]:
+        data_lsts += 2 * np.pi
 
     # select model files
-    match = np.asarray(modelfiles)[(model_starts < data_lst[-1] + atol)
-                                   & (model_ends > data_lst[0] - atol)]
+    match = np.asarray(modelfiles)[(model_starts < data_lsts[-1] + atol)
+                                   & (model_ends > data_lsts[0] - atol)]
 
     return match
 

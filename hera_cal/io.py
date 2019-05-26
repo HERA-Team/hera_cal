@@ -726,11 +726,11 @@ def get_file_times(filepaths, filetype='uvh5'):
     Note: this is not currently compatible with Baseline Dependent Averaged data.
 
     Args:
-        filepaths : type=list, list of filepaths
+        filepaths : type=list or str, filepath or list of filepaths
         filetype : str, options=['miriad', 'uvh5']
 
     Returns:
-        If input is a string, output are floats, otherwise outputs are lists.
+        If input is a string, output are floats, otherwise outputs are ndarrays.
         dlst : ndarray of lst bin width [radian]
         dtime : ndarray of time bin width [Julian Date]
         file_lst_arrays : ndarrays of unwrapped lst_array [radians]
@@ -773,9 +773,9 @@ def get_file_times(filepaths, filetype='uvh5'):
             with h5py.File(f, mode='r') as _f:
                 lst_array = np.ravel(_f[u'Header'][u'lst_array'])
                 time_array = np.unique(_f[u'Header'][u'time_array'])
-            lst_indices = np.unique(lst_array.ravel(), return_index=True)[1]
+            lst_indices = np.unique(lst_array, return_index=True)[1]
             # resort by their appearance in lst_array, then unwrap
-            lst_array = np.unwrap(lst_array.ravel()[np.sort(lst_indices)])
+            lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
             int_time_rad = np.median(np.diff(lst_array))
             int_time = np.median(np.diff(time_array))
 
@@ -790,12 +790,9 @@ def get_file_times(filepaths, filetype='uvh5'):
     file_time_arrays = np.asarray(file_time_arrays)
 
     if _array is False:
-        dlsts = dlsts[0]
-        dtimes = dtimes[0]
-        file_lst_arrays = file_lst_arrays[0]
-        file_time_arrays = file_time_arrays[0]
-
-    return dlsts, dtimes, file_lst_arrays, file_time_arrays
+        return dlsts[0], dtimes[0], file_lst_arrays[0], file_time_arrays[0]
+    else:
+        return dlsts, dtimes, file_lst_arrays, file_time_arrays
 
 
 def partial_time_io(hd, times, **kwargs):
