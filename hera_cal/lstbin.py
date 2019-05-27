@@ -417,6 +417,7 @@ def lst_bin_arg_parser():
     a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers ot run on. Default is all output files.")
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
     a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
+    a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
     return a
 
 
@@ -592,7 +593,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # get baselines from data and form baseline groups
     bls = sorted(hd.get_antpairs())
     Nbls = len(bls)
-    if Nbls_to_load is None:
+    if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = Nbls
     Nblgroups = Nbls // Nbls_to_load + 1
     blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
