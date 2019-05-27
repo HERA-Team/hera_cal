@@ -202,8 +202,8 @@ class Test_AbsCal_Funcs:
         # test basic execution
         relevant_mfiles = abscal.match_times(dfiles[1], mfiles, filetype='miriad')
         nt.assert_equal(len(relevant_mfiles), 1)
-        # test exception
-        mfiles = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2458045.*.xx.HH.uvXRAA')))
+        # test no overlap
+        mfiles = sorted(glob.glob(os.path.join(DATA_PATH, 'zen.2457698.40355.xx.HH.uvcA')))
         relevant_mfiles = abscal.match_times(dfiles[0], mfiles, filetype='miriad')
         nt.assert_equal(len(relevant_mfiles), 0)
 
