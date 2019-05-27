@@ -277,7 +277,7 @@ class ReflectionFitter(FRFilter):
             _keys = list(self.ref_gains.keys())
             for a in self.ants:
                 for p in self.pols:
-                    k = (a, uvutils.parse_jpolstr(p))
+                    k = (a, split_pol(p)[0])
                     if k not in self.ref_gains:
                         self.ref_gains[k] = np.ones_like(self.ref_gains[_keys[0]], dtype=np.complex)
 
@@ -874,10 +874,10 @@ class ReflectionFitter(FRFilter):
                 F = np.concatenate([F[1:Nmirror + 1, :][::-1, :], F, F[-Nmirror - 1:-1, :][::-1, :]], axis=0)
 
             # setup regression data: get unflagged data
-            select = ~np.max(F, axis=1)
+            select = ~np.any(F, axis=1)
             X = X[select, None]
             Y = Y[select, :]
-            Npix = Y.shape[0]
+            Npix = Y.shape [0]
 
             # do real and imag separately
             ypredict = []

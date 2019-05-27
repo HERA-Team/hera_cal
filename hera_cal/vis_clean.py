@@ -337,13 +337,16 @@ class VisClean(object):
                 raise ValueError("if time cleaning, must feed max_frate parameter")
 
         # initialize containers
-        (clean_model, clean_resid, clean_flags, clean_data,
-         clean_info) = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'info']]
-        for dc in [clean_model, clean_resid, clean_flags, clean_data]:
+        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data']]
+        for i, dc in enumerate(containers):
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
+            containers[i] = getattr(self, dc)
+        clean_model, clean_resid, clean_flags, clean_data = containers
+        clean_info = "{}_{}".format(output_prefix, 'info')
         if not hasattr(self, clean_info):
             setattr(self, clean_info, {})
+        clean_info = getattr(self, clean_info)
 
         # select DataContainers
         if data is None:
@@ -378,7 +381,7 @@ class VisClean(object):
 
         # iterate over keys
         for k in keys:
-            if k in getattr(self, clean_model) and overwrite is False:
+            if k in clean_model and overwrite is False:
                 echo("{} exists in clean_model and overwrite is False, skipping...".format(k), verbose=verbose)
                 continue
             echo("Starting CLEAN of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
@@ -466,18 +469,18 @@ class VisClean(object):
                     info = {'skipped': True}
 
             # append to new Containers
-            getattr(self, clean_model)[k] = mdl
-            getattr(self, clean_resid)[k] = res
-            getattr(self, clean_data)[k] = mdl + res * fw
-            getattr(self, clean_flags)[k] = flgs
-            getattr(self, clean_info)[k] = info
+            clean_model[k] = mdl
+            clean_resid[k] = res
+            clean_data[k] = mdl + res * fw
+            clean_flags[k] = flgs
+            clean_info[k] = info
 
         # add metadata
         if hasattr(data, 'times'):
-            getattr(self, clean_data).times = data.times
-            getattr(self, clean_model).times = data.times
-            getattr(self, clean_resid).times = data.times
-            getattr(self, clean_flags).times = data.times
+            clean_data.times = data.times
+            clean_model.times = data.times
+            clean_resid.times = data.times
+            clean_flags.times = data.times
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
                  overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
