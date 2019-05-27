@@ -71,7 +71,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
     rephase : type=bool, if True, phase data to center of the LST bin before binning.
         Note this produces a copy of the data.
     antpos : type=dictionary, holds antenna position vectors in ENU frame in meters with
-        antenna integers as keys and 3D ndarrays as values. See io.load_vis(). Needed for rephase.
+        antenna integers as keys and 3D ndarrays as values. Needed for rephase.
     freq_array : type=ndarray, 1D array of unique data frequencies channels in Hz. Needed for rephase.
     lat : type=float, latitude of array in degrees North. Needed for rephase.
     verbose : type=bool, if True report feedback to stdout
@@ -398,9 +398,8 @@ def lst_bin_arg_parser():
                                 "glob-parsable search strings to nightly data. For example: \n"
                                 "'2458042/zen.2458042.*.xx.HH.uv' '2458043/zen.2458043.*.xx.HH.uv' \n"
                                 "Consult lstbin.lst_bin_files() for further details on functionality.")
-    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files")
+    a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files (UVH5)")
     a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly calibration files")
-    a.add_argument("--filetype", type=str, default='uvh5', help="Filetype of input filepaths.")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--lst_start", type=float, default=0, help="starting LST for binner as it sweeps across 2pi LST")
     a.add_argument("--fixed_lst_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
@@ -417,10 +416,11 @@ def lst_bin_arg_parser():
     a.add_argument("--silence", default=False, action='store_true', help='stop feedback to stdout')
     a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers ot run on. Default is all output files.")
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
+    a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
     return a
 
 
-def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst_start=0.0, fixed_lst_start=False, verbose=True,
+def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed_lst_start=False, verbose=True,
                          ntimes_per_file=60):
     """
     Configure data for LST binning.
@@ -433,61 +433,59 @@ def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst
     data_files : type=list of lists: nested set of lists, with each nested list containing
                  paths to data files from a particular night. These files should be sorted
                  by ascending Julian Date. Frequency axis of each file must be identical.
-    filetype : str, filetype of filepaths in data_files. options=['miriad', 'uvh5']
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
     fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
         record. Otherwise, LST grid starts at LST of first data record.
     ntimes_per_file : type=int, number of LST bins in a single output file
 
-    Returns (lst_grid, dlst, file_lsts, start_lst)
+    Returns
     -------
     lst_grid : float ndarray holding LST bin centers
     dlst : float, LST bin width of output lst_grid
     file_lsts : list, contains the lst grid of each output file
-    start_lst : float, starting lst for LST binner
+    begin_lst : float, starting lst for LST binner. If fixed_lst_start, this equals lst_start.
+    lst_arrays : list, list of lst arrays for each file
+    time_arrays : list, list of time arrays for each file
     """
     # get dlst from first data file if None
     if dlst is None:
-        start, stop, int_time = io.get_file_lst_range(data_files[0][0], filetype=filetype)
-        dlst = int_time
+        dlst, _, _, _ = io.get_file_times(data_files[0][0], filetype='uvh5')
 
-    # get start and stop times for each list of files in data_files.
-    # add_int_buffer adds an integration to the end time of df[:-1] files,
-    # and the %(2pi) ensures everything is within a 2pi LST grid.
-    data_times = []
-    for df in data_files:
-        data_times.append(np.array(io.get_file_lst_range(df, add_int_buffer=True, filetype=filetype))[:2, :].T % (2 * np.pi))
+    # get time arrays for each file
+    lst_arrays = []
+    time_arrays = []
+    for dfs in data_files:
+        dlsts, dtimes, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
+        lst_arrays.append(larrs)
+        time_arrays.append(tarrs)
+    lst_arrays = np.asarray(lst_arrays)
+    time_arrays = np.asarray(time_arrays)
 
-    # unwrap data_times less than lst_start, get starting and ending lst
-    start_lst = 100
+    # unwrap times relative to lst_start, and get global start and end lst
+    begin_lst = 100
     end_lst = -1
-    for dt in data_times:
-        # unwrap starts below lst_start
-        dt[:, 0][dt[:, 0] < lst_start - atol] += 2 * np.pi
+    for larrs in lst_arrays:
+        for la in larrs:
+            if la[0] < (lst_start - atol):
+                la += 2 * np.pi
+        begin_lst = np.min(np.append(begin_lst, larrs.ravel()))
+        end_lst = np.max(np.append(end_lst, larrs.ravel()))
 
-        # unwrap ends below starts
-        dt[:, 1][dt[:, 1] < dt[:, 0] - atol] += 2 * np.pi
-
-        # get start and end lst
-        start_lst = np.min(np.append(start_lst, dt[:, 0]))
-        end_lst = np.max(np.append(end_lst, dt.ravel()))
-
-    # ensure start_lst isn't beyond 2pi
-    if start_lst >= (2 * np.pi):
-        start_lst -= 2 * np.pi
+    # ensure begin_lst isn't beyond 2pi
+    if begin_lst >= (2 * np.pi):
+        begin_lst -= 2 * np.pi
         end_lst -= 2 * np.pi
-        for dt in data_times:
-            dt -= 2 * np.pi
+        lst_arrays -= 2 * np.pi
 
     # create lst_grid
     if fixed_lst_start:
-        start_lst = lst_start
-    lst_grid = make_lst_grid(dlst, lst_start=start_lst, verbose=verbose)
+        begin_lst = lst_start
+    lst_grid = make_lst_grid(dlst, lst_start=begin_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
     # get starting and stopping lst_grid indices
-    start_diff = lst_grid - start_lst
+    start_diff = lst_grid - begin_lst
     start_diff[start_diff < -dlst / 2 - atol] = 100
     start_index = np.argmin(start_diff)
     end_diff = lst_grid - end_lst
@@ -500,15 +498,15 @@ def config_lst_bin_files(data_files, filetype='uvh5', dlst=None, atol=1e-10, lst
     # get output file lsts
     file_lsts = [lst_grid[start_index:end_index][ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
 
-    return data_times, lst_grid, dlst, file_lsts, start_lst
+    return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 
 
-def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
+def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=0, 
                   fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
-                  output_file_select=None, **kwargs):
+                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, **kwargs):
     """
-    LST bin a series of files with identical frequency bins, but varying
+    LST bin a series of UVH5 files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
     are taken from the first file in data_files. Can only LST bin drift-phased data.
 
@@ -522,7 +520,6 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
     data_files : type=list of lists: nested set of lists, with each nested list containing
         paths to files from a particular night. These files should be sorted
         by ascending Julian Date. Frequency axis of each file must be identical.
-    filetype : str, options=['uvh5', 'miriad']
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
     fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
@@ -544,6 +541,9 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
         filepath to calfits, UVCal or HERACal objects with gain solutions to
         apply to data on-the-fly before binning via hera_cal.apply_cal.calibrate_in_place.
         If no apply cal is desired for a particular file, feed as None in input_cals.
+    Nbls_to_load : int, default=None, Number of baselines to load and bin simultaneously. If Nbls exceeds this
+        than iterate over an outer loop until all baselines are binned. Default is to load all baselines at once.
+    ignore_flags : bool, if True, ignore the flags in the input files, such that all input data in included in binning.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
@@ -551,8 +551,9 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
     zen.{pol}.LST.{file_lst}.uv : holds LST bin avg (data_array) and bin count (nsample_array)
     zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
-    (data_times, lst_grid, dlst, file_lsts,
-     start_lst) = config_lst_bin_files(data_files, filetype=filetype, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
+    # get file lst arrays
+    (lst_grid, dlst, file_lsts, lst_start, lst_arrs,
+     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
                                        ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
 
@@ -568,9 +569,6 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
                   "file_lsts list, exiting...".format(output_file_select, nfiles))
             return
 
-    # create data file status: None if not opened, data objects if opened
-    data_status = list(map(lambda d: list(map(lambda f: None, d)), data_files))
-
     # get outdir
     if outdir is None:
         outdir = os.path.dirname(os.path.commonprefix(abscal.flatten(data_files)))
@@ -579,110 +577,132 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
     kwargs['outdir'] = outdir
     kwargs['overwrite'] = overwrite
 
-    # get metadata from the zeroth data file
-    d, fl, ap, a, f, t, l, p = io.load_vis(data_files[0][0], return_meta=True, pick_data_ants=False, filetype=filetype)
+    # get metadata from the zeroth data file in the last day
+    hd = io.HERAData(data_files[-1][0])
 
-    # get frequency, time (converting times in days to integration times in seconds) and antenna position information
-    freq_array = copy.copy(f)
-    antpos = copy.deepcopy(ap)
-    start_jd = np.floor(t)[0]
+    # get metadata
+    freq_array = hd.freqs
+    antpos = hd.antpos
+    times = hd.times
+    start_jd = np.floor(times.min())
     kwargs['start_jd'] = start_jd
-    integration_time = np.median(np.diff(t)) * 24 * 3600.
-    assert np.all(np.abs(np.diff(t) - np.median(np.diff(t))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
-    del d, fl, ap, a, f, t, l, p
-    garbage_collector.collect()
+    integration_time = np.median(hd.integration_time)
+    assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
+
+    # get baselines from data and form baseline groups
+    bls = sorted(hd.get_antpairs())
+    Nbls = len(bls)
+    if Nbls_to_load is None:
+        Nbls_to_load = Nbls
+    Nblgroups = Nbls // Nbls_to_load + 1
+    blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
+    blgroups = [blg for blg in blgroups if len(blg) > 0]
 
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
+        fmin = f_lst[0] - (dlst / 2 + atol)
+        fmax = f_lst[-1] + (dlst / 2 + atol)
 
-        # create empty data_list and lst_list
-        data_list = []
-        file_list = []
-        flgs_list = []
-        lst_list = []
+        # iterate over baseline groups (for memory efficiency)
+        data_conts, flag_conts, std_conts, num_conts = [], [], [], []
+        for bi, blgroup in enumerate(blgroups):
+            utils.echo("starting baseline-group {} / {}: {}".format(bi + 1, len(blgroups), datetime.datetime.now()), type=0, verbose=verbose)
 
-        # locate all data files that fall within the range of lst for this output file
-        f_min = np.min(f_lst)
-        f_max = np.max(f_lst)
-        f_select = np.array(list(map(lambda d: list(map(lambda f: (f[1] > f_min) & (f[0] < f_max + atol), d)), data_times)))
-        if i == 0:
-            old_f_select = copy.copy(f_select)
+            # create empty data lists
+            data_list = []
+            file_list = []
+            flgs_list = []
+            lst_list = []
+     
+            # iterate over individual nights to bin
+            for j in range(len(data_files)):
+                nightly_data_list = []
+                nightly_flgs_list = []
+                nightly_lst_list = []
 
-        # open necessary files, close ones that are no longer needed
-        # append necessary files to data_list
-        for j in range(len(data_files)):
-            nightly_data_list = []
-            nightly_flgs_list = []
-            nightly_lst_list = []
-            for k in range(len(data_files[j])):
-                if f_select[j][k] and data_status[j][k] is None:
-                    # open file
-                    utils.echo("Opening {}".format(data_files[j][k]), verbose=verbose)
-                    d, fl, ap, a, f, t, li, p = io.load_vis(data_files[j][k], return_meta=True, filetype=filetype)
-                    d.phase_type = 'drift'
+                # iterate over files in each night, and open files that fall into this output file LST range
+                for k in range(len(data_files[j])):
+                    # unwrap la relative to itself
+                    larr = lst_arrs[j][k]
+                    tarr = time_arrs[j][k]
+                    larr[larr < larr[0]] += 2 * np.pi
 
-                    # open and apply calibration if provided
+                    # check if this file has overlap with output file
+                    if larr[-1] < fmin or larr[0] > fmax:
+                        continue
+
+                    # if overlap, get relevant time indicies
+                    tinds = (larr > fmin) & (larr < fmax)
+
+                    # load data: only times needed for this output LST-bin file
+                    hd = io.HERAData(data_files[j][k], filetype='uvh5')
+                    try:
+                        data, flags, nsamps = hd.read(bls=blgroup, times=tarr[tinds])
+                        data.phase_type = 'drift'
+                    except ValueError:
+                        # if no baselines in the file, skip this file
+                        utils.echo("No baselines from blgroup {} found in {}, skipping file for these bls".format(bi + 1, data_files[j][k]), verbose=verbose)
+                        continue
+
+                    # load calibration
                     if input_cals is not None:
-                        calfile = input_cals[j][k]
-                        if calfile is not None:
-                            utils.echo("Opening and applying {}".format(calfile), verbose=verbose)
-                            uvc = io.to_HERACal(calfile)
+                        if input_cals[j][k] is not None:
+                            utils.echo("Opening and applying {}".format(input_cals[j][k]), verbose=verbose)
+                            uvc = io.to_HERACal(input_cals[j][k])
                             gains, cal_flags, quals, totquals = uvc.read()
-                            apply_cal.calibrate_in_place(d, gains, data_flags=fl, cal_flags=cal_flags,
+                            # down select times in necessary
+                            if False in tinds and uvc.Ntimes > 1:
+                                # If uvc has Ntimes == 1, then broadcast across time will work automatically
+                                uvc.select(times=uvc.time_array[tinds])
+                                gains, cal_flags, quals, totquals = uvc.read()
+                            apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
                                                          gain_convention=uvc.gain_convention)
 
-                    # unwrap li relative to itself
-                    li[li < li[0]] += 2 * np.pi
-
-                    # unwrap li relative to start_lst
-                    li[li < start_lst - atol] += 2 * np.pi
-
-                    # pass data references to data_status list
-                    data_status[j][k] = [d, fl, ap, a, f, t, li, p]
-
-                    # erase references from namespace
-                    del d, fl, ap, a, f, t, li, p
-
-                elif not f_select[j][k] and old_f_select[j][k]:
-                    # close file
-                    del data_status[j][k]
-                    data_status[j].insert(k, None)
-
-                # if file is needed, append data references to data_list
-                if f_select[j][k]:
                     file_list.append(data_files[j][k])
-                    nightly_data_list.append(data_status[j][k][0])  # this is data
-                    nightly_flgs_list.append(data_status[j][k][1])  # this is flgs
-                    nightly_lst_list.append(data_status[j][k][6])  # this is lsts
+                    nightly_data_list.append(data)  # this is data
+                    nightly_flgs_list.append(flags)  # this is flgs
+                    nightly_lst_list.append(larr[tinds])  # this is lsts
 
-            # skip if nothing accumulated in nightly files
-            if len(nightly_data_list) == 0:
+                # skip if nothing accumulated in nightly files
+                if len(nightly_data_list) == 0:
+                    continue
+
+                # extend to data lists
+                data_list.extend(nightly_data_list)
+                flgs_list.extend(nightly_flgs_list)
+                lst_list.extend(nightly_lst_list)
+
+                del nightly_data_list, nightly_flgs_list, nightly_lst_list
+
+            # skip if data_list is empty
+            if len(data_list) == 0:
                 continue
 
-            # extend to data lists
-            data_list.extend(nightly_data_list)
-            flgs_list.extend(nightly_flgs_list)
-            lst_list.extend(nightly_lst_list)
+            # pass through lst-bin function
+            if ignore_flags:
+                flgs_list = None
+            (bin_lst, bin_data, flag_data, std_data,
+             num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, lst_start=lst_start,
+                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip,
+                                 sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
-            del nightly_data_list, nightly_flgs_list, nightly_lst_list
+            # append to lists
+            data_conts.append(bin_data)
+            flag_conts.append(flag_data)
+            std_conts.append(std_data)
+            num_conts.append(num_data)
 
-        # skip if data_list is empty
-        if len(data_list) == 0:
+        # if all blgroups were empty skip
+        if len(data_conts) == 0:
             utils.echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
-
-            # erase data references
-            del file_list, data_list, flgs_list, lst_list
-
-            # assign old f_select
-            old_f_select = copy.copy(f_select)
             continue
 
-        # pass through lst-bin function
-        (bin_lst, bin_data, flag_data, std_data,
-         num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, lst_start=start_lst,
-                             lst_low=f_min, lst_hi=f_max, truncate_empty=False, sig_clip=sig_clip,
-                             sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
+        # join DataContainers across blgroups
+        bin_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in data_conts])))
+        flag_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in flag_conts])))
+        std_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in std_conts])))
+        num_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in num_conts])))
 
         # update history
         file_history = history + " Input files: " + "-".join(list(map(lambda ff: os.path.basename(ff), file_list)))
@@ -690,13 +710,6 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
 
         # form integration time array
         kwargs['integration_time'] = np.ones(len(bin_lst) * len(bin_data.keys()), dtype=np.float64) * integration_time
-
-        # erase data references
-        del file_list, data_list, flgs_list, lst_list
-        garbage_collector.collect()
-
-        # assign old f_select
-        old_f_select = copy.copy(f_select)
 
         # file in data ext
         fkwargs = {"type": "LST", "time": bin_lst[0] - dlst / 2.0}
@@ -714,10 +727,11 @@ def lst_bin_files(data_files, filetype='uvh5', input_cals=None, dlst=None, verbo
             continue
 
         # write to file
-        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype=filetype, **kwargs)
-        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype=filetype, **kwargs)
+        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='uvh5', **kwargs)
+        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='uvh5', **kwargs)
 
         del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
+        del data_conts, flag_conts, std_conts, num_conts
         garbage_collector.collect()
 
 

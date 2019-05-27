@@ -1629,36 +1629,36 @@ def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
     Match start and end LST of datafile to modelfiles. Each file in modelfiles needs
     to have the same integration time.
 
-    Parameters:
-    -----------
-    datafile : type=str, path to miriad data file
-    modelfiles : type=str, list of paths to miriad model files ordered according to file start time
-    filetype : str, options=['miriad', 'uvh5']
+    Args:
+        datafile : type=str, path to data file
+        modelfiles : type=list of str, list of filepaths to model files ordered according to file start time
+        filetype : str, options=['uvh5', 'miriad']
 
-    Return: (matched_modelfiles)
-    -------
-    matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
+    Returns:
+        matched_modelfiles : type=list, list of modelfiles that overlap w/ datafile in LST
     """
-    # get times
-    data_time = np.array(io.get_file_lst_range(datafile, filetype=filetype))[:2]
-    model_times = np.array(io.get_file_lst_range(modelfiles, filetype=filetype))
-    model_inttime = model_times[2][0]
-    model_times = model_times[:2]
-    model_times[1] += model_inttime
+    # get lst arrays
+    data_dlst, data_dtime, data_lsts, data_times = io.get_file_times(datafile, filetype=filetype)
+    model_dlsts, model_dtimes, model_lsts, model_times = io.get_file_times(modelfiles, filetype=filetype)
 
-    # unwrap LST
-    if data_time[1] < data_time[0]:
-        data_time[1] += 2 * np.pi
-    model_start = model_times[0][0]
-    model_times[model_times < model_start] += 2 * np.pi
-    if data_time[0] < model_start:
-        data_time += 2 * np.pi
+    # shift model files relative to first file & first index if needed
+    for ml in model_lsts:
+        if ml[0] < model_lsts[0][0]:
+            ml += 2 * np.pi
+
+    # get model start and stop, buffering by dlst / 2
+    model_starts = np.asarray([ml[0] - md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
+    model_ends = np.asarray([ml[-1] + md / 2.0 for ml, md in zip(model_lsts, model_dlsts)])
+
+    # shift data relative to model if needed
+    if data_lsts[-1] < model_starts[0]:
+        data_lsts += 2 * np.pi
 
     # select model files
-    matched_modelfiles = np.array(modelfiles)[(model_times[0] < data_time[1] + atol)
-                                              & (model_times[1] > data_time[0] - atol)]
+    match = np.asarray(modelfiles)[(model_starts < data_lsts[-1] + atol)
+                                   & (model_ends > data_lsts[0] - atol)]
 
-    return matched_modelfiles
+    return match
 
 
 def cut_bls(datacontainer, bls=None, min_bl_cut=None, max_bl_cut=None, inplace=False):

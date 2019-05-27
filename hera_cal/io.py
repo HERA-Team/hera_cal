@@ -716,39 +716,40 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         return flags
 
 
-def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
+def get_file_times(filepaths, filetype='uvh5'):
     """
-    Get a file's start, stop and dlst in radians.
+    Get a file's lst_array in radians and time_array in Julian Date.
 
-    Start and stop are bin center. Miriad standard is bin start,
-    so shift by int_time / 2 is done. UVH5 standard is bin center,
-    so lsts are left untouched.
+    Miriad standard is bin start, so a shift by int_time / 2 is performed.
+    UVH5 standard is bin center, so times are left untouched.
+
+    Note: this is not currently compatible with Baseline Dependent Averaged data.
 
     Args:
-        filepaths : type=list, list of filepaths
+        filepaths : type=list or str, filepath or list of filepaths
         filetype : str, options=['miriad', 'uvh5']
-        add_int_buffer : type=bool, if True, extend stop times by an
-            integration duration. This is done so that when LST matching
-            the last bin is appropriately accounted for.
 
     Returns:
-        If input is a string, output are floats, otherwise outputs are lists.
-        file_starts : file starting point (bin center) in LST [radians]
-        file_stops : file ending point (bin center) in LST [radians]
-        int_times : integration duration in LST [radians]
+        If input is a string, output are floats, otherwise outputs are ndarrays.
+        dlst : ndarray of lst bin width [radian]
+        dtime : ndarray of time bin width [Julian Date]
+        file_lst_arrays : ndarrays of unwrapped lst_array [radians]
+        file_time_arrays : ndarrays of time_array [Julian Date]
     """
     _array = True
     # check filepaths type
     if isinstance(filepaths, str):
         _array = False
         filepaths = [filepaths]
-        if filetype not in ['miriad', 'uvh5']:
-            raise ValueError("filetype {} not recognized".format(filetype))
+
+    if filetype not in ['miriad', 'uvh5']:
+        raise ValueError("filetype {} not recognized".format(filetype))
 
     # form empty lists
-    file_starts = []
-    file_stops = []
-    int_times = []
+    dlsts = []
+    dtimes = []
+    file_lst_arrays = []
+    file_time_arrays = []
 
     # get Nfiles
     Nfiles = len(filepaths)
@@ -758,43 +759,40 @@ def get_file_lst_range(filepaths, filetype='uvh5', add_int_buffer=False):
         if filetype == 'miriad':
             uv = aipy.miriad.UV(f)
             # get integration time
-            int_time = uv['inttime'] * 2 * np.pi / (units.si.sday.in_units(units.si.s))
-            # get start and stop
-            start = uv['lst']
-            stop = start + (uv['ntimes'] - 1) * int_time
-            # add half an integration to get center of integration
-            start += int_time / 2
-            stop += int_time / 2
+            int_time = uv['inttime'] / (units.si.day.in_units(units.si.s))
+            int_time_rad = uv['inttime'] * 2 * np.pi / (units.si.sday.in_units(units.si.s))
+            # get start and stop, add half an integration
+            start_lst = uv['lst'] + int_time_rad / 2.0
+            start_time = uv['time'] + int_time / 2.0
+            # form time arrays
+            lst_array = (start_lst + np.arange(uv['ntimes']) * int_time_rad) % (2 * np.pi)
+            time_array = start_time + np.arange(uv['ntimes']) * int_time
+
         elif filetype == 'uvh5':
-            # get lsts directly from uhv5 file's header, much faster than using empty HERAData object
-            lst_array = np.array(h5py.File(f, mode='r')[u'Header'][u'lst_array'])
-            lst_indices = np.unique(lst_array.ravel(), return_index=True)[1]
+            # get times directly from uvh5 file's header: faster than loading entire file via HERAData
+            with h5py.File(f, mode='r') as _f:
+                lst_array = np.ravel(_f[u'Header'][u'lst_array'])
+                time_array = np.unique(_f[u'Header'][u'time_array'])
+            lst_indices = np.unique(lst_array, return_index=True)[1]
             # resort by their appearance in lst_array, then unwrap
-            lsts = np.unwrap(lst_array.ravel()[np.sort(lst_indices)])
-            start, stop, int_time = lsts[0], lsts[-1], np.median(np.diff(lsts))
+            lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
+            int_time_rad = np.median(np.diff(lst_array))
+            int_time = np.median(np.diff(time_array))
 
-        # add integration buffer to end of file if desired
-        if add_int_buffer:
-            stop += int_time
+        dlsts.append(int_time_rad)
+        dtimes.append(int_time)
+        file_lst_arrays.append(lst_array)
+        file_time_arrays.append(time_array)
 
-        file_starts.append(start)
-        file_stops.append(stop)
-        int_times.append(int_time)
-
-    file_starts = np.array(file_starts)
-    file_stops = np.array(file_stops)
-    int_times = np.array(int_times)
-
-    # make sure times don't wrap
-    file_starts[np.where(file_starts < 0)] += 2 * np.pi
-    file_stops[np.where(file_stops >= 2 * np.pi)] -= 2 * np.pi
+    dlsts = np.asarray(dlsts)
+    dtimes = np.asarray(dtimes)
+    file_lst_arrays = np.asarray(file_lst_arrays)
+    file_time_arrays = np.asarray(file_time_arrays)
 
     if _array is False:
-        file_starts = file_starts[0]
-        file_stops = file_stops[0]
-        int_times = int_times[0]
-
-    return file_starts, file_stops, int_times
+        return dlsts[0], dtimes[0], file_lst_arrays[0], file_time_arrays[0]
+    else:
+        return dlsts, dtimes, file_lst_arrays, file_time_arrays
 
 
 def partial_time_io(hd, times, **kwargs):
