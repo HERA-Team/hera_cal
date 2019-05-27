@@ -470,8 +470,8 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
         for la in larrs:
             if la[0] < (lst_start - atol):
                 la += 2 * np.pi
-        begin_lst = np.min(np.append(begin_lst, larrs.ravel()))
-        end_lst = np.max(np.append(end_lst, larrs.ravel()))
+        begin_lst = np.min(np.append(begin_lst, np.concatenate(larrs)))
+        end_lst = np.max(np.append(end_lst, np.concatenate(larrs)))
 
     # ensure begin_lst isn't beyond 2pi
     if begin_lst >= (2 * np.pi):
