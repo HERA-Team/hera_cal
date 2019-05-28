@@ -488,15 +488,17 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     if lst_start is None:
         lst_start = lmin
 
+    # if lst_start is sufficiently below lmin, shift everything down an octave
+    if lst_start < (lmin - np.pi):
+        lst_arrays -= 2 * np.pi
+        lmin -= 2 * np.pi
+        lmax -= 2 * np.pi
+
     # get beginning LST for lst_grid
     if fixed_lst_start:
         begin_lst = lst_start
     else:
         begin_lst = lmin
-
-    # if begin_lst is sufficiently below lmin, shift it up one octave
-    if begin_lst < (lmin - np.pi):
-        begin_lst += 2 * np.pi
 
     # get stopping LST for output binning
     if lst_stop is None:
