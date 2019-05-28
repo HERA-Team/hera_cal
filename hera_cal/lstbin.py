@@ -733,7 +733,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         kwargs['history'] = file_history + version.history_string()
 
         # form integration time array
-        kwargs['integration_time'] = np.ones(len(bin_lst) * len(bin_data.keys()), dtype=np.float64) * integration_time
+        Nbls = len(set([bl[:2] for bl in list(bin_data.keys())])) 
+        kwargs['integration_time'] = np.ones(len(bin_lst) * Nbls, dtype=np.float64) * integration_time
 
         # file in data ext
         fkwargs = {"type": "LST", "time": bin_lst[0] - dlst / 2.0}
