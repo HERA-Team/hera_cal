@@ -33,7 +33,7 @@ from . import apply_cal
 from .datacontainer import DataContainer
 
 
-def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst_low=None,
+def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
             freq_array=None, lat=-30.72152, verbose=True):
@@ -52,8 +52,8 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         in data_list. Flagged data do not contribute to the average of an LST bin.
     dlst : type=float, delta-LST spacing for lst_grid. If None, will use the delta-LST of the first
         array in lst_list.
-    lst_start : type=float, starting LST for making the lst_grid, extending from
-        [lst_start, lst_start+2pi). Default is lst_start = 0 radians.
+    begin_lst : type=float, beginning LST for making the lst_grid, extending from
+        [begin_lst, begin_lst+2pi). Default is begin_lst = 0 radians.
     lst_low : type=float, truncate lst_grid below this lower bound on the LST bin center
     lst_hi : type=float, truncate lst_grid above this upper bound on the LST bin center
     flag_thresh : type=float, minimum fraction of flagged points in an LST bin needed to
@@ -99,7 +99,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, lst_start=None, lst
         dlst = np.median(np.diff(lst_list[0]))
 
     # construct lst_grid
-    lst_grid = make_lst_grid(dlst, lst_start=lst_start, verbose=verbose)
+    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
     # test for special case of lst grid restriction
@@ -364,8 +364,8 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
         data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
 
     # make lst_grid
-    lst_start = np.max([data_lsts[0] - 1e-5, 0])
-    lst_grid = make_lst_grid(dlst, lst_start=lst_start, verbose=verbose)
+    begin_lst = np.max([data_lsts[0] - 1e-5, 0])
+    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
 
     # get frequency info
     Nfreqs = data[list(data.keys())[0]].shape[1]
@@ -373,9 +373,9 @@ def lst_align(data, data_lsts, flags=None, dlst=None,
     model_freqs = np.arange(Nfreqs)
 
     # restrict lst_grid based on interpolate-able points
-    lst_start = data_lsts[0]
+    begin_lst = data_lsts[0]
     lst_end = data_lsts[-1]
-    lst_grid = lst_grid[(lst_grid > lst_start - dlst / 2 - atol) & (lst_grid < lst_end + dlst / 2 + atol)]
+    lst_grid = lst_grid[(lst_grid > begin_lst - dlst / 2 - atol) & (lst_grid < lst_end + dlst / 2 + atol)]
 
     # interpolate data
     interp_data, interp_flags = abscal.interp2d_vis(data, data_lsts, data_freqs, lst_grid, model_freqs, flags=flags, **interp_kwargs)
@@ -401,7 +401,8 @@ def lst_bin_arg_parser():
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files (UVH5)")
     a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly calibration files")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
-    a.add_argument("--lst_start", type=float, default=0, help="starting LST for binner as it sweeps across 2pi LST")
+    a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
+    a.add_argument("--lst_stop", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is lst_start + 2pi")
     a.add_argument("--fixed_lst_start", action='store_true', default=False, help="If True, make the start of the LST grid equal to lst_start, rather than the LST of the first data record.")
     a.add_argument("--ntimes_per_file", type=int, default=60, help="number of LST bins to write per output file")
     a.add_argument("--file_ext", type=str, default="{type}.{time:7.5f}.uvh5", help="file extension for output files. See lstbin.lst_bin_files doc-string for format specs.")
@@ -421,7 +422,7 @@ def lst_bin_arg_parser():
     return a
 
 
-def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed_lst_start=False, verbose=True,
+def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_stop=None, fixed_lst_start=False, verbose=True,
                          ntimes_per_file=60):
     """
     Configure data for LST binning.
@@ -436,6 +437,9 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
                  by ascending Julian Date. Frequency axis of each file must be identical.
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
+        Default is first LST of first file.
+    lst_stop : type=float, stopping LST for binner as it sweeps from lst_start to lst_start + 2pi.
+        Default is lst_start + 2pi.
     fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
         record. Otherwise, LST grid starts at LST of first data record.
     ntimes_per_file : type=int, number of LST bins in a single output file
@@ -456,55 +460,67 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=0.0, fixed
     # get time arrays for each file
     lst_arrays = []
     time_arrays = []
-    for dfs in data_files:
+    for di, dfs in enumerate(data_files):
+        # get times
         dlsts, dtimes, larrs, tarrs = io.get_file_times(dfs, filetype='uvh5')
+
+        # get lmin: LST of first integration from first file
+        if di == 0:
+            lmin = larrs[0][0]
+
+        # unwrap relative to lmin
+        for la in larrs:
+            if la[0] < lmin:
+                la += 2 * np.pi
+
+        # get lmax
+        if di == (len(data_files) - 1):
+            lmax = larrs[-1][-1]
+
+        # append
         lst_arrays.append(larrs)
         time_arrays.append(tarrs)
+
     lst_arrays = np.asarray(lst_arrays)
     time_arrays = np.asarray(time_arrays)
 
-    # unwrap times relative to lst_start, and get global start and end lst
-    begin_lst = 100
-    end_lst = -1
-    for larrs in lst_arrays:
-        for la in larrs:
-            if la[0] < (lst_start - atol):
-                la += 2 * np.pi
-        begin_lst = np.min(np.append(begin_lst, np.concatenate(larrs)))
-        end_lst = np.max(np.append(end_lst, np.concatenate(larrs)))
+    # get starting LST for output binning
+    if lst_start is None:
+        lst_start = lmin
 
-    # ensure begin_lst isn't beyond 2pi
-    if begin_lst >= (2 * np.pi):
-        begin_lst -= 2 * np.pi
-        end_lst -= 2 * np.pi
-        lst_arrays -= 2 * np.pi
-
-    # create lst_grid
+    # get beginning LST for lst_grid
     if fixed_lst_start:
         begin_lst = lst_start
-    lst_grid = make_lst_grid(dlst, lst_start=begin_lst, verbose=verbose)
+    else:
+        begin_lst = lmin
+
+    # get stopping LST for output binning
+    if lst_stop is None:
+        lst_stop = lmax
+    else:
+        if lst_stop < begin_lst:
+            lst_stop += 2 * np.pi
+
+    # make LST grid
+    lst_grid = make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)
     dlst = np.median(np.diff(lst_grid))
 
-    # get starting and stopping lst_grid indices
-    start_diff = lst_grid - begin_lst
-    start_diff[start_diff < -dlst / 2 - atol] = 100
-    start_index = np.argmin(start_diff)
-    end_diff = lst_grid - end_lst
-    end_diff[end_diff > dlst / 2 + atol] = -100
-    end_index = np.argmax(end_diff)
+    # get starting and stopping indicies
+    start_index = np.argmin(np.abs(lst_grid - lst_start))
+    stop_index = np.argmin(np.abs(lst_grid - lst_stop))
 
     # get number of output files
-    nfiles = int(np.ceil(float(end_index - start_index) / ntimes_per_file))
+    nfiles = int(np.ceil(float(stop_index - start_index) / ntimes_per_file))
 
     # get output file lsts
-    file_lsts = [lst_grid[start_index:end_index][ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
+    file_lsts = [lst_grid[start_index:stop_index][ntimes_per_file * i:ntimes_per_file * (i + 1)] for i in range(nfiles)]
 
     return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
-                  file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=0, 
-                  fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
+                  file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None, 
+                  lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
                   output_file_select=None, Nbls_to_load=None, ignore_flags=False, **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
@@ -523,6 +539,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         by ascending Julian Date. Frequency axis of each file must be identical.
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
+    lst_stop : type=float, stopping LST for binner as it sweeps from lst_start to lst_start + 2pi.
     fixed_lst_start : type=bool, if True, LST grid starts at lst_start, regardless of LST of first data
         record. Otherwise, LST grid starts at LST of first data record.
     ntimes_per_file : type=int, number of LST bins in a single output file
@@ -553,8 +570,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     zen.{pol}.STD.{file_lst}.uv : holds LST bin stand dev along real and imag (data_array)
     """
     # get file lst arrays
-    (lst_grid, dlst, file_lsts, lst_start, lst_arrs,
-     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, fixed_lst_start=fixed_lst_start,
+    (lst_grid, dlst, file_lsts, begin_lst, lst_arrs,
+     time_arrs) = config_lst_bin_files(data_files, dlst=dlst, lst_start=lst_start, lst_stop=lst_stop, fixed_lst_start=fixed_lst_start,
                                        ntimes_per_file=ntimes_per_file, verbose=verbose)
     nfiles = len(file_lsts)
 
@@ -684,7 +701,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             if ignore_flags:
                 flgs_list = None
             (bin_lst, bin_data, flag_data, std_data,
-             num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, lst_start=lst_start,
+             num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip,
                                  sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
@@ -736,7 +753,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         garbage_collector.collect()
 
 
-def make_lst_grid(dlst, lst_start=None, verbose=True):
+def make_lst_grid(dlst, begin_lst=None, verbose=True):
     """
     Make a uniform grid in local sidereal time spanning 2pi radians.
 
@@ -747,9 +764,9 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
                 is also greater than the input dlst. There is a minimum allowed dlst of 6.283e-6 radians,
                 or .0864 seconds.
 
-    lst_start : type=float, starting point for lst_grid, which extends out 2pi from lst_start.
-                lst_start must fall exactly on an LST bin given a dlst, within 0-2pi. If not, it is
-                replaced with the closest bin. Default is lst_start at zero radians.
+    begin_lst : type=float, beginning point for lst_grid, which extends out 2pi from begin_lst.
+                begin_lst must fall exactly on an LST bin given a dlst, within 0-2pi. If not, it is
+                replaced with the closest bin. Default is zero radians.
 
     Output:
     -------
@@ -771,14 +788,14 @@ def make_lst_grid(dlst, lst_start=None, verbose=True):
     # make an lst grid from [0, 2pi), with the first bin having a left-edge at 0 radians.
     lst_grid = np.arange(0, 2 * np.pi - 1e-7, dlst) + dlst / 2
 
-    # shift grid by lst_start
-    if lst_start is not None:
-        # enforce lst_start to be within 0-2pi, else replace with 0
-        if lst_start < 0 or lst_start >= 2 * np.pi:
-            utils.echo("lst_start was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
-            lst_start = lst_start % (2 * np.pi)
-        lst_start = lst_grid[np.argmin(np.abs(lst_grid - lst_start))] - dlst / 2
-        lst_grid += lst_start
+    # shift grid by begin_lst
+    if begin_lst is not None:
+        # enforce begin_lst to be within 0-2pi
+        if begin_lst < 0 or begin_lst >= 2 * np.pi:
+            utils.echo("begin_lst was < 0 or >= 2pi, taking modulus with (2pi)", verbose=verbose)
+            begin_lst = begin_lst % (2 * np.pi)
+        begin_lst = lst_grid[np.argmin(np.abs(lst_grid - begin_lst))] - dlst / 2
+        lst_grid += begin_lst
 
     return lst_grid
 

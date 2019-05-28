@@ -46,13 +46,13 @@ class Test_lstbin:
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]
 
     def test_make_lst_grid(self):
-        lst_grid = hc.lstbin.make_lst_grid(0.01, lst_start=None, verbose=False)
+        lst_grid = hc.lstbin.make_lst_grid(0.01, begin_lst=None, verbose=False)
         nt.assert_equal(len(lst_grid), 628)
         nt.assert_almost_equal(lst_grid[0], 0.0050025360725952121)
-        lst_grid = hc.lstbin.make_lst_grid(0.01, lst_start=np.pi, verbose=False)
+        lst_grid = hc.lstbin.make_lst_grid(0.01, begin_lst=np.pi, verbose=False)
         nt.assert_equal(len(lst_grid), 628)
         nt.assert_almost_equal(lst_grid[0], 3.1365901175171982)
-        lst_grid = hc.lstbin.make_lst_grid(0.01, lst_start=-np.pi, verbose=False)
+        lst_grid = hc.lstbin.make_lst_grid(0.01, begin_lst=-np.pi, verbose=False)
         nt.assert_equal(len(lst_grid), 628)
         nt.assert_almost_equal(lst_grid[0], 3.1365901175171982)
 
@@ -102,7 +102,7 @@ class Test_lstbin:
                                    verbose=False, sig_clip=True, min_N=5, sigma=2)
         # test wrapping
         lst_list = list(map(lambda l: (copy.deepcopy(l) + 6) % (2 * np.pi), self.lst_list))
-        output = hc.lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, lst_start=np.pi)
+        output = hc.lstbin.lst_bin(self.data_list, lst_list, dlst=0.001, begin_lst=np.pi)
         nt.assert_true(output[0][0] > output[0][-1])
         nt.assert_equal(len(output[0]), 175)
         # test appropriate data_count
