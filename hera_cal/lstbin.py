@@ -494,6 +494,10 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     else:
         begin_lst = lmin
 
+    # if begin_lst is sufficiently below lmin, shift it up one octave
+    if begin_lst < (lmin - np.pi):
+        begin_lst += 2 * np.pi
+
     # get stopping LST for output binning
     if lst_stop is None:
         lst_stop = lmax
