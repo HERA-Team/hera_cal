@@ -269,7 +269,7 @@ class Test_lstbin:
     def test_lst_bin_arg_parser(self):
         a = hc.lstbin.lst_bin_arg_parser()
         args = a.parse_args(["--dlst", "0.1", "--input_cals", "zen.2458043.12552.HH.uvA.omni.calfits", "zen.2458043.12552.xx.HH.uvORA.abs.calfits",
-                             "--overwrite", "zen.2458042.12552.xx.HH.uvXA", "zen.2458042.12552.xx.HH.uvXA"])
+                             "--overwrite", "zen.2458042.12552.xx.HH.uvXA", "zen.2458043.12552.xx.HH.uvXA"])
 
         nt.assert_almost_equal(args.dlst, 0.1)
         nt.assert_true(len(args.input_cals), 2)
