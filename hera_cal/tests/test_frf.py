@@ -87,8 +87,8 @@ def test_fir_filtering():
     frp[512 - 9:512 + 10] = 0.0
     fir, tbins = frf.frp_to_fir(frp, delta_bin=np.diff(frbins)[0])
     # confirm its purely real
-    assert not np.isclose(np.abs(fir.real), 0.0).any()
-    assert np.isclose(np.abs(fir.imag), 0.0).all()
+    assert not np.any(np.isclose(np.abs(fir.real), 0.0))
+    assert np.allclose(np.abs(fir.imag), 0.0)
 
     # convert back
     _frp, _frbins = frf.frp_to_fir(fir, delta_bin=np.diff(tbins)[0], undo=True)

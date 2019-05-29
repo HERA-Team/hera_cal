@@ -97,11 +97,11 @@ class Test_AbsCal_Funcs(object):
         # test flag propagation
         m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                     self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=True)
-        assert np.isclose(mf[(24, 25, 'xx')][10, 0], True)
+        assert np.all(mf[(24, 25, 'xx')][10, 0] == True)
         # test flag extrapolation
         m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                     self.time_array + .0001, self.freq_array, flags=self.wgts, flag_extrapolate=True)
-        assert np.isclose(mf[(24, 25, 'xx')][-1].min(), True)
+        assert np.all(mf[(24, 25, 'xx')][-1].min() == True)
 
     def test_wiener(self):
         # test smoothing
@@ -186,7 +186,7 @@ class Test_AbsCal_Funcs(object):
         # test averaging worked
         rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=False)
         v = np.mean([data[(52, 53, 'xx')], data[(37, 38, 'xx')], data[(24, 25, 'xx')], data[(38, 39, 'xx')]], axis=0)
-        assert np.isclose(rd[(24, 25, 'xx')], v).min()
+        assert np.allclose(rd[(24, 25, 'xx')], v)
         # test mirror_red_data
         rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, wgts=self.wgts, tol=2.0, mirror_red_data=True)
         assert len(rd.keys()) == 21
@@ -220,8 +220,8 @@ class Test_AbsCal_Funcs(object):
 
         k = list(new_m.keys())[0]
         assert new_m[k].shape == d[k].shape
-        assert np.isclose(new_f[k][-1].min(), True)
-        assert np.isclose(new_f[k][0].max(), False)
+        assert np.all(new_f[k][-1] == True)
+        assert np.all(new_f[k][0] == False)
 
     def test_cut_bl(self):
         Nbls = len(self.data)
@@ -346,7 +346,7 @@ class Test_AbsCal(object):
         assert self.AC.abs_psi_gain[(24, 'Jxx')].shape == (60, 64)
         assert self.AC.TT_Phi[(24, 'Jxx')].shape == (2, 60, 64)
         assert self.AC.TT_Phi_gain[(24, 'Jxx')].shape == (60, 64)
-        assert np.isclose(np.angle(self.AC.TT_Phi_gain[(24, 'Jxx')]), 0.0).all()
+        assert np.allclose(np.angle(self.AC.TT_Phi_gain[(24, 'Jxx')]), 0.0)
         # test merge pols
         self.AC.TT_phs_logcal(verbose=False, four_pol=True)
         assert self.AC.TT_Phi_arr.shape == (7, 2, 60, 64, 1)
@@ -396,7 +396,7 @@ class Test_AbsCal(object):
         assert self.AC.ant_phi_arr.dtype == np.float
         assert self.AC.ant_phi_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_phi_gain_arr.dtype == np.complex
-        assert np.isclose(np.angle(self.AC.ant_phi_gain[(24, 'Jxx')]), 0.0).all()
+        assert np.allclose(np.angle(self.AC.ant_phi_gain[(24, 'Jxx')]), 0.0)
         self.AC.phs_logcal(verbose=False, avg=True)
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         assert AC.ant_phi is None
@@ -424,8 +424,8 @@ class Test_AbsCal(object):
         assert self.AC.ant_dly_arr.dtype == np.float
         assert self.AC.ant_dly_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_dly_gain_arr.dtype == np.complex
-        assert np.isclose(np.angle(self.AC.ant_dly_gain[(24, 'Jxx')]), 0.0).all()
-        assert np.isclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'Jxx')]), 0.0).all()
+        assert np.allclose(np.angle(self.AC.ant_dly_gain[(24, 'Jxx')]), 0.0)
+        assert np.allclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'Jxx')]), 0.0)
         # test exception
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         pytest.raises(AttributeError, AC.delay_lincal)
@@ -458,7 +458,7 @@ class Test_AbsCal(object):
         assert self.AC.dly_slope_arr.shape == (7, 2, 60, 1, 1)
         assert self.AC.dly_slope_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.dly_slope_ant_dly_arr.shape == (7, 60, 1, 1)
-        assert np.isclose(np.angle(self.AC.dly_slope_gain[(24, 'Jxx')]), 0.0).all()
+        assert np.allclose(np.angle(self.AC.dly_slope_gain[(24, 'Jxx')]), 0.0)
         g = self.AC.custom_dly_slope_gain(self.gk, self.ap)
         assert g[(0, 'Jxx')].shape == (60, 64)
         # test exception
@@ -497,7 +497,7 @@ class Test_AbsCal(object):
             assert self.AC.phs_slope_arr.shape == (7, 2, 60, 1, 1)
             assert self.AC.phs_slope_gain_arr.shape == (7, 60, 64, 1)
             assert self.AC.phs_slope_ant_phs_arr.shape == (7, 60, 1, 1)
-            assert np.isclose(np.angle(self.AC.phs_slope_gain[(24, 'Jxx')]), 0.0).all()
+            assert np.allclose(np.angle(self.AC.phs_slope_gain[(24, 'Jxx')]), 0.0)
             g = self.AC.custom_phs_slope_gain(self.gk, self.ap)
             assert g[(0, 'Jxx')].shape == (60, 64)
             # test Nones
