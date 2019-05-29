@@ -18,6 +18,7 @@ import operator
 import functools
 from sklearn.gaussian_process import kernels
 import hera_sim as hs
+import copy
 
 from hera_cal import io
 from hera_cal import reflections
@@ -326,6 +327,7 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='neg')
         RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True)
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=True)
+
         # says that the two are similar to each other at -250 ns, which they should be
         ind = np.argmin(np.abs(RF.delays - -250))
         Vrms = np.sqrt(np.mean(RF.dfft[bl][:, ind].real**2))
@@ -351,38 +353,77 @@ class Test_ReflectionFitter_XTalk(unittest.TestCase):
     def test_misc_svd_funcs(self):
         # setup RF object
         RF = reflections.ReflectionFitter(self.uvd)
+        # add noise
+        np.random.seed(0)
+        Namp = 3e0
+        for k in RF.data:
+            RF.data += stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs) + 1j * stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs)
         bl = (23, 24, 'xx')
 
         # fft data
         RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
 
         # sv decomp
-        wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='both')
-        RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl], overwrite=True, Nkeep=10)
-        nt.assert_equal(RF.umodes[bl].shape, (100, 10))
-        nt.assert_equal(RF.vmodes[bl].shape, (10, 128))
+        svd_wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=150, max_dly=500, side='both')
+        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=None)
+        nt.assert_equal(RF.umodes[bl].shape, (100, 100))
+        nt.assert_equal(RF.vmodes[bl].shape, (100, 128))
 
         # test interpolation of umodes
         gp_frate = 0.2
-        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None)
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=None)
+        nt.assert_equal(RF.umode_interp[bl].shape, (100, 100))
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10)
         nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
 
         # get fft and assert a good match within gp_frate
-        RF.fft_data(data=RF.umodes, assign='ufft', window='blackmanharris', ax='time', overwrite=True)
-        RF.fft_data(data=RF.umode_interp, assign='uifft', window='blackmanharris', ax='time', overwrite=True)
-        select = np.abs(RF.frates) < gp_frate
-        nt.assert_true(np.mean(np.abs(RF.umodes[bl][select, 0] - RF.umode_interp[bl][select, 0]) / np.abs(RF.umodes[bl][select, 0])) < 0.01)
+        RF.fft_data(data=RF.umodes, assign='ufft', window='blackmanharris', ax='time', overwrite=True, edgecut_low=5, edgecut_hi=5)
+        RF.fft_data(data=RF.umode_interp, assign='uifft', window='blackmanharris', ax='time', overwrite=True, edgecut_low=5, edgecut_hi=5)
+        select = np.abs(RF.frates) < gp_frate / 2
+        nt.assert_true(np.mean(np.abs(RF.ufft[bl][select, 0] - RF.uifft[bl][select, 0]) / np.abs(RF.ufft[bl][select, 0])) < 0.01)
         # plt.plot(RF.frates, np.abs(RF.ufft[bl][:, 0]));plt.plot(RF.frates, np.abs(RF.uifft[bl][:, 0]));plt.yscale('log')
+
+        # test mode projection after interpolation (smoothing)
+        umodes = copy.deepcopy(RF.umodes)
+        for k in umodes:
+            umodes[k][:, :10] = RF.umode_interp[k][:, :10]  # fill in umodes with smoothed components
+        vmodes = RF.project_svd_modes(RF.dfft * svd_wgts, umodes=umodes, svals=RF.svals)
+
+        # build systematic models with original vmodes and projected vmodes
+        RF.build_pc_model(umodes, RF.vmodes, RF.svals, overwrite=True, Nkeep=10)
+        pcomp1 = RF.pcomp_model[bl]
+        RF.build_pc_model(umodes, vmodes, RF.svals, overwrite=True, Nkeep=10)
+        pcomp2 = RF.pcomp_model[bl]
+        # assert pcomp model with projected vmode has less noise in it for a delay with no systematic
+        ind = np.argmin(np.abs(RF.delays - 400))  # no systematic at this delay, only noise
+        nt.assert_true(np.mean(np.abs(pcomp1[:, ind])) > np.mean(np.abs(pcomp2[:, ind])))
+
+        # test projection of other SVD matrices
+        _svals = RF.project_svd_modes(RF.dfft * svd_wgts, umodes=RF.umodes, vmodes=RF.vmodes)
+        _umodes = RF.project_svd_modes(RF.dfft * svd_wgts, vmodes=RF.vmodes, svals=RF.svals)
+
+        # assert original is nearly the same as projected
+        nt.assert_true(np.all(np.isclose(_svals[bl], RF.svals[bl], atol=1e-10)))  
+        nt.assert_true(np.all(np.isclose(_umodes[bl][:, 0], RF.umodes[bl][:, 0], atol=1e-10)))  
+
+        # try with and without Nmirror
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=0)
+        uinterp1 = copy.deepcopy(RF.umode_interp)
+        RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=25)
+        uinterp2 = copy.deepcopy(RF.umode_interp)
+        # assert higher order umodes don't diverge as much at time boundaries with Nmirror > 0
+        for i in range(3, 10):
+            nt.assert_true(np.mean(np.abs(uinterp1[bl][:2, i]) / np.abs(uinterp2[bl][:2, i])) > 1.0)
+            nt.assert_true(np.mean(np.abs(uinterp1[bl][-2:, i]) / np.abs(uinterp2[bl][-2:, i])) > 1.0)
+
+        # test too large Nmirror
+        nt.assert_raises(AssertionError, RF.interp_u, RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=100)
 
         # assert custom kernel works
         gp_len = 1.0 / (0.4 * 1e-3) / (24.0 * 3600.0)
         kernel = 1**2 * kernels.RBF(gp_len) + kernels.WhiteKernel(1e-10)
         RF.interp_u(RF.umodes, RF.times, overwrite=True, kernels=kernel, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
-
-        # test mirror
-        RF.interp_u(RF.umodes, RF.times, full_times=RF.times, overwrite=True, gp_frate=1.0, gp_nl=1e-10, optimizer=None)
-        nt.assert_equal(RF.umode_interp[bl].shape, (100, 10))
+        nt.assert_equal(RF.umode_interp[bl].shape, (100, 100))
 
         # assert broadcasting to full time resolution worked
         RF.timeavg_data(RF.data, RF.times, RF.lsts, 500, overwrite=True, verbose=False)
