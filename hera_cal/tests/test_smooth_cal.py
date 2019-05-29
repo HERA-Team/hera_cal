@@ -71,7 +71,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5)
         assert np.allclose(ff[0, :], gains[0, :])
-        assert np.isclose(info[0]['skipped'], True)
+        assert np.all(info[0]['skipped'] == True)
 
     def test_time_freq_2D_filter(self):
         gains = np.ones((100, 100), dtype=complex)
