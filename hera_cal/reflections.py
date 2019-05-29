@@ -591,6 +591,8 @@ class ReflectionFitter(FRFilter):
             U = D V_dagger S_inv
             S = U_dagger D V_dagger
             V = S_inv U_dagger D
+        where
+            S_inv contains the inverse of the S vector along its diagonal.
 
         Args:
             dfft : DataContainer, holds time-delay waterfall visibilities
@@ -877,7 +879,7 @@ class ReflectionFitter(FRFilter):
             select = ~np.any(F, axis=1)
             X = X[select, None]
             Y = Y[select, :]
-            Npix = Y.shape [0]
+            Npix = Y.shape[0]
 
             # do real and imag separately
             ypredict = []
