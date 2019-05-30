@@ -124,7 +124,7 @@ class Test_VisClean(object):
         # basic 2d clean
         V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', max_frate=10., overwrite=True,
                     filt2d_mode='plus')
-        'success' in V.clean_info[(24, 25, 'xx')]
+        assert 'success' in V.clean_info[(24, 25, 'xx')]
 
         V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', flags=V.flags + True, max_frate=10.,
                     overwrite=True, filt2d_mode='plus')
