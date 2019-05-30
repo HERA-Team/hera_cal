@@ -24,11 +24,11 @@ class Test_Noise(object):
 
     def test_interleaved_noise_variance_estimate(self):
         const_test = noise.interleaved_noise_variance_estimate(np.ones((10, 10)))
-        assert np.all(const_test == 0)
+        np.testing.assert_array_equal(const_test, 0)
 
         np.random.seed(21)
         gauss_test = np.mean(noise.interleaved_noise_variance_estimate(np.random.randn(1000, 1000)))
-        assert np.allclose(gauss_test, 1, atol=1e-2)
+        np.testing.assert_almost_equal(gauss_test, 1, decimal=2)
 
         kernels = [('2x2 diff', [[1, -1], [-1, 1]]),
                    ('2D plus', [[0, 1, 0], [1, -4, 1], [0, 1, 0]]),
@@ -40,7 +40,7 @@ class Test_Noise(object):
                    ('1D 7-term', [[2, -9, 18, -22, 18, -9, 2]])]
         for kname, kernel in kernels:
             gauss_test = np.mean(noise.interleaved_noise_variance_estimate(np.random.randn(1000, 1000), kernel=kernel))
-            assert np.allclose(gauss_test, 1, atol=1e-2)
+            np.testing.assert_almost_equal(gauss_test, 1, decimal=2)
 
         with pytest.raises(AssertionError):
             noise.interleaved_noise_variance_estimate(np.random.randn(10, 10), kernel=[[.5, 1.0, .5]])
@@ -54,10 +54,10 @@ class Test_Noise(object):
             if k[0] != k[1]:
                 sigmasq = noise.predict_noise_variance_from_autos(k, data)
                 noise_var = noise.interleaved_noise_variance_estimate(data[k])
-                assert np.allclose(np.abs(np.mean(np.mean(noise_var, axis=0) / np.mean(sigmasq, axis=0)) - 1) <= .1, True)
+                np.testing.assert_array_equal(np.abs(np.mean(np.mean(noise_var, axis=0) / np.mean(sigmasq, axis=0)) - 1) <= .1, True)
                 times = hd.times_by_bl[k[:2]]
                 sigmasq2 = noise.predict_noise_variance_from_autos(k, data, df=(hd.freqs[1] - hd.freqs[0]), dt=((times[1] - times[0]) * 24. * 3600.))
-                assert np.allclose(sigmasq, sigmasq2)
+                np.testing.assert_array_equal(sigmasq, sigmasq2)
 
     def test_per_antenna_noise_std(self):
         infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
@@ -68,7 +68,7 @@ class Test_Noise(object):
             if (bl[0] == bl[1]) and (split_pol(bl[2])[0] == split_pol(bl[2])[1]):
                 assert bl in n
                 assert n[bl].shape == data[bl].shape
-                assert np.allclose(n[bl].imag, 0.0)
+                np.testing.assert_array_equal(n[bl].imag, 0.0)
             else:
                 assert bl not in n
 
@@ -87,8 +87,8 @@ class Test_Noise(object):
         for bl in n.keys():
             assert bl[0] == bl[1]
             assert split_pol(bl[2])[0] == split_pol(bl[2])[1]
-            assert np.allclose(n[bl].imag, 0.0)
-            assert np.allclose(f[bl], gf[bl[0], split_pol(bl[2])[0]])
+            np.testing.assert_array_equal(n[bl].imag, 0.0)
+            np.testing.assert_array_equal(f[bl], gf[bl[0], split_pol(bl[2])[0]])
         os.remove(outfile)
 
     def test_noise_std_argparser(self):

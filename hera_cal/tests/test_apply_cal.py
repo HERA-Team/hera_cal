@@ -69,11 +69,11 @@ class Test_Update_Cal(object):
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         ac.calibrate_in_place(dc, {}, flags, cal_flags, gain_convention='divide')
-        assert np.all(flags[(0, 1, 'xx')])
+        np.testing.assert_array_equal(flags[(0, 1, 'xx')], True)
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
         ac.calibrate_in_place(dc, g_new, flags, cal_flags, old_gains={}, gain_convention='divide')
-        assert np.all(flags[(0, 1, 'xx')])
+        np.testing.assert_array_equal(flags[(0, 1, 'xx')], True)
 
         # test error
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})

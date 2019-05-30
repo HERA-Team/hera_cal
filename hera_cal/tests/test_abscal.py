@@ -254,8 +254,8 @@ class Test_AbsCal_Funcs(object):
                                 + 2.0j * np.pi * y * phase_slopes_y) for x, y in zip(xs, ys)])
 
         x_slope_est, y_slope_est = abscal.dft_phase_slope_solver(xs, ys, data)
-        assert np.allclose(phase_slopes_x - x_slope_est, 0, atol=1e-7)
-        assert np.allclose(phase_slopes_y - y_slope_est, 0, atol=1e-7)
+        np.testing.assert_array_almost_equal(phase_slopes_x - x_slope_est, 0, decimal=7)
+        np.testing.assert_array_almost_equal(phase_slopes_y - y_slope_est, 0, decimal=7)
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -309,7 +309,7 @@ class Test_AbsCal(object):
         gf = (uvc.flag_array[aa.index(bl[0])] + uvc.flag_array[aa.index(bl[1])]).squeeze().T
         w = self.AC.wgts[bl] * ~gf
         AC2 = abscal.AbsCal(copy.deepcopy(self.AC.model), copy.deepcopy(self.AC.data), wgts=copy.deepcopy(self.AC.wgts), refant=24, input_cal=self.input_cal)
-        assert np.allclose(self.AC.data[bl] / g * w, AC2.data[bl] * w)
+        np.testing.assert_array_almost_equal(self.AC.data[bl] / g * w, AC2.data[bl] * w)
 
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
@@ -615,13 +615,13 @@ class Test_Post_Redcal_Abscal_Run(object):
         all_times, all_lsts = abscal.get_all_times_and_lsts(hd)
         assert len(all_times) == 120
         assert len(all_lsts) == 120
-        assert np.all(all_times == sorted(all_times))
+        np.testing.assert_array_equal(all_times, sorted(all_times))
 
         for f in hd.lsts.keys():
             hd.lsts[f] += 4.75
         all_times, all_lsts = abscal.get_all_times_and_lsts(hd, unwrap=True)
         assert all_lsts[-1] > 2 * np.pi
-        assert np.allclose(all_lsts, sorted(all_lsts))
+        np.testing.assert_array_equal(all_lsts, sorted(all_lsts))
         c = abscal.get_all_times_and_lsts(hd)
         assert all_lsts[0] < all_lsts[-1]
 
@@ -694,9 +694,9 @@ class Test_Post_Redcal_Abscal_Run(object):
                 assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
                 assert delta_gains[k].dtype == np.complex
         for k in AC.model.keys():
-            assert np.allclose(model[k], AC.model[k])
+            np.testing.assert_array_equal(model[k], AC.model[k])
         for k in AC.data.keys():
-            assert np.allclose(data[k][~flags[k]], AC.data[k][~flags[k]], atol=1e-4)
+            np.testing.assert_array_almost_equal(data[k][~flags[k]], AC.data[k][~flags[k]], decimal=4)
         assert AC.ant_dly is None
         assert AC.ant_dly_arr is None
         assert AC.ant_dly_phi is None
@@ -734,7 +734,7 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert k in ac_flags
             assert ac_flags[k].shape == rc_flags[k].shape
             assert ac_flags[k].dtype == bool
-            assert np.allclose(ac_flags[k][rc_flags[k]], rc_flags[k][rc_flags[k]])
+            np.testing.assert_array_equal(ac_flags[k][rc_flags[k]], rc_flags[k][rc_flags[k]])
         assert not np.all(list(ac_flags.values()))
         for pol in ['Jxx', 'Jyy']:
             assert pol in ac_total_qual
@@ -751,10 +751,10 @@ class Test_Post_Redcal_Abscal_Run(object):
             hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4, 
                                                 nInt_to_load=30, verbose=False, add_to_history='testing')
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
-        assert np.allclose(hca.total_quality_array, 0.0)
-        assert np.allclose(hca.gain_array, hcr.gain_array)
-        assert np.allclose(hca.flag_array, True)
-        assert np.allclose(hca.quality_array, 0.0)
+        np.testing.assert_array_equal(hca.total_quality_array, 0.0)
+        np.testing.assert_array_equal(hca.gain_array, hcr.gain_array)
+        np.testing.assert_array_equal(hca.flag_array, True)
+        np.testing.assert_array_equal(hca.quality_array, 0.0)
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(temp_outfile)
 
