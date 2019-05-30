@@ -395,15 +395,15 @@ class Test_ReflectionFitter_XTalk(object):
         pcomp2 = RF.pcomp_model[bl]
         # assert pcomp model with projected vmode has less noise in it for a delay with no systematic
         ind = np.argmin(np.abs(RF.delays - 400))  # no systematic at this delay, only noise
-        nt.assert_true(np.mean(np.abs(pcomp1[:, ind])) > np.mean(np.abs(pcomp2[:, ind])))
+        assert np.mean(np.abs(pcomp1[:, ind])) > np.mean(np.abs(pcomp2[:, ind]))
 
         # test projection of other SVD matrices
         _svals = RF.project_svd_modes(RF.dfft * svd_wgts, umodes=RF.umodes, vmodes=RF.vmodes)
         _umodes = RF.project_svd_modes(RF.dfft * svd_wgts, vmodes=RF.vmodes, svals=RF.svals)
 
         # assert original is nearly the same as projected
-        nt.assert_true(np.all(np.isclose(_svals[bl], RF.svals[bl], atol=1e-10)))  
-        nt.assert_true(np.all(np.isclose(_umodes[bl][:, 0], RF.umodes[bl][:, 0], atol=1e-10)))  
+        assert np.allclose(_svals[bl], RF.svals[bl], atol=1e-10)
+        assert np.allclose(_umodes[bl][:, 0], RF.umodes[bl][:, 0], atol=1e-10)
 
         # try with and without Nmirror
         RF.interp_u(RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=0)
@@ -412,11 +412,11 @@ class Test_ReflectionFitter_XTalk(object):
         uinterp2 = copy.deepcopy(RF.umode_interp)
         # assert higher order umodes don't diverge as much at time boundaries with Nmirror > 0
         for i in range(3, 10):
-            nt.assert_true(np.mean(np.abs(uinterp1[bl][:2, i]) / np.abs(uinterp2[bl][:2, i])) > 1.0)
-            nt.assert_true(np.mean(np.abs(uinterp1[bl][-2:, i]) / np.abs(uinterp2[bl][-2:, i])) > 1.0)
+            assert np.mean(np.abs(uinterp1[bl][:2, i]) / np.abs(uinterp2[bl][:2, i])) > 1.0
+            assert np.mean(np.abs(uinterp1[bl][-2:, i]) / np.abs(uinterp2[bl][-2:, i])) > 1.0
 
         # test too large Nmirror
-        nt.assert_raises(AssertionError, RF.interp_u, RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=100)
+        pytest.raises(AssertionError, RF.interp_u, RF.umodes, RF.times, overwrite=True, gp_frate=gp_frate, gp_nl=1e-10, optimizer=None, Ninterp=10, Nmirror=100)
 
         # assert custom kernel works
         gp_len = 1.0 / (0.4 * 1e-3) / (24.0 * 3600.0)

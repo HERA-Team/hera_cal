@@ -134,7 +134,7 @@ class Test_lstbin(object):
     @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
     def test_lst_bin_files(self):
         # basic execution
-        file_ext = "{pol}.{type}.{time:7.5f}.uv"
+        file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                              verbose=False, file_ext=file_ext, ignore_flags=True)
         output_lst_file = "./zen.xx.LST.0.20124.uvh5"
@@ -146,7 +146,7 @@ class Test_lstbin(object):
         # assert nsample w.r.t time follows 1-2-3-2-1 pattern
         nsamps = np.mean(uv1.get_nsamples(52, 52, 'xx'), axis=1)
         expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(21)]).astype(np.float)
-        nt.assert_true(np.isclose(nsamps, expectation).all())
+        assert np.allclose(nsamps, expectation)
         os.remove(output_lst_file)
         os.remove(output_std_file)
 
@@ -164,8 +164,8 @@ class Test_lstbin(object):
         # test rephase
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                              verbose=False, rephase=True, file_ext=file_ext)
-        output_lst_file = "./zen.xx.LST.0.20124.uv"
-        output_std_file = "./zen.xx.STD.0.20124.uv"
+        output_lst_file = "./zen.xx.LST.0.20124.uvh5"
+        output_std_file = "./zen.xx.STD.0.20124.uvh5"
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
         os.remove(output_lst_file)
@@ -229,12 +229,16 @@ class Test_lstbin(object):
         # test fixed start
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                              verbose=False, lst_start=0.18, fixed_lst_start=True, file_ext=file_ext)
-        output_lst_file = "./zen.xx.LST.0.17932.uv"
-        output_std_file = "./zen.xx.STD.0.17932.uv"
+        output_lst_file = "./zen.xx.LST.0.17932.uvh5"
+        output_std_file = "./zen.xx.STD.0.17932.uvh5"
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
         os.remove(output_lst_file)
         os.remove(output_std_file)
+        extra_files = ["zen.xx.LST.0.37508.uvh5", "zen.xx.STD.0.37508.uvh5"]
+        for of in extra_files:
+            if os.path.exists(of):
+                os.remove(of)
 
         # test input_cal
         uvc = UVCal()
@@ -274,7 +278,7 @@ class Test_lstbin(object):
         os.remove(output_std_file)
 
     def test_lst_bin_arg_parser(self):
-        a = hc.lstbin.lst_bin_arg_parser()
+        a = lstbin.lst_bin_arg_parser()
         args = a.parse_args(["--dlst", "0.1", "--input_cals", "zen.2458043.12552.HH.uvA.omni.calfits", "zen.2458043.12552.xx.HH.uvORA.abs.calfits",
                              "--overwrite", "zen.2458042.12552.xx.HH.uvXA", "zen.2458043.12552.xx.HH.uvXA"])
 
