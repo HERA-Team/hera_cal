@@ -32,8 +32,8 @@ class Test_Autos(object):
         for bl in d.keys():
             assert bl[0] == bl[1]
             assert split_pol(bl[2])[0] == split_pol(bl[2])[1]
-            assert np.all(d_full[bl] == d[bl])
-            assert np.all(f_full[bl] == f[bl])
+            np.testing.assert_array_equal(d_full[bl], d[bl])
+            np.testing.assert_array_equal(f_full[bl], f[bl])
         assert 'testing' in hd.history.replace('\n', '').replace(' ', '')
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         os.remove(outfile)
@@ -53,8 +53,8 @@ class Test_Autos(object):
         for bl in d.keys():
             assert bl[0] == bl[1]
             assert split_pol(bl[2])[0] == split_pol(bl[2])[1]
-            assert np.all(d_full_cal[bl] == d[bl])
-            assert np.all(f_full_cal[bl] == f[bl])
+            np.testing.assert_array_equal(d_full_cal[bl], d[bl])
+            np.testing.assert_array_equal(f_full_cal[bl], f[bl])
         os.remove(outfile)
         os.remove(calibrated)
 

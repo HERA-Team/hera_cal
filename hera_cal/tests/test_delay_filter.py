@@ -45,9 +45,9 @@ class Test_DelayFilter(object):
         wgts[k][0, :] = 0.0
         dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
         assert dfil.clean_info[k][0]['skipped'] is True
-        assert np.allclose(dfil.clean_flags[k][0, :], np.ones_like(dfil.flags[k][0, :]))
-        assert np.allclose(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
-        assert np.allclose(dfil.clean_resid[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
+        np.testing.assert_array_equal(dfil.clean_flags[k][0, :], np.ones_like(dfil.flags[k][0, :]))
+        np.testing.assert_array_equal(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
+        np.testing.assert_array_equal(dfil.clean_resid[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
 
     def test_write_filtered_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
@@ -79,10 +79,10 @@ class Test_DelayFilter(object):
         filled_data, filled_flags = io.load_vis(outfilename, filetype='uvh5')
 
         for k in data.keys():
-            assert np.allclose(filled_data[k][~flags[k]], data[k][~flags[k]])
-            assert np.allclose(dfil.clean_model[k], clean_model[k])
-            assert np.allclose(dfil.clean_resid[k], filtered_residuals[k])
-            assert np.allclose(data[k][~flags[k]], (clean_model[k] + filtered_residuals[k])[~flags[k]], 5)
+            np.testing.assert_array_almost_equal(filled_data[k][~flags[k]], data[k][~flags[k]])
+            np.testing.assert_array_almost_equal(dfil.clean_model[k], clean_model[k])
+            np.testing.assert_array_almost_equal(dfil.clean_resid[k], filtered_residuals[k])
+            np.testing.assert_array_almost_equal(data[k][~flags[k]], (clean_model[k] + filtered_residuals[k])[~flags[k]], 5)
         os.remove(outfilename)
 
     def test_partial_load_delay_filter_and_write(self):
@@ -95,8 +95,8 @@ class Test_DelayFilter(object):
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
         dfil.read(bls=[(53, 54, 'xx')])
         dfil.run_filter(to_filter=[(53, 54, 'xx')], tol=1e-4, verbose=True)
-        assert np.allclose(d[(53, 54, 'xx')], dfil.clean_resid[(53, 54, 'xx')], atol=1e-5)
-        assert np.allclose(f[(53, 54, 'xx')], dfil.flags[(53, 54, 'xx')])
+        np.testing.assert_almost_equal(d[(53, 54, 'xx')], dfil.clean_resid[(53, 54, 'xx')], decimal=5)
+        np.testing.assert_array_equal(f[(53, 54, 'xx')], dfil.flags[(53, 54, 'xx')])
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
@@ -104,7 +104,7 @@ class Test_DelayFilter(object):
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'xx')])
-        assert np.all(f[(53, 54, 'xx')])
+        np.testing.assert_array_equal(f[(53, 54, 'xx')], True)
         os.remove(outfilename)
 
     def test_delay_filter_argparser(self):

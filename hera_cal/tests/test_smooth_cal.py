@@ -45,7 +45,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts[3, 5] = 0
         times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 10, endpoint=False)
         tf = smooth_cal.time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=1)
-        assert np.allclose(tf, np.ones((10, 10), dtype=complex))
+        np.testing.assert_array_almost_equal(tf, np.ones((10, 10), dtype=complex))
 
     def test_freq_filter(self):
         gains = np.ones((10, 10), dtype=complex)
@@ -54,7 +54,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts[3, 5] = 0
         freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs)
-        assert np.allclose(ff, np.ones((10, 10), dtype=complex))
+        np.testing.assert_array_almost_equal(ff, np.ones((10, 10), dtype=complex))
 
         # test rephasing
         gains = np.ones((2, 1000), dtype=complex)
@@ -62,7 +62,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
         gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs)
-        assert np.allclose(ff, gains)
+        np.testing.assert_array_almost_equal(ff, gains)
 
         # test skip_wgt
         gains = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
@@ -70,7 +70,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts[0, 0:8] = 0
         freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5)
-        assert np.allclose(ff[0, :], gains[0, :])
+        np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
         assert np.all(info[0]['skipped'] == True)
 
     def test_time_freq_2D_filter(self):
@@ -81,16 +81,16 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
         times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 100, endpoint=False)
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='rect')
-        assert np.allclose(ff, np.ones((100, 100), dtype=complex))
+        np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='plus')
-        assert np.allclose(ff, np.ones((100, 100), dtype=complex))
+        np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
 
         # test rephasing
         gains = np.ones((100, 100), dtype=complex)
         wgts = np.ones((100, 100), dtype=float)
         gains *= np.exp(2.0j * np.pi * np.outer(-151e-9 * np.ones(100), freqs))
         ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times)
-        assert np.allclose(ff, gains, 4)
+        np.testing.assert_array_almost_equal(ff, gains, 4)
 
         # test errors
         with pytest.raises(ValueError):
@@ -127,7 +127,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         gains = {(0, 'Jxx'): np.array([1. + 1.0j, 1. - 1.0j]),
                  (1, 'Jxx'): np.array([-1. + 1.0j, -1. - 1.0j])}
         smooth_cal.rephase_to_refant(gains, (0, 'Jxx'))
-        assert np.allclose(np.imag(gains[(0, 'Jxx')]), np.zeros_like(np.imag(gains[(0, 'Jxx')])))
+        np.testing.assert_array_almost_equal(np.imag(gains[(0, 'Jxx')]), np.zeros_like(np.imag(gains[(0, 'Jxx')])))
         flags = {(0, 'Jxx'): np.array([False, True]),
                  (1, 'Jxx'): np.array([True, False])}
         with pytest.raises(ValueError):
@@ -149,8 +149,8 @@ class Test_Calibration_Smoother(object):
         assert cs.refant['Jxx'] == (54, 'Jxx')
         cs.time_freq_2D_filter(window='tukey', alpha=.45)
         cs.rephase_to_refant()
-        assert np.allclose(np.imag(cs.gain_grids[54, 'Jxx']),
-                           np.zeros_like(np.imag(cs.gain_grids[54, 'Jxx'])))
+        np.testing.assert_array_almost_equal(np.imag(cs.gain_grids[54, 'Jxx']),
+                                             np.zeros_like(np.imag(cs.gain_grids[54, 'Jxx'])))
 
     def test_check_consistency(self):
         temp_time = self.cs.cal_times[self.cs.cals[0]][0]
@@ -187,7 +187,7 @@ class Test_Calibration_Smoother(object):
         assert (54, 'Jxx') in self.cs.flag_grids
         assert self.cs.gain_grids[54, 'Jxx'].shape == (180, 1024)
         assert self.cs.flag_grids[54, 'Jxx'].shape == (180, 1024)
-        assert np.allclose(self.cs.flag_grids[54, 'Jxx'][60:120, :], True)
+        np.testing.assert_array_equal(self.cs.flag_grids[54, 'Jxx'][60:120, :], True)
 
     def test_1D_filtering(self):
         g = deepcopy(self.cs.gain_grids[54, 'Jxx'])
@@ -219,12 +219,12 @@ class Test_Calibration_Smoother(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.cs.freq_filter()
-            assert np.allclose(self.cs.gain_grids[(54, 'Jxx')], g)
+            np.testing.assert_array_equal(self.cs.gain_grids[(54, 'Jxx')], g)
             self.cs.time_filter()
-            assert np.allclose(self.cs.gain_grids[(54, 'Jxx')], g)
+            np.testing.assert_array_equal(self.cs.gain_grids[(54, 'Jxx')], g)
             # test skip_wgt propagation to flags
-            assert np.allclose(self.cs.flag_grids[(54, 'Jxx')],
-                               np.ones_like(self.cs.flag_grids[(54, 'Jxx')]))
+            np.testing.assert_array_equal(self.cs.flag_grids[(54, 'Jxx')],
+                                          np.ones_like(self.cs.flag_grids[(54, 'Jxx')]))
         self.setup_method()
         self.cs.gain_grids[54, 'Jxx'] = g
 
@@ -248,5 +248,5 @@ class Test_Calibration_Smoother(object):
             assert 'helloworld' in new_cal.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in new_cal.history.replace('\n', '').replace(' ', '')
             assert new_cal.telescope_name == 'PAPER'
-            assert np.allclose(gains[54, 'Jxx'], g[self.cs.time_indices[cal], :])
+            np.testing.assert_array_equal(gains[54, 'Jxx'], g[self.cs.time_indices[cal], :])
             os.remove(cal.replace('test_input/', 'test_output/smoothed_'))

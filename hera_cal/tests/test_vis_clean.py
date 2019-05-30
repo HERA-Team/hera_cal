@@ -152,7 +152,7 @@ class Test_VisClean(object):
         delays = V.delays
         assert hasattr(V, 'foo')
         V.fft_data(keys=[(24, 25, 'xx')], assign='foo', overwrite=True, ifft=False, fftshift=False)
-        assert np.allclose(delays, np.fft.fftshift(V.delays))
+        np.testing.assert_array_almost_equal(delays, np.fft.fftshift(V.delays))
 
         # test flag factorization
         flags = V.factorize_flags(inplace=False, time_thresh=0.05)

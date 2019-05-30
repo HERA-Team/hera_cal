@@ -92,8 +92,8 @@ def test_fir_filtering():
 
     # convert back
     _frp, _frbins = frf.frp_to_fir(fir, delta_bin=np.diff(tbins)[0], undo=True)
-    assert np.allclose(frp, _frp.real)
-    assert np.allclose(np.diff(frbins), np.diff(_frbins))
+    np.testing.assert_array_almost_equal(frp, _frp.real)
+    np.testing.assert_array_almost_equal(np.diff(frbins), np.diff(_frbins))
     assert np.allclose(np.abs(_frp.imag), 0.0)
 
     # test noise averaging properties

@@ -51,12 +51,12 @@ class Test_HERACal(object):
         gains, flags, quals, total_qual = hc.read()
         uvc = UVCal()
         uvc.read_calfits(self.fname_both)
-        assert np.allclose(uvc.gain_array[0, 0, :, :, 0].T, gains[9, parse_jpolstr('jxx')])
-        assert np.allclose(uvc.flag_array[0, 0, :, :, 0].T, flags[9, parse_jpolstr('jxx')])
-        assert np.allclose(uvc.quality_array[0, 0, :, :, 0].T, quals[9, parse_jpolstr('jxx')])
-        assert np.allclose(uvc.total_quality_array[0, :, :, 0].T, total_qual[parse_jpolstr('jxx')])
-        assert np.allclose(np.unique(uvc.freq_array), hc.freqs)
-        assert np.allclose(np.unique(uvc.time_array), hc.times)
+        np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, parse_jpolstr('jxx')])
+        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, parse_jpolstr('jxx')])
+        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, parse_jpolstr('jxx')])
+        np.testing.assert_array_equal(uvc.total_quality_array[0, :, :, 0].T, total_qual[parse_jpolstr('jxx')])
+        np.testing.assert_array_equal(np.unique(uvc.freq_array), hc.freqs)
+        np.testing.assert_array_equal(np.unique(uvc.time_array), hc.times)
         assert hc.pols == [parse_jpolstr('jxx'), parse_jpolstr('jyy')]
         assert set([ant[0] for ant in hc.ants]) == set(uvc.ant_array)
 
@@ -86,11 +86,11 @@ class Test_HERACal(object):
         hc2 = HERACal('test.calfits')
         gains_out, flags_out, quals_out, total_qual_out = hc2.read()
         for key in gains_in.keys():
-            assert np.allclose(gains_in[key] * (2.0 + 1.0j), gains_out[key])
-            assert np.allclose(np.logical_not(flags_in[key]), flags_out[key])
-            assert np.allclose(quals_in[key] * (2.0), quals_out[key])
+            np.testing.assert_array_equal(gains_in[key] * (2.0 + 1.0j), gains_out[key])
+            np.testing.assert_array_equal(np.logical_not(flags_in[key]), flags_out[key])
+            np.testing.assert_array_equal(quals_in[key] * (2.0), quals_out[key])
         for key in total_qual.keys():
-            assert np.allclose(total_qual_in[key] * (2.0), total_qual_out[key])
+            np.testing.assert_array_equal(total_qual_in[key] * (2.0), total_qual_out[key])
 
         os.remove('test.calfits')
 
@@ -130,13 +130,13 @@ class Test_HERAData(object):
             assert getattr(hd, meta) is not None
         for f in files:
             assert len(hd.freqs[f]) == 1024
-            assert np.allclose(hd.freqs[f], individual_hds[f].freqs)
+            np.testing.assert_array_equal(hd.freqs[f], individual_hds[f].freqs)
             assert len(hd.bls[f]) == 3
-            assert np.all(hd.bls[f] == individual_hds[f].bls)
+            np.testing.assert_array_equal(hd.bls[f], individual_hds[f].bls)
             assert len(hd.times[f]) == 60
-            assert np.allclose(hd.times[f], individual_hds[f].times)
+            np.testing.assert_array_equal(hd.times[f], individual_hds[f].times)
             assert len(hd.lsts[f]) == 60
-            assert np.allclose(hd.lsts[f], individual_hds[f].lsts)
+            np.testing.assert_array_equal(hd.lsts[f], individual_hds[f].lsts)
         assert not hasattr(hd, '_writers')
 
         # miriad
@@ -183,10 +183,10 @@ class Test_HERAData(object):
         hd.select(bls=[(53, 54)])
         assert len(hd._blt_slices) == 1
         d2 = hd.get_data(53, 54, 'xx')
-        assert np.allclose(d1, d2)
+        np.testing.assert_array_almost_equal(d1, d2)
         hd.select(times=np.unique(hd.time_array)[-5:])
         d3 = hd.get_data(53, 54, 'xx')
-        assert np.allclose(d2[-5:], d3)
+        np.testing.assert_array_almost_equal(d2[-5:], d3)
 
         # pol select
         hd.select(polarizations=['yy'])
@@ -217,16 +217,16 @@ class Test_HERAData(object):
         assert len(metas['bls']) == 3
         assert len(metas['times']) == 60
         assert len(metas['lsts']) == 60
-        assert np.allclose(metas['times'], np.unique(list(metas['times_by_bl'].values())))
-        assert np.allclose(metas['lsts'], np.unique(list(metas['lsts_by_bl'].values())))
+        np.testing.assert_array_equal(metas['times'], np.unique(list(metas['times_by_bl'].values())))
+        np.testing.assert_array_equal(metas['lsts'], np.unique(list(metas['lsts_by_bl'].values())))
 
     def test_determine_blt_slicing(self):
         hd = HERAData(self.uvh5_1)
         for s in hd._blt_slices.values():
             assert isinstance(s, slice)
         for bl, s in hd._blt_slices.items():
-            assert np.allclose(np.arange(180)[np.logical_and(hd.ant_1_array == bl[0],
-                                                             hd.ant_2_array == bl[1])], np.arange(180)[s])
+            np.testing.assert_array_equal(np.arange(180)[np.logical_and(hd.ant_1_array == bl[0],
+                                                                        hd.ant_2_array == bl[1])], np.arange(180)[s])
         # test check for non-regular spacing
         hd.ant_1_array = hd.ant_2_array
         with pytest.raises(NotImplementedError):
@@ -243,23 +243,23 @@ class Test_HERAData(object):
         hd = HERAData(self.uvh5_1)
         hd.read()
         for bl in hd.bls:
-            assert np.allclose(hd._get_slice(hd.data_array, bl), hd.get_data(bl))
-        assert np.allclose(hd._get_slice(hd.data_array, (54, 53, 'XX')),
-                           hd.get_data((54, 53, 'XX')))
-        assert np.allclose(hd._get_slice(hd.data_array, (53, 54))[parse_polstr('XX')],
-                           hd.get_data((53, 54, 'XX')))
-        assert np.allclose(hd._get_slice(hd.data_array, 'XX')[(53, 54)],
-                           hd.get_data((53, 54, 'XX')))
+            np.testing.assert_array_equal(hd._get_slice(hd.data_array, bl), hd.get_data(bl))
+        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (54, 53, 'XX')),
+                                      hd.get_data((54, 53, 'XX')))
+        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (53, 54))[parse_polstr('XX')],
+                                      hd.get_data((53, 54, 'XX')))
+        np.testing.assert_array_equal(hd._get_slice(hd.data_array, 'XX')[(53, 54)],
+                                      hd.get_data((53, 54, 'XX')))
         with pytest.raises(KeyError):
             hd._get_slice(hd.data_array, (1, 2, 3, 4))
 
         hd = HERAData(self.four_pol, filetype='miriad')
         d, f, n = hd.read(bls=[(80, 81)])
         for p in d.pols():
-            assert np.allclose(hd._get_slice(hd.data_array, (80, 81, p)),
-                               hd.get_data((80, 81, p)))
-            assert np.allclose(hd._get_slice(hd.data_array, (81, 80, p)),
-                               hd.get_data((81, 80, p)))
+            np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (80, 81, p)),
+                                                 hd.get_data((80, 81, p)))
+            np.testing.assert_array_almost_equal(hd._get_slice(hd.data_array, (81, 80, p)),
+                                                 hd.get_data((81, 80, p)))
 
     def test_set_slice(self):
         hd = HERAData(self.uvh5_1)
@@ -269,20 +269,20 @@ class Test_HERAData(object):
         for bl in hd.bls:
             new_vis = np.random.randn(60, 1024) + np.random.randn(60, 1024) * 1.0j
             hd._set_slice(hd.data_array, bl, new_vis)
-            assert np.allclose(new_vis, hd.get_data(bl))
+            np.testing.assert_array_almost_equal(new_vis, hd.get_data(bl))
 
         new_vis = np.random.randn(60, 1024) + np.random.randn(60, 1024) * 1.0j
         hd._set_slice(hd.data_array, (54, 53, 'xx'), new_vis)
-        assert np.allclose(np.conj(new_vis), hd.get_data((53, 54, 'xx')))
+        np.testing.assert_array_almost_equal(np.conj(new_vis), hd.get_data((53, 54, 'xx')))
 
         new_vis = np.random.randn(60, 1024) + np.random.randn(60, 1024) * 1.0j
         hd._set_slice(hd.data_array, (53, 54), {'xx': new_vis})
-        assert np.allclose(new_vis, hd.get_data((53, 54, 'xx')))
+        np.testing.assert_array_almost_equal(new_vis, hd.get_data((53, 54, 'xx')))
 
         new_vis = np.random.randn(60, 1024) + np.random.randn(60, 1024) * 1.0j
         to_set = {(53, 54): new_vis, (54, 54): 2 * new_vis, (53, 53): 3 * new_vis}
         hd._set_slice(hd.data_array, 'XX', to_set)
-        assert np.allclose(new_vis, hd.get_data((53, 54, 'xx')))
+        np.testing.assert_array_almost_equal(new_vis, hd.get_data((53, 54, 'xx')))
 
         with pytest.raises(KeyError):
             hd._set_slice(hd.data_array, (1, 2, 3, 4), None)
@@ -291,9 +291,9 @@ class Test_HERAData(object):
         hd = HERAData(self.uvh5_1)
         d, f, n = hd.read()
         for bl in hd.bls:
-            assert np.allclose(d[bl], hd.get_data(bl))
-            assert np.allclose(f[bl], hd.get_flags(bl))
-            assert np.allclose(n[bl], hd.get_nsamples(bl))
+            np.testing.assert_array_almost_equal(d[bl], hd.get_data(bl))
+            np.testing.assert_array_almost_equal(f[bl], hd.get_flags(bl))
+            np.testing.assert_array_almost_equal(n[bl], hd.get_nsamples(bl))
         for dc in [d, f, n]:
             assert isinstance(dc, DataContainer)
             for k in dc.antpos.keys():
@@ -360,7 +360,7 @@ class Test_HERAData(object):
         hd = HERAData(self.uvh5_1)
         hd.read()
         for bl in hd.bls:
-            assert np.allclose(hd[bl], hd.get_data(bl))
+            np.testing.assert_array_almost_equal(hd[bl], hd.get_data(bl))
 
     def test_update(self):
         hd = HERAData(self.uvh5_1)
@@ -372,9 +372,9 @@ class Test_HERAData(object):
         hd.update(data=d, flags=f, nsamples=n)
         d2, f2, n2 = hd.build_datacontainers()
         for bl in hd.bls:
-            assert np.allclose(d[bl], d2[bl])
-            assert np.all(f[bl] == f2[bl])
-            assert np.all(n[bl] == n2[bl])
+            np.testing.assert_array_almost_equal(d[bl], d2[bl])
+            np.testing.assert_array_equal(f[bl], f2[bl])
+            np.testing.assert_array_equal(n[bl], n2[bl])
 
     def test_partial_write(self):
         hd = HERAData(self.uvh5_1)
@@ -402,16 +402,16 @@ class Test_HERAData(object):
         d[(54, 54, 'XX')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True, inplace=True)
         d_after, _, _ = hd.build_datacontainers()
-        assert np.allclose(d[(54, 54, 'XX')], d_after[(54, 54, 'XX')])
+        np.testing.assert_array_almost_equal(d[(54, 54, 'XX')], d_after[(54, 54, 'XX')])
 
         hd = HERAData(self.uvh5_1)
         d, f, n = hd.read()
         hd2 = HERAData('out.h5')
         d2, f2, n2 = hd2.read()
         for bl in hd.bls:
-            assert np.allclose(d[bl] * (2.0 + 1.0j), d2[bl])
-            assert np.all(f[bl] == f2[bl])
-            assert np.all(n[bl] == n2[bl])
+            np.testing.assert_array_almost_equal(d[bl] * (2.0 + 1.0j), d2[bl])
+            np.testing.assert_array_equal(f[bl], f2[bl])
+            np.testing.assert_array_equal(n[bl], n2[bl])
         os.remove('out.h5')
 
         # test errors
@@ -580,9 +580,9 @@ class Test_Visibility_IO_Legacy(object):
                 uvpol = list(uvd1.polarization_array).index(polstr2num(pol))
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
-                assert np.all(d[i, j][pol] == np.resize(
+                np.testing.assert_equal(d[i, j][pol], np.resize(
                     uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
-                assert np.all(f[i, j][pol] == np.resize(
+                np.testing.assert_equal(f[i, j][pol], np.resize(
                     uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
 
         d, f = io.load_vis([filename1, filename2], nested_dict=True)
@@ -591,9 +591,9 @@ class Test_Visibility_IO_Legacy(object):
                 uvpol = list(uvd.polarization_array).index(polstr2num(pol))
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
-                assert np.all(d[i, j][pol] == np.resize(
+                np.testing.assert_equal(d[i, j][pol], np.resize(
                     uvd.data_array[uvmask][:, 0, :, uvpol], d[i, j][pol].shape))
-                assert np.all(f[i, j][pol] == np.resize(
+                np.testing.assert_equal(f[i, j][pol], np.resize(
                     uvd.flag_array[uvmask][:, 0, :, uvpol], f[i, j][pol].shape))
 
         uvd = UVData()
@@ -779,7 +779,7 @@ class Test_Calibration_IO_Legacy(object):
             gains[(k[0], 'Jyy')] = gains[k].conj()
         uvc = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, outdir='./')
         assert uvc.gain_array.shape == (10, 1, 64, 100, 2)
-        assert np.allclose(uvc.gain_array[0, 0, :, :, 0], uvc.gain_array[0, 0, :, :, 1].conj())
+        np.testing.assert_array_almost_equal(uvc.gain_array[0, 0, :, :, 0], uvc.gain_array[0, 0, :, :, 1].conj())
         os.remove('ex.calfits')
 
         # test zero check
@@ -838,8 +838,8 @@ class Test_Flags_IO(object):
         assert (53, 54, parse_polstr('XX')) in flags
         for f in flags.values():
             assert f.shape == (60, 1024)
-            assert np.allclose(f[:, 0:50], True)
-            assert np.allclose(f[:, -50:], True)
+            np.testing.assert_array_equal(f[:, 0:50], True)
+            np.testing.assert_array_equal(f[:, -50:], True)
             assert not np.all(f)
 
         flags, meta = io.load_flags(npzfile, filetype='npz', return_meta=True)

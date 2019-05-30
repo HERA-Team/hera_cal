@@ -90,7 +90,7 @@ def test_factorize_flags():
 
     # run on datacontainer
     f2 = flag_utils.factorize_flags(copy.deepcopy(flags), time_thresh=0.5 / 60, inplace=False)
-    assert np.allclose(f2[(24, 25, 'xx')], f)
+    np.testing.assert_array_equal(f2[(24, 25, 'xx')], f)
 
     # test exceptions
     pytest.raises(ValueError, flag_utils.factorize_flags, flags, spw_ranges=(0, 1))

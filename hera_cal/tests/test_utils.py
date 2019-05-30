@@ -85,7 +85,7 @@ class TestFftDly(object):
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df, f0=self.freqs[0])
         assert np.median(np.abs(dlys - true_dlys)) < 1e-5  # median accuracy of 10 fs
-        assert np.allclose(offs, 0, atol=1e-4)
+        np.testing.assert_almost_equal(offs, 0, decimal=4)
         dlys, offs = utils.fft_dly(data, df, medfilt=True, f0=self.freqs[0])
         assert np.median(np.abs(dlys - true_dlys)) < 1e-2  # median accuracy of 10 ps
 
@@ -96,15 +96,15 @@ class TestFftDly(object):
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df, f0=self.freqs[0])
         assert np.median(np.abs(dlys - true_dlys)) < 1e-5  # median accuracy of 10 fs
-        assert np.allclose(offs, 0.123, atol=1e-4)
+        np.testing.assert_almost_equal(offs, 0.123, decimal=4)
         mdl = np.exp(2j * np.pi * self.freqs * dlys + 1j * offs)
-        assert np.allclose(np.angle(data * mdl.conj()), 0, atol=1e-5)
+        np.testing.assert_almost_equal(np.angle(data * mdl.conj()), 0, decimal=5)
         dlys, offs = utils.fft_dly(data, df, edge_cut=100, f0=self.freqs[0])
         assert np.median(np.abs(dlys - true_dlys)) < 1e-4  # median accuracy of 100 fs
-        assert np.allclose(offs, 0.123, atol=1e-4)
+        np.testing.assert_almost_equal(offs, 0.123, decimal=4)
         dlys, offs = utils.fft_dly(data, df, medfilt=True, f0=self.freqs[0])
         assert np.median(np.abs(dlys - true_dlys)) < 1e-2  # median accuracy of 10 ps
-        assert np.allclose(offs, 0.123, atol=1e-1)
+        np.testing.assert_almost_equal(offs, 0.123, decimal=1)
 
     def test_noisy(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
@@ -354,20 +354,20 @@ def test_chisq():
     assert nObs.shape == (5, 10)
     assert chisq.dtype == float
     assert nObs.dtype == int
-    assert np.allclose(chisq, 4.0)
-    assert np.allclose(nObs, 1)
-    assert np.allclose(chisq_per_ant[0, 'Jxx'], 4.0)
-    assert np.allclose(chisq_per_ant[1, 'Jxx'], 4.0)
-    assert np.allclose(nObs_per_ant[0, 'Jxx'], 1)
-    assert np.allclose(nObs_per_ant[1, 'Jxx'], 1)
+    np.testing.assert_array_equal(chisq, 4.0)
+    np.testing.assert_array_equal(nObs, 1)
+    np.testing.assert_array_equal(chisq_per_ant[0, 'Jxx'], 4.0)
+    np.testing.assert_array_equal(chisq_per_ant[1, 'Jxx'], 4.0)
+    np.testing.assert_array_equal(nObs_per_ant[0, 'Jxx'], 1)
+    np.testing.assert_array_equal(nObs_per_ant[1, 'Jxx'], 1)
 
     # test with reds
     data = datacontainer.DataContainer({(0, 1, 'xx'): np.ones((5, 10), dtype=complex),
                                         (1, 2, 'xx'): np.ones((5, 10), dtype=complex)})
     model = datacontainer.DataContainer({(0, 1, 'xx'): 2 * np.ones((5, 10), dtype=complex)})
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, reds=[[(0, 1, 'xx'), (1, 2, 'xx')]])
-    assert np.allclose(chisq, 2.0)
-    assert np.allclose(nObs, 2)
+    np.testing.assert_array_equal(chisq, 2.0)
+    np.testing.assert_array_equal(nObs, 2)
     assert (1, 2, 'xx') not in model
 
     # test with weights
@@ -386,12 +386,12 @@ def test_chisq():
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts)
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, chisq=chisq, nObs=nObs,
                                                            chisq_per_ant=chisq_per_ant, nObs_per_ant=nObs_per_ant)
-    assert np.allclose(chisq, 2.0)
-    assert np.allclose(nObs, 2)
-    assert np.allclose(chisq_per_ant[0, 'Jxx'], 2.0)
-    assert np.allclose(chisq_per_ant[1, 'Jxx'], 2.0)
-    assert np.allclose(nObs_per_ant[0, 'Jxx'], 2)
-    assert np.allclose(nObs_per_ant[1, 'Jxx'], 2)
+    np.testing.assert_array_equal(chisq, 2.0)
+    np.testing.assert_array_equal(nObs, 2)
+    np.testing.assert_array_equal(chisq_per_ant[0, 'Jxx'], 2.0)
+    np.testing.assert_array_equal(chisq_per_ant[1, 'Jxx'], 2.0)
+    np.testing.assert_array_equal(nObs_per_ant[0, 'Jxx'], 2)
+    np.testing.assert_array_equal(nObs_per_ant[1, 'Jxx'], 2)
 
     # test with gains and gain flags
     gains = {(0, 'Jxx'): .5**.5 * np.ones((5, 10), dtype=complex),
@@ -400,10 +400,10 @@ def test_chisq():
                   (1, 'Jxx'): np.zeros((5, 10), dtype=bool)}
     gain_flags[0, 'Jxx'][:, 0] = True
     chisq, nObs, chisq_per_ant, nObs_per_ant = utils.chisq(data, model, data_wgts, gains=gains, gain_flags=gain_flags)
-    assert np.allclose(np.sum(chisq), 0.0)
+    assert np.isclose(np.sum(chisq), 0.0)
     assert np.sum(nObs) == 45
-    assert np.allclose(np.sum(chisq_per_ant[0, 'Jxx']), 0.0)
-    assert np.allclose(np.sum(chisq_per_ant[1, 'Jxx']), 0.0)
+    assert np.isclose(np.sum(chisq_per_ant[0, 'Jxx']), 0.0)
+    assert np.isclose(np.sum(chisq_per_ant[1, 'Jxx']), 0.0)
     assert np.sum(nObs_per_ant[1, 'Jxx']) == 45
     assert np.sum(nObs_per_ant[1, 'Jxx']) == 45
 
@@ -429,8 +429,8 @@ def test_chisq():
     assert 'Jxx' in nObs
     assert chisq['Jxx'].shape == (5, 10)
     assert nObs['Jxx'].shape == (5, 10)
-    assert np.allclose(chisq['Jxx'], 1.0)
-    assert np.allclose(nObs['Jxx'], 1)
+    np.testing.assert_array_equal(chisq['Jxx'], 1.0)
+    np.testing.assert_array_equal(nObs['Jxx'], 1)
     data = datacontainer.DataContainer({(0, 1, 'xy'): np.ones((5, 10), dtype=complex)})
     model = datacontainer.DataContainer({(0, 1, 'xy'): 2 * np.ones((5, 10), dtype=complex)})
     data_wgts = datacontainer.DataContainer({(0, 1, 'xy'): np.ones((5, 10), dtype=float)})
