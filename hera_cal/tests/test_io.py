@@ -894,7 +894,7 @@ def test_get_file_times():
     # test execution
     dlsts, dtimes, larrs, tarrs = io.get_file_times(filepaths, filetype='miriad')
     assert np.isclose(larrs[0, 0], 4.7293432458811866)
-    asesrt np.isclose(larrs[0, -1], 4.7755393587036084)
+    assert np.isclose(larrs[0, -1], 4.7755393587036084)
     assert np.isclose(dlsts[0], 0.00078298496309189868)
     assert len(dlsts) == 2
     assert len(dtimes) == 2
@@ -905,10 +905,10 @@ def test_get_file_times():
 
     # test if fed as a str
     dlsts, dtimes, larrs, tarrs = io.get_file_times(filepaths[0], filetype='miriad')
-    nt.assert_true(isinstance(dlsts, (float, np.float)))
-    nt.assert_true(isinstance(dtimes, (float, np.float)))
-    nt.assert_equal(larrs.ndim, 1)
-    nt.assert_equal(tarrs.ndim, 1)
+    assert isinstance(dlsts, (float, np.float))
+    assert isinstance(dtimes, (float, np.float))
+    assert larrs.ndim == 1
+    assert tarrs.ndim == 1
 
     # test uvh5
     fp = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
