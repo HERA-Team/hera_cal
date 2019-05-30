@@ -45,9 +45,9 @@ class Test_Update_Cal(object):
             for j in range(10):
                 assert np.allclose(dc[(0, 1, 'xx')][i, j], vis[i, j] * g0_old[i, j] * np.conj(g1_old[i, j]) / g0_new[i, j] / np.conj(g1_new[i, j]))
                 if f[i, j] or cal_flags[(0, 'Jxx')][i, j] or cal_flags[(1, 'Jxx')][i, j]:
-                    assert np.all(flags[(0, 1, 'xx')][i, j] == True)
+                    assert np.all(flags[(0, 1, 'xx')][i, j])
                 else:
-                    assert np.all(flags[(0, 1, 'xx')][i, j] == False)
+                    assert not np.any(flags[(0, 1, 'xx')][i, j])
 
         # test without old cal
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
@@ -126,7 +126,7 @@ class Test_Update_Cal(object):
                         assert np.allclose(new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, atol=1e-4)
                     # from flag_nchan_low and flag_nchan_high above with 1024 total channels
                     if j < 450 or j > 623:
-                        assert np.all(new_flags[k][i, j] == True)
+                        assert np.all(new_flags[k][i, j])
 
         # test partial load
         ac.apply_cal(uvh5, outname_uvh5, new_cal, old_calibration=calout, gain_convention='divide',
@@ -142,7 +142,7 @@ class Test_Update_Cal(object):
                         assert np.allclose(new_data[k][i, j] / 25.0 / data[k][i, j], 1.0, atol=1e-4)
                     # from flag_nchan_low and flag_nchan_high above with 1024 total channels
                     if j < 450 or j > 623:
-                        assert np.all(new_flags[k][i, j] == True)
+                        assert np.all(new_flags[k][i, j])
         os.remove(outname_uvh5)
 
         # test errors

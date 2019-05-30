@@ -97,11 +97,11 @@ class Test_AbsCal_Funcs(object):
         # test flag propagation
         m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                     self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=True)
-        assert np.all(mf[(24, 25, 'xx')][10, 0] == True)
+        assert np.all(mf[(24, 25, 'xx')][10, 0])
         # test flag extrapolation
         m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                     self.time_array + .0001, self.freq_array, flags=self.wgts, flag_extrapolate=True)
-        assert np.all(mf[(24, 25, 'xx')][-1].min() == True)
+        assert np.all(mf[(24, 25, 'xx')][-1].min())
 
     def test_wiener(self):
         # test smoothing
@@ -220,8 +220,8 @@ class Test_AbsCal_Funcs(object):
 
         k = list(new_m.keys())[0]
         assert new_m[k].shape == d[k].shape
-        assert np.all(new_f[k][-1] == True)
-        assert np.all(new_f[k][0] == False)
+        assert np.all(new_f[k][-1])
+        assert not np.any(new_f[k][0])
 
     def test_cut_bl(self):
         Nbls = len(self.data)

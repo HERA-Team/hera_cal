@@ -289,23 +289,23 @@ class Test_lstbin(object):
         x[10] = 4
         x[11] = -4
         arr = lstbin.sigma_clip(x, sigma=2.0)
-        assert np.all(arr[10] == True)
-        assert np.all(arr[11] == True)
+        assert np.all(arr[10])
+        assert np.all(arr[11])
         # test array performance
         x = np.array(list(map(lambda s: stats.norm.rvs(0, s, 100), np.arange(1, 5.1, 1))))
         x[0, 50] = 100
         x[4, 50] = 5
         arr = lstbin.sigma_clip(x, sigma=2.0)
-        assert np.all(arr[0, 50] == True)
-        assert np.all(arr[4, 50] == False)
+        assert np.all(arr[0, 50])
+        assert not np.any(arr[4, 50])
         # test flags
         arr = stats.norm.rvs(0, 1, 10).reshape(2, 5)
         flg = np.zeros_like(arr, np.bool)
         flg[0, 3] = True
         out = lstbin.sigma_clip(arr, flags=flg, min_N=5)
-        assert np.all(out[0, 3] == False)
+        assert not np.any(out[0, 3])
         out = lstbin.sigma_clip(arr, flags=flg, min_N=1)
-        assert np.all(out[0, 3] == True)
+        assert np.all(out[0, 3])
 
     def test_switch_bl(self):
         # test basic execution
