@@ -605,6 +605,7 @@ class Test_Visibility_IO_Legacy(object):
 
     @pytest.mark.filterwarnings("ignore:The expected shape of the ENU array")
     @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
+    @pytest.mark.filterwarnings("ignore:Unicode equal comparison failed")
     def test_write_vis(self):
         # get data
         uvd = UVData()
