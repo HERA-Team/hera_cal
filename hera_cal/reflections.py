@@ -77,6 +77,7 @@ from uvtools import dspec
 import argparse
 import ast
 from astropy import constants
+from hera_sim import sigchain
 
 from . import io
 from . import version
@@ -283,9 +284,10 @@ class ReflectionFitter(FRFilter):
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs, ref_flags=None,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
-                                fix_dly=False, fix_phs=False,
-                                edgecut_low=0, edgecut_hi=0, window='none', alpha=0.1, zeropad=0,
-                                skip_frac=0.9, maxiter=50, method='BFGS', tol=1e-2, verbose=True):
+                                fix_dly=False, fix_phs=False, fix_amp_slope=True, fix_dly_slope=True,
+                                fix_phs_slope=True, edgecut_low=0, edgecut_hi=0,
+                                window='blackmanharris', alpha=0.1, zeropad=0, skip_frac=0.9, maxiter=50,
+                                method='BFGS', tol=1e-2, verbose=True):
         """
         Refine reflection parameters via some minimization technique.
 
@@ -320,6 +322,12 @@ class ReflectionFitter(FRFilter):
                 If True, fix delay solution at ref_dly
             fix_phs : bool
                 If True, fix delay solution at ref_phs
+            fix_amp_slope : bool
+                If True, fix amplitude slope across freq to 0.0. See _construct_params for definition.
+            fix_dly_slope : bool
+                If True, fix delay slope across freq to 0.0. See _construct_params for definition.
+            fix_phs_slope : bool
+                If True, fix phase slope across freq to 0.0. See _construct_params for definition.
             method : str
                 Optimization algorithm. See scipy.optimize.minimize for options
             skip_frac : float in range [0, 1]
@@ -336,6 +344,12 @@ class ReflectionFitter(FRFilter):
                 Reflection delay [ns]
             ref_phs : dictionary
                 Reflection phase [radian]
+            ref_amp_slope : dictionary
+                Amplitude slope across frequency [log10(amp) / GHz]
+            ref_dly_slope : dictionary
+                Delay slope across frequency [ns / GHz]
+            ref_phs_slope : dictionary
+                Phase slope across frequency [radian / GHz]
             ref_info : dictionary
                 Optimization success [bool]
             ref_eps : dictionary
@@ -358,6 +372,9 @@ class ReflectionFitter(FRFilter):
         out_ref_amp = {}
         out_ref_dly = {}
         out_ref_phs = {}
+        out_ref_amp_slope = {}
+        out_ref_dly_slope = {}
+        out_ref_phs_slope = {}
         out_ref_info = {}
 
         # iterate over keys
@@ -383,29 +400,38 @@ class ReflectionFitter(FRFilter):
             amp = ref_amp[rkey]
             dly = ref_dly[rkey]
             phs = ref_phs[rkey]
-            (opt_amp, opt_dly, opt_phs,
+            (opt_amp, opt_dly, opt_phs, opt_amp_slope, opt_dly_slope, opt_phs_slope,
              opt_info) = reflection_param_minimization(clean_data[k], dly_range, self.freqs, amp, dly, phs, fix_amp=fix_amp, fix_dly=fix_dly,
-                                                       fix_phs=fix_phs, clean_model=clean_model[k], clean_flags=clean_flags[k] + rflags,
+                                                       fix_phs=fix_phs, fix_amp_slope=fix_amp_slope, fix_dly_slope=fix_dly_slope, fix_phs_slope=fix_phs_slope,
+                                                       clean_model=clean_model[k], clean_flags=clean_flags[k] + rflags,
                                                        method=method, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
                                                        edgecut_hi=edgecut_hi, edgecut_low=edgecut_low, zeropad=zeropad)
 
             amp = np.reshape(opt_amp, amp.shape)
             dly = np.reshape(opt_dly, dly.shape)
             phs = np.reshape(opt_phs, phs.shape)
+            amp_slope = np.reshape(opt_amp_slope, amp.shape)
+            dly_slope = np.reshape(opt_dly_slope, dly.shape)
+            phs_slope = np.reshape(opt_phs_slope, phs.shape)
 
             # form epsilon term
-            eps = construct_reflection(self.freqs, amp, dly / 1e9, phs, real=False)
+            _amp, _dly, _phs = _construct_params(self.freqs, amp, dly, phs, amp_slope=amp_slope, dly_slope=dly_slope, phs_slope=phs_slope)
+            eps = construct_reflection(self.freqs, _amp, _dly / 1e9, _phs, real=False)
 
             out_ref_eps[rkey] = eps
-            out_ref_amp[rkey] = amp
-            out_ref_phs[rkey] = phs
-            out_ref_dly[rkey] = dly
+            out_ref_amp[rkey] = _amp
+            out_ref_phs[rkey] = _phs
+            out_ref_dly[rkey] = _dly
+            out_ref_amp_slope[rkey] = amp_slope
+            out_ref_dly_slope[rkey] = dly_slope
+            out_ref_phs_slope[rkey] = phs_slope
             out_ref_info[rkey] = opt_info
 
         # form gains
         out_ref_gains = form_gains(out_ref_eps)
 
-        return out_ref_amp, out_ref_dly, out_ref_phs, out_ref_info, out_ref_eps, out_ref_gains
+        return (out_ref_amp, out_ref_dly, out_ref_phs, out_ref_amp_slope, out_ref_dly_slope, out_ref_phs_slope,
+                out_ref_info, out_ref_eps, out_ref_gains)
 
     def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False,
                                write_npz=False, add_to_history='', verbose=True):
@@ -887,6 +913,7 @@ class ReflectionFitter(FRFilter):
                 # shift by median and normalize by MAD
                 ymed = np.median(y, axis=0, keepdims=True)
                 ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
+                ymad[np.isclose(ymad, 0.0)] = 1.0
                 y = (y - ymed) / ymad**2
 
                 # fit gp and predict
@@ -916,7 +943,40 @@ def form_gains(epsilon):
     return dict([(k, 1 + epsilon[k]) for k in epsilon.keys()])
 
 
-def construct_reflection(freqs, amp, tau, phs, real=False):
+def _construct_params(freqs, amp, dly, phs, amp_slope=None, dly_slope=None, phs_slope=None):
+    """
+    Construct frequency-dependent reflection parameters
+
+    Args:
+        freqs : 1-D array of frequencies [Hz]
+        amp : float or N-D array (Ntimes,) of reflection amplitudes
+        amp_slope : float of N-D array (Ntimes,) amplitude slope defined as d log10(amp) / d GHz
+            w.r.t. freqs anchored at freqs.min()
+        dly : float or N-D array (Ntimes,) of reflection delays [ns]
+        dly_slope : float of N-D array (Ntimes,) delay slope defined as d ns / d GHz
+            w.r.t. freqs, anchored at freqs.min()
+        phs : float or N-D array (Ntimes,) of phase offsets [radians]
+        phs_slope : float of N-D array (Ntimes,) phase slope defined as d rad / d GHz
+            w.r.t. freqs, anchored at freqs.min()
+
+    Returns:
+        amp : ndarray, shape (Ntimes, Nfreqs)
+        dly : ndarray, shape (Ntimes, Nfreqs)
+        phs : ndarray, shape (Ntimes, Nfreqs)
+    """
+    # add slopes
+    if amp_slope is not None:
+        # amplitude slope defined in log10 space
+        amp = 10**(amp_slope * (freqs.reshape(1, -1) - freqs.min()) / 1e9) * amp
+    if dly_slope is not None:
+        dly = dly_slope * (freqs.reshape(1, -1) - freqs.min()) / 1e9 + dly
+    if phs_slope is not None:
+        phs = phs_slope * (freqs.reshape(1, -1) - freqs.min()) / 1e9 + phs
+
+    return amp, dly, phs
+
+
+def construct_reflection(freqs, amp, dly, phs, real=False):
     """
     Given a frequency range and reflection parameters,
     construct the complex (or real) valued reflection
@@ -924,9 +984,9 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
 
     Args:
         freqs : 1-D array of frequencies [Hz]
-        amp : N-D array of reflection amplitudes
-        tau : N-D array of reflection delays [sec]
-        phs : N-D array of phase offsets [radians]
+        amp : float or N-D array (Ntimes,) of reflection amplitudes
+        dly : float or N-D array (Ntimes,) of reflection delays [sec]
+        phs : float or N-D array (Ntimes,) of phase offsets [radians]
         real : bool, if True return as real-valued. Else
             return as complex-valued.
 
@@ -934,19 +994,8 @@ def construct_reflection(freqs, amp, tau, phs, real=False):
         eps : complex (or real) valued reflection across
             input frequencies.
     """
-    # reshape if necessary
-    if isinstance(amp, np.ndarray):
-        if amp.ndim == 1:
-            amp = np.reshape(amp, (-1, 1))
-    if isinstance(tau, np.ndarray):
-        if tau.ndim == 1:
-            tau = np.reshape(tau, (-1, 1))
-    if isinstance(phs, np.ndarray):
-        if phs.ndim == 1:
-            phs = np.reshape(phs, (-1, 1))
-
-    # make reflection
-    eps = amp * np.exp(2j * np.pi * tau * freqs + 1j * phs)
+    # make reflection: freqs in GHz and delay in ns
+    eps = sigchain.gen_reflection_coefficient(freqs * 1e-9, amp, dly * 1e9, phs)
     if real:
         eps = eps.real
 
@@ -1172,8 +1221,9 @@ def fit_reflection_params(clean_resid, dly_range, freqs, clean_flags=None, clean
 
 
 def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0,
-                                  fix_amp=False, fix_dly=False, fix_phs=False, clean_model=None,
-                                  clean_flags=None, method='BFGS', skip_frac=0.9,
+                                  fix_amp=False, fix_dly=False, fix_phs=False,
+                                  fix_amp_slope=True, fix_dly_slope=True, fix_phs_slope=True,
+                                  clean_model=None, clean_flags=None, method='BFGS', skip_frac=0.9,
                                   tol=1e-4, maxiter=100, **fft_kwargs):
     """
     Perturb reflection parameters to minimize residual in data.
@@ -1198,6 +1248,12 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
             If True, fix delay solution at dly0
         fix_phs : bool
             If True, fix delay solution at phs0
+        fix_ampslope : bool
+            If True, ampslope is fixed at zero, else it is solved for.
+        fix_dlyslope : bool
+            If True, dlyslope is fixed at zero, else it is solved for.
+        fix_phsslope : bool
+            If True, phsslope is fixed at zero, else it is solved for.
         clean_model : 2D ndarray of shape (Ntimes, Nfreqs)
             CLEAN model with CLEAN boundary out to at most min(|dly0 - dly_range|)
             If reflection is well-isolated from foreground power, this is not necessary.
@@ -1221,21 +1277,34 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
             Reflection delay solution [ns]
         phs : ndarray
             Reflection phase solution [rad]
+        amp_slope : ndarray
+            Reflection amplitude slope w.r.t. freqs
+        dly_slope : ndarray
+            Reflection delay slope w.r.t. freqs
+        phs_slope : ndarray
+            Reflection phase slope w.r.t. freqs
         info : list
             Optimization success [bool]
     """
     # define removal metric
-    def L(x, amp, dly, phs, clean_data, clean_model, clean_wgts, dly_range, freqs, fft_kwargs):
+    def L(x, amp, amp_slope, dly, dly_slope, phs, phs_slope, clean_data, clean_model, clean_wgts, dly_range, freqs, fft_kwargs):
         """
         Metric to minimize is max(dfft) in delay range
 
-        x : ndarray, amp, and/or dly [ns], and/or phs [rad] parameters in this order.
-            If any are fed as their own argument below, exclude them from x.
+        x : ndarray, amp and/or amp_slope and/or dly [ns] and/or dly_slope and/or phs [rad]
+            and/or phs_slope parameters in this order.
+            If any are fed as their own argument, exclude them from x.
         amp : ndarray, amplitude to hold fixed if not fed in x.
+            If fed in x, this should be None
+        amp_slope : ndarray, amplitude slope across frequency.
             If fed in x, this should be None
         dly : ndarray, delay [ns] to hold fixed if not fed in x.
             If fed in x, this should be None
+        dly_slope : ndarray, delay slope across frequency.
+            If fed in x, this should be None
         phs : ndarray, phase [rad] to hold fixed if not fed in x.
+            If fed in x, this should be None
+        phs_slope : ndarray, phase slope across frequency.
             If fed in x, this should be None
         clean_data : ndarray, CLEANed visibility data
         clean_model : ndarray, CLEAN visibility model
@@ -1245,22 +1314,33 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
         fft_kwargs : dictionary, kwargs to pass to fft_data
         """
         # form gains and apply to data
-        Nparams = (amp is None) + (dly is None) + (phs is None)
+        Nparams = (amp is None) + (amp_slope is None) + (dly is None) \
+            + (dly_slope is None) + (phs is None) + (phs_slope is None)
         x = np.reshape(x, (Nparams, -1))
         if amp is None:
             amp = x[0]
             x = x[1:]
+        if amp_slope is None:
+            amp_slope = x[0]
+            x = x[1:]
         if dly is None:
             dly = x[0]
             x = x[1:]
+        if dly_slope is None:
+            dly_slope = x[0]
+            x = x[1:]
         if phs is None:
             phs = x[0]
+            x = x[1:]
+        if phs_slope is None:
+            phs_slope = x[0]
 
-        # return large number if amp is negative
-        if amp < 0:
+        # enforce a hard prior on amplitudes < 0 or > 1
+        if amp < 0 or amp > 1:
             return 1e10
 
         # construct reflection and divide gain from data
+        amp, dly, phs = _construct_params(freqs, amp, dly, phs, amp_slope=amp_slope, dly_slope=dly_slope, phs_slope=phs_slope)
         eps = construct_reflection(freqs, amp, dly / 1e9, phs, real=False)
         gain = 1 + eps
         cal_data = clean_data / (gain * np.conj(gain))
@@ -1287,6 +1367,15 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
     edge_flags[np.argmin(edge_flags):-np.argmin(edge_flags[::-1])] = False
     if fix_amp and fix_dly and fix_phs:
         raise ValueError("Can't hold amp, dly and phs fixed")
+    if isinstance(amp0, (float, np.float, int, np.int)):
+        amp0 = np.ones((Ntimes, 1)) * amp0
+    if isinstance(dly0, (float, np.float, int, np.int)):
+        dly0 = np.ones((Ntimes, 1)) * dly0
+    if isinstance(phs0, (float, np.float, int, np.int)):
+        phs0 = np.ones((Ntimes, 1)) * phs0
+    amp_slope0 = np.zeros((Ntimes, 1))
+    dly_slope0 = np.zeros((Ntimes, 1))
+    phs_slope0 = np.zeros((Ntimes, 1))
 
     # create delay range
     if isinstance(dly_range, (int, np.int, float, np.float)):
@@ -1294,13 +1383,16 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
     dly_range = (np.nanmedian(dly0) - np.abs(dly_range[0]), np.nanmedian(dly0) + np.abs(dly_range[1]))
 
     # iterate over times
-    amp, dly, phs, info = [], [], [], []
+    amp, amp_slope, dly, dly_slope, phs, phs_slope, info = [], [], [], [], [], [], []
     for i in range(Ntimes):
         # skip frac
         if edge_flags.all() or (skip_frac < 1 - np.mean(clean_wgts[i][~edge_flags])):
-            amp.append(0)
-            dly.append(0)
-            phs.append(0)
+            amp.append(0.0)
+            amp_slope.append(0.0)
+            dly.append(0.0)
+            dly_slope.append(0.0)
+            phs.append(0.0)
+            phs_slope.append(0.0)
             info.append(False)
             continue
 
@@ -1311,20 +1403,35 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
         else:
             x0.append(amp0[i])
             _amp = None
+        if fix_amp_slope:
+            _amp_slope = amp_slope0[i]
+        else:
+            x0.append(amp_slope0[i])
+            _amp_slope = None
         if fix_dly:
             _dly = dly0[i]
         else:
             x0.append(dly0[i])
             _dly = None
+        if fix_dly_slope:
+            _dly_slope = dly_slope0[i]
+        else:
+            x0.append(dly_slope0[i])
+            _dly_slope = None
         if fix_phs:
             _phs = phs0[i]
         else:
             x0.append(phs0[i])
             _phs = None
+        if fix_phs_slope:
+            _phs_slope = phs_slope0[i]
+        else:
+            x0.append(phs_slope0[i])
+            _phs_slope = None
         x0 = np.array(x0)
 
         # optimize
-        res = minimize(L, x0, args=(_amp, _dly, _phs, clean_data[i], clean_model[i], clean_wgts[i], dly_range, freqs, fft_kwargs), method=method, tol=tol, options=dict(maxiter=maxiter))
+        res = minimize(L, x0, args=(_amp, _amp_slope, _dly, _dly_slope, _phs, _phs_slope, clean_data[i], clean_model[i], clean_wgts[i], dly_range, freqs, fft_kwargs), method=method, tol=tol, options=dict(maxiter=maxiter))
 
         # collect output
         xf = res.x
@@ -1333,18 +1440,35 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
         else:
             amp.append(xf[0])
             xf = xf[1:]
+        if fix_amp_slope:
+            amp_slope.append(amp_slope0[i])
+        else:
+            amp_slope.append(xf[0])
+            xf = xf[1:]
         if fix_dly:
             dly.append(dly0[i])
         else:
             dly.append(xf[0])
             xf = xf[1:]
+        if fix_dly_slope:
+            dly_slope.append(dly_slope0[i])
+        else:
+            dly_slope.append(xf[0])
+            xf = xf[1:]
         if fix_phs:
             phs.append(phs0[i])
         else:
             phs.append(xf[0])
+            xf = xf[1:]
+        if fix_phs_slope:
+            phs_slope.append(phs_slope0[i])
+        else:
+            phs_slope.append(xf[0])
+            xf = xf[1:]
         info.append(res.success)
 
-    return np.array(amp), np.array(dly), np.array(phs), np.array(info)
+    return (np.array(amp), np.array(dly), np.array(phs), np.array(amp_slope), np.array(dly_slope),
+            np.array(phs_slope), np.array(info))
 
 
 def auto_reflection_argparser():
