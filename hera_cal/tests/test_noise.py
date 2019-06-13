@@ -62,8 +62,7 @@ class Test_Noise(object):
 
                 nsamples[k] *= 2
                 sigmasq3 = noise.predict_noise_variance_from_autos(k, data, nsamples=nsamples)
-                np.testing.assert_array_equal(sigmasq/2.0, sigmasq3)
-
+                np.testing.assert_array_equal(sigmasq / 2.0, sigmasq3)
 
     def test_per_antenna_noise_std(self):
         infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
