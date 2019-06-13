@@ -28,7 +28,7 @@ install:
   # create environment and install dependencies
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy astropy pip matplotlib coverage pandas scikit-learn h5py six pytest-cov coveralls cached-property
   - source activate test-environment
-  - conda install -c conda-forge healpy aipy pycodestyle attrs h5py healpy pyyaml
+  - conda install -c conda-forge healpy aipy pycodestyle attrs h5py healpy pyyaml mpi4py
   - pip install git+https://github.com/HERA-Team/pyuvdata.git
   - pip install git+https://github.com/HERA-Team/linsolve.git
   - pip install git+https://github.com/HERA-Team/hera_qm.git
