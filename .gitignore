@@ -18,3 +18,4 @@ hera_cal/data/test_output/*
 # Test notebooks
 hera_cal/notebooks
 *.ipynb_checkpoints*
+.pytest_cache*
