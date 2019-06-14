@@ -123,6 +123,7 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
 
     # smooth via median filter
     if medfilt:
+        data = deepcopy(data)  # this prevents filtering of the original input data
         data.real = signal.medfilt(data.real, kernel_size=kernel)
         data.imag = signal.medfilt(data.imag, kernel_size=kernel)
 
