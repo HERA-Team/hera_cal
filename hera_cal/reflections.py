@@ -323,11 +323,11 @@ class ReflectionFitter(FRFilter):
             fix_phs : bool
                 If True, fix delay solution at ref_phs
             fix_amp_slope : bool
-                If True, fix amplitude slope across freq to 0.0. See _construct_params for definition.
+                If True, fix amplitude slope across freq to 0.0. See construct_params for definition.
             fix_dly_slope : bool
-                If True, fix delay slope across freq to 0.0. See _construct_params for definition.
+                If True, fix delay slope across freq to 0.0. See construct_params for definition.
             fix_phs_slope : bool
-                If True, fix phase slope across freq to 0.0. See _construct_params for definition.
+                If True, fix phase slope across freq to 0.0. See construct_params for definition.
             method : str
                 Optimization algorithm. See scipy.optimize.minimize for options
             skip_frac : float in range [0, 1]
@@ -410,18 +410,22 @@ class ReflectionFitter(FRFilter):
             amp = np.reshape(opt_amp, amp.shape)
             dly = np.reshape(opt_dly, dly.shape)
             phs = np.reshape(opt_phs, phs.shape)
-            amp_slope = np.reshape(opt_amp_slope, amp.shape)
-            dly_slope = np.reshape(opt_dly_slope, dly.shape)
-            phs_slope = np.reshape(opt_phs_slope, phs.shape)
+            amp_slope, dly_slope, phs_slope = None, None, None
+            if not fix_amp_slope:
+                amp_slope = np.reshape(opt_amp_slope, amp.shape)
+            if not fix_dly_slope:
+                dly_slope = np.reshape(opt_dly_slope, dly.shape)
+            if not fix_phs_slope:
+                phs_slope = np.reshape(opt_phs_slope, phs.shape)
 
             # form epsilon term
-            _amp, _dly, _phs = _construct_params(self.freqs, amp, dly, phs, amp_slope=amp_slope, dly_slope=dly_slope, phs_slope=phs_slope)
+            _amp, _dly, _phs = construct_params(self.freqs, amp, dly, phs, amp_slope=amp_slope, dly_slope=dly_slope, phs_slope=phs_slope)
             eps = construct_reflection(self.freqs, _amp, _dly / 1e9, _phs, real=False)
 
             out_ref_eps[rkey] = eps
-            out_ref_amp[rkey] = _amp
-            out_ref_phs[rkey] = _phs
-            out_ref_dly[rkey] = _dly
+            out_ref_amp[rkey] = amp
+            out_ref_phs[rkey] = phs
+            out_ref_dly[rkey] = dly
             out_ref_amp_slope[rkey] = amp_slope
             out_ref_dly_slope[rkey] = dly_slope
             out_ref_phs_slope[rkey] = phs_slope
@@ -943,7 +947,7 @@ def form_gains(epsilon):
     return dict([(k, 1 + epsilon[k]) for k in epsilon.keys()])
 
 
-def _construct_params(freqs, amp, dly, phs, amp_slope=None, dly_slope=None, phs_slope=None):
+def construct_params(freqs, amp, dly, phs, amp_slope=None, dly_slope=None, phs_slope=None):
     """
     Construct frequency-dependent reflection parameters
 
@@ -1340,7 +1344,7 @@ def reflection_param_minimization(clean_data, dly_range, freqs, amp0, dly0, phs0
             return 1e10
 
         # construct reflection and divide gain from data
-        amp, dly, phs = _construct_params(freqs, amp, dly, phs, amp_slope=amp_slope, dly_slope=dly_slope, phs_slope=phs_slope)
+        amp, dly, phs = construct_params(freqs, amp, dly, phs, amp_slope=amp_slope, dly_slope=dly_slope, phs_slope=phs_slope)
         eps = construct_reflection(freqs, amp, dly / 1e9, phs, real=False)
         gain = 1 + eps
         cal_data = clean_data / (gain * np.conj(gain))

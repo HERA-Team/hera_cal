@@ -233,7 +233,7 @@ class Test_ReflectionFitter_Cables(object):
         dly = 300.0
         phs = 0.0
         freqs = self.uvd.freq_array[0]
-        amp, dly, phs = reflections._construct_params(freqs, amp, dly, phs, amp_slope=amp_slope)
+        amp, dly, phs = reflections.construct_params(freqs, amp, dly, phs, amp_slope=amp_slope)
         uvd = simulate_reflections(cdelay=[dly], cphase=[phs], camp=[amp], add_cable=True, cable_ants=[23], add_xtalk=False)
 
         # load RF object
@@ -258,15 +258,15 @@ class Test_ReflectionFitter_Cables(object):
         RF.model_auto_reflections(RF.avg_data, (200, 600), keys=[bl_k], window='blackmanharris',
                                   zeropad=100, overwrite=True, fthin=1, verbose=True,
                                   edgecut_low=0, edgecut_hi=0)
-        # Powell seems to achieve better precision than BFGS in the case of freq evolution
-        output = RF.refine_auto_reflections(RF.avg_data, 25, RF.ref_amp, RF.ref_dly, RF.ref_phs, keys=[bl_k],
+        # achieves better precision with slightly larger delay buffer (50 ns)
+        output = RF.refine_auto_reflections(RF.avg_data, 50, RF.ref_amp, RF.ref_dly, RF.ref_phs, keys=[bl_k],
                                             fix_amp_slope=False, window='blackmanharris', zeropad=250,
-                                            method="Powell", tol=1e-4, maxiter=50)
+                                            method="BFGS", tol=1e-4, maxiter=100)
         ref_amp = output[0][g_k][0, :1]
         ref_dly = output[1][g_k][0, :1]
         ref_phs = output[2][g_k][0, :1]
         ref_amp_slope = output[3][g_k]
-        # assert equivalence: lower precision achieved than before due to frequency evolution
+        # assert equivalence with input parameters
         assert np.allclose(np.ravel(ref_dly), 300.0, atol=1e-1)
         assert np.allclose(np.ravel(ref_amp), 1e-2, atol=1e-4)
         assert np.allclose(np.ravel(ref_phs), 0.0, atol=1e-1)
