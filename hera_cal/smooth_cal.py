@@ -272,13 +272,12 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
             if per_pol: dictionary mapping gain polarizations string to ant-pol tuples
             else: ant-pol tuple e.g. (0, 'Jxx')
     '''
-    # compute delay and phase for all gains to flatten them as well as possible. Average over times.
-    df = np.median(np.diff(freqs))
+    # compute delay for all gains to flatten them as well as possible. Average over times.
     rephasors = {}
     for ant in gains.keys():
         wgts = np.array(~(flags[ant]), dtype=float)
-        (dlys, phis) = utils.fft_dly(gains[ant], df, wgts, medfilt=False, f0=freqs[0])
-        rephasors[ant] = np.exp(-2.0j * np.pi * np.mean(dlys), freqs - 1.0j * np.mean(phis))
+        dly = single_iterative_fft_dly(gains[ant], wgts, freqs)
+        rephasors[ant] = np.exp(-2.0j * np.pi * dly * freqs)
 
     def narrow_refant_candidates(candidates):
         '''Helper function for comparing refant candidates to another another looking for the one with the 
