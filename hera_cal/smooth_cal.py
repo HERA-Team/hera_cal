@@ -21,6 +21,41 @@ from . import flag_utils
 from .noise import interleaved_noise_variance_estimate
 
 
+def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
+    '''Iteratively find a single best-fit delay for a given gain waterfall for all times.
+
+    Arguments:
+        gains: ndarray of shape=(Ntimes,Nfreqs) of complex calibration solutions
+        wgts: ndarray of shape=(Ntimes,Nfreqs) of real linear multiplicative weights
+            For the purposes of this function, wghts <= 0 are considered flags.
+        freqs: ndarray of frequency channels in Hz
+        conv_crit: convergence criterionf or relative change in the rephasor
+        maxiter: maximum number of 
+    
+    Returns:
+        tau: float, single best fit delay in s
+    '''
+    df = np.median(np.diff(freqs))
+    gains = deepcopy(gains)
+    gains[wgts <= 0] = np.nan
+    avg_gains = np.nanmean(gains, axis=0, keepdims=True)
+    unflagged_channels = np.nonzero(np.isfinite(avg_gains[0]))
+    unflagged_range = slice(np.min(unflagged_channels), np.max(unflagged_channels) + 1)
+    avg_gains[~np.isfinite(avg_gains)] = 0
+
+    taus = []
+    for i in range(maxiter):
+        tau, _ = utils.fft_dly(avg_gains[:, unflagged_range], df)
+        taus.append(tau)
+
+        rephasor = np.exp(-2.0j * np.pi * tau[0][0] * freqs)
+        avg_gains *= rephasor
+        if np.mean(np.abs(rephasor - 1.0)) < conv_crit:
+            break
+
+    return np.sum(taus)
+
+
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
                 maxiter=100, **win_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
