@@ -47,6 +47,26 @@ class Test_Smooth_Cal_Helper_Functions(object):
         tf = smooth_cal.time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=1)
         np.testing.assert_array_almost_equal(tf, np.ones((10, 10), dtype=complex))
 
+    @pytest.mark.filterwarnings("ignore: Mean of empty slice")
+    def test_single_iterative_fft_dly(self):
+        # try without flags
+        gains = np.ones((2, 1000), dtype=complex)
+        wgts = np.ones((2, 1000), dtype=float)
+        freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
+        gains *= np.exp(2.0j * np.pi * np.outer(151e-9 * np.ones(2), freqs))
+        dly = smooth_cal.single_iterative_fft_dly(gains, wgts, freqs)
+        np.testing.assert_array_almost_equal(dly, 151e-9)
+
+        # try with flags
+        gains = np.ones((2, 1000), dtype=complex)
+        wgts = np.ones((2, 1000), dtype=float)
+        wgts[:,0:40] = 0.0
+        wgts[:,900:] = 0.0
+        freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
+        gains *= np.exp(2.0j * np.pi * np.outer(-151e-9 * np.ones(2), freqs))
+        dly = smooth_cal.single_iterative_fft_dly(gains, wgts, freqs)
+        np.testing.assert_array_almost_equal(dly, -151e-9)
+
     def test_freq_filter(self):
         gains = np.ones((10, 10), dtype=complex)
         gains[3, 5] = 10.0
