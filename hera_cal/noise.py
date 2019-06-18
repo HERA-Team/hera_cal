@@ -36,16 +36,18 @@ def interleaved_noise_variance_estimate(vis, kernel=[[1, -2, 1], [-2, 4, -2], [1
     return variance
 
 
-def predict_noise_variance_from_autos(bl, data, dt=None, df=None):
+def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None):
     '''Predict the noise variance on a baseline using autocorrelation data.
 
     Arguments:
         bl: baseline tuple of the form (0, 1, 'xx')
-        data: DataContainer containing autocorrelation data
+        data: DataContainer containing autocorrelation data of the two antennas in bl
         dt: integration time in seconds. If None, will try infer this
             from the times stored in the DataContainer.
         df: channel width in Hz. If None, will try to infer this from
             from the frequencies stored in the DataContainer
+        nsamples: DataContainer mapping bl tuples to numpy arrays of the number 
+            integrations for that given baseline. Must include nsamples[bl].
 
     Returns:
         Noise variance predicted on baseline bl in units of data squared
@@ -58,7 +60,11 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None):
         df = np.median(np.ediff1d(data.freqs))
 
     ap1, ap2 = split_pol(bl[2])
-    return np.abs(data[bl[0], bl[0], join_pol(ap1, ap1)] * data[bl[1], bl[1], join_pol(ap2, ap2)] / dt / df)
+    auto_bl1, auto_bl2 = (bl[0], bl[0], join_pol(ap1, ap1)), (bl[1], bl[1], join_pol(ap2, ap2))
+    var = np.abs(data[auto_bl1] * data[auto_bl2] / dt / df)
+    if nsamples is not None:
+        return var / nsamples[bl]
+    return var
 
 
 def per_antenna_noise_std(autos, dt=None, df=None):

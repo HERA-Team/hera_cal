@@ -55,9 +55,14 @@ class Test_Noise(object):
                 sigmasq = noise.predict_noise_variance_from_autos(k, data)
                 noise_var = noise.interleaved_noise_variance_estimate(data[k])
                 np.testing.assert_array_equal(np.abs(np.mean(np.mean(noise_var, axis=0) / np.mean(sigmasq, axis=0)) - 1) <= .1, True)
+                
                 times = hd.times_by_bl[k[:2]]
                 sigmasq2 = noise.predict_noise_variance_from_autos(k, data, df=(hd.freqs[1] - hd.freqs[0]), dt=((times[1] - times[0]) * 24. * 3600.))
                 np.testing.assert_array_equal(sigmasq, sigmasq2)
+
+                nsamples[k] *= 2
+                sigmasq3 = noise.predict_noise_variance_from_autos(k, data, nsamples=nsamples)
+                np.testing.assert_array_equal(sigmasq / 2.0, sigmasq3)
 
     def test_per_antenna_noise_std(self):
         infile = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
