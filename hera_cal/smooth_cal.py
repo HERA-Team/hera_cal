@@ -35,6 +35,9 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     Returns:
         tau: float, single best fit delay in s
     '''
+    if np.sum(wgts) == 0:  # if all flagged, return 0 delay
+        return 0.0
+
     df = np.median(np.diff(freqs))
     gains = deepcopy(gains)
     gains[wgts <= 0] = np.nan
