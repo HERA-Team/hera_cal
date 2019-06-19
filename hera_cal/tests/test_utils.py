@@ -441,6 +441,34 @@ def test_chisq():
     assert len(chisq_per_ant) == 0
 
 
+@pytest.mark.filterwarnings("ignore:Mean of empty slice")
+def test_gain_relative_difference():
+    # setup
+    old_gains = {(0, 'Jxx'): np.ones((10, 10), dtype=np.complex),
+                 (1, 'Jxx'): np.ones((10, 10), dtype=np.complex)}
+    new_gains = {(0, 'Jxx'): 2. * np.ones((10, 10), dtype=np.complex),
+                 (1, 'Jxx'): 4. * np.ones((10, 10), dtype=np.complex)}
+    flags = {(0, 'Jxx'): np.zeros((10, 10), dtype=bool),
+             (1, 'Jxx'): np.zeros((10, 10), dtype=bool)}
+    flags[(0, 'Jxx')][3, 4:6] = True
+    flags[(1, 'Jxx')][3:5, 4] = True
+
+    # standard test with flags
+    relative_diff, avg_relative_diff = utils.gain_relative_difference(old_gains, new_gains, flags)
+    assert relative_diff[0, 'Jxx'][0, 0] == 1.
+    assert relative_diff[1, 'Jxx'][0, 0] == 3.
+    assert avg_relative_diff['Jxx'][0, 0] == 2.
+    assert avg_relative_diff['Jxx'][3, 4] == 0.  # both flagged
+    assert avg_relative_diff['Jxx'][3, 5] == 3.  # ant 0 flagged
+    assert avg_relative_diff['Jxx'][4, 3] == 2.  # ant 1 flagged
+
+    # test different denominator
+    relative_diff, avg_relative_diff = utils.gain_relative_difference(old_gains, new_gains, flags, denom=new_gains)
+    assert relative_diff[0, 'Jxx'][0, 0] == .5
+    assert relative_diff[1, 'Jxx'][0, 0] == 3. / 4.
+    assert avg_relative_diff['Jxx'][0, 0] == 5. / 8.
+
+
 def test_echo(capsys):
     utils.echo('hi', verbose=True)
     output = capsys.readouterr().out
