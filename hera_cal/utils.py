@@ -845,6 +845,44 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     return chisq, nObs, chisq_per_ant, nObs_per_ant
 
 
+def gain_relative_difference(old_gains, new_gains, flags, denom=None):
+    """Compuate relative gain differences between two sets of calibration solutions 
+    (e.g. abscal and smooth_cal), as well as antenna-averaged relative gain differences.
+    
+    Arguments:
+        old_gains: dictionary mapping keys like (0, 'Jxx') to waterfalls of complex gains.
+            Must contain all keys in new_gains.
+        new_gains: dictionary mapping keys like (0, 'Jxx') to waterfalls of complex gains
+        flags: dictionary mapping keys like (0, 'Jxx') to boolean flag waterfalls. Must
+            contain all keys in new_gains.
+        denom: gain dictionary to use to normalize the relative difference. Default None
+            uses old_gains.
+
+    Returns:
+        relative_diff: dictionary mapping keys like (0, 'Jxx') to waterfalls of relative
+            differences between old and new gains
+        avg_relative_diff: dictionary mapping antpols (e.g. 'Jxx') to waterfalls. Flagged
+            gains are excluded from the average; completely flagged times and channels are
+            replaced by 0s to match the convention of chi^2 above
+
+    """
+    if denom is None:
+        denom = old_gains
+    relative_diff = {ant: np.abs((old_gains[ant] - new_gains[ant]) / denom[ant]) for ant in new_gains}
+
+    # compute average relative diff over all antennas for each polarizations separately
+    avg_relative_diff = {}
+    pols = set([ant[1] for ant in new_gains])
+    for pol in pols:
+        diffs = {ant: copy.deepcopy(relative_diff[ant]) for ant in new_gains if ant[1] == pol}
+        for ant in diffs:
+            diffs[ant][flags[ant]] = np.nan 
+        avg_relative_diff[pol] = np.nanmean(list(diffs.values()), axis=0)
+        avg_relative_diff[pol][~np.isfinite(avg_relative_diff[pol])] = 0.0  # if completely flagged
+
+    return relative_diff, avg_relative_diff
+
+
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
     at the given hour angle (ha) and declination (dec).
