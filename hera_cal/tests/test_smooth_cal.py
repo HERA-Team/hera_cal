@@ -16,7 +16,7 @@ import warnings
 from pyuvdata.utils import check_histories
 from pyuvdata import UVCal, UVData
 
-from .. import io, smooth_cal
+from .. import io, smooth_cal, utils
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 
@@ -273,9 +273,15 @@ class Test_Calibration_Smoother(object):
                                    add_to_history='hello world', clobber=True, telescope_name='PAPER')
         for cal in self.cs.cals:
             new_cal = io.HERACal(cal.replace('test_input/', 'test_output/smoothed_'))
-            gains, flags, _, _ = new_cal.read()
+            gains, flags, qual, total_qual = new_cal.read()
+            old_cal = io.HERACal(cal)
+            old_gains, _, _, _ = old_cal.read()
             assert 'helloworld' in new_cal.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in new_cal.history.replace('\n', '').replace(' ', '')
             assert new_cal.telescope_name == 'PAPER'
             np.testing.assert_array_equal(gains[54, 'Jxx'], g[self.cs.time_indices[cal], :])
+
+            relative_diff, avg_relative_diff = utils.gain_relative_difference(gains, old_gains, flags)
+            np.testing.assert_array_equal(qual[54, 'Jxx'], relative_diff[54, 'Jxx'])
+            np.testing.assert_array_equal(total_qual['Jxx'], avg_relative_diff['Jxx'])
             os.remove(cal.replace('test_input/', 'test_output/smoothed_'))
