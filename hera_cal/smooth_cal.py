@@ -548,8 +548,9 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = filtered
         self.rephase_to_refant(warn=False)
 
-    def write_smoothed_cal(self, output_replace=('.abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
+    def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
+        Also compares the input and output calibration and saves that result in the quals/total_quals fields.
 
         Arguments:
             output_replace: tuple of input calfile substrings: ("to_replace", "to_replace_with")
@@ -560,18 +561,26 @@ class CalibrationSmoother():
         '''
         utils.echo('Now writing results to disk...', verbose=self.verbose)
         for cal in self.cals:
-            outfilename = cal.replace(output_replace[0], output_replace[1])
+            hc = io.HERACal(cal)
+            gains, flags, _, _ = hc.read()
             out_gains = {ant: self.gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
-            io.update_cal(cal, outfilename, gains=out_gains, flags=out_flags,
-                          add_to_history=version.history_string(add_to_history), clobber=clobber, **kwargs)
+            rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
+            hc.update(gains=out_gains, flags=out_flags, quals=rel_diff, total_qual=avg_rel_diff)
+
+            hc.history += version.history_string(add_to_history)
+            for attribute, value in kwargs.items():
+                hc.__setattr__(attribute, value)
+            hc.check()
+            outfilename = cal.replace(output_replace[0], output_replace[1])
+            hc.write_calfits(outfilename, clobber=clobber)
 
 
 def smooth_cal_argparser():
     '''Arg parser for commandline operation of 2D calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
     a.add_argument("calfits_list", type=str, nargs='+', help="list of paths to chronologically sortable calfits files (usually a full day)")
-    a.add_argument("--infile_replace", type=str, default='.abs.', help="substring of files in calfits_list to replace for output files")
+    a.add_argument("--infile_replace", type=str, default='.flagged_abs.', help="substring of files in calfits_list to replace for output files")
     a.add_argument("--outfile_replace", type=str, default='.smooth_abs.', help="replacement substring for output files")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at cal_outfile (default False)')
     a.add_argument("--pick_refant", default=False, action="store_true", help='Automatically picks one reference anteanna per polarization. \
