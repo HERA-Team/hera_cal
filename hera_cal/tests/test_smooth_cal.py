@@ -139,6 +139,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         assert np.all(flags[0, 'Jxx'])
         assert not np.all(flags[1, 'Jxx'])
 
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_pick_reference_antenna(self):
         gains = {(n, 'Jxx'): np.ones((10, 10), dtype=complex) for n in range(10)}
         flags = {(n, 'Jxx'): np.zeros((10, 10), dtype=bool) for n in range(10)}
@@ -171,6 +172,7 @@ class Test_Calibration_Smoother(object):
     @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
     @pytest.mark.filterwarnings("ignore:overflow encountered in square")
     @pytest.mark.filterwarnings("ignore:invalid value encountered in reduce")
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_ref_ant(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         flag_file_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
@@ -266,6 +268,7 @@ class Test_Calibration_Smoother(object):
         assert not np.all(g == g2)
         assert g2.shape == g.shape
 
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_write(self):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
         g = deepcopy(self.cs.gain_grids[54, 'Jxx'])
