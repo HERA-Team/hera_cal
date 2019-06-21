@@ -856,7 +856,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
         flags: dictionary mapping keys like (0, 'Jxx') to boolean flag waterfalls. Must
             contain all keys in new_gains.
         denom: gain dictionary to use to normalize the relative difference. Default None
-            uses old_gains.
+            uses old_gains. Anywhere denom is 0 must also be flagged.
 
     Returns:
         relative_diff: dictionary mapping keys like (0, 'Jxx') to waterfalls of relative
@@ -868,7 +868,11 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     """
     if denom is None:
         denom = old_gains
-    relative_diff = {ant: np.abs((old_gains[ant] - new_gains[ant]) / denom[ant]) for ant in new_gains}
+    relative_diff = {}
+    for ant in new_gains:
+        assert ~np.any(denom[ant] == 0) or np.all(flags[np.isclose(np.abs(denom[ant]), 0.0)])
+        relative_diff[ant] = np.true_divide(np.abs(old_gains[ant] - new_gains[ant]), np.abs(denom[ant]), 
+                                            where=~np.isclose(np.abs(denom[ant]), 0))
 
     # compute average relative diff over all antennas for each polarizations separately
     avg_relative_diff = {}
