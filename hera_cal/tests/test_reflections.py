@@ -113,7 +113,7 @@ class Test_ReflectionFitter_Cables(object):
 
         # basic run through
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+                                  zeropad=100, fthin=1, verbose=True)
         assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
         assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
         assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
@@ -122,14 +122,13 @@ class Test_ReflectionFitter_Cables(object):
         RF = reflections.ReflectionFitter(self.uvd)
         edgecut = 5
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris', reject_edges=False,
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True, edgecut_low=edgecut, edgecut_hi=edgecut)
+                                  zeropad=100, fthin=1, verbose=True, edgecut_low=edgecut, edgecut_hi=edgecut)
         assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
         assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
         assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
 
         # try a high ref_sig cut: assert ref_flags are True
-        RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',
-                                  ref_sig_cut=100, overwrite=True)
+        RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris', ref_sig_cut=100)
         assert np.all(RF.ref_flags[g_k])
 
         # assert refinement uses flags to return zeros
@@ -141,7 +140,7 @@ class Test_ReflectionFitter_Cables(object):
         # try filtering the visibilities
         RF.vis_clean(data=RF.data, ax='freq', min_dly=100, overwrite=True, window='blackmanharris', alpha=0.1, tol=1e-8, keys=[bl_k])
         RF.model_auto_reflections(RF.clean_resid, (200, 300), clean_data=RF.clean_data, keys=[bl_k],
-                                  window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
+                                  window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
         assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
         assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
@@ -149,7 +148,7 @@ class Test_ReflectionFitter_Cables(object):
         # try optimization on time-averaged data
         RF.timeavg_data(RF.data, RF.times, RF.lsts, 5000, keys=None, overwrite=True)
         RF.model_auto_reflections(RF.avg_data, (200, 300), keys=[bl_k], window='blackmanharris',
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+                                  zeropad=100, fthin=1, verbose=True)
         output = RF.refine_auto_reflections(RF.avg_data, (20, 80), RF.ref_amp, RF.ref_dly, RF.ref_phs,
                                             keys=[bl_k], window='blackmanharris', zeropad=100,
                                             maxiter=100, method='Nelder-Mead', tol=1e-5)
@@ -163,7 +162,7 @@ class Test_ReflectionFitter_Cables(object):
 
         # now reverse delay range
         RF.model_auto_reflections(RF.avg_data, (-300, -200), keys=[bl_k], window='blackmanharris',
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+                                  zeropad=100, fthin=1, verbose=True)
         assert np.allclose(np.ravel(list(RF.ref_dly.values())), -255.0, atol=1e-1)
         assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
         assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2 * np.pi - 2.0, atol=1e-1)
@@ -181,7 +180,7 @@ class Test_ReflectionFitter_Cables(object):
 
         # test flagged data
         RF.model_auto_reflections(RF.avg_data, (-300, -200), keys=[bl_k], window='blackmanharris',
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+                                  zeropad=100, fthin=1, verbose=True)
         RF.avg_flags[bl_k][:] = True
         output = RF.refine_auto_reflections(RF.avg_data, (80, 20), RF.ref_amp, RF.ref_dly, RF.ref_phs,
                                             keys=[bl_k], window='blackmanharris', zeropad=100, clean_flags=RF.avg_flags,
@@ -192,28 +191,28 @@ class Test_ReflectionFitter_Cables(object):
         # non-even Nfreqs
         RF = reflections.ReflectionFitter(self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:-1], inplace=False))
         RF.model_auto_reflections(RF.data, (200, 300), keys=[bl_k], window='blackmanharris',
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+                                  zeropad=100, fthin=1, verbose=True)
         assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
         assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
         assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
 
         # exceptions
-        pytest.raises(ValueError, RF.model_auto_reflections, RF.data, (4000, 5000), window='none', overwrite=True, edgecut_low=edgecut)
+        pytest.raises(ValueError, RF.model_auto_reflections, RF.data, (4000, 5000), window='none', edgecut_low=edgecut)
 
         # test reject_edges: choose dly_range to make max on edge
         # assert peak is in main lobe, not at actual reflection delay
         RF.model_auto_reflections(RF.data, (25, 300), keys=[bl_k], window='blackmanharris', reject_edges=False,
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+                                  zeropad=100, fthin=1, verbose=True)
         assert np.all(np.ravel(list(RF.ref_dly.values())) < 200)
         # assert peak is correct
         RF.model_auto_reflections(RF.data, (25, 300), keys=[bl_k], window='blackmanharris', reject_edges=True,
-                                  zeropad=100, overwrite=True, fthin=1, verbose=True)
+                                  zeropad=100, fthin=1, verbose=True)
         assert np.allclose(np.ravel(list(RF.ref_dly.values())), 255.0, atol=1e-1)
         assert np.allclose(np.ravel(list(RF.ref_amp.values())), 1e-2, atol=1e-4)
         assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2.0, atol=1e-1)
         # assert valley results in flagged reflection (make sure zeropad=0)
         RF.model_auto_reflections(RF.data, (25, 225), keys=[bl_k], window='blackmanharris', reject_edges=True,
-                                  zeropad=0, overwrite=True, fthin=1, verbose=True)
+                                  zeropad=0, fthin=1, verbose=True)
         assert np.all(RF.ref_flags[g_k])
 
         # try clear
@@ -229,7 +228,7 @@ class Test_ReflectionFitter_Cables(object):
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (23, 23, 'xx')
-        RF.model_auto_reflections(RF.data, (200, 300), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
+        RF.model_auto_reflections(RF.data, (200, 300), window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True)
         assert uvc.Ntimes == 100
         assert len(uvc.ant_array) == 65
@@ -238,7 +237,7 @@ class Test_ReflectionFitter_Cables(object):
 
         # test w/ input calfits
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits="./ex.calfits", overwrite=True)
-        RF.model_auto_reflections(RF.data, (200, 300), window='blackmanharris', zeropad=100, overwrite=True, fthin=1, verbose=True)
+        RF.model_auto_reflections(RF.data, (200, 300), window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
         assert uvc.Ntimes == 100
         assert len(uvc.ant_array) == 65
