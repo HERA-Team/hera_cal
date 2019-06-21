@@ -164,7 +164,7 @@ class ReflectionFitter(FRFilter):
     def model_auto_reflections(self, clean_resid, dly_range, clean_flags=None, clean_data=None,
                                keys=None, edgecut_low=0, edgecut_hi=0, window='none',
                                alpha=0.1, zeropad=0, fthin=10, Nphs=300, ref_sig_cut=2.0,
-                               overwrite=False, reject_edges=True, verbose=True):
+                               reject_edges=True, verbose=True):
         """
         Model reflections in (ideally RFI-free) autocorrelation data.
 
@@ -207,8 +207,6 @@ class ReflectionFitter(FRFilter):
                 if max reflection significance is not above this, do not record solution
             reject_edges : bool
                 If True, reject peak solutions at delay edges
-            overwrite : bool
-                if True, overwrite dictionaries
 
         Result:
             self.ref_eps : dict
@@ -1498,7 +1496,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
 
         # model auto reflections in clean data
         _RF.model_auto_reflections(cdata, dly_range, clean_flags=flags, edgecut_low=edgecut_low,
-                                   edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha, overwrite=True,
+                                   edgecut_hi=edgecut_hi, Nphs=Nphs, window=window, alpha=alpha,
                                    zeropad=zeropad, fthin=fthin, ref_sig_cut=ref_sig_cut, reject_edges=reject_edges)
 
         # refine reflections
@@ -1506,7 +1504,7 @@ def auto_reflection_run(data, dly_ranges, output_fname, filetype='uvh5', input_c
             (_RF.ref_amp, _RF.ref_dly, _RF.ref_phs, info, _RF.ref_eps,
              _RF.ref_gains) = RF.refine_auto_reflections(cdata, opt_buffer, _RF.ref_amp, _RF.ref_dly, _RF.ref_phs, ref_flags=_RF.ref_flags,
                                                          keys=keys, window=window, alpha=alpha, edgecut_low=edgecut_low,
-                                                         edgecut_hi=edgecut_hi, clean_flags=flags, clean_model=model, overwrite=True,
+                                                         edgecut_hi=edgecut_hi, clean_flags=flags, clean_model=model,
                                                          skip_frac=skip_frac, maxiter=opt_maxiter, method=opt_method, tol=opt_tol)
 
         # write gains
