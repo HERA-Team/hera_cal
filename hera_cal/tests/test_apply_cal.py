@@ -26,6 +26,45 @@ from ..data import DATA_PATH
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 class Test_Update_Cal(object):
+    def test_calibrate_avg_gains_in_place(self):
+        np.random.seed(21)
+        vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        dc = DataContainer({(0, 1, 'xx'): deepcopy(vis), (1, 2, 'xx'): deepcopy(vis)})
+        f = np.random.randn(10, 10) > 0
+        flags = DataContainer({(0, 1, 'xx'): deepcopy(f), (1, 2, 'xx'): deepcopy(f)})
+        dns = DataContainer({(0, 1, 'xx'): np.ones((10, 10)), (1, 2, 'xx'): np.ones((10, 10))})
+        g0_new = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g1_new = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g2_new = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g_new = {(0, 'Jxx'): g0_new, (1, 'Jxx'): g1_new, (2, 'Jxx'): g2_new}
+        g0_old = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g1_old = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g2_old = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
+        g_old = {(0, 'Jxx'): g0_old, (1, 'Jxx'): g1_old, (2, 'Jxx'): g2_old}
+        f_old = {(0, 'Jxx'): np.random.randn(10, 10) > 0, (1, 'Jxx'): np.random.randn(10, 10) > 0, (2, 'Jxx'): np.random.randn(10, 10) > 0}
+        f_new = {(0, 'Jxx'): np.random.randn(10, 10) > 0, (1, 'Jxx'): np.random.randn(10, 10) > 0, (2, 'Jxx'): np.random.randn(10, 10) > 0}
+        all_reds = [[(0, 1, 'xx'), (1, 2, 'xx')]]
+
+        # test average
+        ac.calibrate_avg_gains_in_place(dc, flags, dns, g_new, f_new, all_reds,
+                                        old_gains=g_old, old_flags=f_old, gain_convension='divide')
+
+        avg_gains = np.sum([(g_new[(i, 'J{}'.format(pol))] * np.conj(g_new[(j, 'J{}'.format(pol))])) * (1.0 - np.logical_or(f_new[(i, 'J{}'.format(pol))], f_new[(j, 'J{}'.format(pol))])) for (i, j, pol) in all_reds[0]], axis=0)
+        nsamples = np.sum([1.0 - np.logical_or(f_new[(i, 'J{}'.format(pol))], f_new[(j, 'J{}'.format(pol))]) for (i, j, pol) in all_reds[0]], axis=0).astype(np.float32)
+        nsamples[(nsamples == 0.0)] = np.inf
+        avg_gains /= nsamples
+        for i in range(10):
+            for j in range(10):
+                if not np.isinf(dc[(0, 1, 'xx')][i, j]):
+                    assert np.allclose(dc[(0, 1, 'xx')][i, j], vis[i, j] * g0_old[i, j] * np.conj(g1_old[i, j]) / avg_gains[i, j])
+
+        # test nsamples
+        old_nsamples = dns[(0, 1, 'xx')]
+        ac.calibrate_avg_gains_in_place(dc, flags, dns, g_new, f_new, all_reds,
+                                        old_gains=g_old, old_flags=f_old, gain_convension='divide')
+        nsamples = np.sum([1.0 - np.logical_or(f_new[(i, 'J{}'.format(pol))], f_new[(j, 'J{}'.format(pol))]) for (i, j, pol) in all_reds[0]], axis=0).astype(np.float32)
+        assert np.allclose(dns[(0, 1, 'xx')], np.sum([old_nsamples, nsamples], axis=0))
+
     def test_calibrate_in_place(self):
         np.random.seed(21)
         vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
