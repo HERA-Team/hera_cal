@@ -16,6 +16,60 @@ from . import utils
 from .datacontainer import DataContainer
 
 
+def calibrate_avg_gains_in_place(data, data_flags, data_nsamples, new_gains, new_flags, all_reds,
+                                 old_gains=None, old_flags=None, gain_convension='divide'):
+    '''Update data and data flags in flags by taking out the old calibration solutions if need be, and
+    calibrate by the average solution over all redundant baseline in a redundant group of baseline pairs.
+    The flags are updated based on the flags of the new gains. If any antenna is flagged in the new gains,
+    the data corresponding to that particular antenna is flagged.
+
+    Arguments:
+        data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
+        data_flags: DataContainer containing data flags. They are updated based on the flags of the
+            calibration solutions
+        data_nsamples: DataContainer mapping baseline-pol tuples like (0,1,'xx') to float number of samples.
+            Used for counting the number of non-flagged visibilities that went into each redundant group.
+        new_gains: Dictionary of complex calibration gains to apply with keys like (1,'x')
+        new_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
+            if either antenna in a visibility is flagged. Any missing antennas are assumed to be totally
+            flagged.
+        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+            item in each list will be treated as the key for the unique baseline. Must be a superset of
+            the reds used for producing cal
+        old_gains: Dictionary of complex calibration gains to take out with keys like (1,'x').
+            Default of None implies that the data is raw (i.e. uncalibrated).
+        old_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
+            if either antenna in a visibility is flagged. Any missing antennas are assumed to be totally
+            flagged. Default of None implies implies no calibration has been applied, therefore no
+            corresponding flags.
+        gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
+            'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
+    '''
+    exponent = {'divide': 1, 'multiply': -1}[gain_convension]
+    for red in all_reds:
+        avg_gains = np.sum([(new_gains[(i, 'J{}'.format(pol))] * np.conj(new_gains[(j, 'J{}'.format(pol))]))
+                            * (1.0 - np.logical_or(new_flags[(i, 'J{}'.format(pol))], new_flags[(j, 'J{}'.format(pol))]))
+                            for (i, j, pol) in red], axis=0)
+        nsamples = np.sum([1.0 - np.logical_or(new_flags[(i, 'J{}'.format(pol))], new_flags[(j, 'J{}'.format(pol))])
+                          for (i, j, pol) in red], axis=0).astype(np.float32)
+        # need to incorporate the nsamples in the data somehow?? what is the right way?
+        nsamples[(nsamples == 0.0)] = np.inf
+        avg_gains /= nsamples
+        for (i, j, pol) in red:
+            if old_gains is not None:
+                try:
+                    data[(i, j, pol)] *= (old_gains[i, 'J{}'.format(pol)])**exponent
+                except KeyError:
+                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
+                try:
+                    data[(i, j, pol)] *= (np.conj(old_gains[j, 'J{}'.format(pol)]))**exponent
+                except KeyError:
+                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
+            data_flags[(i, j, pol)] = np.logical_or(data_flags[(i, j, pol)], np.logical_or(new_flags[(i, 'J{}'.format(pol))], new_flags[(j, 'J{}'.format(pol))]))
+            data[(i, j, pol)] /= avg_gains**exponent
+            data_nsamples[(i, j, pol)] = np.sum([data_nsamples[(i, j, pol)], nsamples], axis=0)
+
+
 def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None,
                        gain_convention='divide', flags_are_wgts=False):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in new calibration
