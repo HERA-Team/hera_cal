@@ -64,7 +64,7 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
         
         # Set flagged values to np.nan for those gain rations
         for n, (i, j , pol) in enumerate(red):
-            flagged = new_flags[i, utils.split_pol(pol)[0]] | new_flags[j, utils.split_pol(pol)[0]] |
+            flagged = new_flags[i, utils.split_pol(pol)[0]] | new_flags[j, utils.split_pol(pol)[0]] | \
                       old_flags[i, utils.split_pol(pol)[0]] | old_flags[j, utils.split_pol(pol)[0]]
             gain_ratios[n][flagged] = np.nan
 
