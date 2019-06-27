@@ -17,7 +17,7 @@ from . import utils
 from .datacontainer import DataContainer
 
 
-def calibrate_redundant_solution(data, data_flags, data_nsamples, new_gains, new_flags, all_reds,
+def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds,
                                  old_gains=None, old_flags=None, gain_convension='divide'):
     '''Update data and data flags in flags by taking out the old calibration solutions if need be, and
     calibrate by the average solution over all redundant baseline in a redundant group of baseline pairs.
