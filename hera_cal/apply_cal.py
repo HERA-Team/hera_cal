@@ -7,6 +7,7 @@
 from __future__ import print_function, division, absolute_import
 
 import numpy as np
+import copy
 import argparse
 from pyuvdata import UVCal, UVData
 
@@ -16,7 +17,7 @@ from . import utils
 from .datacontainer import DataContainer
 
 
-def calibrate_avg_gains_in_place(data, data_flags, data_nsamples, new_gains, new_flags, all_reds,
+def calibrate_redundant_solution(data, data_flags, data_nsamples, new_gains, new_flags, all_reds,
                                  old_gains=None, old_flags=None, gain_convension='divide'):
     '''Update data and data flags in flags by taking out the old calibration solutions if need be, and
     calibrate by the average solution over all redundant baseline in a redundant group of baseline pairs.
@@ -25,49 +26,60 @@ def calibrate_avg_gains_in_place(data, data_flags, data_nsamples, new_gains, new
 
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
+            Should be only contain the first baselines in each redundant baseline group in all_reds.
         data_flags: DataContainer containing data flags. They are updated based on the flags of the
             calibration solutions
         data_nsamples: DataContainer mapping baseline-pol tuples like (0,1,'xx') to float number of samples.
             Used for counting the number of non-flagged visibilities that went into each redundant group.
         new_gains: Dictionary of complex calibration gains to apply with keys like (1,'x')
         new_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
-            if either antenna in a visibility is flagged. Any missing antennas are assumed to be totally
-            flagged.
+            if either antenna in a visibility is flagged. Must have all keys in new_gains.
         all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
             item in each list will be treated as the key for the unique baseline. Must be a superset of
             the reds used for producing cal
         old_gains: Dictionary of complex calibration gains to take out with keys like (1,'x').
-            Default of None implies that the data is raw (i.e. uncalibrated).
+            Default of None implies means that the "old" gains are all 1s. Must be either None or
+            have all the same keys as new_gains.
         old_flags: Dictionary with keys like (1,'x') of per-antenna boolean flags to update data_flags
-            if either antenna in a visibility is flagged. Any missing antennas are assumed to be totally
-            flagged. Default of None implies implies no calibration has been applied, therefore no
-            corresponding flags.
+            if either antenna in a visibility is flagged. Default of None all old_gains are unflagged.
+            Must be either None or have all the same keys as new_flags.
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
     '''
+    
     exponent = {'divide': 1, 'multiply': -1}[gain_convension]
+    if old_gains is None:
+        old_gains = {ant: np.ones_like(new_gains[ant]) for ant in new_gains}
+    if old_flags is None:
+        old_gains = {ant: np.zeros_like(new_flags[ant]) for ant in new_flags}
+
+    # assert that all antennas in new_gains are also in new_flags, old_gains, and old_flags
+    assert np.all([ant in new_flags for ant in new_gains])
+    assert np.all([ant in old_gains for ant in new_gains])
+    assert np.all([ant in old_flags for ant in new_gains])
+
     for red in all_reds:
-        avg_gains = np.sum([(new_gains[(i, 'J{}'.format(pol))] * np.conj(new_gains[(j, 'J{}'.format(pol))]))
-                            * (1.0 - np.logical_or(new_flags[(i, 'J{}'.format(pol))], new_flags[(j, 'J{}'.format(pol))]))
-                            for (i, j, pol) in red], axis=0)
-        nsamples = np.sum([1.0 - np.logical_or(new_flags[(i, 'J{}'.format(pol))], new_flags[(j, 'J{}'.format(pol))])
-                          for (i, j, pol) in red], axis=0).astype(np.float32)
-        # need to incorporate the nsamples in the data somehow?? what is the right way?
-        nsamples[(nsamples == 0.0)] = np.inf
-        avg_gains /= nsamples
-        for (i, j, pol) in red:
-            if old_gains is not None:
-                try:
-                    data[(i, j, pol)] *= (old_gains[i, 'J{}'.format(pol)])**exponent
-                except KeyError:
-                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
-                try:
-                    data[(i, j, pol)] *= (np.conj(old_gains[j, 'J{}'.format(pol)]))**exponent
-                except KeyError:
-                    data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
-            data_flags[(i, j, pol)] = np.logical_or(data_flags[(i, j, pol)], np.logical_or(new_flags[(i, 'J{}'.format(pol))], new_flags[(j, 'J{}'.format(pol))]))
-            data[(i, j, pol)] /= avg_gains**exponent
-            data_nsamples[(i, j, pol)] = np.sum([data_nsamples[(i, j, pol)], nsamples], axis=0)
+        # Compute all gain ratios within a redundant baseline
+        gain_ratios = [old_gains[i, utils.split_pol(pol)[0]] * np.conj(old_gains[j, utils.split_pol(pol)[1]])
+                       / new_gains[i, utils.split_pol(pol)[0]] / np.conj(new_gains[j, utils.split_pol(pol)[1]])
+                       for (i, j , pol) in red]
+        
+        # Set flagged values to np.nan for those gain rations
+        for n, (i, j , pol) in enumerate(red):
+            flagged = new_flags[i, utils.split_pol(pol)[0]] | new_flags[j, utils.split_pol(pol)[0]] |
+                      old_flags[i, utils.split_pol(pol)[0]] | old_flags[j, utils.split_pol(pol)[0]]
+            gain_ratios[n][flagged] = np.nan
+
+        # Average gain ratios using np.nanmean
+        avg_gains = np.nanmean(gain_ratios, axis=0)
+        avg_flags = ~np.isifinite(avg_gains)
+        avg_gains[avg_flags] = 1
+        
+        # Apply average gains ratios and update flags
+        for bl in reds:
+            if bl in data:
+                data_flags[bl] |= avg_flags
+                data[bl] *= avg_gains**exponent
 
 
 def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None,
