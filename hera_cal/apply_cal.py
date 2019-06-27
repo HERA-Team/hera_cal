@@ -44,7 +44,7 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
     '''
-    
+
     exponent = {'divide': 1, 'multiply': -1}[gain_convension]
     if old_gains is None:
         old_gains = {ant: np.ones_like(new_gains[ant]) for ant in new_gains}
@@ -60,21 +60,21 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
         # Compute all gain ratios within a redundant baseline
         gain_ratios = [old_gains[i, utils.split_pol(pol)[0]] * np.conj(old_gains[j, utils.split_pol(pol)[1]])
                        / new_gains[i, utils.split_pol(pol)[0]] / np.conj(new_gains[j, utils.split_pol(pol)[1]])
-                       for (i, j , pol) in red]
-        
+                       for (i, j, pol) in red]
+
         # Set flagged values to np.nan for those gain rations
-        for n, (i, j , pol) in enumerate(red):
-            flagged = new_flags[i, utils.split_pol(pol)[0]] | new_flags[j, utils.split_pol(pol)[0]] | \
-                      old_flags[i, utils.split_pol(pol)[0]] | old_flags[j, utils.split_pol(pol)[0]]
+        for n, (i, j, pol) in enumerate(red):
+            flagged = new_flags[i, utils.split_pol(pol)[0]] | new_flags[j, utils.split_pol(pol)[0]] \
+                | old_flags[i, utils.split_pol(pol)[0]] | old_flags[j, utils.split_pol(pol)[0]]
             gain_ratios[n][flagged] = np.nan
 
         # Average gain ratios using np.nanmean
         avg_gains = np.nanmean(gain_ratios, axis=0)
-        avg_flags = ~np.isifinite(avg_gains)
+        avg_flags = ~np.isinf(avg_gains)
         avg_gains[avg_flags] = 1
-        
+
         # Apply average gains ratios and update flags
-        for bl in reds:
+        for bl in red:
             if bl in data:
                 data_flags[bl] |= avg_flags
                 data[bl] *= avg_gains**exponent
