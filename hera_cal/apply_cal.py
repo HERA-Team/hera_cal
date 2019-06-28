@@ -78,54 +78,6 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
                 data[bl] *= avg_gains**exponent
 
 
-def apply_redundant_solution(data_infilename, data_outfilename, new_calibration, all_reds, old_calibration=None,
-                             filetype_in='uvh5', filetype_out='uvh5', gain_convention='divide', add_to_history='',
-                             clobber=False, **kwargs):
-    '''Update the redundant calibration solution and flags on the data, writing to a new file. Takes out old calibration
-    and puts in new calibration solution, including its flags. Also enables appending to history.
-
-    Arguments:
-        data_infilename: filename of the data to be calibrated.
-        data_outfilename: filename of the resultant data file with the new calibration and flags.
-        new_calibration: filename of the calfits file (or a list of filenames) for the calibration
-            to be applied, along with its new flags (if any).
-        all_reds: list of lists of redundant baseline tuples, e.g. (0, 1,'xx'). Must be a superset of
-            the reds used for producing cal
-        old_calibration: filename of the calfits file (or a list of filenames) for the calibration
-            to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
-        filetype_in: type of data infile. Supports 'miriad', 'uvfits', and 'uvh5'.
-        filetype_out: type of data outfile. Supports 'miriad', 'uvfits', and 'uvh5'.
-        gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
-            'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
-        add_to_history: appends a string to the history of the output file. This will preceed combined histories
-            of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
-        clobber: if True, overwrites existing file at outfilename
-        kwargs: dictionary mapping updated UVData attributes to their new values.
-            See pyuvdata.UVData documentation for more info.
-        '''
-    # load new calibration solution
-    hc = io.HERACal(new_calibration)
-    new_gains, new_flags, _, _ = hc.read()
-    add_to_history += '\nNEW_CALFITS_HISTORY: ' + hc.history + '\n'
-
-    # load old calibration solution
-    if old_calibration is not None:
-        old_hc = io.HERACal(old_calibration)
-        old_gains, old_flags, _, _ = old_hc.read()
-        add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
-
-    add_to_history = version.history_string(add_to_history)
-
-    hd = io.HERAData(data_infilename, filetype=filetype_in)
-    data, data_flags, _ = hd.read()
-    # apply redundant solutions
-    calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds,
-                                 old_gains=old_gains, old_flags=old_flags, gain_convention=gain_convention)
-    # full data writing
-    io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
-                  data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
-
-
 def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gains=None,
                        gain_convention='divide', flags_are_wgts=False):
     '''Update data and data_flags in place, taking out old calibration solutions, putting in new calibration
