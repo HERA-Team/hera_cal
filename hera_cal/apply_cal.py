@@ -55,6 +55,20 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
     assert np.all([ant in old_flags for ant in new_gains])
 
     for red in all_reds:
+        # skip if there's nothing to calibrate
+        if np.all([bl not in data for bl in red]):
+            continue
+
+        # Fill in missing antennas with flags
+        for bl in red:
+            for ant in utils.split_bl(bl):  
+                if ant not in new_gains:
+                    new_gains[ant] = np.ones_like(list(new_gains.values())[0])
+                    new_flags[ant] = np.ones_like(list(new_flags.values())[0])
+                if ant not in old_gains:
+                    old_gains[ant] = np.ones_like(list(old_gains.values())[0])
+                    old_flags[ant] = np.ones_like(list(old_flags.values())[0])
+        
         # Compute all gain ratios within a redundant baseline
         gain_ratios = [old_gains[i, utils.split_pol(pol)[0]] * np.conj(old_gains[j, utils.split_pol(pol)[1]])
                        / new_gains[i, utils.split_pol(pol)[0]] / np.conj(new_gains[j, utils.split_pol(pol)[1]])
