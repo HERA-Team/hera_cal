@@ -62,13 +62,11 @@ class Test_Update_Cal(object):
 
     def test_apply_redundant_solutions(self):
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
-        outname_uvh5 = os.path.join(DATA_PATH, "test_output/red_out.h5")
+        outname_uvh5 = os.path.join(DATA_PATH, "test_output/red_out.uvh5")
         old_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        all_reds = [[(54, 54, 'xx')]]
-        ac.apply_redundant_solution(miriad, outname_uvh5, new_cal, all_reds, old_cal, filetype_in='miriad',
-                                    filetype_out='uvh5', gain_convention='divide', add_to_history='',
-                                    clobber=True)
+        ac.apply_cal(miriad, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='miriad', filetype_out='uvh5', 
+                     gain_convention='divide', redundant_solution=True, add_to_history='', clobber=True)
         # checking if file is created
         assert os.path.exists(outname_uvh5)
 
@@ -78,6 +76,27 @@ class Test_Update_Cal(object):
         out_hc = io.HERAData(outname_uvh5)
         out_data, out_flags, _ = out_hc.read()
         np.testing.assert_almost_equal(inp_data[(54, 54, 'xx')], out_data[(54, 54, 'xx')])
+        os.remove(outname_uvh5)
+
+        # Now test with partial I/O
+        uv = UVData()
+        uv.read_miriad(miriad)
+        inname_uvh5 = os.path.join(DATA_PATH, "test_output/red_in.uvh5")
+        uv.write_uvh5(inname_uvh5)
+        ac.apply_cal(inname_uvh5, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='uvh5', filetype_out='uvh5', 
+                     gain_convention='divide', redundant_solution=True, nbl_per_load=1, add_to_history='', clobber=True)
+        os.remove(inname_uvh5)
+        # checking if file is created
+        assert os.path.exists(outname_uvh5)
+
+        # checking average
+        inp_hc = io.HERAData(miriad, filetype='miriad')
+        inp_data, inp_flags, _ = inp_hc.read()
+        out_hc = io.HERAData(outname_uvh5)
+        out_data, out_flags, _ = out_hc.read()
+        np.testing.assert_almost_equal(inp_data[(54, 54, 'xx')], out_data[(54, 54, 'xx')])
+        os.remove(outname_uvh5)
+
 
     def test_calibrate_in_place(self):
         np.random.seed(21)
