@@ -26,6 +26,7 @@ from .. import utils
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
+@pytest.mark.filterwarnings("ignore:Mean of empty slice")
 class Test_Update_Cal(object):
     def test_calibrate_avg_gains_in_place(self):
         np.random.seed(20)
