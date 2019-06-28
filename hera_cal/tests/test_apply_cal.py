@@ -97,7 +97,6 @@ class Test_Update_Cal(object):
         np.testing.assert_almost_equal(inp_data[(54, 54, 'xx')], out_data[(54, 54, 'xx')])
         os.remove(outname_uvh5)
 
-
     def test_calibrate_in_place(self):
         np.random.seed(21)
         vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
