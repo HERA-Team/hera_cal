@@ -303,4 +303,5 @@ def apply_cal_argparser():
                    help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--vis_units", default=None, type=str, help="String to insert into vis_units attribute of output visibility file.")
+    a.add_argument("--reds", default=None, type=list, help="List of lists of redundant baseline tuples")
     return a
