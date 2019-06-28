@@ -47,7 +47,7 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
     if old_gains is None:
         old_gains = {ant: np.ones_like(new_gains[ant]) for ant in new_gains}
     if old_flags is None:
-        old_gains = {ant: np.zeros_like(new_flags[ant]) for ant in new_flags}
+        old_flags = {ant: np.ones_like(new_flags[ant]) for ant in new_flags}
 
     # assert that all antennas in new_gains are also in new_flags, old_gains, and old_flags
     assert np.all([ant in new_flags for ant in new_gains])
