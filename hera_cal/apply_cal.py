@@ -11,7 +11,10 @@ import copy
 import argparse
 from pyuvdata import UVCal, UVData
 
-from . import io, version, utils, redcal
+from . import io
+from . import version
+from . import utils
+from . import redcal
 from .datacontainer import DataContainer
 
 
