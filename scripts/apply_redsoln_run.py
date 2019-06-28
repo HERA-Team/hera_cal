@@ -18,6 +18,6 @@ if args.vis_units is not None:
     kwargs['vis_units'] = args.vis_units
 
 ac.apply_redundant_solution(args.infilename, args.outfilename, args.new_cal, args.reds,
-                            old_calibration=args.old_cal,filetype_in=args.filetype_in,
+                            old_calibration=args.old_cal, filetype_in=args.filetype_in,
                             filetype_out=args.filetype_out, gain_convention=args.gain_convention,
                             add_to_history=' '.join(sys.argv), clobber=args.clobber, **kwargs)
