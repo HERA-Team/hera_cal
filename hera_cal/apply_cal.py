@@ -14,7 +14,7 @@ from pyuvdata import UVCal, UVData
 from . import io
 from . import version
 from . import utils
-from . import redcal
+from .redcal import get_reds
 from .datacontainer import DataContainer
 
 
@@ -235,7 +235,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 if flag_file is not None:
                     data_flags[bl] = np.logical_or(data_flags[bl], ext_flags[bl])
             if redundant_solution:
-                all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol)
+                all_reds = get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol)
                 calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds, old_gains=old_gains, 
                                              old_flags=old_flags, gain_convention=gain_convention)
             else:
@@ -256,7 +256,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             if flag_file is not None:
                 data_flags[bl] = np.logical_or(data_flags[bl], ext_flags[bl])
         if redundant_solution:
-            all_reds = redcal.get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol)
+            all_reds = get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol)
             calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds, old_gains=old_gains, 
                                          old_flags=old_flags, gain_convention=gain_convention)
         else:
