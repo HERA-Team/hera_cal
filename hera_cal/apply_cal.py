@@ -211,6 +211,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         old_hc = io.HERACal(old_calibration)
         old_gains, old_flags, _, _ = old_hc.read()
         add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
+    else:
+        old_gains, old_flags = None, None
 
     add_to_history = version.history_string(add_to_history)
 
