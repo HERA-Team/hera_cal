@@ -62,9 +62,9 @@ class Test_Update_Cal(object):
     def test_apply_redundant_solutions(self):
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
         outname_uvh5 = os.path.join(DATA_PATH, "test_output/red_out.h5")
-        old_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.gains.calfits_53_54x")
-        new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.gains.calfits_53_54x")
-        all_reds = [[(53, 54, 'xx')]]
+        old_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        all_reds = [[(54, 54, 'xx')]]
         ac.apply_redundant_solution(miriad, outname_uvh5, new_cal, all_reds, old_cal, filetype_in='miriad',
                                     filetype_out='uvh5', gain_convention='divide', add_to_history='',
                                     clobber=True)
@@ -76,7 +76,7 @@ class Test_Update_Cal(object):
         inp_data, inp_flags, _ = inp_hc.read()
         out_hc = io.HERAData(outname_uvh5)
         out_data, out_flags, _ = out_hc.read()
-        np.testing.assert_almost_equal(inp_data[(53, 54, 'xx')], out_data[(53, 54, 'xx')])
+        np.testing.assert_almost_equal(inp_data[(54, 54, 'xx')], out_data[(54, 54, 'xx')])
 
     def test_calibrate_in_place(self):
         np.random.seed(21)
