@@ -63,14 +63,14 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
 
         # Fill in missing antennas with flags
         for bl in red:
-            for ant in utils.split_bl(bl):  
+            for ant in utils.split_bl(bl):
                 if ant not in new_gains:
                     new_gains[ant] = np.ones_like(list(new_gains.values())[0])
                     new_flags[ant] = np.ones_like(list(new_flags.values())[0])
                 if ant not in old_gains:
                     old_gains[ant] = np.ones_like(list(old_gains.values())[0])
                     old_flags[ant] = np.ones_like(list(old_flags.values())[0])
-        
+
         # Compute all gain ratios within a redundant baseline
         gain_ratios = [old_gains[i, utils.split_pol(pol)[0]] * np.conj(old_gains[j, utils.split_pol(pol)[1]])
                        / new_gains[i, utils.split_pol(pol)[0]] / np.conj(new_gains[j, utils.split_pol(pol)[1]])
@@ -191,6 +191,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
         redundant_solution: If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.
+        bl_error_tol: the largest allowable difference between baselines in a redundant group
+            (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
@@ -236,7 +238,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             if redundant_solution:
                 from .redcal import get_reds
                 all_reds = get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol)
-                calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds, old_gains=old_gains, 
+                calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds, old_gains=old_gains,
                                              old_flags=old_flags, gain_convention=gain_convention)
             else:
                 calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
@@ -258,12 +260,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         if redundant_solution:
             from .redcal import get_reds
             all_reds = get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol)
-            calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds, old_gains=old_gains, 
+            calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds, old_gains=old_gains,
                                          old_flags=old_flags, gain_convention=gain_convention)
         else:
             calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                                old_gains=old_gains, gain_convention=gain_convention)
-        
+
         io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
                       data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
 
@@ -284,7 +286,7 @@ def apply_cal_argparser():
     a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only. Default loads the whole file.")
     a.add_argument("--gain_convention", type=str, default='divide',
                    help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
-    a.add_argument("--redundant_solution", default=False, action="store_true", 
+    a.add_argument("--redundant_solution", default=False, action="store_true",
                    help="If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--vis_units", default=None, type=str, help="String to insert into vis_units attribute of output visibility file.")
