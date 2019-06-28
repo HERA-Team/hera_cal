@@ -1126,7 +1126,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
         return uvd
 
 
-def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
+def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', **kwargs):
     '''Updates a UVData/HERAData object with data or parameters. Cannot modify the shape of
     data arrays. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
@@ -1137,6 +1137,8 @@ def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
             like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update.
         flags: dictionary or DataContainer of data flags to update.
             Default (None) does not update.
+        nsamples: dictionary or DataContainer of nsamples to update.
+            Default (None) does not update.            
         add_to_history: appends a string to the history of the UVData/HERAData object
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVData documentation for more info.
@@ -1145,7 +1147,7 @@ def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
     # perform update
     original_class = uvd.__class__
     uvd = to_HERAData(uvd)
-    uvd.update(data=data, flags=flags)
+    uvd.update(data=data, flags=flags, nsamples=nsamples)
     uvd.__class__ = original_class
 
     # set additional attributes
@@ -1156,7 +1158,7 @@ def update_uvdata(uvd, data=None, flags=None, add_to_history='', **kwargs):
 
 
 def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miriad',
-               data=None, flags=None, add_to_history='', clobber=False, **kwargs):
+               data=None, flags=None, nsamples=None, add_to_history='', clobber=False, **kwargs):
     '''Loads an existing file with pyuvdata, modifies some subset of of its parameters, and
     then writes a new file to disk. Cannot modify the shape of data arrays. More than one
     spectral window is not supported. Assumes every baseline has the same times present
@@ -1171,6 +1173,8 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
             like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update.
         flags: dictionary or DataContainer of data flags to update.
             Default (None) does not update.
+        nsamples: dictionary or DataContainer of nsamples to update.
+            Default (None) does not update.
         add_to_history: appends a string to the history of the output file
         clobber: if True, overwrites existing file at outfilename. Always True for uvfits.
         kwargs: dictionary mapping updated attributs to their new values.
@@ -1183,7 +1187,7 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
     else:
         hd = HERAData(infilename, filetype=filetype_in)
         hd.read()
-    update_uvdata(hd, data=data, flags=flags, add_to_history=add_to_history, **kwargs)
+    update_uvdata(hd, data=data, flags=flags, nsamples=nsamples, add_to_history=add_to_history, **kwargs)
 
     # write out results
     if filetype_out == 'miriad':
