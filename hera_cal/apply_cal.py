@@ -49,7 +49,7 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
     if old_gains is None:
         old_gains = {ant: np.ones_like(new_gains[ant]) for ant in new_gains}
     if old_flags is None:
-        old_flags = {ant: np.ones_like(new_flags[ant]) for ant in new_flags}
+        old_flags = {ant: np.zeros_like(new_flags[ant]) for ant in new_flags}
 
     # assert that all antennas in new_gains are also in new_flags, old_gains, and old_flags
     assert np.all([ant in new_flags for ant in new_gains])
@@ -77,14 +77,13 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
                        for (i, j, pol) in red]
 
         # Set flagged values to np.nan for those gain rations
-        for n, (i, j, pol) in enumerate(red):
-            flagged = new_flags[i, utils.split_pol(pol)[0]] | new_flags[j, utils.split_pol(pol)[0]] \
-                | old_flags[i, utils.split_pol(pol)[0]] | old_flags[j, utils.split_pol(pol)[0]]
-            gain_ratios[n][flagged] = np.nan
-
+        for n, bl in enumerate(red):
+            ant1, ant2 = utils.split_bl(bl)
+            gain_ratios[n][new_flags[ant1] | new_flags[ant2] | old_flags[ant1] | old_flags[ant2]] = np.nan
+            
         # Average gain ratios using np.nanmean
         avg_gains = np.nanmean(gain_ratios, axis=0)
-        avg_flags = ~np.isinf(avg_gains)
+        avg_flags = ~np.isfinite(avg_gains)
         avg_gains[avg_flags] = 1
 
         # Apply average gains ratios and update flags
