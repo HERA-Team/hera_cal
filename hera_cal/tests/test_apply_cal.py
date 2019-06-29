@@ -52,12 +52,12 @@ class Test_Update_Cal(object):
         flagged = f_old[(0, 'Jxx')] | f_old[(1, 'Jxx')] | f_new[(0, 'Jxx')] | f_new[(1, 'Jxx')]
         gain_ratios[flagged] = np.nan
         avg_gains = np.nanmean(np.array([gain_ratios]), axis=0)
-        avg_flags = ~np.isinf(avg_gains)
+        avg_flags = ~np.isfinite(avg_gains)
         avg_gains[avg_flags] = 1. + 0.j
 
         for i in range(10):
             for j in range(10):
-                if not np.isinf(dc[(0, 1, 'xx')][i, j]):
+                if not np.isfinite(dc[(0, 1, 'xx')][i, j]):
                     assert np.allclose(dc[(0, 1, 'xx')][i, j], vis[i, j] * avg_gains[i, j])
 
     def test_apply_redundant_solutions(self):
