@@ -12,6 +12,7 @@ from uvtools import dspec
 from astropy import constants
 import copy
 import fnmatch
+from scipy import signal
 
 from . import io
 from . import apply_cal
@@ -786,6 +787,76 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     return data, fourier_axes
 
 
+def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=5.0, delay_cut=3000,
+               flags=None, kernel_size=None, edgecut_low=0, edgecut_hi=0,):
+    """
+    Truncate CLEAN model components below some amplitude threshold.
+
+    Estimate the noise in Fourier space and truncate CLEAN model
+    components below a specified value times the noise.
+
+    Args:
+        clean_model : DataContainer
+            Holds clean_model output of self.vis_clean
+        clean_resid : DataContainer
+            Holds clean_resid output of self.vis_clean
+        dnu : float
+            Frequency channel width [Hz]
+        keys : list of antpairpol tuples
+            List of keys to operate on
+        noise_thresh : float
+            Coefficient times noise to truncate model components below
+        delay_cut : float
+            Minimum |delay| [ns] above which to use in estimating noise
+        kernel_size : int
+            Time median filter kernel_size. None is no median filter.
+        edgecut_low : int
+            Edgecut bins to apply to low edge of frequency band
+        edgecut_hi : int
+            Edgecut bins to apply to high edge of frequency band
+
+    Returns:
+        model : DataContainer
+            Truncated clean_model
+        noise : DataContainer
+            Per integration noise estimate from clean_resid
+    """
+    # get keys
+    if keys is None:
+        keys = [k for k in sorted(set(clean_model.keys() + clean_resid.keys())) if k in clean_model and k in clean_resid]
+
+    # estimate noise in Fourier space
+    model = DataContainer({})
+    noise = DataContainer({})    
+    for k in keys:
+        # get rfft
+        rfft, delays = fft_data(clean_resid[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
+        delays *= 1e9
+
+        # get clean_resid flags and its NEB
+        neb = noise_eq_bandwidth(~np.isclose(clean_resid[k], 0.0))[:, None]
+
+        # get noise estimate
+        noise[k] = np.median(np.abs((rfft * neb)[:, np.abs(delays) > delay_cut]), axis=1)
+
+        # median filter it
+        if kernel_size is not None:
+            n = noise[k]
+            nlen = len(n)
+            n = np.pad(n, nlen, 'reflect', reflect_type='odd')
+            noise[k] = signal.medfilt(n, kernel_size=kernel_size)[nlen:-nlen]
+
+        # get mfft
+        mfft, _ = fft_data(clean_model[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
+        mfft[np.abs(mfft) < (noise[k][:, None] * noise_thresh)] = 0.0
+
+        # re-fft
+        mdl, _ = fft_data(mfft, dnu, axis=1, window='none', edgecut_low=0, edgecut_hi=0, ifft=True, ifftshift=False, fftshift=False)
+        model[k] = mdl
+
+    return model, noise
+
+
 def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
     """
     Zeropad data ndarray along axis.
@@ -851,3 +922,20 @@ def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
         binvals = binvals[0]
 
     return data, binvals
+
+
+def noise_eq_bandwidth(window, axis=-1):
+    """
+    Calculate the noise equivalent bandwidth (NEB) of a windowing function
+    as
+        sqrt(window.size * window.max ** 2 / sum(window ** 2))
+
+    Args:
+        window : float ndarray
+        axis : int, axis along which to calculate NEB
+
+    Returns
+        neb : float or ndarray
+            Noise equivalent bandwidth of the window
+    """
+    return np.sqrt(window.shape[axis] * np.max(window, axis=axis)**2 / np.sum(window**2, dtype=np.float, axis=axis))
