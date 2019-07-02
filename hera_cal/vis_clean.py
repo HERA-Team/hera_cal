@@ -788,7 +788,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
 
 
 def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=5.0, delay_cut=3000,
-               flags=None, kernel_size=None, edgecut_low=0, edgecut_hi=0,):
+               kernel_size=None, edgecut_low=0, edgecut_hi=0,):
     """
     Truncate CLEAN model components below some amplitude threshold.
 
@@ -833,7 +833,7 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=5.0, delay
         rfft, delays = fft_data(clean_resid[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
         delays *= 1e9
 
-        # get clean_resid flags and its NEB
+        # get clean_resid NEB
         neb = noise_eq_bandwidth(~np.isclose(clean_resid[k], 0.0))[:, None]
 
         # get noise estimate
