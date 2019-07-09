@@ -7,47 +7,67 @@ The hera_cal package includes modules and scripts for calibration of HERA as par
 
 Full documentation available on [Read the Docs.](http://hera_cal.readthedocs.io/en/latest/)
 
-# Package Details
+## Package Details
 
-## Modules
+### Modules
 
-* hera_cal.firstcal: module includes the FirstCalRedundantInfo class, FirstCal class that solves for delays, and other helper functions.
+* `hera_cal.firstcal`: module includes the `FirstCalRedundantInfo` class, `FirstCal` 
+  class that solves for delays, and other helper functions.
 
-* hera_cal.omni: includes functions and classes for interfacing with and running omnical.
+* `hera_cal.omni`: includes functions and classes for interfacing with and running 
+  `omnical`.
 
-* hera_cal.abscal: includes AbsCal class for phasing and scaling visibility data to an absolute reference. See scripts/notebook/running_abscal.ipynb for a quick tutorial. Functionalities include:
+* `hera_cal.abscal`: includes `AbsCal` class for phasing and scaling visibility data to 
+  an absolute reference. See `scripts/notebook/running_abscal.ipynb` for a quick 
+  tutorial. Functionalities include:
     1. scaling raw data to an absolute (visibility) reference
     2. scaling omnicalibrated data to an absolute (visibility) reference
-    3. scaling omnical unique-baseline visibility solutions to an absolute reference (still beta testing this capability)
+    3. scaling omnical unique-baseline visibility solutions to an absolute reference 
+       (still beta testing this capability)
 
-* hera_cal.lstbin: includes functions for LST-aligning visibility data, and LST binning files overlapping in LST. See scripts/notebooks/running_lstbin.ipynb for a brief tutorial.
+* `hera_cal.lstbin`: includes functions for LST-aligning visibility data, and LST-binning 
+  files overlapping in LST. See `scripts/notebooks/running_lstbin.ipynb` for a brief 
+  tutorial.
 
-## Scripts
+### Scripts
 
-* firstcal\_run.py: runs firstcal on a per file basis.
-* omni\_run.py: runs omnical on a per file basis.
-* omni\_apply.py: apply calibration solutions to miriad files.
-* abscal\_run.py: run absolute calibration given a data file and model file(s)
-* lstbin\_run.py: run LST binning on series of files overlapping in LST.
+* `firstcal\_run.py`: runs firstcal on a per file basis.
+* `omni\_run.py`: runs omnical on a per file basis.
+* `omni\_apply.py`: apply calibration solutions to miriad files.
+* `abscal\_run.py`: run absolute calibration given a data file and model file(s)
+* `lstbin\_run.py`: run LST binning on series of files overlapping in LST.
 
-# Installation
-## Dependencies
-First install dependencies. 
+## Installation
+Preferred installation method is `pip install .` in top-level directory. Alternatively,
+one can use `python setup.py install`. This will attempt to install all dependencies.
+If you prefer to explicitly manage dependencies, see below.
 
-* numpy >= 1.10
-* scipy
-* astropy >=1.2
+### Dependencies
+Those who use `conda` (preferred) may wish to install the following manually before 
+installing `hera_cal`:
+
+`conda install -c conda-forge "numpy>=1.10" scipy scikit-learn h5py astropy pyuvdata "aipy>=3.0rc2"`
+
+(note that `h5py` is a dependency of `hera_qm`, not `hera_cal`).
+
+Other dependencies that will be installed from PyPI on-the-fly are:
 * pyephem
 * [uvtools](https://github.com/HERA-Team/uvtools)
-* [aipy](https://github.com/HERA-Team/aipy/)
-* [pyuvdata](https://github.com/HERA-Team/pyuvdata/)
 * [linsolve](https://github.com/HERA-Team/linsolve)
 * [hera_qm](https://github.com/HERA-Team/hera_qm)
-* [hera_sim](https://github.com/HERA-Team/hera_sim) (Only required for unit tests.)
 
-## Install hera_cal
-Install with ```python setup.py install```
+### Development Environment
+To install a full development environment for `hera_cal`, it is preferred to work with
+a fresh `conda` environment. These steps will get you up and running::
 
-## Running tests
+    $ conda create -n hera_cal python=3
+    $ conda activate hera_cal
+    $ conda env update -n hera_cal -f environment.yml
+    $ pip install -e . 
+
+This installs extra packages than those required to use `hera_cal`, including `hera_sim`
+and `pytest`.
+
+### Running tests
 Tests use the `pytest` framework. To run all tests, call `pytest` or
 `python -m pytest` from the base directory of the repo.

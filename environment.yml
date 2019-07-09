@@ -1,0 +1,23 @@
+name: hera_cal
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - pip
+  - aipy>=3.0.0rc2
+  - astropy
+  - h5py
+  - numpy>=1.10
+  - pytest
+  - pyuvdata
+  - scipy
+  - scikit-learn
+  - mpi4py
+  - pyyaml
+  - pip:
+    - git+https://github.com/HERA-Team/hera_qm
+    - git+https://github.com/HERA-Team/linsolve
+    - pyephem
+    - pyuvsim
+    - git+https://github.com/HERA-Team/uvtools
+    - git+https://github.com/HERA-Team/hera_sim
