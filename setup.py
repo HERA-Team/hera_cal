@@ -1,9 +1,11 @@
 from setuptools import setup
-import glob
+
 import os
 import sys
-from hera_cal import version
 import json
+
+sys.path.append("hera_cal")
+import version
 
 data = [version.git_origin, version.git_hash, version.git_description, version.git_branch]
 with open(os.path.join('hera_cal', 'GIT_INFO'), 'w') as outfile:
@@ -40,6 +42,18 @@ setup_args = {
                 'scripts/auto_reflection_run.py', 'scripts/noise_from_autos.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
+    'install_requires':[
+        'numpy>=1.10',
+        'scipy',
+        'astropy',
+        'pyuvdata',
+        'aipy>=3.0rc2',
+        'pyephem',
+        'uvtools @ git+git://github.com/HERA-Team/uvtools',
+        'linsolve @ git+git://github.com/HERA-Team/linsolve',
+        'hera_qm @ git+git://github.com/HERA-Team/hera_qm',
+        'scikit-learn'
+    ],
     'zip_safe': False,
 }
 
