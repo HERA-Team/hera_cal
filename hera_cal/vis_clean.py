@@ -823,7 +823,7 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=5.0, delay
     """
     # get keys
     if keys is None:
-        keys = [k for k in sorted(set(clean_model.keys() + clean_resid.keys())) if k in clean_model and k in clean_resid]
+        keys = [k for k in sorted(set(list(clean_model.keys()) + list(clean_resid.keys()))) if k in clean_model and k in clean_resid]
 
     # estimate noise in Fourier space
     model = DataContainer({})
