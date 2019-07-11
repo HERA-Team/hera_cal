@@ -26,8 +26,8 @@ install:
   # Useful for debugging any issues with conda
   - conda info -a
   # create environment and install dependencies
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION coverage pytest-cov coveralls
-  - conda activate test-environment
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION pytest-cov coveralls
+  - source activate test-environment
   - conda env update -n test-environment -f environment.yml
   - pip install .
   - conda list
