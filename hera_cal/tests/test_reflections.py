@@ -28,7 +28,8 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
     # create a simulated dataset
     if uvd is None:
         uvd = UVData()
-        uvd.read(os.path.join(DATA_PATH, 'PyGSM_Jy_downselect.uvh5'))
+        uvd.read(os.path.join(DATA_PATH, 'PyGSM_Jy_downselect.uvh5'),
+                 run_check_acceptability=False)
     else:
         if isinstance(uvd, (str, np.str)):
             _uvd = UVData()

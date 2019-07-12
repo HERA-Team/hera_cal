@@ -305,6 +305,7 @@ class Test_HERAData(object):
                 assert np.all(dc.times_by_bl[k] == hd.times_by_bl[k])
                 assert np.all(dc.lsts_by_bl[k] == hd.lsts_by_bl[k])
 
+    @pytest.mark.filterwarnings("ignore:miriad does not support partial loading")
     def test_read(self):
         # uvh5
         hd = HERAData(self.uvh5_1)
@@ -334,9 +335,7 @@ class Test_HERAData(object):
         hd = HERAData(self.miriad_1, filetype='miriad')
         d, f, n = hd.read()
         hd = HERAData(self.miriad_1, filetype='miriad')
-        with warnings.catch_warnings(record=True) as w:
-            d, f, n = hd.read(bls=(52, 53), polarizations=['XX'], frequencies=d.freqs[0:30], times=d.times[0:10])
-            assert len(w) == 1
+        d, f, n = hd.read(bls=(52, 53), polarizations=['XX'], frequencies=d.freqs[0:30], times=d.times[0:10])
         assert hd.last_read_kwargs['polarizations'] == ['XX']
         for dc in [d, f, n]:
             assert len(dc) == 1
