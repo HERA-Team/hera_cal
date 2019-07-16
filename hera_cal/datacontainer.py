@@ -115,7 +115,13 @@ class DataContainer:
             try:
                 return self._data[comply_bl(key)]
             except(KeyError):
-                return np.conj(self._data[reverse_bl(key)])
+                try:
+                    if np.iscomplexobj(self._data[reverse_bl(key)]): 
+                        return np.conj(self._data[reverse_bl(key)])
+                    else:
+                        return self._data[reverse_bl(key)]
+                except(KeyError):
+                    raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
 
     def __setitem__(self, key, value):
         '''Sets the data corresponding to the key. Only supports the form (0,1,'xx').
@@ -129,7 +135,10 @@ class DataContainer:
                 if key in self.keys():
                     self._data[key] = value
                 else:
-                    self._data[reverse_bl(key)] = np.conj(value)
+                    if np.iscomplexobj(value):
+                        self._data[reverse_bl(key)] = np.conj(value)
+                    else:
+                        self._data[reverse_bl(key)] = value
             else:
                 self._data[key] = value
                 self._antpairs.update({tuple(key[:2])})
