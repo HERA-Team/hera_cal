@@ -5,7 +5,7 @@ import sys
 import json
 
 sys.path.append("hera_cal")
-import version # noqa
+import version  # noqa
 
 data = [version.git_origin, version.git_hash, version.git_description, version.git_branch]
 with open(os.path.join('hera_cal', 'GIT_INFO'), 'w') as outfile:
