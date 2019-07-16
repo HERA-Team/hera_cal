@@ -5,7 +5,7 @@ import sys
 import json
 
 sys.path.append("hera_cal")
-import version
+import version # noqa
 
 data = [version.git_origin, version.git_hash, version.git_description, version.git_branch]
 with open(os.path.join('hera_cal', 'GIT_INFO'), 'w') as outfile:
@@ -42,7 +42,7 @@ setup_args = {
                 'scripts/auto_reflection_run.py', 'scripts/noise_from_autos.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
-    'install_requires':[
+    'install_requires': [
         'numpy>=1.10',
         'scipy',
         'astropy',
