@@ -787,7 +787,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
     return data, fourier_axes
 
 
-def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=5.0, delay_cut=3000,
+def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay_cut=3000,
                kernel_size=None, edgecut_low=0, edgecut_hi=0,):
     """
     Truncate CLEAN model components below some amplitude threshold.
@@ -833,10 +833,11 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=5.0, delay
         rfft, delays = fft_data(clean_resid[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
         delays *= 1e9
 
-        # get clean_resid NEB
-        neb = noise_eq_bandwidth(~np.isclose(clean_resid[k], 0.0))[:, None]
+        # get NEB of clean_resid: a top-hat window nulled where resid == 0
+        w = (~np.isclose(clean_resid[k], 0.0)).astype(np.float)
+        neb = noise_eq_bandwidth(w[:, None])
 
-        # get noise estimate
+        # get time-dependent noise level in Fourier space from FFT at high delays
         noise[k] = np.median(np.abs((rfft * neb)[:, np.abs(delays) > delay_cut]), axis=1)
 
         # median filter it
@@ -848,6 +849,8 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=5.0, delay
 
         # get mfft
         mfft, _ = fft_data(clean_model[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
+
+        # set all mfft modes below some threshold to zero
         mfft[np.abs(mfft) < (noise[k][:, None] * noise_thresh)] = 0.0
 
         # re-fft
