@@ -37,7 +37,6 @@ class TestDataContainer(object):
             for bl in self.antpairs:
                 self.bools[bl + (pol,)] = np.array([True])
 
-
     def test_init(self):
         dc = datacontainer.DataContainer(self.blpol)
         for k in dc._data.keys():
