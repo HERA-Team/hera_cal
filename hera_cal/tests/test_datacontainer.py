@@ -32,6 +32,11 @@ class TestDataContainer(object):
         for pol in self.pols:
             for bl in self.antpairs:
                 self.both[bl + (pol,)] = 1j
+        self.bools = {}
+        for pol in self.pols:
+            for bl in self.antpairs:
+                self.bools[bl + (pol,)] = np.array([True])
+
 
     def test_init(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -185,6 +190,12 @@ class TestDataContainer(object):
         assert dc[(2, 1, 'XX')] == -1j
         assert dc[(2, 1, 'XX')] == dc.get_data(2, 1, 'XX')
         assert dc[(2, 1, 'XX')] == dc.get_data(2, 1, 'xx')
+        dc = datacontainer.DataContainer(self.bools)
+        assert dc[(1, 2, 'xx')] == np.array([True])
+        assert dc[(2, 1, 'xx')] == np.array([True])
+        assert dc[(2, 1, 'xx')].dtype == bool
+        with pytest.raises(KeyError, match=r".*(10, 1, 'xx').*(1, 10, 'xx).*"):
+            dc[(10, 1, 'xx')]
 
     def test_has_key(self):
         dc = datacontainer.DataContainer(self.blpol)
@@ -277,6 +288,12 @@ class TestDataContainer(object):
         assert 'xy' in dc._pols
         # test error
         pytest.raises(ValueError, dc.__setitem__, *((100, 101), 100j))
+
+        dc = datacontainer.DataContainer(self.bools)
+        dc[2, 1, 'xx'] = np.array([True])
+        assert dc[(1, 2, 'xx')] == np.array([True])
+        assert dc[(2, 1, 'xx')] == np.array([True])
+        assert dc[(2, 1, 'xx')].dtype == bool
 
     def test_adder(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
