@@ -790,10 +790,11 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
 def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay_cut=3000,
                kernel_size=None, edgecut_low=0, edgecut_hi=0,):
     """
-    Truncate CLEAN model components below some amplitude threshold.
+    Truncate CLEAN model components in delay space below some amplitude threshold.
 
-    Estimate the noise in Fourier space and truncate CLEAN model
-    components below a specified value times the noise.
+    Estimate the noise in Fourier space by taking median of high delay
+    clean residual above delay_cut, and truncate CLEAN model components
+    below a multiplier times this level.
 
     Args:
         clean_model : DataContainer
@@ -825,7 +826,8 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
     if keys is None:
         keys = [k for k in sorted(set(list(clean_model.keys()) + list(clean_resid.keys()))) if k in clean_model and k in clean_resid]
 
-    # estimate noise in Fourier space
+    # estimate noise in Fourier space by taking amplitude of high delay modes
+    # above delay_cut
     model = DataContainer({})
     noise = DataContainer({})    
     for k in keys:
@@ -833,7 +835,7 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
         rfft, delays = fft_data(clean_resid[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
         delays *= 1e9
 
-        # get NEB of clean_resid: a top-hat window nulled where resid == 0
+        # get NEB of clean_resid: a top-hat window nulled where resid == 0 (i.e. flag pattern)
         w = (~np.isclose(clean_resid[k], 0.0)).astype(np.float)
         neb = noise_eq_bandwidth(w[:, None])
 
@@ -932,6 +934,8 @@ def noise_eq_bandwidth(window, axis=-1):
     Calculate the noise equivalent bandwidth (NEB) of a windowing function
     as
         sqrt(window.size * window.max ** 2 / sum(window ** 2))
+
+    See https://analog.intgckts.com/equivalent-noise-bandwidth/
 
     Args:
         window : float ndarray
