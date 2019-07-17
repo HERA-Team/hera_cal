@@ -885,6 +885,8 @@ class ReflectionFitter(FRFilter):
                 # shift by median and normalize by MAD
                 ymed = np.median(y, axis=0, keepdims=True)
                 ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
+                # in rare case that ymad == 0, set it to 1.0 to prevent divbyzero error
+                ymad[np.isclose(ymad, 0.0)] = 1.0
                 y = (y - ymed) / ymad**2
 
                 # fit gp and predict

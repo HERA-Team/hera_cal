@@ -10,8 +10,10 @@ from copy import deepcopy
 import os
 import sys
 import shutil
-from scipy import constants
+from scipy import constants, interpolate
 from pyuvdata import UVCal, UVData
+from hera_sim import noise
+from uvtools import dspec
 
 from hera_cal import io, datacontainer
 from hera_cal import vis_clean
@@ -172,6 +174,61 @@ class Test_VisClean(object):
         pytest.raises(ValueError, V.fft_data, ax='foo')
         pytest.raises(ValueError, V.fft_data, keys=[])
         pytest.raises(ValueError, V.fft_data, keys=[('foo')])
+
+    def test_trim_model(self):
+        # load data
+        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V.read(bls=[(23, 23, 'xx'), (23, 24, 'xx')])
+
+        # interpolate to 768 frequencies
+        freqs = np.linspace(120e6, 180e6, 768)
+        for k in V.data:
+            V.data[k] = interpolate.interp1d(V.freqs, V.data[k], axis=1, fill_value='extrapolate', kind='cubic')(freqs)
+            V.flags[k] = np.zeros_like(V.data[k], dtype=np.bool)
+        V.freqs = freqs
+        V.Nfreqs = len(V.freqs)
+
+        # add noise
+        np.random.seed(0)
+        k = (23, 24, 'xx')
+        Op = noise.bm_poly_to_omega_p(V.freqs / 1e9)
+        V.data[k] += noise.sky_noise_jy(V.data[(23, 23, 'xx')], V.freqs / 1e9, V.lsts, Op, inttime=50)
+
+        # add lots of random flags
+        f = np.zeros(V.Nfreqs, dtype=np.bool)[None, :]
+        f[:, 127:156] = True
+        f[:, 300:303] = True
+        f[:, 450:455] = True
+        f[:, 625:630] = True
+        V.flags[k] += f
+
+        # vis clean
+        V.vis_clean(data=V.data, flags=V.flags, keys=[k], tol=1e-6, min_dly=300, ax='freq', overwrite=True, window='tukey', alpha=0.2)
+        V.fft_data(V.data, window='bh', overwrite=True, assign='dfft1')
+        V.fft_data(V.clean_data, window='bh', overwrite=True, assign='dfft2')
+
+        # trim model
+        mdl, n = vis_clean.trim_model(V.clean_model, V.clean_resid, V.dnu, noise_thresh=3.0, delay_cut=500,
+                                      kernel_size=21)
+        clean_data2 = deepcopy(V.clean_data)
+        clean_data2[k][V.flags[k]] = mdl[k][V.flags[k]]
+        V.fft_data(clean_data2, window='bh', overwrite=True, assign='dfft3')
+
+        # get averaged spectra
+        n1 = vis_clean.noise_eq_bandwidth(dspec.gen_window('bh', V.Nfreqs))
+        n2 = vis_clean.noise_eq_bandwidth(dspec.gen_window('bh', V.Nfreqs) * ~V.flags[k][0])
+        d1 = np.mean(np.abs(V.dfft1[k]), axis=0) * n1
+        d2 = np.mean(np.abs(V.dfft2[k]), axis=0) * n2
+        d3 = np.mean(np.abs(V.dfft3[k]), axis=0) * n2
+
+        # confirm that dfft3 and dfft1 match while dfft2 and dfft1 do not near CLEAN boundary
+        select = (np.abs(V.delays) < 300) & (np.abs(V.delays) > 100)
+        assert np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d3)[select]), atol=10)
+        assert not np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d2)[select]), atol=10)
+
+    def test_neb(self):
+        n = vis_clean.noise_eq_bandwidth(dspec.gen_window('blackmanharris', 10000))
+        assert np.isclose(n, 1.9689862471203075)
 
     def test_zeropad(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
