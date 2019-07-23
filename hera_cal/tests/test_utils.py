@@ -18,6 +18,7 @@ import six
 from pyuvdata import UVData
 from pyuvdata import UVCal
 import pyuvdata.tests as uvtest
+from sklearn import gaussian_process as gp
 
 from hera_sim.noise import white_noise
 from .. import utils, abscal, datacontainer, io
@@ -439,6 +440,37 @@ def test_chisq():
     assert len(nObs) == 0
     assert len(chisq_per_ant) == 0
     assert len(chisq_per_ant) == 0
+
+
+def test_gp_interp1d():
+    # load data
+    dfiles = glob.glob(os.path.join(DATA_PATH, "zen.2458043.4*.xx.HH.XRAA.uvh5"))
+    uvd = UVData()
+    uvd.read(dfiles, bls=[(37, 39)])
+    times = np.unique(uvd.time_array) * 24 * 60
+    times -= times.min()
+    y = uvd.get_data(37, 39, 'xx')
+    f = uvd.get_flags(37, 39, 'xx')
+
+    # interpolate
+    yint = utils.gp_interp1d(times, y, length_scale=5.0, Nmirror=20, flags=f, nl=1e-10)
+
+    # check residual
+    # plt.imshow(np.real(y-yint),aspect='auto',vmin=-10,vmax=10)
+    assert np.std((y - yint)[~f]) < 10
+
+    # now test without feeding flags and see that fit got worse
+    yint2 = utils.gp_interp1d(times, y, length_scale=5.0, Nmirror=20, nl=1e-10)
+    assert np.std((y - yint2)[~f]) > 10
+
+    # try with custom x_eval: test it is same as starting yint at same times
+    yint3 = utils.gp_interp1d(times, y, x_eval=times[:2], length_scale=5.0, Nmirror=20, nl=1e-10, flags=f)
+    assert np.all(np.isclose(yint[:2], yint3))
+
+    # assert custom kernel with slightly different params gives different results
+    kernel = 1 * gp.kernels.RBF(4.0) + gp.kernels.WhiteKernel(1e-10)
+    yint4 = utils.gp_interp1d(times, y, kernel=kernel, Nmirror=20, flags=f)
+    assert not np.all(np.isclose(yint, yint4))
 
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")

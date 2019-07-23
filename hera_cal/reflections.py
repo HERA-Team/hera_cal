@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 """
@@ -85,7 +85,7 @@ from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
 from .frf import FRFilter
 from . import vis_clean
-from .utils import echo, interp_peak, split_pol
+from .utils import echo, interp_peak, split_pol, gp_interp1d
 
 
 class ReflectionFitter(FRFilter):
@@ -834,7 +834,8 @@ class ReflectionFitter(FRFilter):
 
         # setup X predict
         Xmean = np.median(times)
-        Xpredict = full_times[:, None] - Xmean
+        Xtrain = times - Xmean
+        Xpredict = full_times - Xmean
 
         # parse kernels
         if kernels is not None and isinstance(kernels, gp.kernels.Kernel):
@@ -858,45 +859,10 @@ class ReflectionFitter(FRFilter):
                 # setup GP kernel
                 kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
 
-            # setup GP
-            GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False)
-
-            # setup regression data
-            X = times - Xmean
-            Y = umodes[k][:, :Ninterp].copy()
-            F = uflags[k].copy()
-
-            # mirror if desired
-            if Nmirror > 0:
-                assert Nmirror < X.size, "Nmirror can't be equal or larger than Ntimes"
-                _, X = vis_clean.zeropad_array(Y, binvals=X, zeropad=Nmirror, axis=0)
-                Y = np.concatenate([Y[1:Nmirror + 1, :][::-1, :], Y, Y[-Nmirror - 1:-1, :][::-1, :]], axis=0)
-                F = np.concatenate([F[1:Nmirror + 1, :][::-1, :], F, F[-Nmirror - 1:-1, :][::-1, :]], axis=0)
-
-            # setup regression data: get unflagged data
-            select = ~np.any(F, axis=1)
-            X = X[select, None]
-            Y = Y[select, :]
-            Npix = Y.shape[0]
-
-            # do real and imag separately
-            ypredict = []
-            for y in [Y.real, Y.imag]:
-                # shift by median and normalize by MAD
-                ymed = np.median(y, axis=0, keepdims=True)
-                ymad = np.median(np.abs(y - ymed), axis=0, keepdims=True) * 1.4826
-                # in rare case that ymad == 0, set it to 1.0 to prevent divbyzero error
-                ymad[np.isclose(ymad, 0.0)] = 1.0
-                y = (y - ymed) / ymad**2
-
-                # fit gp and predict
-                GP.fit(X, y)
-                ypred = GP.predict(Xpredict)
-
-                # append
-                ypredict.append(ypred * ymad**2 + ymed)
-
-            self.umode_interp[k] = ypredict[0] + 1j * ypredict[1]
+            # interpolate
+            self.umode_interp[k] = gp_interp1d(Xtrain, umodes[k][:, :Ninterp], x_eval=Xpredict,
+                                               flags=uflags[k], kernel=kernel, Nmirror=Nmirror,
+                                               optimizer=optimizer)
 
 
 def form_gains(epsilon):

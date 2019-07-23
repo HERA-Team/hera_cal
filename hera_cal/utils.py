@@ -19,6 +19,7 @@ import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT
+import sklearn.gaussian_process as gp
 
 
 def _comply_antpol(antpol):
@@ -843,6 +844,107 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                     nObs_per_ant[ant] = np.array(wgts > 0, dtype=int)
 
     return chisq, nObs, chisq_per_ant, nObs_per_ant
+
+
+def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
+                kernel=None, Nmirror=0, optimizer=None):
+    """
+    Gaussian Process interpolation
+
+    Interpolate or smooth a series of datavectors y with a Gaussian Process.
+    See sklearn.gaussian_process for more details.
+
+    Args:
+        x : real ndarray
+            A 1-d array of shape (Nvalues,)
+        y : ndarray
+            A 2-d array of shape (Nvalues, Nvectors)
+        x_eval : real ndarray
+            A 1-d array holding model evaluation x-values.
+            Default is x.
+        flags : ndarray
+            A boolean array of y flags of shape (Nvalues, Nvectors)
+        length_scale : float
+            Length scale for RBF kernel if input kernel is None.
+        nl : float
+            Noise level for WhiteNoise kernel if input kernel is None.
+        kernel : sklearn Kernel object
+            Custom kernel to use. This supercedes length_scale and nl choices.
+        Nmirror : int
+            Number of x values to mirror about either end before interpolation.
+        optimizer : str
+            Hyperparameter optimization method. Default is no optimization.
+    """
+    # type checks
+    assert isinstance(x, np.ndarray)
+    assert isinstance(y, np.ndarray)
+    if y.ndim == 1:
+        y = y.reshape(-1, 1)
+
+    if x_eval is None:
+        x_eval = x.reshape(-1, 1)
+    else:
+        if x_eval.ndim == 1:
+            x_eval = x_eval.reshape(-1, 1)
+
+    # setup kernel
+    if kernel is None:
+        kernel = 1**2 * gp.kernels.RBF(length_scale=length_scale) + gp.kernels.WhiteKernel(noise_level=nl)
+
+    # initialize GP
+    GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False)
+
+    if flags is None:
+        flags = np.zeros_like(y, dtype=np.bool)
+
+    # mirror if desired
+    if Nmirror > 0:
+        assert Nmirror < x.size, "Nmirror can't be equal or larger than x"
+        x = np.pad(x, Nmirror, mode='reflect', reflect_type='odd') 
+        y = np.concatenate([y[1:Nmirror + 1, :][::-1, :], y, y[-Nmirror - 1:-1, :][::-1, :]], axis=0)
+        flags = np.concatenate([flags[1:Nmirror + 1, :][::-1, :], flags, flags[-Nmirror - 1:-1, :][::-1, :]], axis=0)
+
+    # setup training values and determine if inhomogenous flags exist
+    X = x.reshape(-1, 1)
+    same_flags = np.all(np.all(~flags, axis=1) | np.all(flags, axis=1))
+
+    # do real and imag separately
+    ypredict = []
+    for _y in [y.real, y.imag]:
+        # shift by median and normalize by MAD
+        ymed = np.median(_y, axis=0, keepdims=True)
+        ymad = np.median(np.abs(_y - ymed), axis=0, keepdims=True) * 1.4826
+        # in rare case that ymad == 0, set it to 1.0 to prevent divbyzero error
+        ymad[np.isclose(ymad, 0.0)] = 1.0
+        _y = (_y - ymed) / ymad**2
+
+        if same_flags:
+            # if same_flags, predict all vectors at once
+            select = ~np.any(flags, axis=1)
+            if not np.any(select):
+                ypred = np.zeros((len(x_eval), _y.shape[1]))
+            else:
+                GP.fit(X[select], _y[select])
+                ypred = GP.predict(x_eval) * ymad**2 + ymed
+        else:
+            # if inhomogenous flags, predict each vector individually
+            ypred = []
+            for i in range(_y.shape[1]):
+                select = ~flags[:, i]
+                if not np.any(select):
+                    ypred.append(np.zeros(len(x_eval)))
+                else:
+                    GP.fit(X[select], _y[select, i:i+1])
+                    ypred.append(GP.predict(x_eval)[:, 0] * ymad[:, i]**2 + ymed[:, i])
+            ypred = np.asarray(ypred).T
+
+        # append
+        ypredict.append(ypred)
+
+    # cast back into complex domain
+    ypredict = ypredict[0] + 1j * ypredict[1]
+
+    return ypredict
 
 
 def gain_relative_difference(old_gains, new_gains, flags, denom=None):
