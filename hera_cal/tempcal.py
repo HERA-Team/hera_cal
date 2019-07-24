@@ -96,14 +96,17 @@ class TempCal(VisClean):
             self.smooth[k] = utils.gp_interp1d(times, data[k], flags=flags[k], length_scale=length_scale, nl=nl,
                                                Nmirror=Nmirror)
             self.gflags[gkey] = np.isclose(self.smooth[k], 0.0)
-            gwgt = (~self.gflags[gkey]).astype(np.float)
 
             # take ratio and compute gain term
             self.ratio[k] = np.true_divide(self.data[k], self.smooth[k], where=~self.gflags[gkey])
             self.gains[gkey] = np.sqrt(self.ratio[k])
 
-            # only allow frequency-averaged gains for now!
-            self.gains[gkey] = np.sum(self.gains[gkey] * gwgt, axis=1, keepdims=True) / np.sum(gwgt, axis=1, keepdims=True).clip(1e-10, np.inf)
+            # only allow frequency-averaged gains for now via nanmedian
+            # use median over mean to help w/ unflagged RFI
+            g = self.gains[gkey].copy()
+            g[self.gflags[gkey]] = np.nan
+            self.gains[gkey] = np.nanmedian(g, axis=1, keepdims=True)
+            self.gains[gkey][np.isnan(self.gains[gkey])] = 1.0  # catch for fully flagged integrations
             self.gains[gkey] = np.repeat(self.gains[gkey], data_shape[1], axis=1)
             self.gflags[gkey] = np.repeat(np.min(self.gflags[gkey], axis=1, keepdims=True), data_shape[1], axis=1)
 
