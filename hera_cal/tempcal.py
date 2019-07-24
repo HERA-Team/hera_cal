@@ -68,8 +68,10 @@ class TempCal(VisClean):
             keys = list(data.keys())
 
         # smooth data
-        if not hasattr(self, 'smooth'): self.smooth = DataContainer({})
-        if not hasattr(self, 'ratio'): self.ratio = DataContainer({})
+        if not hasattr(self, 'smooth'):
+            self.smooth = DataContainer({})
+        if not hasattr(self, 'ratio'):
+            self.ratio = DataContainer({})
         for k in keys:
             # smooth data
             utils.echo("working on {}".format(k), verbose=verbose)
@@ -105,7 +107,8 @@ class TempCal(VisClean):
             # get gain keys
             keys = list(self.gains.keys())
             assert isinstance(avg_ants, list)
-            if not isinstance(avg_ants[0], list): avg_ants = [avg_ants]
+            if not isinstance(avg_ants[0], list):
+                avg_ants = [avg_ants]
             # iterate over antenna lists
             for antlist in avg_ants:
                 gkeys = [k for k in antlist if k in self.gains]
@@ -179,4 +182,3 @@ class TempCal(VisClean):
                            quality=None, total_qual=None, zero_check=False,
                            overwrite=overwrite, history=version.history_string(add_to_history),
                            **kwargs)
-
