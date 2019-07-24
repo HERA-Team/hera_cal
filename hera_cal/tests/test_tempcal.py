@@ -47,7 +47,7 @@ def test_tempcal():
 
     # test avg_ants: assert all gains are the same
     T.avg_ants(list(T.gains.keys()))
-    assert np.all([np.isclose(T.gains[k] - T.gains[(24, 'Jxx')], 0.0).all() for k in T.gains])
+    assert np.all([np.isclose(T.gains[_k] - T.gains[(24, 'Jxx')], 0.0).all() for _k in T.gains])
 
     # test setting abscal time
     caltime = 2458043.41427365
