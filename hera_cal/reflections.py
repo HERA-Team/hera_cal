@@ -860,8 +860,10 @@ class ReflectionFitter(FRFilter):
                 kernel = 1**2 * gp.kernels.RBF(length_scale=gp_len) + gp.kernels.WhiteKernel(noise_level=gp_nl)
 
             # interpolate
-            self.umode_interp[k] = gp_interp1d(Xtrain, umodes[k][:, :Ninterp], x_eval=Xpredict,
-                                               flags=uflags[k], kernel=kernel, Nmirror=Nmirror,
+            y = umodes[k][:, :Ninterp]
+            yflag = np.repeat(uflags[k], y.shape[1], axis=1)
+            self.umode_interp[k] = gp_interp1d(Xtrain, y, x_eval=Xpredict,
+                                               flags=yflag, kernel=kernel, Nmirror=Nmirror,
                                                optimizer=optimizer)
 
 

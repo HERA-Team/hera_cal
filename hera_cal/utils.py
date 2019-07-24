@@ -904,9 +904,23 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
         y = np.concatenate([y[1:Nmirror + 1, :][::-1, :], y, y[-Nmirror - 1:-1, :][::-1, :]], axis=0)
         flags = np.concatenate([flags[1:Nmirror + 1, :][::-1, :], flags, flags[-Nmirror - 1:-1, :][::-1, :]], axis=0)
 
-    # setup training values and determine if inhomogenous flags exist
+    # setup training values
     X = x.reshape(-1, 1)
-    same_flags = np.all(np.all(~flags, axis=1) | np.all(flags, axis=1))
+
+    # get unique flagging patterns
+    flag_patterns = []
+    flag_hashes = []
+    flag_indices = {}
+    for i in range(flags.shape[1]):
+        # hash the flag pattern
+        h = hash(flags[:, i].tostring())
+        # append to list
+        if h not in flag_hashes:
+            flag_hashes.append(h)
+            flag_patterns.append(flags[:, i])
+            flag_indices[h] = [i]
+        else:
+            flag_indices[h].append(i)
 
     # do real and imag separately
     ypredict = []
@@ -916,27 +930,16 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
         ymad = np.median(np.abs(_y - ymed), axis=0, keepdims=True) * 1.4826
         # in rare case that ymad == 0, set it to 1.0 to prevent divbyzero error
         ymad[np.isclose(ymad, 0.0)] = 1.0
-        _y = (_y - ymed) / ymad**2
+        _y = (_y - ymed) / ymad
 
-        if same_flags:
-            # if same_flags, predict all vectors at once
-            select = ~np.any(flags, axis=1)
-            if not np.any(select):
-                ypred = np.zeros((len(x_eval), _y.shape[1]))
-            else:
-                GP.fit(X[select], _y[select])
-                ypred = GP.predict(x_eval) * ymad**2 + ymed
-        else:
-            # if inhomogenous flags, predict each vector individually
-            ypred = []
-            for i in range(_y.shape[1]):
-                select = ~flags[:, i]
-                if not np.any(select):
-                    ypred.append(np.zeros(len(x_eval)))
-                else:
-                    GP.fit(X[select], _y[select, i:i + 1])
-                    ypred.append(GP.predict(x_eval)[:, 0] * ymad[:, i]**2 + ymed[:, i])
-            ypred = np.asarray(ypred).T
+        # iterate over flagging patterns
+        ypred = np.zeros((len(x_eval), _y.shape[1]), np.float)
+        for i, fh in enumerate(flag_hashes):
+            inds = flag_indices[fh]
+            select = ~flag_patterns[i]
+            if np.any(select):
+                GP.fit(X[select, :], _y[select, :][:, inds])
+                ypred[:, inds] = GP.predict(x_eval) * ymad[:, inds] + ymed[:, inds]
 
         # append
         ypredict.append(ypred)
