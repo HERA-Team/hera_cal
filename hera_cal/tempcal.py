@@ -29,13 +29,14 @@ class TempCal(VisClean):
         self.gflags = {}
 
     def gains_from_autos(self, data, times, flags=None, smooth_frate=1.0, nl=1e-10, Nmirror=0,
-                         keys=None, verbose=True):
+                         keys=None, edgeflag=0, verbose=True):
         """
         Model temperature fluctuations in auto-correlations
         by dividing auto-correlation by its time-smoothed counterpart.
 
         This is only valid for timescales significantly shorter than
-        the beam crossing timescale.
+        the beam crossing timescale. Resultant gains have a "divide" gain_convention.
+
         Rcommended to factorize the flags beforehand using utils.factorize_flags.
 
         Args:
@@ -52,13 +53,28 @@ class TempCal(VisClean):
             Nmirror : int
                 Number of time bins to mirror about edges before interpolation
             keys : list
-                List of ant-pair-pol tuples to operate on.
+                List of ant-pair-pol tuples to operate on
+            edgeflag : int or len-2 tuple
+                Number of channels to flag on low and high end of frequency band.
+                Low and high can be specified independently via a len-2 tuple.
             verbose : bool
                 If True, report feedback to stdout.
         """
         # get flags
         if flags is None:
             flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
+
+        # edgeflag
+        if edgeflag is not None:
+            flags = copy.deepcopy(flags)
+            if isinstance(edgeflag, (int, np.int, float, np.float)):
+                edgeflag = (edgeflag, edgeflag)
+            assert len(edgeflag) == 2
+            for k in flags:
+                if edgeflag[0] > 0:
+                    flags[k][:, :edgeflag[0]] = True
+                if edgeflag[1] > 0:
+                    flags[k][:, -edgeflag[1]:] = True
 
         # get length scale in seconds
         length_scale = 1.0 / (smooth_frate * 1e-3) / (24.0 * 3600.0)
@@ -179,6 +195,6 @@ class TempCal(VisClean):
         """
         utils.echo("...writing {}".format(fname), verbose=verbose)
         uvc = io.write_cal(fname, self.gains, self.freqs, self.times, flags=self.gflags,
-                           quality=None, total_qual=None, zero_check=False,
+                           quality=None, total_qual=None, zero_check=False, gain_convention='divide',
                            overwrite=overwrite, history=version.history_string(add_to_history),
                            **kwargs)
