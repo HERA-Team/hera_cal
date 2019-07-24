@@ -934,7 +934,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
                 if not np.any(select):
                     ypred.append(np.zeros(len(x_eval)))
                 else:
-                    GP.fit(X[select], _y[select, i:i+1])
+                    GP.fit(X[select], _y[select, i:i + 1])
                     ypred.append(GP.predict(x_eval)[:, 0] * ymad[:, i]**2 + ymed[:, i])
             ypred = np.asarray(ypred).T
 
