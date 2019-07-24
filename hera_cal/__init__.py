@@ -19,5 +19,6 @@ from . import reflections
 from . import vis_clean
 from . import autos
 from . import noise
+from . import tempcal
 
 __version__ = version.version
