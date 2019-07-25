@@ -23,47 +23,6 @@ from .apply_cal import calibrate_in_place
 SEC_PER_DAY = 86400.
 
 
-def noise(size):
-    """Return complex random gaussian array with given size and variance = 1."""
-    # XXX I think this should be superceded by hera_sim
-    sig = 1. / np.sqrt(2)
-    return np.random.normal(scale=sig, size=size) + 1j * np.random.normal(scale=sig, size=size)
-
-
-def sim_red_data(reds, gains=None, shape=(10, 10), gain_scatter=.1):
-    """ Simulate noise-free random but redundant (up to differing gains) visibilities.
-        # XXX I think this should be superceded by hera_sim
-
-        Args:
-            reds: list of lists of baseline-pol tuples where each sublist has only
-                redundant pairs
-            gains: pre-specify base gains to then scatter on top of in the
-                {(index,antpol): np.array} format. Default gives all ones.
-            shape: tuple of (Ntimes, Nfreqs). Default is (10,10).
-            gain_scatter: Relative amplitude of per-antenna complex gain scatter. Default is 0.1.
-
-        Returns:
-            gains: true gains used in the simulation in the {(index,antpol): np.array} format
-            true_vis: true underlying visibilities in the {(ind1,ind2,pol): np.array} format
-            data: simulated visibilities in the {(ind1,ind2,pol): np.array} format
-    """
-
-    data, true_vis = {}, {}
-    ants = sorted(list(set([ant for bls in reds for bl in bls for ant in
-                  [(bl[0], split_pol(bl[2])[0]), (bl[1], split_pol(bl[2])[1])]])))
-    if gains is None:
-        gains = {}
-    else:
-        gains = deepcopy(gains)
-    for ant in ants:
-        gains[ant] = gains.get(ant, 1 + gain_scatter * noise((1,))) * np.ones(shape, dtype=np.complex)
-    for bls in reds:
-        true_vis[bls[0]] = noise(shape)
-        for (i, j, pol) in bls:
-            data[(i, j, pol)] = true_vis[bls[0]] * gains[(i, split_pol(pol)[0])] * gains[(j, split_pol(pol)[1])].conj()
-    return gains, DataContainer(true_vis), DataContainer(data)
-
-
 def get_pos_reds(antpos, bl_error_tol=1.0):
     """ Figure out and return list of lists of redundant baseline pairs. Ordered by length. All baselines
         in a group have the same orientation with a preference for positive b_y and, when b_y==0, positive
