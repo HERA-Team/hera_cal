@@ -12,6 +12,8 @@ import os
 import sys
 import shutil
 from six.moves import range
+from hera_sim.antpos import linear_array, hex_array
+from hera_sim.vis import sim_red_data
 
 from .. import redcal as om
 from .. import io, abscal
@@ -55,20 +57,20 @@ class TestMethods(object):
         assert om.parse_pol_mode(reds) == 'unrecognized_pol_mode'
 
     def test_get_pos_red(self):
-        pos = build_hex_array(3, sep=14.7)
+        pos = hex_array(3, sep=14.6, split_core=False, outriggers=0)
         assert len(om.get_pos_reds(pos)) == 30
 
-        pos = build_hex_array(7, sep=14.7)
+        pos = hex_array(7, sep=14.6, split_core=False, outriggers=0)
         assert len(om.get_pos_reds(pos)) == 234
         for ant, r in pos.items():
             pos[ant] += [0, 0, 1 * r[0] - .5 * r[1]]
         assert len(om.get_pos_reds(pos)) == 234
 
-        pos = build_hex_array(7, sep=1)
+        pos = hex_array(7, sep=1, split_core=False, outriggers=0)
         assert len(om.get_pos_reds(pos)) < 234
         assert len(om.get_pos_reds(pos, bl_error_tol=.1)) == 234
 
-        pos = build_hex_array(7, sep=14.7)
+        pos = hex_array(7, sep=14.6, split_core=False, outriggers=0)
         blerror = 1.0 - 1e-12
         error = blerror / 4
         for key, val in pos.items():
@@ -82,7 +84,7 @@ class TestMethods(object):
         assert om.get_pos_reds(pos) == [[(0, 2), (2, 1)], [(0, 1)]]
 
     def test_filter_reds(self):
-        antpos = build_linear_array(7)
+        antpos = linear_array(7)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         # exclude ants
         red = om.filter_reds(reds, ex_ants=[0, 4])
@@ -111,7 +113,7 @@ class TestMethods(object):
         # reds = omni.filter_reds(self.info.get_reds(), ex_crosspols=()
 
     def test_filter_reds_2pol(self):
-        antpos = build_linear_array(4)
+        antpos = linear_array(4)
         reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='1pol')
         # include pols
         red = om.filter_reds(reds, pols=['xx'])
@@ -138,7 +140,7 @@ class TestMethods(object):
         red = om.filter_reds(reds, ex_ubls=[(2, 3), (0, 3)])
         assert red == [[(0, 2, 'xx'), (1, 3, 'xx')], [(0, 2, 'yy'), (1, 3, 'yy')]]
         # test baseline length min and max cutoffs
-        antpos = build_hex_array(4, sep=14.7)
+        antpos = hex_array(4, sep=14.6, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         assert om.filter_reds(reds, antpos=antpos, min_bl_cut=85) == reds[-3:]
         assert om.filter_reds(reds, antpos=antpos, max_bl_cut=15) == reds[:3]
@@ -156,7 +158,7 @@ class TestMethods(object):
 
     def test_reds_to_antpos(self):
         # Test 1D
-        true_antpos = build_linear_array(10)
+        true_antpos = linear_array(10)
         reds = om.get_reds(true_antpos, pols=['xx', 'yy'], pol_mode='2pol', bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds,)
         for pos in inferred_antpos.values():
@@ -171,7 +173,7 @@ class TestMethods(object):
             found_match = False
 
         # Test 2D
-        true_antpos = build_hex_array(5)
+        true_antpos = hex_array(5, split_core=False, outriggers=0)
         reds = om.get_reds(true_antpos, pols=['xx'], pol_mode='1pol', bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds)
         for pos in inferred_antpos.values():
@@ -186,7 +188,7 @@ class TestMethods(object):
             found_match = False
 
         # Test 2D with split
-        true_antpos = build_split_hex_array_with_outriggers(hexNum=5, splitCore=True, splitCoreOutriggers=0)
+        true_antpos = hex_array(5, split_core=True, outriggers=0)
         reds = om.get_pos_reds(true_antpos, bl_error_tol=1e-10)
         inferred_antpos = om.reds_to_antpos(reds)
         for pos in inferred_antpos.values():
@@ -221,7 +223,7 @@ class TestRedundantCalibrator(object):
 
     def test_init(self):
         # test a very small array
-        pos = build_hex_array(3)
+        pos = hex_array(3, split_core=False, outriggers=0)
         pos = {ant: pos[ant] for ant in range(4)}
         reds = om.get_reds(pos)
         rc = om.RedundantCalibrator(reds)
@@ -229,7 +231,7 @@ class TestRedundantCalibrator(object):
             rc = om.RedundantCalibrator(reds, check_redundancy=True)
 
         # test disconnected redundant array
-        pos = build_hex_array(5)
+        pos = hex_array(5, split_core=False, outriggers=0)
         pos = {ant: pos[ant] for ant in pos if ant in [0, 1, 5, 6, 54, 55, 59, 60]}
         reds = om.get_reds(pos)
         try:
@@ -238,9 +240,9 @@ class TestRedundantCalibrator(object):
             assert False, 'This array is actually redundant, so check_redundancy should not raise a ValueError.'
 
     def test_build_eq(self):
-        antpos = build_linear_array(3)
+        antpos = linear_array(3)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
-        gains, true_vis, data = om.sim_red_data(reds)
+        gains, true_vis, data = sim_red_data(reds)
         info = om.RedundantCalibrator(reds)
         eqs = info.build_eqs(data)
         assert len(eqs) == 3
@@ -249,7 +251,7 @@ class TestRedundantCalibrator(object):
         assert eqs['g_0_Jxx * g_2_Jxx_ * u_1_xx'] == (0, 2, 'xx')
 
         reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol')
-        gains, true_vis, data = om.sim_red_data(reds)
+        gains, true_vis, data = sim_red_data(reds)
         info = om.RedundantCalibrator(reds)
         eqs = info.build_eqs(data)
         assert len(eqs) == 3 * 4
@@ -261,7 +263,7 @@ class TestRedundantCalibrator(object):
         assert eqs['g_0_Jyy * g_2_Jxx_ * u_7_yx'] == (0, 2, 'yx')
 
         reds = om.get_reds(antpos, pols=['xx', 'yy', 'xy', 'yx'], pol_mode='4pol_minV')
-        gains, true_vis, data = om.sim_red_data(reds)
+        gains, true_vis, data = sim_red_data(reds)
         info = om.RedundantCalibrator(reds)
         eqs = info.build_eqs(data)
         assert len(eqs) == 3 * 4
@@ -276,10 +278,10 @@ class TestRedundantCalibrator(object):
             info.build_eqs({})
 
     def test_solver(self):
-        antpos = build_linear_array(3)
+        antpos = linear_array(3)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds)
+        gains, true_vis, d = sim_red_data(reds)
         w = {}
         w = dict([(k, 1.) for k in d.keys()])
 
@@ -299,11 +301,11 @@ class TestRedundantCalibrator(object):
     def test_firstcal_iteration(self):
         NANTS = 18
         NFREQ = 64
-        antpos = build_linear_array(NANTS)
+        antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
         fqs = np.linspace(.1, .2, NFREQ)
-        g, true_vis, d = om.sim_red_data(reds, shape=(1, NFREQ), gain_scatter=0)
+        g, true_vis, d = sim_red_data(reds, shape=(1, NFREQ), gain_scatter=0)
         delays = {k: np.random.randn() * 30 for k in g.keys()}  # in ns
         fc_gains = {k: np.exp(2j * np.pi * v * fqs) for k, v in delays.items()}
         delays = {k: np.array([[v]]) for k, v in delays.items()}
@@ -321,13 +323,13 @@ class TestRedundantCalibrator(object):
 
     def test_firstcal(self):
         np.random.seed(21)
-        antpos = build_hex_array(2)
+        antpos = hex_array(2, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(1e8, 2e8, 1024)
         
         # test firstcal where the degeneracies of the phases and delays have already been removed so no abscal is necessary
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
         fc_delays = {ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()}  # in s
         fc_delays = rc.remove_degen_gains(fc_delays)
         fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
@@ -342,7 +344,7 @@ class TestRedundantCalibrator(object):
         np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, decimal=3)
 
         # test firstcal with only phases (no delays)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
         fc_delays = {ant: [[0 * np.random.randn()]] for ant in gains.keys()}  # in s
         fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
         fc_offsets = rc.remove_degen_gains(fc_offsets)
@@ -357,10 +359,10 @@ class TestRedundantCalibrator(object):
 
     def test_logcal(self):
         NANTS = 18
-        antpos = build_linear_array(NANTS)
+        antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.05)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
         w = dict([(k, 1.) for k in d.keys()])
         sol = info.logcal(d)
         for i in range(NANTS):
@@ -387,10 +389,10 @@ class TestRedundantCalibrator(object):
 
     def test_omnical(self):
         NANTS = 18
-        antpos = build_linear_array(NANTS)
+        antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.0099999)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.0099999)
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
@@ -408,10 +410,10 @@ class TestRedundantCalibrator(object):
 
     def test_omnical64(self):
         NANTS = 18
-        antpos = build_linear_array(NANTS)
+        antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
+        gains, true_vis, d = sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
@@ -429,10 +431,10 @@ class TestRedundantCalibrator(object):
 
     def test_omnical128(self):
         NANTS = 18
-        antpos = build_linear_array(NANTS)
+        antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
+        gains, true_vis, d = sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
@@ -450,10 +452,10 @@ class TestRedundantCalibrator(object):
 
     def test_lincal(self):
         NANTS = 18
-        antpos = build_linear_array(NANTS)
+        antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.0099999)
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.0099999)
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
@@ -471,10 +473,10 @@ class TestRedundantCalibrator(object):
 
     def test_lincal64(self):
         NANTS = 18
-        antpos = build_linear_array(NANTS)
+        antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
+        gains, true_vis, d = sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
@@ -492,10 +494,10 @@ class TestRedundantCalibrator(object):
 
     def test_lincal128(self):
         NANTS = 18
-        antpos = build_linear_array(NANTS)
+        antpos = linear_array(NANTS)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         info = om.RedundantCalibrator(reds)
-        gains, true_vis, d = om.sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
+        gains, true_vis, d = sim_red_data(reds, shape=(2, 1), gain_scatter=.0099999)
         w = dict([(k, 1.) for k in d.keys()])
         sol0 = dict([(k, np.ones_like(v)) for k, v in gains.items()])
         sol0.update(info.compute_ubls(d, sol0))
@@ -514,10 +516,10 @@ class TestRedundantCalibrator(object):
     def test_svd_convergence(self):
         for hexnum in (2, 3, 4):
             for dtype in (np.complex64, np.complex128):
-                antpos = build_hex_array(hexnum)
+                antpos = hex_array(hexnum, split_core=False, outriggers=0)
                 reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
                 rc = om.RedundantCalibrator(reds)
-                gains, _, d = om.sim_red_data(reds, shape=(2, 1), gain_scatter=.01)
+                gains, _, d = sim_red_data(reds, shape=(2, 1), gain_scatter=.01)
                 d = {k: dk.astype(dtype) for k, dk in d.items()}
                 w = {k: 1. for k in d.keys()}
                 gains = {k: gk.astype(dtype) for k, gk in gains.items()}
@@ -529,7 +531,7 @@ class TestRedundantCalibrator(object):
         pol = 'xx'
         xhat = np.array([1., 0, 0])
         dtau_dx = 10.
-        antpos = build_linear_array(10)
+        antpos = linear_array(10)
         reds = om.get_reds(antpos, pols=[pol], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         # put in a linear slope in delays, see that it is taken out
@@ -547,7 +549,7 @@ class TestRedundantCalibrator(object):
         yhat = np.array([0., 1, 0])
         dtau_dx = 10.
         dtau_dy = -5.
-        antpos = build_hex_array(5)
+        antpos = hex_array(5, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=[pol], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         # put in a linear slope in delays, see that it is taken out
@@ -559,11 +561,11 @@ class TestRedundantCalibrator(object):
             np.testing.assert_almost_equal(dlys[k], 0, decimal=10)
 
     def test_lincal_hex_end_to_end_1pol_with_remove_degen_and_firstcal(self):
-        antpos = build_hex_array(3)
+        antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(.1, .2, 10)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
@@ -626,11 +628,11 @@ class TestRedundantCalibrator(object):
             sol_rd = rc.remove_degen(sol)
 
     def test_lincal_hex_end_to_end_4pol_with_remove_degen_and_firstcal(self):
-        antpos = build_hex_array(3)
+        antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx', 'xy', 'yx', 'yy'], pol_mode='4pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(.1, .2, 10)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.09, shape=(1, len(freqs)))
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.09, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
@@ -711,11 +713,11 @@ class TestRedundantCalibrator(object):
 
     def test_lincal_hex_end_to_end_4pol_minV_with_remove_degen_and_firstcal(self):
 
-        antpos = build_hex_array(3)
+        antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx', 'xy', 'yx', 'yy'], pol_mode='4pol_minV')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(.1, .2, 10)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
@@ -809,11 +811,11 @@ class TestRedundantCalibrator(object):
 
     def test_lincal_hex_end_to_end_2pol_with_remove_degen_and_firstcal(self):
 
-        antpos = build_hex_array(3)
+        antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='2pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(.1, .2, 10)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(1, len(freqs)))
         fc_delays = {ant: 100 * np.random.randn() for ant in gains.keys()}  # in ns
         fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay), (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
@@ -896,7 +898,7 @@ class TestRedundantCalibrator(object):
 
     def test_count_degen(self):
         # 1 phase slope
-        antpos = build_linear_array(10)
+        antpos = linear_array(10)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         assert om.RedundantCalibrator(reds).count_degens() == 3
         reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='2pol')
@@ -907,7 +909,7 @@ class TestRedundantCalibrator(object):
         assert om.RedundantCalibrator(reds).count_degens() == 4
 
         # 2 phase slopes (fiducial case)
-        antpos = build_hex_array(3)
+        antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         assert om.RedundantCalibrator(reds).count_degens() == 4
         reds = om.get_reds(antpos, pols=['xx', 'yy'], pol_mode='2pol')
@@ -930,19 +932,19 @@ class TestRedundantCalibrator(object):
         assert om.RedundantCalibrator(reds).count_degens() == 7
 
     def test_is_redundantly_calibratable(self):
-        pos = build_hex_array(3)
+        pos = hex_array(3, split_core=False, outriggers=0)
         assert om.is_redundantly_calibratable(pos, bl_error_tol=1)
         pos[0] += [.5, 0, 0]
         assert not om.is_redundantly_calibratable(pos, bl_error_tol=.1)
         assert om.is_redundantly_calibratable(pos, bl_error_tol=1)
 
         # test a very small array
-        pos = build_hex_array(3)
+        pos = hex_array(3, split_core=False, outriggers=0)
         pos = {ant: pos[ant] for ant in range(4)}
         assert not om.is_redundantly_calibratable(pos)
 
         # test disconnected redundant array
-        pos = build_hex_array(5)
+        pos = hex_array(5, split_core=False, outriggers=0)
         pos = {ant: pos[ant] for ant in pos if ant in [0, 1, 5, 6, 54, 55, 59, 60]}
         assert not om.is_redundantly_calibratable(pos)
         assert om.is_redundantly_calibratable(pos, require_coplanarity=False)
@@ -955,11 +957,12 @@ class TestRedcalAndAbscal(object):
         up to an overall phase (which is handled by using a reference antenna).'''
         # Simulate Redundant Data
         np.random.seed(21)
-        antpos = build_hex_array(3)
+        antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(1e8, 2e8, 256)
-        gains, true_vis, d = om.sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)))
+        gains, true_vis, d = sim_red_data(reds, gain_scatter=.1, shape=(2, len(freqs)))
+        d = DataContainer(d)
         fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
         fc_offsets = {ant: 2 * np.pi * np.random.rand() for ant in gains.keys()}  # random phase offsets
         fc_gains = {ant: np.reshape(np.exp(2.0j * np.pi * freqs * delay + 1.0j * fc_offsets[ant]), 
