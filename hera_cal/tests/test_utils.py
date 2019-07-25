@@ -19,8 +19,8 @@ from pyuvdata import UVData
 from pyuvdata import UVCal
 import pyuvdata.tests as uvtest
 
+from hera_sim.noise import white_noise
 from .. import utils, abscal, datacontainer, io
-from ..redcal import noise
 from ..calibrations import CAL_PATH
 from ..data import DATA_PATH
 
@@ -109,7 +109,7 @@ class TestFftDly(object):
     def test_noisy(self):
         true_dlys = np.random.uniform(-200, 200, size=60)
         true_dlys.shape = (60, 1)
-        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * noise((60, 1024))
+        data = np.exp(2j * np.pi * self.freqs.reshape((1, -1)) * true_dlys) + 5 * white_noise((60, 1024))
         df = np.median(np.diff(self.freqs))
         dlys, offs = utils.fft_dly(data, df)
         assert np.median(np.abs(dlys - true_dlys)) < 1  # median accuracy of 1 ns
