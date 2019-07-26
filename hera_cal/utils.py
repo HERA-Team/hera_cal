@@ -849,16 +849,17 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
 def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
                 kernel=None, Nmirror=0, optimizer=None):
     """
-    Gaussian Process interpolation
+    Gaussian Process interpolation.
 
-    Interpolate or smooth a series of datavectors y with a Gaussian Process.
-    See sklearn.gaussian_process for more details.
+    Interpolate or smooth a series of datavectors y with a Gaussian Process
+    along its zeroth axis.
+    See sklearn.gaussian_process for more details on the methodology.
 
     Args:
         x : real ndarray
-            A 1-d array of shape (Nvalues,)
+            Independent variable 1-d array of shape (Nvalues,)
         y : ndarray
-            A 2-d array of shape (Nvalues, Nvectors)
+            Dependent variable 2-d array of shape (Nvalues, Nvectors)
         x_eval : real ndarray
             A 1-d array holding model evaluation x-values.
             Default is x.
@@ -868,12 +869,19 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
             Length scale for RBF kernel if input kernel is None.
         nl : float
             Noise level for WhiteNoise kernel if input kernel is None.
+            Recommended to keep this near 1e-10 for non-expert user.
+            This is normalized to a unity-variance process.
         kernel : sklearn Kernel object
             Custom kernel to use. This supercedes length_scale and nl choices.
         Nmirror : int
             Number of x values to mirror about either end before interpolation.
+            This can minimize impact of boundary effects on interpolation.
         optimizer : str
             Hyperparameter optimization method. Default is no optimization.
+
+    Returns:
+        ndarray
+            Interpolated y-vector of shape (len(x_eval), Nvectors)
     """
     # type checks
     assert isinstance(x, np.ndarray)
@@ -922,9 +930,14 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
         else:
             flag_indices[h].append(i)
 
-    # do real and imag separately
+    # do real and imag separately if complex
+    iscomplex = np.iscomplexobj(y)
+    if iscomplex:
+        y_iter = [y.real, y.imag]
+    else:
+        y_iter = [y]
     ypredict = []
-    for _y in [y.real, y.imag]:
+    for _y in y_iter:
         # shift by median and normalize by MAD
         ymed = np.median(_y, axis=0, keepdims=True)
         ymad = np.median(np.abs(_y - ymed), axis=0, keepdims=True) * 1.4826
@@ -935,17 +948,25 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
         # iterate over flagging patterns
         ypred = np.zeros((len(x_eval), _y.shape[1]), np.float)
         for i, fh in enumerate(flag_hashes):
+            # get 1st axis indices for this flagging pattern
             inds = flag_indices[fh]
+            # get 0th axis indices given flags
             select = ~flag_patterns[i]
+            # interpolate if not completely flagged
             if np.any(select):
+                # pick out unflagged data for training
                 GP.fit(X[select, :], _y[select, :][:, inds])
+                # insert predicted data at x_eval points into output vector
                 ypred[:, inds] = GP.predict(x_eval) * ymad[:, inds] + ymed[:, inds]
 
         # append
         ypredict.append(ypred)
 
-    # cast back into complex domain
-    ypredict = ypredict[0] + 1j * ypredict[1]
+    # cast back into complex domain if necessary
+    if iscomplex:
+        ypredict = ypredict[0] + 1j * ypredict[1]
+    else:
+        ypredict = ypredict[0]
 
     return ypredict
 
