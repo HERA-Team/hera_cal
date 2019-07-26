@@ -21,7 +21,7 @@ class Test_TempCal():
     def setup_method(self):
         dfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458043.*.xx.HH.XRAA.uvh5")))
         self.T = tempcal.TempCal(dfiles)
-        autos = [bl for bl in self.T.bls if (bl[0] == bl[1]) and (bl[2][0] == bl[2][1])]
+        autos = [bl for bl in self.T.bls if (bl[0] == bl[1])]
         self.T.read(bls=autos)
 
     def test_gains_from_autos(self):
