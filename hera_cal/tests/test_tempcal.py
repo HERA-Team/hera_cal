@@ -17,63 +17,61 @@ from .. import utils, io, apply_cal, tempcal
 from ..data import DATA_PATH
 
 
-class Test_TempCal():
+class Test_tempcal():
     def setup_method(self):
         dfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458043.*.xx.HH.XRAA.uvh5")))
-        self.T = tempcal.TempCal(dfiles)
-        autos = [bl for bl in self.T.bls if (bl[0] == bl[1])]
-        self.T.read(bls=autos)
+        self.hd = io.HERAData(dfiles)
+        self.data, self.flags, self.nsamps = self.hd.read(bls=[(24, 24), (25, 25), (37, 37)])
+        self.times = np.unique(self.hd.time_array)
 
     def test_gains_from_autos(self):
-        # mostly already tested in top-level function
-        # this just checks outputs are populated etc.
-        self.T.gains_from_autos(self.T.data, self.T.times, flags=self.T.flags,
-                                smooth_frate=1.0, nl=1e-10, Nmirror=20,
-                                edgeflag=10, verbose=False)
-        k = (24, 24, 'xx')
+        # test gains from autos
+        key = (24, 24, 'xx')
         gkey = (24, 'Jxx')
-        assert k in self.T.smooth
-        assert self.T.smooth[k].shape == self.T.data[k].shape 
+        gain, gfalg, smooth = tempcal.gains_from_autos(self.data, self.times, flags=self.flags, smooth_frate=1.0,
+                                                       nl=1e-10, Nmirror=20, edgeflag=10, verbose=False)
+        assert isinstance(gain, dict)
+        assert len(gain) == 3
+        assert gain[gkey].shape == (self.hd.Ntimes, self.hd.Nfreqs)
 
-        # test avg_ants b/c it needs gains
-        self.T.avg_ants(list(self.T.gains.keys()))
-        assert np.all([np.isclose(self.T.gains[_k] - self.T.gains[(24, 'Jxx')], 0.0).all() for _k in self.T.gains])
+        # assert gains are constant across freq
+        assert np.isclose(gain[gkey][0], gain[gkey][0, 0]).all() 
 
-        # test setting abscal time
-        caltime = 2458043.41427365
-        self.T.set_abscal_time(self.T.times, caltime)
-        assert np.isclose(np.abs(self.T.gains[gkey][np.argmin(np.abs(self.T.times - caltime)), :]), 1.0).all()
+        # assert residual std below a value that is set by-hand when it works properly
+        assert np.std((self.data[key] - smooth[key])[:, 10:-10][~self.flags[key][:, 10:-10]]) < 20
 
+        # test applying calibration is a good match to smoothed data
+        assert np.std((self.data[key] / (gain[gkey]**2) - smooth[key])[:, 10:-10][~self.flags[key][:, 10:-10]]) < 15
 
-def test_gains_from_autos():
-    # load data
-    dfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458043.*.xx.HH.XRAA.uvh5")))
-    uvd = UVData()
-    uvd.read(dfiles, bls=[(24, 24), (25, 25)])
-    times = np.unique(uvd.time_array)
+        # test flag propagation
+        self.flags[key][:] = True
+        g, gf, s = tempcal.gains_from_autos(self.data, self.times, flags=self.flags, smooth_frate=1.0,
+                                            nl=1e-10, Nmirror=20, edgeflag=10, verbose=False)
+        assert np.all(gf[gkey])
 
-    # test gains from autos
-    d = uvd.get_data(24, 24, 'xx')
-    f = uvd.get_flags(24, 24, 'xx')
-    g, gf, s = tempcal.gains_from_autos(d, times, flags=f, smooth_frate=1.0, nl=1e-10, Nmirror=20,
-                                        edgeflag=10, verbose=False)
-    assert isinstance(g, np.ndarray)
+    def test_avg_ants(self):
+        key = (24, 24, 'xx')
+        gkey = (24, 'Jxx')
+        gain, gflag, smooth = tempcal.gains_from_autos(self.data, self.times, flags=self.flags, smooth_frate=1.0,
+                                                       nl=1e-10, Nmirror=20, edgeflag=10, verbose=False)
+        # test avg_ants
+        ag, af = tempcal.avg_gain_ants(gain, list(gain.keys()), gflags=gflag, inplace=False)
+        assert not np.all(np.isclose(gain[(24, 'Jxx')], gain[(25, 'Jxx')]))
+        assert np.all([np.isclose(ag[_k] - ag[(24, 'Jxx')], 0.0).all() for _k in ag])
 
-    # assert gains are constant across freq
-    assert np.isclose(g[0], g[0, 0]).all() 
+        # test inplace
+        tempcal.avg_gain_ants(gain, list(gain.keys()), gflags=gflag, inplace=True)
+        assert np.all([np.isclose(gain[_k] - gain[(24, 'Jxx')], 0.0).all() for _k in gain])
 
-    # assert residual std below a value that is set by-hand when it works properly
-    assert np.std((d - s)[:, 10:-10][~f[:, 10:-10]]) < 20
+    def test_normalize_tempgains(self):
+        key = (24, 24, 'xx')
+        gkey = (24, 'Jxx')
+        gain, gflag, smooth = tempcal.gains_from_autos(self.data, self.times, flags=self.flags, smooth_frate=1.0,
+                                                       nl=1e-10, Nmirror=20, edgeflag=10, verbose=False)
 
-    # test applying calibration is a good match to smoothed data
-    assert np.std((d / (g**2) - s)[:, 10:-10][~f[:, 10:-10]]) < 15
+        normtime = 2458043.41427365
+        ng = tempcal.normalize_tempgains(gain, self.times, normtime, inplace=False)
+        assert np.isclose(np.abs(ng[gkey][np.argmin(np.abs(self.times - normtime)), :]), 1.0).all()
 
-    # test flag propagation
-    f[:] = True
-    g, gf, s = tempcal.gains_from_autos(d, times, flags=f, smooth_frate=1.0, nl=1e-10, Nmirror=20,
-                                        edgeflag=10, verbose=False)
-    assert np.all(gf)
-
-
-def test_gains_from_tempdata():
-    pytest.raises(NotImplementedError, tempcal.gains_from_tempdata, None, None, None)
+    def test_gains_from_tempdata(self):
+        pytest.raises(NotImplementedError, tempcal.gains_from_tempdata, None, None, None)

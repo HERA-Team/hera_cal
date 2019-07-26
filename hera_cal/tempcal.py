@@ -139,105 +139,88 @@ def gains_from_tempdata(tempdata, times, temp_coeff):
     raise NotImplementedError("gains_from_tempdata not yet implemented")
 
 
-class TempCal(VisClean):
-    
-    def __init__(self, *args, **kwargs):
-        """
-        Initialize TempCal with vis_clean.VisClean args and kwargs.
-        """ 
-        super(TempCal, self).__init__(*args, **kwargs)
+def avg_gain_ants(gains, antkeys, gflags=None, inplace=True):
+    """
+    Average gain arrays in gains dict according to antkeys
+    and re-broadcast to all antkeys.
 
-        # init empty dictionaries
-        self.gains = {}
-        self.gflags = {}
+    Args:
+        gains : dict
+            Gain dictionary with (ant, pol) keys
+        antkeys : list of tuples
+            List of (ant, pol) keys in gains to average together.
+        gflags : dict
+            flag dictionary with same shape as gains
+        inplace : bool
+            If True edit input dictionaries inplace, otherwise
+            return deepcopies
 
-    def gains_from_autos(self, data, times, flags=None, smooth_frate=1.0, nl=1e-10, Nmirror=0,
-                         keys=None, edgeflag=0, verbose=True):
-        """
-        Model temperature fluctuations in auto-correlations
-        by dividing auto-correlation by its time-smoothed counterpart.
+    Returns:
+        dict
+            averaged gain dictionary if not inplace
+        dict
+            averaged flag dictionary if not inplace
+    """
+    # get gain keys
+    keys = list(gains.keys())
+    assert isinstance(antkeys, list)
 
-        This is only valid for timescales significantly shorter than
-        the beam crossing timescale. Resultant gains have a "divide" gain_convention.
+    # get gflags
+    if gflags is None:
+        gflags = dict([(k, np.zeros_like(gains[k], np.bool)) for k in gains])
 
-        Rcommended to factorize the flags beforehand using utils.factorize_flags.
+    # iterate over antenna lists
+    gkeys = [k for k in antkeys if k in gains]
+    avg = np.sum([gains[k] * (~gflags[k]).astype(np.float) for k in gkeys], axis=0) / np.sum([~gflags[k] for k in gkeys], axis=0).clip(1e-10, np.inf)
+    avgf = np.any([gflags[k] for k in gkeys], axis=0)
 
-        Args:
-            data : DataContainer
-                Auto-correlation waterfalls of shape (Ntimes, Nfreqs) with ant-pair-pol tuple keys
-            times : ndarray
-                Holds time array in Julian Date of shape (Ntimes,)
-            flags : DataContainer
-                data flags with matching shape of data
-            smooth_frate : float
-                Maximum fringe-rate cutoff [mHz] for "low-pass" smoothing
-            nl : float
-                Noise level in GP interpolation.
-                Recommended to keep this near 1e-10 for non-expert users.
-            Nmirror : int
-                Number of time bins to mirror about edges before interpolation.
-                This can minimimze impact of boundary effects.
-            keys : list
-                List of ant-pair-pol tuples to operate on if fed DataContainers
-            edgeflag : int or len-2 tuple
-                Number of channels to flag on low and high end of frequency band.
-                Low and high can be specified independently via a len-2 tuple.
-            verbose : bool
-                If True, report feedback to stdout.
+    # update gain dicts
+    if inplace:
+        _gains, _gflags = gains, gflags
+    else:
+        _gains, _gflags = copy.deepcopy(gains), copy.deepcopy(gflags)
+    for gkey in gkeys:
+        _gains[gkey] = avg
+        _gflags[gkey] = avgf
 
-            Result:
-                self.gains : dictionary
-                    Ant-pol keys and gain ndarray values
-                self.gflags : dictionary
-                    Ant-pol keys and gain flag ndarray values
-                self.smooth : DataContainer
-                    Ant-pair-pol keys and smoothed autocorr data values
-        """
-        g, gf, s = gains_from_autos(data, times, flags=flags, smooth_frate=smooth_frate,
-                                    nl=nl, Nmirror=Nmirror, keys=keys, edgeflag=edgeflag, verbose=verbose)
-        self.gains.update(g)
-        self.gflags.update(gf)
-        if not hasattr(self, 'smooth'):
-            self.smooth = DataContainer({})
-        for k in s:
-            self.smooth[k] = s[k]
+    if not inplace:
+        return _gains, _gflags
 
-    def avg_ants(self, avg_ants):
-        """
-        Average ant-pol keys together in self.gains.
 
-        Args:
-            avg_ants : list of tuples
-                List of ant-pol tuples to average together.
+def normalize_tempgains(gains, times, norm_time, inplace=False):
+    """
+    Normalize temperature-derived gains to unity
+    at a chosen time.
 
-        Result:
-            Averaged gains edited inplace in self.gains and self.gflags.
-        """
-        # get gain keys
-        keys = list(self.gains.keys())
-        assert isinstance(avg_ants, list)
-        # iterate over antenna lists
-        gkeys = [k for k in avg_ants if k in self.gains]
-        avg = np.sum([self.gains[k] * ~self.gflags[k] for k in gkeys], axis=0) / np.sum([~self.gflags[k] for k in gkeys], axis=0).clip(1e-10, np.inf)
-        avgf = np.any([self.gflags[k] for k in gkeys], axis=0)
-        for gkey in gkeys:
-            self.gains[gkey] = avg
-            self.gflags[gkey] = avgf
+    Args:
+        gains : ndarray or dict
+            Gain array (Ntimes, Nfreqs) or dict of
+            such with (ant, pol) keys
+        times : ndarray
+            Julian Date array of time integrationns
+        norm_time : float
+            JD time to normalize gains
+        inplace : bool
+            If True, edit input dicts in place. Else return deepcopies.
 
-    def set_abscal_time(self, times, cal_time):
-        """
-        Normalize gains to one at time of abscal.
+    Returns:
+        ndarray or dict
+            Normalized gain array or dict if not inplace
+    """
+    if isinstance(gains, dict):
+        # operate on dict
+        if inplace:
+            ngains = gains
+        else:
+            ngains = copy.deepcopy(gains)
+        for k in gains:
+            ngains[k] = normalize_tempgains(gains[k], times, norm_time)
+        if not inplace:
+            return ngains
 
-        Args:
-            times : ndarray
-                Times of data in Julian Date.
-            cal_time : float
-                Julian Date of when absolute calibration was performed.
-                This normalizes the gains at this time to one.
-
-        Result:
-            Edits self.gains in place.
-        """
-        tind = np.argmin(np.abs(times - cal_time))
-        for gkey in self.gains:
-            self.gains[gkey] /= abs(self.gains[gkey][tind])
+    # operate on ndarray
+    tind = np.argmin(np.abs(times - norm_time))
+    if inplace:
+        gains /= np.abs(gains[tind])
+    else:
+        return gains / np.abs(gains[tind])
