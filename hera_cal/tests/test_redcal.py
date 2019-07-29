@@ -1046,12 +1046,20 @@ class TestRunMethods(object):
                 for k, flag in rv['vf_omnical'].items():
                     np.testing.assert_array_equal(rv['v_omnical'][k][flag], 0)
 
-        if pol_mode == '4pol':
-            assert rv['chisq'].shape == (nTimes, nFreqs)
-        else:
-            assert len(rv['chisq']) == 2
-            for val in rv['chisq'].values():
-                assert val.shape == (nTimes, nFreqs)
+            if pol_mode == '4pol':
+                assert rv['chisq'].shape == (nTimes, nFreqs)
+            else:
+                assert len(rv['chisq']) == 2
+                for val in rv['chisq'].values():
+                    assert val.shape == (nTimes, nFreqs)
+
+            # test with no iterations and blank wgts
+            wgts = {k: np.ones_like(data[k], np.float) for k in data}
+            rv = om.redundantly_calibrate(data, all_reds, wgts=wgts, fc_maxiter=0, run_logcal=False, oc_maxiter=0)
+            assert np.all(np.isclose(rv['g_firstcal'][(1, 'Jxx')], 1.0))
+            assert np.all(np.isclose(rv['g_omnical'][(1, 'Jxx')], 1.0))
+            assert np.isclose(np.median(list(rv['chisq_per_ant'].values())), 1.0, atol=1e-6)
+            assert np.all(np.isclose(rv['omni_meta']['iter'], 0))
 
     def test_redcal_iteration(self):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))

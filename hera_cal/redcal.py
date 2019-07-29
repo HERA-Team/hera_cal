@@ -615,7 +615,7 @@ class RedundantCalibrator:
         """
         df = np.median(np.ediff1d(freqs))
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
-        
+
         # iteratively solve for offsets to account for phase wrapping
         for i in range(maxiter):
             dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
@@ -819,7 +819,6 @@ class RedundantCalibrator:
         Returns:
             new_sol: sol with degeneracy removal/replacement performed
         """
-
         gains, vis = get_gains_and_vis_from_sol(sol)
         if degen_sol is None:
             degen_sol = {key: np.ones_like(val) for key, val in gains.items()}
@@ -937,8 +936,8 @@ def expand_omni_vis(cal, all_reds, data, flags, nsamples):
     cal['vns_omnical'] = DataContainer(cal['vns_omnical'])
 
 
-def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
-                          oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4):
+def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
+                          run_logcal=True, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -946,6 +945,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             complex data of shape. Asummed to have no flags.
         reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
             item in each list will be treated as the key for the unique baseline.
+        wgts : dictionary or DataContainer of data weights matching data shape.
+            Default is None for firstcal and logcal, and computes noise from autos for omnical
         freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
             but must be provided if data is a dictionary, if it doesn't have .freqs, or if the
             length of data.freqs is 1.
@@ -954,8 +955,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             if it doesn't have .times_by_bl, or if the length of any list of times is 1.
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
+            Skip if maxiter is zero.
+        run_logcal : bool, run logcal if True before omnical. Default = True.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
+            Skip if maxiter is zero.
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
@@ -985,18 +989,41 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         freqs = data.freqs
     if times_by_bl is None:
         times_by_bl = data.times_by_bl
+    data_shape = data[list(data.keys())[0]].shape
+    data_dtype = data[list(data.keys())[0]].dtype
+    gain_keys = sorted(set([utils.split_bl(k)[0] for k in data] + [utils.split_bl(k)[1] for k in data]))
+    vis_keys = [r[0] for r in reds]
 
     # perform firstcal
-    rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit)
-    rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
+    if fc_maxiter > 0:
+        rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit, wgts=wgts)
+        rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=np.bool) for ant, g in rv['g_firstcal'].items()}
+    else:
+        rv['g_firstcal'] = {k: np.ones(data_shape, dtype=data_dtype) for k in gain_keys}
+        rv['gf_firstcal'] = {k: np.zeros(data_shape, dtype=np.bool) for k in gain_keys}
 
-    # perform logcal and omnical
-    log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
-    make_sol_finite(log_sol)
-    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
-                                                                     * SEC_PER_DAY))**-1 for bl in data.keys()}
-    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
-                                           check_every=check_every, check_after=check_after, gain=gain)
+    # perform logcal
+    if run_logcal:
+        log_sol = rc.logcal(data, sol0=rv['g_firstcal'], wgts=wgts)
+        make_sol_finite(log_sol)
+    else:
+        # use fc gains and update with vis solutions
+        log_sol = deepcopy(rv['g_firstcal'])
+        for k in vis_keys:
+            log_sol[k] = np.ones(data_shape, dtype=data_dtype)
+
+    # perform omnical: derive wgts if None
+    if len(wgts) == 0:
+        wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
+                                                                         * SEC_PER_DAY))**-1 for bl in data.keys()}
+    if oc_maxiter > 0:
+        rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
+                                               check_every=check_every, check_after=check_after, gain=gain)
+    else:
+        omni_sol = deepcopy(log_sol)
+        rv['omni_meta'] = {'iter': np.zeros(data_shape, dtype=np.int),
+                           'chisq': np.zeros(data_shape, dtype=np.float),
+                           'conv_crit': np.zeros(data_shape, dtype=np.float)}
 
     # update omnical flags and then remove degeneracies
     rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
@@ -1009,7 +1036,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
+    rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=wgts,
                                                                        gains=rv['g_omnical'], reds=reds,
                                                                        split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
     rv['chisq_per_ant'] = {ant: cs / nObs_per_ant[ant] for ant, cs in rv['chisq_per_ant'].items()}
@@ -1026,15 +1053,17 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     return rv
 
 
-def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
-                     flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, 
-                     oc_maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
+def redcal_iteration(hd, wgts={}, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
+                     flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, run_logcal=True,
+                     oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
     Arguments:
         hd: HERAData object, instantiated with the datafile or files to calibrate. Must be loaded using uvh5.
             Assumed to have no prior flags.
+        wgts : external weight dictionary to use. Must match keys and shape of data. Default is no wgts
+            fed to redcal.redundantly_calibrate, which results in wgts derived from autocorr noise model.
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype for hd. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
@@ -1049,8 +1078,11 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
+            Skip if maxiter is zero.
+        run_logcal: bool, run log_cal before omnical if desired. Default is True.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
+            Skip if maxiter is zero.
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
@@ -1139,9 +1171,10 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                         nsamples[bl] = nsamples[bl][tinds, fSlice] 
                 else:  # perform partial i/o
                     data, flags, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
-                cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, 
-                                            oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after, gain=gain)
+                cal = redundantly_calibrate(data, reds, wgts=wgts, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
+                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, run_logcal=run_logcal,
+                                            oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, check_every=check_every,
+                                            check_after=check_after, gain=gain)
                 expand_omni_vis(cal, filter_reds(all_reds, pols=pols), data, flags, nsamples)
                 
                 # gather results
@@ -1169,8 +1202,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                omnivis_ext='.omni_vis.uvh5', outdir=None, ant_metrics_file=None, clobber=False, 
                nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, 
                max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
-               fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, 
-               add_to_history='', verbose=False, **filter_reds_kwargs):
+               fc_maxiter=50, run_logcal=True, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
+               check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1204,8 +1237,11 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
+            Skip if maxiter is zero.
+        run_logcal: bool, run log_cal before omnical if desired. Default is True.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
+            Skip if maxiter is zero.
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
@@ -1244,8 +1280,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
         cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants, 
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high, 
-                               fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, 
-                               check_every=check_every, check_after=check_after, gain=gain, verbose=verbose, **filter_reds_kwargs)
+                               fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, run_logcal=run_logcal, oc_conv_crit=oc_conv_crit,
+                               oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after, gain=gain,
+                               verbose=verbose, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
         z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
@@ -1320,6 +1357,7 @@ def redcal_argparser():
     omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
     omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-6, help="maximum allowed changed in firstcal phases for convergence")
     omni_opts.add_argument("--fc_maxiter", type=int, default=50, help="maximum number of firstcal iterations allowed for finding per-antenna phases")
+    omni_opts.add_argument("--no_logcal", default=False, action='store_true', help="Dont run logcal.")
     omni_opts.add_argument("--oc_conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
     omni_opts.add_argument("--oc_maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
     omni_opts.add_argument("--check_every", type=int, default=10, help="compute omnical convergence every Nth iteration (saves computation).")
