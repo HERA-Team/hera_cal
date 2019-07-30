@@ -938,8 +938,9 @@ def expand_omni_vis(cal, all_reds, data, flags, nsamples):
     cal['vns_omnical'] = DataContainer(cal['vns_omnical'])
 
 
-def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
-                          run_logcal=True, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4):
+def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, wgts={}, prior_firstcal=False,
+                          fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, 
+                          check_every=10, check_after=50, gain=.4):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -947,17 +948,23 @@ def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_
             complex data of shape. Asummed to have no flags.
         reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
             item in each list will be treated as the key for the unique baseline.
-        wgts : dictionary or DataContainer of data weights matching data shape.
-            Default is None for firstcal and logcal, and computes noise from autos for omnical
         freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
             but must be provided if data is a dictionary, if it doesn't have .freqs, or if the
             length of data.freqs is 1.
         times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data DataContainer, but must be provided if data is a dictionary,
             if it doesn't have .times_by_bl, or if the length of any list of times is 1.
+        wgts : dictionary or DataContainer of data weights matching data shape, to be applied linearly
+            to the data. All baselines in reds must be in wgts if it is no the default, {}. In the default
+            case, this uses identical weights for firstcal and logcal and autocorrelations to estimate
+            noise weighting for omnical. Regardless, auto-based noise estimates normalize chi^2.
+        prior_firstcal: either bool or dictionary:
+            If False (default): the data is raw and firstcal is unknown. Run firstcal normally.
+            If True: the data has been pre-calibrated. Assumes firstcal is all unity gains.
+            If a dictionary: the data is raw, but instead of using the firstcal algorithm, 
+                use these gains instead. Must be in the same format 
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
-        run_logcal : bool, run logcal if True before omnical. Default = True.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
         check_every: compute omnical convergence every Nth iteration (saves computation).
@@ -968,6 +975,7 @@ def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jxx').
             Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
+            Note that ants/bls in data but not in reds will not appear in returned gains/vis sols.
         'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
         'g_omnical': full omnical gain dictionary (which include firstcal gains) in the same format.
             Flagged gains will be 1.0s.
@@ -989,42 +997,32 @@ def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_
         freqs = data.freqs
     if times_by_bl is None:
         times_by_bl = data.times_by_bl
-    data_shape = data[list(data.keys())[0]].shape
-    data_dtype = data[list(data.keys())[0]].dtype
-    gain_keys = sorted(set([utils.split_bl(k)[0] for k in data] + [utils.split_bl(k)[1] for k in data]))
+    ants = sorted(set([ant for red in reds for bl in red for ant in utils.split_bl(bl)]))
 
-    # perform firstcal
-    if fc_maxiter > 0:
+    # perform firstcal if required
+    if prior_firstcal is False:
+        # perform firstcal normally on raw data
         rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit, wgts=wgts)
-        rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=np.bool) for ant, g in rv['g_firstcal'].items()}
+    elif prior_firstcal is True:
+        # assume the data is pre-calibrated, so all firstcal gains are 1.0 + 0.0j
+        rv['g_firstcal'] = {ant: np.ones_like(list(data.values())[0]) for ant in ant}
     else:
-        rv['g_firstcal'] = {k: np.ones(data_shape, dtype=data_dtype) for k in gain_keys}
-        rv['gf_firstcal'] = {k: np.zeros(data_shape, dtype=np.bool) for k in gain_keys}
+        # assume the data is raw, but use an external set of gains for firstcal
+        assert isinstance(prior_firstcal, dict), 'prior_firstcal must be a boolean or a dictionary of gains.'
+        assert np.all([ant in prior_firstcal for ant in ants]), 
+               'if prior_firstcal is a dict, it must have gains for all antennas that appear in reds'
+        rv['g_firstcal'] = prior_firstcal
+    rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
-    # perform logcal
-    if run_logcal:
-        log_sol = rc.logcal(data, sol0=rv['g_firstcal'], wgts=wgts)
-        make_sol_finite(log_sol)
-    else:
-        # use fc gains and update with vis solutions
-        log_sol = deepcopy(rv['g_firstcal'])
-        # take weighted mean in each red group as starting vis solution
-        for r in reds:
-            log_sol[r[0]] = np.sum([data[k] * wgts.get(k, 1.0) for k in r], axis=0) \
-                            / np.sum([wgts.get(k, 1.0) for k in r], axis=0).clip(1e-10, np.inf)
-
-    # perform omnical: derive wgts if None
+    # perform logcal and omnical. Use noise_wgts if wgts if None
+    log_sol = rc.logcal(data, sol0=rv['g_firstcal'], wgts=wgts)
+    make_sol_finite(log_sol)
+    noise_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
+                                                                      * SEC_PER_DAY))**-1 for bl in data.keys()}
     if len(wgts) == 0:
-        wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
-                                                                         * SEC_PER_DAY))**-1 for bl in data.keys()}
-    if oc_maxiter > 0:
-        rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
-                                               check_every=check_every, check_after=check_after, gain=gain)
-    else:
-        omni_sol = deepcopy(log_sol)
-        rv['omni_meta'] = {'iter': np.zeros(data_shape, dtype=np.int),
-                           'chisq': np.zeros(data_shape, dtype=np.float),
-                           'conv_crit': np.zeros(data_shape, dtype=np.float)}
+        wgts = noise_wgts
+    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
+                                           check_every=check_every, check_after=check_after, gain=gain)
 
     # update omnical flags and then remove degeneracies
     rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
@@ -1037,7 +1035,7 @@ def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=wgts,
+    rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=noise_wgts,
                                                                        gains=rv['g_omnical'], reds=reds,
                                                                        split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
     rv['chisq_per_ant'] = {ant: cs / nObs_per_ant[ant] for ant, cs in rv['chisq_per_ant'].items()}
