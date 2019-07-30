@@ -1075,10 +1075,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
-            Skip if maxiter is zero.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
-            Skip if maxiter is zero.
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
