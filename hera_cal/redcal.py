@@ -1009,7 +1009,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, wgts={}, pri
     else:
         # assume the data is raw, but use an external set of gains for firstcal
         assert isinstance(prior_firstcal, dict), 'prior_firstcal must be a boolean or a dictionary of gains.'
-        assert np.all([ant in prior_firstcal for ant in ants]), 
+        assert np.all([ant in prior_firstcal for ant in ants]), \
                'if prior_firstcal is a dict, it must have gains for all antennas that appear in reds'
         rv['g_firstcal'] = prior_firstcal
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
