@@ -1005,7 +1005,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, wgts={}, pri
         rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit, wgts=wgts)
     elif prior_firstcal is True:
         # assume the data is pre-calibrated, so all firstcal gains are 1.0 + 0.0j
-        rv['g_firstcal'] = {ant: np.ones_like(list(data.values())[0]) for ant in ant}
+        rv['g_firstcal'] = {ant: np.ones_like(list(data.values())[0]) for ant in ants}
     else:
         # assume the data is raw, but use an external set of gains for firstcal
         assert isinstance(prior_firstcal, dict), 'prior_firstcal must be a boolean or a dictionary of gains.'
