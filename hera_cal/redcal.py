@@ -1168,9 +1168,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 else:  # perform partial i/o
                     data, flags, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, run_logcal=run_logcal,
-                                            oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, check_every=check_every,
-                                            check_after=check_after, gain=gain)
+                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, 
+                                            oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after, gain=gain)
                 expand_omni_vis(cal, filter_reds(all_reds, pols=pols), data, flags, nsamples)
                 
                 # gather results
@@ -1233,10 +1232,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
-            Skip if maxiter is zero.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
-            Skip if maxiter is zero.
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
@@ -1275,9 +1272,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             print('\nNow running redundant calibration without antennas', list(ex_ants), '...')
         cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants, 
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high, 
-                               fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, run_logcal=run_logcal, oc_conv_crit=oc_conv_crit,
-                               oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after, gain=gain,
-                               verbose=verbose, **filter_reds_kwargs)
+                               fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, 
+                               check_every=check_every, check_after=check_after, gain=gain, verbose=verbose, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
         z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
