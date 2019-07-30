@@ -1054,17 +1054,15 @@ def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_
     return rv
 
 
-def redcal_iteration(hd, wgts={}, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
-                     flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, run_logcal=True,
-                     oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
+def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
+                     flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, 
+                     oc_maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
     Arguments:
         hd: HERAData object, instantiated with the datafile or files to calibrate. Must be loaded using uvh5.
             Assumed to have no prior flags.
-        wgts : external weight dictionary to use. Must match keys and shape of data. Default is no wgts
-            fed to redcal.redundantly_calibrate, which results in wgts derived from autocorr noise model.
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype for hd. Lower numbers save memory, but incur a CPU overhead.
         pol_mode: polarization mode of redundancies. Can be '1pol', '2pol', '4pol', or '4pol_minV'.
@@ -1080,7 +1078,6 @@ def redcal_iteration(hd, wgts={}, nInt_to_load=None, pol_mode='2pol', bl_error_t
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
             Skip if maxiter is zero.
-        run_logcal: bool, run log_cal before omnical if desired. Default is True.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
             Skip if maxiter is zero.
@@ -1172,7 +1169,7 @@ def redcal_iteration(hd, wgts={}, nInt_to_load=None, pol_mode='2pol', bl_error_t
                         nsamples[bl] = nsamples[bl][tinds, fSlice] 
                 else:  # perform partial i/o
                     data, flags, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
-                cal = redundantly_calibrate(data, reds, wgts=wgts, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
+                cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, run_logcal=run_logcal,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, check_every=check_every,
                                             check_after=check_after, gain=gain)
@@ -1203,8 +1200,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                omnivis_ext='.omni_vis.uvh5', outdir=None, ant_metrics_file=None, clobber=False, 
                nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, 
                max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
-               fc_maxiter=50, run_logcal=True, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
-               check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
+               fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, 
+               add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1239,7 +1236,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
             Skip if maxiter is zero.
-        run_logcal: bool, run log_cal before omnical if desired. Default is True.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
             Skip if maxiter is zero.
@@ -1358,7 +1354,6 @@ def redcal_argparser():
     omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
     omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-6, help="maximum allowed changed in firstcal phases for convergence")
     omni_opts.add_argument("--fc_maxiter", type=int, default=50, help="maximum number of firstcal iterations allowed for finding per-antenna phases")
-    omni_opts.add_argument("--no_logcal", default=False, action='store_true', help="Dont run logcal.")
     omni_opts.add_argument("--oc_conv_crit", type=float, default=1e-10, help="maximum allowed relative change in omnical solutions for convergence")
     omni_opts.add_argument("--oc_maxiter", type=int, default=500, help="maximum number of omnical iterations allowed before it gives up")
     omni_opts.add_argument("--check_every", type=int, default=10, help="compute omnical convergence every Nth iteration (saves computation).")
