@@ -372,6 +372,7 @@ class OmnicalSolver(linsolve.LinProductSolver):
                 conv_crit: the convergence criterion evaluated at the final iteration, with dimensions of the data.
             sol: a dictionary of complex solutions with variables as keys, with dimensions of the data.
         """
+        assert maxiter > 0, 'Omnical must have at least 1 iteration.'
         sol = self.sol0
         terms = [(linsolve.get_name(gi), linsolve.get_name(gj), linsolve.get_name(uij))
                  for term in self.all_terms for (gi, gj, uij) in term]
@@ -617,6 +618,7 @@ class RedundantCalibrator:
         dtype = np.find_common_type([d.dtype for d in data.values()], [])
 
         # iteratively solve for offsets to account for phase wrapping
+        assert maxiter > 0, 'Firstcal must have at least 1 iteration.'
         for i in range(maxiter):
             dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
                                                        offsets_only=(i > 0), sparse=sparse, mode=mode, 
@@ -955,11 +957,9 @@ def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_
             if it doesn't have .times_by_bl, or if the length of any list of times is 1.
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
         fc_maxiter: maximum number of firstcal iterations allowed for finding per-antenna phases
-            Skip if maxiter is zero.
         run_logcal : bool, run logcal if True before omnical. Default = True.
         oc_conv_crit: maximum allowed relative change in omnical solutions for convergence
         oc_maxiter: maximum number of omnical iterations allowed before it gives up
-            Skip if maxiter is zero.
         check_every: compute omnical convergence every Nth iteration (saves computation).
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
