@@ -992,7 +992,6 @@ def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_
     data_shape = data[list(data.keys())[0]].shape
     data_dtype = data[list(data.keys())[0]].dtype
     gain_keys = sorted(set([utils.split_bl(k)[0] for k in data] + [utils.split_bl(k)[1] for k in data]))
-    vis_keys = [r[0] for r in reds]
 
     # perform firstcal
     if fc_maxiter > 0:
@@ -1009,8 +1008,10 @@ def redundantly_calibrate(data, reds, wgts={}, freqs=None, times_by_bl=None, fc_
     else:
         # use fc gains and update with vis solutions
         log_sol = deepcopy(rv['g_firstcal'])
-        for k in vis_keys:
-            log_sol[k] = np.ones(data_shape, dtype=data_dtype)
+        # take weighted mean in each red group as starting vis solution
+        for r in reds:
+            log_sol[r[0]] = np.sum([data[k] * wgts.get(k, 1.0) for k in r], axis=0) \
+                            / np.sum([wgts.get(k, 1.0) for k in r], axis=0).clip(1e-10, np.inf)
 
     # perform omnical: derive wgts if None
     if len(wgts) == 0:

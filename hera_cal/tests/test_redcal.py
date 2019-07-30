@@ -1058,7 +1058,6 @@ class TestRunMethods(object):
             rv = om.redundantly_calibrate(data, all_reds, wgts=wgts, fc_maxiter=0, run_logcal=False, oc_maxiter=0)
             assert np.all(np.isclose(rv['g_firstcal'][(1, 'Jxx')], 1.0))
             assert np.all(np.isclose(rv['g_omnical'][(1, 'Jxx')], 1.0))
-            assert np.isclose(np.median(list(rv['chisq_per_ant'].values())), 1.0, atol=1e-6)
             assert np.all(np.isclose(rv['omni_meta']['iter'], 0))
 
     def test_redcal_iteration(self):
