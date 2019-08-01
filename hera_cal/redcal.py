@@ -254,6 +254,8 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
                                                        and (max_bl_cut is None or l < max_bl_cut))]
     return reds
 
+def test(variable):
+	return variable
 
 def reds_to_antpos(reds, tol=1e-10):
     '''Computes a set of antenna positions consistent with the given redundancies.
