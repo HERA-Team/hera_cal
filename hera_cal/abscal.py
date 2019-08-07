@@ -2438,7 +2438,7 @@ class AbsCal(object):
         if hasattr(self, '_dly_slope'):
             # form dict of delay slopes for each polarization in self._gain_keys
             # b/c they are identical for all antennas of the same polarization
-            dly_slope_dict = {ants[0][1]: self.dly_slope[k[0]] for ants in self._gain_keys}
+            dly_slope_dict = {ants[0][1]: self.dly_slope[ants[0]] for ants in self._gain_keys}
 
             # turn delay slope into per-antenna complex gains, while iterating over input gain_keys
             dly_slope_gain = odict()
@@ -2503,7 +2503,7 @@ class AbsCal(object):
         if hasattr(self, '_phs_slope'):
             # form dict of phs slopes for each polarization in self._gain_keys
             # b/c they are identical for all antennas of the same polarization
-            phs_slope_dict = {ants[0][1]: self.phs_slope[k[0]] for ants in self._gain_keys}
+            phs_slope_dict = {ants[0][1]: self.phs_slope[ants[0]] for ants in self._gain_keys}
 
             # turn phs slope into per-antenna complex gains, while iterating over input gain_keys
             phs_slope_gain = odict()
@@ -2565,7 +2565,7 @@ class AbsCal(object):
         if hasattr(self, '_abs_eta'):
             # form dict of abs eta for each polarization in self._gain_keys
             # b/c they are identical for all antennas of the same polarization
-            abs_eta_dict = {ants[0][1]: self.abs_eta[k[0]] for ants in self._gain_keys}
+            abs_eta_dict = {ants[0][1]: self.abs_eta[ants[0]] for ants in self._gain_keys}
 
             # turn abs eta into per-antenna complex gains, while iterating over input gain_keys
             abs_eta_gain = odict()
@@ -2619,7 +2619,7 @@ class AbsCal(object):
         if hasattr(self, '_abs_psi'):
             # form dict of abs psi for each polarization in self._gain_keys
             # b/c they are identical for all antennas of the same polarization
-            abs_psi_dict = {ants[0][1]: self.abs_psi[k[0]] for ants in self._gain_keys}
+            abs_psi_dict = {ants[0][1]: self.abs_psi[ants[0]] for ants in self._gain_keys}
 
             # turn abs psi into per-antenna complex gains, while iterating over input gain_keys
             abs_psi_gain = odict()
@@ -2672,7 +2672,7 @@ class AbsCal(object):
         if hasattr(self, '_TT_Phi'):
             # form dict of TT_Phi for each polarization in self._gain_keys
             # b/c they are identical for all antennas of the same polarization
-            TT_Phi_dict = {ants[0][1]: self.TT_Phi[k[0]] for ants in self._gain_keys}
+            TT_Phi_dict = {ants[0][1]: self.TT_Phi[ants[0]] for ants in self._gain_keys}
 
             # turn TT_Phi into per-antenna complex gains, while iterating over input gain_keys
             TT_Phi_gain = odict()
