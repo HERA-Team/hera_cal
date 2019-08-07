@@ -272,12 +272,14 @@ class ReflectionFitter(FRFilter):
 
         # if ref_gains not empty, fill in missing antenna and polarizations with unity gains
         if len(self.ref_gains) > 0:
-            _keys = list(self.ref_gains.keys())
+            _key = list(self.ref_gains.keys())[0]
             for a in self.ants:
                 for p in self.pols:
                     k = (a, split_pol(p)[0])
                     if k not in self.ref_gains:
-                        self.ref_gains[k] = np.ones_like(self.ref_gains[_keys[0]], dtype=np.complex)
+                        self.ref_gains[k] = np.ones_like(self.ref_gains[_key], dtype=np.complex)
+                    if k not in self.ref_flags:
+                        self.ref_flags[k] = np.zeros_like(self.ref_gains[_key], dtype=np.bool)
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs, ref_flags=None,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
@@ -405,8 +407,9 @@ class ReflectionFitter(FRFilter):
 
         return out_ref_amp, out_ref_dly, out_ref_phs, out_ref_info, out_ref_eps, out_ref_gains
 
-    def write_auto_reflections(self, output_calfits, input_calfits=None, overwrite=False,
-                               write_npz=False, add_to_history='', verbose=True):
+    def write_auto_reflections(self, output_calfits, input_calfits=None, time_array=None,
+                               freq_array=None, overwrite=False, write_npz=False,
+                               add_to_history='', verbose=True):
         """
         Write reflection gain terms from self.ref_gains.
 
@@ -422,6 +425,8 @@ class ReflectionFitter(FRFilter):
             output_calfits : str, filepath to write output calfits file to
             input_calfits : str, filepath to input calfits file to multiply in with
                 reflection gains.
+            time_array : ndarray, Julian Date of times in ref_gains. Default is self.times
+            freq_array : ndarray, Frequency array [Hz] of ref_gains. Default is self.freqs
             overwrite : bool, if True, overwrite output file
             write_npz : bool, if True, write an NPZ file holding reflection
                 params with the same pathname as output_calfits
@@ -432,8 +437,26 @@ class ReflectionFitter(FRFilter):
             uvc : UVCal object with new gains
         """
         # Create reflection gains
-        rgains = self.ref_gains
-        flags, quals, tquals = None, None, None
+        rgains, flags = self.ref_gains, self.ref_flags
+        quals, tquals = None, None
+
+        # get time and freq array
+        if time_array is None:
+            time_array = self.times
+        Ntimes = len(time_array)
+        if freq_array is None:
+            freq_array = self.freqs
+        Nfreqs = len(freq_array)
+
+        # write npz
+        if write_npz:
+            output_npz = os.path.splitext(output_calfits)[0] + '.npz'
+            if not os.path.exists(output_npz) or overwrite:
+                echo("...writing {}".format(output_npz), verbose=verbose)
+                np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
+                         significance=self.ref_significance, times=time_array, freqs=freq_array,
+                         lsts=self.lsts, antpos=self.antpos, flags=self.ref_flags,
+                         history=version.history_string(add_to_history))
 
         if input_calfits is not None:
             # Load calfits
@@ -444,20 +467,14 @@ class ReflectionFitter(FRFilter):
             rgains = merge_gains([gains, rgains])
 
             # resolve possible broadcasting across time and freq
-            if cal.Ntimes > self.Ntimes:
+            if cal.Ntimes > Ntimes:
                 time_array = cal.time_array
-            else:
-                time_array = self.times
-            if cal.Nfreqs > self.Nfreqs:
+            if cal.Nfreqs > Nfreqs:
                 freq_array = cal.freq_array
-            else:
-                freq_array = self.freqs
             kwargs = dict([(k, getattr(cal, k)) for k in ['gain_convention', 'x_orientation',
                                                           'telescope_name', 'cal_style']])
             add_to_history += "\nMerged-in calibration {}".format(input_calfits)
         else:
-            time_array = self.times
-            freq_array = self.freqs
             kwargs = {}
 
         echo("...writing {}".format(output_calfits), verbose=verbose)
@@ -465,15 +482,6 @@ class ReflectionFitter(FRFilter):
                            quality=quals, total_qual=tquals, zero_check=False,
                            overwrite=overwrite, history=version.history_string(add_to_history),
                            **kwargs)
-
-        if write_npz:
-            output_npz = os.path.splitext(output_calfits)[0] + '.npz'
-            if not os.path.exists(output_npz) or overwrite:
-                echo("...writing {}".format(output_npz), verbose=verbose)
-                np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
-                         significance=self.ref_significance, times=self.times, freqs=self.freqs,
-                         lsts=self.lsts, antpos=self.antpos,
-                         history=version.history_string(add_to_history))
 
         return uvc
 
