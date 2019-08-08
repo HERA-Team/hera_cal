@@ -83,6 +83,13 @@ class TestMethods(object):
         pos = {0: np.array([0, 0, 0]), 1: np.array([20, 0, 0]), 2: np.array([10, 0, 0])}
         assert om.get_pos_reds(pos) == [[(0, 2), (2, 1)], [(0, 1)]]
 
+        # test branch cut
+        pos = {0: np.array([-.03, 1., 0.]),
+               1: np.array([1., 1., 0.]),
+               2: np.array([0.03, 0.0, 0.]),
+               3: np.array([1., 0., 0.])}
+        assert len(om.get_pos_reds(pos, bl_error_tol=.1)) == 4
+
     def test_filter_reds(self):
         antpos = linear_array(7)
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
