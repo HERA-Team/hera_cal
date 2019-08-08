@@ -243,7 +243,7 @@ class Test_ReflectionFitter_Cables(object):
         assert np.all(uvc.get_flags(a_k)[:, 0])
 
         # load npz and do some basic checks
-        fnpz = np.load('ex.npz')
+        fnpz = np.load('ex.npz', allow_pickle=True)
         assert len(fnpz['times']) == 100
         assert fnpz['flags'].item()[a_k][0, 0]
         assert 'delay' in fnpz and 'amp' in fnpz and 'phase' in fnpz
@@ -281,6 +281,7 @@ class Test_ReflectionFitter_Cables(object):
 
         os.remove('./ex.calfits')
         os.remove('./ex2.calfits')
+        os.remove('./ex.npz')
 
     def test_auto_reflection_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--output_fname', 'ex.calfits', '--dly_ranges', '10,20', '10,20', '--overwrite', '--opt_buffer', '25', '75']
