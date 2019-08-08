@@ -660,6 +660,7 @@ class Test_Post_Redcal_Abscal_Run(object):
                 assert np.min(np.abs(all_data_lsts - mlst)) == np.abs(dlst - mlst)
 
     def test_post_redcal_abscal(self):
+        # setup
         hd = io.HERAData(self.data_file)
         hdm = io.HERAData(self.model_files)
         hc = io.HERACal(self.redcal_file)
@@ -668,9 +669,9 @@ class Test_Post_Redcal_Abscal_Run(object):
         all_model_times, all_model_lsts = abscal.get_all_times_and_lsts(hdm)
         d2m_time_map = abscal.get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)
         tinds = [0, 1, 2]
-        data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=['xx'])
+        data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=['xx', 'yy'])
         model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=['xx'])
+        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=['xx', 'yy'])
         model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
         utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
@@ -682,17 +683,21 @@ class Test_Post_Redcal_Abscal_Run(object):
         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
         calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+
+        # run function
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             delta_gains, AC = abscal.post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, min_bl_cut=1, verbose=False)
+
+        # use returned gains to calibrate data
         calibrate_in_place(data, delta_gains, data_flags=flags, 
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
 
+        # basic shape & type checks
         for k in rc_gains.keys():
-            if k[1] == 'Jxx':
-                assert k in delta_gains
-                assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
-                assert delta_gains[k].dtype == np.complex
+            assert k in delta_gains
+            assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
+            assert delta_gains[k].dtype == np.complex
         for k in AC.model.keys():
             np.testing.assert_array_equal(model[k], AC.model[k])
         for k in AC.data.keys():
@@ -711,6 +716,15 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert AC.abs_psi_arr is not None
         assert AC.TT_Phi is not None
         assert AC.TT_Phi_arr is not None
+
+        # assert custom_* funcs with multiple pols returns different results
+        # for different pols, as expected
+        gkxx, gkyy = (0, 'Jxx'), (0, 'Jyy')
+        for func, args in zip([AC.custom_abs_eta_gain, AC.custom_dly_slope_gain,
+                               AC.custom_phs_slope_gain, AC.custom_TT_Phi_gain],
+                              [(), (AC.antpos,), (AC.antpos,), (AC.antpos,)]):
+            custom_gains = func([gkxx, gkyy], *args)
+            assert not np.all(np.isclose(np.abs(custom_gains[gkxx] - custom_gains[gkyy]), 0.0, atol=1e-12))
 
     def test_post_redcal_abscal_run(self):
         with warnings.catch_warnings():
