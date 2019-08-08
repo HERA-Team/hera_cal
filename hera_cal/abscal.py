@@ -2423,6 +2423,7 @@ class AbsCal(object):
             # get dly_slope dictionary
             dly_slope = self.dly_slope
             # turn delay slope into per-antenna complex gains, while iterating over self._gain_keys
+            # einsum sums over antenna position
             return odict(list(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2]))),
                                   flatten(self._gain_keys))))
         else:
@@ -2443,6 +2444,7 @@ class AbsCal(object):
             # turn delay slope into per-antenna complex gains, while iterating over input gain_keys
             dly_slope_gain = odict()
             for gk in gain_keys:
+                # einsum sums over antenna position
                 dly_slope_gain[gk] = np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope_dict[gk[1]], antpos[gk[0]][:2]))
             return dly_slope_gain
         else:
@@ -2460,6 +2462,7 @@ class AbsCal(object):
     def dly_slope_gain_arr(self):
         """ form complex gain from _dly_slope_arr array """
         if hasattr(self, '_dly_slope_arr'):
+            # einsum sums over antenna position
             return np.exp(2j * np.pi * self.freqs.reshape(-1, 1) * np.einsum("hi...,hi->h...", self._dly_slope_arr, self.antpos_arr[:, :2]))
         else:
             return None
@@ -2468,6 +2471,7 @@ class AbsCal(object):
     def dly_slope_ant_dly_arr(self):
         """ form antenna delays from _dly_slope_arr array """
         if hasattr(self, '_dly_slope_arr'):
+            # einsum sums over antenna position
             return np.einsum("hi...,hi->h...", self._dly_slope_arr, self.antpos_arr[:, :2])
         else:
             return None
@@ -2488,6 +2492,7 @@ class AbsCal(object):
             # get phs_slope dictionary
             phs_slope = self.phs_slope
             # turn phs slope into per-antenna complex gains, while iterating over self._gain_keys
+            # einsum sums over antenna position
             return odict(list(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))),
                                   flatten(self._gain_keys))))
         else:
@@ -2508,6 +2513,7 @@ class AbsCal(object):
             # turn phs slope into per-antenna complex gains, while iterating over input gain_keys
             phs_slope_gain = odict()
             for gk in gain_keys:
+                # einsum sums over antenna position
                 phs_slope_gain[gk] = np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope_dict[gk[1]], antpos[gk[0]][:2]))
             return phs_slope_gain
 
@@ -2526,6 +2532,7 @@ class AbsCal(object):
     def phs_slope_gain_arr(self):
         """ form complex gain from _phs_slope_arr array """
         if hasattr(self, '_phs_slope_arr'):
+            # einsum sums over antenna position
             return np.exp(1.0j * np.ones_like(self.freqs).reshape(-1, 1) * np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
         else:
             return None
@@ -2534,6 +2541,7 @@ class AbsCal(object):
     def phs_slope_ant_phs_arr(self):
         """ form antenna delays from _phs_slope_arr array """
         if hasattr(self, '_phs_slope_arr'):
+            # einsum sums over antenna position
             return np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2])
         else:
             return None
@@ -2658,6 +2666,7 @@ class AbsCal(object):
         """ form complex gain from _TT_Phi array """
         if hasattr(self, '_TT_Phi'):
             TT_Phi = self.TT_Phi
+            # einsum sums over antenna position
             return odict(list(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys))))
         else:
             return None
@@ -2677,6 +2686,7 @@ class AbsCal(object):
             # turn TT_Phi into per-antenna complex gains, while iterating over input gain_keys
             TT_Phi_gain = odict()
             for gk in gain_keys:
+                # einsum sums over antenna position
                 TT_Phi_gain[gk] = np.exp(1j * np.einsum("i...,i->...", TT_Phi_dict[gk[1]], antpos[gk[0]][:2]))
             return TT_Phi_gain
         else:
@@ -2694,6 +2704,7 @@ class AbsCal(object):
     def TT_Phi_gain_arr(self):
         """ form complex gain from _TT_Phi_arr array """
         if hasattr(self, '_TT_Phi_arr'):
+            # einsum sums over antenna position
             return np.exp(1j * np.einsum("hi...,hi->h...", self._TT_Phi_arr, self.antpos_arr[:, :2]))
         else:
             return None
