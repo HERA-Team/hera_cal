@@ -232,6 +232,7 @@ class Test_ReflectionFitter_Cables(object):
         a_k = (23, 'Jxx')
         # add a flagged integration
         RF.flags[bl_k][0] = True
+        RF._clear_ref()
         RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True, write_npz=True)
         assert uvc.Ntimes == 100
@@ -250,6 +251,7 @@ class Test_ReflectionFitter_Cables(object):
         # test w/ input calfits
         RF.flags[bl_k][1] = True
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits="./ex.calfits", overwrite=True)
+        RF._clear_ref()
         RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
         assert uvc.Ntimes == 100
@@ -264,7 +266,21 @@ class Test_ReflectionFitter_Cables(object):
         r = data[bl_k] / self.uvd_clean.get_data(bl_k)
         assert np.abs(np.mean(r) - 1) < 1e-1
 
+        # test with timeaverage
+        full_uvc = copy.deepcopy(uvc)
+        RF.timeavg_data(RF.data, RF.times, RF.lsts, 1e10, rephase=False, overwrite=True)
+        RF._clear_ref()
+        RF.model_auto_reflections(RF.avg_data, (200, 300), window='blackmanharris', zeropad=100, fthin=1, verbose=True)
+        assert RF.ref_gains[a_k].shape == (1, 128)
+        # test write without input calfits results in Ntimes = 1
+        uvc = RF.write_auto_reflections("./ex2.calfits", time_array=RF.avg_times, overwrite=True)
+        assert uvc.Ntimes == 1
+        # test by feeding full-time calfits that output times are full-time
+        uvc = RF.write_auto_reflections("./ex.calfits", time_array=RF.avg_times, input_calfits='./ex.calfits', overwrite=True)
+        assert uvc.Ntimes == 100
+
         os.remove('./ex.calfits')
+        os.remove('./ex2.calfits')
 
     def test_auto_reflection_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--output_fname', 'ex.calfits', '--dly_ranges', '10,20', '10,20', '--overwrite', '--opt_buffer', '25', '75']
