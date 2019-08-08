@@ -85,7 +85,7 @@ from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
 from .frf import FRFilter
 from . import vis_clean
-from .utils import echo, interp_peak, split_pol, gp_interp1d
+from .utils import echo, interp_peak, split_pol, split_bl, gp_interp1d
 
 
 class ReflectionFitter(FRFilter):
@@ -238,9 +238,9 @@ class ReflectionFitter(FRFilter):
         for k in keys:
             # get gain key
             if dly_range[0] >= 0:
-                rkey = (k[0], split_pol(k[2])[0])
+                rkey = split_bl(k)[0]
             else:
-                rkey = (k[1], split_pol(k[2])[1])
+                rkey = split_bl(k)[1]
 
             # model reflection
             echo("...Modeling reflections in {}, assigning to {}".format(k, rkey), verbose=verbose)
@@ -265,21 +265,22 @@ class ReflectionFitter(FRFilter):
             self.ref_phs[rkey] = phs
             self.ref_dly[rkey] = dly
             self.ref_significance[rkey] = sig
-            self.ref_flags[rkey] = np.min(clean_flags[k], axis=1, keepdims=True) + (sig < ref_sig_cut) + bad_sols
+            self.ref_flags[rkey] = np.all(clean_flags[k], axis=1, keepdims=True) + (sig < ref_sig_cut) + bad_sols
 
         # form gains
         self.ref_gains = form_gains(self.ref_eps)
 
         # if ref_gains not empty, fill in missing antenna and polarizations with unity gains
+        autopols = [p for p in self.pols if p[0] == p[1]]
         if len(self.ref_gains) > 0:
-            _key = list(self.ref_gains.keys())[0]
+            antpol = split_bl(keys[0])[0]
             for a in self.ants:
-                for p in self.pols:
+                for p in autopols:
                     k = (a, split_pol(p)[0])
                     if k not in self.ref_gains:
-                        self.ref_gains[k] = np.ones_like(self.ref_gains[_key], dtype=np.complex)
+                        self.ref_gains[k] = np.ones_like(self.ref_gains[antpol], dtype=np.complex)
                     if k not in self.ref_flags:
-                        self.ref_flags[k] = np.zeros_like(self.ref_gains[_key], dtype=np.bool)
+                        self.ref_flags[k] = np.zeros_like(self.ref_flags[antpol], dtype=np.bool)
 
     def refine_auto_reflections(self, clean_data, dly_range, ref_amp, ref_dly, ref_phs, ref_flags=None,
                                 keys=None, clean_flags=None, clean_model=None, fix_amp=False,
@@ -437,7 +438,7 @@ class ReflectionFitter(FRFilter):
             uvc : UVCal object with new gains
         """
         # Create reflection gains
-        rgains, flags = self.ref_gains, self.ref_flags
+        rgains, rflags = self.ref_gains, self.ref_flags
         quals, tquals = None, None
 
         # get time and freq array
@@ -455,7 +456,7 @@ class ReflectionFitter(FRFilter):
                 echo("...writing {}".format(output_npz), verbose=verbose)
                 np.savez(output_npz, delay=self.ref_dly, phase=self.ref_phs, amp=self.ref_amp,
                          significance=self.ref_significance, times=time_array, freqs=freq_array,
-                         lsts=self.lsts, antpos=self.antpos, flags=self.ref_flags,
+                         lsts=self.lsts, antpos=self.antpos, flags=rflags,
                          history=version.history_string(add_to_history))
 
         if input_calfits is not None:
@@ -463,8 +464,9 @@ class ReflectionFitter(FRFilter):
             cal = io.HERACal(input_calfits)
             gains, flags, quals, tquals = cal.read()
 
-            # Merge gains
+            # Merge gains and flags
             rgains = merge_gains([gains, rgains])
+            rflags = merge_gains([flags, rflags])
 
             # resolve possible broadcasting across time and freq
             if cal.Ntimes > Ntimes:
@@ -478,7 +480,7 @@ class ReflectionFitter(FRFilter):
             kwargs = {}
 
         echo("...writing {}".format(output_calfits), verbose=verbose)
-        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=flags,
+        uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
                            quality=quals, total_qual=tquals, zero_check=False,
                            overwrite=overwrite, history=version.history_string(add_to_history),
                            **kwargs)
