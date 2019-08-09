@@ -1035,6 +1035,41 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         rv['chisq'] /= (nObs - len(rv['g_omnical']) - len(rv['v_omnical']) + nDegen / 2.0)
     return rv
 
+def lookup (self):
+	"""Given a list of excluded, predicted to be broken antennas, produce a dictionary of all
+	baselines as keys, and their corresponding unique baselines that do not contain an excluded
+   	antenna as that keys data"""
+    keys = list(rv['g_omnical'].keys())
+    keysv = list(rv['v_omnical'].keys())
+    lookup_dict = {}
+	for i,keysv in enumerate(reds):
+    	reference = [i]
+    	lookup.update({bl:reference for bl in keysv})
+	for mdlbl in rv['v_omnical'].keys():
+    	lookup[mdlbl][0] = mdlbl
+    return lookup_dict
+
+def sol_dead_ants(self):
+    """Given a list of broken antennas, solve for their gain based on other baselines"""
+    sol_ants = list()
+	for i in exclude:
+    	ant_pick = (i, 'Jxx')
+    	sol_ants.append(ant_pick)
+	def make_g_bl(ant):
+    	return 'g{}_{}'.format(*ant)
+	def make_vis_bl(bl):
+    	return 'v_{}_{}_{}'.format(*bl)
+	def make_equ(bl):
+    	ant1,ant2 = hera_cal.utils.split_bl(bl)
+    	equ = '{}*{}_*{}'.format(make_g_bl(ant1),make_g_bl(ant2),make_vis_bl(bl))
+    	return equ
+	bls = [bl for bl in lookup.keys() if np.sum([ant in hera_cal.utils.split_bl(bl) for ant in sol_ants]) == 1 and type(lookup[bl][0]) != int]
+	#checking sum = 1 to ensure one and only one antenna in a baseline is an unsolved antenna
+	data = {make_equ(bl): vis_data[bl] for bl in bls}
+	consts = {make_vis_bl(bl):cal['v_omnical'][lookup[bl][0]] for bl in bls}
+	consts.update({make_g_bl(ant):cal['g_omnical'][ant] for ant in cal['g_omnical']})
+	ls = linsolve.LinearSolver(data,**consts)
+	sol = ls.solve()
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
                      flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, 
