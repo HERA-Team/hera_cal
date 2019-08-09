@@ -855,19 +855,22 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
 
 def merge_gains(gains, merge_shared=True):
     """
-    Merge a list of gain dictionaries.
+    Merge a list of gain (or flag) dictionaries.
+
+    If gains has boolean ndarray keys, interpret as flags
+    and merge with a logical OR.
 
     Parameters:
     -----------
     gains : type=list or tuple, series of gain dictionaries with (ant, pol) keys
-            and complex ndarrays as values.
+            and complex ndarrays as values (or boolean ndarrays if flags)
     merge_shared : type=bool, If True merge only shared keys, eliminating the others.
         Otherwise, merge all keys.
 
     Output:
     -------
-    merged_gains : type=dictionary, merged gain dictionary with same key-value
-                   structure as input gain dictionaries.
+    merged_gains : type=dictionary, merged gain (or flag) dictionary with same key-value
+                   structure as input dict.
     """
     # get shared keys
     if merge_shared:
@@ -878,9 +881,17 @@ def merge_gains(gains, merge_shared=True):
     # form merged_gains dict
     merged_gains = odict()
 
+    # determine if gains or flags from first entry in gains
+    fedflags = False
+    if gains[0][list(gains[0].keys())[0]].dtype == np.bool_:
+        fedflags = True
+
     # iterate over keys
     for i, k in enumerate(keys):
-        merged_gains[k] = reduce(operator.mul, [g.get(k, 1.0) for g in gains])
+        if fedflags:
+            merged_gains[k] = reduce(operator.add, [g.get(k, True) for g in gains])
+        else:
+            merged_gains[k] = reduce(operator.mul, [g.get(k, 1.0) for g in gains])
 
     return merged_gains
 

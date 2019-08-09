@@ -537,6 +537,16 @@ class Test_AbsCal(object):
         assert np.allclose(np.angle(mgains[k][0, 0]), np.angle(self.AC.TT_Phi_gain[k] * self.AC.abs_psi_gain[k]
                                                                * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
 
+        # test merge of flag dictionaries
+        f1 = {(1, 'Jxx'): np.zeros(5, np.bool)}
+        f2 = {(1, 'Jxx'): np.zeros(5, np.bool)}
+        f3 = abscal.merge_gains([f1, f2])
+        assert f3[(1, 'Jxx')].dtype == np.bool_
+        assert not np.any(f3[(1, 'Jxx')])
+        f2[(1, 'Jxx')][:] = True
+        f3 = abscal.merge_gains([f1, f2])
+        assert np.all(f3[(1, 'Jxx')])
+
     def test_fill_dict_nans(self):
         data = copy.deepcopy(self.AC.data)
         wgts = copy.deepcopy(self.AC.wgts)
