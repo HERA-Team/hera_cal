@@ -42,26 +42,34 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
     assert np.all([len(pos) <= 3 for pos in antpos.values()]), 'Get_pos_reds only works in up to 3 dimensions.'
     ap = {ant: np.pad(pos, (0, 3 - len(pos)), mode='constant') for ant, pos in antpos.items()}  # increase dimensionality
     array_is_flat = np.all(np.abs(np.array(list(ap.values()))[:, 2] - np.mean(list(ap.values()), axis=0)[2]) < bl_error_tol / 4.0)
+    p_or_m = (0, -1, 1)
+    if array_is_flat:
+        epsilons = [[dx, dy, 0] for dx in p_or_m for dy in p_or_m]
+    else:
+        epsilons = [[dx, dy, dz] for dx in p_or_m for dy in p_or_m for dz in p_or_m]
+    
+    def check_neighbors(delta):  # Check to make sure reds doesn't have the key plus or minus rounding error
+        for epsilon in epsilons:
+            newKey = (delta[0] + epsilon[0], delta[1] + epsilon[1], delta[2] + epsilon[2])
+            if newKey in reds:
+                return newKey
+        return
+        
     for i, ant1 in enumerate(keys):
         for ant2 in keys[i + 1:]:
+            bl_pair = (ant1, ant2)
             delta = tuple(np.round(1.0 * (np.array(ap[ant2]) - np.array(ap[ant1])) / bl_error_tol).astype(int))
-            if delta[0] > 0 or (delta[0] == 0 and delta[1] > 0) or (delta[0] == 0 and delta[1] == 0 and delta[2] > 0):
-                bl_pair = (ant1, ant2)
-            else:
-                delta = tuple([-d for d in delta])
-                bl_pair = (ant2, ant1)
-            # Check to make sure reds doesn't have the key plus or minus rounding error
-            p_or_m = (0, -1, 1)
-            if array_is_flat:
-                epsilons = [[dx, dy, 0] for dx in p_or_m for dy in p_or_m]
-            else:
-                epsilons = [[dx, dy, dz] for dx in p_or_m for dy in p_or_m for dz in p_or_m]
-            for epsilon in epsilons:
-                newKey = (delta[0] + epsilon[0], delta[1] + epsilon[1], delta[2] + epsilon[2])
-                if newKey in reds:
-                    reds[newKey].append(bl_pair)
-                    break
-            if newKey not in reds:
+            new_key = check_neighbors(delta)
+            if new_key is None:  # forward baseline has no matches
+                new_key = check_neighbors(tuple([-d for d in delta]))
+                if new_key is not None:  # reverse baseline does have a match
+                    bl_pair = (ant2, ant1)
+            if new_key is not None:  # either the forward or reverse baseline has a match
+                reds[new_key].append(bl_pair)
+            else:  # this baseline is entirely new
+                if delta[0] <= 0 or (delta[0] == 0 and delta[1] <= 0) or (delta[0] == 0 and delta[1] == 0 and delta[2] <= 0):
+                    delta = tuple([-d for d in delta])
+                    bl_pair = (ant2, ant1)
                 reds[delta] = [bl_pair]
 
     # sort reds by length and each red to make sure the first antenna of the first bl in each group is the lowest antenna number
@@ -130,6 +138,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     Filter redundancies to include/exclude the specified bls, antennas, unique bl groups and polarizations.
     Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, ubls, ex_ubls, bls, ex_bls,
     ants, ex_ants).
+
     Args:
         reds: list of lists of redundant (i,j,pol) baseline tuples, e.g. the output of get_reds()
         bls (optional): baselines to include. Baselines of the form (i,j,pol) include that specific
@@ -151,6 +160,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             which must be specified.
         max_bl_cut: cut redundant groups with average baselines lengths longer than this. Same units as antpos
             which must be specified.
+
     Return:
         reds: list of lists of redundant baselines in the same form as input reds.
     '''

@@ -855,19 +855,22 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
 
 def merge_gains(gains, merge_shared=True):
     """
-    Merge a list of gain dictionaries.
+    Merge a list of gain (or flag) dictionaries.
+
+    If gains has boolean ndarray keys, interpret as flags
+    and merge with a logical OR.
 
     Parameters:
     -----------
     gains : type=list or tuple, series of gain dictionaries with (ant, pol) keys
-            and complex ndarrays as values.
+            and complex ndarrays as values (or boolean ndarrays if flags)
     merge_shared : type=bool, If True merge only shared keys, eliminating the others.
         Otherwise, merge all keys.
 
     Output:
     -------
-    merged_gains : type=dictionary, merged gain dictionary with same key-value
-                   structure as input gain dictionaries.
+    merged_gains : type=dictionary, merged gain (or flag) dictionary with same key-value
+                   structure as input dict.
     """
     # get shared keys
     if merge_shared:
@@ -878,9 +881,17 @@ def merge_gains(gains, merge_shared=True):
     # form merged_gains dict
     merged_gains = odict()
 
+    # determine if gains or flags from first entry in gains
+    fedflags = False
+    if gains[0][list(gains[0].keys())[0]].dtype == np.bool_:
+        fedflags = True
+
     # iterate over keys
     for i, k in enumerate(keys):
-        merged_gains[k] = reduce(operator.mul, [g.get(k, 1.0) for g in gains])
+        if fedflags:
+            merged_gains[k] = reduce(operator.add, [g.get(k, True) for g in gains])
+        else:
+            merged_gains[k] = reduce(operator.mul, [g.get(k, 1.0) for g in gains])
 
     return merged_gains
 
@@ -1910,7 +1921,7 @@ class AbsCal(object):
         self._set_antpos(antpos)
 
         # setup gain solution keys
-        self._gain_keys = list(map(lambda p: list(map(lambda a: (a, p), self.ants)), self.gain_pols))
+        self._gain_keys = [[(a, p) for a in self.ants] for p in self.gain_pols]
 
         # perform baseline cut
         if min_bl_cut is not None or max_bl_cut is not None:
@@ -2423,6 +2434,7 @@ class AbsCal(object):
             # get dly_slope dictionary
             dly_slope = self.dly_slope
             # turn delay slope into per-antenna complex gains, while iterating over self._gain_keys
+            # einsum sums over antenna position
             return odict(list(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope[k], self.antpos[k[0]][:2]))),
                                   flatten(self._gain_keys))))
         else:
@@ -2436,11 +2448,16 @@ class AbsCal(object):
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant position vectors
         """
         if hasattr(self, '_dly_slope'):
-            # get dly slope dictionary
-            dly_slope = self.dly_slope[self._gain_keys[0][0]]
-            # turn delay slope into per-antenna complex gains, while iterating over gain_keys
-            return odict(list(map(lambda k: (k, np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope, antpos[k[0]][:2]))),
-                                  gain_keys)))
+            # form dict of delay slopes for each polarization in self._gain_keys
+            # b/c they are identical for all antennas of the same polarization
+            dly_slope_dict = {ants[0][1]: self.dly_slope[ants[0]] for ants in self._gain_keys}
+
+            # turn delay slope into per-antenna complex gains, while iterating over input gain_keys
+            dly_slope_gain = odict()
+            for gk in gain_keys:
+                # einsum sums over antenna position
+                dly_slope_gain[gk] = np.exp(2j * np.pi * self.freqs.reshape(1, -1) * np.einsum("i...,i->...", dly_slope_dict[gk[1]], antpos[gk[0]][:2]))
+            return dly_slope_gain
         else:
             return None
 
@@ -2456,6 +2473,7 @@ class AbsCal(object):
     def dly_slope_gain_arr(self):
         """ form complex gain from _dly_slope_arr array """
         if hasattr(self, '_dly_slope_arr'):
+            # einsum sums over antenna position
             return np.exp(2j * np.pi * self.freqs.reshape(-1, 1) * np.einsum("hi...,hi->h...", self._dly_slope_arr, self.antpos_arr[:, :2]))
         else:
             return None
@@ -2464,6 +2482,7 @@ class AbsCal(object):
     def dly_slope_ant_dly_arr(self):
         """ form antenna delays from _dly_slope_arr array """
         if hasattr(self, '_dly_slope_arr'):
+            # einsum sums over antenna position
             return np.einsum("hi...,hi->h...", self._dly_slope_arr, self.antpos_arr[:, :2])
         else:
             return None
@@ -2484,6 +2503,7 @@ class AbsCal(object):
             # get phs_slope dictionary
             phs_slope = self.phs_slope
             # turn phs slope into per-antenna complex gains, while iterating over self._gain_keys
+            # einsum sums over antenna position
             return odict(list(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope[k], self.antpos[k[0]][:2]))),
                                   flatten(self._gain_keys))))
         else:
@@ -2497,11 +2517,17 @@ class AbsCal(object):
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant position vectors
         """
         if hasattr(self, '_phs_slope'):
-            # get phs slope dictionary
-            phs_slope = self.phs_slope[self._gain_keys[0][0]]
-            # turn phs slope into per-antenna complex gains, while iterating over gain_keys
-            return odict(list(map(lambda k: (k, np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope, antpos[k[0]][:2]))),
-                                  gain_keys)))
+            # form dict of phs slopes for each polarization in self._gain_keys
+            # b/c they are identical for all antennas of the same polarization
+            phs_slope_dict = {ants[0][1]: self.phs_slope[ants[0]] for ants in self._gain_keys}
+
+            # turn phs slope into per-antenna complex gains, while iterating over input gain_keys
+            phs_slope_gain = odict()
+            for gk in gain_keys:
+                # einsum sums over antenna position
+                phs_slope_gain[gk] = np.exp(1.0j * np.ones_like(self.freqs).reshape(1, -1) * np.einsum("i...,i->...", phs_slope_dict[gk[1]], antpos[gk[0]][:2]))
+            return phs_slope_gain
+
         else:
             return None
 
@@ -2517,6 +2543,7 @@ class AbsCal(object):
     def phs_slope_gain_arr(self):
         """ form complex gain from _phs_slope_arr array """
         if hasattr(self, '_phs_slope_arr'):
+            # einsum sums over antenna position
             return np.exp(1.0j * np.ones_like(self.freqs).reshape(-1, 1) * np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2]))
         else:
             return None
@@ -2525,6 +2552,7 @@ class AbsCal(object):
     def phs_slope_ant_phs_arr(self):
         """ form antenna delays from _phs_slope_arr array """
         if hasattr(self, '_phs_slope_arr'):
+            # einsum sums over antenna position
             return np.einsum("hi...,hi->h...", self._phs_slope_arr, self.antpos_arr[:, :2])
         else:
             return None
@@ -2554,8 +2582,16 @@ class AbsCal(object):
         gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
         """
         if hasattr(self, '_abs_eta'):
-            abs_eta = self.abs_eta[self._gain_keys[0][0]]
-            return odict(list(map(lambda k: (k, np.exp(abs_eta).astype(np.complex)), gain_keys)))
+            # form dict of abs eta for each polarization in self._gain_keys
+            # b/c they are identical for all antennas of the same polarization
+            abs_eta_dict = {ants[0][1]: self.abs_eta[ants[0]] for ants in self._gain_keys}
+
+            # turn abs eta into per-antenna complex gains, while iterating over input gain_keys
+            abs_eta_gain = odict()
+            for gk in gain_keys:
+                abs_eta_gain[gk] = np.exp(abs_eta_dict[gk[1]]).astype(np.complex)
+            return abs_eta_gain
+
         else:
             return None
 
@@ -2600,8 +2636,15 @@ class AbsCal(object):
         gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
         """
         if hasattr(self, '_abs_psi'):
-            abs_psi = self.abs_psi[self._gain_keys[0][0]]
-            return odict(list(map(lambda k: (k, np.exp(1j * abs_psi)), gain_keys)))
+            # form dict of abs psi for each polarization in self._gain_keys
+            # b/c they are identical for all antennas of the same polarization
+            abs_psi_dict = {ants[0][1]: self.abs_psi[ants[0]] for ants in self._gain_keys}
+
+            # turn abs psi into per-antenna complex gains, while iterating over input gain_keys
+            abs_psi_gain = odict()
+            for gk in gain_keys:
+                abs_psi_gain[gk] = np.exp(1j * abs_psi_dict[gk[1]])
+            return abs_psi_gain
         else:
             return None
 
@@ -2634,6 +2677,7 @@ class AbsCal(object):
         """ form complex gain from _TT_Phi array """
         if hasattr(self, '_TT_Phi'):
             TT_Phi = self.TT_Phi
+            # einsum sums over antenna position
             return odict(list(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi[k], self.antpos[k[0]][:2]))), flatten(self._gain_keys))))
         else:
             return None
@@ -2646,8 +2690,16 @@ class AbsCal(object):
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant positions
         """
         if hasattr(self, '_TT_Phi'):
-            TT_Phi = self.TT_Phi[self._gain_keys[0][0]]
-            return odict(list(map(lambda k: (k, np.exp(1j * np.einsum("i...,i->...", TT_Phi, antpos[k[0]][:2]))), gain_keys)))
+            # form dict of TT_Phi for each polarization in self._gain_keys
+            # b/c they are identical for all antennas of the same polarization
+            TT_Phi_dict = {ants[0][1]: self.TT_Phi[ants[0]] for ants in self._gain_keys}
+
+            # turn TT_Phi into per-antenna complex gains, while iterating over input gain_keys
+            TT_Phi_gain = odict()
+            for gk in gain_keys:
+                # einsum sums over antenna position
+                TT_Phi_gain[gk] = np.exp(1j * np.einsum("i...,i->...", TT_Phi_dict[gk[1]], antpos[gk[0]][:2]))
+            return TT_Phi_gain
         else:
             return None
 
@@ -2663,6 +2715,7 @@ class AbsCal(object):
     def TT_Phi_gain_arr(self):
         """ form complex gain from _TT_Phi_arr array """
         if hasattr(self, '_TT_Phi_arr'):
+            # einsum sums over antenna position
             return np.exp(1j * np.einsum("hi...,hi->h...", self._TT_Phi_arr, self.antpos_arr[:, :2]))
         else:
             return None
