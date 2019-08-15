@@ -931,7 +931,7 @@ def linear_cal_update(bls, cal, data, all_reds):
         dt = np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY
         w_ls[eq] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
         if ('vns_omnical' in cal) and (cal['vns_omnical'].has_key(bl)):
-            w_ls[eq] *= cal['vns_omnical'][bl] # weight by nsamples in the bl group
+            w_ls[eq] *= cal['vns_omnical'][bl]  # weight by nsamples in the bl group
     ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
     sol = ls.solve()
     return {rc_all.unpack_sol_key(k): sol for k, sol in sol.items()}
@@ -971,9 +971,9 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     '''
     # Solve for unsolved-for unique baselines whose antennas are both in cal['g_omnical']        
     bls_to_use = [bl for red in all_reds for bl in red 
-                  if not np.any([bl in cal['v_omnical'] for bl in red]) and
-                  ((split_bl(bl)[0] in cal['g_omnical']) and 
-                  (split_bl(bl)[1] in cal['g_omnical']))]
+                  if (not np.any([bl in cal['v_omnical'] for bl in red])
+                      and ((split_bl(bl)[0] in cal['g_omnical']) 
+                      and (split_bl(bl)[1] in cal['g_omnical'])))]
     if len(bls_to_use) > 0:
         for ubl, vis in linear_cal_update(bls_to_use, cal, data, all_reds).items():
             cal['v_omnical'][ubl] = vis
@@ -990,19 +990,19 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     # Compute nsamples for each unique baseline, based on which antennas were in cal['g_omnical']
     cal['vns_omnical'] = DataContainer({})
     for red in all_reds:
-        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * ((split_bl(bl)[0] in cal['g_omnical']) &
-                                                             (split_bl(bl)[1] in cal['g_omnical'])) 
+        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * ((split_bl(bl)[0] in cal['g_omnical'])
+                                                             & (split_bl(bl)[1] in cal['g_omnical']))
                                              for bl in red], axis=0).astype(np.float32)
 
     # Solve for excluded antennas and update cal
     while True:
         # pick out baselines with a visibility solution and one but not two excluded antennas
         bls_to_use = [bl for red in all_reds for bl in red 
-                      if (red[0] in cal['v_omnical']) and
-                      ((split_bl(bl)[0] not in cal['g_omnical']) ^ 
-                      (split_bl(bl)[1] not in cal['g_omnical']))]
+                      if ((red[0] in cal['v_omnical'])
+                          and ((split_bl(bl)[0] not in cal['g_omnical'])
+                          ^ (split_bl(bl)[1] not in cal['g_omnical'])))]
         if len(bls_to_use) == 0:
-            break # iterate to also solve for ants only found in bls with other ex_ants
+            break  # iterate to also solve for ants only found in bls with other ex_ants
         
         # solve for new gains and update cal
         new_gains = linear_cal_update(bls_to_use, cal, data, all_reds)
@@ -1015,7 +1015,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
         
         # compute new chisq_per_ant for new gains
         data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
-        dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY) for bl in bls_to_use}
+        dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in bls_to_use}
         data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in bls_to_use}
         _, _, chisq_per_ant, nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
                                                         gains=rv['g_omnical'], reds=all_reds)
@@ -1024,9 +1024,9 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     
     # Solve for unsolved-for unique baselines visbility solutions
     bls_to_use = [bl for red in all_reds for bl in red 
-                  if (red[0] not in cal['v_omnical']) and
-                  ((split_bl(bl)[0] in cal['g_omnical']) and 
-                  (split_bl(bl)[1] in cal['g_omnical']))]
+                  if ((red[0] not in cal['v_omnical']) 
+                      and ((split_bl(bl)[0] in cal['g_omnical'])
+                      and (split_bl(bl)[1] in cal['g_omnical'])))]
     if len(bls_to_use) > 0:
         for bl, vis in linear_cal_update(bls_to_use, cal, data, all_reds).items():
             cal['v_omnical'][bl] = vis
