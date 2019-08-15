@@ -902,6 +902,41 @@ def _get_pol_load_list(pols, pol_mode='1pol'):
     return pol_load_list
 
 
+def linear_cal_update(bls, cal, data, all_reds):
+    '''Solve for unsolved gains or unique baseline visibilities (but not both simultaneously)
+    using existing gain/visibility solutions in cal.
+    
+    Arguments:
+        bls: list of baseline tuples like (0,1,'xx') to solve for the single remaining term
+            using the corresponding data and the prior gain/visibility solutions. If any 
+            bl has two unsolved terms, linsolve will throw an error.
+        cal: dictionary of redundant calibration solutions, updated in place, like the one 
+            produced by redcal.redundantly_calibrate(). See that function more details.
+        data: DataContainer mapping baseline-pol tuples like (0,1,'xx') to complex data of 
+            shape (Nt, Nf). Must have data for all baselines in bls.
+        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+            item in each list will be treated as the key for the unique baseline. Must be 
+            a superset of the reds used for producing cal.    
+    '''
+    rc_all = redcal.RedundantCalibrator(all_reds)
+    consts = {rc_all.pack_sol_key(ant): cal['g_omnical'][ant] for ant in cal['g_omnical']}
+    consts.update({rc_all.pack_sol_key([red[0] for red in all_reds if bl in red][0]): 
+                   cal['v_omnical'][bl] for bl in cal['v_omnical']})
+    eqs = {eq_str: bl for eq_str, bl in rc_all.build_eqs().items() if bl in bls}
+        
+    d_ls, w_ls = {}, {}
+    for eq, bl in eqs.items():
+        d_ls[eq] = data[bl]
+        # weight by inverse noise variance inferred from autocorrelations
+        dt = np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY
+        w_ls[eq] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
+        if ('vns_omnical' in cal) and (cal['vns_omnical'].has_key(bl)):
+            w_ls[eq] *= cal['vns_omnical'][bl] # weight by nsamples in the bl group
+    ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
+    sol = ls.solve()
+    return {rc_all.unpack_sol_key(k): sol for k, sol in sol.items()}
+
+
 def expand_omni_vis(cal, all_reds, data, flags, nsamples):
     '''This function expands and harmonizes a calibration solution produced by redcal.redundantly_calibrate
     to a set of un-filtered redundancies. This only affects omnical visibility solutions. It has three effects:
