@@ -920,22 +920,26 @@ def expand_omni_vis(cal, all_reds, data, flags, nsamples):
             item in each list will be treated as the key for the unique baseline. Must be a superset of
             the reds used for producing cal
         data: DataContainer mapping baseline-pol tuples like (0,1,'xx') to complex data of 
-            shape (Nt, Nf). Calibrated in place using cal['g_omnical'] and cal['gf_omnical']
+            shape (Nt, Nf).
         flags: DataContainer mapping baseline-pol tuples like (0,1,'xx') to boolean flags of
-            shape (Nt, Nf). Modified in place using cal['gf_omnical']
+            shape (Nt, Nf).
         nsamples: DataContainer mapping baseline-pol tuples like (0,1,'xx') to float number of samples.
             Used for counting the number of non-flagged visibilities that went into each redundant group.
     '''
-    calibrate_in_place(data, cal['g_omnical'], data_flags=flags, cal_flags=cal['gf_omnical'])
     cal['vns_omnical'] = {}
 
     for red in all_reds:
+        # copy relevant portions of data and flags (to save memory) and then calibrate (which also applies flags for ex_ants)
+        data_here = DataContainer({bl: deepcopy(data[bl]) for bl in red})
+        flags_here = DataContainer({bl: deepcopy(flags[bl]) for bl in red})
+        calibrate_in_place(data_here, cal['g_omnical'], data_flags=flags_here, cal_flags=cal['gf_omnical'])
+
         omni_keys = [bl for bl in red if bl in cal['v_omnical']]
         assert len(omni_keys) <= 1, "The input calibration's 'v_omnical' entry can have at most visibility per unique baseline group."
-        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * (1.0 - flags[bl]) for bl in red], axis=0).astype(np.float32)
+        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * (1.0 - flags_here[bl]) for bl in red], axis=0).astype(np.float32)
 
         if len(omni_keys) == 0:  # the omnical solution doesn't have this baseline, so compute it by averaging the calibrated data
-            cal['v_omnical'][red[0]] = np.sum([data[bl] * (1.0 - flags[bl]) * nsamples[bl] for bl in red], axis=0).astype(np.complex64)
+            cal['v_omnical'][red[0]] = np.sum([data_here[bl] * (1.0 - flags_here[bl]) * nsamples[bl] for bl in red], axis=0).astype(np.complex64)
             cal['v_omnical'][red[0]] /= cal['vns_omnical'][red[0]]
             cal['vf_omnical'][red[0]] = np.logical_or(cal['vns_omnical'][red[0]] == 0, ~np.isfinite(cal['v_omnical'][red[0]]))
             cal['v_omnical'][red[0]][~np.isfinite(cal['v_omnical'][red[0]])] = np.complex64(1.)
