@@ -795,8 +795,9 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     if reds is not None:
         model = copy.deepcopy(model)
         for red in reds:
-            for bl in red:
-                model[bl] = model[red[0]]
+            if np.any([bl in data for bl in red]):
+                for bl in red:
+                    model[bl] = model[red[0]]
 
     for bl in data.keys():
         ap1, ap2 = split_pol(bl[2])
