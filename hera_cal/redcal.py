@@ -1219,17 +1219,16 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 if verbose:
                     print('    Now calibrating times', hd.times[tinds[0]], 'through', hd.times[tinds[-1]], '...')
                 if nInt_to_load is None:  # don't perform partial I/O
-                    data, flags, nsamples = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
+                    data, _, nsamples = hd.build_datacontainers()  # this may contain unused polarizations, but that's OK
                     for bl in data:
                         data[bl] = data[bl][tinds, fSlice]  # cut down size of DataContainers to match unflagged indices
-                        flags[bl] = flags[bl][tinds, fSlice]
                         nsamples[bl] = nsamples[bl][tinds, fSlice] 
                 else:  # perform partial i/o
-                    data, flags, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
+                    data, _, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, 
                                             oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after, gain=gain)
-                expand_omni_vis(cal, filter_reds(all_reds, pols=pols), data, flags, nsamples)
+                expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
                 
                 # gather results
                 for ant in cal['g_omnical'].keys():
