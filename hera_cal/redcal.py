@@ -1003,13 +1003,24 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
                       (split_bl(bl)[1] not in cal['g_omnical']))]
         if len(bls_to_use) == 0:
             break # iterate to also solve for ants only found in bls with other ex_ants
-        for ant, g in linear_cal_update(bls_to_use, cal, data, all_reds).items():
+        
+        # solve for new gains and update cal
+        new_gains = linear_cal_update(bls_to_use, cal, data, all_reds)
+        for ant, g in new_gains.items():
             cal['g_omnical'][ant] = g
             # keep omnical gains flagged, also keep firstcal gains and flags consistent
             cal['gf_omnical'][ant] = np.ones_like(g, dtype=bool)
             cal['g_firstcal'][ant] = np.ones_like(g, dtype=np.complex64)
             cal['gf_firstcal'][ant] = np.ones_like(g, dtype=bool) 
-            cal['chisq_per_ant'] #TODO: update
+        
+        # compute new chisq_per_ant for new gains
+        data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
+        dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY) for bl in bls_to_use}
+        data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in bls_to_use}
+        _, _, chisq_per_ant, nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
+                                                        gains=rv['g_omnical'], reds=all_reds)
+        for ant in new_gains:
+            cal['chisq_per_ant'][ant] = chisq_per_ant[ant] / nObs_per_ant[ant]
     
     # Solve for unsolved-for unique baselines visbility solutions
     bls_to_use = [bl for red in all_reds for bl in red 
