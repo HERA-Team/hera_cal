@@ -72,6 +72,7 @@ from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
 from scipy.signal import windows
 from scipy.optimize import minimize
+from scipy import sparse
 from sklearn import gaussian_process as gp
 from uvtools import dspec
 import argparse
@@ -525,7 +526,7 @@ class ReflectionFitter(FRFilter):
         return wgts
 
     def sv_decomp(self, dfft, wgts=None, flags=None, keys=None, Nkeep=None,
-                  overwrite=False, verbose=True):
+                  overwrite=False, sparse_svd=True, verbose=True):
         """
         Create a SVD-based model of the FFT data in dfft.
 
@@ -543,6 +544,8 @@ class ReflectionFitter(FRFilter):
                 Default is keep all modes.
             overwrite : bool
                 If dfft exists, overwrite its values.
+            sparse_svd : bool
+                If True, use scipy.sparse.linalg.svds, else use scipy.linalg.svd
 
         Result:
             self.umodes : DataContainer, SVD time-modes, ant-pair-pol keys, 2D ndarray values
@@ -573,7 +576,13 @@ class ReflectionFitter(FRFilter):
 
             # perform svd to get principal components
             # full_matrices = False truncates u or v depending on which has more modes
-            u, svals, v = np.linalg.svd(dfft[k] * wgts[k], full_matrices=False)
+            if sparse_svd:
+                Nk = Nkeep
+                if Nk is None:
+                    Nk = min(dfft[k].shape) - 2
+                u, svals, v = sparse.linalg.svds(dfft[k] * wgts[k], k=Nk, which='LM')
+            else:
+                u, svals, v = np.linalg.svd(dfft[k] * wgts[k], full_matrices=False)
 
             # append to containers only modes one desires. Default is all modes.
             self.umodes[k] = u[:, :Nkeep]
