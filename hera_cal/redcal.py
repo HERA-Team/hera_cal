@@ -918,7 +918,7 @@ def linear_cal_update(bls, cal, data, all_reds):
             item in each list will be treated as the key for the unique baseline. Must be 
             a superset of the reds used for producing cal.
     '''
-    rc_all = redcal.RedundantCalibrator(all_reds)
+    rc_all = RedundantCalibrator(all_reds)
     consts = {rc_all.pack_sol_key(ant): cal['g_omnical'][ant] for ant in cal['g_omnical']}
     consts.update({rc_all.pack_sol_key([red[0] for red in all_reds if bl in red][0]): 
                    cal['v_omnical'][bl] for bl in cal['v_omnical']})
