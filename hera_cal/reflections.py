@@ -788,7 +788,8 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False, Ninterp=None,
-                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0, verbose=True):
+                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0, 
+                 xthin=None, verbose=True):
         """
         Interpolate u modes along time with a Gaussian Process.
 
@@ -827,6 +828,8 @@ class ReflectionFitter(FRFilter):
                 See sklearn.gaussian_process.GaussianProcessRegressor for details.
             Nmirror : int
                 Number of time bins to mirror at ends of input time axis. Default is no mirroring.
+            xthin : int
+                Factor by which to thin time-axis before GP interpolation. Default is no thinning.
             verbose : bool
                 If True, report feedback to stdout.
 
@@ -883,7 +886,7 @@ class ReflectionFitter(FRFilter):
             yflag = np.repeat(uflags[k], y.shape[1], axis=1)
             self.umode_interp[k] = gp_interp1d(Xtrain, y, x_eval=Xpredict,
                                                flags=yflag, kernel=kernel, Nmirror=Nmirror,
-                                               optimizer=optimizer)
+                                               optimizer=optimizer, xthin=xthin)
 
 
 def form_gains(epsilon):

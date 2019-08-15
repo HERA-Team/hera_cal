@@ -847,7 +847,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
 
 
 def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
-                kernel=None, Nmirror=0, optimizer=None):
+                kernel=None, Nmirror=0, optimizer=None, xthin=None):
     """
     Gaussian Process interpolation.
 
@@ -866,7 +866,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
         flags : ndarray
             A boolean array of y flags of shape (Nvalues, Nvectors)
         length_scale : float
-            Length scale for RBF kernel if input kernel is None.
+            Length scale for RBF kernel in units of x if input kernel is None.
         nl : float
             Noise level for WhiteNoise kernel if input kernel is None.
             Recommended to keep this near 1e-10 for non-expert user.
@@ -878,6 +878,9 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
             This can minimize impact of boundary effects on interpolation.
         optimizer : str
             Hyperparameter optimization method. Default is no optimization.
+        xthin : int
+            Thinning factor along prediction x-axis of unflagged data.
+            Default is no thinning.
 
     Returns:
         ndarray
@@ -902,8 +905,16 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
     # initialize GP
     GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False, copy_X_train=False)
 
+    # get flags
     if flags is None:
         flags = np.zeros_like(y, dtype=np.bool)
+
+    # thin x-axis if desired
+    if xthin is not None:
+        assert xthin < x.size // 2, "Can't thin x-axis by more then len(x) // 2"
+        x = x[::xthin]
+        y = y[::xthin, :]
+        flags = flags[::xthin, :]
 
     # mirror if desired
     if Nmirror > 0:

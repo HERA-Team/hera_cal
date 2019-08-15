@@ -472,6 +472,20 @@ def test_gp_interp1d():
     yint4 = utils.gp_interp1d(times, y, kernel=kernel, Nmirror=20, flags=f)
     assert not np.all(np.isclose(yint, yint4))
 
+    # test thinning
+    yint_0thin = utils.gp_interp1d(times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=None)
+    yint_1thin = utils.gp_interp1d(times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=1)
+    yint_2thin = utils.gp_interp1d(times, y, length_scale=5.0, flags=f, nl=1e-10, xthin=2)
+
+    # check 0thin and 1thin are equivalent
+    assert np.all(np.isclose(np.abs(yint_0thin - yint_1thin), 0.0))
+
+    # check 1thin and 2thin are *reasonably* close to within noise of original data
+    # plt.plot(np.abs(y[:, 10]));plt.plot(np.abs(yint_1thin[:, 10]));plt.plot(np.abs(yint_2thin[:, 10]))
+    nstd = np.std(y - yint_0thin, axis=0)  # residual noise after subtraction with unthinned model
+    rstd = np.std(yint_1thin - yint_2thin, axis=0)  # error flucturations between 1 and 2 thin models
+    assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
+
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 def test_gain_relative_difference():
