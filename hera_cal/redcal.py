@@ -916,7 +916,7 @@ def linear_cal_update(bls, cal, data, all_reds):
             shape (Nt, Nf). Must have data for all baselines in bls.
         all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
             item in each list will be treated as the key for the unique baseline. Must be 
-            a superset of the reds used for producing cal.    
+            a superset of the reds used for producing cal.
     '''
     rc_all = redcal.RedundantCalibrator(all_reds)
     consts = {rc_all.pack_sol_key(ant): cal['g_omnical'][ant] for ant in cal['g_omnical']}
@@ -937,15 +937,23 @@ def linear_cal_update(bls, cal, data, all_reds):
     return {rc_all.unpack_sol_key(k): sol for k, sol in sol.items()}
 
 
-def expand_omni_vis(cal, all_reds, data, flags, nsamples):
-    '''This function expands and harmonizes a calibration solution produced by redcal.redundantly_calibrate
-    to a set of un-filtered redundancies. This only affects omnical visibility solutions. It has three effects:
-        1) Visibility solutions are now keyed by the first entry in each red in all_reds, even if they were
-            originally keyed by a different entry.
-        2) Unique baselines that were exluded from the redundant calibration are filled in by averaging
-            unflagged calibrated visibilities.
+def expand_omni_sol(cal, all_reds, data, nsamples):
+    '''This function expands and harmonizes a calibration solution produced by 
+    redcal.redundantly_calibrate to a set of un-filtered redundancies, modifying cal in place.
+
+    It does five related things:
+        1) Visibility solutions in cal['v_omnical'] and cal['vf_omnical'] are now keyed by the first 
+            entry in each red in all_reds, even if they were originally keyed by a different entry.
+        2) Unique baselines that were exluded from the redundant calibration are filled in by a 
+            noise-weighted average of calibrated visibilities.
         3) cal gets a new entry, cal['vns_omnical'] which is a nsamples data container of the number of 
-            visibilites that went into each unique baseline solution/average. 
+            visibilites that went into each unique baseline visibility solution
+        4) gains missing from cal['g_omnical'] (e.g. ex_ants) are backsolved using omnical solutions 
+            as fixed priors. These gains remain flagged in cal['gf_omnical']. For bookkeeping purposes, 
+            cal['g_firstcal'] and cal['gf_firstcal'] and filled in with 1.0s and Trues respectively.
+        5) Unique baseline visibiltiy solutions that could not be solved for withose these backsolved 
+            gains are then solved for. These remain flagged in cal['vf_omnical'] and have all 0s 
+            for samples in cal['vns_omnical']. 
 
     Arguments:
         cal: dictionary of redundant calibration solutions produced by redcal.redundantly_calibrate. 
@@ -961,29 +969,59 @@ def expand_omni_vis(cal, all_reds, data, flags, nsamples):
         nsamples: DataContainer mapping baseline-pol tuples like (0,1,'xx') to float number of samples.
             Used for counting the number of non-flagged visibilities that went into each redundant group.
     '''
-    cal['vns_omnical'] = {}
-
-    for red in all_reds:
-        # copy relevant portions of data and flags (to save memory) and then calibrate (which also applies flags for ex_ants)
-        data_here = DataContainer({bl: deepcopy(data[bl]) for bl in red})
-        flags_here = DataContainer({bl: deepcopy(flags[bl]) for bl in red})
-        calibrate_in_place(data_here, cal['g_omnical'], data_flags=flags_here, cal_flags=cal['gf_omnical'])
-
-        omni_keys = [bl for bl in red if bl in cal['v_omnical']]
-        assert len(omni_keys) <= 1, "The input calibration's 'v_omnical' entry can have at most visibility per unique baseline group."
-        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * (1.0 - flags_here[bl]) for bl in red], axis=0).astype(np.float32)
-
-        if len(omni_keys) == 0:  # the omnical solution doesn't have this baseline, so compute it by averaging the calibrated data
-            cal['v_omnical'][red[0]] = np.sum([data_here[bl] * (1.0 - flags_here[bl]) * nsamples[bl] for bl in red], axis=0).astype(np.complex64)
-            cal['v_omnical'][red[0]] /= cal['vns_omnical'][red[0]]
-            cal['vf_omnical'][red[0]] = np.logical_or(cal['vns_omnical'][red[0]] == 0, ~np.isfinite(cal['v_omnical'][red[0]]))
-            cal['v_omnical'][red[0]][~np.isfinite(cal['v_omnical'][red[0]])] = np.complex64(1.)
-        elif omni_keys[0] != red[0]:  # the omnical solution has the baseline, but it's keyed by something other than red[0]
-            cal['v_omnical'][red[0]] = deepcopy(cal['v_omnical'][omni_keys[0]])
-            cal['vf_omnical'][red[0]] = deepcopy(cal['vf_omnical'][omni_keys[0]])
-            del cal['v_omnical'][omni_keys[0]], cal['vf_omnical'][omni_keys[0]]
+    # Solve for unsolved-for unique baselines whose antennas are both in cal['g_omnical']        
+    bls_to_use = [bl for red in all_reds for bl in red 
+                  if not np.any([bl in cal['v_omnical'] for bl in red]) and
+                  ((split_bl(bl)[0] in cal['g_omnical']) and 
+                  (split_bl(bl)[1] in cal['g_omnical']))]
+    if len(bls_to_use) > 0:
+        for ubl, vis in linear_cal_update(bls_to_use, cal, data, all_reds).items():
+            cal['v_omnical'][ubl] = vis
+            cal['vf_omnical'][ubl] = ~np.isfinite(vis)
     
-    cal['vns_omnical'] = DataContainer(cal['vns_omnical'])
+    # Reassign omnical visibility solutions to the first entry in each group in all_reds
+    for red in all_reds:
+        for bl in red[1:]:
+            if bl in cal['v_omnical']:
+                cal['v_omnical'][red[0]] = deepcopy(cal['v_omnical'][bl])
+                cal['vf_omnical'][red[0]] = deepcopy(cal['vf_omnical'][bl])
+                del cal['v_omnical'][bl], cal['vf_omnical'][bl]
+            
+    # Compute nsamples for each unique baseline, based on which antennas were in cal['g_omnical']
+    cal['vns_omnical'] = DataContainer({})
+    for red in all_reds:
+        cal['vns_omnical'][red[0]] = np.sum([nsamples[bl] * ((split_bl(bl)[0] in cal['g_omnical']) &
+                                                             (split_bl(bl)[1] in cal['g_omnical'])) 
+                                             for bl in red], axis=0).astype(np.float32)
+
+    # Solve for excluded antennas and update cal
+    while True:
+        # pick out baselines with a visibility solution and one but not two excluded antennas
+        bls_to_use = [bl for red in all_reds for bl in red 
+                      if (red[0] in cal['v_omnical']) and
+                      ((split_bl(bl)[0] not in cal['g_omnical']) ^ 
+                      (split_bl(bl)[1] not in cal['g_omnical']))]
+        if len(bls_to_use) == 0:
+            break # iterate to also solve for ants only found in bls with other ex_ants
+        for ant, g in linear_cal_update(bls_to_use, cal, data, all_reds).items():
+            cal['g_omnical'][ant] = g
+            # keep omnical gains flagged, also keep firstcal gains and flags consistent
+            cal['gf_omnical'][ant] = np.ones_like(g, dtype=bool)
+            cal['g_firstcal'][ant] = np.ones_like(g, dtype=np.complex64)
+            cal['gf_firstcal'][ant] = np.ones_like(g, dtype=bool) 
+            cal['chisq_per_ant'] #TODO: update
+    
+    # Solve for unsolved-for unique baselines visbility solutions
+    bls_to_use = [bl for red in all_reds for bl in red 
+                  if (red[0] not in cal['v_omnical']) and
+                  ((split_bl(bl)[0] in cal['g_omnical']) and 
+                  (split_bl(bl)[1] in cal['g_omnical']))]
+    if len(bls_to_use) > 0:
+        for bl, vis in linear_cal_update(bls_to_use, cal, data, all_reds).items():
+            cal['v_omnical'][bl] = vis
+            # keep omnical visibility solutions flagged and nsamples at 0
+            cal['vf_omnical'][bl] = np.ones_like(vis, dtype=bool)
+            cal['vns_omnical'][bl] = np.zeros_like(vis, dtype=np.float32)
 
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
@@ -1074,41 +1112,6 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         rv['chisq'] /= (nObs - len(rv['g_omnical']) - len(rv['v_omnical']) + nDegen / 2.0)
     return rv
 
-def lookup (self):
-    """Given a list of excluded, predicted to be broken antennas, produce a dictionary of all
-    baselines as keys, and their corresponding unique baselines that do not contain an excluded
-    antenna as that keys data"""
-    keys = list(rv['g_omnical'].keys())
-    keysv = list(rv['v_omnical'].keys())
-    lookup_dict = {}
-    for i,keysv in enumerate(reds):
-        reference = [i]
-        lookup.update({bl:reference for bl in keysv})
-    for mdlbl in rv['v_omnical'].keys():
-        lookup[mdlbl][0] = mdlbl
-    return lookup_dict
-
-def sol_dead_ants(self):
-    """Given a list of broken antennas, solve for their gain based on other baselines"""
-    sol_ants = list()
-    for i in exclude:
-        ant_pick = (i, 'Jxx')
-        sol_ants.append(ant_pick)
-    def make_g_bl(ant):
-        return 'g{}_{}'.format(*ant)
-    def make_vis_bl(bl):
-        return 'v_{}_{}_{}'.format(*bl)
-    def make_equ(bl):
-        ant1,ant2 = hera_cal.utils.split_bl(bl)
-        equ = '{}*{}_*{}'.format(make_g_bl(ant1),make_g_bl(ant2),make_vis_bl(bl))
-        return equ
-    bls = [bl for bl in lookup.keys() if np.sum([ant in hera_cal.utils.split_bl(bl) for ant in sol_ants]) == 1 and type(lookup[bl][0]) != int]
-    #checking sum = 1 to ensure one and only one antenna in a baseline is an unsolved antenna
-    data = {make_equ(bl): vis_data[bl] for bl in bls}
-    consts = {make_vis_bl(bl):cal['v_omnical'][lookup[bl][0]] for bl in bls}
-    consts.update({make_g_bl(ant):cal['g_omnical'][ant] for ant in cal['g_omnical']})
-    ls = linsolve.LinearSolver(data,**consts)
-    sol = ls.solve()
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
                      flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, 
