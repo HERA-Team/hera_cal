@@ -1112,6 +1112,11 @@ class TestRunMethods(object):
             # test redundant baseline counting
             np.testing.assert_array_equal(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]], 4.0)
             np.testing.assert_array_equal(rv['vns_omnical'][(23, 27, pol)], 0.0)
+            np.testing.assert_array_equal(rv['vns_omnical'][(1, 27, pol)], 0.0)
+        for ant in [(1, 'Jxx'), (1, 'Jyy'), (27, 'Jxx'), (27, 'Jyy')]:
+            assert not np.all(rv['g_omnical'][ant] == 1.0)
+            assert not np.all(rv['chisq_per_ant'][ant] == 0.0)
+            np.testing.assert_array_equal(rv['gf_omnical'][ant], True)
 
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
