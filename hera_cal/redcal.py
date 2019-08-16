@@ -934,7 +934,7 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False):
         w_ls[eq] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
         if weight_by_nsamples:
             ubl_key = [red[0] for red in all_reds if bl in red][0]
-            w_ls[eq] *= cal['vns_omnical'][ubl_key] # weight by nsamples in the bl group
+            w_ls[eq] *= cal['vns_omnical'][ubl_key]  # weight by nsamples in the bl group
     ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
     sol = ls.solve()
     return {rc_all.unpack_sol_key(k): sol for k, sol in sol.items()}
