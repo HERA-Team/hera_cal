@@ -902,7 +902,7 @@ def _get_pol_load_list(pols, pol_mode='1pol'):
     return pol_load_list
 
 
-def linear_cal_update(bls, cal, data, all_reds):
+def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False):
     '''Solve for unsolved gains or unique baseline visibilities (but not both simultaneously)
     using existing gain/visibility solutions in cal.
     
@@ -917,6 +917,8 @@ def linear_cal_update(bls, cal, data, all_reds):
         all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
             item in each list will be treated as the key for the unique baseline. Must be 
             a superset of the reds used for producing cal.
+        weight_by_nsamples: if True, weight equations by the number of observations that 
+            went into each omnical visibility solution. Use when solving for only gains.
     '''
     rc_all = RedundantCalibrator(all_reds)
     consts = {rc_all.pack_sol_key(ant): cal['g_omnical'][ant] for ant in cal['g_omnical']}
@@ -930,8 +932,9 @@ def linear_cal_update(bls, cal, data, all_reds):
         # weight by inverse noise variance inferred from autocorrelations
         dt = np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY
         w_ls[eq] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
-        if ('vns_omnical' in cal) and (cal['vns_omnical'].has_key(bl)):
-            w_ls[eq] *= cal['vns_omnical'][bl]  # weight by nsamples in the bl group
+        if weight_by_nsamples:
+            ubl_key = [red[0] for red in all_reds if bl in red][0]
+            w_ls[eq] *= cal['vns_omnical'][ubl_key] # weight by nsamples in the bl group
     ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
     sol = ls.solve()
     return {rc_all.unpack_sol_key(k): sol for k, sol in sol.items()}
@@ -1006,7 +1009,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             break  # iterate to also solve for ants only found in bls with other ex_ants
         
         # solve for new gains and update cal
-        new_gains = linear_cal_update(bls_to_use, cal, data, all_reds)
+        new_gains = linear_cal_update(bls_to_use, cal, data, all_reds, weight_by_nsamples=True)
         for ant, g in new_gains.items():
             cal['g_omnical'][ant] = g
             # keep omnical gains flagged, also keep firstcal gains and flags consistent
