@@ -1098,6 +1098,7 @@ class TestRunMethods(object):
         for nsamples in rv['vns_omnical'].values():
             np.testing.assert_array_equal(nsamples, 0)
 
+        # this tests redcal.expand_omni_sol
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -1143,7 +1144,6 @@ class TestRunMethods(object):
                 np.testing.assert_array_equal(flags[ant][zero_check], True)
             np.testing.assert_array_almost_equal(quals[ant][~zero_check], cal['chisq_per_ant'][ant][~zero_check])
             if ant[0] in bad_ants:
-                np.testing.assert_array_equal(gains[ant], 1.0)
                 np.testing.assert_array_equal(flags[ant], True)
         for antpol in total_qual.keys():
             np.testing.assert_array_almost_equal(total_qual[antpol], cal['chisq'][antpol])
