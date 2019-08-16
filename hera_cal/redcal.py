@@ -902,7 +902,7 @@ def _get_pol_load_list(pols, pol_mode='1pol'):
     return pol_load_list
 
 
-def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False):
+def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight_by_flags=False):
     '''Solve for unsolved gains or unique baseline visibilities (but not both simultaneously)
     using existing gain/visibility solutions in cal.
     
@@ -919,13 +919,34 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False):
             a superset of the reds used for producing cal.
         weight_by_nsamples: if True, weight equations by the number of observations that 
             went into each omnical visibility solution. Use when solving for only gains.
+        weight_by_flags: if True, use flags from cal['gf_omnical'] and cal['vf_omnical']
+            to downweight the equations they participate in. If a particular frequency
+            and integration is flagged for all input data, this will produce np.nan
     '''
+    # use RedundantCalibrator to build up constants and equations
     rc_all = RedundantCalibrator(all_reds)
     consts = {rc_all.pack_sol_key(ant): cal['g_omnical'][ant] for ant in cal['g_omnical']}
     consts.update({rc_all.pack_sol_key([red[0] for red in all_reds if bl in red][0]): 
                    cal['v_omnical'][bl] for bl in cal['v_omnical']})
     eqs = {eq_str: bl for eq_str, bl in rc_all.build_eqs().items() if bl in bls}
-        
+    
+    # build up flag weights using cal['vf_omnical'] and cal['gf_omnical']
+    if weight_by_flags:
+        bl_flg_wgts = {bl: 1.0 for bl in bls}
+        for red in all_reds:
+            bls_in_omni_sol = [bl for bl in red if bl in cal['vf_omnical']]
+            for bl in red:
+                if bl in bls:
+                    if len(bls_in_omni_sol) > 0:
+                        bl_flg_wgts[bl] *= (1.0 - cal['vf_omnical'][bls_in_omni_sol[0]])
+                    for i in range(2):
+                        if split_bl(bl)[i] in cal['gf_omnical']:
+                            bl_flg_wgts[bl] *= (1.0 - cal['gf_omnical'][split_bl(bl)[i]])
+        totally_flagged = np.sum(list(bl_flg_wgts.values()), axis=0) == 0
+        for bl in bls:
+            # this avoids singular matrices and is fixed  later in expand_omni_sol
+            bl_flg_wgts[bl][totally_flagged] = np.nan  
+
     d_ls, w_ls = {}, {}
     for eq, bl in eqs.items():
         d_ls[eq] = data[bl]
@@ -935,6 +956,8 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False):
         if weight_by_nsamples:
             ubl_key = [red[0] for red in all_reds if bl in red][0]
             w_ls[eq] *= cal['vns_omnical'][ubl_key]  # weight by nsamples in the bl group
+        if weight_by_flags:
+            w_ls[eq] *= bl_flg_wgts[bl]
     ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
     sol = ls.solve()
     return {rc_all.unpack_sol_key(k): sol for k, sol in sol.items()}
@@ -972,13 +995,13 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
         nsamples: DataContainer mapping baseline-pol tuples like (0,1,'xx') to float number of samples.
             Used for counting the number of non-flagged visibilities that went into each redundant group.
     '''
-    # Solve for unsolved-for unique baselines whose antennas are both in cal['g_omnical']        
+    # Solve for unsolved-for unique baselines whose antennas are both in cal['g_omnical']
     bls_to_use = [bl for red in all_reds for bl in red 
                   if (not np.any([bl in cal['v_omnical'] for bl in red])
                       and ((split_bl(bl)[0] in cal['g_omnical']) 
                       and (split_bl(bl)[1] in cal['g_omnical'])))]
     if len(bls_to_use) > 0:
-        new_vis = linear_cal_update(bls_to_use, cal, data, all_reds)
+        new_vis = linear_cal_update(bls_to_use, cal, data, all_reds, weight_by_flags=True)
         for ubl, vis in new_vis.items():
             cal['v_omnical'][ubl] = vis
             cal['vf_omnical'][ubl] = ~np.isfinite(vis)
@@ -999,7 +1022,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
                                              for bl in red], axis=0).astype(np.float32)
 
     # Solve for excluded antennas and update cal
-    while True:
+    for i in range(len(data)):  # this should break well before the end
         # pick out baselines with a visibility solution and one but not two excluded antennas
         bls_to_use = [bl for red in all_reds for bl in red 
                       if ((red[0] in cal['v_omnical'])
@@ -1009,7 +1032,8 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             break  # iterate to also solve for ants only found in bls with other ex_ants
         
         # solve for new gains and update cal
-        new_gains = linear_cal_update(bls_to_use, cal, data, all_reds, weight_by_nsamples=True)
+        new_gains = linear_cal_update(bls_to_use, cal, data, all_reds,
+                                      weight_by_nsamples=True, weight_by_flags=(i == 0))
         for ant, g in new_gains.items():
             cal['g_omnical'][ant] = g
             # keep omnical gains flagged, also keep firstcal gains and flags consistent
@@ -1042,7 +1066,8 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     # make sure there are no infs or nans
     make_sol_finite(cal['v_omnical'])
     make_sol_finite(cal['g_omnical'])
-    make_sol_finite(cal['chisq_per_ant'])
+    for ant, cspa in cal['chisq_per_ant'].items():
+        cal['chisq_per_ant'][ant][~np.isfinite(cspa)] = np.zeros_like(cspa[~np.isfinite(cspa)])
 
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
