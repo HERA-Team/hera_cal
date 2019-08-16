@@ -72,6 +72,7 @@ from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
 from scipy.signal import windows
 from scipy.optimize import minimize
+from scipy import sparse
 from sklearn import gaussian_process as gp
 from uvtools import dspec
 import argparse
@@ -525,7 +526,7 @@ class ReflectionFitter(FRFilter):
         return wgts
 
     def sv_decomp(self, dfft, wgts=None, flags=None, keys=None, Nkeep=None,
-                  overwrite=False, verbose=True):
+                  overwrite=False, sparse_svd=True, verbose=True):
         """
         Create a SVD-based model of the FFT data in dfft.
 
@@ -543,6 +544,8 @@ class ReflectionFitter(FRFilter):
                 Default is keep all modes.
             overwrite : bool
                 If dfft exists, overwrite its values.
+            sparse_svd : bool
+                If True, use scipy.sparse.linalg.svds, else use scipy.linalg.svd
 
         Result:
             self.umodes : DataContainer, SVD time-modes, ant-pair-pol keys, 2D ndarray values
@@ -573,7 +576,13 @@ class ReflectionFitter(FRFilter):
 
             # perform svd to get principal components
             # full_matrices = False truncates u or v depending on which has more modes
-            u, svals, v = np.linalg.svd(dfft[k] * wgts[k], full_matrices=False)
+            if sparse_svd:
+                Nk = Nkeep
+                if Nk is None:
+                    Nk = min(dfft[k].shape) - 2
+                u, svals, v = sparse.linalg.svds(dfft[k] * wgts[k], k=Nk, which='LM')
+            else:
+                u, svals, v = np.linalg.svd(dfft[k] * wgts[k], full_matrices=False)
 
             # append to containers only modes one desires. Default is all modes.
             self.umodes[k] = u[:, :Nkeep]
@@ -779,7 +788,8 @@ class ReflectionFitter(FRFilter):
             self.data_pcmodel_resid[k] = data[k] - model_fft
 
     def interp_u(self, umodes, times, full_times=None, uflags=None, keys=None, overwrite=False, Ninterp=None,
-                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0, verbose=True):
+                 gp_frate=1.0, gp_frate_degrade=0.0, gp_nl=1e-12, kernels=None, optimizer=None, Nmirror=0, 
+                 xthin=None, verbose=True):
         """
         Interpolate u modes along time with a Gaussian Process.
 
@@ -818,6 +828,8 @@ class ReflectionFitter(FRFilter):
                 See sklearn.gaussian_process.GaussianProcessRegressor for details.
             Nmirror : int
                 Number of time bins to mirror at ends of input time axis. Default is no mirroring.
+            xthin : int
+                Factor by which to thin time-axis before GP interpolation. Default is no thinning.
             verbose : bool
                 If True, report feedback to stdout.
 
@@ -874,7 +886,7 @@ class ReflectionFitter(FRFilter):
             yflag = np.repeat(uflags[k], y.shape[1], axis=1)
             self.umode_interp[k] = gp_interp1d(Xtrain, y, x_eval=Xpredict,
                                                flags=yflag, kernel=kernel, Nmirror=Nmirror,
-                                               optimizer=optimizer)
+                                               optimizer=optimizer, xthin=xthin)
 
 
 def form_gains(epsilon):

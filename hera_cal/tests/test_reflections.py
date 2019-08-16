@@ -336,7 +336,7 @@ class Test_ReflectionFitter_XTalk(object):
 
         # test sv_decomposition on positive side
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='pos')
-        RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl], overwrite=True)
+        RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl], overwrite=True, sparse_svd=True)
 
         # build a model
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=False, overwrite=True)
@@ -355,7 +355,7 @@ class Test_ReflectionFitter_XTalk(object):
 
         # increment the model
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='neg')
-        RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True)
+        RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True, sparse_svd=True)
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=True)
 
         # says that the two are similar to each other at -250 ns, which they should be
@@ -367,7 +367,7 @@ class Test_ReflectionFitter_XTalk(object):
 
         # overwrite the model with double side modeling
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='both')
-        RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True)
+        RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True, sparse_svd=True)
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=2, increment=False, overwrite=True)
         # says the residual is small compared to original array
         ind = np.argmin(np.abs(RF.delays - 250))
@@ -393,9 +393,18 @@ class Test_ReflectionFitter_XTalk(object):
         # fft data
         RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
 
-        # sv decomp
+        # sparse sv decomp
         svd_wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=150, max_dly=500, side='both')
-        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=None)
+        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=None, sparse_svd=True)
+        assert RF.umodes[bl].shape == (100, 98)
+        assert RF.vmodes[bl].shape == (98, 128)
+
+        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=10, sparse_svd=True)
+        assert RF.umodes[bl].shape == (100, 10)
+        assert RF.vmodes[bl].shape == (10, 128)
+
+        # full svd
+        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=None, sparse_svd=False)
         assert RF.umodes[bl].shape == (100, 100)
         assert RF.vmodes[bl].shape == (100, 128)
 
@@ -459,7 +468,7 @@ class Test_ReflectionFitter_XTalk(object):
         RF.timeavg_data(RF.data, RF.times, RF.lsts, 500, overwrite=True, verbose=False)
         RF.fft_data(data=RF.avg_data, window='blackmanharris', overwrite=True, assign='adfft', dtime=np.diff(RF.avg_times)[0] * 24 * 3600)
         wgts = RF.svd_weights(RF.adfft, RF.delays, min_dly=200, max_dly=300, side='both')
-        RF.sv_decomp(RF.adfft, wgts=wgts, keys=[bl], overwrite=True)
-        assert RF.umodes[bl].shape == (34, 34)
+        RF.sv_decomp(RF.adfft, wgts=wgts, keys=[bl], overwrite=True, sparse_svd=True)
+        assert RF.umodes[bl].shape == (34, 32)
         RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, gp_frate=1.0, gp_nl=1e-10, optimizer=None)
-        assert RF.umode_interp[bl].shape == (100, 34)
+        assert RF.umode_interp[bl].shape == (100, 32)
