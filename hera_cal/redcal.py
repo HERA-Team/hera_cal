@@ -944,8 +944,8 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
                             bl_flg_wgts[bl] *= (1.0 - cal['gf_omnical'][split_bl(bl)[i]])
         totally_flagged = np.sum(list(bl_flg_wgts.values()), axis=0) == 0
         for bl in bls:
-            # this avoids singular matrices and is fixed  later in expand_omni_sol
-            bl_flg_wgts[bl][totally_flagged] = np.nan  
+            # this avoids singular matrices and is fixed later in expand_omni_sol
+            bl_flg_wgts[bl][totally_flagged] = np.nan
 
     d_ls, w_ls = {}, {}
     for eq, bl in eqs.items():
@@ -959,7 +959,7 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
         if weight_by_flags:
             w_ls[eq] *= bl_flg_wgts[bl]
     ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
-    sol = ls.solve()
+    sol = ls.solve(mode='pinv')
     return {rc_all.unpack_sol_key(k): sol for k, sol in sol.items()}
 
 
