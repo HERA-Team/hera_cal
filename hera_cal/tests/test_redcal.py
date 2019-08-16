@@ -17,7 +17,7 @@ from hera_sim.vis import sim_red_data
 
 from .. import redcal as om
 from .. import io, abscal
-from ..utils import split_pol, conj_pol
+from ..utils import split_pol, conj_pol, split_bl
 from ..apply_cal import calibrate_in_place
 from ..data import DATA_PATH
 from ..datacontainer import DataContainer
@@ -1059,6 +1059,41 @@ class TestRunMethods(object):
             assert len(rv['chisq']) == 2
             for val in rv['chisq'].values():
                 assert val.shape == (nTimes, nFreqs)
+
+    def test_expand_omni_sol(self):
+        # noise free test of dead antenna resurrection
+        ex_ants = [0, 13, 2, 18]
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        pols = ['xx', 'yy']
+        reds = om.get_reds(antpos, pols=pols)
+        np.random.seed(21)
+        freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
+        times = np.linspace(0, 600./60/60/24, 3, endpoint=False)
+        df = np.median(np.diff(freqs))
+        dt = np.median(np.diff(times)) * 3600. * 24
+
+        g, tv, d = sim_red_data(reds, shape=(len(times),len(freqs)), gain_scatter=.01)
+        tv, d = DataContainer(tv), DataContainer(d)
+        nsamples = DataContainer({bl: np.ones_like(d[bl], dtype=float) for bl in d})
+
+        for antnum in antpos.keys():
+            for pol in pols:
+                d[(antnum, antnum, pol)] = np.ones((len(times),len(freqs)), dtype=complex)
+        d.freqs = deepcopy(freqs)
+        d.times_by_bl = {bl[0:2]: deepcopy(times) for bl in d.keys()}
+
+        filtered_reds = om.filter_reds(reds, ex_ants=ex_ants, antpos=antpos, max_bl_cut=30)
+        cal = om.redundantly_calibrate(d, filtered_reds)
+        om.expand_omni_sol(cal, reds, d, nsamples)
+
+        # test that all chisqs are 0
+        for red in reds:
+            for bl in red:
+                ant0, ant1 = split_bl(bl)
+                np.testing.assert_array_almost_equal(d[bl], cal['g_omnical'][ant0] * np.conj(cal['g_omnical'][ant1]) * cal['v_omnical'][red[0]])
+        assert len(pols) * len(antpos) == len(cal['g_omnical'])
+        for ant in cal['chisq_per_ant']:
+            np.testing.assert_array_less(cal['chisq_per_ant'][ant], 1e-10)
 
     def test_redcal_iteration(self):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
