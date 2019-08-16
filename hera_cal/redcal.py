@@ -976,7 +976,6 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
                       and (split_bl(bl)[1] in cal['g_omnical'])))]
     if len(bls_to_use) > 0:
         new_vis = linear_cal_update(bls_to_use, cal, data, all_reds)
-        make_sol_finite(new_vis)
         for ubl, vis in new_vis.items():
             cal['v_omnical'][ubl] = vis
             cal['vf_omnical'][ubl] = ~np.isfinite(vis)
@@ -1008,7 +1007,6 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
         
         # solve for new gains and update cal
         new_gains = linear_cal_update(bls_to_use, cal, data, all_reds)
-        make_sol_finite(new_gains)
         for ant, g in new_gains.items():
             cal['g_omnical'][ant] = g
             # keep omnical gains flagged, also keep firstcal gains and flags consistent
@@ -1032,12 +1030,16 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
                       and (split_bl(bl)[1] in cal['g_omnical'])))]
     if len(bls_to_use) > 0:
         new_vis = linear_cal_update(bls_to_use, cal, data, all_reds)
-        make_sol_finite(new_vis)
         for bl, vis in new_vis.items():
             cal['v_omnical'][bl] = vis
             # keep omnical visibility solutions flagged and nsamples at 0
             cal['vf_omnical'][bl] = np.ones_like(vis, dtype=bool)
             cal['vns_omnical'][bl] = np.zeros_like(vis, dtype=np.float32)
+
+    # make sure there are no infs or nans
+    make_sol_finite(cal['v_omnical'])
+    make_sol_finite(cal['g_omnical'])
+    make_sol_finite(cal['chisq_per_ant'])
 
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
