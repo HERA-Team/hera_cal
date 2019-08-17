@@ -930,37 +930,60 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
                    cal['v_omnical'][bl] for bl in cal['v_omnical']})
     eqs = {eq_str: bl for eq_str, bl in rc_all.build_eqs().items() if bl in bls}
     
-    # build up flag weights using cal['vf_omnical'] and cal['gf_omnical']
-    if weight_by_flags:
-        bl_flg_wgts = {bl: 1.0 for bl in bls}
-        for red in all_reds:
-            bls_in_omni_sol = [bl for bl in red if bl in cal['vf_omnical']]
-            for bl in red:
-                if bl in bls:
-                    if len(bls_in_omni_sol) > 0:
-                        bl_flg_wgts[bl] *= (1.0 - cal['vf_omnical'][bls_in_omni_sol[0]])
-                    for i in range(2):
-                        if split_bl(bl)[i] in cal['gf_omnical']:
-                            bl_flg_wgts[bl] *= (1.0 - cal['gf_omnical'][split_bl(bl)[i]])
-        totally_flagged = np.sum(list(bl_flg_wgts.values()), axis=0) == 0
+    # map baselines to ubls
+    bl_to_ubl_map = {bl: None for bl in bls}
+    for red in all_reds:
         for bl in bls:
-            # this avoids singular matrices and is fixed later in expand_omni_sol
-            bl_flg_wgts[bl][totally_flagged] = np.nan
+            if bl in red:
+                bls_in_sol = [k for k in cal['v_omnical'] if k in red]
+                if len(bls_in_sol) > 0:
+                    bl_to_ubl_map[bl] = bls_in_sol[0]
+                else:
+                    bl_to_ubl_map[bl] = red[0]
+
+    # build up weights and flags
+    bl_wgts = {bl: 1.0 for bl in bls}
+    # to_flag = {ant: np.ones_like(data[bl], dtype=bool) for bl in bls for ant in split_bl(bl)}  # starts all flagged
+    # to_flag.update({ubl: np.ones_like(to_flag[list(to_flag.keys())[0]], dtype=bool)
+    #                 for ubl in set(bl_to_ubl_map.values())})
+    for bl in bls:
+        ant0, ant1 = split_bl(bl)
+        # weight by inverse noise variance inferred from autocorrelations
+        dt = np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY
+        bl_wgts[bl] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
+        if weight_by_nsamples:
+            bl_wgts[bl] *= cal['vns_omnical'][bl_to_ubl_map[bl]]  # weight by nsamples in the bl group
+        if weight_by_flags:
+            if bl_to_ubl_map[bl] in cal['vf_omnical']:
+                bl_wgts[bl] *= (1.0 - cal['vf_omnical'][bl_to_ubl_map[bl]])
+            if ant0 in cal['gf_omnical']:
+                bl_wgts[bl] *= (1.0 - cal['gf_omnical'][ant0])
+            if ant1 in cal['gf_omnical']:
+                bl_wgts[bl] *= (1.0 - cal['gf_omnical'][ant1])
+
+    #     # set flags to False if any good data is available
+    #     wgts_are_bad = (~np.isfinite(bl_wgts[bl])) | (bl_wgts[bl] == 0)
+    #     bl_wgts[bl][wgts_are_bad] = 0.0
+    #     to_flag[ant0] &= wgts_are_bad 
+    #     to_flag[ant1] &= wgts_are_bad
+    #     if bl_to_ubl_map[bl] is not None:
+    #         to_flag[ant1] &= wgts_are_bad
+
+    # totally_flagged = np.sum(list(bl_wgts.values()), axis=0) == 0
+    # for bl in bls:
+    #     # this avoids singular matrices and is fixed later
+    #     bl_wgts[bl][totally_flagged] = 1.0
 
     d_ls, w_ls = {}, {}
     for eq, bl in eqs.items():
         d_ls[eq] = data[bl]
-        # weight by inverse noise variance inferred from autocorrelations
-        dt = np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY
-        w_ls[eq] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
-        if weight_by_nsamples:
-            ubl_key = [red[0] for red in all_reds if bl in red][0]
-            w_ls[eq] *= cal['vns_omnical'][ubl_key]  # weight by nsamples in the bl group
-        if weight_by_flags:
-            w_ls[eq] *= bl_flg_wgts[bl]
+        w_ls[eq] = np.ones_like(data[bl], dtype=float)#bl_wgts[bl]
     ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
-    sol = ls.solve(mode='pinv')
-    return {rc_all.unpack_sol_key(k): sol for k, sol in sol.items()}
+    sol = {rc_all.unpack_sol_key(k): val for k, val in ls.solve(mode='pinv').items()}
+    # for k, val in sol.items():
+    #     sol[k][to_flag[k]] = np.nan
+    #     sol[k][totally_flagged] = np.nan
+    return sol
 
 
 def expand_omni_sol(cal, all_reds, data, nsamples):
