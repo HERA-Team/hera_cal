@@ -32,10 +32,9 @@ install:
   - pip install .
   - conda list
 script:
-  #- pytest hera_cal --cov=hera_cal --cov-report=term --cov-report=xml
-  - pytest hera_cal/tests/test_redcal.py # --cov=hera_cal --cov-report=term --cov-report=xml
+  - pytest hera_cal --cov=hera_cal --cov-report=term --cov-report=xml
   - pycodestyle . --ignore=E501,W291,W293,W503,W601
 after_success:
-  #- coveralls
+  - coveralls
 notifications:
-  # webhooks: https://coveralls.io/webhook?repo_token=$COVERALLS_REPO_TOKEN
+  webhooks: https://coveralls.io/webhook?repo_token=$COVERALLS_REPO_TOKEN
