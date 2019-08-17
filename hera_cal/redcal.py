@@ -1384,7 +1384,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
         # Determine whether to add additional antennas to exclude
         z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
-                                                  if not np.all(cspa == 0)})
+                                                  if (ant[0] not in ex_ants) and not np.all(cspa == 0)})
         n_ex = len(ex_ants)
         for ant, score in z_scores.items():
             if (score >= ant_z_thresh):
