@@ -941,11 +941,8 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
                 else:
                     bl_to_ubl_map[bl] = red[0]
 
-    # build up weights and flags
+    # build up weights
     bl_wgts = {bl: 1.0 for bl in bls}
-    # to_flag = {ant: np.ones_like(data[bl], dtype=bool) for bl in bls for ant in split_bl(bl)}  # starts all flagged
-    # to_flag.update({ubl: np.ones_like(to_flag[list(to_flag.keys())[0]], dtype=bool)
-    #                 for ubl in set(bl_to_ubl_map.values())})
     for bl in bls:
         ant0, ant1 = split_bl(bl)
         # weight by inverse noise variance inferred from autocorrelations
@@ -962,29 +959,10 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
             if ant1 in cal['gf_omnical']:
                 bl_wgts[bl] *= (1.0 - cal['gf_omnical'][ant1])
 
-    #     # set flags to False if any good data is available
-    #     wgts_are_bad = (~np.isfinite(bl_wgts[bl])) | (bl_wgts[bl] == 0)
-    #     bl_wgts[bl][wgts_are_bad] = 0.0
-    #     to_flag[ant0] &= wgts_are_bad 
-    #     to_flag[ant1] &= wgts_are_bad
-    #     if bl_to_ubl_map[bl] is not None:
-    #         to_flag[ant1] &= wgts_are_bad
-
-    # totally_flagged = np.sum(list(bl_wgts.values()), axis=0) == 0
-    # for bl in bls:
-    #     # this avoids singular matrices and is fixed later
-    #     bl_wgts[bl][totally_flagged] = 1.0
-
-    d_ls, w_ls = {}, {}
-    for eq, bl in eqs.items():
-        d_ls[eq] = data[bl]
-        #w_ls[eq] = np.ones_like(data[bl], dtype=float)
-        w_ls[eq] = bl_wgts[bl]
+    d_ls = {eq: data[bl] for eq, bl in eqs.items()}
+    w_ls = {eq: bl_wgts[bl] for eq, bl in eqs.items()}
     ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
     sol = {rc_all.unpack_sol_key(k): val for k, val in ls.solve(mode='pinv').items()}
-    # for k, val in sol.items():
-    #     sol[k][to_flag[k]] = np.nan
-    #     sol[k][totally_flagged] = np.nan
     return sol
 
 
