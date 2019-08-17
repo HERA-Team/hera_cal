@@ -951,6 +951,7 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
         # weight by inverse noise variance inferred from autocorrelations
         dt = np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY
         bl_wgts[bl] = (predict_noise_variance_from_autos(bl, data, dt=dt))**-1
+        bl_wgts[bl][~np.isfinite(bl_wgts[bl])] = 0.0
         if weight_by_nsamples:
             bl_wgts[bl] *= cal['vns_omnical'][bl_to_ubl_map[bl]]  # weight by nsamples in the bl group
         if weight_by_flags:
@@ -977,7 +978,8 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
     d_ls, w_ls = {}, {}
     for eq, bl in eqs.items():
         d_ls[eq] = data[bl]
-        w_ls[eq] = np.ones_like(data[bl], dtype=float)#bl_wgts[bl]
+        #w_ls[eq] = np.ones_like(data[bl], dtype=float)
+        w_ls[eq] = bl_wgts[bl]
     ls = linsolve.LinearSolver(d_ls, wgts=w_ls, **consts)
     sol = {rc_all.unpack_sol_key(k): val for k, val in ls.solve(mode='pinv').items()}
     # for k, val in sol.items():
