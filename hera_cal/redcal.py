@@ -889,6 +889,32 @@ def is_redundantly_calibratable(antpos, bl_error_tol=1.0, require_coplanarity=Tr
     return (rc.count_degens() == rc.count_degens(assume_redundant=False))
 
 
+def predict_chisq_per_bl(reds):
+    '''Predict the expected value of chi^2 for each baselines (equivalently, the
+    effective number of degrees of freedom). This is calculated from the logcal 
+    A and B matrices and their respective data resolution matrices.
+    
+    Arguments:
+        reds: list of list of baselines (with polarizations) considered redundant
+    
+    Returns:
+        predicted_chisq_per_bl: dictionary mapping baseline tuples to the expected
+            value of chi^2 = |Vij - gigj*Vi-j|^2/sigmaij^2.
+    '''
+    bls = [bl for red in reds for bl in red]
+    dummy_data = DataContainer({bl: np.ones((1, 1), dtype=np.complex) for bl in bls})
+    rc = redcal.RedundantCalibrator(reds)
+    solver = rc._solver(linsolve.LogProductSolver, dummy_data)
+
+    A = solver.ls_amp.get_A()[:,:,0]
+    A_data_resolution = A.dot(np.linalg.pinv(A.T.dot(A)).dot(A.T))
+    B = solver.ls_phs.get_A()[:,:,0]
+    B_data_resolution = B.dot(np.linalg.pinv(B.T.dot(B)).dot(B.T))
+
+    predicted_chisq_per_bl = 1.0 - np.diag(A_data_resolution + B_data_resolution) / 2.0
+    return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
+
+
 def _get_pol_load_list(pols, pol_mode='1pol'):
     '''Get a list of lists of polarizations to load simultaneously, depending on the polarizations
     in the data and the pol_mode (which can be 1pol, 2pol, 4pol, or 4pol_minV)'''
