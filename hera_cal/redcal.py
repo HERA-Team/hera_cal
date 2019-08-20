@@ -906,9 +906,9 @@ def predict_chisq_per_bl(reds):
     rc = redcal.RedundantCalibrator(reds)
     solver = rc._solver(linsolve.LogProductSolver, dummy_data)
 
-    A = solver.ls_amp.get_A()[:,:,0]
+    A = solver.ls_amp.get_A()[:, :, 0]
     A_data_resolution = A.dot(np.linalg.pinv(A.T.dot(A)).dot(A.T))
-    B = solver.ls_phs.get_A()[:,:,0]
+    B = solver.ls_phs.get_A()[:, :, 0]
     B_data_resolution = B.dot(np.linalg.pinv(B.T.dot(B)).dot(B.T))
 
     predicted_chisq_per_bl = 1.0 - np.diag(A_data_resolution + B_data_resolution) / 2.0
