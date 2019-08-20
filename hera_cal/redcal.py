@@ -893,10 +893,10 @@ def predict_chisq_per_bl(reds):
     '''Predict the expected value of chi^2 for each baselines (equivalently, the
     effective number of degrees of freedom). This is calculated from the logcal 
     A and B matrices and their respective data resolution matrices.
-    
+
     Arguments:
         reds: list of list of baselines (with polarizations) considered redundant
-    
+
     Returns:
         predicted_chisq_per_bl: dictionary mapping baseline tuples to the expected
             value of chi^2 = |Vij - gigj*Vi-j|^2/sigmaij^2.
@@ -918,16 +918,34 @@ def predict_chisq_per_bl(reds):
 def predict_chisq_per_red(reds):
     '''Predict the expected value of chi^2 for each redundant baselines group 
     (equivalently, the effective number of degrees of freedom).
-    
+
     Arguments:
         reds: list of list of baselines (with polarizations) considered redundant
-    
+
     Returns:
         predicted_chisq_per_bl: dictionary mapping unique baseline tuples to the 
             expected sum(|Vij - gigj*Vi-j|^2/sigmaij^2) over baselines in a group 
     '''
     predicted_chisq_per_bl = predict_chisq_per_bl(reds)
     return {red[0]: np.sum([predicted_chisq_per_bl[bl] for bl in red]) for red in reds}
+
+
+def predict_chisq_per_ant(reds):
+    '''Predict the expected value of chi^2 per antenna (equivalently, the effective 
+    number of degrees of freedom). The sum over all antennas will twice the total
+    DoF, since each baseline has two antennas.
+
+    Arguments:
+        reds: list of list of baselines (with polarizations) considered redundant
+
+    Returns:
+        predicted_chisq_per_ant: dictionary mapping antenna-pol tuples to the expected 
+        sum(|Vij - gigj*Vi-j|^2/sigmaij^2) over all baselines including that antenna
+    '''
+    predicted_chisq_per_bl = predict_chisq_per_bl(reds)
+    bls = [bl for red in reds for bl in red]
+    ants = sorted(set([ant for bl in bls for ant in split_bl(bl)]))
+    return {ant: np.sum([predicted_chisq_per_bl[bl] for bl in bls if ant in split_bl(bl)]) for ant in ants}
 
 
 def _get_pol_load_list(pols, pol_mode='1pol'):
