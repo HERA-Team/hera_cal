@@ -2736,8 +2736,8 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
     all_times = hd.times
     all_lsts = hd.lsts
     if len(hd.filepaths) > 1:  # in this case, it's a dictionary
-        all_times = np.ravel([all_times[f] for f in hd.filepaths])
-        all_lsts = np.ravel([all_lsts[f] for f in hd.filepaths])[np.argsort(all_times)]
+        all_times = np.array([time for f in hd.filepaths for time in all_times[f]])
+        all_lsts = np.array([lst for f in hd.filepaths for lst in all_lsts[f]])[np.argsort(all_times)]
     if unwrap:  # avoid phase wraps 
         all_lsts[all_lsts < all_lsts[0]] += 2 * np.pi
         
