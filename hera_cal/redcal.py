@@ -915,6 +915,21 @@ def predict_chisq_per_bl(reds):
     return {bl: dof for bl, dof in zip(bls, predicted_chisq_per_bl)}
 
 
+def predict_chisq_per_red(reds):
+    '''Predict the expected value of chi^2 for each redundant baselines group 
+    (equivalently, the effective number of degrees of freedom).
+    
+    Arguments:
+        reds: list of list of baselines (with polarizations) considered redundant
+    
+    Returns:
+        predicted_chisq_per_bl: dictionary mapping unique baseline tuples to the 
+            expected sum(|Vij - gigj*Vi-j|^2/sigmaij^2) over baselines in a group 
+    '''
+    predicted_chisq_per_bl = predict_chisq_per_bl(reds)
+    return {red[0]: np.sum([predicted_chisq_per_bl[bl] for bl in red]) for red in reds}
+
+
 def _get_pol_load_list(pols, pol_mode='1pol'):
     '''Get a list of lists of polarizations to load simultaneously, depending on the polarizations
     in the data and the pol_mode (which can be 1pol, 2pol, 4pol, or 4pol_minV)'''
