@@ -21,10 +21,11 @@ from pyuvdata.utils import POL_STR2NUM_DICT
 import sklearn.gaussian_process as gp
 
 try:
-    import aipy
     AIPY = True
+    import aipy
 except ImportError:
     AIPY = False
+
 
 def _comply_antpol(antpol):
     '''Maps an input antenna polarization string onto a string compliant with pyuvdata
@@ -149,9 +150,14 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
-    offset = np.angle(np.sum(wgts[:, fSlice] * data[:, fSlice]
-                             * np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)), 
-                             axis=1, keepdims=True) / np.sum(wgts[:, fSlice], axis=1, keepdims=True))
+    offset = np.angle(
+        np.sum(
+            wgts[:, fSlice] * data[:, fSlice] * np.exp(
+                -np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)
+            ),
+            axis=1, keepdims=True
+        ) / np.sum(wgts[:, fSlice], axis=1, keepdims=True)
+    )
 
     return dlys, offset
 
@@ -210,23 +216,23 @@ def interp_peak(data, method='quinn', reject_edges=False):
     k0 = data[range(N1), indices - 1]
     k1 = data[range(N1), indices]
     k2 = data[range(N1), (indices + 1) % N2]
-    
+
     if method == 'quinn':
         def tau(x):
-            t = .25 * np.log(3 * x**2 + 6 * x + 1) 
-            t -= 6**.5 / 24 * np.log((x + 1 - (2. / 3.)**.5) / (x + 1 + (2. / 3.)**.5))
+            t = .25 * np.log(3 * x ** 2 + 6 * x + 1)
+            t -= 6 ** .5 / 24 * np.log((x + 1 - (2. / 3.) ** .5) / (x + 1 + (2. / 3.) ** .5))
             return t
 
         alpha1 = (k0 / k1).real
         alpha2 = (k2 / k1).real
         delta1 = alpha1 / (1 - alpha1)
         delta2 = -alpha2 / (1 - alpha2)
-        d = (delta1 + delta2) / 2 + tau(delta1**2) - tau(delta2**2)
+        d = (delta1 + delta2) / 2 + tau(delta1 ** 2) - tau(delta2 ** 2)
         d[~np.isfinite(d)] = 0.
-        
-        ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k), 
+
+        ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k),
                                       where=~(d == 0)) for k in [-1, 0, 1]])
-        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck**2))
+        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
         rho[d == 0] = np.abs(k1[d == 0])
         return indices, d, np.abs(peaks), rho
 
@@ -825,7 +831,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                 wgts = copy.deepcopy(data_wgts[bl])
 
             # calculate chi^2
-            chisq_here = np.asarray(np.abs(model_here - data[bl])**2 * wgts, dtype=np.float64)
+            chisq_here = np.asarray(np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64)
             if split_by_antpol:
                 if ap1 in chisq:
                     assert ap1 in nObs
@@ -1024,7 +1030,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     for pol in pols:
         diffs = {ant: copy.deepcopy(relative_diff[ant]) for ant in new_gains if ant[1] == pol}
         for ant in diffs:
-            diffs[ant][flags[ant]] = np.nan 
+            diffs[ant][flags[ant]] = np.nan
         avg_relative_diff[pol] = np.nanmean(list(diffs.values()), axis=0)
         avg_relative_diff[pol][~np.isfinite(avg_relative_diff[pol])] = 0.0  # if completely flagged
 
