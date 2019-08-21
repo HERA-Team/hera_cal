@@ -1004,13 +1004,13 @@ class TestRedundantCalibrator(object):
         rc = om.RedundantCalibrator(reds)
         dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
-        dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl - nubl) for red in reds}
+        non_degen_dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl - nubl) for red in reds}
         for red in reds:
-            assert chisq_per_red[red[0]] - dof_per_ubl[red[0]] < 1
+            assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
             if len(red) == 1:
                 assert chisq_per_red[red[0]] < 1e-10
             else:
-                assert chisq_per_red[red[0]] - dof_per_ubl[red[0]] > 0
+                assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
 
         # Test hex array
         antpos = hex_array(3, split_core=False, outriggers=0)
@@ -1022,13 +1022,13 @@ class TestRedundantCalibrator(object):
         rc = om.RedundantCalibrator(reds)
         dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
-        dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl - nubl) for red in reds}
+        non_degen_dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl - nubl) for red in reds}
         for red in reds:
-            assert chisq_per_red[red[0]] - dof_per_ubl[red[0]] < 1
+            assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
             if len(red) == 1:
                 assert chisq_per_red[red[0]] < 1e-10
             else:
-                assert chisq_per_red[red[0]] - dof_per_ubl[red[0]] > 0
+                assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
 
         # Test 2 pol array
         antpos = hex_array(3, split_core=False, outriggers=0)
@@ -1040,13 +1040,13 @@ class TestRedundantCalibrator(object):
         rc = om.RedundantCalibrator(reds)
         dof = 2.0 * len(antpos) * (len(antpos) - 1) / 2 - len(reds) - 2 * len(antpos) + rc.count_degens() / 2.0
         np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
-        dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl / 2 - nubl / 2) for red in reds}
+        non_degen_dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl / 2 - nubl / 2) for red in reds}
         for red in reds:
-            assert chisq_per_red[red[0]] - dof_per_ubl[red[0]] < 1
+            assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
             if len(red) == 1:
                 assert chisq_per_red[red[0]] < 1e-10
             else:
-                assert chisq_per_red[red[0]] - dof_per_ubl[red[0]] > 0
+                assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
 
     def test_predict_chisq_per_ant(self):
         pass
