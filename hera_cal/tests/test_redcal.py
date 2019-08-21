@@ -1064,7 +1064,7 @@ class TestRedundantCalibrator(object):
         for red in reds:
             for bl in red:        
                 for ant in split_bl(bl):
-                    non_degen_dof_per_ant[ant] += 1.0 - 1.0/(len(red))
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
@@ -1084,7 +1084,7 @@ class TestRedundantCalibrator(object):
         for red in reds:
             for bl in red:        
                 for ant in split_bl(bl):
-                    non_degen_dof_per_ant[ant] += 1.0 - 1.0/(len(red))
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
@@ -1104,7 +1104,7 @@ class TestRedundantCalibrator(object):
         for red in reds:
             for bl in red:        
                 for ant in split_bl(bl):
-                    non_degen_dof_per_ant[ant] += 1.0 - 1.0/(len(red))
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
