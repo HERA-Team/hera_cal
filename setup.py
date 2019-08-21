@@ -57,8 +57,7 @@ setup_args = {
         "all": [
             'aipy>=3.0rc2',
         ]
-    }
-
+    },
     'zip_safe': False,
 }
 
