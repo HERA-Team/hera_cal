@@ -65,12 +65,9 @@ through a combination of SVD and fringe-rate filtering.
 """
 from __future__ import print_function, division, absolute_import
 import numpy as np
-import aipy
 import os
 import copy
-from pyuvdata import UVData, UVCal
 import pyuvdata.utils as uvutils
-from scipy.signal import windows
 from scipy.optimize import minimize
 from scipy import sparse
 from sklearn import gaussian_process as gp

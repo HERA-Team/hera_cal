@@ -6,18 +6,13 @@ from __future__ import print_function, division, absolute_import
 
 import pytest
 import os
-import shutil
-import json
 import numpy as np
-import aipy
-import optparse
 import sys
 from collections import OrderedDict as odict
 import copy
 import glob
 from six.moves import map, zip
 from pyuvdata import UVCal, UVData
-import pyuvdata.tests as uvtest
 import warnings
 
 from .. import io, abscal, redcal, utils

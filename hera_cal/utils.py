@@ -8,7 +8,6 @@ import numpy as np
 import os
 import copy
 from six.moves import map, range
-import aipy
 import astropy.constants as const
 from astropy.time import Time
 from astropy import coordinates as crd
@@ -21,6 +20,11 @@ from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT
 import sklearn.gaussian_process as gp
 
+try:
+    import aipy
+    AIPY = True
+except ImportError:
+    AIPY = False
 
 def _comply_antpol(antpol):
     '''Maps an input antenna polarization string onto a string compliant with pyuvdata
@@ -243,50 +247,51 @@ def echo(message, type=0, verbose=True):
             print("-" * 40)
 
 
-class AntennaArray(aipy.pol.AntennaArray):
-    def __init__(self, *args, **kwargs):
-        aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
-        self.antpos_ideal = kwargs.pop('antpos_ideal')
-        # yes, this is a thing. cm per meter
-        self.cm_p_m = 100.
+if AIPY:
+    class AntennaArray(aipy.pol.AntennaArray):
+        def __init__(self, *args, **kwargs):
+            aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
+            self.antpos_ideal = kwargs.pop('antpos_ideal')
+            # yes, this is a thing. cm per meter
+            self.cm_p_m = 100.
 
-    def update(self):
-        aipy.pol.AntennaArray.update(self)
+        def update(self):
+            aipy.pol.AntennaArray.update(self)
 
-    def get_params(self, ant_prms={'*': '*'}):
-        try:
-            prms = aipy.pol.AntennaArray.get_params(self, ant_prms)
-        except(IndexError):
-            return {}
-        return prms
+        def get_params(self, ant_prms={'*': '*'}):
+            try:
+                prms = aipy.pol.AntennaArray.get_params(self, ant_prms)
+            except(IndexError):
+                return {}
+            return prms
 
-    def set_params(self, prms):
-        changed = aipy.pol.AntennaArray.set_params(self, prms)
-        for i, ant in enumerate(self):
-            ant_changed = False
-            top_pos = np.dot(self._eq2zen, ant.pos)
-            try:
-                top_pos[0] = prms[str(i)]['top_x']
-                ant_changed = True
-            except(KeyError):
-                pass
-            try:
-                top_pos[1] = prms[str(i)]['top_y']
-                ant_changed = True
-            except(KeyError):
-                pass
-            try:
-                top_pos[2] = prms[str(i)]['top_z']
-                ant_changed = True
-            except(KeyError):
-                pass
-            if ant_changed:
-                # rotate from zenith to equatorial, convert from meters to ns
-                ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * self.cm_p_m
-            changed |= ant_changed
-        if changed:
-            self.update()
-        return changed
+        def set_params(self, prms):
+            changed = aipy.pol.AntennaArray.set_params(self, prms)
+            for i, ant in enumerate(self):
+                ant_changed = False
+                top_pos = np.dot(self._eq2zen, ant.pos)
+                try:
+                    top_pos[0] = prms[str(i)]['top_x']
+                    ant_changed = True
+                except(KeyError):
+                    pass
+                try:
+                    top_pos[1] = prms[str(i)]['top_y']
+                    ant_changed = True
+                except(KeyError):
+                    pass
+                try:
+                    top_pos[2] = prms[str(i)]['top_z']
+                    ant_changed = True
+                except(KeyError):
+                    pass
+                if ant_changed:
+                    # rotate from zenith to equatorial, convert from meters to ns
+                    ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * self.cm_p_m
+                changed |= ant_changed
+            if changed:
+                self.update()
+            return changed
 
 
 def get_aa_from_uv(uvd, freqs=[0.15]):
@@ -315,6 +320,7 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     aa: AntennaArray object that can be used to calculate redundancies from
        antenna positions.
     '''
+    assert AIPY, "you need aipy to run this function"
     # center of array values from file
     cofa_lat, cofa_lon, cofa_alt = uvd.telescope_location_lat_lon_alt
     location = (cofa_lat, cofa_lon, cofa_alt)
@@ -696,7 +702,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         u = np.einsum("...i,i->...", s_diff, bl)
 
         # get delay
-        tau = u / (aipy.const.c / 100.0)
+        tau = u / const.c.value
 
         # reshape tau
         if isinstance(tau, np.ndarray):

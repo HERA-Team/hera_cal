@@ -15,9 +15,14 @@ import collections
 from six.moves import map, range, zip
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
-import aipy
 from astropy import units
 import h5py
+
+try:
+    import aipy
+    AIPY = True
+except ImportError:
+    AIPY = False
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num
@@ -757,6 +762,7 @@ def get_file_times(filepaths, filetype='uvh5'):
     # iterate over filepaths and extract time info
     for i, f in enumerate(filepaths):
         if filetype == 'miriad':
+            assert AIPY, "you need aipy to use the miriad filetype"
             uv = aipy.miriad.UV(f)
             # get integration time
             int_time = uv['inttime'] / (units.si.day.in_units(units.si.s))

@@ -46,7 +46,7 @@ If you prefer to explicitly manage dependencies, see below.
 Those who use `conda` (preferred) may wish to install the following manually before 
 installing `hera_cal`:
 
-`conda install -c conda-forge "numpy>=1.10" scipy scikit-learn h5py astropy pyuvdata "aipy>=3.0rc2"`
+`conda install -c conda-forge "numpy>=1.10" scipy scikit-learn h5py astropy pyuvdata
 
 (note that `h5py` is a dependency of `hera_qm`, not `hera_cal`).
 
@@ -55,6 +55,10 @@ Other dependencies that will be installed from PyPI on-the-fly are:
 * [uvtools](https://github.com/HERA-Team/uvtools)
 * [linsolve](https://github.com/HERA-Team/linsolve)
 * [hera_qm](https://github.com/HERA-Team/hera_qm)
+
+`hera_cal` also has the _optional_ dependency of `aipy`, and some functions will not
+work without this dependency. To install all optional dependencies, use
+`pip install .[all]` or `pip install git+git://github.com/HERA-Team/hera_cal.git[all]`.
 
 ### Development Environment
 To install a full development environment for `hera_cal`, it is preferred to work with
