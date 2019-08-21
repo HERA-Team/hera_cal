@@ -903,7 +903,7 @@ def predict_chisq_per_bl(reds):
     '''
     bls = [bl for red in reds for bl in red]
     dummy_data = DataContainer({bl: np.ones((1, 1), dtype=np.complex) for bl in bls})
-    rc = redcal.RedundantCalibrator(reds)
+    rc = RedundantCalibrator(reds)
     solver = rc._solver(linsolve.LogProductSolver, dummy_data)
 
     A = solver.ls_amp.get_A()[:, :, 0]
