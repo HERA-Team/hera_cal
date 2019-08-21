@@ -21,8 +21,8 @@ from .datacontainer import DataContainer
 from .vis_clean import VisClean
 
 
-def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts=None,
-                      freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
+def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
+                      lsts=None, freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
     """
     Calculate the time average of a visibility waterfall. The average is optionally
     weighted by a boolean flag array (flags) and also optionally by an Nsample array (nsample),
@@ -56,6 +56,10 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
     nsamples : ndarray, optional
         2D float ndarray containing the number of pre-averages behind each pixel
         in data. Default is to assume unity for all pixels.
+
+    wgt_by_nsample : bool, optional
+        If True, perform time average weighted by nsample, otherwise perform uniform
+        average. Default is True.
 
     rephase : boolean, optional
         If True, phase each integration to the LST of the averaging window-center
@@ -169,13 +173,16 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, rephase=False, lsts
             dlst = mean_l - lst
             d = utils.lst_rephase(d, bl_vec, freqs, dlst, lat=lat, inplace=False, array=True)
 
-        # form data weights : flag weights * nsample
-        w = fw * n
+        # form data weights
+        if wgt_by_nsample:
+            w = fw * n
+        else:
+            w = fw
         w_sum = np.sum(w, axis=0, keepdims=False).clip(1e-10, np.inf)
 
         # perfom weighted average of data along time
         ad = np.sum(d * w, keepdims=False, axis=0) / w_sum
-        an = np.sum(w, keepdims=False, axis=0)
+        an = np.sum(n * fw, keepdims=False, axis=0)
 
         # append to data lists
         avg_data.append(ad)
@@ -306,8 +313,8 @@ class FRFilter(VisClean):
     FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
 
-    def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, rephase=False,
-                     verbose=True, output_prefix='avg', keys=None, overwrite=False):
+    def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, wgt_by_nsample=True,
+                     rephase=False, verbose=True, output_prefix='avg', keys=None, overwrite=False):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
         The resultant averaged data, flags, time arrays, etc. are attached to self
@@ -336,6 +343,9 @@ class FRFilter(VisClean):
             nsamples : DataContainer
                 nsamples to use in averaging. Default is None.
                 Must be consistent with self.lsts, self.freqs, etc.
+            wgt_by_nsample : bool
+                If True, perform time average weighted by nsample, otherwise perform
+                uniform average. Default is True.
             rephase : bool
                 If True, rephase data in averaging window to the window-center.
             keys : list of len-3 antpair-pol tuples
@@ -383,12 +393,13 @@ class FRFilter(VisClean):
         at = None
         for i, k in enumerate(keys):
             if k in avg_data and not overwrite:
-                utils.echo("{} exists in ouput DataContainer and overwrite == False, skipping...".format(k), verbose=verbose)
+                utils.echo("{} exists in output DataContainer and overwrite == False, skipping...".format(k), verbose=verbose)
                 continue
             (ad, af, an, al,
              ea) = timeavg_waterfall(data[k], Navg, flags=flags[k], nsamples=nsamples[k],
                                      rephase=rephase, lsts=lsts, freqs=self.freqs, bl_vec=self.blvecs[k[:2]],
-                                     lat=self.lat, extra_arrays=dict(times=times), verbose=verbose)
+                                     lat=self.lat, extra_arrays=dict(times=times), wgt_by_nsample=wgt_by_nsample,
+                                     verbose=verbose)
             avg_data[k] = ad
             avg_flags[k] = af
             avg_nsamples[k] = an
