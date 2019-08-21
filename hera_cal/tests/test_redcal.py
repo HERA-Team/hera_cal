@@ -956,6 +956,48 @@ class TestRedundantCalibrator(object):
         assert not om.is_redundantly_calibratable(pos)
         assert om.is_redundantly_calibratable(pos, require_coplanarity=False)
 
+    def test_predict_chisq_per_bl(self):
+        # Test linear array
+        antpos = linear_array(7)
+        reds = om.get_reds(antpos)
+        chisq_per_bl = om.predict_chisq_per_bl(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
+        np.testing.assert_array_less(list(chisq_per_bl.values()), 1.0)
+        for red in reds:
+            if len(red) == 0:
+                assert chisq_per_bl[red[0]] < 1e-10
+
+        # Test hex array
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos)
+        chisq_per_bl = om.predict_chisq_per_bl(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
+        np.testing.assert_array_less(list(chisq_per_bl.values()), 1.0)
+        for red in reds:
+            if len(red) == 0:
+                assert chisq_per_bl[red[0]] < 1e-10
+
+        # Test 2 pol array
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos, pols=['xx', 'yy'])
+        chisq_per_bl = om.predict_chisq_per_bl(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = 2.0 * len(antpos) * (len(antpos) - 1) / 2 - len(reds) - 2 * len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
+        np.testing.assert_array_less(list(chisq_per_bl.values()), 1.0)
+        for red in reds:
+            if len(red) == 0:
+                assert chisq_per_bl[red[0]] < 1e-10
+
+    def test_predict_chisq_per_red(self):
+        pass
+
+    def test_predict_chisq_per_ant(self):
+        pass
 
 class TestRedcalAndAbscal(object):
     
