@@ -1049,7 +1049,65 @@ class TestRedundantCalibrator(object):
                 assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
 
     def test_predict_chisq_per_ant(self):
-        pass
+        # Test linear array
+        antpos = linear_array(7)
+        ants = [(ant, 'Jxx') for ant in antpos]
+        reds = om.get_reds(antpos)
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_ant = om.predict_chisq_per_ant(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
+        non_degen_dof_per_ant = {ant: -2 for ant in ants}
+        for red in reds:
+            for bl in red:        
+                for ant in split_bl(bl):
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0/(len(red))
+        for ant in ants:
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
+            
+        # Test hex array
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        ants = [(ant, 'Jxx') for ant in antpos]
+        reds = om.get_reds(antpos)
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_ant = om.predict_chisq_per_ant(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
+        non_degen_dof_per_ant = {ant: -2 for ant in ants}
+        for red in reds:
+            for bl in red:        
+                for ant in split_bl(bl):
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0/(len(red))
+        for ant in ants:
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
+
+        # Test 2 pol array
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        ants = [(ant, pol) for ant in antpos for pol in ['Jxx', 'Jyy']]
+        reds = om.get_reds(antpos, pols=['xx', 'yy'])
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_ant = om.predict_chisq_per_ant(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = 2.0 * len(antpos) * (len(antpos) - 1) / 2 - len(reds) - 2 * len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
+        non_degen_dof_per_ant = {ant: -2 for ant in ants}
+        for red in reds:
+            for bl in red:        
+                for ant in split_bl(bl):
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0/(len(red))
+        for ant in ants:
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
 
 
 class TestRedcalAndAbscal(object):
