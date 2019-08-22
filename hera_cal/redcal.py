@@ -1091,17 +1091,19 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     '''This function expands and harmonizes a calibration solution produced by 
     redcal.redundantly_calibrate to a set of un-filtered redundancies, modifying cal in place.
 
-    It does five related things:
+    It does six related things:
         1) Visibility solutions in cal['v_omnical'] and cal['vf_omnical'] are now keyed by the first 
             entry in each red in all_reds, even if they were originally keyed by a different entry.
         2) Unique baselines that were exluded from the redundant calibration are filled in by a 
             noise-weighted average of calibrated visibilities.
-        3) cal gets a new entry, cal['vns_omnical'] which is a nsamples data container of the number of 
+        3) cal['chisq'] and cal['chisq_per_ant'] are recalculated using the full set of redundancies
+            (but still excluding the dead antennas)
+        4) cal gets a new entry, cal['vns_omnical'] which is a nsamples data container of the number of 
             visibilites that went into each unique baseline visibility solution
-        4) gains missing from cal['g_omnical'] (e.g. ex_ants) are backsolved using omnical solutions 
+        5) gains missing from cal['g_omnical'] (e.g. ex_ants) are backsolved using omnical solutions 
             as fixed priors. These gains remain flagged in cal['gf_omnical']. For bookkeeping purposes, 
             cal['g_firstcal'] and cal['gf_firstcal'] and filled in with 1.0s and Trues respectively.
-        5) Unique baseline visibiltiy solutions that could not be solved for withose these backsolved 
+        6) Unique baseline visibiltiy solutions that could not be solved for withose these backsolved 
             gains are then solved for. These remain flagged in cal['vf_omnical'] and have all 0s 
             for samples in cal['vns_omnical']. 
 
