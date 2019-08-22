@@ -1217,15 +1217,12 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
                                                          split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
     predicted_chisq_per_ant = predict_chisq_per_ant(reds)
     rv['chisq_per_ant'] = {ant: cs / predicted_chisq_per_ant[ant] for ant, cs in rv['chisq_per_ant'].items()}
+    predicted_chisq = np.sum(list(predicted_chisq_per_ant.values())) / 2.0
     if rc.pol_mode in ['1pol', '2pol']:  # in this case, chisq is split by antpol
         for antpol in rv['chisq'].keys():
-            Ngains = len([ant for ant in rv['g_omnical'].keys() if ant[1] == antpol])
-            Nvis = len([bl for bl in rv['v_omnical'].keys() if bl[2] == join_pol(antpol, antpol)])
-            rv['chisq'][antpol] /= (nObs[antpol] - Ngains - Nvis + nDegen / {'1pol': 2.0, '2pol': 4.0}[rc.pol_mode])  
-    elif rc.pol_mode == '4pol':
-        rv['chisq'] /= (nObs - len(rv['g_omnical']) - len(rv['v_omnical']) + nDegen / 2.0)
-    else:  # 4pol_minV
-        rv['chisq'] /= (nObs - len(rv['g_omnical']) - len(rv['v_omnical']) + nDegen / 2.0)
+            rv['chisq'][antpol] /= (predicted_chisq / {'1pol': 1.0, '2pol': 2.0}[rc.pol_mode])
+    else:
+        rv['chisq'] /= predicted_chisq
     return rv
 
 
