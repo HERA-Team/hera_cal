@@ -1120,7 +1120,6 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             Used for counting the number of non-flagged visibilities that went into each redundant group.
     '''
     # Solve for unsolved-for unique baselines whose antennas are both in cal['g_omnical']
-    input_cal = deepcopy(cal)
     bls_to_use = [bl for red in all_reds for bl in red 
                   if (not np.any([bl in cal['v_omnical'] for bl in red])
                       and ((split_bl(bl)[0] in cal['g_omnical']) 
