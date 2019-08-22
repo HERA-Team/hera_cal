@@ -228,11 +228,10 @@ class Test_VisClean(object):
 
         # test that polynomial fitting is a good fit
         _, n1 = vis_clean.trim_model(V.clean_model, V.clean_resid, V.dnu, noise_thresh=3.0, delay_cut=500,
-                                      kernel_size=None, polyfit_deg=None)
+                                     kernel_size=None, polyfit_deg=None)
         _, n2 = vis_clean.trim_model(V.clean_model, V.clean_resid, V.dnu, noise_thresh=3.0, delay_cut=500,
-                                      kernel_size=None, polyfit_deg=5)
+                                     kernel_size=None, polyfit_deg=5)
         assert (np.std(n1[k] - n2[k]) / np.mean(n2[k])) < 0.1  # assert residual is below 10% of fit
-
 
     def test_neb(self):
         n = vis_clean.noise_eq_bandwidth(dspec.gen_window('blackmanharris', 10000))
