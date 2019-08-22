@@ -1212,11 +1212,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    rv['chisq'], nObs, rv['chisq_per_ant'], nObs_per_ant = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
-                                                                       gains=rv['g_omnical'], reds=reds,
-                                                                       split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
-    rv['chisq_per_ant'] = {ant: cs / nObs_per_ant[ant] for ant, cs in rv['chisq_per_ant'].items()}
-    nDegen = rc.count_degens()  # need to add back in nDegen/2 complex degrees of freedom
+    rv['chisq'], _, rv['chisq_per_ant'], _ = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
+                                                         gains=rv['g_omnical'], reds=reds,
+                                                         split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
+    predicted_chisq_per_ant = predict_chisq_per_ant(reds)
+    rv['chisq_per_ant'] = {ant: cs / predicted_chisq_per_ant[ant] for ant, cs in rv['chisq_per_ant'].items()}
     if rc.pol_mode in ['1pol', '2pol']:  # in this case, chisq is split by antpol
         for antpol in rv['chisq'].keys():
             Ngains = len([ant for ant in rv['g_omnical'].keys() if ant[1] == antpol])
