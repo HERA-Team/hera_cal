@@ -1120,16 +1120,21 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             Used for counting the number of non-flagged visibilities that went into each redundant group.
     '''
     # Solve for unsolved-for unique baselines whose antennas are both in cal['g_omnical']
-    bls_to_use = [bl for red in all_reds for bl in red 
-                  if (not np.any([bl in cal['v_omnical'] for bl in red])
-                      and ((split_bl(bl)[0] in cal['g_omnical']) 
-                      and (split_bl(bl)[1] in cal['g_omnical'])))]
+    good_ants_reds = filter_reds(all_reds, ants=list(cal['g_omnical'].keys()))
+    good_ants_bls = [bl for red in good_ants_reds for bl in red]
+    bls_to_use = [bl for red in good_ants_reds for bl in red if not np.any([bl in cal['v_omnical'] for bl in red])]
     if len(bls_to_use) > 0:
-        new_vis = linear_cal_update(bls_to_use, cal, data, all_reds, weight_by_flags=True)
+        new_vis = linear_cal_update(bls_to_use, cal, data, good_ants_reds, weight_by_flags=True)
         for ubl, vis in new_vis.items():
             cal['v_omnical'][ubl] = vis
             cal['vf_omnical'][ubl] = ~np.isfinite(vis)
         make_sol_finite(cal['v_omnical'])
+
+    # Update chisq and chisq per ant to include all baselines between working antennas
+    rekey_vis_sols(cal, good_ants_reds)
+    dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in good_ants_bls}
+    data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in good_ants_bls}
+    cal['chisq'], cal['chisq_per_ant'] = normalized_chisq(data, data_wgts, good_ants_reds, cal['v_omnical'], cal['g_omnical'])
 
     # Reassign omnical visibility solutions to the first entry in each group in all_reds
     rekey_vis_sols(cal, all_reds)
