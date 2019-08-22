@@ -788,7 +788,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
 
 
 def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay_cut=3000,
-               kernel_size=None, edgecut_low=0, edgecut_hi=0,):
+               kernel_size=None, edgecut_low=0, edgecut_hi=0, polyfit_deg=None):
     """
     Truncate CLEAN model components in delay space below some amplitude threshold.
 
@@ -815,6 +815,9 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
             Edgecut bins to apply to low edge of frequency band
         edgecut_hi : int
             Edgecut bins to apply to high edge of frequency band
+        polyfit_deg : int
+            Degree of polynomial to fit to noise curve w.r.t. time.
+            None is no fitting.
 
     Returns:
         model : DataContainer
@@ -848,6 +851,13 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
             nlen = len(n)
             n = np.pad(n, nlen, 'reflect', reflect_type='odd')
             noise[k] = signal.medfilt(n, kernel_size=kernel_size)[nlen:-nlen]
+
+        # fit a polynomial if desired
+        if polyfit_deg is not None:
+            x = np.arange(noise[k].size, dtype=np.float)
+            f = ~np.isnan(noise[k])
+            fit = np.polyfit(x[f], noise[k][f], deg=polyfit_deg)
+            noise[k] = np.polyval(fit, x)
 
         # get mfft
         mfft, _ = fft_data(clean_model[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)

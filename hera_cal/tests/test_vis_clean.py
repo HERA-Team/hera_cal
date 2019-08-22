@@ -209,7 +209,7 @@ class Test_VisClean(object):
 
         # trim model
         mdl, n = vis_clean.trim_model(V.clean_model, V.clean_resid, V.dnu, noise_thresh=3.0, delay_cut=500,
-                                      kernel_size=21)
+                                      kernel_size=21, polyfit_deg=None)
         clean_data2 = deepcopy(V.clean_data)
         clean_data2[k][V.flags[k]] = mdl[k][V.flags[k]]
         V.fft_data(clean_data2, window='bh', overwrite=True, assign='dfft3')
@@ -225,6 +225,14 @@ class Test_VisClean(object):
         select = (np.abs(V.delays) < 300) & (np.abs(V.delays) > 100)
         assert np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d3)[select]), atol=10)
         assert not np.isclose(np.mean(np.abs(d1)[select]), np.mean(np.abs(d2)[select]), atol=10)
+
+        # test that polynomial fitting is a good fit
+        _, n1 = vis_clean.trim_model(V.clean_model, V.clean_resid, V.dnu, noise_thresh=3.0, delay_cut=500,
+                                      kernel_size=None, polyfit_deg=None)
+        _, n2 = vis_clean.trim_model(V.clean_model, V.clean_resid, V.dnu, noise_thresh=3.0, delay_cut=500,
+                                      kernel_size=None, polyfit_deg=5)
+        assert (np.std(n1[k] - n2[k]) / np.mean(n2[k])) < 0.1  # assert residual is below 10% of fit
+
 
     def test_neb(self):
         n = vis_clean.noise_eq_bandwidth(dspec.gen_window('blackmanharris', 10000))
