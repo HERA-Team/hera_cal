@@ -1095,10 +1095,10 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     # Solve for excluded antennas and update cal
     for i in range(len(data)):  # this should break well before the end
         # pick out baselines with a visibility solution and one but not two excluded antennas
-        bls_to_use = [bl for red in all_reds for bl in red 
-                      if ((red[0] in cal['v_omnical'])
-                          and ((split_bl(bl)[0] not in cal['g_omnical'])
-                          ^ (split_bl(bl)[1] not in cal['g_omnical'])))]
+        bls_to_use = [bl for red in all_reds for bl in red if ((red[0] in cal['v_omnical'])
+                      and ((split_bl(bl)[0] not in cal['g_omnical']) ^ (split_bl(bl)[1] not in cal['g_omnical'])))]
+        bls_for_chisq = [bl for red in all_reds for bl in red if ((red[0] in cal['v_omnical'])
+                         and ((split_bl(bl)[0] in cal['g_omnical']) | (split_bl(bl)[1] in cal['g_omnical'])))]
         if len(bls_to_use) == 0:
             break  # iterate to also solve for ants only found in bls with other ex_ants
 
@@ -1117,10 +1117,12 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
         data_subset = DataContainer({bl: data[bl] for bl in bls_to_use})
         dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in bls_to_use}
         data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=dts_by_bl[bl])**-1 for bl in bls_to_use}
-        _, _, chisq_per_ant, nObs_per_ant = utils.chisq(data_subset, cal['v_omnical'], data_wgts=data_wgts,
-                                                        gains=cal['g_omnical'], reds=all_reds)
+        _, _, chisq_per_ant, _ = utils.chisq(data_subset, cal['v_omnical'], data_wgts=data_wgts,
+                                             gains=cal['g_omnical'], reds=all_reds)
+        reds_for_chisq = filter_reds(all_reds, bls=bls_for_chisq)
+        predicted_chisq_per_ant = predict_chisq_per_ant(reds_for_chisq)
         for ant, cspa in chisq_per_ant.items():
-            cal['chisq_per_ant'][ant] = chisq_per_ant[ant] / nObs_per_ant[ant]
+            cal['chisq_per_ant'][ant] = chisq_per_ant[ant] / predicted_chisq_per_ant[ant]
             cal['chisq_per_ant'][ant][~np.isfinite(cspa)] = np.zeros_like(cspa[~np.isfinite(cspa)])
     
     # Solve for unsolved-for unique baselines visbility solutions
