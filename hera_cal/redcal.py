@@ -948,6 +948,44 @@ def predict_chisq_per_ant(reds):
     return {ant: np.sum([predicted_chisq_per_bl[bl] for bl in bls if ant in split_bl(bl)]) for ant in ants}
 
 
+def normalized_chisq(data, data_wgts, reds, vis_sols, gains):
+    '''Computes chi^2 and chi^2 per antenna with proper normalization per DoF. When the only 
+    source of non-redundancy is noise, these quantities should have expectation values of 1.
+
+    Arguments:
+        data: DataContainer mapping baseline-pol tuples like (0,1,'xx') to complex data of 
+            shape (Nt, Nf).
+        data_wgts: multiplicative weights with which to combine chisq per visibility. Usually
+            equal to (visibility noise variance)**-1.
+        reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+            item in each list will be treated as the key for the unique baseline.
+        vis_sols: omnical visibility solutions dictionary with baseline-pol tuple keys that are the
+            first elements in each of the sub-lists of reds. 
+        gains: gain dictionary keyed by ant-pol tuples like (1,'Jxx')
+
+    Returns:
+        chisq: chi^2 per degree of freedom for the calibration solution. Normalized using noise derived
+            from autocorrelations and a number of DoF derived from the reds using predict_chisq_per_ant.
+            If the inferred pol_mode from reds (see redcal.parse_pol_mode) is '1pol' or '2pol', this 
+            is a dictionary mapping antenna polarization (e.g. 'Jxx') to chi^2. Otherwise, there is a 
+            single chisq (because polarizations mix) and this is a numpy array.
+        chisq_per_ant: dictionary mapping ant-pol tuples like (1,'Jxx') to the sum of all chisqs for
+            visibilities that an antenna participates in, DoF normalized using predict_chisq_per_ant
+    '''
+    pol_mode = parse_pol_mode(reds)
+    chisq, _, chisq_per_ant, _ = utils.chisq(data, vis_sols, data_wgts=data_wgts, gains=gains, 
+                                             reds=reds, split_by_antpol=(pol_mode in ['1pol', '2pol']))
+    predicted_chisq_per_ant = predict_chisq_per_ant(reds)
+    chisq_per_ant = {ant: cs / predicted_chisq_per_ant[ant] for ant, cs in chisq_per_ant.items()}
+    if pol_mode in ['1pol', '2pol']:  # in this case, chisq is split by antpol
+        for antpol in chisq.keys():
+            chisq[antpol] /= np.sum([cspa / 2.0 for ant, cspa in predicted_chisq_per_ant.items() 
+                                     if antpol in ant], axis=0)
+    else:
+        chisq /= np.sum(list(predicted_chisq_per_ant.values())) / 2.0
+    return chisq, chisq_per_ant
+
+
 def _get_pol_load_list(pols, pol_mode='1pol'):
     '''Get a list of lists of polarizations to load simultaneously, depending on the polarizations
     in the data and the pol_mode (which can be 1pol, 2pol, 4pol, or 4pol_minV)'''
@@ -1212,17 +1250,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    rv['chisq'], _, rv['chisq_per_ant'], _ = utils.chisq(data, rv['v_omnical'], data_wgts=data_wgts,
-                                                         gains=rv['g_omnical'], reds=reds,
-                                                         split_by_antpol=(rc.pol_mode in ['1pol', '2pol']))
-    predicted_chisq_per_ant = predict_chisq_per_ant(reds)
-    rv['chisq_per_ant'] = {ant: cs / predicted_chisq_per_ant[ant] for ant, cs in rv['chisq_per_ant'].items()}
-    predicted_chisq = np.sum(list(predicted_chisq_per_ant.values())) / 2.0
-    if rc.pol_mode in ['1pol', '2pol']:  # in this case, chisq is split by antpol
-        for antpol in rv['chisq'].keys():
-            rv['chisq'][antpol] /= (predicted_chisq / {'1pol': 1.0, '2pol': 2.0}[rc.pol_mode])
-    else:
-        rv['chisq'] /= predicted_chisq
+    rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, data_wgts, reds, rv['v_omnical'], rv['g_omnical'])
     return rv
 
 
