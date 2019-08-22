@@ -999,6 +999,23 @@ def _get_pol_load_list(pols, pol_mode='1pol'):
     return pol_load_list
 
 
+def rekey_vis_sols(cal, reds):
+    '''Rekey visibility solutions in cal['v_omnical'] and cal['vf_omnical'] using the first entry in
+    each red in reds. even if they were originally keyed by a different entry.
+
+    Arguments:
+        cal: dictionary of redundant calibration solutions, updated in place, like the one 
+            produced by redcal.redundantly_calibrate(). See that function more details.
+        reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx')
+    '''
+    for red in reds:
+        for bl in red[1:]:
+            if bl in cal['v_omnical']:
+                cal['v_omnical'][red[0]] = deepcopy(cal['v_omnical'][bl])
+                cal['vf_omnical'][red[0]] = deepcopy(cal['vf_omnical'][bl])
+                del cal['v_omnical'][bl], cal['vf_omnical'][bl]
+
+
 def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight_by_flags=False):
     '''Solve for unsolved gains or unique baseline visibilities (but not both simultaneously)
     using existing gain/visibility solutions in cal.
@@ -1116,12 +1133,7 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
         make_sol_finite(cal['v_omnical'])
 
     # Reassign omnical visibility solutions to the first entry in each group in all_reds
-    for red in all_reds:
-        for bl in red[1:]:
-            if bl in cal['v_omnical']:
-                cal['v_omnical'][red[0]] = deepcopy(cal['v_omnical'][bl])
-                cal['vf_omnical'][red[0]] = deepcopy(cal['vf_omnical'][bl])
-                del cal['v_omnical'][bl], cal['vf_omnical'][bl]
+    rekey_vis_sols(cal, all_reds)
 
     # Compute nsamples for each unique baseline, based on which antennas were in cal['g_omnical']
     cal['vns_omnical'] = DataContainer({})
