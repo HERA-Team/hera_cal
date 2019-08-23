@@ -1110,7 +1110,8 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     Arguments:
         cal: dictionary of redundant calibration solutions produced by redcal.redundantly_calibrate. 
             Modified in place, including adding an entry with key 'vns_omnical' that gives a number of
-            samples that went into each unique baseline visibility solution
+            samples that went into each unique baseline visibility solution. Excluded antennas are
+            assumed to be missing from cal['g_omnical'] and cal['chisq_per_ant'].
         all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
             item in each list will be treated as the key for the unique baseline. Must be a superset of
             the reds used for producing cal
