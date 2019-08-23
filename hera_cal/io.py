@@ -44,9 +44,12 @@ class HERACal(UVCal):
 
         # parse input_data as filepath(s)
         if isinstance(input_cal, str):
+            assert os.path.exists(input_cal), '{} does not exist.'.format(input_cal)
             self.filepaths = [input_cal]
         elif isinstance(input_cal, collections.Iterable):  # List loading
             if np.all([isinstance(i, str) for i in input_cal]):  # List of visibility data paths
+                for ic in input_cal:
+                    assert os.path.exists(ic), '{} does not exist.'.format(ic)
                 self.filepaths = list(input_cal)
             else:
                 raise TypeError('If input_cal is a list, it must be a list of strings.')
