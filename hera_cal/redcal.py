@@ -1178,8 +1178,9 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
         reds_for_chisq = filter_reds(all_reds, bls=bls_for_chisq)
         predicted_chisq_per_ant = predict_chisq_per_ant(reds_for_chisq)
         for ant, cspa in chisq_per_ant.items():
-            cal['chisq_per_ant'][ant] = chisq_per_ant[ant] / predicted_chisq_per_ant[ant]
-            cal['chisq_per_ant'][ant][~np.isfinite(cspa)] = np.zeros_like(cspa[~np.isfinite(cspa)])
+            if ant not in cal['chisq_per_ant']:
+                cal['chisq_per_ant'][ant] = chisq_per_ant[ant] / predicted_chisq_per_ant[ant]
+                cal['chisq_per_ant'][ant][~np.isfinite(cspa)] = np.zeros_like(cspa[~np.isfinite(cspa)])
     
     # Solve for unsolved-for unique baselines visbility solutions
     bls_to_use = [bl for red in all_reds for bl in red 
