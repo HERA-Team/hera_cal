@@ -1160,6 +1160,69 @@ class TestRedundantCalibrator(object):
         for ant in chisq_per_ant:
             np.testing.assert_almost_equal(np.mean(chisq_per_ant[ant]), predicted_chisq_per_ant[ant], -np.log10(.02))
 
+    def test_predict_chisq_statistically_with_excluded_antenna(self):
+        np.random.seed(21)
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos)
+        freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
+        times = np.linspace(0, 600. / 60 / 60 / 24, 60, endpoint=False)
+        df = np.median(np.diff(freqs))
+        dt = np.median(np.diff(times)) * 3600. * 24
+
+        # Simulate redundant data with noise
+        noise_var = .001
+        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.00)
+        ants = g.keys()
+        n = DataContainer({bl: np.sqrt(noise_var / 2) * (np.random.randn(*vis.shape) + 1j * np.random.randn(*vis.shape)) for bl, vis in d.items()})
+        noisy_data = n + DataContainer(d)
+        nsamples = DataContainer({bl: np.ones_like(d[bl], dtype=float) for bl in d})
+
+        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
+        for antnum in antpos.keys():
+            noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
+        noisy_data.freqs = deepcopy(freqs)
+        noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
+        filtered_reds = om.filter_reds(reds, ex_ants=[6])
+        cal = om.redundantly_calibrate(noisy_data, filtered_reds)
+        cal_copy = deepcopy(cal)
+        om.expand_omni_sol(cal, reds, noisy_data, nsamples)
+        # expand_omni_sol(cal_copy, reds, noisy_data, nsamples)
+
+        # Compute various chi^2s
+        chisq_per_bl = {}
+        chisq_per_red = {red[0]: 0.0 for red in filtered_reds}
+        chisq_per_ant = {ant: 0.0 for ant in ants}
+        for red in filtered_reds:
+            for bl in red:
+                d_here = noisy_data[bl]
+                ant0, ant1 = split_bl(bl)
+                g1, g2 = cal['g_omnical'][ant0], cal['g_omnical'][ant1]
+                v_here = cal['v_omnical'][red[0]]
+                chisq_per_bl[bl] = np.abs(d_here - g1 * np.conj(g2) * v_here)**2 / noise_var
+                chisq_per_red[red[0]] += chisq_per_bl[bl]
+                chisq_per_ant[ant0] += chisq_per_bl[bl]
+                chisq_per_ant[ant1] += chisq_per_bl[bl]
+
+        # compare predictions at the 3% level for non-excluded antennas
+        np.testing.assert_almost_equal(np.mean(cal['chisq']['Jxx']), 1.0, -np.log10(.03))
+
+        predicted_chisq_per_bl = om.predict_chisq_per_bl(filtered_reds)
+        for bl in predicted_chisq_per_bl:
+            np.testing.assert_almost_equal(np.mean(chisq_per_bl[bl]), predicted_chisq_per_bl[bl], -np.log10(.03))
+
+        predicted_chisq_per_red = om.predict_chisq_per_red(filtered_reds)
+        for red in predicted_chisq_per_red:
+            np.testing.assert_almost_equal(np.mean(chisq_per_red[red]), predicted_chisq_per_red[red], -np.log10(.03))
+
+        predicted_chisq_per_ant = om.predict_chisq_per_ant(filtered_reds)
+        for ant in predicted_chisq_per_ant:
+            np.testing.assert_almost_equal(np.mean(chisq_per_ant[ant]), predicted_chisq_per_ant[ant], -np.log10(.03))
+
+        # make sure excluded antenna has the highest chi^2, but not inexplicably large
+        assert np.mean(cal['chisq_per_ant'][6, 'Jxx']) <= len(antpos)  
+        for ant in cal['chisq_per_ant']:
+            assert np.mean(cal['chisq_per_ant'][ant]) <= np.mean(cal['chisq_per_ant'][6, 'Jxx'])
+
 
 class TestRedcalAndAbscal(object):
     
