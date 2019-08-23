@@ -788,7 +788,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
 
 
 def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay_cut=3000,
-               kernel_size=None, edgecut_low=0, edgecut_hi=0, polyfit_deg=None):
+               kernel_size=None, edgecut_low=0, edgecut_hi=0, polyfit_deg=None, verbose=True):
     """
     Truncate CLEAN model components in delay space below some amplitude threshold.
 
@@ -818,6 +818,8 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
         polyfit_deg : int
             Degree of polynomial to fit to noise curve w.r.t. time.
             None is no fitting.
+        verbose : bool
+            Report feedback to stdout
 
     Returns:
         model : DataContainer
@@ -855,9 +857,14 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
         # fit a polynomial if desired
         if polyfit_deg is not None:
             x = np.arange(noise[k].size, dtype=np.float)
-            f = ~np.isnan(noise[k])
-            fit = np.polyfit(x[f], noise[k][f], deg=polyfit_deg)
-            noise[k] = np.polyval(fit, x)
+            f = ~np.isnan(noise[k]) & ~np.isfinite(noise[k]) & ~np.isclose(noise[k], 0.0)
+            # only fit if it is well-conditioned: Ntimes > polyfit_deg + 1
+            if f.sum() >= (polyfit_deg + 1):
+                fit = np.polyfit(x[f], noise[k][f], deg=polyfit_deg)
+                noise[k] = np.polyval(fit, x)
+            else:
+                # not enough points to fit polynomial
+                echo("Need more suitable data points for {} to fit {}-deg polynomial".format(k, polyfit_deg), verbose=verbose)
 
         # get mfft
         mfft, _ = fft_data(clean_model[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)

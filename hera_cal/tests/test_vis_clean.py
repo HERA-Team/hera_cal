@@ -233,6 +233,13 @@ class Test_VisClean(object):
                                      kernel_size=None, polyfit_deg=5)
         assert (np.std(n1[k] - n2[k]) / np.mean(n2[k])) < 0.1  # assert residual is below 10% of fit
 
+        # test well-conditioned check takes effect
+        V2 = deepcopy(V)
+        V2.clean_resid[k][:-2] = 0.0  # zero all the data except last two integrations
+        _, n2 = vis_clean.trim_model(V2.clean_model, V2.clean_resid, V2.dnu, noise_thresh=3.0, delay_cut=500,
+                                     kernel_size=None, polyfit_deg=5)
+        assert np.all(np.isclose(n2[k][-1], n1[k][-1]))  # assert non-zeroed output are same as n1 (no polyfit)
+
     def test_neb(self):
         n = vis_clean.noise_eq_bandwidth(dspec.gen_window('blackmanharris', 10000))
         assert np.isclose(n, 1.9689862471203075)
