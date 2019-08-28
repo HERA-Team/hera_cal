@@ -13,7 +13,6 @@ from astropy.time import Time
 from astropy import coordinates as crd
 from astropy import units as unt
 from scipy import signal
-from collections import OrderedDict as odict
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol

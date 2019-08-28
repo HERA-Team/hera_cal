@@ -7,10 +7,8 @@
 from __future__ import print_function, division, absolute_import
 
 import numpy as np
-from collections import OrderedDict as odict
 from copy import deepcopy
 import argparse
-import datetime
 from six.moves import range, zip
 
 from . import io

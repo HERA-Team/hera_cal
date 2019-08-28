@@ -11,7 +11,12 @@ from copy import deepcopy
 from six.moves import range
 import warnings
 import argparse
-import uvtools
+
+try:
+    import uvtools
+    HAVE_UVTOOLS = True
+except:
+    HAVE_UVTOOLS = False
 
 try:
     import aipy
@@ -90,6 +95,9 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
     '''
+    if not HAVE_UVTOOLS:
+        raise ImportError("uvtools required, instsall hera_cal[all]")
+
     df = np.median(np.diff(freqs))  # in Hz
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s

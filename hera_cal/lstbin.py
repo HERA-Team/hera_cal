@@ -5,29 +5,19 @@
 from __future__ import print_function, division, absolute_import
 
 import os
-import sys
 from collections import OrderedDict as odict
 import copy
 import argparse
 import functools
 import numpy as np
-import itertools
 import operator
 import gc as garbage_collector
 import datetime
 from six.moves import map, range
-from scipy import signal
-from scipy import interpolate
-from scipy import spatial
-from astropy import stats as astats
-import aipy
-from pyuvdata import UVCal, UVData
-from pyuvdata import utils as uvutils
 
 from . import utils
 from . import version
 from . import abscal
-from . import redcal
 from . import io
 from . import apply_cal
 from .datacontainer import DataContainer

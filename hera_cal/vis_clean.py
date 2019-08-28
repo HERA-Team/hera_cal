@@ -7,8 +7,13 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
 import datetime
-from six.moves import range, zip
-from uvtools import dspec
+from six.moves import range
+try:
+    from uvtools import dspec
+    HAVE_UVTOOLS = True
+except ImportError:
+    HAVE_UVTOOLS = False
+
 from astropy import constants
 import copy
 import fnmatch
@@ -329,6 +334,9 @@ class VisClean(object):
             dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             verbose: If True print feedback to stdout
         """
+        if not HAVE_UVTOOLS:
+            raise ImportError("uvtools required, install hera_cal[all]")
+
         # type checks
         if ax not in ['freq', 'time', 'both']:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
@@ -713,6 +721,9 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         dfft : complex ndarray FFT of data
         fourier_axes : fourier axes, if axis is ndimensional, so is this.
     """
+    if not HAVE_UVTOOLS:
+        raise ImportError("uvtools required, install hera_cal[all]")
+
     # type checks
     if not isinstance(axis, (tuple, list)):
         axis = [axis]
