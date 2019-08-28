@@ -5,16 +5,10 @@
 from __future__ import print_function, division, absolute_import
 
 import numpy as np
-import os
 import copy
-from six.moves import map, range
-from pyuvdata import UVData, UVCal, utils as uvutils
-from functools import wraps
 
-from .vis_clean import VisClean
 from . import utils
 from .datacontainer import DataContainer
-from . import version, io
 
 
 def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,

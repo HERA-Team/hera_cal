@@ -5,16 +5,13 @@
 from __future__ import print_function, division, absolute_import
 
 import numpy as np
-from collections import OrderedDict as odict
-import copy
-import os
 from six.moves import range
-from pyuvdata import UVData
-import pyuvdata.utils as uvutils
-from uvtools import dspec
+try:
+    from uvtools import dspec
+    HAVE_UVTOOLS = True
+except ImportError:
+    HAVE_UVTOOLS = False
 
-from . import io
-from . import version
 from . import utils
 
 from .datacontainer import DataContainer
@@ -435,6 +432,8 @@ class FRFilter(VisClean):
             edgecut_low : int, number of bins to flag on low side of axis
             edgecut_hi : int, number of bins to flag on high side of axis
         """
+        if not HAVE_UVTOOLS:
+            raise ImportError("FRFilter.filter_data requires uvtools to be installed. Install hera_cal[all]")
         # setup containers
         for n in ['data', 'flags', 'nsamples']:
             name = "{}_{}".format(output_prefix, n)

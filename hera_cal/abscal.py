@@ -25,7 +25,6 @@ the i-th and j-th antenna respectively.
 from __future__ import print_function, division, absolute_import
 
 import os
-import sys
 from collections import OrderedDict as odict
 import copy
 import argparse
