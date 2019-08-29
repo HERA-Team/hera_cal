@@ -15,7 +15,7 @@ import argparse
 try:
     import uvtools
     HAVE_UVTOOLS = True
-except:
+except ImportError:
     HAVE_UVTOOLS = False
 
 try:
