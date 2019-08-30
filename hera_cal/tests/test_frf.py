@@ -15,10 +15,10 @@ import glob
 from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 import unittest
+from scipy import stats
 
 from .. import datacontainer, io, frf
 from ..data import DATA_PATH
-from scipy import stats
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -111,16 +111,34 @@ class Test_FRFilter(object):
         self.F.read()
 
     def test_timeavg_data(self):
+        # test basic time average
         self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35, rephase=True, keys=[(24, 25, 'xx')])
         assert self.F.Navg == 3
         assert len(self.F.avg_data) == 1
         assert self.F.avg_data[(24, 25, 'xx')].shape == (20, 64)
 
+        # test full time average and overwrite
         self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 1e10, rephase=True, verbose=False, overwrite=False)
         assert self.F.Navg == 60
         assert len(self.F.avg_data) == 28
         assert self.F.avg_data[(24, 25, 'xx')].shape == (20, 64)
         assert self.F.avg_data[(24, 37, 'xx')].shape == (1, 64)
+
+        # test weight by nsample
+        F = copy.deepcopy(self.F)
+        k = (24, 25, 'xx')
+        F.nsamples[k][:3] = 0.0
+        F.timeavg_data(F.data, F.times, F.lsts, 35, nsamples=F.nsamples, keys=[k], overwrite=True,
+                       wgt_by_nsample=True)
+        assert np.all(np.isclose(F.avg_data[k][0], 0.0))  # assert data is zero b/c I zeroed nsample
+        assert np.all(np.isclose(F.avg_nsamples[k][0], 0.0))  # assert avg_nsample is also zero
+        assert np.all(np.isclose(F.avg_nsamples[k][1:], 3.0))  # assert non-zeroed nsample is 3
+
+        # repeat without nsample wgt
+        F.timeavg_data(F.data, F.times, F.lsts, 35, nsamples=F.nsamples, keys=[k], overwrite=True,
+                       wgt_by_nsample=False)
+        assert not np.any(np.isclose(F.avg_data[k][0, 5:-5], 0.0))  # assert non-edge data is now not zero
+        assert np.all(np.isclose(F.avg_nsamples[k][0], 0.0))  # avg_nsample should still be zero
 
         # exceptions
         pytest.raises(AssertionError, self.F.timeavg_data, self.F.data, self.F.times, self.F.lsts, 1.0)

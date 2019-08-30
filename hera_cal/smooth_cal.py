@@ -6,13 +6,23 @@ from __future__ import absolute_import, division, print_function
 
 import numpy as np
 import scipy
-import aipy
 from collections import OrderedDict as odict
 from copy import deepcopy
 from six.moves import range
 import warnings
 import argparse
-import uvtools
+
+try:
+    import uvtools
+    HAVE_UVTOOLS = True
+except ImportError:
+    HAVE_UVTOOLS = False
+
+try:
+    import aipy
+    AIPY = True
+except ImportError:
+    AIPY = False
 
 from . import io
 from . import version
@@ -85,6 +95,9 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
     '''
+    if not HAVE_UVTOOLS:
+        raise ImportError("uvtools required, instsall hera_cal[all]")
+
     df = np.median(np.diff(freqs))  # in Hz
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
@@ -183,6 +196,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: dictionary of metadata from aipy.deconv.clean
     '''
+    assert AIPY, "You need aipy to use this function"
     df = np.median(np.diff(freqs))
     dt = np.median(np.diff(times)) * 24.0 * 3600.0  # in seconds
     delays = np.fft.fftfreq(freqs.size, df)

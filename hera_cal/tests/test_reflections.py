@@ -229,19 +229,35 @@ class Test_ReflectionFitter_Cables(object):
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (23, 23, 'xx')
-        RF.model_auto_reflections(RF.data, (200, 300), window='blackmanharris', zeropad=100, fthin=1, verbose=True)
-        uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True)
+        a_k = (23, 'Jxx')
+        # add a flagged integration
+        RF.flags[bl_k][0] = True
+        RF._clear_ref()
+        RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
+        uvc = RF.write_auto_reflections("./ex.calfits", overwrite=True, write_npz=True)
         assert uvc.Ntimes == 100
         assert len(uvc.ant_array) == 65
         assert np.allclose(uvc.gain_array[0], 1.0)
         assert not np.allclose(uvc.gain_array[uvc.ant_array.tolist().index(23)], 1.0)
+        # assert flag propagation
+        assert np.all(uvc.get_flags(a_k)[:, 0])
+
+        # load npz and do some basic checks
+        fnpz = np.load('ex.npz', allow_pickle=True)
+        assert len(fnpz['times']) == 100
+        assert fnpz['flags'].item()[a_k][0, 0]
+        assert 'delay' in fnpz and 'amp' in fnpz and 'phase' in fnpz
 
         # test w/ input calfits
+        RF.flags[bl_k][1] = True
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits="./ex.calfits", overwrite=True)
-        RF.model_auto_reflections(RF.data, (200, 300), window='blackmanharris', zeropad=100, fthin=1, verbose=True)
+        RF._clear_ref()
+        RF.model_auto_reflections(RF.data, (200, 300), clean_flags=RF.flags, window='blackmanharris', zeropad=100, fthin=1, verbose=True)
         uvc = RF.write_auto_reflections("./ex.calfits", input_calfits='./ex.calfits', overwrite=True)
         assert uvc.Ntimes == 100
         assert len(uvc.ant_array) == 65
+        # assert flag propagation
+        assert np.all(uvc.get_flags(a_k)[:, :2])
 
         # test data is corrected by taking ratio w/ clean data
         data = deepcopy(RF.data)
@@ -250,7 +266,22 @@ class Test_ReflectionFitter_Cables(object):
         r = data[bl_k] / self.uvd_clean.get_data(bl_k)
         assert np.abs(np.mean(r) - 1) < 1e-1
 
+        # test with timeaverage
+        full_uvc = copy.deepcopy(uvc)
+        RF.timeavg_data(RF.data, RF.times, RF.lsts, 1e10, rephase=False, overwrite=True)
+        RF._clear_ref()
+        RF.model_auto_reflections(RF.avg_data, (200, 300), window='blackmanharris', zeropad=100, fthin=1, verbose=True)
+        assert RF.ref_gains[a_k].shape == (1, 128)
+        # test write without input calfits results in Ntimes = 1
+        uvc = RF.write_auto_reflections("./ex2.calfits", time_array=RF.avg_times, overwrite=True)
+        assert uvc.Ntimes == 1
+        # test by feeding full-time calfits that output times are full-time
+        uvc = RF.write_auto_reflections("./ex.calfits", time_array=RF.avg_times, input_calfits='./ex.calfits', overwrite=True)
+        assert uvc.Ntimes == 100
+
         os.remove('./ex.calfits')
+        os.remove('./ex2.calfits')
+        os.remove('./ex.npz')
 
     def test_auto_reflection_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--output_fname', 'ex.calfits', '--dly_ranges', '10,20', '10,20', '--overwrite', '--opt_buffer', '25', '75']
@@ -305,7 +336,7 @@ class Test_ReflectionFitter_XTalk(object):
 
         # test sv_decomposition on positive side
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='pos')
-        RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl], overwrite=True)
+        RF.sv_decomp(RF.dfft, wgts=wgts, keys=[bl], overwrite=True, sparse_svd=True)
 
         # build a model
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=False, overwrite=True)
@@ -324,7 +355,7 @@ class Test_ReflectionFitter_XTalk(object):
 
         # increment the model
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='neg')
-        RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True)
+        RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True, sparse_svd=True)
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=1, increment=True)
 
         # says that the two are similar to each other at -250 ns, which they should be
@@ -336,7 +367,7 @@ class Test_ReflectionFitter_XTalk(object):
 
         # overwrite the model with double side modeling
         wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=200, max_dly=300, side='both')
-        RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True)
+        RF.sv_decomp(RF.dfft, wgts=wgts, overwrite=True, sparse_svd=True)
         RF.build_pc_model(RF.umodes, RF.vmodes, RF.svals, Nkeep=2, increment=False, overwrite=True)
         # says the residual is small compared to original array
         ind = np.argmin(np.abs(RF.delays - 250))
@@ -362,9 +393,18 @@ class Test_ReflectionFitter_XTalk(object):
         # fft data
         RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
 
-        # sv decomp
+        # sparse sv decomp
         svd_wgts = RF.svd_weights(RF.dfft, RF.delays, min_dly=150, max_dly=500, side='both')
-        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=None)
+        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=None, sparse_svd=True)
+        assert RF.umodes[bl].shape == (100, 98)
+        assert RF.vmodes[bl].shape == (98, 128)
+
+        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=10, sparse_svd=True)
+        assert RF.umodes[bl].shape == (100, 10)
+        assert RF.vmodes[bl].shape == (10, 128)
+
+        # full svd
+        RF.sv_decomp(RF.dfft, wgts=svd_wgts, keys=[bl], overwrite=True, Nkeep=None, sparse_svd=False)
         assert RF.umodes[bl].shape == (100, 100)
         assert RF.vmodes[bl].shape == (100, 128)
 
@@ -428,7 +468,7 @@ class Test_ReflectionFitter_XTalk(object):
         RF.timeavg_data(RF.data, RF.times, RF.lsts, 500, overwrite=True, verbose=False)
         RF.fft_data(data=RF.avg_data, window='blackmanharris', overwrite=True, assign='adfft', dtime=np.diff(RF.avg_times)[0] * 24 * 3600)
         wgts = RF.svd_weights(RF.adfft, RF.delays, min_dly=200, max_dly=300, side='both')
-        RF.sv_decomp(RF.adfft, wgts=wgts, keys=[bl], overwrite=True)
-        assert RF.umodes[bl].shape == (34, 34)
+        RF.sv_decomp(RF.adfft, wgts=wgts, keys=[bl], overwrite=True, sparse_svd=True)
+        assert RF.umodes[bl].shape == (34, 32)
         RF.interp_u(RF.umodes, RF.avg_times, full_times=RF.times, overwrite=True, gp_frate=1.0, gp_nl=1e-10, optimizer=None)
-        assert RF.umode_interp[bl].shape == (100, 34)
+        assert RF.umode_interp[bl].shape == (100, 32)

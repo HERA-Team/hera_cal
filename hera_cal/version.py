@@ -5,10 +5,12 @@
 from __future__ import print_function, division, absolute_import
 
 import os
-import six
+import sys
 import subprocess
 import json
 import inspect
+
+PY2 = sys.version_info < (3, 0)
 
 hera_cal_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -26,7 +28,7 @@ def _get_git_output(args, capture_stderr=False):
 
     data = data.strip()
 
-    if six.PY2:
+    if PY2:
         return data
     return data.decode('utf8')
 
@@ -48,7 +50,7 @@ def _get_gitinfo_file(git_file=None):
 
 
 def _unicode_to_str(u):
-    if six.PY2:
+    if PY2:
         return u.encode('utf8')
     return u
 
