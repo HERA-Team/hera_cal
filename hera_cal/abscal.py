@@ -198,7 +198,7 @@ def abs_amp_lincal(model, data, sol0, wgts=None, verbose=True):
 
     # cast fit back into log-space
     for k in list(fit.keys()):
-        fit[k] = np.exp(fit[k])
+        fit[k] = np.log(fit[k])
 
     return fit
 
@@ -2308,7 +2308,8 @@ class AbsCal(object):
 
         # run abs_amp_logcal
         fit = abs_amp_logcal(model, data, wgts=wgts, verbose=verbose)
-        fit = abs_amp_lincal(model, data, fit, wgts=wgts, verbose=verbose)
+        if run_lincal:
+            fit = abs_amp_lincal(model, data, fit, wgts=wgts, verbose=verbose)
 
         # form result
         self._abs_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys))))
