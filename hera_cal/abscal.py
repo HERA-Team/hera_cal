@@ -122,6 +122,87 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     return fit
 
 
+def abs_amp_lincal(model, data, sol0, wgts=None, verbose=True):
+    """
+    calculate absolute (array-wide) gain amplitude scalar
+    with a linear-product solver (i.e. Taylor Expansion) of
+
+    |V_ij,xy^data / V_ij,xy^model| = exp(eta_x) * exp(eta_y)
+
+    where {i,j} index antenna numbers and {x,y} index polarizations
+    of the i-th and j-th antennas respectively.
+
+    Parameters:
+    -----------
+    model : visibility data of refence model, type=DataContainer
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            values are complex ndarray visibilities.
+            these must be 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
+
+    data : visibility data of measurements, type=DataContainer
+           keys are antenna pair + pol tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
+
+    sol0 : dictionary of initial guess, type=dict
+           This should be the output of abs_amp_logcal
+
+    wgts : weights of data, type=DataContainer, [default=None]
+           keys are antenna pair + pol tuples (must match model), values are real floats
+           matching shape of model and data
+
+    verbose : print output, type=boolean, [default=False]
+
+    Output:
+    -------
+    fit : dictionary with 'eta_{}' key for amplitude scalar for {} polarization,
+            which has the same shape as the ndarrays in the model
+    """
+    echo("...configuring linsolve data for abs_amp_lincal", verbose=verbose)
+
+    # get keys from model and data dictionary
+    keys = sorted(set(model.keys()) & set(data.keys()))
+
+    # abs of amplitude ratio is ydata independent variable
+    ydata = odict([(k, np.abs(data[k] / model[k])) for k in keys])
+
+    # make weights if None
+    if wgts is None:
+        wgts = odict()
+        for i, k in enumerate(keys):
+            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
+
+    # fill nans and infs
+    fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
+
+    # setup linsolve equations
+    # a{} is a dummy variable to prevent linsolve from overwriting repeated measurements
+    eqns = odict([(k, "a{}*eta_{}*a{}*eta_{}".format(i, split_pol(k[-1])[0],
+                                                     i, split_pol(k[-1])[1])) for i, k in enumerate(keys)])
+    ls_design_matrix = odict([("a{}".format(i), 1.0) for i, k in enumerate(keys)])
+
+    # setup linsolve dictionaries
+    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
+    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
+
+    # exponentiate initial guess
+    sol0 = copy.deepcopy(sol0)
+    for k in list(sol0.keys()):
+        sol0[k] = np.exp(sol0[k])
+
+    # setup linsolve and run
+    sol = linsolve.LinProductSolver(ls_data, sol0, wgts=ls_wgts, **ls_design_matrix)
+    echo("...running linsolve", verbose=verbose)
+    fit = sol.solve()
+    echo("...finished linsolve", verbose=verbose)
+
+    # cast fit back into log-space
+    for k in list(fit.keys()):
+        fit[k] = np.exp(fit[k])
+
+    return fit
+
+
 def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zero_psi=True,
                   four_pol=False):
     """
@@ -2202,12 +2283,14 @@ class AbsCal(object):
         self._phs_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["Phi_ew_{}".format(k[1])], fit["Phi_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
         self._phs_slope_arr = np.moveaxis(list(map(lambda pk: list(map(lambda k: np.array([self._phs_slope[k][0], self._phs_slope[k][1]]), pk)), self._gain_keys)), 0, -1)
 
-    def abs_amp_logcal(self, verbose=True):
+    def abs_amp_logcal(self, run_lincal=True, verbose=True):
         """
-        call abscal_funcs.abs_amp_logcal() method. see its docstring for more details.
+        call abscal.abs_amp_logcal and abs_amp_lincal methods.
+        see their docstring for more details.
 
         Parameters:
         -----------
+        run_lincal : type=boolean, if True, run abs_amp_lincal after logcal.
         verbose : type=boolean, if True print feedback to stdout
 
         Result:
@@ -2225,6 +2308,7 @@ class AbsCal(object):
 
         # run abs_amp_logcal
         fit = abs_amp_logcal(model, data, wgts=wgts, verbose=verbose)
+        fit = abs_amp_lincal(model, data, fit, wgts=wgts, verbose=verbose)
 
         # form result
         self._abs_eta = odict(list(map(lambda k: (k, copy.copy(fit["eta_{}".format(k[1])])), flatten(self._gain_keys))))
