@@ -957,19 +957,25 @@ class TestRedundantCalibrator(object):
         assert om.is_redundantly_calibratable(pos, require_coplanarity=False)
 
     def test_predict_chisq_per_bl(self):
+        # This test shows that predicted chisq_per_bl make sense, given the known constraints.
+        # See test_predict_chisq_statistically to see that the answer actually works
+
         # Test linear array
         antpos = linear_array(7)
         reds = om.get_reds(antpos)
         chisq_per_bl = om.predict_chisq_per_bl(reds)
         rc = om.RedundantCalibrator(reds)
+        # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
         dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
+        # show that all baselines have DoF less than 1 (this is just a sense check)
         np.testing.assert_array_less(list(chisq_per_bl.values()), 1.0)
         for red in reds:
             if len(red) == 1:
+                # show that length 1 redundancies (unique baselines) have expected chi^2 of 0
                 np.testing.assert_almost_equal(chisq_per_bl[red[0]], 1e-10)
 
-        # Test hex array
+        # Test hex array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos)
         chisq_per_bl = om.predict_chisq_per_bl(reds)
@@ -981,7 +987,7 @@ class TestRedundantCalibrator(object):
             if len(red) == 1:
                 np.testing.assert_almost_equal(chisq_per_bl[red[0]], 1e-10)
 
-        # Test 2 pol array
+        # Test 2 pol array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx', 'yy'])
         chisq_per_bl = om.predict_chisq_per_bl(reds)
@@ -994,6 +1000,9 @@ class TestRedundantCalibrator(object):
                 np.testing.assert_almost_equal(chisq_per_bl[red[0]], 1e-10)
 
     def test_predict_chisq_per_red(self):
+        # This test shows that predicted chisq_per_red make sense, given the known constraints.
+        # See test_predict_chisq_statistically to see that the answer actually works
+
         # Test linear array
         antpos = linear_array(7)
         reds = om.get_reds(antpos)
@@ -1002,17 +1011,22 @@ class TestRedundantCalibrator(object):
         nant = len(antpos)
         chisq_per_red = om.predict_chisq_per_red(reds)
         rc = om.RedundantCalibrator(reds)
+        # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
         dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
         non_degen_dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl - nubl) for red in reds}
         for red in reds:
+            # show that, up to the degeneracies, the above formula is a correct apportionment of the degrees of freedom
+            # that are taken up by antennas and unique baselines
             assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
             if len(red) == 1:
+                # show that if the length of the redundancy is 1, then then there are no DoF
                 assert chisq_per_red[red[0]] < 1e-10
             else:
+                # show that if the length of the redundancy is greater than 1, some of the degenerate DoF are present
                 assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
 
-        # Test hex array
+        # Test hex array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos)
         nubl = len(reds)
@@ -1030,7 +1044,7 @@ class TestRedundantCalibrator(object):
             else:
                 assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
 
-        # Test 2 pol array
+        # Test 2 pol array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         reds = om.get_reds(antpos, pols=['xx', 'yy'])
         nubl = len(reds)
@@ -1049,6 +1063,9 @@ class TestRedundantCalibrator(object):
                 assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
 
     def test_predict_chisq_per_ant(self):
+        # This test shows that predicted chisq_per_ant make sense, given the known constraints.
+        # See test_predict_chisq_statistically to see that the answer actually works
+
         # Test linear array
         antpos = linear_array(7)
         ants = [(ant, 'Jxx') for ant in antpos]
@@ -1058,18 +1075,23 @@ class TestRedundantCalibrator(object):
         nant = len(antpos)
         chisq_per_ant = om.predict_chisq_per_ant(reds)
         rc = om.RedundantCalibrator(reds)
+        # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
         dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
         np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
+        # factor of 2 comes from the fact that all baselines go into two antennas' chisq_per_ant
         non_degen_dof_per_ant = {ant: -2 for ant in ants}
         for red in reds:
             for bl in red:        
                 for ant in split_bl(bl):
                     non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
+            # show that the number of degrees of freedom (i.e. expected chi^2) per antenna is always a bit larger
+            # than the number expected from just antenna and ubl DoF, but that each antenna gets some of the 
+            # degenerate DoF
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
             
-        # Test hex array
+        # Test hex array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         ants = [(ant, 'Jxx') for ant in antpos]
         reds = om.get_reds(antpos)
@@ -1089,7 +1111,7 @@ class TestRedundantCalibrator(object):
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
 
-        # Test 2 pol array
+        # Test 2 pol array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         ants = [(ant, pol) for ant in antpos for pol in ['Jxx', 'Jyy']]
         reds = om.get_reds(antpos, pols=['xx', 'yy'])
@@ -1110,6 +1132,7 @@ class TestRedundantCalibrator(object):
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
 
     def test_predict_chisq_statistically(self):
+        # Show that chisq prediction works pretty well for small arrays
         np.random.seed(21)
         antpos = hex_array(2, split_core=False, outriggers=0)
         reds = om.get_reds(antpos)
