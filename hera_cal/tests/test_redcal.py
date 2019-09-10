@@ -1350,12 +1350,29 @@ class TestRunMethods(object):
                 for val in rv['chisq'].values():
                     assert val.shape == (nTimes, nFreqs)
 
-            # test with no iterations and blank wgts
-            wgts = {k: np.ones_like(data[k], np.float) for k in data}
-            rv = om.redundantly_calibrate(data, all_reds, wgts=wgts, fc_maxiter=0, run_logcal=False, oc_maxiter=0)
-            assert np.all(np.isclose(rv['g_firstcal'][(1, 'Jxx')], 1.0))
-            assert np.all(np.isclose(rv['g_omnical'][(1, 'Jxx')], 1.0))
-            assert np.all(np.isclose(rv['omni_meta']['iter'], 0))
+            # test on raw data but feeding firstcal sol instead of running firstcal
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+
+                gk = (1, 'Jxx')
+                rv2 = om.redundantly_calibrate(data, all_reds, prior_firstcal=rv['g_firstcal'])
+                assert np.all(np.isclose(rv2['g_firstcal'][gk], rv['g_firstcal'][gk]))
+                assert np.all(np.isclose(rv2['g_omnical'][gk], rv['g_omnical'][gk]))
+
+                # test prior firstcal
+                cdata = deepcopy(data)
+                calibrate_in_place(cdata, rv['g_firstcal'])
+                fc_ones = {k: np.ones_like(rv['g_firstcal'][k]) for k in rv['g_firstcal']}
+                rv3 = om.redundantly_calibrate(cdata, all_reds, prior_firstcal=True)
+                rv4 = om.redundantly_calibrate(cdata, all_reds, prior_firstcal=fc_ones)
+                assert np.all(np.isclose(rv3['g_firstcal'][gk], 1.0))
+                assert np.all(np.isclose(rv3['g_firstcal'][gk], rv4['g_firstcal'][gk]))
+                assert np.all(np.isclose(rv3['g_omnical'][gk], rv4['g_omnical'][gk]))
+
+            # test redundantly_calibrate with no iterations
+            with pytest.raises(AssertionError):
+                om.redundantly_calibrate(data, all_reds, fc_maxiter=0, oc_maxiter=1)
+                om.redundantly_calibrate(data, all_reds, fc_maxiter=1, oc_maxiter=0)
 
     def test_expand_omni_sol(self):
         # noise free test of dead antenna resurrection
@@ -1456,8 +1473,17 @@ class TestRunMethods(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
+
+            # redcal_run
             cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
             sys.stdout = sys.__stdout__
+
+            # try with prior_firstcal
+            cal2 = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+                                 prior_firstcal=input_data.replace("uvh5", "first.calfits"), ant_metrics_file=ant_metrics_file, clobber=True)
+
+            assert np.all(np.isclose(cal['g_firstcal'][(1, 'Jxx')], cal2['g_firstcal'][(1, 'Jxx')]))
+            assert np.all(np.isclose(cal['g_omnical'][(1, 'Jxx')], cal2['g_omnical'][(1, 'Jxx')], atol=1e-3))
 
         bad_ants = [50, 12]  # this is based on experiments with this particular file
         hc = io.HERACal(os.path.splitext(input_data)[0] + '.first.calfits')

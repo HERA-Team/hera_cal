@@ -554,7 +554,7 @@ class RedundantCalibrator:
         '''Runs a single iteration of firstcal, which uses phase differences between nominally
         redundant meausrements to solve for delays and phase offsets that produce gains of the
         form: np.exp(2j * np.pi * delay * freqs + 1j * offset).
-        
+
         Arguments:
             df: frequency change between data bins, scales returned delays by 1/df.
             f0: frequency of the first channel in the data
@@ -602,6 +602,9 @@ class RedundantCalibrator:
         per antenna using the phase difference between nominally redundant measurements. 
         Delays are solved in a single iteration, but phase offsets are solved for 
         iteratively to account for phase wraps.
+
+        Note: this applies calibration on-the-fly and inplace to data but then uncalibrates
+        at the end; however, residual differences at 1e-9 are not unexpected.
 
         Args:
             data: visibility data in the dictionary format {(ant1,ant2,pol): np.array}
@@ -1233,6 +1236,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, wgts={}, pri
         prior_firstcal: either bool or dictionary:
             If False (default): the data is raw and firstcal is unknown. Run firstcal normally.
             If True: the data has been pre-calibrated. Assumes firstcal is all unity gains.
+                In this case, degeneracy removal against firstcal gains needs to be done manually.
             If a dictionary: the data is raw, but instead of using the firstcal algorithm, 
                 use these gains instead. Must be in the same format 
         fc_conv_crit: maximum allowed changed in firstcal phases for convergence
@@ -1286,9 +1290,10 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, wgts={}, pri
         rv['g_firstcal'] = prior_firstcal
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
-    # perform logcal and omnical. Use noise_wgts if wgts if None
+    # perform logcal and omnical. Use noise_wgts if wgts is None
     log_sol = rc.logcal(data, sol0=rv['g_firstcal'], wgts=wgts)
     make_sol_finite(log_sol)
+
     noise_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
                                                                       * SEC_PER_DAY))**-1 for bl in data.keys()}
     if len(wgts) == 0:
@@ -1307,14 +1312,15 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, wgts={}, pri
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, data_wgts, reds, rv['v_omnical'], rv['g_omnical'])
+    rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, noise_wgts, reds, rv['v_omnical'], rv['g_omnical'])
 
     return rv
 
 
 def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
                      flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, 
-                     oc_maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
+                     oc_maxiter=500, check_every=10, check_after=50, gain=.4, prior_firstcal=False,
+                     verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
@@ -1341,6 +1347,11 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
+        prior_firstcal: either bool or dictionary:
+            If False (default): the data is raw and firstcal is unknown. Run firstcal normally.
+            If True: the data has been pre-calibrated. Assumes firstcal is all unity gains.
+            If a dictionary: the data is raw, but instead of using the firstcal algorithm, 
+                use these gains instead. Must be in the same format 
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
@@ -1426,7 +1437,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                     data, _, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, 
-                                            oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after, gain=gain)
+                                            oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after,
+                                            gain=gain, prior_firstcal=prior_firstcal)
                 expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
                 
                 # gather results
@@ -1455,7 +1467,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, 
                max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
                fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, 
-               add_to_history='', verbose=False, **filter_reds_kwargs):
+               add_to_history='', prior_firstcal=False, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1496,12 +1508,18 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
         add_to_history: string to add to history of output firstcal and omnical files
+        prior_firstcal: either bool or dictionary:
+            If False (default): the data is raw and firstcal is unknown. Run firstcal normally.
+            If True: the data has been pre-calibrated. Assumes firstcal is all unity gains.
+            If a dictionary or calfits filepath: the data is raw, but instead of using the
+            firstcal algorithm, use these gains instead. Must be in the same format as firstcal gains.
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
     Returns:
         cal: the dictionary result of the final run of redcal_iteration (see above for details)
     '''
+    # load input data
     if isinstance(input_data, str):
         hd = HERAData(input_data, filetype=filetype)
         if filetype != 'uvh5' or nInt_to_load is None:
@@ -1512,6 +1530,11 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         input_data = hd.filepaths[0]
     else:
         raise TypeError('input_data must be a single string path to a visibility data file or a HERAData object')
+
+    # load prior firstcal if provided
+    if isinstance(prior_firstcal, str):
+        uvc = HERACal(prior_firstcal)
+        prior_firstcal, _, _, _ = uvc.read()
 
     ex_ants = set(ex_ants)
     from hera_qm.metrics_io import load_metric_file
@@ -1530,7 +1553,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants, 
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high, 
                                fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, 
-                               check_every=check_every, check_after=check_after, gain=gain, verbose=verbose, **filter_reds_kwargs)
+                               check_every=check_every, check_after=check_after, gain=gain, prior_firstcal=prior_firstcal,
+                               verbose=verbose, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
         z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()

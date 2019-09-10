@@ -68,7 +68,7 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
             keys = data.keys()
         # only use auto-ant and auto-pol
         keys = [k for k in keys if (k[0] == k[1]) and (k[2][0] == k[2][1])]
-        assert len(keys) > 1, "Can only operate on auto-pol auto-correlations!"
+        assert len(keys) > 0, "Can only operate on auto-pol auto-correlations!"
         if flags is None:
             flags = DataContainer(dict([(k, None) for k in keys]))
         for key in keys:
