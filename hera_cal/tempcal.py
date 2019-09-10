@@ -75,7 +75,7 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
             utils.echo("starting {}".format(key), verbose=verbose)
             gkey = utils.split_bl(key)[0]
             g, gf, s = gains_from_autos(data[key], times, flags=flags[key], smooth_frate=smooth_frate,
-                                        nl=nl, Nmirror=Nmirror, edgeflag=edgeflag, verbose=False)
+                                        nl=nl, Nmirror=Nmirror, edgeflag=edgeflag, freq_avg=freq_avg, verbose=False)
             gains[gkey], gflags[gkey], smooth[key] = g, gf, s
         return gains, gflags, smooth
 
