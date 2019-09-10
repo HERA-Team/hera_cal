@@ -1478,13 +1478,6 @@ class TestRunMethods(object):
             cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
             sys.stdout = sys.__stdout__
 
-            # try with prior_firstcal
-            cal2 = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
-                                 prior_firstcal=input_data.replace("uvh5", "first.calfits"), ant_metrics_file=ant_metrics_file, clobber=True)
-
-            assert np.all(np.isclose(cal['g_firstcal'][(1, 'Jxx')], cal2['g_firstcal'][(1, 'Jxx')]))
-            assert np.all(np.isclose(cal['g_omnical'][(1, 'Jxx')], cal2['g_omnical'][(1, 'Jxx')], atol=1e-3))
-
         bad_ants = [50, 12]  # this is based on experiments with this particular file
         hc = io.HERACal(os.path.splitext(input_data)[0] + '.first.calfits')
         gains, flags, quals, total_qual = hc.read()
@@ -1522,6 +1515,16 @@ class TestRunMethods(object):
             np.testing.assert_array_almost_equal(nsamples[bl], cal['vns_omnical'][bl])
         assert 'testing' in hd.history.replace('\n', '').replace(' ', '')
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+
+        # try with prior_firstcal
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            cal2 = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+                                 prior_firstcal=input_data.replace("uvh5", "first.calfits"), ant_metrics_file=ant_metrics_file, clobber=True)
+
+            assert np.all(np.isclose(cal['g_firstcal'][(1, 'Jxx')], cal2['g_firstcal'][(1, 'Jxx')]))
+            assert np.all(np.isclose(cal['g_omnical'][(1, 'Jxx')], cal2['g_omnical'][(1, 'Jxx')], atol=1e-3))
+
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
@@ -1543,7 +1546,7 @@ class TestRunMethods(object):
         os.remove(os.path.join(DATA_PATH, 'test_output/temp.omni.calfits'))
         os.remove(os.path.join(DATA_PATH, 'test_output/temp.omni_vis.uvh5'))
 
-        with pytest.raises(TypeError):
+       with pytest.raises(TypeError):
             cal = om.redcal_run({})
 
     def test_redcal_argparser(self):
