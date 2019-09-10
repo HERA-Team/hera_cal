@@ -12,7 +12,8 @@ from .datacontainer import DataContainer
 
 
 def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
-                     Nmirror=0, keys=None, edgeflag=0, verbose=False):
+                     Nmirror=0, keys=None, edgeflag=0, xthin=None,
+                     freq_avg=True, verbose=False):
     """
     Model temperature fluctuations in auto-correlations
     by dividing auto-correlation by its time-smoothed counterpart.
@@ -43,6 +44,11 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
         edgeflag : int or len-2 tuple
             Number of channels to flag on low and high end of frequency band.
             Low and high can be specified independently via a len-2 tuple.
+        xthin : int
+            Thinning factor along time axis of unflagged data.
+            Default is no thinning.
+        freq_avg : bool
+            If True take median of resultant gains across frequency (within edgeflag)
         verbose : bool
             If True, report feedback to stdout.
 
@@ -69,7 +75,7 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
             utils.echo("starting {}".format(key), verbose=verbose)
             gkey = utils.split_bl(key)[0]
             g, gf, s = gains_from_autos(data[key], times, flags=flags[key], smooth_frate=smooth_frate,
-                                        nl=nl, Nmirror=Nmirror, edgeflag=edgeflag, verbose=False)
+                                        nl=nl, Nmirror=Nmirror, edgeflag=edgeflag, freq_avg=freq_avg, verbose=False)
             gains[gkey], gflags[gkey], smooth[key] = g, gf, s
         return gains, gflags, smooth
 
@@ -94,19 +100,19 @@ def gains_from_autos(data, times, flags=None, smooth_frate=1.0, nl=1e-10,
     # smooth
     data_shape = data.shape 
     smooth = utils.gp_interp1d(times, data, flags=flags, length_scale=length_scale, nl=nl,
-                               Nmirror=Nmirror)
+                               Nmirror=Nmirror, xthin=xthin)
 
     # take ratio and compute gain term
     gflags = np.isclose(smooth, 0.0)
     gains = np.sqrt(np.true_divide(data, smooth, where=~gflags))
 
-    # only allow frequency-averaged gains for now via nanmedian
-    # use median over mean to help w/ unflagged RFI
-    gains[gflags] = np.nan
-    gains = np.nanmedian(gains, axis=1, keepdims=True)
-    gains[np.isnan(gains)] = 1.0  # catch for fully flagged integrations
-    gains = np.repeat(gains, data_shape[1], axis=1)
-    gflags = np.repeat(np.all(gflags, axis=1, keepdims=True), data_shape[1], axis=1)
+    if freq_avg:
+        # use median over mean to help w/ unflagged RFI
+        gains[gflags] = np.nan
+        gains = np.nanmedian(gains, axis=1, keepdims=True)
+        gains[np.isnan(gains)] = 1.0  # catch for fully flagged integrations
+        gains = np.repeat(gains, data_shape[1], axis=1)
+        gflags = np.repeat(np.all(gflags, axis=1, keepdims=True), data_shape[1], axis=1)
 
     return gains, gflags, smooth
 
