@@ -7,14 +7,11 @@
 from __future__ import print_function, division, absolute_import
 
 import numpy as np
-import copy
 import argparse
-from pyuvdata import UVCal, UVData
 
 from . import io
 from . import version
 from . import utils
-from .datacontainer import DataContainer
 
 
 def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds,

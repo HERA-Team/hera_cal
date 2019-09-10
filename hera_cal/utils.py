@@ -8,18 +8,22 @@ import numpy as np
 import os
 import copy
 from six.moves import map, range
-import aipy
 import astropy.constants as const
 from astropy.time import Time
 from astropy import coordinates as crd
 from astropy import units as unt
 from scipy import signal
-from collections import OrderedDict as odict
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT
 import sklearn.gaussian_process as gp
+
+try:
+    AIPY = True
+    import aipy
+except ImportError:
+    AIPY = False
 
 
 def _comply_antpol(antpol):
@@ -145,9 +149,14 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
-    offset = np.angle(np.sum(wgts[:, fSlice] * data[:, fSlice]
-                             * np.exp(-np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)), 
-                             axis=1, keepdims=True) / np.sum(wgts[:, fSlice], axis=1, keepdims=True))
+    offset = np.angle(
+        np.sum(
+            wgts[:, fSlice] * data[:, fSlice] * np.exp(
+                -np.complex64(2j * np.pi) * dlys * freqs[fSlice].reshape(1, -1)
+            ),
+            axis=1, keepdims=True
+        ) / np.sum(wgts[:, fSlice], axis=1, keepdims=True)
+    )
 
     return dlys, offset
 
@@ -206,23 +215,23 @@ def interp_peak(data, method='quinn', reject_edges=False):
     k0 = data[range(N1), indices - 1]
     k1 = data[range(N1), indices]
     k2 = data[range(N1), (indices + 1) % N2]
-    
+
     if method == 'quinn':
         def tau(x):
-            t = .25 * np.log(3 * x**2 + 6 * x + 1) 
-            t -= 6**.5 / 24 * np.log((x + 1 - (2. / 3.)**.5) / (x + 1 + (2. / 3.)**.5))
+            t = .25 * np.log(3 * x ** 2 + 6 * x + 1)
+            t -= 6 ** .5 / 24 * np.log((x + 1 - (2. / 3.) ** .5) / (x + 1 + (2. / 3.) ** .5))
             return t
 
         alpha1 = (k0 / k1).real
         alpha2 = (k2 / k1).real
         delta1 = alpha1 / (1 - alpha1)
         delta2 = -alpha2 / (1 - alpha2)
-        d = (delta1 + delta2) / 2 + tau(delta1**2) - tau(delta2**2)
+        d = (delta1 + delta2) / 2 + tau(delta1 ** 2) - tau(delta2 ** 2)
         d[~np.isfinite(d)] = 0.
-        
-        ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k), 
+
+        ck = np.array([np.true_divide(np.exp(2.0j * np.pi * d) - 1, 2.0j * np.pi * (d - k),
                                       where=~(d == 0)) for k in [-1, 0, 1]])
-        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck**2))
+        rho = np.abs(k0 * ck[0] + k1 * ck[1] + k2 * ck[2]) / np.abs(np.sum(ck ** 2))
         rho[d == 0] = np.abs(k1[d == 0])
         return indices, d, np.abs(peaks), rho
 
@@ -243,50 +252,51 @@ def echo(message, type=0, verbose=True):
             print("-" * 40)
 
 
-class AntennaArray(aipy.pol.AntennaArray):
-    def __init__(self, *args, **kwargs):
-        aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
-        self.antpos_ideal = kwargs.pop('antpos_ideal')
-        # yes, this is a thing. cm per meter
-        self.cm_p_m = 100.
+if AIPY:
+    class AntennaArray(aipy.pol.AntennaArray):
+        def __init__(self, *args, **kwargs):
+            aipy.pol.AntennaArray.__init__(self, *args, **kwargs)
+            self.antpos_ideal = kwargs.pop('antpos_ideal')
+            # yes, this is a thing. cm per meter
+            self.cm_p_m = 100.
 
-    def update(self):
-        aipy.pol.AntennaArray.update(self)
+        def update(self):
+            aipy.pol.AntennaArray.update(self)
 
-    def get_params(self, ant_prms={'*': '*'}):
-        try:
-            prms = aipy.pol.AntennaArray.get_params(self, ant_prms)
-        except(IndexError):
-            return {}
-        return prms
+        def get_params(self, ant_prms={'*': '*'}):
+            try:
+                prms = aipy.pol.AntennaArray.get_params(self, ant_prms)
+            except(IndexError):
+                return {}
+            return prms
 
-    def set_params(self, prms):
-        changed = aipy.pol.AntennaArray.set_params(self, prms)
-        for i, ant in enumerate(self):
-            ant_changed = False
-            top_pos = np.dot(self._eq2zen, ant.pos)
-            try:
-                top_pos[0] = prms[str(i)]['top_x']
-                ant_changed = True
-            except(KeyError):
-                pass
-            try:
-                top_pos[1] = prms[str(i)]['top_y']
-                ant_changed = True
-            except(KeyError):
-                pass
-            try:
-                top_pos[2] = prms[str(i)]['top_z']
-                ant_changed = True
-            except(KeyError):
-                pass
-            if ant_changed:
-                # rotate from zenith to equatorial, convert from meters to ns
-                ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * self.cm_p_m
-            changed |= ant_changed
-        if changed:
-            self.update()
-        return changed
+        def set_params(self, prms):
+            changed = aipy.pol.AntennaArray.set_params(self, prms)
+            for i, ant in enumerate(self):
+                ant_changed = False
+                top_pos = np.dot(self._eq2zen, ant.pos)
+                try:
+                    top_pos[0] = prms[str(i)]['top_x']
+                    ant_changed = True
+                except(KeyError):
+                    pass
+                try:
+                    top_pos[1] = prms[str(i)]['top_y']
+                    ant_changed = True
+                except(KeyError):
+                    pass
+                try:
+                    top_pos[2] = prms[str(i)]['top_z']
+                    ant_changed = True
+                except(KeyError):
+                    pass
+                if ant_changed:
+                    # rotate from zenith to equatorial, convert from meters to ns
+                    ant.pos = np.dot(np.linalg.inv(self._eq2zen), top_pos) / aipy.const.len_ns * self.cm_p_m
+                changed |= ant_changed
+            if changed:
+                self.update()
+            return changed
 
 
 def get_aa_from_uv(uvd, freqs=[0.15]):
@@ -315,6 +325,7 @@ def get_aa_from_uv(uvd, freqs=[0.15]):
     aa: AntennaArray object that can be used to calculate redundancies from
        antenna positions.
     '''
+    assert AIPY, "you need aipy to run this function"
     # center of array values from file
     cofa_lat, cofa_lon, cofa_alt = uvd.telescope_location_lat_lon_alt
     location = (cofa_lat, cofa_lon, cofa_alt)
@@ -696,7 +707,7 @@ def lst_rephase(data, bls, freqs, dlst, lat=-30.72152, inplace=True, array=False
         u = np.einsum("...i,i->...", s_diff, bl)
 
         # get delay
-        tau = u / (aipy.const.c / 100.0)
+        tau = u / const.c.value
 
         # reshape tau
         if isinstance(tau, np.ndarray):
@@ -795,8 +806,9 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     if reds is not None:
         model = copy.deepcopy(model)
         for red in reds:
-            for bl in red:
-                model[bl] = model[red[0]]
+            if np.any([bl in data for bl in red]):
+                for bl in red:
+                    model[bl] = model[red[0]]
 
     for bl in data.keys():
         ap1, ap2 = split_pol(bl[2])
@@ -818,7 +830,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
                 wgts = copy.deepcopy(data_wgts[bl])
 
             # calculate chi^2
-            chisq_here = np.asarray(np.abs(model_here - data[bl])**2 * wgts, dtype=np.float64)
+            chisq_here = np.asarray(np.abs(model_here - data[bl]) ** 2 * wgts, dtype=np.float64)
             if split_by_antpol:
                 if ap1 in chisq:
                     assert ap1 in nObs
@@ -847,7 +859,7 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
 
 
 def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
-                kernel=None, Nmirror=0, optimizer=None):
+                kernel=None, Nmirror=0, optimizer=None, xthin=None):
     """
     Gaussian Process interpolation.
 
@@ -866,7 +878,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
         flags : ndarray
             A boolean array of y flags of shape (Nvalues, Nvectors)
         length_scale : float
-            Length scale for RBF kernel if input kernel is None.
+            Length scale for RBF kernel in units of x if input kernel is None.
         nl : float
             Noise level for WhiteNoise kernel if input kernel is None.
             Recommended to keep this near 1e-10 for non-expert user.
@@ -878,6 +890,9 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
             This can minimize impact of boundary effects on interpolation.
         optimizer : str
             Hyperparameter optimization method. Default is no optimization.
+        xthin : int
+            Thinning factor along prediction x-axis of unflagged data.
+            Default is no thinning.
 
     Returns:
         ndarray
@@ -900,10 +915,18 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
         kernel = 1**2 * gp.kernels.RBF(length_scale=length_scale) + gp.kernels.WhiteKernel(noise_level=nl)
 
     # initialize GP
-    GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False)
+    GP = gp.GaussianProcessRegressor(kernel=kernel, optimizer=optimizer, normalize_y=False, copy_X_train=False)
 
+    # get flags
     if flags is None:
         flags = np.zeros_like(y, dtype=np.bool)
+
+    # thin x-axis if desired
+    if xthin is not None:
+        assert xthin < x.size // 2, "Can't thin x-axis by more then len(x) // 2"
+        x = x[::xthin]
+        y = y[::xthin, :]
+        flags = flags[::xthin, :]
 
     # mirror if desired
     if Nmirror > 0:
@@ -1006,7 +1029,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     for pol in pols:
         diffs = {ant: copy.deepcopy(relative_diff[ant]) for ant in new_gains if ant[1] == pol}
         for ant in diffs:
-            diffs[ant][flags[ant]] = np.nan 
+            diffs[ant][flags[ant]] = np.nan
         avg_relative_diff[pol] = np.nanmean(list(diffs.values()), axis=0)
         avg_relative_diff[pol][~np.isfinite(avg_relative_diff[pol])] = 0.0  # if completely flagged
 

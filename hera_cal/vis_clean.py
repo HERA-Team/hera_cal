@@ -7,8 +7,13 @@ from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import OrderedDict as odict
 import datetime
-from six.moves import range, zip
-from uvtools import dspec
+from six.moves import range
+try:
+    from uvtools import dspec
+    HAVE_UVTOOLS = True
+except ImportError:
+    HAVE_UVTOOLS = False
+
 from astropy import constants
 import copy
 import fnmatch
@@ -329,6 +334,9 @@ class VisClean(object):
             dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             verbose: If True print feedback to stdout
         """
+        if not HAVE_UVTOOLS:
+            raise ImportError("uvtools required, install hera_cal[all]")
+
         # type checks
         if ax not in ['freq', 'time', 'both']:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
@@ -713,6 +721,9 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
         dfft : complex ndarray FFT of data
         fourier_axes : fourier axes, if axis is ndimensional, so is this.
     """
+    if not HAVE_UVTOOLS:
+        raise ImportError("uvtools required, install hera_cal[all]")
+
     # type checks
     if not isinstance(axis, (tuple, list)):
         axis = [axis]
@@ -788,7 +799,7 @@ def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edge
 
 
 def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay_cut=3000,
-               kernel_size=None, edgecut_low=0, edgecut_hi=0,):
+               kernel_size=None, edgecut_low=0, edgecut_hi=0, polyfit_deg=None, verbose=True):
     """
     Truncate CLEAN model components in delay space below some amplitude threshold.
 
@@ -815,6 +826,11 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
             Edgecut bins to apply to low edge of frequency band
         edgecut_hi : int
             Edgecut bins to apply to high edge of frequency band
+        polyfit_deg : int
+            Degree of polynomial to fit to noise curve w.r.t. time.
+            None is no fitting.
+        verbose : bool
+            Report feedback to stdout
 
     Returns:
         model : DataContainer
@@ -848,6 +864,18 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
             nlen = len(n)
             n = np.pad(n, nlen, 'reflect', reflect_type='odd')
             noise[k] = signal.medfilt(n, kernel_size=kernel_size)[nlen:-nlen]
+
+        # fit a polynomial if desired
+        if polyfit_deg is not None:
+            x = np.arange(noise[k].size, dtype=np.float)
+            f = ~np.isnan(noise[k]) & ~np.isfinite(noise[k]) & ~np.isclose(noise[k], 0.0)
+            # only fit if it is well-conditioned: Ntimes > polyfit_deg + 1
+            if f.sum() >= (polyfit_deg + 1):
+                fit = np.polyfit(x[f], noise[k][f], deg=polyfit_deg)
+                noise[k] = np.polyval(fit, x)
+            else:
+                # not enough points to fit polynomial
+                echo("Need more suitable data points for {} to fit {}-deg polynomial".format(k, polyfit_deg), verbose=verbose)
 
         # get mfft
         mfft, _ = fft_data(clean_model[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)

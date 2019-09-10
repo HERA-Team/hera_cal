@@ -17,7 +17,7 @@ from hera_sim.vis import sim_red_data
 
 from .. import redcal as om
 from .. import io, abscal
-from ..utils import split_pol, conj_pol
+from ..utils import split_pol, conj_pol, split_bl
 from ..apply_cal import calibrate_in_place
 from ..data import DATA_PATH
 from ..datacontainer import DataContainer
@@ -82,6 +82,13 @@ class TestMethods(object):
 
         pos = {0: np.array([0, 0, 0]), 1: np.array([20, 0, 0]), 2: np.array([10, 0, 0])}
         assert om.get_pos_reds(pos) == [[(0, 2), (2, 1)], [(0, 1)]]
+
+        # test branch cut
+        pos = {0: np.array([-.03, 1., 0.]),
+               1: np.array([1., 1., 0.]),
+               2: np.array([0.03, 0.0, 0.]),
+               3: np.array([1., 0., 0.])}
+        assert len(om.get_pos_reds(pos, bl_error_tol=.1)) == 4
 
     def test_filter_reds(self):
         antpos = linear_array(7)
@@ -949,6 +956,296 @@ class TestRedundantCalibrator(object):
         assert not om.is_redundantly_calibratable(pos)
         assert om.is_redundantly_calibratable(pos, require_coplanarity=False)
 
+    def test_predict_chisq_per_bl(self):
+        # This test shows that predicted chisq_per_bl make sense, given the known constraints.
+        # See test_predict_chisq_statistically to see that the answer actually works
+
+        # Test linear array
+        antpos = linear_array(7)
+        reds = om.get_reds(antpos)
+        chisq_per_bl = om.predict_chisq_per_bl(reds)
+        rc = om.RedundantCalibrator(reds)
+        # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
+        # show that all baselines have DoF less than 1 (this is just a sense check)
+        np.testing.assert_array_less(list(chisq_per_bl.values()), 1.0)
+        for red in reds:
+            if len(red) == 1:
+                # show that length 1 redundancies (unique baselines) have expected chi^2 of 0
+                np.testing.assert_almost_equal(chisq_per_bl[red[0]], 1e-10)
+
+        # Test hex array (see comments on analogous test above)
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos)
+        chisq_per_bl = om.predict_chisq_per_bl(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
+        np.testing.assert_array_less(list(chisq_per_bl.values()), 1.0)
+        for red in reds:
+            if len(red) == 1:
+                np.testing.assert_almost_equal(chisq_per_bl[red[0]], 1e-10)
+
+        # Test 2 pol array (see comments on analogous test above)
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos, pols=['xx', 'yy'])
+        chisq_per_bl = om.predict_chisq_per_bl(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = 2.0 * len(antpos) * (len(antpos) - 1) / 2 - len(reds) - 2 * len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_bl.values())), dof)
+        np.testing.assert_array_less(list(chisq_per_bl.values()), 1.0)
+        for red in reds:
+            if len(red) == 1:
+                np.testing.assert_almost_equal(chisq_per_bl[red[0]], 1e-10)
+
+    def test_predict_chisq_per_red(self):
+        # This test shows that predicted chisq_per_red make sense, given the known constraints.
+        # See test_predict_chisq_statistically to see that the answer actually works
+
+        # Test linear array
+        antpos = linear_array(7)
+        reds = om.get_reds(antpos)
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_red = om.predict_chisq_per_red(reds)
+        rc = om.RedundantCalibrator(reds)
+        # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
+        non_degen_dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl - nubl) for red in reds}
+        for red in reds:
+            # show that, up to the degeneracies, the above formula is a correct apportionment of the degrees of freedom
+            # that are taken up by antennas and unique baselines
+            assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
+            if len(red) == 1:
+                # show that if the length of the redundancy is 1, then then there are no DoF
+                assert chisq_per_red[red[0]] < 1e-10
+            else:
+                # show that if the length of the redundancy is greater than 1, some of the degenerate DoF are present
+                assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
+
+        # Test hex array (see comments on analogous test above)
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos)
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_red = om.predict_chisq_per_red(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
+        non_degen_dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl - nubl) for red in reds}
+        for red in reds:
+            assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
+            if len(red) == 1:
+                assert chisq_per_red[red[0]] < 1e-10
+            else:
+                assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
+
+        # Test 2 pol array (see comments on analogous test above)
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos, pols=['xx', 'yy'])
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_red = om.predict_chisq_per_red(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = 2.0 * len(antpos) * (len(antpos) - 1) / 2 - len(reds) - 2 * len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_red.values())), dof)
+        non_degen_dof_per_ubl = {red[0]: len(red) - 1 - nant * (len(red) - 1.) / (nbl / 2 - nubl / 2) for red in reds}
+        for red in reds:
+            assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] < 1
+            if len(red) == 1:
+                assert chisq_per_red[red[0]] < 1e-10
+            else:
+                assert chisq_per_red[red[0]] - non_degen_dof_per_ubl[red[0]] > 0
+
+    def test_predict_chisq_per_ant(self):
+        # This test shows that predicted chisq_per_ant make sense, given the known constraints.
+        # See test_predict_chisq_statistically to see that the answer actually works
+
+        # Test linear array
+        antpos = linear_array(7)
+        ants = [(ant, 'Jxx') for ant in antpos]
+        reds = om.get_reds(antpos)
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_ant = om.predict_chisq_per_ant(reds)
+        rc = om.RedundantCalibrator(reds)
+        # show that the total degrees of freedom adds up for total chi^2 (see HERA memo #61)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
+        # factor of 2 comes from the fact that all baselines go into two antennas' chisq_per_ant
+        non_degen_dof_per_ant = {ant: -2 for ant in ants}
+        for red in reds:
+            for bl in red:        
+                for ant in split_bl(bl):
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
+        for ant in ants:
+            # show that the number of degrees of freedom (i.e. expected chi^2) per antenna is always a bit larger
+            # than the number expected from just antenna and ubl DoF, but that each antenna gets some of the 
+            # degenerate DoF
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
+            
+        # Test hex array (see comments on analogous test above)
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        ants = [(ant, 'Jxx') for ant in antpos]
+        reds = om.get_reds(antpos)
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_ant = om.predict_chisq_per_ant(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = len(antpos) * (len(antpos) - 1) / 2 - len(reds) - len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
+        non_degen_dof_per_ant = {ant: -2 for ant in ants}
+        for red in reds:
+            for bl in red:        
+                for ant in split_bl(bl):
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
+        for ant in ants:
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
+
+        # Test 2 pol array (see comments on analogous test above)
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        ants = [(ant, pol) for ant in antpos for pol in ['Jxx', 'Jyy']]
+        reds = om.get_reds(antpos, pols=['xx', 'yy'])
+        nubl = len(reds)
+        nbl = np.sum([len(red) for red in reds])
+        nant = len(antpos)
+        chisq_per_ant = om.predict_chisq_per_ant(reds)
+        rc = om.RedundantCalibrator(reds)
+        dof = 2.0 * len(antpos) * (len(antpos) - 1) / 2 - len(reds) - 2 * len(antpos) + rc.count_degens() / 2.0
+        np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
+        non_degen_dof_per_ant = {ant: -2 for ant in ants}
+        for red in reds:
+            for bl in red:        
+                for ant in split_bl(bl):
+                    non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
+        for ant in ants:
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
+            assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
+
+    def test_predict_chisq_statistically(self):
+        # Show that chisq prediction works pretty well for small arrays
+        np.random.seed(21)
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos)
+        freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
+        times = np.linspace(0, 600. / 60 / 60 / 24, 60, endpoint=False)
+        df = np.median(np.diff(freqs))
+        dt = np.median(np.diff(times)) * 3600. * 24
+
+        # Simulate redundant data with noise
+        noise_var = .001
+        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.00)
+        ants = g.keys()
+        n = DataContainer({bl: np.sqrt(noise_var / 2) * (np.random.randn(*vis.shape) + 1j * np.random.randn(*vis.shape)) for bl, vis in d.items()})
+        noisy_data = n + DataContainer(d)
+
+        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
+        for antnum in antpos.keys():
+            noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
+        noisy_data.freqs = deepcopy(freqs)
+        noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
+        cal = om.redundantly_calibrate(noisy_data, reds)
+
+        # Compute various chi^2s
+        chisq_per_bl = {}
+        chisq_per_red = {red[0]: 0.0 for red in reds}
+        chisq_per_ant = {ant: 0.0 for ant in ants}
+        for red in reds:
+            for bl in red:
+                d_here = noisy_data[bl]
+                ant0, ant1 = split_bl(bl)
+                g1, g2 = cal['g_omnical'][ant0], cal['g_omnical'][ant1]
+                v_here = cal['v_omnical'][red[0]]
+                chisq_per_bl[bl] = np.abs(d_here - g1 * np.conj(g2) * v_here)**2 / noise_var
+                chisq_per_red[red[0]] += chisq_per_bl[bl]
+                chisq_per_ant[ant0] += chisq_per_bl[bl]
+                chisq_per_ant[ant1] += chisq_per_bl[bl]
+
+        # compare predictions at the 2% level
+        predicted_chisq_per_bl = om.predict_chisq_per_bl(reds)
+        for bl in chisq_per_bl:
+            np.testing.assert_almost_equal(np.mean(chisq_per_bl[bl]), predicted_chisq_per_bl[bl], -np.log10(.02))
+
+        predicted_chisq_per_red = om.predict_chisq_per_red(reds)
+        for red in chisq_per_red:
+            np.testing.assert_almost_equal(np.mean(chisq_per_red[red]), predicted_chisq_per_red[red], -np.log10(.02))
+
+        predicted_chisq_per_ant = om.predict_chisq_per_ant(reds)
+        for ant in chisq_per_ant:
+            np.testing.assert_almost_equal(np.mean(chisq_per_ant[ant]), predicted_chisq_per_ant[ant], -np.log10(.02))
+
+    def test_predict_chisq_statistically_with_excluded_antenna(self):
+        np.random.seed(21)
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos)
+        freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
+        times = np.linspace(0, 600. / 60 / 60 / 24, 60, endpoint=False)
+        df = np.median(np.diff(freqs))
+        dt = np.median(np.diff(times)) * 3600. * 24
+
+        # Simulate redundant data with noise
+        noise_var = .001
+        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.00)
+        ants = g.keys()
+        n = DataContainer({bl: np.sqrt(noise_var / 2) * (np.random.randn(*vis.shape) + 1j * np.random.randn(*vis.shape)) for bl, vis in d.items()})
+        noisy_data = n + DataContainer(d)
+        nsamples = DataContainer({bl: np.ones_like(d[bl], dtype=float) for bl in d})
+
+        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
+        for antnum in antpos.keys():
+            noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
+        noisy_data.freqs = deepcopy(freqs)
+        noisy_data.times_by_bl = {bl[0:2]: deepcopy(times) for bl in noisy_data.keys()}
+        filtered_reds = om.filter_reds(reds, ex_ants=[6])
+        cal = om.redundantly_calibrate(noisy_data, filtered_reds)
+        cal_copy = deepcopy(cal)
+        om.expand_omni_sol(cal, reds, noisy_data, nsamples)
+        # expand_omni_sol(cal_copy, reds, noisy_data, nsamples)
+
+        # Compute various chi^2s
+        chisq_per_bl = {}
+        chisq_per_red = {red[0]: 0.0 for red in filtered_reds}
+        chisq_per_ant = {ant: 0.0 for ant in ants}
+        for red in filtered_reds:
+            for bl in red:
+                d_here = noisy_data[bl]
+                ant0, ant1 = split_bl(bl)
+                g1, g2 = cal['g_omnical'][ant0], cal['g_omnical'][ant1]
+                v_here = cal['v_omnical'][red[0]]
+                chisq_per_bl[bl] = np.abs(d_here - g1 * np.conj(g2) * v_here)**2 / noise_var
+                chisq_per_red[red[0]] += chisq_per_bl[bl]
+                chisq_per_ant[ant0] += chisq_per_bl[bl]
+                chisq_per_ant[ant1] += chisq_per_bl[bl]
+
+        # compare predictions at the 3% level for non-excluded antennas
+        np.testing.assert_almost_equal(np.mean(cal['chisq']['Jxx']), 1.0, -np.log10(.03))
+
+        predicted_chisq_per_bl = om.predict_chisq_per_bl(filtered_reds)
+        for bl in predicted_chisq_per_bl:
+            np.testing.assert_almost_equal(np.mean(chisq_per_bl[bl]), predicted_chisq_per_bl[bl], -np.log10(.03))
+
+        predicted_chisq_per_red = om.predict_chisq_per_red(filtered_reds)
+        for red in predicted_chisq_per_red:
+            np.testing.assert_almost_equal(np.mean(chisq_per_red[red]), predicted_chisq_per_red[red], -np.log10(.03))
+
+        predicted_chisq_per_ant = om.predict_chisq_per_ant(filtered_reds)
+        for ant in predicted_chisq_per_ant:
+            np.testing.assert_almost_equal(np.mean(chisq_per_ant[ant]), predicted_chisq_per_ant[ant], -np.log10(.03))
+
+        # make sure excluded antenna has the highest chi^2, but not inexplicably large
+        assert np.mean(cal['chisq_per_ant'][6, 'Jxx']) <= len(antpos)  
+        for ant in cal['chisq_per_ant']:
+            assert np.mean(cal['chisq_per_ant'][ant]) <= np.mean(cal['chisq_per_ant'][6, 'Jxx'])
+
 
 class TestRedcalAndAbscal(object):
     
@@ -1060,6 +1357,41 @@ class TestRunMethods(object):
             assert np.all(np.isclose(rv['g_omnical'][(1, 'Jxx')], 1.0))
             assert np.all(np.isclose(rv['omni_meta']['iter'], 0))
 
+    def test_expand_omni_sol(self):
+        # noise free test of dead antenna resurrection
+        ex_ants = [0, 13, 2, 18]
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        pols = ['xx', 'yy']
+        reds = om.get_reds(antpos, pols=pols)
+        np.random.seed(21)
+        freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
+        times = np.linspace(0, 600. / 60 / 60 / 24, 3, endpoint=False)
+        df = np.median(np.diff(freqs))
+        dt = np.median(np.diff(times)) * 3600. * 24
+
+        g, tv, d = sim_red_data(reds, shape=(len(times), len(freqs)), gain_scatter=.01)
+        tv, d = DataContainer(tv), DataContainer(d)
+        nsamples = DataContainer({bl: np.ones_like(d[bl], dtype=float) for bl in d})
+
+        for antnum in antpos.keys():
+            for pol in pols:
+                d[(antnum, antnum, pol)] = np.ones((len(times), len(freqs)), dtype=complex)
+        d.freqs = deepcopy(freqs)
+        d.times_by_bl = {bl[0:2]: deepcopy(times) for bl in d.keys()}
+
+        filtered_reds = om.filter_reds(reds, ex_ants=ex_ants, antpos=antpos, max_bl_cut=30)
+        cal = om.redundantly_calibrate(d, filtered_reds)
+        om.expand_omni_sol(cal, reds, d, nsamples)
+
+        # test that all chisqs are 0
+        for red in reds:
+            for bl in red:
+                ant0, ant1 = split_bl(bl)
+                np.testing.assert_array_almost_equal(d[bl], cal['g_omnical'][ant0] * np.conj(cal['g_omnical'][ant1]) * cal['v_omnical'][red[0]])
+        assert len(pols) * len(antpos) == len(cal['g_omnical'])
+        for ant in cal['chisq_per_ant']:
+            np.testing.assert_array_less(cal['chisq_per_ant'][ant], 1e-10)
+
     def test_redcal_iteration(self):
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
@@ -1098,6 +1430,7 @@ class TestRunMethods(object):
         for nsamples in rv['vns_omnical'].values():
             np.testing.assert_array_equal(nsamples, 0)
 
+        # this tests redcal.expand_omni_sol
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -1111,6 +1444,11 @@ class TestRunMethods(object):
             # test redundant baseline counting
             np.testing.assert_array_equal(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]], 4.0)
             np.testing.assert_array_equal(rv['vns_omnical'][(23, 27, pol)], 0.0)
+            np.testing.assert_array_equal(rv['vns_omnical'][(1, 27, pol)], 0.0)
+        for ant in [(1, 'Jxx'), (1, 'Jyy'), (27, 'Jxx'), (27, 'Jyy')]:
+            assert not np.all(rv['g_omnical'][ant] == 1.0)
+            assert not np.all(rv['chisq_per_ant'][ant] == 0.0)
+            np.testing.assert_array_equal(rv['gf_omnical'][ant], True)
 
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
@@ -1118,7 +1456,7 @@ class TestRunMethods(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
-            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.5, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
+            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
             sys.stdout = sys.__stdout__
 
         bad_ants = [50, 12]  # this is based on experiments with this particular file
@@ -1143,7 +1481,6 @@ class TestRunMethods(object):
                 np.testing.assert_array_equal(flags[ant][zero_check], True)
             np.testing.assert_array_almost_equal(quals[ant][~zero_check], cal['chisq_per_ant'][ant][~zero_check])
             if ant[0] in bad_ants:
-                np.testing.assert_array_equal(gains[ant], 1.0)
                 np.testing.assert_array_equal(flags[ant], True)
         for antpol in total_qual.keys():
             np.testing.assert_array_almost_equal(total_qual[antpol], cal['chisq'][antpol])

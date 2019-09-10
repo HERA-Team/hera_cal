@@ -47,13 +47,17 @@ setup_args = {
         'scipy',
         'astropy',
         'pyuvdata',
-        'aipy>=3.0rc2',
         'pyephem',
-        'uvtools @ git+git://github.com/HERA-Team/uvtools',
         'linsolve @ git+git://github.com/HERA-Team/linsolve',
         'hera_qm @ git+git://github.com/HERA-Team/hera_qm',
         'scikit-learn'
     ],
+    'extras_require': {
+        "all": [
+            'aipy>=3.0',
+            'uvtools @ git+git://github.com/HERA-Team/uvtools',
+        ]
+    },
     'zip_safe': False,
 }
 
