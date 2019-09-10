@@ -1546,7 +1546,7 @@ class TestRunMethods(object):
         os.remove(os.path.join(DATA_PATH, 'test_output/temp.omni.calfits'))
         os.remove(os.path.join(DATA_PATH, 'test_output/temp.omni_vis.uvh5'))
 
-       with pytest.raises(TypeError):
+        with pytest.raises(TypeError):
             cal = om.redcal_run({})
 
     def test_redcal_argparser(self):
