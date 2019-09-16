@@ -3013,7 +3013,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                         for ant in data_ants:
                             abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
                             abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + delta_flags[ant]
-                            abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
+                            if not np.all(abscal_flags[ant][tinds, :]):
+                                abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
                         for antpol in total_qual.keys():
                             abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
                             
