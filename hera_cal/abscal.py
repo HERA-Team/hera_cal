@@ -2825,7 +2825,8 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
 
 
 def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, 
-                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
+                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None,
+                       use_idealized_antpos=True, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -2845,6 +2846,9 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
             the updates to all 1.0s.
         refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
+        use_idealized_antpos : bool, Instead of actual antenna positions, use redcal to generate idealized
+            antpos that are perfectly redundant. Note: this allows for an arbitrary stretch / squeeze
+            between the input and output antenna positions.
 
     Returns:
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jxx') to waterfalls containing 
@@ -2857,12 +2861,17 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     if refant_num is None:
         refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
-    AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
+    antpos = data.antpos
+    assert antpos is not None
+    AC = AbsCal(model, data, wgts=wgts, antpos=antpos, freqs=data.freqs,
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
     
-    # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
-    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
-    AC._set_antpos(idealized_antpos)
+    if use_idealized_antpos:
+        # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
+        idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
+        AC._set_antpos(idealized_antpos)
+        tol = IDEALIZED_BL_TOL
+        antpos = idealized_antpos
 
     # Per-Channel Absolute Amplitude Calibration
     abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {'verbose': verbose}, [AC.custom_abs_eta_gain], 
@@ -2871,20 +2880,20 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     # Global Delay Slope Calibration
     for time_avg in [True, False]:
         abscal_step(abscal_delta_gains, AC, AC.delay_slope_lincal, {'time_avg': time_avg, 'edge_cut': edge_cut, 'verbose': verbose},
-                    [AC.custom_dly_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
+                    [AC.custom_dly_slope_gain], [(rc_flags.keys(), antpos)], rc_flags,
                     gain_convention=gain_convention, verbose=verbose)
 
     # Global Phase Slope Calibration (first using dft, then using linfit)
-    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'solver': 'dft', 'tol': IDEALIZED_BL_TOL,
-                'edge_cut': edge_cut, 'verbose': verbose}, [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], 
+    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'solver': 'dft', 'tol': tol,
+                'edge_cut': edge_cut, 'verbose': verbose}, [AC.custom_phs_slope_gain], [(rc_flags.keys(), antpos)], 
                 rc_flags, gain_convention=gain_convention, verbose=verbose)
-    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': IDEALIZED_BL_TOL, 'edge_cut': edge_cut, 'verbose': verbose},
-                [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
+    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': tol, 'edge_cut': edge_cut, 'verbose': verbose},
+                [AC.custom_phs_slope_gain], [(rc_flags.keys(), antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     # Per-Channel Tip-Tilt Phase Calibration
     abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
-                [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], rc_flags,
+                [(rc_flags.keys(), antpos), (rc_flags.keys(),)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     return abscal_delta_gains, AC
@@ -2892,7 +2901,8 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
 def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None, nInt_to_load=None,
                            data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0, 
-                           tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
+                           tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='',
+                           use_idealized_antpos=True, verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     Does not work on data (or models) with baseline-dependant averaging.
     
@@ -2915,6 +2925,9 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         refant: tuple of the form (0, 'Jxx') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
+        use_idealized_antpos : bool, Instead of actual antenna positions, use redcal to generate idealized
+            antpos that are perfectly redundant. Note: this allows for an arbitrary stretch / squeeze
+            between the input and output antenna positions.
 
     Returns:
         hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history.
@@ -2995,6 +3008,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
                                                              phs_conv_crit=phs_conv_crit, verbose=verbose,
+                                                             use_idealized_antpos=use_idealized_antpos,
                                                              refant_num=(None if refant is None else refant[0]))
 
                         # calibrate autos, abscal them, and generate abscal Chi^2
