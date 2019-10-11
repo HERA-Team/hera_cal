@@ -303,7 +303,9 @@ class Test_HERAData(object):
             assert np.all(dc.lsts == hd.lsts)
             for k in dc.times_by_bl.keys():
                 assert np.all(dc.times_by_bl[k] == hd.times_by_bl[k])
+                assert np.all(dc.times_by_bl[k] == dc.times_by_bl[(k[1], k[0])])
                 assert np.all(dc.lsts_by_bl[k] == hd.lsts_by_bl[k])
+                assert np.all(dc.lsts_by_bl[k] == dc.lsts_by_bl[(k[1], k[0])])
 
     @pytest.mark.filterwarnings("ignore:miriad does not support partial loading")
     def test_read(self):
