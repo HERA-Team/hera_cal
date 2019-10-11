@@ -272,8 +272,10 @@ class HERAData(UVData):
 
         times_by_bl = {antpair: np.array(self.time_array[self._blt_slices[antpair]])
                        for antpair in antpairs}
+        times_by_bl.update({(ant1, ant0): times_here for (ant0, ant1), times_here in times_by_bl.items()})
         lsts_by_bl = {antpair: np.array(self.lst_array[self._blt_slices[antpair]])
                       for antpair in antpairs}
+        lsts_by_bl.update({(ant1, ant0): lsts_here for (ant0, ant1), lsts_here in lsts_by_bl.items()})
 
         locs = locals()
         return {meta: locs[meta] for meta in self.HERAData_metas}
