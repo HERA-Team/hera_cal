@@ -191,6 +191,16 @@ class HERAData(UVData):
     # static list of useful metadata to calculate and save
     HERAData_metas = ['ants', 'antpos', 'freqs', 'times', 'lsts', 'pols',
                       'antpairs', 'bls', 'times_by_bl', 'lsts_by_bl']
+    # ants: list of antenna numbers
+    # antpos: dictionary mapping antenna numbers to np.arrays of position in meters
+    # freqs: np.arrray of frequencies (Hz)
+    # times: np.array of unique times in the data file (JD)
+    # lsts: np.array of unique LSTs in the data file (radians)
+    # pols: list of baseline polarization strings
+    # antpairs: list of antenna number pairs in the data as 2-tuples
+    # bls: list of baseline-pols in the data as 3-tuples
+    # times_by+bl: dictionary mapping antpairs to times (JD). Also includes all reverse pairs.
+    # times_by+bl: dictionary mapping antpairs to LSTs (radians). Also includes all reverse pairs.
 
     def __init__(self, input_data, filetype='uvh5', **check_kwargs):
         '''Instantiate a HERAData object. If the filetype == uvh5, read in and store
