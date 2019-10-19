@@ -279,7 +279,7 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
-                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
+                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0, linear=False,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
                   verbose=True):
@@ -326,6 +326,9 @@ class VisClean(object):
             add_clean_residual : bool, if True, adds the CLEAN residual within the CLEAN bounds
                 in fourier space to the CLEAN model. Note that the residual actually returned is
                 not the CLEAN residual, but the residual of data - model in real (data) space.
+            linear : bool, if True, perform a linear delay clean (faster and easier to propagate errors).
+                    WARNING: linear clean will only provide zero model visibilities (only gives residuals).
+                    WARNING: as of now, linear clean only supports 'plus' filt2d_mode.
             dtime : float, time spacing of input data [sec], not necessarily integration time!
                 Default is self.dtime.
             dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
@@ -407,7 +410,7 @@ class VisClean(object):
 
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
-                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
+                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, linear = linear,
                                                   edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual)
 
                 # un-zeropad the data
@@ -433,7 +436,7 @@ class VisClean(object):
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
 
-                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter,
+                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter, linear = linear,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                                                   edgecut_hi=edgecut_hi)
 
@@ -456,7 +459,7 @@ class VisClean(object):
                         d, _ = zeropad_array(d, zeropad=zeropad, axis=(0, 1))
                         w, _ = zeropad_array(w, zeropad=zeropad, axis=(0, 1))
 
-                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime,
+                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime, linear = linear,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
                                                       alpha=alpha, gain=gain, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
                                                       filt2d_mode=filt2d_mode)
