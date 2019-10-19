@@ -410,7 +410,7 @@ class VisClean(object):
 
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
-                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, linear = linear,
+                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, linear=linear,
                                                   edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual)
 
                 # un-zeropad the data
@@ -436,7 +436,7 @@ class VisClean(object):
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
 
-                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter, linear = linear,
+                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter, linear=linear,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                                                   edgecut_hi=edgecut_hi)
 
@@ -459,7 +459,7 @@ class VisClean(object):
                         d, _ = zeropad_array(d, zeropad=zeropad, axis=(0, 1))
                         w, _ = zeropad_array(w, zeropad=zeropad, axis=(0, 1))
 
-                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime, linear = linear,
+                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime, linear=linear,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
                                                       alpha=alpha, gain=gain, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
                                                       filt2d_mode=filt2d_mode)
