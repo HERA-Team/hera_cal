@@ -279,10 +279,10 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
-                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0, linear=False,
+                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
-                  verbose=True):
+                  verbose=True, linear=False, cache={}, deconv_linear_foregrounds=False, fg_deconv_method='clean'):
         """
         Perform a CLEAN deconvolution.
 
@@ -326,13 +326,24 @@ class VisClean(object):
             add_clean_residual : bool, if True, adds the CLEAN residual within the CLEAN bounds
                 in fourier space to the CLEAN model. Note that the residual actually returned is
                 not the CLEAN residual, but the residual of data - model in real (data) space.
-            linear : bool, if True, perform a linear delay clean (faster and easier to propagate errors).
-                    WARNING: linear clean will only provide zero model visibilities (only gives residuals).
-                    WARNING: as of now, linear clean only supports 'plus' filt2d_mode.
             dtime : float, time spacing of input data [sec], not necessarily integration time!
                 Default is self.dtime.
             dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             verbose: If True print feedback to stdout
+            linear : bool,
+                 use aipy.deconv.clean if linear == False
+                 if True, perform linear delay filtering.
+            cache : dict, optional dictionary for storing pre-computed filtering matrices in linear
+                cleaning.
+            deconv_linear_foregrounds : bool, if True, then apply clean to data - residual where
+                                              res is the data-vector after applying a linear clean filter.
+                                              This allows for in-painting flagged foregrounds without introducing
+                                              clean artifacts into EoR window. If False, mdl will still just be the
+                                              difference between the original data vector and the residuals after
+                                              applying the linear filter.
+            fg_deconv_method : string, can be 'leastsq' or 'clean'. If 'leastsq', deconvolve difference between data and linear residual
+                                       by performing linear least squares fitting of data - linear resid to dft modes in filter window.
+                                       If 'clean', obtain deconv fg model using perform a hogboem clean of difference between data and linear residual.
         """
         if not HAVE_UVTOOLS:
             raise ImportError("uvtools required, install hera_cal[all]")
@@ -411,7 +422,9 @@ class VisClean(object):
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
                                                   gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, linear=linear,
-                                                  edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual)
+                                                  edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual,
+                                                  cache=cache, deconv_linear_foregrounds=deconv_linear_foregrounds,
+                                                  fg_deconv_method=fg_deconv_method)
 
                 # un-zeropad the data
                 if zeropad > 0:
