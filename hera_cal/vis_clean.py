@@ -282,7 +282,8 @@ class VisClean(object):
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
-                  verbose=True, linear=False, cache={}, deconv_linear_foregrounds=False, fg_deconv_method='clean'):
+                  verbose=True, linear=False, cache={}, deconv_linear_foregrounds=False,
+                  fg_deconv_method='clean', fg_restore_size=None):
         """
         Perform a CLEAN deconvolution.
 
@@ -344,6 +345,11 @@ class VisClean(object):
             fg_deconv_method : string, can be 'leastsq' or 'clean'. If 'leastsq', deconvolve difference between data and linear residual
                                        by performing linear least squares fitting of data - linear resid to dft modes in filter window.
                                        If 'clean', obtain deconv fg model using perform a hogboem clean of difference between data and linear residual.
+            fg_restore_size: float, optional, allow user to only restore foregrounds subtracted by linear filter
+                             within a region of this size. If None, set to filter_size.
+                             This allows us to avoid the problem that if we have RFI flagging and apply a linear filter
+                             that is larger then the horizon then the foregrounds that we fit might actually include super
+                             -horizon flagging side-lobes and restoring them will introduce spurious structure.
         """
         if not HAVE_UVTOOLS:
             raise ImportError("uvtools required, install hera_cal[all]")
@@ -424,7 +430,7 @@ class VisClean(object):
                                                   gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, linear=linear,
                                                   edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual,
                                                   cache=cache, deconv_linear_foregrounds=deconv_linear_foregrounds,
-                                                  fg_deconv_method=fg_deconv_method)
+                                                  fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size)
 
                 # un-zeropad the data
                 if zeropad > 0:
@@ -451,7 +457,8 @@ class VisClean(object):
 
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter, linear=linear,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
-                                                  edgecut_hi=edgecut_hi)
+                                                  edgecut_hi=edgecut_hi, linear=linear, cache=cache, deconv_linear_foregrounds=deconv_linear_foregrounds,
+                                                  fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size)
 
                 # un-zeropad the data
                 if zeropad > 0:
