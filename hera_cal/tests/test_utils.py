@@ -533,7 +533,7 @@ def test_comply_vispol():
 
 
 def test_comply_vispol_nn():
-    output = utils._comply_vispol('nn')
+    output = utils._comply_vispol('nn', x_orientation='n')
     assert output == 'nn'
 
 
@@ -543,5 +543,5 @@ def test_comply_antpol():
 
 
 def test_comply_antpol_nn():
-    output = utils._comply_antpol('nn')
+    output = utils._comply_antpol('nn', x_orientation='n')
     assert output == 'Jnn'
