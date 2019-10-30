@@ -23,16 +23,16 @@ except ImportError:
     AIPY = False
 
 
-def _comply_antpol(antpol):
+def _comply_antpol(antpol, x_orientation=None):
     '''Maps an input antenna polarization string onto a string compliant with pyuvdata
     and hera_cal.'''
-    return jnum2str(jstr2num(antpol))
+    return jnum2str(jstr2num(antpol, x_orientation=x_orientation), x_orientation=x_orientation)
 
 
-def _comply_vispol(pol):
+def _comply_vispol(pol, x_orientation=None):
     '''Maps an input visibility polarization string onto a string compliant with pyuvdata
     and hera_cal.'''
-    return polnum2str(polstr2num(pol))
+    return polnum2str(polstr2num(pol, x_orientation=x_orientation), x_orientation=x_orientation)
 
 
 _VISPOLS = [pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0]
@@ -165,7 +165,7 @@ def interp_peak(data, method='quinn', reject_edges=False):
     Args:
         data : complex 2d ndarray in Fourier space.
             If fed as 1d array will reshape into [1, N] array.
-            Quinn's method usually operates on complex data (eg. fft'ed data) while the 
+            Quinn's method usually operates on complex data (eg. fft'ed data) while the
             quadratic method operates on real-valued data (generally absolute values).
         method : either 'quinn' (see https://ieeexplore.ieee.org/document/558515) or 'quadratic'
             (see https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html).
@@ -928,7 +928,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
     # mirror if desired
     if Nmirror > 0:
         assert Nmirror < x.size, "Nmirror can't be equal or larger than x"
-        x = np.pad(x, Nmirror, mode='reflect', reflect_type='odd') 
+        x = np.pad(x, Nmirror, mode='reflect', reflect_type='odd')
         y = np.concatenate([y[1:Nmirror + 1, :][::-1, :], y, y[-Nmirror - 1:-1, :][::-1, :]], axis=0)
         flags = np.concatenate([flags[1:Nmirror + 1, :][::-1, :], flags, flags[-Nmirror - 1:-1, :][::-1, :]], axis=0)
 
@@ -992,9 +992,9 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
 
 
 def gain_relative_difference(old_gains, new_gains, flags, denom=None):
-    """Compuate relative gain differences between two sets of calibration solutions 
+    """Compuate relative gain differences between two sets of calibration solutions
     (e.g. abscal and smooth_cal), as well as antenna-averaged relative gain differences.
-    
+
     Arguments:
         old_gains: dictionary mapping keys like (0, 'Jxx') to waterfalls of complex gains.
             Must contain all keys in new_gains.
@@ -1017,7 +1017,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     relative_diff = {}
     for ant in new_gains:
         assert ~np.any(denom[ant] == 0) or np.all(flags[np.isclose(np.abs(denom[ant]), 0.0)])
-        relative_diff[ant] = np.true_divide(np.abs(old_gains[ant] - new_gains[ant]), np.abs(denom[ant]), 
+        relative_diff[ant] = np.true_divide(np.abs(old_gains[ant] - new_gains[ant]), np.abs(denom[ant]),
                                             where=~np.isclose(np.abs(denom[ant]), 0))
 
     # compute average relative diff over all antennas for each polarizations separately
