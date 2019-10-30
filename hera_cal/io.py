@@ -373,9 +373,9 @@ class HERAData(UVData):
             data[bl] = self._get_slice(self.data_array, bl)
             flags[bl] = self._get_slice(self.flag_array, bl)
             nsamples[bl] = self._get_slice(self.nsample_array, bl)
-        data = DataContainer(data)
-        flags = DataContainer(flags)
-        nsamples = DataContainer(nsamples)
+        data = DataContainer(data, x_orientation=self.x_orientation)
+        flags = DataContainer(flags, x_orientation=self.x_orientation)
+        nsamples = DataContainer(nsamples, x_orientation=self.x_orientation)
 
         # store useful metadata inside the DataContainers
         for dc in [data, flags, nsamples]:
@@ -695,9 +695,9 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 for (ant1, ant2), blt_slice in blt_slices.items():
                     flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, 0, :, ip]
             # data container only supports standard polarizations strings
-            if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger): 
-                flags = DataContainer(flags)
-        
+            if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
+                flags = DataContainer(flags, x_orientation=uvf.x_orientation)
+
         elif uvf.type == 'antenna':  # one time x freq waterfall per antenna
             for i, ant in enumerate(uvf.ant_array):
                 for ip, jpol in enumerate(uvf.polarization_array):
@@ -706,7 +706,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                     else:
                         jpol = ','.join([jnum2str(int(p)) for p in jpol.split(b',')])
                     flags[(ant, jpol)] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
-        
+
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
             for ip, jpol in enumerate(uvf.polarization_array):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
@@ -1159,7 +1159,7 @@ def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', 
         flags: dictionary or DataContainer of data flags to update.
             Default (None) does not update.
         nsamples: dictionary or DataContainer of nsamples to update.
-            Default (None) does not update.            
+            Default (None) does not update.
         add_to_history: appends a string to the history of the UVData/HERAData object
         kwargs: dictionary mapping updated attributs to their new values.
             See pyuvdata.UVData documentation for more info.
