@@ -43,59 +43,60 @@ SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _V
 JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
 
-def split_pol(pol):
+def split_pol(pol, x_orientation=None):
     '''Splits visibility polarization string (pyuvdata's polstr) into
     antenna polarization strings (pyuvdata's jstr).'''
-    return SPLIT_POL[_comply_vispol(pol)]
+    return SPLIT_POL[_comply_vispol(pol, x_orientation=x_orientation)]
 
 
-def join_pol(p1, p2):
+def join_pol(p1, p2, x_orientation=None):
     '''Joins antenna polarization strings (pyuvdata's jstr) into
     visibility polarization string (pyuvdata's polstr).'''
-    return JOIN_POL[(_comply_antpol(p1), _comply_antpol(p2))]
+    return JOIN_POL[(_comply_antpol(p1, x_orientation=x_orientation),
+                     _comply_antpol(p2, x_orientation=x_orientation))]
 
 
-def comply_pol(pol):
+def comply_pol(pol, x_orientation=None):
     '''Maps an input (visibility or antenna) polarization string onto a string
     compliant with pyuvdata and hera_cal.'''
     try:
-        return _comply_vispol(pol)
+        return _comply_vispol(pol, x_orientation=x_orientation)
     except(ValueError):  # happens if we have an antpol, not vispol
-        return _comply_antpol(pol)
+        return _comply_antpol(pol, x_orientation=x_orientation)
 
 
-def split_bl(bl):
+def split_bl(bl, x_orientation=None):
     '''Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj.'''
-    pi, pj = split_pol(bl[2])
+    pi, pj = split_pol(bl[2], x_orientation=x_orientation)
     return ((bl[0], pi), (bl[1], pj))
 
 
-def join_bl(ai, aj):
+def join_bl(ai, aj, x_orientation=None):
     '''Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key.'''
-    return (ai[0], aj[0], join_pol(ai[1], aj[1]))
+    return (ai[0], aj[0], join_pol(ai[1], aj[1], x_orientation=x_orientation))
 
 
-def reverse_bl(bl):
+def reverse_bl(bl, x_orientation=None):
     '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i)
     or (j,i,pol[::-1]), respectively.'''
     i, j = bl[:2]
     if len(bl) == 2:
         return (j, i)
     else:
-        return (j, i, conj_pol(_comply_vispol(bl[2])))
+        return (j, i, conj_pol(_comply_vispol(bl[2], x_orientation=x_orientation)))
 
 
-def comply_bl(bl):
+def comply_bl(bl, x_orientation=None):
     '''Translates an input (i,j,pol) baseline to ensure pol is compliant with
     pyuvdata and hera_cal. Inputs of length 2, e.g. (i,j) are unmodified.'''
     if len(bl) == 2:
         return bl
     else:
         i, j, p = bl
-        return (i, j, _comply_vispol(p))
+        return (i, j, _comply_vispol(p, x_orientation=x_orientation))
 
 
-def make_bl(*args):
+def make_bl(*args, x_orientation=None):
     '''Create an (i,j,pol) baseline key that is compliant with pyuvdata
     and hera_cal.  Accepts (bl, pol) or (i, j, pol) as input.'''
     if len(args) == 1:
@@ -104,7 +105,7 @@ def make_bl(*args):
         (i, j), pol = args
     else:
         i, j, pol = args
-    return (i, j, _comply_vispol(pol))
+    return (i, j, _comply_vispol(pol, x_orientation=x_orientation))
 
 
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
