@@ -597,3 +597,23 @@ def test_echo(capsys):
     assert output[0] == '\n'
     assert output[1:4] == 'hi\n'
     assert output[4:] == '-' * 40 + '\n'
+
+
+def test_comply_vispol():
+    output = utils._comply_vispol('I')
+    assert output == 'pI'
+
+
+def test_comply_vispol_nn():
+    output = utils._comply_vispol('nn')
+    assert output == 'nn'
+
+
+def test_comply_antpol():
+    output = utils._comply_antpol('xx')
+    assert output == 'Jxx'
+
+
+def test_comply_antpol_nn():
+    output = utils._comply_antpol('nn')
+    assert output == 'Jnn'
