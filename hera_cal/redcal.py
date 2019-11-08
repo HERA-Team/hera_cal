@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import absolute_import, division, print_function
 
 import numpy as np
 from copy import deepcopy
 import argparse
 import os
-from six.moves import range, zip
 import linsolve
 
 from . import utils
@@ -906,19 +903,8 @@ def predict_chisq_per_bl(reds):
     rc = RedundantCalibrator(reds)
     solver = rc._solver(linsolve.LogProductSolver, dummy_data)
 
-    # A = solver.ls_amp.get_A()[:, :, 0]
-    # B = solver.ls_phs.get_A()[:, :, 0]
-    # The following code corrects the ordering of equations in A and B. It is only necessary in python 2.
-    import ast
-    eqs_dict = {bl: eq for eq, bl in rc.build_eqs().items()}
-    eqs = [linsolve.ast_getterms(ast.parse(eqs_dict[bl], mode='eval')) for bl in bls]
-    amp_keys = [linsolve.jointerms([linsolve.conjterm([t], mode='amp') for t in eq[0]]) for eq in eqs]
-    A_eq_order = [solver.ls_amp.keys.index(k) for k in amp_keys]
-    A = solver.ls_amp.get_A()[A_eq_order, :, 0]
-    phs_keys = [linsolve.jointerms([linsolve.conjterm([t], mode='phs') for t in eq[0]]) for eq in eqs]
-    B_eq_order = [solver.ls_phs.keys.index(k) for k in phs_keys]
-    B = solver.ls_phs.get_A()[B_eq_order, :, 0]
-    # Delete the above when python 2 support is dropped.
+    A = solver.ls_amp.get_A()[:, :, 0]
+    B = solver.ls_phs.get_A()[:, :, 0]
     A_data_resolution = A.dot(np.linalg.pinv(A.T.dot(A)).dot(A.T))
     B_data_resolution = B.dot(np.linalg.pinv(B.T.dot(B)).dot(B.T))
 
