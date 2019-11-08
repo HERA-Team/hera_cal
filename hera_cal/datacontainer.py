@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import print_function, division, absolute_import
 
 import numpy as np
 from collections import OrderedDict as odict
-from six.moves import map, zip
 import copy
 
 from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl

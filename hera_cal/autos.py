@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 """Module for extracting autocorrelations, with the option to calibrate before writing to disk."""
-
-from __future__ import print_function, division, absolute_import
 
 import argparse
 from . import io

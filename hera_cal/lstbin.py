@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import print_function, division, absolute_import
 
 import os
 from collections import OrderedDict as odict
@@ -13,7 +11,6 @@ import numpy as np
 import operator
 import gc as garbage_collector
 import datetime
-from six.moves import map, range
 
 from . import utils
 from . import version

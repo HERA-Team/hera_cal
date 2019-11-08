@@ -2,8 +2,6 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
-from __future__ import print_function, division, absolute_import
-
 import numpy as np
 import copy
 

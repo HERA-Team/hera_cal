@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import print_function, division, absolute_import
 
 import numpy as np
 import os
 import copy
-from six.moves import map, range
 import astropy.constants as const
 from astropy.time import Time
 from astropy import coordinates as crd
