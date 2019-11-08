@@ -63,7 +63,6 @@ some form of a time-average and subtracting off the bias.
 The code here models the time and delay dependent behavior
 through a combination of SVD and fringe-rate filtering.
 """
-from __future__ import print_function, division, absolute_import
 import numpy as np
 import os
 import copy

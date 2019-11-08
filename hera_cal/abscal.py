@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 """
 abscal.py
@@ -22,8 +22,6 @@ V_ij,xy^data = exp(eta_ij,xy^data + i * phi_ij,xy^data)
 where {i,j} index antennas and {x,y} are the polarization of
 the i-th and j-th antenna respectively.
 """
-from __future__ import print_function, division, absolute_import
-
 import os
 from collections import OrderedDict as odict
 import copy
@@ -31,7 +29,6 @@ import argparse
 import numpy as np
 import operator
 from functools import reduce
-from six.moves import map, range, zip
 from scipy import signal, interpolate, spatial
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
