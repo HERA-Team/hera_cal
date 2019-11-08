@@ -1,16 +1,13 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 """Unit tests for the hera_cal.apply_cal module."""
-
-from __future__ import absolute_import, division, print_function
 
 import pytest
 import numpy as np
 import os
 import sys
-
 
 from .. import io, noise
 from ..data import DATA_PATH
