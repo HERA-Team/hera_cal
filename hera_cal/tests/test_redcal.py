@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import absolute_import, division, print_function
 
 import pytest
 import numpy as np
@@ -11,7 +9,6 @@ import warnings
 import os
 import sys
 import shutil
-from six.moves import range
 from hera_sim.antpos import linear_array, hex_array
 from hera_sim.vis import sim_red_data
 

@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 '''Tests for io.py'''
-
-from __future__ import print_function, division, absolute_import
 
 import pytest
 import numpy as np
@@ -13,7 +11,6 @@ import warnings
 import shutil
 import copy
 from collections import OrderedDict as odict
-from six.moves import range, zip
 import pyuvdata
 from pyuvdata import UVCal, UVData, UVFlag
 from pyuvdata.utils import parse_polstr, parse_jpolstr

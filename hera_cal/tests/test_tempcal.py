@@ -1,15 +1,12 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import print_function, division, absolute_import
 
 import pytest
 import numpy as np
 import sys
 import os
 import glob
-import six
 import copy
 from pyuvdata import UVData
 

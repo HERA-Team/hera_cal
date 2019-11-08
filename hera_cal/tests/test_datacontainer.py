@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import print_function, division, absolute_import
 
 import pytest
 import numpy as np
 import os
-from six.moves import zip
 
 from .. import abscal, datacontainer, io
 from ..data import DATA_PATH

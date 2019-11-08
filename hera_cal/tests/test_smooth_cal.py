@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import absolute_import, division, print_function
 
 import pytest
 import numpy as np
