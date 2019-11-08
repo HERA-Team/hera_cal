@@ -30,7 +30,7 @@ def test_get_gitinfo_file():
         git_file = temp_git_file
 
     with open(git_file) as data_file:
-        data = [version._unicode_to_str(x) for x in json.loads(data_file.read().strip())]
+        data = [x for x in json.loads(data_file.read().strip())]
         git_origin = data[0]
         git_hash = data[1]
         git_description = data[2]
