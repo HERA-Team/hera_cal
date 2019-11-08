@@ -3,7 +3,6 @@
 # Copyright 2019 The HERA Collaboration
 # Licensed under the MIT License
 
-from __future__ import print_function, division, absolute_import
 import os
 import sys
 import numpy as np

@@ -1,11 +1,10 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 """Command-line drive script for absolute calibration after redundant calibration."""
 
-from __future__ import absolute_import, division, print_function
 import argparse
 from hera_cal.abscal import post_redcal_abscal_argparser, post_redcal_abscal_run
 import sys

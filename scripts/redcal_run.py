@@ -1,12 +1,11 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 """Command-line drive script for redundant calibration (firstcal, logcal, omnical, remove_degen).
 Includes solar flagging and iterative antenna exclusion based on chi^2."""
 
-from __future__ import absolute_import, division, print_function
 import argparse
 from hera_cal.redcal import redcal_argparser, redcal_run
 import sys
