@@ -1,6 +1,6 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 """Command-line drive script for hera_cal.smooth_cal. This script
@@ -10,7 +10,6 @@
 See help for a more detailed explanation of the parameters.
 """
 
-from __future__ import absolute_import, division, print_function
 from hera_cal.smooth_cal import CalibrationSmoother, smooth_cal_argparser
 import sys
 
