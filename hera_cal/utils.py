@@ -26,13 +26,21 @@ except ImportError:
 def _comply_antpol(antpol, x_orientation=None):
     '''Maps an input antenna polarization string onto a string compliant with pyuvdata
     and hera_cal.'''
-    return jnum2str(jstr2num(antpol, x_orientation=x_orientation), x_orientation=x_orientation)
+    try:
+        return jnum2str(jstr2num(antpol, x_orientation=x_orientation), x_orientation=x_orientation)
+    except KeyError:
+        # This preserves 'Jnn' and 'Jee' strings even when x_orientation is not specified.
+        return jnum2str(jstr2num(antpol, x_orientation='NORTH'), x_orientation='NORTH')
 
 
 def _comply_vispol(pol, x_orientation=None):
     '''Maps an input visibility polarization string onto a string compliant with pyuvdata
-    and hera_cal.'''
-    return polnum2str(polstr2num(pol, x_orientation=x_orientation), x_orientation=x_orientation)
+    and hera_cal. If x_orientation is specified, will convert xx/yy into ee/nn or nn/ee.'''
+    try:
+        return polnum2str(polstr2num(pol, x_orientation=x_orientation), x_orientation=x_orientation)
+    except KeyError:
+        # This preserves 'nn' and 'ee' strings even when x_orientation is not specified.
+        return polnum2str(polstr2num(pol, x_orientation='NORTH'), x_orientation='NORTH')
 
 
 _VISPOLS = [pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0]
