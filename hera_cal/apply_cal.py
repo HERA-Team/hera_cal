@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 """Module for applying calibration solutions to visibility data, both in memory and on disk."""
-
-from __future__ import print_function, division, absolute_import
 
 import numpy as np
 import argparse

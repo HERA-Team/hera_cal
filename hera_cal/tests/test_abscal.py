@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import print_function, division, absolute_import
 
 import pytest
 import os
@@ -11,7 +9,6 @@ import sys
 from collections import OrderedDict as odict
 import copy
 import glob
-from six.moves import map, zip
 from pyuvdata import UVCal, UVData
 import warnings
 

@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import absolute_import, division, print_function
 
 import numpy as np
 import scipy
 from collections import OrderedDict as odict
 from copy import deepcopy
-from six.moves import range
 import warnings
 import argparse
 

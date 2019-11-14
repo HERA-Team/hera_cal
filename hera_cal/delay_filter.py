@@ -1,15 +1,12 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
 """Module for delay filtering data and related operations."""
 
-from __future__ import print_function, division, absolute_import
-
 import numpy as np
 from copy import deepcopy
 import argparse
-from six.moves import range, zip
 
 from . import io
 from . import version

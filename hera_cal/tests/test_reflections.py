@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-# Copyright 2018 the HERA Project
+# Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
-from __future__ import print_function, division, absolute_import
 
 import pytest
 import numpy as np
@@ -10,7 +8,6 @@ from copy import deepcopy
 import os
 import sys
 import shutil
-from six.moves import zip
 from scipy import stats
 from pyuvdata import UVCal, UVData
 import operator
