@@ -43,7 +43,13 @@ def _comply_vispol(pol, x_orientation=None):
         return polnum2str(polstr2num(pol, x_orientation='NORTH'), x_orientation='NORTH')
 
 
-_VISPOLS = [pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0]
+_VISPOLS = set([pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0])
+# Add east/north polarizations to _VISPOLS while relying only on pyuvdata definitions
+for pol in copy.deepcopy(_VISPOLS):
+    try:
+        _VISPOLS.add(polnum2str(polstr2num(pol), x_orientation='NORTH'))
+    except KeyError:
+        pass
 SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _VISPOLS}
 JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
