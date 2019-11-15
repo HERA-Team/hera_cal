@@ -72,7 +72,7 @@ def comply_pol(pol, x_orientation=None):
     compliant with pyuvdata and hera_cal.'''
     try:
         return _comply_vispol(pol, x_orientation=x_orientation)
-    except(ValueError):  # happens if we have an antpol, not vispol
+    except(KeyError):  # happens if we have an antpol, not vispol
         return _comply_antpol(pol, x_orientation=x_orientation)
 
 
