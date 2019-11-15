@@ -24,6 +24,29 @@ from ..data import DATA_PATH
 
 
 class Test_Pol_Ops(object):
+    def test_comply_pol(self):
+        assert utils.comply_pol('XX') == 'xx'
+        assert utils.comply_pol('Xx') == 'xx'
+        assert utils.comply_pol('xx') == 'xx'
+        assert utils.comply_pol('JXX') == 'Jxx'
+        assert utils.comply_pol('Jxx') == 'Jxx'
+        assert utils.comply_pol('EE') == 'ee'
+        assert utils.comply_pol('Ee') == 'ee'
+        assert utils.comply_pol('ee') == 'ee'
+        assert utils.comply_pol('JEE') == 'Jee'
+        assert utils.comply_pol('Jee') == 'Jee'
+        assert utils.comply_pol('xx', x_orientation='EAST') == 'ee'
+        assert utils.comply_pol('Jxx', x_orientation='EAST') == 'Jee'
+        assert utils.comply_pol('XX', x_orientation='EAST') == 'ee'
+        assert utils.comply_pol('jXX', x_orientation='EAST') == 'Jee'
+        assert utils.comply_pol('XY', x_orientation='EAST') == 'en'
+        assert utils.comply_pol('XY', x_orientation='EAST') == 'en'
+        assert utils.comply_pol('jXY', x_orientation='EAST') == 'Jen'
+        assert utils.comply_pol('XY', x_orientation='NORTH') == 'ne'
+        assert utils.comply_pol('JXY', x_orientation='NORTH') == 'Jne'
+        pytest.raises(KeyError, utils.comply_pol, 'stuff')
+        pytest.raises(KeyError, utils.comply_pol, 'Jxe')
+
     def test_split_pol(self):
         assert utils.split_pol('xx') == ('Jxx', 'Jxx')
         assert utils.split_pol('xy') == ('Jxx', 'Jyy')
