@@ -18,7 +18,7 @@ import pyuvdata.tests as uvtest
 from sklearn import gaussian_process as gp
 
 from hera_sim.noise import white_noise
-from .. import utils, abscal, datacontainer, io
+from .. import utils, abscal, datacontainer, io, redcal
 from ..calibrations import CAL_PATH
 from ..data import DATA_PATH
 
@@ -482,6 +482,52 @@ def test_gp_interp1d():
     nstd = np.std(y - yint_0thin, axis=0)  # residual noise after subtraction with unthinned model
     rstd = np.std(yint_1thin - yint_2thin, axis=0)  # error flucturations between 1 and 2 thin models
     assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
+
+
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
+def test_red_average():
+    # setup
+    hd = io.HERAData(os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5"))
+    hd.read(return_data=False)
+    antpos, ants = hd.get_ENU_antpos(pick_data_ants=True)
+    antposd = dict(zip(ants, antpos))
+    reds = redcal.get_pos_reds(antposd)
+
+    # test redundant average
+    hda = utils.red_average(hd, reds, wgt_by_int=False, inplace=False)
+
+    # assert type and averaging is correct
+    assert isinstance(hda, io.HERAData)
+    assert hda.Nbls == len(reds)
+    nsamp = np.sum([hd.get_nsamples(bl + ('xx',)) * ~hd.get_flags(bl + ('xx',)) for bl in reds[0]], axis=0)
+    assert np.isclose(hda.get_nsamples(reds[0][0] + ('xx',)), nsamp).all()
+
+    # try automatic red calc
+    hda2 = utils.red_average(hd, wgt_by_int=False, inplace=False)
+    assert hda == hda2
+
+    # try with large tolerance
+    hda3 = utils.red_average(hd, bl_tol=1000, wgt_by_int=False, inplace=False)
+    assert hda3.Nbls == 1
+
+    # try different weighting
+    hda3 = utils.red_average(hd, wgt_by_int=True, inplace=False)
+    # because nsamp is the same, this should == hda2
+    assert hda3 == hda2
+
+    # now try with modified nsamples
+    _hd = copy.deepcopy(hd)
+    _hd.nsample_array[:] = 0.0
+    _hd.nsample_array[hd.antpair2ind(reds[0][0] + ('xx',))] = 1.0
+    _hd.flag_array[:] = False
+    hda3 = utils.red_average(_hd, wgt_by_int=True, inplace=False)
+    # averaged data should equal original, unaveraged data due to weighting
+    assert np.isclose(hda3.get_data(reds[0][0] + ('xx',)), hd.get_data(reds[0][0] + ('xx',))).all()
+
+    # test inplace
+    hda4 = copy.deepcopy(hd)
+    utils.red_average(hda4, wgt_by_int=False, inplace=True)
+    assert hda2 == hda4
 
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")

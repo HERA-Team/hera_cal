@@ -1093,8 +1093,9 @@ def red_average(hd, reds=None, bl_tol=1.0, wgt_by_int=False, inplace=False):
             # take the weighted average
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)
             davg = np.sum(d * w, axis=0) / wsum
-            navg = np.sum(n, axis=0)
-            iavg = np.sum(tint * w, axis=0) / wsum
+            navg = np.sum(n * f, axis=0)
+            fmax = np.max(f, axis=2)
+            iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
             favg = np.isclose(wsum, 0.0)
 
             # replace in HERAData with first bl of blg
