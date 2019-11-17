@@ -1033,6 +1033,86 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     return relative_diff, avg_relative_diff
 
 
+def red_average(hd, reds=None, bl_tol=1.0, wgt_by_int=False, inplace=False):
+    """
+    Redundantly average visibilities in a HERAData or UVData object.
+
+    Args:
+        hd : HERAData or UVData object
+            A UVData subclass object to redundantly average
+        reds : list, optional
+            Nested lists of antpair tuples to redundantly average.
+            E.g. [ [(1, 2), (2, 3)], [(1, 3), (2, 4)], ...]
+            If None, will calculate these from the metadata
+        bl_tol : float
+            Baseline redundancy tolerance in meters. Only used if reds is None.
+        wgt_by_int : bool
+            Weight average by total integration time (nsamples * integration_time * ~flags)
+            Otherwise weighting is just uniform (1 * ~flags)
+        inplace : bool
+            Perform average and downselect inplace, otherwise returns a deepcopy.
+            The first baseline in each reds sublist is kept.
+
+    Returns:
+        HERAData : if inplace is False
+    """
+    from hera_cal import redcal
+
+    # deepcopy
+    if not inplace:
+        hd = copy.deepcopy(hd)
+
+    # get metadata
+    pols = [polnum2str(pol) for pol in hd.polarization_array]
+
+    # get redundant groups
+    if reds is None:
+        antpos, ants = hd.get_ENU_antpos()
+        antposd = dict(zip(ants, antpos))
+        reds = redcal.get_pos_reds(antposd, bl_error_tol=bl_tol)
+
+    # eliminate baselines not in data
+    antpairs = hd.get_antpairs()
+    reds = [[bl for bl in blg if bl in antpairs] for blg in reds]
+    reds = [blg for blg in reds if len(blg) > 0]
+
+    # iterate over redundant groups and polarizations
+    for pol in pols:
+        for blg in reds:
+            # get data and weight arrays for this pol-blgroup
+            d = np.asarray([hd.get_data(bl + (pol,)) for bl in blg])
+            f = np.asarray([(~hd.get_flags(bl + (pol,))).astype(np.float) for bl in blg])
+            n = np.asarray([hd.get_nsamples(bl + (pol,)) for bl in blg])
+            tint = np.asarray([hd.integration_time[hd.antpair2ind(bl + (pol,))] for bl in blg])[:, :, None]
+            if wgt_by_int:
+                # this is inverse variance weighting b/c noise ~ 1 / sqrt(tint)
+                w = f * n * tint
+            else:
+                w = f
+
+            # take the weighted average
+            wsum = np.sum(w, axis=0).clip(1e-10, np.inf)
+            davg = np.sum(d * w, axis=0) / wsum
+            navg = np.sum(n, axis=0)
+            iavg = np.sum(tint * w, axis=0) / wsum
+            favg = np.isclose(wsum, 0.0)
+
+            # replace in HERAData with first bl of blg
+            blinds = hd.antpair2ind(blg[0])
+            polind = pols.index(pol)
+            hd.data_array[blinds, 0, :, polind] = davg
+            hd.flag_array[blinds, 0, :, polind] = favg
+            hd.nsample_array[blinds, 0, :, polind] = navg
+            hd.integration_time[blinds] = iavg
+
+    # select out averaged bls
+    bls = [blg[0] + (pol,) for pol in pols for blg in reds]
+    hd.select(bls=bls)
+
+    if not inplace:
+        return hd
+
+
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
     at the given hour angle (ha) and declination (dec).
