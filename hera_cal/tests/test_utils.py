@@ -552,6 +552,11 @@ def test_red_average():
     # averaged data should equal original, unaveraged data due to weighting
     assert np.isclose(hda3.get_data(reds[0][0] + ('xx',)), hd.get_data(reds[0][0] + ('xx',))).all()
 
+    # exceptions
+    _data = copy.deepcopy(data)
+    _data.antpos = None
+    pytest.raises(ValueError, utils.red_average, _data)
+
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 def test_gain_relative_difference():
