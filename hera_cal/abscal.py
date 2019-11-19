@@ -779,6 +779,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
         wgts = odict()
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(data[k], dtype=np.float)
+    flags = DataContainer({k: ~wgts[k].astype(np.bool) for k in wgts})
 
     # center antenna positions about the reference antenna
     if refant is None:
@@ -787,16 +788,17 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
     antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
     # average data over baselines
-    _reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data.pols())
+    _reds = redcal.get_pos_reds(antpos, bl_error_tol=tol)
+    ap = data.antpairs()
     reds = []
     for _red in _reds:
-        red = [bl for bl in _red if bl in keys]
+        red = [bl for bl in _red if bl in ap]
         if len(red) > 0:
             reds.append(red)
-    avg_data, avg_wgts, red_keys = avg_data_across_red_bls(DataContainer({k: data[k] for k in keys}),
-                                                           antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
-    avg_model, _, _ = avg_data_across_red_bls(DataContainer({k: model[k] for k in keys}),
-                                              antpos, wgts=wgts, broadcast_wgts=False, tol=tol, reds=reds)
+    avg_data, avg_flags, _ = utils.red_average(data, reds=reds, wgt_by_int=False, flags=flags, inplace=False)
+    red_keys = list(avg_data.keys())
+    avg_wgts = DataContainer({k: (~avg_flags[k]).astype(np.float) for k in avg_flags})
+    avg_model, _, _ = utils.red_average(model, reds=reds, wgt_by_int=False, flags=flags, inplace=False)
 
     ls_data, ls_wgts, bls, pols = {}, {}, {}, {}
     for rk in red_keys:
@@ -1492,6 +1494,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     Output: (red_data, red_wgts, red_keys)
     -------
     """
+    print("Warning: This function will be deprecated in the next hera_cal release.")
     # get data keys
     keys = list(data.keys())
 

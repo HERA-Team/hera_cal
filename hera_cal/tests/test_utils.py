@@ -488,10 +488,11 @@ def test_gp_interp1d():
 def test_red_average():
     # setup
     hd = io.HERAData(os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5"))
-    hd.read(return_data=False)
+    data, flags, nsamples = hd.read()
     antpos, ants = hd.get_ENU_antpos(pick_data_ants=True)
     antposd = dict(zip(ants, antpos))
     reds = redcal.get_pos_reds(antposd)
+    blkey = reds[0][0] + ('xx',)
 
     # test redundant average
     hda = utils.red_average(hd, reds, wgt_by_int=False, inplace=False)
@@ -500,11 +501,38 @@ def test_red_average():
     assert isinstance(hda, io.HERAData)
     assert hda.Nbls == len(reds)
     nsamp = np.sum([hd.get_nsamples(bl + ('xx',)) * ~hd.get_flags(bl + ('xx',)) for bl in reds[0]], axis=0)
-    assert np.isclose(hda.get_nsamples(reds[0][0] + ('xx',)), nsamp).all()
+    assert np.isclose(hda.get_nsamples(blkey), nsamp).all()
+    d = np.asarray([hd.get_data(bl + ('xx',)) for bl in reds[0]])
+    w = np.asarray([(~hd.get_flags(bl + ('xx',))).astype(float) for bl in reds[0]])
+    davg = np.sum(d * w, axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf)
+    assert np.isclose(hda.get_data(blkey), davg).all()
+
+    # try with DataContainer
+    data_avg, flag_avg, _ = utils.red_average(data, reds, flags=flags, wgt_by_int=False, inplace=False)
+    assert isinstance(data_avg, datacontainer.DataContainer)
+    assert len(data_avg) == len(reds)
+    assert np.isclose(data_avg[blkey], davg).all()
+    assert np.isclose(flag_avg[blkey], hda.get_flags(blkey)).all()
+    # try with no flags
+    data_avg2, _, _ = utils.red_average(data, reds, wgt_by_int=False, inplace=False)
+    assert np.isclose(data_avg2[blkey], np.mean([data[bl + ('xx',)] for bl in reds[0]], axis=0)).all()
+
+    # test inplace
+    _hda = copy.deepcopy(hd)
+    utils.red_average(_hda, wgt_by_int=False, inplace=True)
+    assert hda == _hda
+
+    # try with DataContainer
+    data2, flags2 = copy.deepcopy(data), copy.deepcopy(flags)
+    utils.red_average(data2, flags=flags2, wgt_by_int=False, inplace=True)
+    assert np.isclose(data2[blkey], data_avg[blkey]).all()
+    assert np.isclose(flags2[blkey], flag_avg[blkey]).all()
 
     # try automatic red calc
     hda2 = utils.red_average(hd, wgt_by_int=False, inplace=False)
     assert hda == hda2
+    data_avg3, _, _ = utils.red_average(data, flags=flags, wgt_by_int=False, inplace=False)
+    assert np.isclose(data_avg[blkey], data_avg3[blkey]).all()
 
     # try with large tolerance
     hda3 = utils.red_average(hd, bl_tol=1000, wgt_by_int=False, inplace=False)
@@ -523,11 +551,6 @@ def test_red_average():
     hda3 = utils.red_average(_hd, wgt_by_int=True, inplace=False)
     # averaged data should equal original, unaveraged data due to weighting
     assert np.isclose(hda3.get_data(reds[0][0] + ('xx',)), hd.get_data(reds[0][0] + ('xx',))).all()
-
-    # test inplace
-    hda4 = copy.deepcopy(hd)
-    utils.red_average(hda4, wgt_by_int=False, inplace=True)
-    assert hda2 == hda4
 
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
