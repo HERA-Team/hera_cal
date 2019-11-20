@@ -796,10 +796,10 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
         red = [bl for bl in _red if bl in ap]
         if len(red) > 0:
             reds.append(red)
-    avg_data, avg_flags, _ = utils.red_average(data, reds=reds, wgt_by_int=False, flags=flags, inplace=False)
+    avg_data, avg_flags, _ = utils.red_average(data, reds=reds, flags=flags, inplace=False)
     red_keys = list(avg_data.keys())
     avg_wgts = DataContainer({k: (~avg_flags[k]).astype(np.float) for k in avg_flags})
-    avg_model, _, _ = utils.red_average(model, reds=reds, wgt_by_int=False, flags=flags, inplace=False)
+    avg_model, _, _ = utils.red_average(model, reds=reds, flags=flags, inplace=False)
 
     ls_data, ls_wgts, bls, pols = {}, {}, {}, {}
     for rk in red_keys:
