@@ -15,7 +15,7 @@ class TestDataContainer(object):
     def setup_method(self):
         self.antpairs = [(1, 2), (2, 3), (3, 4), (1, 3), (2, 4)]  # not (1,4)
         self.pols = ['nn', 'ee']
-        self.x_orientation = 'NORTH'
+        self.x_orientation = 'north'
         self.blpol = {}
         for bl in self.antpairs:
             self.blpol[bl] = {}

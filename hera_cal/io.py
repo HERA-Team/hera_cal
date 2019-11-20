@@ -952,7 +952,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 
 def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
-              return_uvd=False, longitude=21.42830, start_jd=None, x_orientation="NORTH", instrument="HERA",
+              return_uvd=False, longitude=21.42830, start_jd=None, x_orientation="north", instrument="HERA",
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
               telescope_location=np.array([5109325.85521063, 2005235.09142983, -3239928.42475395]),
               integration_time=None, **kwargs):
@@ -997,7 +997,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
 
     start_jd : type=float, starting integer Julian Date of time_array if time_array is None.
 
-    x_orientation : type=str, orientation of X dipole, options=['EAST', 'NORTH']
+    x_orientation : type=str, orientation of X dipole, options=['east', 'north']
 
     instrument : type=str, instrument name.
 
@@ -1294,7 +1294,7 @@ def load_cal(input_cal, return_meta=False):
 
 def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=None, write_file=True,
               return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
-              history=' ', x_orientation="NORTH", telescope_name='HERA', cal_style='redundant',
+              history=' ', x_orientation="north", telescope_name='HERA', cal_style='redundant',
               zero_check=True, **kwargs):
     '''Format gain solution dictionary into pyuvdata.UVCal and write to file
 
@@ -1319,7 +1319,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
                           to get model, or 'divide' into data to get model
                           options=['multiply', 'divide']
         history : type=str, history string for UVCal object.
-        x_orientation : type=str, orientation of X dipole, options=['EAST', 'NORTH']
+        x_orientation : type=str, orientation of X dipole, options=['east', 'north']
         telescope_name : type=str, name of telescope
         cal_style : type=str, style of calibration solutions, options=['redundant', 'sky']. If
                     cal_style == sky, additional params are required. See pyuvdata.UVCal doc.

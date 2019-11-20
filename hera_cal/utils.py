@@ -30,7 +30,7 @@ def _comply_antpol(antpol, x_orientation=None):
         return jnum2str(jstr2num(antpol, x_orientation=x_orientation), x_orientation=x_orientation)
     except KeyError:
         # This preserves 'Jnn' and 'Jee' strings even when x_orientation is not specified.
-        return jnum2str(jstr2num(antpol, x_orientation='NORTH'), x_orientation='NORTH')
+        return jnum2str(jstr2num(antpol, x_orientation='north'), x_orientation='north')
 
 
 def _comply_vispol(pol, x_orientation=None):
@@ -40,14 +40,14 @@ def _comply_vispol(pol, x_orientation=None):
         return polnum2str(polstr2num(pol, x_orientation=x_orientation), x_orientation=x_orientation)
     except KeyError:
         # This preserves 'nn' and 'ee' strings even when x_orientation is not specified.
-        return polnum2str(polstr2num(pol, x_orientation='NORTH'), x_orientation='NORTH')
+        return polnum2str(polstr2num(pol, x_orientation='north'), x_orientation='north')
 
 
 _VISPOLS = set([pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0])
 # Add east/north polarizations to _VISPOLS while relying only on pyuvdata definitions
 for pol in copy.deepcopy(_VISPOLS):
     try:
-        _VISPOLS.add(polnum2str(polstr2num(pol), x_orientation='NORTH'))
+        _VISPOLS.add(polnum2str(polstr2num(pol), x_orientation='north'))
     except KeyError:
         pass
 SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _VISPOLS}

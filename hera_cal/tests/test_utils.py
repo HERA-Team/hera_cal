@@ -35,15 +35,15 @@ class Test_Pol_Ops(object):
         assert utils.comply_pol('ee') == 'ee'
         assert utils.comply_pol('JEE') == 'Jee'
         assert utils.comply_pol('Jee') == 'Jee'
-        assert utils.comply_pol('xx', x_orientation='EAST') == 'ee'
-        assert utils.comply_pol('Jxx', x_orientation='EAST') == 'Jee'
-        assert utils.comply_pol('XX', x_orientation='EAST') == 'ee'
-        assert utils.comply_pol('jXX', x_orientation='EAST') == 'Jee'
-        assert utils.comply_pol('XY', x_orientation='EAST') == 'en'
-        assert utils.comply_pol('XY', x_orientation='EAST') == 'en'
-        assert utils.comply_pol('jXY', x_orientation='EAST') == 'Jen'
-        assert utils.comply_pol('XY', x_orientation='NORTH') == 'ne'
-        assert utils.comply_pol('JXY', x_orientation='NORTH') == 'Jne'
+        assert utils.comply_pol('xx', x_orientation='east') == 'ee'
+        assert utils.comply_pol('Jxx', x_orientation='east') == 'Jee'
+        assert utils.comply_pol('XX', x_orientation='east') == 'ee'
+        assert utils.comply_pol('jXX', x_orientation='east') == 'Jee'
+        assert utils.comply_pol('XY', x_orientation='east') == 'en'
+        assert utils.comply_pol('XY', x_orientation='east') == 'en'
+        assert utils.comply_pol('jXY', x_orientation='east') == 'Jen'
+        assert utils.comply_pol('XY', x_orientation='north') == 'ne'
+        assert utils.comply_pol('JXY', x_orientation='north') == 'Jne'
         pytest.raises(KeyError, utils.comply_pol, 'stuff')
         pytest.raises(KeyError, utils.comply_pol, 'Jxe')
 
@@ -103,13 +103,13 @@ class Test_Pol_Ops(object):
         assert utils.comply_bl((1, 2, 'en')) == (1, 2, 'en')
         assert utils.comply_bl((1, 2, 'EE')) == (1, 2, 'ee')
 
-        assert utils.comply_bl((1, 2, 'ee'), x_orientation='NORTH') == (1, 2, 'ee')
-        assert utils.comply_bl((1, 2, 'en'), x_orientation='NORTH') == (1, 2, 'en')
-        assert utils.comply_bl((1, 2, 'EE'), x_orientation='NORTH') == (1, 2, 'ee')
+        assert utils.comply_bl((1, 2, 'ee'), x_orientation='north') == (1, 2, 'ee')
+        assert utils.comply_bl((1, 2, 'en'), x_orientation='north') == (1, 2, 'en')
+        assert utils.comply_bl((1, 2, 'EE'), x_orientation='north') == (1, 2, 'ee')
 
-        assert utils.comply_bl((1, 2, 'yy'), x_orientation='NORTH') == (1, 2, 'ee')
-        assert utils.comply_bl((1, 2, 'yx'), x_orientation='NORTH') == (1, 2, 'en')
-        assert utils.comply_bl((1, 2, 'YY'), x_orientation='NORTH') == (1, 2, 'ee')
+        assert utils.comply_bl((1, 2, 'yy'), x_orientation='north') == (1, 2, 'ee')
+        assert utils.comply_bl((1, 2, 'yx'), x_orientation='north') == (1, 2, 'en')
+        assert utils.comply_bl((1, 2, 'YY'), x_orientation='north') == (1, 2, 'ee')
         
         assert utils.comply_bl((1, 2, 'pI')) == (1, 2, 'pI')
 
@@ -121,12 +121,12 @@ class Test_Pol_Ops(object):
         assert utils.make_bl((1, 2, 'XX')) == (1, 2, 'xx')
         assert utils.make_bl((1, 2), 'XX') == (1, 2, 'xx')
 
-        assert utils.make_bl((1, 2, 'xx'), x_orientation='NORTH') == (1, 2, 'nn')
-        assert utils.make_bl((1, 2), 'xx', x_orientation='NORTH') == (1, 2, 'nn')
-        assert utils.make_bl((1, 2, 'xy'), x_orientation='NORTH') == (1, 2, 'ne')
-        assert utils.make_bl((1, 2), 'xy', x_orientation='NORTH') == (1, 2, 'ne')
-        assert utils.make_bl((1, 2, 'XX'), x_orientation='NORTH') == (1, 2, 'nn')
-        assert utils.make_bl((1, 2), 'XX', x_orientation='NORTH') == (1, 2, 'nn')
+        assert utils.make_bl((1, 2, 'xx'), x_orientation='north') == (1, 2, 'nn')
+        assert utils.make_bl((1, 2), 'xx', x_orientation='north') == (1, 2, 'nn')
+        assert utils.make_bl((1, 2, 'xy'), x_orientation='north') == (1, 2, 'ne')
+        assert utils.make_bl((1, 2), 'xy', x_orientation='north') == (1, 2, 'ne')
+        assert utils.make_bl((1, 2, 'XX'), x_orientation='north') == (1, 2, 'nn')
+        assert utils.make_bl((1, 2), 'XX', x_orientation='north') == (1, 2, 'nn')
 
         assert utils.make_bl((1, 2, 'ee')) == (1, 2, 'ee')
         assert utils.make_bl((1, 2), 'ee') == (1, 2, 'ee')
@@ -135,12 +135,12 @@ class Test_Pol_Ops(object):
         assert utils.make_bl((1, 2, 'EE')) == (1, 2, 'ee')
         assert utils.make_bl((1, 2), 'EE') == (1, 2, 'ee')
 
-        assert utils.make_bl((1, 2, 'ee'), x_orientation='NORTH') == (1, 2, 'ee')
-        assert utils.make_bl((1, 2), 'ee', x_orientation='NORTH') == (1, 2, 'ee')
-        assert utils.make_bl((1, 2, 'en'), x_orientation='NORTH') == (1, 2, 'en')
-        assert utils.make_bl((1, 2), 'en', x_orientation='NORTH') == (1, 2, 'en')
-        assert utils.make_bl((1, 2, 'EE'), x_orientation='NORTH') == (1, 2, 'ee')
-        assert utils.make_bl((1, 2), 'EE', x_orientation='NORTH') == (1, 2, 'ee')
+        assert utils.make_bl((1, 2, 'ee'), x_orientation='north') == (1, 2, 'ee')
+        assert utils.make_bl((1, 2), 'ee', x_orientation='north') == (1, 2, 'ee')
+        assert utils.make_bl((1, 2, 'en'), x_orientation='north') == (1, 2, 'en')
+        assert utils.make_bl((1, 2), 'en', x_orientation='north') == (1, 2, 'en')
+        assert utils.make_bl((1, 2, 'EE'), x_orientation='north') == (1, 2, 'ee')
+        assert utils.make_bl((1, 2), 'EE', x_orientation='north') == (1, 2, 'ee')
 
         assert utils.make_bl((1, 2, 'pI')) == (1, 2, 'pI')
         assert utils.make_bl((1, 2), 'pI') == (1, 2, 'pI')
