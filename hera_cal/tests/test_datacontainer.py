@@ -63,7 +63,9 @@ class TestDataContainer(object):
         dc = datacontainer.DataContainer(self.blpol, x_orientation=self.x_orientation)
         assert set(self.antpairs) == dc.antpairs()
         assert set(self.antpairs) == dc.antpairs('nn')
+        assert set(self.antpairs) == dc.antpairs('xx')
         assert set(self.antpairs) == dc.antpairs('ee')
+        assert set(self.antpairs) == dc.antpairs('yy')
         dc = datacontainer.DataContainer(self.polbl, x_orientation=self.x_orientation)
         assert set(self.antpairs) == dc.antpairs()
         assert set(self.antpairs) == dc.antpairs('nn')
@@ -154,7 +156,7 @@ class TestDataContainer(object):
         assert (1, 2, 'nn') not in dc
         assert 'nn' in dc.pols()
         assert (1, 2) in dc.antpairs()
-        del dc[(1, 2, 'ee')]
+        del dc[(1, 2, 'yy')]
         assert (1, 2) not in dc.antpairs()
         del dc[(2, 3, 'NN')]
         assert (2, 3, 'nn') not in dc
@@ -164,34 +166,54 @@ class TestDataContainer(object):
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol, x_orientation=self.x_orientation)
         assert dc[(1, 2, 'nn')] == 1j
+        assert dc[(1, 2, 'xx')] == 1j
         assert dc[(2, 1, 'nn')] == -1j
+        assert dc[(2, 1, 'xx')] == -1j
         assert dc[(1, 2)] == {'nn': 1j, 'ee': 1j}
         assert set(dc['nn'].keys()) == set(self.antpairs)
+        assert set(dc['xx'].keys()) == set(self.antpairs)
         assert dc[(1, 2, 'nn')] == dc.get_data((1, 2, 'nn'))
+        assert dc[(1, 2, 'xx')] == dc.get_data((1, 2, 'xx'))
         assert dc[(1, 2, 'nn')] == dc.get_data(1, 2, 'nn')
+        assert dc[(1, 2, 'xx')] == dc.get_data(1, 2, 'xx')
         dc = datacontainer.DataContainer(self.polbl, x_orientation=self.x_orientation)
         assert dc[(1, 2, 'nn')] == 1j
+        assert dc[(1, 2, 'xx')] == 1j
         assert dc[(2, 1, 'nn')] == -1j
+        assert dc[(2, 1, 'xx')] == -1j
         assert dc[(1, 2)] == {'nn': 1j, 'ee': 1j}
         assert set(dc['nn'].keys()) == set(self.antpairs)
+        assert set(dc['xx'].keys()) == set(self.antpairs)
         assert dc[(2, 1, 'nn')] == dc.get_data((2, 1, 'nn'))
+        assert dc[(2, 1, 'xx')] == dc.get_data((2, 1, 'xx'))
         assert dc[(2, 1, 'nn')] == dc.get_data(2, 1, 'nn')
+        assert dc[(2, 1, 'xx')] == dc.get_data(2, 1, 'xx')
         dc = datacontainer.DataContainer(self.both, x_orientation=self.x_orientation)
         assert dc[(1, 2, 'nn')] == 1j
+        assert dc[(1, 2, 'xx')] == 1j
         assert dc[(2, 1, 'nn')] == -1j
+        assert dc[(2, 1, 'xx')] == -1j
         assert dc[(1, 2)] == {'nn': 1j, 'ee': 1j}
         assert set(dc['nn'].keys()) == set(self.antpairs)
+        assert set(dc['xx'].keys()) == set(self.antpairs)
         assert dc[(1, 2)] == dc.get_data((1, 2))
         assert dc[(1, 2)] == dc.get_data(1, 2)
+        assert dc[(1, 2, 'NN')] == 1j
+        assert dc[(2, 1, 'NN')] == -1j
+        assert dc[(2, 1, 'NN')] == dc.get_data(2, 1, 'NN')
+        assert dc[(2, 1, 'NN')] == dc.get_data(2, 1, 'nn')
         assert dc[(1, 2, 'XX')] == 1j
         assert dc[(2, 1, 'XX')] == -1j
         assert dc[(2, 1, 'XX')] == dc.get_data(2, 1, 'XX')
-        assert dc[(2, 1, 'XX')] == dc.get_data(2, 1, 'nn')
-        dc = datacontainer.DataContainer(self.bools)
+        assert dc[(2, 1, 'XX')] == dc.get_data(2, 1, 'xx')
+        dc = datacontainer.DataContainer(self.bools, x_orientation=self.x_orientation)
         assert dc[(1, 2, 'nn')] == np.array([True])
         assert dc[(2, 1, 'nn')] == np.array([True])
         assert dc[(2, 1, 'nn')].dtype == bool
-        with pytest.raises(KeyError, match=r".*(10, 1, 'nn').*(1, 10, 'nn).*"):
+        assert dc[(1, 2, 'xx')] == np.array([True])
+        assert dc[(2, 1, 'xx')] == np.array([True])
+        assert dc[(2, 1, 'xx')].dtype == bool
+        with pytest.raises(KeyError, match=r".*(10, 1, 'nn').*(1, 10, 'nn').*"):
             dc[(10, 1, 'nn')]
 
     def test_has_key(self):
@@ -291,6 +313,37 @@ class TestDataContainer(object):
         assert dc[(1, 2, 'nn')] == np.array([True])
         assert dc[(2, 1, 'nn')] == np.array([True])
         assert dc[(2, 1, 'nn')].dtype == bool
+
+        dc = datacontainer.DataContainer(self.blpol, x_orientation=self.x_orientation)
+        # test polarization convetion via x_orientation
+        dc[(100, 101, 'XY')] = np.arange(100) + np.arange(100) * 1j
+        assert dc[(100, 101, 'ne')].shape == (100,)
+        assert dc[(100, 101, 'xy')].shape == (100,)
+        assert dc[(100, 101, 'ne')].dtype == np.complex
+        assert dc[(100, 101, 'xy')].dtype == np.complex
+        assert np.allclose(dc[(100, 101, 'ne')][1], (1 + 1j))
+        assert np.allclose(dc[(100, 101, 'xy')][1], (1 + 1j))
+        assert np.allclose(dc[(101, 100, 'en')][1], (1 - 1j))
+        assert np.allclose(dc[(101, 100, 'yx')][1], (1 - 1j))
+        assert len(dc.keys()) == 11
+        assert (100, 101) in dc._antpairs
+        assert 'ne' in dc._pols
+
+        dc = datacontainer.DataContainer(self.blpol)
+        # test polarization convetion via x_orientation
+        dc[(100, 101, 'XY')] = np.arange(100) + np.arange(100) * 1j
+        with pytest.raises(KeyError):
+            dc[(100, 101, 'ne')]
+        assert dc[(100, 101, 'xy')].shape == (100,)
+        assert dc[(100, 101, 'xy')].dtype == np.complex
+        assert np.allclose(dc[(100, 101, 'xy')][1], (1 + 1j))
+        with pytest.raises(KeyError):
+            dc[(101, 100, 'en')]
+        assert np.allclose(dc[(101, 100, 'yx')][1], (1 - 1j))
+        assert len(dc.keys()) == 11
+        assert (100, 101) in dc._antpairs
+        assert 'xy' in dc._pols
+        assert 'ne' not in dc._pols
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
