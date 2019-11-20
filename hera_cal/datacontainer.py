@@ -68,6 +68,7 @@ class DataContainer:
         self.lsts = None
         self.times_by_bl = None
         self.lsts_by_bl = None
+        
         self.x_orientation = x_orientation
 
     def antpairs(self, pol=None):
@@ -115,16 +116,17 @@ class DataContainer:
         elif len(key) == 2:  # asking for a bl
             return dict(zip(self._pols, [self[make_bl(key, pol, x_orientation=self.x_orientation)] for pol in self._pols]))
         else:
+            bl = comply_bl(key, x_orientation=self.x_orientation)
             try:
-                return self._data[comply_bl(key, x_orientation=self.x_orientation)]
+                return self._data[bl]
             except(KeyError):
                 try:
-                    if np.iscomplexobj(self._data[reverse_bl(key, x_orientation=self.x_orientation)]):
-                        return np.conj(self._data[reverse_bl(key, x_orientation=self.x_orientation)])
+                    if np.iscomplexobj(self._data[reverse_bl(bl)]):
+                        return np.conj(self._data[reverse_bl(bl)])
                     else:
-                        return self._data[reverse_bl(key, x_orientation=self.x_orientation)]
+                        return self._data[reverse_bl(bl)]
                 except(KeyError):
-                    raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key, x_orientation=self.x_orientation)))
+                    raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
 
     def __setitem__(self, key, value):
         '''Sets the data corresponding to the key. Only supports the form (0,1,'xx').
@@ -133,15 +135,15 @@ class DataContainer:
         if len(key) == 3:
             key = comply_bl(key, x_orientation=self.x_orientation)
             # check given bl ordering
-            if key in self.keys() or reverse_bl(key, x_orientation=self.x_orientation) in self.keys():
+            if key in self.keys() or reverse_bl(key) in self.keys():
                 # key already exists
                 if key in self.keys():
                     self._data[key] = value
                 else:
                     if np.iscomplexobj(value):
-                        self._data[reverse_bl(key, x_orientation=self.x_orientation)] = np.conj(value)
+                        self._data[reverse_bl(key)] = np.conj(value)
                     else:
-                        self._data[reverse_bl(key, x_orientation=self.x_orientation)] = value
+                        self._data[reverse_bl(key)] = value
             else:
                 self._data[key] = value
                 self._antpairs.update({tuple(key[:2])})
@@ -403,8 +405,8 @@ class DataContainer:
     def __contains__(self, key):
         '''Returns True if the key is in the data, abstracting away case and baseline order.'''
         try:
-            return (comply_bl(key, x_orientation=self.x_orientation) in self.keys()
-                    or reverse_bl(key, x_orientation=self.x_orientation) in self.keys())
+            bl = comply_bl(key, x_orientation=self.x_orientation)
+            return (bl in self.keys() or reverse_bl(bl) in self.keys())
         except(BaseException):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
             return False
 
@@ -422,15 +424,14 @@ class DataContainer:
     def has_key(self, *args):
         '''Interface to DataContainer.__contains__(key).'''
         if len(args) == 1:
-            return (comply_bl(args[0], x_orientation=self.x_orientation) in self._data
-                    or reverse_bl(args[0], x_orientation=self.x_orientation) in self._data)
+            bl = comply_bl(args[0], x_orientation=self.x_orientation)
+            return (bl in self._data or reverse_bl(bl) in self._data)
         else:
             return make_bl(args[0], args[1], x_orientation=self.x_orientation) in self
 
     def has_antpair(self, antpair):
         '''Returns True if baseline or its complex conjugate is in the data.'''
-        return (antpair in self._antpairs
-                or reverse_bl(antpair, x_orientation=self.x_orientation) in self._antpairs)
+        return (antpair in self._antpairs or reverse_bl(antpair) in self._antpairs)
 
     def has_pol(self, pol):
         '''Returns True if polarization (with some capitalization) is in the data.'''
