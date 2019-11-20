@@ -33,6 +33,7 @@ from scipy import signal, interpolate, spatial
 from scipy.optimize import brute, minimize
 from pyuvdata import UVCal, UVData
 import linsolve
+import warnings
 
 from . import version
 from .apply_cal import calibrate_in_place
@@ -1494,7 +1495,8 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     Output: (red_data, red_wgts, red_keys)
     -------
     """
-    print("Warning: This function will be deprecated in the next hera_cal release.")
+    warnings.warn("Warning: This function will be deprecated in the next hera_cal release.")
+
     # get data keys
     keys = list(data.keys())
 

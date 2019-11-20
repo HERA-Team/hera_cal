@@ -1033,12 +1033,11 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     return relative_diff, avg_relative_diff
 
 
-def red_average(data, reds=None, bl_tol=1.0, wgt_by_int=False, inplace=False,
-                flags=None, nsamples=None):
+def red_average(data, reds=None, bl_tol=1.0, inplace=False,
+                wgts=None, flags=None, nsamples=None):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
-
-    Note: different polarizations are assumed to be non-redundant.
+    Average is weighted by integration_time * nsamples * ~flags unless wgts are fed.
 
     Args:
         data : DataContainer, HERAData or UVData object
@@ -1049,16 +1048,16 @@ def red_average(data, reds=None, bl_tol=1.0, wgt_by_int=False, inplace=False,
             If None, will calculate these from the metadata
         bl_tol : float
             Baseline redundancy tolerance in meters. Only used if reds is None.
-        wgt_by_int : bool
-            Weight average by total integration time (nsamples * integration_time * ~flags)
-            Otherwise weighting is just uniform (1 * ~flags)
         inplace : bool
             Perform average and downselect inplace, otherwise returns a deepcopy.
             The first baseline in each reds sublist is kept.
+        wgts : DataContainer
+            Manual weights to use in redundant average. This supercedes flags and nsamples
+            if provided, and will also be used if input data is a UVData or a subclass of it.
         flags : DataContainer
             if data is a DataContainer, these are its flags
         nsamples : DataContainer
-            if data is a DataContainer, these are its nsamples. Only required if wgt_by_int
+            if data is a DataContainer, these are its nsamples
 
     Returns:
         if fed a DataContainer:
@@ -1067,9 +1066,35 @@ def red_average(data, reds=None, bl_tol=1.0, wgt_by_int=False, inplace=False,
             DataContainer, summed nsamples
         elif fed a HERAData or UVData:
             HERAData or UVData object, averaged data
+
+    Notes:
+        1. Different polarizations are assumed to be non-redundant.
+        2. Default weighting is nsamples * integration_time * ~flags.
+        3. If wgts Container is fed then they supercede flag and nsample weighting.
     """
     from hera_cal import redcal, datacontainer
+
+    # type checks
+    if not (isinstance(data, datacontainer.DataContainer) or isinstance(data, UVData)):
+        raise ValueError("data must be a DataContainer or a UVData or its subclass")
     fed_container = isinstance(data, datacontainer.DataContainer)
+
+    # fill DataContainers if necessary
+    if fed_container:
+        if not inplace:
+            flags = copy.deepcopy(flags)
+            nsamples = copy.deepcopy(nsamples)
+        if flags is None:
+            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], np.bool) for k in data})
+        if nsamples is None:
+            nsamples = datacontainer.DataContainer({k: np.ones_like(data[k], np.float) for k in data})
+
+    # get weights: if wgts are not fed, then use flags and nsamples
+    if wgts is None:
+        if fed_container:
+            wgts = datacontainer.DataContainer({k: nsamples[k] * ~flags[k] for k in data})
+        else:
+            wgts = datacontainer.DataContainer({k: data.get_nsamples(k) * ~data.get_flags(k) for k in data.get_antpairpols()})
 
     # deepcopy
     if not inplace:
@@ -1101,16 +1126,6 @@ def red_average(data, reds=None, bl_tol=1.0, wgt_by_int=False, inplace=False,
     reds = [[bl for bl in blg if bl in antpairs] for blg in reds]
     reds = [blg for blg in reds if len(blg) > 0]
 
-    # fill flags and nsamples if needed
-    if fed_container:
-        if not inplace:
-            flags = copy.deepcopy(flags)
-            nsamples = copy.deepcopy(nsamples)
-        if flags is None:
-            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], np.bool) for k in data})
-        if nsamples is None:
-            nsamples = datacontainer.DataContainer({k: np.ones_like(data[k], np.float) for k in data})
-
     # iterate over redundant groups and polarizations
     for pol in pols:
         for blg in reds:
@@ -1119,19 +1134,16 @@ def red_average(data, reds=None, bl_tol=1.0, wgt_by_int=False, inplace=False,
                 d = np.asarray([data[bl + (pol,)] for bl in blg])
                 f = np.asarray([(~flags[bl + (pol,)]).astype(np.float) for bl in blg])
                 n = np.asarray([nsamples[bl + (pol,)] for bl in blg])
-                tint = np.array([1.0])  # DataContainer can't track integration time
+                # DataContainer can't track integration time, so no tint here
+                tint = np.array([1.0])
+                w = np.asarray([wgts[bl + (pol,)] for bl in blg])
 
             else:
                 d = np.asarray([data.get_data(bl + (pol,)) for bl in blg])
                 f = np.asarray([(~data.get_flags(bl + (pol,))).astype(np.float) for bl in blg])
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = np.asarray([data.integration_time[data.antpair2ind(bl + (pol,))] for bl in blg])[:, :, None]
-
-            if wgt_by_int:
-                # this is inverse variance weighting b/c noise ~ 1 / sqrt(tint)
-                w = f * n * tint
-            else:
-                w = f
+                w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
 
             # take the weighted average
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
