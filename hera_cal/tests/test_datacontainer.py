@@ -10,7 +10,6 @@ from .. import abscal, datacontainer, io
 from ..data import DATA_PATH
 
 
-@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 class TestDataContainer(object):
     def setup_method(self):
         self.antpairs = [(1, 2), (2, 3), (3, 4), (1, 3), (2, 4)]  # not (1,4)
@@ -290,6 +289,10 @@ class TestDataContainer(object):
         assert dc[(1, 2, 'xx')] == np.array([True])
         assert dc[(2, 1, 'xx')] == np.array([True])
         assert dc[(2, 1, 'xx')].dtype == bool
+
+
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
+class TestDataContainerWithRealData(object):
 
     def test_adder(self):
         test_file = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
