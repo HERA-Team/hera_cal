@@ -1053,11 +1053,12 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             The first baseline in each reds sublist is kept.
         wgts : DataContainer
             Manual weights to use in redundant average. This supercedes flags and nsamples
-            if provided, and will also be used if input data is a UVData or a subclass of it.
+            If provided, and will also be used if input data is a UVData or a subclass of it.
         flags : DataContainer
-            if data is a DataContainer, these are its flags
+            If data is a DataContainer, these are its flags. Default (None) is no flags.
         nsamples : DataContainer
-            if data is a DataContainer, these are its nsamples
+            If data is a DataContainer, these are its nsamples. Default (None) is 1.0 for all pixels.
+            Furthermore, if data is a DataContainer, integration_time is 1.0 for all pixels.
 
     Returns:
         if fed a DataContainer:
