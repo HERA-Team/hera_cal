@@ -51,17 +51,29 @@ class Test_Pol_Ops(object):
         assert utils.split_pol('xx') == ('Jxx', 'Jxx')
         assert utils.split_pol('xy') == ('Jxx', 'Jyy')
         assert utils.split_pol('XY') == ('Jxx', 'Jyy')
+
+        assert utils.split_pol('ee') == ('Jee', 'Jee')
+        assert utils.split_pol('en') == ('Jee', 'Jnn')
+        assert utils.split_pol('EN') == ('Jee', 'Jnn')
+
         pytest.raises(KeyError, utils.split_pol, 'I')
         pytest.raises(KeyError, utils.split_pol, 'pV')
 
     def test_join_pol(self):
         assert utils.join_pol('Jxx', 'Jxx') == 'xx'
         assert utils.join_pol('Jxx', 'Jyy') == 'xy'
+        assert utils.join_pol('Jee', 'Jee') == 'ee'
+        assert utils.join_pol('Jee', 'Jnn') == 'en'
 
     def test_split_bl(self):
         assert utils.split_bl((1, 2, 'xx')) == ((1, 'Jxx'), (2, 'Jxx'))
         assert utils.split_bl((1, 2, 'xy')) == ((1, 'Jxx'), (2, 'Jyy'))
         assert utils.split_bl((1, 2, 'XX')) == ((1, 'Jxx'), (2, 'Jxx'))
+
+        assert utils.split_bl((1, 2, 'ee')) == ((1, 'Jee'), (2, 'Jee'))
+        assert utils.split_bl((1, 2, 'en')) == ((1, 'Jee'), (2, 'Jnn'))
+        assert utils.split_bl((1, 2, 'EE')) == ((1, 'Jee'), (2, 'Jee'))
+
         pytest.raises(KeyError, utils.split_bl, (1, 2, 'pQ'))
         pytest.raises(KeyError, utils.split_bl, (1, 2, 'U'))
 
@@ -69,10 +81,16 @@ class Test_Pol_Ops(object):
         assert utils.join_bl((1, 'Jxx'), (2, 'Jxx')) == (1, 2, 'xx')
         assert utils.join_bl((1, 'Jxx'), (2, 'Jyy')) == (1, 2, 'xy')
 
+        assert utils.join_bl((1, 'Jee'), (2, 'Jee')) == (1, 2, 'ee')
+        assert utils.join_bl((1, 'Jee'), (2, 'Jnn')) == (1, 2, 'en')
+
     def test_reverse_bl(self):
         assert utils.reverse_bl((1, 2, 'xx')) == (2, 1, 'xx')
         assert utils.reverse_bl((1, 2, 'xy')) == (2, 1, 'yx')
         assert utils.reverse_bl((1, 2, 'XX')) == (2, 1, 'xx')
+        assert utils.reverse_bl((1, 2, 'ee')) == (2, 1, 'ee')
+        assert utils.reverse_bl((1, 2, 'en')) == (2, 1, 'ne')
+        assert utils.reverse_bl((1, 2, 'EE')) == (2, 1, 'ee')
         assert utils.reverse_bl((1, 2, 'pI')) == (2, 1, 'pI')
         assert utils.reverse_bl((1, 2)) == (2, 1)
 
@@ -80,6 +98,19 @@ class Test_Pol_Ops(object):
         assert utils.comply_bl((1, 2, 'xx')) == (1, 2, 'xx')
         assert utils.comply_bl((1, 2, 'xy')) == (1, 2, 'xy')
         assert utils.comply_bl((1, 2, 'XX')) == (1, 2, 'xx')
+
+        assert utils.comply_bl((1, 2, 'ee')) == (1, 2, 'ee')
+        assert utils.comply_bl((1, 2, 'en')) == (1, 2, 'en')
+        assert utils.comply_bl((1, 2, 'EE')) == (1, 2, 'ee')
+
+        assert utils.comply_bl((1, 2, 'ee'), x_orientation='NORTH') == (1, 2, 'ee')
+        assert utils.comply_bl((1, 2, 'en'), x_orientation='NORTH') == (1, 2, 'en')
+        assert utils.comply_bl((1, 2, 'EE'), x_orientation='NORTH') == (1, 2, 'ee')
+
+        assert utils.comply_bl((1, 2, 'yy'), x_orientation='NORTH') == (1, 2, 'ee')
+        assert utils.comply_bl((1, 2, 'yx'), x_orientation='NORTH') == (1, 2, 'en')
+        assert utils.comply_bl((1, 2, 'YY'), x_orientation='NORTH') == (1, 2, 'ee')
+        
         assert utils.comply_bl((1, 2, 'pI')) == (1, 2, 'pI')
 
     def test_make_bl(self):
@@ -89,6 +120,28 @@ class Test_Pol_Ops(object):
         assert utils.make_bl((1, 2), 'xy') == (1, 2, 'xy')
         assert utils.make_bl((1, 2, 'XX')) == (1, 2, 'xx')
         assert utils.make_bl((1, 2), 'XX') == (1, 2, 'xx')
+
+        assert utils.make_bl((1, 2, 'xx'), x_orientation='NORTH') == (1, 2, 'nn')
+        assert utils.make_bl((1, 2), 'xx', x_orientation='NORTH') == (1, 2, 'nn')
+        assert utils.make_bl((1, 2, 'xy'), x_orientation='NORTH') == (1, 2, 'ne')
+        assert utils.make_bl((1, 2), 'xy', x_orientation='NORTH') == (1, 2, 'ne')
+        assert utils.make_bl((1, 2, 'XX'), x_orientation='NORTH') == (1, 2, 'nn')
+        assert utils.make_bl((1, 2), 'XX', x_orientation='NORTH') == (1, 2, 'nn')
+
+        assert utils.make_bl((1, 2, 'ee')) == (1, 2, 'ee')
+        assert utils.make_bl((1, 2), 'ee') == (1, 2, 'ee')
+        assert utils.make_bl((1, 2, 'en')) == (1, 2, 'en')
+        assert utils.make_bl((1, 2), 'en') == (1, 2, 'en')
+        assert utils.make_bl((1, 2, 'EE')) == (1, 2, 'ee')
+        assert utils.make_bl((1, 2), 'EE') == (1, 2, 'ee')
+
+        assert utils.make_bl((1, 2, 'ee'), x_orientation='NORTH') == (1, 2, 'ee')
+        assert utils.make_bl((1, 2), 'ee', x_orientation='NORTH') == (1, 2, 'ee')
+        assert utils.make_bl((1, 2, 'en'), x_orientation='NORTH') == (1, 2, 'en')
+        assert utils.make_bl((1, 2), 'en', x_orientation='NORTH') == (1, 2, 'en')
+        assert utils.make_bl((1, 2, 'EE'), x_orientation='NORTH') == (1, 2, 'ee')
+        assert utils.make_bl((1, 2), 'EE', x_orientation='NORTH') == (1, 2, 'ee')
+
         assert utils.make_bl((1, 2, 'pI')) == (1, 2, 'pI')
         assert utils.make_bl((1, 2), 'pI') == (1, 2, 'pI')
 
