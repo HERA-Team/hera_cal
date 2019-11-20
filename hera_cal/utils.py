@@ -54,17 +54,17 @@ SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _V
 JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
 
-def split_pol(pol, x_orientation=None):
+def split_pol(pol):
     '''Splits visibility polarization string (pyuvdata's polstr) into
     antenna polarization strings (pyuvdata's jstr).'''
-    return SPLIT_POL[_comply_vispol(pol, x_orientation=x_orientation)]
+    return SPLIT_POL[_comply_vispol(pol)]
 
 
-def join_pol(p1, p2, x_orientation=None):
+def join_pol(p1, p2):
     '''Joins antenna polarization strings (pyuvdata's jstr) into
     visibility polarization string (pyuvdata's polstr).'''
-    return JOIN_POL[(_comply_antpol(p1, x_orientation=x_orientation),
-                     _comply_antpol(p2, x_orientation=x_orientation))]
+    return JOIN_POL[(_comply_antpol(p1),
+                     _comply_antpol(p2))]
 
 
 def comply_pol(pol, x_orientation=None):
@@ -76,25 +76,25 @@ def comply_pol(pol, x_orientation=None):
         return _comply_antpol(pol, x_orientation=x_orientation)
 
 
-def split_bl(bl, x_orientation=None):
+def split_bl(bl):
     '''Splits a (i,j,pol) baseline key into ((i,pi),(j,pj)), where pol=pi+pj.'''
-    pi, pj = split_pol(bl[2], x_orientation=x_orientation)
+    pi, pj = split_pol(bl[2])
     return ((bl[0], pi), (bl[1], pj))
 
 
-def join_bl(ai, aj, x_orientation=None):
+def join_bl(ai, aj):
     '''Joins two (i,pi) antenna keys to make a (i,j,pol) baseline key.'''
-    return (ai[0], aj[0], join_pol(ai[1], aj[1], x_orientation=x_orientation))
+    return (ai[0], aj[0], join_pol(ai[1], aj[1]))
 
 
-def reverse_bl(bl, x_orientation=None):
+def reverse_bl(bl):
     '''Reverses a (i,j) or (i,j,pol) baseline key to make (j,i)
     or (j,i,pol[::-1]), respectively.'''
     i, j = bl[:2]
     if len(bl) == 2:
         return (j, i)
     else:
-        return (j, i, conj_pol(_comply_vispol(bl[2], x_orientation=x_orientation)))
+        return (j, i, conj_pol(_comply_vispol(bl[2])))
 
 
 def comply_bl(bl, x_orientation=None):
