@@ -622,15 +622,15 @@ class Test_Visibility_IO_Legacy(object):
         assert uvd2.data_array.shape == (1680, 1, 64, 1)
         assert np.allclose(data[(24, 25, 'xx')][30, 32], uvd.get_data(24, 25, 'xx')[30, 32])
         assert np.allclose(data[(24, 25, 'xx')][30, 32], uvd2.get_data(24, 25, 'xx')[30, 32])
-        assert uvd2.x_orientation == 'NORTH'
+        assert uvd2.x_orientation.lower() == 'north'
 
         # test with nsample and flags
-        uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='EAST', return_uvd=True, overwrite=True, verbose=True)
+        uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='east', return_uvd=True, overwrite=True, verbose=True)
         assert uvd.nsample_array.shape == (1680, 1, 64, 1)
         assert uvd.flag_array.shape == (1680, 1, 64, 1)
         assert np.allclose(nsample[(24, 25, 'xx')][30, 32], uvd.get_nsamples(24, 25, 'xx')[30, 32])
         assert np.allclose(flgs[(24, 25, 'xx')][30, 32], uvd.get_flags(24, 25, 'xx')[30, 32])
-        assert uvd.x_orientation == 'EAST'
+        assert uvd.x_orientation.lower == 'east'
 
         # test exceptions
         pytest.raises(AttributeError, io.write_vis, "ex.uv", data, l, f, ap)
