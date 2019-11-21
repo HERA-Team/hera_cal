@@ -478,7 +478,7 @@ class ReflectionFitter(FRFilter):
                                                           'telescope_name', 'cal_style']])
             add_to_history += "\nMerged-in calibration {}".format(input_calfits)
         else:
-            kwargs = {}
+            kwargs = {'x_orientation': self.hd.x_orientation}
 
         echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
