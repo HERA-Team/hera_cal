@@ -13,7 +13,7 @@ from . import version
 from .noise import predict_noise_variance_from_autos
 from .datacontainer import DataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol
-from .io import HERAData, HERACal, write_cal, write_vis
+from .io import HERAData, HERACal, write_cal
 from .apply_cal import calibrate_in_place
 
 
@@ -1515,13 +1515,13 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         print('\nNow saving firstcal gains to', os.path.join(outdir, filename_no_ext + firstcal_ext))
     write_cal(filename_no_ext + firstcal_ext, cal['g_firstcal'], hd.freqs, hd.times,
               flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, 
-              history=version.history_string(add_to_history))
+              x_orientation=hd.x_orientation, history=version.history_string(add_to_history))
 
     if verbose:
         print('Now saving omnical gains to', os.path.join(outdir, filename_no_ext + omnical_ext))
     write_cal(filename_no_ext + omnical_ext, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
               quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
-              history=version.history_string(add_to_history + '\n' + high_z_ant_hist))
+              x_orientation=hd.x_orientation, history=version.history_string(add_to_history + '\n' + high_z_ant_hist))
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, filename_no_ext + omnivis_ext))
