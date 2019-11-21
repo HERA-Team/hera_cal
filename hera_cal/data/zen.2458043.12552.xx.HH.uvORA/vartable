@@ -2,7 +2,6 @@ r corr
 i nchan
 i npol
 i nspect
-d inttime
 d sdf
 a source
 a telescop
@@ -20,6 +19,7 @@ i nblts
 a visunits
 a instrume
 d altitude
+a xorient
 a cminfo
 a st_type
 d stopt
@@ -30,6 +30,7 @@ d duration
 d antnums
 a antnames
 d lst
+d inttime
 d ra
 d dec
 i pol

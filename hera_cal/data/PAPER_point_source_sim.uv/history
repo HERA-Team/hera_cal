@@ -2,3 +2,4 @@ MDLVIS: created file.
 MDLVIS: /Users/sherlock/src/aipy/scripts/mdlvis.py -C hsa7458_nick_test --src=21:25:41.9_0:0:0.0 --nchan=64 --sfreq=.1 --sdf=0.0015625 --inttime=10.7 --pol=xx -a all
   Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.  Git hash: f83a05ea95d708df989002d81fa02ceb005c6b15.  Git branch: uvcal_ant_array_doc_update.  Git description: v1.2-122-gf83a05e-dirty.  Downselected to specific times using pyuvdata.
   Downselected to specific antennas, times, frequencies using pyuvdata.
+  Read/written with pyuvdata version: 1.4.2.  Git origin: https://github.com/RadioAstronomySoftwareGroup/pyuvdata.git.  Git hash: 1889573c13e27532aa1854463a4f38daa11c9772.  Git branch: master.  Git description: v1.4-363-g1889573.
