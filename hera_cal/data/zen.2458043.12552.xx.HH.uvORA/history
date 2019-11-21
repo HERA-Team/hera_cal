@@ -3,3 +3,4 @@ CORR-DACQ: created file.
   Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.  Git hash: 1a3bf03ea8859d02a5c5e22fe5290f17fad653b4.  Git branch: master.  Git description: v1.2-49-g1a3bf03.
 Flagging command: "/users/nkern/anaconda2/bin/xrfi_run.py --algorithm xrfi --ex_ants 50 zen.2458043.12552.xx.HH.uvO", Using hera_qm version: 1.0.  Git origin: https://github.com/HERA-Team/hera_qm.  Git hash: a0f14c539f1f519367e2c59980a11f89ffb0021c.  Git branch: master.  Git description: v0.0.0-318-ga0f14c5./users/nkern/anaconda2/bin/xrfi_apply.py --flag_file zen.2458043.12552.xx.HH.uvO.flags.npz --overwrite zen.2458043.12552.xx.HH.uvO
   Downselected to specific antennas, frequencies using pyuvdata.
+  Read/written with pyuvdata version: 1.4.2.  Git origin: https://github.com/RadioAstronomySoftwareGroup/pyuvdata.git.  Git hash: 1889573c13e27532aa1854463a4f38daa11c9772.  Git branch: master.  Git description: v1.4-363-g1889573.
