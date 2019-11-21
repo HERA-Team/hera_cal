@@ -1337,7 +1337,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     Nants_telescope = len(antenna_numbers)
 
     # get polarization info: ordering must be monotonic in Jones number
-    jones_array = np.array(list(set([jstr2num(k[1],  x_orientation=x_orientation) for k in gains.keys()])))
+    jones_array = np.array(list(set([jstr2num(k[1], x_orientation=x_orientation) for k in gains.keys()])))
     jones_array = jones_array[np.argsort(np.abs(jones_array))]
     pol_array = np.array([jnum2str(j, x_orientation=x_orientation) for j in jones_array])
     Njones = len(jones_array)
