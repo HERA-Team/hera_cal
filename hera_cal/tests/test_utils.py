@@ -18,7 +18,7 @@ import pyuvdata.tests as uvtest
 from sklearn import gaussian_process as gp
 
 from hera_sim.noise import white_noise
-from .. import utils, abscal, datacontainer, io
+from .. import utils, abscal, datacontainer, io, redcal
 from ..calibrations import CAL_PATH
 from ..data import DATA_PATH
 
@@ -558,6 +558,81 @@ def test_gp_interp1d():
     nstd = np.std(y - yint_0thin, axis=0)  # residual noise after subtraction with unthinned model
     rstd = np.std(yint_1thin - yint_2thin, axis=0)  # error flucturations between 1 and 2 thin models
     assert np.nanmedian(nstd / rstd) > 2.0  # assert model error is on average less then half noise
+
+
+@pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
+def test_red_average():
+    # setup
+    hd = io.HERAData(os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5"))
+    data, flags, nsamples = hd.read()
+    antpos, ants = hd.get_ENU_antpos(pick_data_ants=True)
+    antposd = dict(zip(ants, antpos))
+    reds = redcal.get_pos_reds(antposd)
+    blkey = reds[0][0] + ('xx',)
+
+    # test redundant average
+    hda = utils.red_average(hd, reds, inplace=False)
+
+    # assert type and averaging is correct
+    assert isinstance(hda, io.HERAData)
+    assert hda.Nbls == len(reds)
+    nsamp = np.sum([hd.get_nsamples(bl + ('xx',)) * ~hd.get_flags(bl + ('xx',)) for bl in reds[0]], axis=0)
+    assert np.isclose(hda.get_nsamples(blkey), nsamp).all()
+    d = np.asarray([hd.get_data(bl + ('xx',)) for bl in reds[0]])
+    w = np.asarray([(~hd.get_flags(bl + ('xx',))).astype(float) for bl in reds[0]])
+    davg = np.sum(d * w, axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf)
+    assert np.isclose(hda.get_data(blkey), davg).all()
+
+    # try with DataContainer
+    data_avg, flag_avg, _ = utils.red_average(data, reds, flags=flags, inplace=False)
+    assert isinstance(data_avg, datacontainer.DataContainer)
+    assert len(data_avg) == len(reds)
+    assert np.isclose(data_avg[blkey], davg).all()
+    assert np.isclose(flag_avg[blkey], hda.get_flags(blkey)).all()
+    # try with no flags
+    data_avg2, _, _ = utils.red_average(data, reds, inplace=False)
+    assert np.isclose(data_avg2[blkey], np.mean([data[bl + ('xx',)] for bl in reds[0]], axis=0)).all()
+
+    # test inplace
+    _hda = copy.deepcopy(hd)
+    utils.red_average(_hda, inplace=True)
+    assert hda == _hda
+
+    # try with DataContainer
+    data2, flags2 = copy.deepcopy(data), copy.deepcopy(flags)
+    utils.red_average(data2, flags=flags2, inplace=True)
+    assert np.isclose(data2[blkey], data_avg[blkey]).all()
+    assert np.isclose(flags2[blkey], flag_avg[blkey]).all()
+
+    # try automatic red calc
+    hda2 = utils.red_average(hd, inplace=False)
+    assert hda == hda2
+    data_avg3, _, _ = utils.red_average(data, flags=flags, inplace=False)
+    assert np.isclose(data_avg[blkey], data_avg3[blkey]).all()
+
+    # try with large tolerance
+    hda3 = utils.red_average(hd, bl_tol=1000, inplace=False)
+    assert hda3.Nbls == 1
+
+    # now try with modified nsamples
+    _hd = copy.deepcopy(hd)
+    _hd.nsample_array[:] = 0.0
+    _hd.nsample_array[hd.antpair2ind(reds[0][0] + ('xx',))] = 1.0
+    _hd.flag_array[:] = False
+    hda3 = utils.red_average(_hd, inplace=False)
+    # averaged data should equal original, unaveraged data due to weighting
+    assert np.isclose(hda3.get_data(reds[0][0] + ('xx',)), hd.get_data(reds[0][0] + ('xx',))).all()
+
+    # try with manual weights
+    wgts = datacontainer.DataContainer({k: _hd.get_nsamples(k) for k in _hd.get_antpairpols()})
+    hda4 = utils.red_average(_hd, wgts=wgts, inplace=False)
+    assert hda3 == hda4
+
+    # exceptions
+    _data = copy.deepcopy(data)
+    _data.antpos = None
+    pytest.raises(ValueError, utils.red_average, _data)
+    pytest.raises(ValueError, utils.red_average, 'foo')
 
 
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
