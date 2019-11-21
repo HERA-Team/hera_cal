@@ -62,7 +62,7 @@ class HERACal(UVCal):
         '''Extract and store useful metadata and array indexing dictionaries.'''
         self.freqs = np.unique(self.freq_array)
         self.times = np.unique(self.time_array)
-        self.pols = [jnum2str(j) for j in self.jones_array]
+        self.pols = [jnum2str(j, x_orientation=self.x_orientation) for j in self.jones_array]
         self._jnum_indices = {jnum: i for i, jnum in enumerate(self.jones_array)}
         self.ants = [(ant, pol) for ant in self.ant_array for pol in self.pols]
         self._antnum_indices = {ant: i for i, ant in enumerate(self.ant_array)}
@@ -83,14 +83,14 @@ class HERACal(UVCal):
 
         # build dict of gains, flags, and quals
         for (ant, pol) in self.ants:
-            i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol)]
+            i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
             gains[(ant, pol)] = np.array(self.gain_array[i, 0, :, :, ip].T)
             flags[(ant, pol)] = np.array(self.flag_array[i, 0, :, :, ip].T)
             quals[(ant, pol)] = np.array(self.quality_array[i, 0, :, :, ip].T)
 
         # build dict of total_qual if available
         for pol in self.pols:
-            ip = self._jnum_indices[jstr2num(pol)]
+            ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
             if self.total_quality_array is not None:
                 total_qual[pol] = np.array(self.total_quality_array[0, :, :, ip].T)
             else:
@@ -131,13 +131,13 @@ class HERACal(UVCal):
         for to_update, array in zip([gains, flags, quals], data_arrays):
             if to_update is not None:
                 for (ant, pol) in to_update.keys():
-                    i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol)]
+                    i, ip = self._antnum_indices[ant], self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
                     array[i, 0, :, :, ip] = to_update[(ant, pol)].T
 
         # update total_qual
         if total_qual is not None:
             for pol in total_qual.keys():
-                ip = self._jnum_indices[jstr2num(pol)]
+                ip = self._jnum_indices[jstr2num(pol, x_orientation=self.x_orientation)]
                 self.total_quality_array[0, :, :, ip] = total_qual[pol].T
 
 
@@ -273,7 +273,7 @@ class HERAData(UVData):
         times = np.unique(self.time_array)
         lst_indices = np.unique(self.lst_array.ravel(), return_index=True)[1]
         lsts = self.lst_array.ravel()[np.sort(lst_indices)]
-        pols = [polnum2str(polnum) for polnum in self.polarization_array]
+        pols = [polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array]
         antpairs = self.get_antpairs()
         bls = [antpair + (pol,) for antpair in antpairs for pol in pols]
 
@@ -312,15 +312,15 @@ class HERAData(UVData):
         if isinstance(key, str):  # asking for a pol
             return {antpair: self._get_slice(data_array, antpair + (key,)) for antpair in self.get_antpairs()}
         elif len(key) == 2:  # asking for antpair
-            pols = np.array([polnum2str(polnum) for polnum in self.polarization_array])
+            pols = np.array([polnum2str(polnum, x_orientation=self.x_orientation) for polnum in self.polarization_array])
             return {pol: self._get_slice(data_array, key + (pol,)) for pol in pols}
         elif len(key) == 3:  # asking for bl-pol
             try:
                 return np.array(data_array[self._blt_slices[tuple(key[0:2])], 0, :,
-                                           self._polnum_indices[polstr2num(key[2])]])
+                                           self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]])
             except KeyError:
                 return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], 0, :,
-                                          self._polnum_indices[polstr2num(conj_pol(key[2]))]])
+                                          self._polnum_indices[polstr2num(conj_pol(key[2], x_orientation=self.x_orientation))]])
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -345,10 +345,10 @@ class HERAData(UVData):
         elif len(key) == 3:  # providing bl-pol
             try:
                 data_array[self._blt_slices[tuple(key[0:2])], 0, :,
-                           self._polnum_indices[polstr2num(key[2])]] = value
+                           self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]] = value
             except(KeyError):
                 data_array[self._blt_slices[tuple(key[1::-1])], 0, :,
-                           self._polnum_indices[polstr2num(conj_pol(key[2]))]] = np.conj(value)
+                           self._polnum_indices[polstr2num(conj_pol(key[2], x_orientation=self.x_orientation))]] = np.conj(value)
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -686,9 +686,9 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             blt_slices = get_blt_slices(uvf)
             for ip, pol in enumerate(uvf.polarization_array):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                    pol = polnum2str(pol)  # convert to string if possible
+                    pol = polnum2str(pol, x_orientation=uvf.x_orientation)  # convert to string if possible
                 else:
-                    pol = ','.join([polnum2str(int(p)) for p in pol.split(b',')])
+                    pol = ','.join([polnum2str(int(p), x_orientation=uvf.x_orientation) for p in pol.split(b',')])
                 for (ant1, ant2), blt_slice in blt_slices.items():
                     flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, 0, :, ip]
             # data container only supports standard polarizations strings
@@ -699,17 +699,17 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             for i, ant in enumerate(uvf.ant_array):
                 for ip, jpol in enumerate(uvf.polarization_array):
                     if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                        jpol = jnum2str(jpol)  # convert to string if possible
+                        jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
                     else:
-                        jpol = ','.join([jnum2str(int(p)) for p in jpol.split(b',')])
+                        jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(b',')])
                     flags[(ant, jpol)] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
 
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
             for ip, jpol in enumerate(uvf.polarization_array):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
-                    jpol = jnum2str(jpol)  # convert to string if possible
+                    jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
                 else:
-                    jpol = ','.join([jnum2str(int(p)) for p in jpol.split(b',')])
+                    jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(b',')])
                 flags[jpol] = uvf.flag_array[:, :, ip]
 
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
@@ -1027,7 +1027,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # get pols
     pols = np.unique(list(map(lambda k: k[-1], data.keys())))
     Npols = len(pols)
-    polarization_array = np.array(list(map(lambda p: polstr2num(p), pols)))
+    polarization_array = np.array(list(map(lambda p: polstr2num(p, x_orientation=x_orientation), pols)))
 
     # get times
     if time_array is None:
@@ -1337,9 +1337,9 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     Nants_telescope = len(antenna_numbers)
 
     # get polarization info: ordering must be monotonic in Jones number
-    jones_array = np.array(list(set([jstr2num(k[1]) for k in gains.keys()])))
+    jones_array = np.array(list(set([jstr2num(k[1],  x_orientation=x_orientation) for k in gains.keys()])))
     jones_array = jones_array[np.argsort(np.abs(jones_array))]
-    pol_array = np.array([jnum2str(j) for j in jones_array])
+    pol_array = np.array([jnum2str(j, x_orientation=x_orientation) for j in jones_array])
     Njones = len(jones_array)
 
     # get time info
