@@ -1033,6 +1033,158 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     return relative_diff, avg_relative_diff
 
 
+def red_average(data, reds=None, bl_tol=1.0, inplace=False,
+                wgts=None, flags=None, nsamples=None):
+    """
+    Redundantly average visibilities in a DataContainer, HERAData or UVData object.
+    Average is weighted by integration_time * nsamples * ~flags unless wgts are fed.
+
+    Args:
+        data : DataContainer, HERAData or UVData object
+            Object to redundantly average
+        reds : list, optional
+            Nested lists of antpair tuples to redundantly average.
+            E.g. [ [(1, 2), (2, 3)], [(1, 3), (2, 4)], ...]
+            If None, will calculate these from the metadata
+        bl_tol : float
+            Baseline redundancy tolerance in meters. Only used if reds is None.
+        inplace : bool
+            Perform average and downselect inplace, otherwise returns a deepcopy.
+            The first baseline in each reds sublist is kept.
+        wgts : DataContainer
+            Manual weights to use in redundant average. This supercedes flags and nsamples
+            If provided, and will also be used if input data is a UVData or a subclass of it.
+        flags : DataContainer
+            If data is a DataContainer, these are its flags. Default (None) is no flags.
+        nsamples : DataContainer
+            If data is a DataContainer, these are its nsamples. Default (None) is 1.0 for all pixels.
+            Furthermore, if data is a DataContainer, integration_time is 1.0 for all pixels.
+
+    Returns:
+        if fed a DataContainer:
+            DataContainer, averaged data
+            DataContainer, averaged flags
+            DataContainer, summed nsamples
+        elif fed a HERAData or UVData:
+            HERAData or UVData object, averaged data
+
+    Notes:
+        1. Different polarizations are assumed to be non-redundant.
+        2. Default weighting is nsamples * integration_time * ~flags.
+        3. If wgts Container is fed then they supercede flag and nsample weighting.
+    """
+    from hera_cal import redcal, datacontainer
+
+    # type checks
+    if not (isinstance(data, datacontainer.DataContainer) or isinstance(data, UVData)):
+        raise ValueError("data must be a DataContainer or a UVData or its subclass")
+    fed_container = isinstance(data, datacontainer.DataContainer)
+
+    # fill DataContainers if necessary
+    if fed_container:
+        if not inplace:
+            flags = copy.deepcopy(flags)
+            nsamples = copy.deepcopy(nsamples)
+        if flags is None:
+            flags = datacontainer.DataContainer({k: np.zeros_like(data[k], np.bool) for k in data})
+        if nsamples is None:
+            nsamples = datacontainer.DataContainer({k: np.ones_like(data[k], np.float) for k in data})
+
+    # get weights: if wgts are not fed, then use flags and nsamples
+    if wgts is None:
+        if fed_container:
+            wgts = datacontainer.DataContainer({k: nsamples[k] * ~flags[k] for k in data})
+        else:
+            wgts = datacontainer.DataContainer({k: data.get_nsamples(k) * ~data.get_flags(k) for k in data.get_antpairpols()})
+
+    # deepcopy
+    if not inplace:
+        data = copy.deepcopy(data)
+
+    # get metadata
+    if fed_container:
+        pols = sorted(data.pols())
+    else:
+        pols = [polnum2str(pol, x_orientation=data.x_orientation) for pol in data.polarization_array]
+
+    # get redundant groups
+    if reds is None:
+        # if DataContainer, check for antpos
+        if fed_container:
+            if not hasattr(data, 'antpos') or data.antpos is None:
+                raise ValueError("DataContainer must have antpos dictionary to calculate reds")
+            antposd = data.antpos
+        else:
+            antpos, ants = data.get_ENU_antpos()
+            antposd = dict(zip(ants, antpos))
+        reds = redcal.get_pos_reds(antposd, bl_error_tol=bl_tol)
+
+    # eliminate baselines not in data
+    if fed_container:
+        antpairs = sorted(data.antpairs())
+    else:
+        antpairs = data.get_antpairs()
+    reds = [[bl for bl in blg if bl in antpairs] for blg in reds]
+    reds = [blg for blg in reds if len(blg) > 0]
+
+    # iterate over redundant groups and polarizations
+    for pol in pols:
+        for blg in reds:
+            # get data and weighting for this pol-blgroup
+            if fed_container:
+                d = np.asarray([data[bl + (pol,)] for bl in blg])
+                f = np.asarray([(~flags[bl + (pol,)]).astype(np.float) for bl in blg])
+                n = np.asarray([nsamples[bl + (pol,)] for bl in blg])
+                # DataContainer can't track integration time, so no tint here
+                tint = np.array([1.0])
+                w = np.asarray([wgts[bl + (pol,)] for bl in blg])
+
+            else:
+                d = np.asarray([data.get_data(bl + (pol,)) for bl in blg])
+                f = np.asarray([(~data.get_flags(bl + (pol,))).astype(np.float) for bl in blg])
+                n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
+                tint = np.asarray([data.integration_time[data.antpair2ind(bl + (pol,))] for bl in blg])[:, :, None]
+                w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
+
+            # take the weighted average
+            wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
+            davg = np.sum(d * w, axis=0) / wsum  # weighted average
+            navg = np.sum(n * f, axis=0)         # this is the new total nsample (without flagged elements)
+            fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
+            iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
+            favg = np.isclose(wsum, 0.0)         # this is getting any fully flagged pixels
+
+            # replace with new data
+            if fed_container:
+                blkey = blg[0] + (pol,)
+                data[blkey] = davg
+                flags[blkey] = favg
+                nsamples[blkey] = navg
+
+            else:
+                blinds = data.antpair2ind(blg[0])
+                polind = pols.index(pol)
+                data.data_array[blinds, 0, :, polind] = davg
+                data.flag_array[blinds, 0, :, polind] = favg
+                data.nsample_array[blinds, 0, :, polind] = navg
+                data.integration_time[blinds] = iavg
+
+    # select out averaged bls
+    bls = [blg[0] + (pol,) for pol in pols for blg in reds]
+    if fed_container:
+        for bl in list(data.keys()):
+            if bl not in bls:
+                del data[bl]
+    else:
+        data.select(bls=bls)
+
+    if not inplace:
+        if fed_container:
+            return data, flags, nsamples
+        else:
+            return data
+
+
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
     at the given hour angle (ha) and declination (dec).
