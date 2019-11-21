@@ -48,13 +48,13 @@ class Test_HERACal(object):
         gains, flags, quals, total_qual = hc.read()
         uvc = UVCal()
         uvc.read_calfits(self.fname_both)
-        np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, parse_jpolstr('jxx')])
-        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, parse_jpolstr('jxx')])
-        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, parse_jpolstr('jxx')])
-        np.testing.assert_array_equal(uvc.total_quality_array[0, :, :, 0].T, total_qual[parse_jpolstr('jxx')])
+        np.testing.assert_array_equal(uvc.gain_array[0, 0, :, :, 0].T, gains[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
+        np.testing.assert_array_equal(uvc.flag_array[0, 0, :, :, 0].T, flags[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
+        np.testing.assert_array_equal(uvc.quality_array[0, 0, :, :, 0].T, quals[9, parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
+        np.testing.assert_array_equal(uvc.total_quality_array[0, :, :, 0].T, total_qual[parse_jpolstr('jxx', x_orientation=hc.x_orientation)])
         np.testing.assert_array_equal(np.unique(uvc.freq_array), hc.freqs)
         np.testing.assert_array_equal(np.unique(uvc.time_array), hc.times)
-        assert hc.pols == [parse_jpolstr('jxx'), parse_jpolstr('jyy')]
+        assert hc.pols == [parse_jpolstr('jxx', x_orientation=hc.x_orientation), parse_jpolstr('jyy', x_orientation=hc.x_orientation)]
         assert set([ant[0] for ant in hc.ants]) == set(uvc.ant_array)
 
         # test list loading
@@ -65,7 +65,7 @@ class Test_HERACal(object):
         assert len(quals.keys()) == 36
         assert hc.freqs.shape == (1024,)
         assert hc.times.shape == (3,)
-        assert sorted(hc.pols) == [parse_jpolstr('jxx'), parse_jpolstr('jyy')]
+        assert sorted(hc.pols) == [parse_jpolstr('jxx', x_orientation=hc.x_orientation), parse_jpolstr('jyy', x_orientation=hc.x_orientation)]
 
     def test_write(self):
         hc = HERACal(self.fname_both)
@@ -630,7 +630,7 @@ class Test_Visibility_IO_Legacy(object):
         assert uvd.flag_array.shape == (1680, 1, 64, 1)
         assert np.allclose(nsample[(24, 25, 'xx')][30, 32], uvd.get_nsamples(24, 25, 'xx')[30, 32])
         assert np.allclose(flgs[(24, 25, 'xx')][30, 32], uvd.get_flags(24, 25, 'xx')[30, 32])
-        assert uvd.x_orientation.lower == 'east'
+        assert uvd.x_orientation.lower() == 'east'
 
         # test exceptions
         pytest.raises(AttributeError, io.write_vis, "ex.uv", data, l, f, ap)
@@ -712,7 +712,7 @@ class Test_Calibration_IO_Legacy(object):
         assert len(quals.keys()) == 36
         assert freqs.shape == (1024,)
         assert times.shape == (3,)
-        assert sorted(pols) == [parse_jpolstr('jxx'), parse_jpolstr('jyy')]
+        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal.x_orientation), parse_jpolstr('jyy', x_orientation=cal.x_orientation)]
 
         cal_xx, cal_yy = UVCal(), UVCal()
         cal_xx.read_calfits(fname_xx)
@@ -723,12 +723,12 @@ class Test_Calibration_IO_Legacy(object):
         assert len(quals.keys()) == 36
         assert freqs.shape == (1024,)
         assert times.shape == (3,)
-        assert sorted(pols) == [parse_jpolstr('jxx'), parse_jpolstr('jyy')]
+        assert sorted(pols) == [parse_jpolstr('jxx', x_orientation=cal_xx.x_orientation), parse_jpolstr('jyy', x_orientation=cal_yy.x_orientation)]
 
     def test_write_cal(self):
         # create fake data
         ants = np.arange(10)
-        pols = np.array(['Jxx'])
+        pols = np.array(['Jnn'])
         freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
         Nfreqs = len(freqs)
         times = np.linspace(2458043.1, 2458043.6, 100)
@@ -745,7 +745,7 @@ class Test_Calibration_IO_Legacy(object):
                 flags[(a, p)] = np.zeros((Ntimes, Nfreqs), np.bool)
 
         # set some terms to zero
-        gains[(5, 'Jxx')][20:30] *= 0
+        gains[(5, 'Jnn')][20:30] *= 0
 
         # test basic execution
         uvc = io.write_cal("ex.calfits", gains, freqs, times, flags=flags, quality=quality,
@@ -784,7 +784,7 @@ class Test_Calibration_IO_Legacy(object):
         os.remove('ex.calfits')
 
         # test zero check
-        gains[(0, 'Jxx')][:] = 0.0
+        gains[(0, 'Jnn')][:] = 0.0
         uvc1 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False, outdir='./', zero_check=True)
         uvc2 = io.write_cal("ex.calfits", gains, freqs, times, return_uvc=True, write_file=False, outdir='./', zero_check=False)
         assert np.allclose(uvc1.gain_array[0, 0, :, :, 0], 1.0)
