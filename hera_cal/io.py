@@ -320,7 +320,7 @@ class HERAData(UVData):
                                            self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]])
             except KeyError:
                 return np.conj(data_array[self._blt_slices[tuple(key[1::-1])], 0, :,
-                                          self._polnum_indices[polstr2num(conj_pol(key[2], x_orientation=self.x_orientation))]])
+                                          self._polnum_indices[polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)]])
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
@@ -348,7 +348,7 @@ class HERAData(UVData):
                            self._polnum_indices[polstr2num(key[2], x_orientation=self.x_orientation)]] = value
             except(KeyError):
                 data_array[self._blt_slices[tuple(key[1::-1])], 0, :,
-                           self._polnum_indices[polstr2num(conj_pol(key[2], x_orientation=self.x_orientation))]] = np.conj(value)
+                           self._polnum_indices[polstr2num(conj_pol(key[2]), x_orientation=self.x_orientation)]] = np.conj(value)
         else:
             raise KeyError('Unrecognized key type for slicing data.')
 
