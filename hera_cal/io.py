@@ -1320,6 +1320,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
                           options=['multiply', 'divide']
         history : type=str, history string for UVCal object.
         x_orientation : type=str, orientation of X dipole, options=['east', 'north']
+                        If None, assumed to be 'east' (but a warning is raised) to match H1C data
         telescope_name : type=str, name of telescope
         cal_style : type=str, style of calibration solutions, options=['redundant', 'sky']. If
                     cal_style == sky, additional params are required. See pyuvdata.UVCal doc.
@@ -1397,6 +1398,11 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         flag_array[zero_check_arr] += True
         if zero_check_arr.max() is True:
             warnings.warn("Some of values in self.gain_array were zero and are flagged and set to 1.")
+
+    # Use default x_orientation = 'east' if None is given because None usually means it's H1C data
+    if x_orientation is None:
+        x_orientation = 'east'
+        warnings.warn("x_orientation is a required parameter. Since None was provided, this is assumed be 'east'.")
 
     # instantiate UVCal
     uvc = UVCal()
