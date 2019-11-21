@@ -599,6 +599,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['start_jd'] = start_jd
     integration_time = np.median(hd.integration_time)
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
+    x_orientation = hd.x_orientation
 
     # get baselines from data and form baseline groups
     bls = sorted(hd.get_antpairs())
@@ -739,8 +740,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             continue
 
         # write to file
-        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='uvh5', **kwargs)
-        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose, nsamples=num_data, filetype='uvh5', **kwargs)
+        io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose,
+                     nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **kwargs)
+        io.write_vis(std_file, std_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose,
+                     nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **kwargs)
 
         del bin_file, std_file, bin_data, std_data, num_data, bin_lst, flag_data
         del data_conts, flag_conts, std_conts, num_conts
