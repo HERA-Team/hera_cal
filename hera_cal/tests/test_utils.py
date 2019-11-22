@@ -413,7 +413,7 @@ def test_lst_rephase():
     assert np.abs(phs_err).max() < 1e-4
 
     # test operation on array
-    k = (0, 1, 'xx')
+    k = (0, 1, 'ee')
     d = data_drift[k].copy()
     d_phs = utils.lst_rephase(d, bls[k], freqs, dlst, lat=0.0, array=True)
     assert np.allclose(np.abs(np.angle(d_phs[50] / data[k][50])).max(), 0.0)
