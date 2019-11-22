@@ -536,7 +536,7 @@ class VisClean(object):
 
         # generate home
         if not hasattr(self, assign):
-            setattr(self, assign, DataContainer({}))
+            setattr(self, assign, DataContainer({}, x_orientation=data.x_orientation))
 
         # get home
         dfft = getattr(self, assign)
@@ -545,9 +545,9 @@ class VisClean(object):
         if data is None:
             data = self.data
         if flags is not None:
-            wgts = DataContainer(dict([(k, (~flags[k]).astype(np.float)) for k in flags]))
+            wgts = DataContainer(dict([(k, (~flags[k]).astype(np.float)) for k in flags]), x_orientation=flags.x_orientation)
         else:
-            wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=np.float)) for k in data]))
+            wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=np.float)) for k in data]), x_orientation=data.x_orientation)
 
         # get keys
         if keys is None:

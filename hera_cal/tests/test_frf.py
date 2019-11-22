@@ -146,7 +146,7 @@ class Test_FRFilter(object):
         frates = np.fft.fftshift(np.fft.fftfreq(self.F.Ntimes, self.F.dtime)) * 1e3
         w = np.ones((self.F.Ntimes, self.F.Nfreqs), dtype=np.float)
         w[np.abs(frates) < 20] = 0.0
-        frps = datacontainer.DataContainer(dict([(k, w) for k in self.F.data]))
+        frps = datacontainer.DataContainer(dict([(k, w) for k in self.F.data]), x_orientation=self.F.data.x_orientation)
 
         # make gaussian random noise
         bl = (24, 25, 'xx')
