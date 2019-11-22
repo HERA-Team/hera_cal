@@ -52,7 +52,7 @@ class Test_VisClean(object):
         V1.read(bls=[bl])
         V2 = VisClean(fname, filetype='miriad', input_cal=uvc)
         V2.read(bls=[bl])
-        g = gains[(bl[0], 'Jxx')] * gains[(bl[1], 'Jxx')].conj()
+        g = gains[(bl[0], 'Jee')] * gains[(bl[1], 'Jee')].conj()
         assert np.allclose((V1.data[bl] / g)[30, 30], V2.data[bl][30, 30])
         V2.apply_calibration(V2.hc, unapply=True)
         assert np.allclose(V1.data[bl][30, 30], V2.data[bl][30, 30], atol=1e-5)
