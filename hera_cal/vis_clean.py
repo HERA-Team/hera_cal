@@ -145,7 +145,7 @@ class VisClean(object):
             if key in exclude:
                 continue
             if isinstance(getattr(self, key), DataContainer):
-                setattr(self, key, DataContainer({}))
+                setattr(self, key, DataContainer({}, x_orientation=self.hd.x_orientation))
 
     def attach_calibration(self, input_cal):
         """
@@ -346,7 +346,7 @@ class VisClean(object):
         containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data']]
         for i, dc in enumerate(containers):
             if not hasattr(self, dc):
-                setattr(self, dc, DataContainer({}))
+                setattr(self, dc, DataContainer({}, x_orientation=self.hd.x_orientation))
             containers[i] = getattr(self, dc)
         clean_model, clean_resid, clean_flags, clean_data = containers
         clean_info = "{}_{}".format(output_prefix, 'info')
@@ -366,7 +366,7 @@ class VisClean(object):
 
         # get weights
         if wgts is None:
-            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
+            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]), x_orientation=self.hd.x_orientation)
 
         # get delta bin
         dtime, dnu = self._get_delta_bin(dtime=dtime, dnu=dnu)
@@ -374,11 +374,11 @@ class VisClean(object):
         # parse max_frate if fed
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.float)):
-                max_frate = DataContainer(dict([(k, max_frate) for k in data]))
+                max_frate = DataContainer(dict([(k, max_frate) for k in data]), x_orientation=self.hd.x_orientation)
             if not isinstance(max_frate, DataContainer):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
             # convert kwargs to proper units
-            max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
+            max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]), x_orientation=self.hd.x_orientation)
 
         if max_frate is not None:
             max_frate = max_frate * 1e-3
@@ -536,7 +536,7 @@ class VisClean(object):
 
         # generate home
         if not hasattr(self, assign):
-            setattr(self, assign, DataContainer({}, x_orientation=data.x_orientation))
+            setattr(self, assign, DataContainer({}, x_orientation=self.hd.x_orientation))
 
         # get home
         dfft = getattr(self, assign)
@@ -545,9 +545,9 @@ class VisClean(object):
         if data is None:
             data = self.data
         if flags is not None:
-            wgts = DataContainer(dict([(k, (~flags[k]).astype(np.float)) for k in flags]), x_orientation=flags.x_orientation)
+            wgts = DataContainer(dict([(k, (~flags[k]).astype(np.float)) for k in flags]), x_orientation=self.hd.x_orientation)
         else:
-            wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=np.float)) for k in data]), x_orientation=data.x_orientation)
+            wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=np.float)) for k in data]), x_orientation=self.hd.x_orientation)
 
         # get keys
         if keys is None:
@@ -841,8 +841,8 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
 
     # estimate noise in Fourier space by taking amplitude of high delay modes
     # above delay_cut
-    model = DataContainer({})
-    noise = DataContainer({})    
+    model = DataContainer({}, x_orientation=self.hd.x_orientation)
+    noise = DataContainer({}, x_orientation=self.hd.x_orientation)
     for k in keys:
         # get rfft
         rfft, delays = fft_data(clean_resid[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
