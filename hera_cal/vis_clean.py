@@ -806,7 +806,7 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
 
     Args:
         clean_model : DataContainer
-            Holds clean_model output of self.vis_clean
+            Holds clean_model output of self.vis_clean. Should also contain x_orientation
         clean_resid : DataContainer
             Holds clean_resid output of self.vis_clean
         dnu : float
@@ -841,8 +841,8 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
 
     # estimate noise in Fourier space by taking amplitude of high delay modes
     # above delay_cut
-    model = DataContainer({}, x_orientation=self.hd.x_orientation)
-    noise = DataContainer({}, x_orientation=self.hd.x_orientation)
+    model = DataContainer({}, x_orientation=clean_model.x_orientation)
+    noise = DataContainer({}, x_orientation=clean_model.x_orientation)
     for k in keys:
         # get rfft
         rfft, delays = fft_data(clean_resid[k], dnu, axis=1, window='none', edgecut_low=edgecut_low, edgecut_hi=edgecut_hi, ifft=False, ifftshift=False, fftshift=False)
