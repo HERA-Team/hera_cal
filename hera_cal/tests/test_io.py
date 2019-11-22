@@ -241,12 +241,12 @@ class Test_HERAData(object):
         hd.read()
         for bl in hd.bls:
             np.testing.assert_array_equal(hd._get_slice(hd.data_array, bl), hd.get_data(bl))
-        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (54, 53, 'XX')),
-                                      hd.get_data((54, 53, 'XX')))
-        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (53, 54))[parse_polstr('XX')],
-                                      hd.get_data((53, 54, 'XX')))
-        np.testing.assert_array_equal(hd._get_slice(hd.data_array, 'XX')[(53, 54)],
-                                      hd.get_data((53, 54, 'XX')))
+        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (54, 53, 'EE')),
+                                      hd.get_data((54, 53, 'EE')))
+        np.testing.assert_array_equal(hd._get_slice(hd.data_array, (53, 54))[parse_polstr('XX', x_orientation=hd.x_orientation)],
+                                      hd.get_data((53, 54, 'EE')))
+        np.testing.assert_array_equal(hd._get_slice(hd.data_array, 'EE')[(53, 54)],
+                                      hd.get_data((53, 54, 'EE')))
         with pytest.raises(KeyError):
             hd._get_slice(hd.data_array, (1, 2, 3, 4))
 
@@ -313,7 +313,7 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs['polarizations'] is None
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(53, 54, parse_polstr('XX'))]
+            assert list(dc.keys()) == [(53, 54, parse_polstr('XX', x_orientation=dc.x_orientation))]
             assert dc[53, 54, 'xx'].shape == (10, 100)
         with pytest.raises(ValueError):
             d, f, n = hd.read(polarizations=['xy'])
@@ -338,7 +338,7 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs['polarizations'] == ['XX']
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(52, 53, parse_polstr('XX'))]
+            assert list(dc.keys()) == [(52, 53, parse_polstr('XX', x_orientation=dc.x_orientation))]
             assert dc[52, 53, 'xx'].shape == (10, 30)
         with pytest.raises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
@@ -349,7 +349,7 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs['freq_chans'] == list(range(10))
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(0, 1, parse_polstr('XX'))]
+            assert list(dc.keys()) == [(0, 1, parse_polstr('XX', x_orientation=dc.x_orientation))]
             assert dc[0, 1, 'xx'].shape == (60, 10)
         with pytest.raises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
@@ -378,7 +378,7 @@ class Test_HERAData(object):
         hd = HERAData(self.uvh5_1)
         assert hd._writers == {}
         d, f, n = hd.read(bls=hd.bls[0])
-        assert hd.last_read_kwargs['bls'] == (53, 53, parse_polstr('XX'))
+        assert hd.last_read_kwargs['bls'] == (53, 53, parse_polstr('XX', x_orientation=d.x_orientation))
         d[(53, 53, 'XX')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True)
         assert 'out.h5' in hd._writers
@@ -391,12 +391,12 @@ class Test_HERAData(object):
                     assert np.all(getattr(hd, meta)[k] == getattr(hd._writers['out.h5'], meta)[k])
 
         d, f, n = hd.read(bls=hd.bls[1])
-        assert hd.last_read_kwargs['bls'] == (53, 54, parse_polstr('XX'))
+        assert hd.last_read_kwargs['bls'] == (53, 54, parse_polstr('XX', x_orientation=d.x_orientation))
         d[(53, 54, 'XX')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True)
 
         d, f, n = hd.read(bls=hd.bls[2])
-        assert hd.last_read_kwargs['bls'] == (54, 54, parse_polstr('XX'))
+        assert hd.last_read_kwargs['bls'] == (54, 54, parse_polstr('XX', x_orientation=d.x_orientation))
         d[(54, 54, 'XX')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True, inplace=True)
         d_after, _, _ = hd.build_datacontainers()
@@ -436,7 +436,7 @@ class Test_HERAData(object):
 
         hd = HERAData(self.miriad_1, filetype='miriad')
         d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')]))
-        assert list(d.keys()) == [(52, 53, parse_polstr('XX'))]
+        assert list(d.keys()) == [(52, 53, parse_polstr('XX', x_orientation=dc.x_orientation))]
         with pytest.raises(NotImplementedError):
             next(hd.iterate_over_bls())
 
@@ -575,7 +575,7 @@ class Test_Visibility_IO_Legacy(object):
         d, f = io.load_vis([uvd1, uvd2], nested_dict=True)
         for i, j in d:
             for pol in d[i, j]:
-                uvpol = list(uvd1.polarization_array).index(polstr2num(pol))
+                uvpol = list(uvd1.polarization_array).index(polstr2num(pol, x_orientation=uvd1.x_orientation))
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
@@ -586,7 +586,7 @@ class Test_Visibility_IO_Legacy(object):
         d, f = io.load_vis([filename1, filename2], nested_dict=True)
         for i, j in d:
             for pol in d[i, j]:
-                uvpol = list(uvd.polarization_array).index(polstr2num(pol))
+                uvpol = list(uvd.polarization_array).index(polstr2num(pol, x_orientation=uvd.x_orientation))
                 uvmask = np.all(
                     np.array(list(zip(uvd.ant_1_array, uvd.ant_2_array))) == [i, j], axis=1)
                 np.testing.assert_equal(d[i, j][pol], np.resize(
@@ -614,7 +614,7 @@ class Test_Visibility_IO_Legacy(object):
             nsample[k] = np.ones_like(nsample[k], np.float)
 
         # test basic execution
-        uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True)
+        uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east')
         uvd2 = UVData()
         uvd2.read_miriad('ex.uv')
         assert os.path.exists('ex.uv')
@@ -622,7 +622,7 @@ class Test_Visibility_IO_Legacy(object):
         assert uvd2.data_array.shape == (1680, 1, 64, 1)
         assert np.allclose(data[(24, 25, 'xx')][30, 32], uvd.get_data(24, 25, 'xx')[30, 32])
         assert np.allclose(data[(24, 25, 'xx')][30, 32], uvd2.get_data(24, 25, 'xx')[30, 32])
-        assert uvd2.x_orientation.lower() == 'north'
+        assert uvd2.x_orientation.lower() == 'east'
 
         # test with nsample and flags
         uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='east', return_uvd=True, overwrite=True, verbose=True)
