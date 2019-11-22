@@ -175,11 +175,11 @@ class Test_Calibration_Smoother(object):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         flag_file_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
         cs = smooth_cal.CalibrationSmoother(calfits_list, flag_file_list=flag_file_list, flag_filetype='npz', pick_refant=True)
-        assert cs.refant['Jxx'] == (54, 'Jxx')
+        assert cs.refant['Jee'] == (54, 'Jee')
         cs.time_freq_2D_filter(window='tukey', alpha=.45)
         cs.rephase_to_refant()
-        np.testing.assert_array_almost_equal(np.imag(cs.gain_grids[54, 'Jxx']),
-                                             np.zeros_like(np.imag(cs.gain_grids[54, 'Jxx'])))
+        np.testing.assert_array_almost_equal(np.imag(cs.gain_grids[54, 'Jee']),
+                                             np.zeros_like(np.imag(cs.gain_grids[54, 'Jee'])))
 
     def test_check_consistency(self):
         temp_time = self.cs.cal_times[self.cs.cals[0]][0]
@@ -212,64 +212,64 @@ class Test_Calibration_Smoother(object):
         assert len(self.cs.freqs) == 1024
         assert len(self.cs.time_grid) == 180
         assert np.allclose(self.cs.dt, 10.737419128417969 / 24 / 60 / 60)
-        assert (54, 'Jxx') in self.cs.gain_grids
-        assert (54, 'Jxx') in self.cs.flag_grids
-        assert self.cs.gain_grids[54, 'Jxx'].shape == (180, 1024)
-        assert self.cs.flag_grids[54, 'Jxx'].shape == (180, 1024)
-        np.testing.assert_array_equal(self.cs.flag_grids[54, 'Jxx'][60:120, :], True)
+        assert (54, 'Jee') in self.cs.gain_grids
+        assert (54, 'Jee') in self.cs.flag_grids
+        assert self.cs.gain_grids[54, 'Jee'].shape == (180, 1024)
+        assert self.cs.flag_grids[54, 'Jee'].shape == (180, 1024)
+        np.testing.assert_array_equal(self.cs.flag_grids[54, 'Jee'][60:120, :], True)
 
     def test_1D_filtering(self):
-        g = deepcopy(self.cs.gain_grids[54, 'Jxx'])
+        g = deepcopy(self.cs.gain_grids[54, 'Jee'])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.cs.freq_filter(window='tukey', alpha=.45)
-        g2 = deepcopy(self.cs.gain_grids[54, 'Jxx'])
+        g2 = deepcopy(self.cs.gain_grids[54, 'Jee'])
         assert not np.all(g == g2)
         assert g2.shape == g.shape
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.cs.time_filter()
-        g3 = deepcopy(self.cs.gain_grids[54, 'Jxx'])
+        g3 = deepcopy(self.cs.gain_grids[54, 'Jee'])
         assert not np.all(g == g3)
         assert g3.shape == g.shape
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.cs.time_filter()
-        g4 = deepcopy(self.cs.gain_grids[54, 'Jxx'])
+        g4 = deepcopy(self.cs.gain_grids[54, 'Jee'])
         assert not np.all(g3 == g4)
         assert g4.shape == g.shape
 
         self.setup_method()
-        assert not np.all(self.cs.flag_grids[(54, 'Jxx')] == np.ones_like(self.cs.flag_grids[(54, 'Jxx')]))
-        self.cs.flag_grids[(54, 'Jxx')] = np.zeros_like(self.cs.flag_grids[(54, 'Jxx')])
-        self.cs.flag_grids[(54, 'Jxx')][:, 0:1000] = True
+        assert not np.all(self.cs.flag_grids[(54, 'Jee')] == np.ones_like(self.cs.flag_grids[(54, 'Jee')]))
+        self.cs.flag_grids[(54, 'Jee')] = np.zeros_like(self.cs.flag_grids[(54, 'Jee')])
+        self.cs.flag_grids[(54, 'Jee')][:, 0:1000] = True
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.cs.freq_filter()
-            np.testing.assert_array_equal(self.cs.gain_grids[(54, 'Jxx')], g)
+            np.testing.assert_array_equal(self.cs.gain_grids[(54, 'Jee')], g)
             self.cs.time_filter()
-            np.testing.assert_array_equal(self.cs.gain_grids[(54, 'Jxx')], g)
+            np.testing.assert_array_equal(self.cs.gain_grids[(54, 'Jee')], g)
             # test skip_wgt propagation to flags
-            np.testing.assert_array_equal(self.cs.flag_grids[(54, 'Jxx')],
-                                          np.ones_like(self.cs.flag_grids[(54, 'Jxx')]))
+            np.testing.assert_array_equal(self.cs.flag_grids[(54, 'Jee')],
+                                          np.ones_like(self.cs.flag_grids[(54, 'Jee')]))
         self.setup_method()
-        self.cs.gain_grids[54, 'Jxx'] = g
+        self.cs.gain_grids[54, 'Jee'] = g
 
     def test_2D_filtering(self):
-        g = deepcopy(self.cs.gain_grids[54, 'Jxx'])
+        g = deepcopy(self.cs.gain_grids[54, 'Jee'])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.cs.time_freq_2D_filter(window='tukey', alpha=.45)
-        g2 = deepcopy(self.cs.gain_grids[54, 'Jxx'])
+        g2 = deepcopy(self.cs.gain_grids[54, 'Jee'])
         assert not np.all(g == g2)
         assert g2.shape == g.shape
 
     @pytest.mark.filterwarnings("ignore:Mean of empty slice")
     def test_write(self):
         outfilename = os.path.join(DATA_PATH, 'test_output/smooth_test.calfits')
-        g = deepcopy(self.cs.gain_grids[54, 'Jxx'])
+        g = deepcopy(self.cs.gain_grids[54, 'Jee'])
         self.cs.write_smoothed_cal(output_replace=('test_input/', 'test_output/smoothed_'),
                                    add_to_history='hello world', clobber=True, telescope_name='PAPER')
         for cal in self.cs.cals:
@@ -280,9 +280,9 @@ class Test_Calibration_Smoother(object):
             assert 'helloworld' in new_cal.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in new_cal.history.replace('\n', '').replace(' ', '')
             assert new_cal.telescope_name == 'PAPER'
-            np.testing.assert_array_equal(gains[54, 'Jxx'], g[self.cs.time_indices[cal], :])
+            np.testing.assert_array_equal(gains[54, 'Jee'], g[self.cs.time_indices[cal], :])
 
             relative_diff, avg_relative_diff = utils.gain_relative_difference(gains, old_gains, flags)
-            np.testing.assert_array_equal(qual[54, 'Jxx'], relative_diff[54, 'Jxx'])
-            np.testing.assert_array_equal(total_qual['Jxx'], avg_relative_diff['Jxx'])
+            np.testing.assert_array_equal(qual[54, 'Jee'], relative_diff[54, 'Jee'])
+            np.testing.assert_array_equal(total_qual['Jee'], avg_relative_diff['Jee'])
             os.remove(cal.replace('test_input/', 'test_output/smoothed_'))
