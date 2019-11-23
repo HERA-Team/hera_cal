@@ -39,7 +39,6 @@ class Test_Pol_Ops(object):
         pytest.raises(KeyError, utils.comply_pol, 'stuff')
         pytest.raises(KeyError, utils.comply_pol, 'Jxe')
 
-
     def test_split_pol(self):
         assert utils.split_pol('xx') == ('Jxx', 'Jxx')
         assert utils.split_pol('xy') == ('Jxx', 'Jyy')
@@ -644,6 +643,3 @@ def test_echo(capsys):
     assert output[0] == '\n'
     assert output[1:4] == 'hi\n'
     assert output[4:] == '-' * 40 + '\n'
-
-
-
