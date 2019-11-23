@@ -73,7 +73,7 @@ class Test_Update_Cal(object):
         inp_data, inp_flags, _ = inp_hc.read()
         out_hc = io.HERAData(outname_uvh5)
         out_data, out_flags, _ = out_hc.read()
-        np.testing.assert_almost_equal(inp_data[(54, 54, 'xx')], out_data[(54, 54, 'xx')])
+        np.testing.assert_almost_equal(inp_data[(54, 54, 'ee')], out_data[(54, 54, 'ee')])
         os.remove(outname_uvh5)
 
         # Now test with partial I/O
@@ -92,7 +92,7 @@ class Test_Update_Cal(object):
         inp_data, inp_flags, _ = inp_hc.read()
         out_hc = io.HERAData(outname_uvh5)
         out_data, out_flags, _ = out_hc.read()
-        np.testing.assert_almost_equal(inp_data[(54, 54, 'xx')], out_data[(54, 54, 'xx')])
+        np.testing.assert_almost_equal(inp_data[(54, 54, 'ee')], out_data[(54, 54, 'ee')])
         os.remove(outname_uvh5)
 
     def test_calibrate_in_place(self):
