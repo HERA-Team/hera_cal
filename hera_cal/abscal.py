@@ -780,7 +780,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
         wgts = odict()
         for i, k in enumerate(keys):
             wgts[k] = np.ones_like(data[k], dtype=np.float)
-    flags = DataContainer({k: ~wgts[k].astype(np.bool) for k in wgts}, x_orientation=data.x_orientation)
+    flags = DataContainer({k: ~wgts[k].astype(np.bool) for k in wgts})
 
     # center antenna positions about the reference antenna
     if refant is None:
@@ -798,7 +798,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
             reds.append(red)
     avg_data, avg_flags, _ = utils.red_average(data, reds=reds, flags=flags, inplace=False)
     red_keys = list(avg_data.keys())
-    avg_wgts = DataContainer({k: (~avg_flags[k]).astype(np.float) for k in avg_flags}, x_orientation=data.x_orientation)
+    avg_wgts = DataContainer({k: (~avg_flags[k]).astype(np.float) for k in avg_flags})
     avg_model, _, _ = utils.red_average(model, reds=reds, flags=flags, inplace=False)
 
     ls_data, ls_wgts, bls, pols = {}, {}, {}, {}
@@ -1066,7 +1066,7 @@ def wiener(data, window=(5, 11), noise=None, medfilt=True, medfilt_kernel=(3, 9)
     if array:
         return new_data['arr']
     else:
-        return DataContainer(new_data, x_orientation=data.x_orientation)
+        return DataContainer(new_data)
 
 
 def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=None,
@@ -1080,7 +1080,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     -----------
     model : type=DataContainer, holds complex visibility for model
         keys are antenna-pair + pol tuples, values are 2d complex visibility
-        with shape (Ntimes, Nfreqs). x_orientation inferred from this object.
+        with shape (Ntimes, Nfreqs).
 
     model_lsts : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
 
@@ -1141,7 +1141,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     # ensure flags are booleans
     if flags is not None:
         if np.issubdtype(flags[list(flags.keys())[0]].dtype, np.floating):
-            flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys()))), x_orientation=model.x_orientation)
+            flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys()))))
 
     # loop over keys
     for i, k in enumerate(list(model.keys())):
@@ -1232,7 +1232,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         new_model[k] = interp_real + 1j * interp_imag
         new_flags[k] = f
 
-    return DataContainer(new_model, x_orientation=model.x_orientation), DataContainer(new_flags, x_orientation=model.x_orientation)
+    return DataContainer(new_model), DataContainer(new_flags)
 
 
 def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=None, max_dlst=0.005, latitude=-30.72152):
@@ -1304,7 +1304,7 @@ def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=N
         return new_model, new_flags
     else:
         new_model = utils.lst_rephase(new_model, bls, freqs, dlst, lat=latitude, inplace=False)
-        return DataContainer(new_model, x_orientation=model.x_orientation), DataContainer(new_flags, x_orientation=model.x_orientation)
+        return DataContainer(new_model), DataContainer(new_flags)
 
 
 def fill_dict_nans(data, wgts=None, nan_fill=None, inf_fill=None, array=False):
@@ -1464,8 +1464,7 @@ def match_red_baselines(model, model_antpos, data, data_antpos, tol=1.0, verbose
             elif comparison[matches[0]] == 'conjugated':
                 new_model[data_keys[matches[0]]] = np.conj(model[model_keys[i]])
 
-    assert data.x_orientation == model.x_orientation, '{} does not match {}'.format(data.x_orientation, model.x_orientation)
-    return DataContainer(new_model, x_orientation=data.x_orientation)
+    return DataContainer(new_model)
 
 
 def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.0,
@@ -1506,7 +1505,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     pols = np.unique(list(map(lambda k: k[2], data.keys())))
     ants = np.unique(np.concatenate(keys))
     if wgts is None:
-        wgts = DataContainer(odict(list(map(lambda k: (k, np.ones_like(data[k]).astype(np.float)), data.keys()))), x_orientation=data.x_orientation)
+        wgts = DataContainer(odict(list(map(lambda k: (k, np.ones_like(data[k]).astype(np.float)), data.keys()))))
 
     # get redundant baselines if not provided
     if reds is None:
@@ -1551,7 +1550,7 @@ def avg_data_across_red_bls(data, antpos, wgts=None, broadcast_wgts=True, tol=1.
     # get red_data keys
     red_keys = list(red_data.keys())
 
-    return DataContainer(red_data, x_orientation=data.x_orientation), DataContainer(red_wgts, x_orientation=data.x_orientation), red_keys
+    return DataContainer(red_data), DataContainer(red_wgts), red_keys
 
 
 def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
@@ -1635,7 +1634,7 @@ def mirror_data_to_red_bls(data, antpos, tol=2.0, weights=False):
     else:
         red_data = odict([(k, red_data[k]) for k in sorted(red_data)])
 
-    return DataContainer(red_data, x_orientation=data.x_orientation)
+    return DataContainer(red_data)
 
 
 def match_times(datafile, modelfiles, filetype='uvh5', atol=1e-5):
@@ -1802,8 +1801,6 @@ class AbsCal(object):
                 or a list of either. In this case, antpos, freqs
                 and wgts are overwritten from arrays in data. 
 
-                x_orientation is inferred from the data
-
         refant : antenna number integer for reference antenna
             The refence antenna is used in the phase solvers, where an absolute phase is applied to all
             antennas such that the refant's phase is set to identically zero.
@@ -1860,10 +1857,6 @@ class AbsCal(object):
             freqs = data_freqs
             antpos = data_antpos
 
-        # figure out x_orientation
-        assert data.x_orientation == model.x_orientation, '{} does not match {}'.format(data.x_orientation, model.x_orientation)
-        self.x_orientation = data.x_orientation
-
         # apply calibration
         if input_cal is not None:
             if 'flags' not in locals():
@@ -1877,8 +1870,8 @@ class AbsCal(object):
         assert len(self.keys) > 0, "no shared keys exist between model and data"
 
         # append attributes
-        self.model = DataContainer(dict([(k, model[k]) for k in self.keys]), self.x_orientation)
-        self.data = DataContainer(dict([(k, data[k]) for k in self.keys]), self.x_orientation)
+        self.model = DataContainer(dict([(k, model[k]) for k in self.keys]))
+        self.data = DataContainer(dict([(k, data[k]) for k in self.keys]))
 
         # setup frequencies
         self.freqs = freqs
@@ -1892,15 +1885,15 @@ class AbsCal(object):
             pols = np.unique(list(map(lambda k: k[2], self.keys)))
         elif isinstance(pols, np.ndarray) or isinstance(pols, list):
             if np.issubdtype(type(pols[0]), int):
-                pols = list(map(lambda p: polnum2str(p, x_orientation=self.x_orientation), pols))
+                pols = list(map(lambda p: polnum2str(p), pols))
 
         # convert to integer format
         self.pols = pols
-        self.pols = list(map(lambda p: polstr2num(p, x_orientation=self.x_orientation), self.pols))
+        self.pols = list(map(lambda p: polstr2num(p), self.pols))
         self.Npols = len(self.pols)
 
         # save pols in string format and get gain_pols
-        self.polstrings = np.array(list(map(lambda p: polnum2str(p, x_orientation=self.x_orientation), self.pols)))
+        self.polstrings = np.array(list(map(lambda p: polnum2str(p), self.pols)))
         self.gain_pols = np.unique(list(map(lambda p: list(split_pol(p)), self.polstrings)))
         self.Ngain_pols = len(self.gain_pols)
 
@@ -1908,9 +1901,9 @@ class AbsCal(object):
         if wgts is None:
             # use data flags if present
             if 'flags' in locals() and flags is not None:
-                wgts = DataContainer(dict([(k, (~flags[k]).astype(np.float)) for k in self.keys]), self.x_orientation)
+                wgts = DataContainer(dict([(k, (~flags[k]).astype(np.float)) for k in self.keys]))
             else:
-                wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=np.float)) for k in self.keys]), self.x_orientation)
+                wgts = DataContainer(dict([(k, np.ones_like(data[k], dtype=np.float)) for k in self.keys]))
             if 'model_flags' in locals():
                 for k in self.keys:
                     wgts[k] *= (~model_flags[k]).astype(np.float)
@@ -2866,7 +2859,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     # instantiate Abscal object
     if refant_num is None:
         refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
-    wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()}, data.x_orientation)
+    wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
     AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
     
@@ -2955,6 +2948,11 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
     if len(matched_model_files) > 0:
         hd = io.HERAData(data_file)
         hdm = io.HERAData(matched_model_files)
+        # check for matching x_orientations
+        if len(matched_model_files) > 1:
+            assert np.all([x_or == hd.x_orientation for x_or in hdm.x_orientation.values()])
+        else:
+            assert hdm.x_orientation == hd.x_orientation
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
         
         # match integrations in model to integrations in data
@@ -2985,7 +2983,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                     calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                                        cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
                     auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
-                    autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls}, x_orientation=hd.x_orientation)
+                    autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
 
                     if not np.all(list(flags.values())):
                         # load model and rephase
