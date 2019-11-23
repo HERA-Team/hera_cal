@@ -128,8 +128,8 @@ class Test_lstbin(object):
         file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                              verbose=False, file_ext=file_ext, ignore_flags=True)
-        output_lst_file = "./zen.xx.LST.0.20124.uvh5"
-        output_std_file = "./zen.xx.STD.0.20124.uvh5"
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
         uv1 = UVData()
@@ -155,8 +155,8 @@ class Test_lstbin(object):
         # test rephase
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                              verbose=False, rephase=True, file_ext=file_ext)
-        output_lst_file = "./zen.xx.LST.0.20124.uvh5"
-        output_std_file = "./zen.xx.STD.0.20124.uvh5"
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
         os.remove(output_lst_file)
@@ -167,12 +167,12 @@ class Test_lstbin(object):
                       [sorted(glob.glob(DATA_PATH + '/zen.2458045.*XRAA.uvh5'))[-1]]]
         lstbin.lst_bin_files(data_files, ntimes_per_file=30, outdir="./", overwrite=True,
                              verbose=False, file_ext=file_ext)
-        output_lst_files = ['./zen.xx.LST.0.20124.uvh5', './zen.xx.LST.0.31870.uvh5', './zen.xx.LST.0.36568.uvh5']
+        output_lst_files = ['./zen.ee.LST.0.20124.uvh5', './zen.ee.LST.0.31870.uvh5', './zen.ee.LST.0.36568.uvh5']
         assert os.path.exists(output_lst_files[0])
         assert os.path.exists(output_lst_files[1])
         assert os.path.exists(output_lst_files[2])
-        output_files = np.concatenate([glob.glob("./zen.xx.LST*"),
-                                       glob.glob("./zen.xx.STD*")])
+        output_files = np.concatenate([glob.glob("./zen.ee.LST*"),
+                                       glob.glob("./zen.ee.STD*")])
         for of in output_files:
             if os.path.exists(of):
                 os.remove(of)
@@ -180,7 +180,7 @@ class Test_lstbin(object):
         # test smaller ntimes file output, sweeping through f_select
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True,
                              verbose=False, vis_units='Jy', file_ext=file_ext)
-        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
         uvd1 = UVData()
         uvd1.read(output_files[1])
@@ -196,7 +196,7 @@ class Test_lstbin(object):
         # test output_file_select
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=1,
                              verbose=False, vis_units='Jy', file_ext=file_ext)
-        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         # load a file
         uvd2 = UVData()
         uvd2.read(output_files[0])
@@ -208,25 +208,25 @@ class Test_lstbin(object):
                 os.remove(of)
 
         # assert bad output_file_select produces no files
-        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         for of in output_files:
             if os.path.exists(of):
                 os.remove(of)
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=80, outdir="./", overwrite=True, output_file_select=100,
                              verbose=False, file_ext=file_ext)
-        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         assert len(output_files) == 0
 
         # test fixed start
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                              verbose=False, lst_start=0.18, fixed_lst_start=True, file_ext=file_ext)
-        output_lst_file = "./zen.xx.LST.0.17932.uvh5"
-        output_std_file = "./zen.xx.STD.0.17932.uvh5"
+        output_lst_file = "./zen.ee.LST.0.17932.uvh5"
+        output_std_file = "./zen.ee.STD.0.17932.uvh5"
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
         os.remove(output_lst_file)
         os.remove(output_std_file)
-        extra_files = ["zen.xx.LST.0.37508.uvh5", "zen.xx.STD.0.37508.uvh5"]
+        extra_files = ["zen.ee.LST.0.37508.uvh5", "zen.ee.STD.0.37508.uvh5"]
         for of in extra_files:
             if os.path.exists(of):
                 os.remove(of)
@@ -243,8 +243,8 @@ class Test_lstbin(object):
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
                              verbose=False, input_cals=input_cals, file_ext=file_ext)
 
-        output_lst_file = "./zen.xx.LST.0.20124.uvh5"
-        output_std_file = "./zen.xx.STD.0.20124.uvh5"
+        output_lst_file = "./zen.ee.LST.0.20124.uvh5"
+        output_std_file = "./zen.ee.STD.0.20124.uvh5"
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
         os.remove(output_lst_file)
