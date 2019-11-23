@@ -118,14 +118,14 @@ class ReflectionFitter(FRFilter):
         super(ReflectionFitter, self).__init__(*args, **kwargs)
 
         # init empty datacontainers
-        self.umodes = DataContainer({}, x_orientation=self.hd.x_orientation)
-        self.uflags = DataContainer({}, x_orientation=self.hd.x_orientation)
-        self.vmodes = DataContainer({}, x_orientation=self.hd.x_orientation)
-        self.svals = DataContainer({}, x_orientation=self.hd.x_orientation)
-        self.umode_interp = DataContainer({}, x_orientation=self.hd.x_orientation)
-        self.pcomp_model = DataContainer({}, x_orientation=self.hd.x_orientation)
-        self.pcomp_model_fft = DataContainer({}, x_orientation=self.hd.x_orientation)
-        self.data_pcmodel_resid = DataContainer({}, x_orientation=self.hd.x_orientation)
+        self.umodes = DataContainer({})
+        self.uflags = DataContainer({})
+        self.vmodes = DataContainer({})
+        self.svals = DataContainer({})
+        self.umode_interp = DataContainer({})
+        self.pcomp_model = DataContainer({})
+        self.pcomp_model_fft = DataContainer({})
+        self.data_pcmodel_resid = DataContainer({})
 
         # init empty dictionaries
         self.ref_eps = {}
@@ -150,7 +150,7 @@ class ReflectionFitter(FRFilter):
                 continue
             obj = getattr(self, key)
             if isinstance(getattr(self, key), DataContainer):
-                setattr(self, key, DataContainer({}, x_orientation=self.hd.x_orientation))
+                setattr(self, key, DataContainer({}))
         self._clear_ref()
 
     def _clear_ref(self):
@@ -229,7 +229,7 @@ class ReflectionFitter(FRFilter):
         """
         # get flags
         if clean_flags is None:
-            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_resid[k], dtype=np.bool)) for k in clean_resid]), x_orientation=self.hd.x_orientation)
+            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_resid[k], dtype=np.bool)) for k in clean_resid]))
 
         # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
@@ -347,9 +347,9 @@ class ReflectionFitter(FRFilter):
         """
         # check inputs
         if clean_flags is None:
-            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]), x_orientation=self.hd.x_orientation)
+            clean_flags = DataContainer(dict([(k, np.zeros_like(clean_data[k], dtype=np.bool)) for k in clean_data]))
         if clean_model is None:
-            clean_model = DataContainer(dict([(k, np.zeros_like(clean_data[k])) for k in clean_data]), x_orientation=self.hd.x_orientation)
+            clean_model = DataContainer(dict([(k, np.zeros_like(clean_data[k])) for k in clean_data]))
 
         # get keys: only use auto correlations and auto pols to model reflections
         if keys is None:
@@ -507,7 +507,7 @@ class ReflectionFitter(FRFilter):
         Returns:
             wgts : DataContainer, holding sv_decomp weights
         """
-        wgts = DataContainer({}, x_orientation=self.hd.x_orientation)
+        wgts = DataContainer({})
         for k in dfft:
             w = np.ones_like(dfft[k], dtype=np.float)
             # get horizon
@@ -555,11 +555,11 @@ class ReflectionFitter(FRFilter):
         """
         # get flags
         if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=np.bool)) for k in dfft]), x_orientation=self.hd.x_orientation)
+            flags = DataContainer(dict([(k, np.zeros_like(dfft[k], dtype=np.bool)) for k in dfft]))
 
         # get weights
         if wgts is None:
-            wgts = DataContainer(dict([(k, np.ones_like(dfft[k], dtype=np.float)) for k in dfft]), x_orientation=self.hd.x_orientation)
+            wgts = DataContainer(dict([(k, np.ones_like(dfft[k], dtype=np.float)) for k in dfft]))
 
         # get keys
         if keys is None:
@@ -620,7 +620,7 @@ class ReflectionFitter(FRFilter):
         Returns:
             output : DataContainer, estimate of remaining SVD matrix
         """
-        output = DataContainer({}, x_orientation=self.hd.x_orientation)
+        output = DataContainer({})
         if umodes is None:
             assert svals is not None and vmodes is not None, "Must feed two of the SVD output matrices"
             # compute umodes
@@ -754,9 +754,9 @@ class ReflectionFitter(FRFilter):
             keys = list(self.pcomp_model.keys())
 
         if not hasattr(self, 'pcomp_model_fft'):
-            self.pcomp_model_fft = DataContainer({}, x_orientation=self.hd.x_orientation)
+            self.pcomp_model_fft = DataContainer({})
         if not hasattr(self, 'data_pcmodel_resid'):
-            self.data_pcmodel_resid = DataContainer({}, x_orientation=self.hd.x_orientation)
+            self.data_pcmodel_resid = DataContainer({})
 
         # get data
         if data is None:
@@ -841,7 +841,7 @@ class ReflectionFitter(FRFilter):
                 Holds the input umodes Container interpolated onto full_times.
         """
         if not hasattr(self, 'umode_interp'):
-            self.umode_interp = DataContainer({}, x_orientation=self.hd.x_orientation)
+            self.umode_interp = DataContainer({})
 
         if uflags is None:
             uflags = self.uflags
@@ -855,7 +855,7 @@ class ReflectionFitter(FRFilter):
 
         # parse gp_frate
         if isinstance(gp_frate, (int, np.integer, float, np.float)):
-            gp_frate = DataContainer(dict([(k, gp_frate) for k in umodes.keys()]), x_orientation=self.hd.x_orientation)
+            gp_frate = DataContainer(dict([(k, gp_frate) for k in umodes.keys()]))
 
         # setup X predict
         Xmean = np.median(times)
