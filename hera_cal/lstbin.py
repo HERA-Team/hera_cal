@@ -153,12 +153,12 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             # exists, then pass
             if key in data:
                 pass
-            elif switch_bl(key) in data:
+            elif utils.reverse_bl(key) in data:
                 # check to see if conj(key) exists in data
-                key = switch_bl(key)
-                d[key] = np.conj(d[switch_bl(key)])
+                key = utils.reverse_bl(key)
+                d[key] = np.conj(d[utils.reverse_bl(key)])
                 if flags_list is not None:
-                    flags_list[i][key] = flags_list[i][switch_bl(key)]
+                    flags_list[i][key] = flags_list[i][utils.reverse_bl(key)]
             else:
                 # if key or conj(key) not in data, insert key into data as an odict
                 data[key] = odict()
@@ -855,12 +855,3 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     clip_flags[clip] = True
 
     return clip_flags
-
-
-def switch_bl(key):
-    """
-    switch antenna ordering in (ant1, ant2, pol) key
-    where ant1 and ant2 are ints and pol is a two-char str
-    Ex. (1, 2, 'xx')
-    """
-    return (key[1], key[0], key[2][::-1])
