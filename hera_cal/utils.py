@@ -13,7 +13,7 @@ from scipy import signal
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
-from pyuvdata.utils import POL_STR2NUM_DICT
+from pyuvdata.utils import POL_STR2NUM_DICT, _x_orientation_rep_dict
 import sklearn.gaussian_process as gp
 
 try:
@@ -23,24 +23,31 @@ except ImportError:
     AIPY = False
 
 
-def _comply_antpol(antpol, x_orientation=None):
+# Defines characters to look for to see if the polarization string is in east/north format. Nominally ['e', 'n'].
+_KEY_CARDINAL_CHARS = [c.lower() for c in _x_orientation_rep_dict('north').values()]
+
+
+def _is_cardinal(polstr):
+    '''Returns true if any characters in the polarization match those in _KEY_CARDINAL_CHARS.'''
+    return np.any([c.lower() in _KEY_CARDINAL_CHARS for c in polstr])
+
+
+def _comply_antpol(antpol):
     '''Maps an input antenna polarization string onto a string compliant with pyuvdata
     and hera_cal.'''
-    try:
-        return jnum2str(jstr2num(antpol, x_orientation=x_orientation), x_orientation=x_orientation)
-    except KeyError:
-        # This preserves 'Jnn' and 'Jee' strings even when x_orientation is not specified.
+    if _is_cardinal(antpol):
         return jnum2str(jstr2num(antpol, x_orientation='north'), x_orientation='north')
+    else:
+        return jnum2str(jstr2num(antpol))
 
 
-def _comply_vispol(pol, x_orientation=None):
+def _comply_vispol(pol):
     '''Maps an input visibility polarization string onto a string compliant with pyuvdata
-    and hera_cal. If x_orientation is specified, will convert xx/yy into ee/nn or nn/ee.'''
-    try:
-        return polnum2str(polstr2num(pol, x_orientation=x_orientation), x_orientation=x_orientation)
-    except KeyError:
-        # This preserves 'nn' and 'ee' strings even when x_orientation is not specified.
+    and hera_cal.'''
+    if _is_cardinal(pol):
         return polnum2str(polstr2num(pol, x_orientation='north'), x_orientation='north')
+    else:
+        return polnum2str(polstr2num(pol))
 
 
 _VISPOLS = set([pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0])
@@ -67,13 +74,13 @@ def join_pol(p1, p2):
                      _comply_antpol(p2))]
 
 
-def comply_pol(pol, x_orientation=None):
+def comply_pol(pol):
     '''Maps an input (visibility or antenna) polarization string onto a string
     compliant with pyuvdata and hera_cal.'''
     try:
-        return _comply_vispol(pol, x_orientation=x_orientation)
+        return _comply_vispol(pol)
     except(KeyError):  # happens if we have an antpol, not vispol
-        return _comply_antpol(pol, x_orientation=x_orientation)
+        return _comply_antpol(pol)
 
 
 def split_bl(bl):
@@ -97,17 +104,17 @@ def reverse_bl(bl):
         return (j, i, conj_pol(_comply_vispol(bl[2])))
 
 
-def comply_bl(bl, x_orientation=None):
+def comply_bl(bl):
     '''Translates an input (i,j,pol) baseline to ensure pol is compliant with
     pyuvdata and hera_cal. Inputs of length 2, e.g. (i,j) are unmodified.'''
     if len(bl) == 2:
         return bl
     else:
         i, j, p = bl
-        return (i, j, _comply_vispol(p, x_orientation=x_orientation))
+        return (i, j, _comply_vispol(p))
 
 
-def make_bl(*args, x_orientation=None):
+def make_bl(*args):
     '''Create an (i,j,pol) baseline key that is compliant with pyuvdata
     and hera_cal.  Accepts (bl, pol) or (i, j, pol) as input.'''
     if len(args) == 1:
@@ -116,7 +123,7 @@ def make_bl(*args, x_orientation=None):
         (i, j), pol = args
     else:
         i, j, pol = args
-    return (i, j, _comply_vispol(pol, x_orientation=x_orientation))
+    return (i, j, _comply_vispol(pol))
 
 
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
