@@ -309,7 +309,7 @@ class Test_lstbin(object):
         assert sw_k == (2, 1, 'xx')
 
     def tearDown(self):
-        output_files = sorted(glob.glob("./zen.xx.LST*") + glob.glob("./zen.xx.STD*"))
+        output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
         for of in output_files:
             if os.path.exists(of):
                 os.remove(of)
