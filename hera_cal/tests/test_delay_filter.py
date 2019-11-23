@@ -22,7 +22,7 @@ from ..data import DATA_PATH
 class Test_DelayFilter(object):
     def test_run_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        k = (24, 25, 'xx')
+        k = (24, 25, 'ee')
         dfil = df.DelayFilter(fname, filetype='miriad')
         dfil.read(bls=[k])
         bl = np.linalg.norm(dfil.antpos[24] - dfil.antpos[25]) / constants.c * 1e9
@@ -36,7 +36,7 @@ class Test_DelayFilter(object):
 
         # test skip_wgt imposition of flags
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        k = (24, 25, 'xx')
+        k = (24, 25, 'ee')
         dfil = df.DelayFilter(fname, filetype='miriad')
         dfil.read(bls=[k])
         wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
@@ -49,7 +49,7 @@ class Test_DelayFilter(object):
 
     def test_write_filtered_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        k = (24, 25, 'xx')
+        k = (24, 25, 'ee')
         dfil = df.DelayFilter(fname, filetype='miriad')
         dfil.read(bls=[k])
 
@@ -88,21 +88,21 @@ class Test_DelayFilter(object):
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         df.partial_load_delay_filter_and_write(uvh5, res_outfilename=outfilename, Nbls=1, tol=1e-4, clobber=True)
         hd = io.HERAData(outfilename)
-        d, f, n = hd.read(bls=[(53, 54, 'xx')])
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
 
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
-        dfil.read(bls=[(53, 54, 'xx')])
-        dfil.run_filter(to_filter=[(53, 54, 'xx')], tol=1e-4, verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'xx')], dfil.clean_resid[(53, 54, 'xx')], decimal=5)
-        np.testing.assert_array_equal(f[(53, 54, 'xx')], dfil.flags[(53, 54, 'xx')])
+        dfil.read(bls=[(53, 54, 'ee')])
+        dfil.run_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         df.partial_load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls=2, clobber=True)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
-        d, f, n = hd.read(bls=[(53, 54, 'xx')])
-        np.testing.assert_array_equal(f[(53, 54, 'xx')], True)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
 
     def test_delay_filter_argparser(self):
