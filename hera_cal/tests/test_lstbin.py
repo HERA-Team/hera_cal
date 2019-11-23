@@ -62,28 +62,28 @@ class Test_lstbin(object):
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
                                 verbose=False)
         # check shape and dtype
-        assert output[1][(24, 25, 'xx')].dtype == np.complex
-        assert output[1][(24, 25, 'xx')].shape == (224, 64)
+        assert output[1][(24, 25, 'ee')].dtype == np.complex
+        assert output[1][(24, 25, 'ee')].shape == (224, 64)
         # check number of points in each bin
-        assert np.allclose(output[-1][(24, 25, 'xx')].real[0, 30], 1)
-        assert np.allclose(output[-1][(24, 25, 'xx')].real[30, 30], 2)
-        assert np.allclose(output[-1][(24, 25, 'xx')].real[100, 30], 3)
-        assert np.allclose(output[-1][(24, 25, 'xx')].real[190, 30], 2)
-        assert np.allclose(output[-1][(24, 25, 'xx')].real[220, 30], 1)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 1)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[30, 30], 2)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[100, 30], 3)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[190, 30], 2)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[220, 30], 1)
         # check with large spacing lst_grid
         output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=.01, verbose=False)
-        assert np.allclose(output[-1][(24, 25, 'xx')].real[10, 30], 38)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[10, 30], 38)
         # check flgs are propagated
         flgs1 = copy.deepcopy(self.flgs1)
-        flgs1[(24, 25, 'xx')][:, 32] = True
+        flgs1[(24, 25, 'ee')][:, 32] = True
         flgs2 = copy.deepcopy(self.flgs2)
-        flgs2[(24, 25, 'xx')][:, 32] = True
+        flgs2[(24, 25, 'ee')][:, 32] = True
         flgs3 = copy.deepcopy(self.flgs3)
         flgs_list = [flgs1, flgs2, flgs3]
         output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=flgs_list)
-        assert np.allclose(output[2][(24, 25, 'xx')][0, 32], True)
-        assert np.allclose(output[2][(24, 25, 'xx')][180, 32], False)
-        assert np.allclose(output[2][(24, 25, 'xx')][210, 32], False)
+        assert np.allclose(output[2][(24, 25, 'ee')][0, 32], True)
+        assert np.allclose(output[2][(24, 25, 'ee')][180, 32], False)
+        assert np.allclose(output[2][(24, 25, 'ee')][210, 32], False)
         # test return no avg
         output = lstbin.lst_bin(self.data_list, self.lst_list, dlst=dlst, flags_list=self.flgs_list, return_no_avg=True)
         assert len(output[2][list(output[2].keys())[0]][100]) == 3
@@ -92,7 +92,7 @@ class Test_lstbin(object):
         conj_data3 = DataContainer(odict(list(map(lambda k: (lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys()))))
         data_list = [self.data1, self.data2, conj_data3]
         output = lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
-        assert output[1][(24, 25, 'xx')].shape == (224, 64)
+        assert output[1][(24, 25, 'ee')].shape == (224, 64)
         # test sigma clip
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                 verbose=False, sig_clip=True, min_N=5, sigma=2)
@@ -104,16 +104,16 @@ class Test_lstbin(object):
         # test appropriate data_count
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=dlst, lst_low=0.25, lst_hi=0.3,
                                 verbose=False)
-        assert np.allclose(output[4][(24, 25, 'xx')], 3.0)
+        assert np.allclose(output[4][(24, 25, 'ee')], 3.0)
 
     def test_lst_align(self):
         # test basic execution
         output = lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
-        assert output[0][(24, 25, 'xx')].shape == (180, 64)
+        assert output[0][(24, 25, 'ee')].shape == (180, 64)
         assert len(output[2]) == 180
         assert np.allclose(output[2][0], 0.20163512170971379)
         # test flag extrapolate
-        assert np.all(output[1][(24, 25, 'xx')][-1])
+        assert np.all(output[1][(24, 25, 'ee')][-1])
         # test no dlst
         output = lstbin.lst_align(self.data1, self.lsts1, dlst=None, flags=self.flgs1, flag_extrapolate=True, verbose=False)
         # test wrapped lsts
@@ -135,7 +135,7 @@ class Test_lstbin(object):
         uv1 = UVData()
         uv1.read(output_lst_file)
         # assert nsample w.r.t time follows 1-2-3-2-1 pattern
-        nsamps = np.mean(uv1.get_nsamples(52, 52, 'xx'), axis=1)
+        nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
         expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(21)]).astype(np.float)
         assert np.allclose(nsamps, expectation)
         os.remove(output_lst_file)
