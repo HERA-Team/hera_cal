@@ -53,7 +53,7 @@ def simulate_reflections(uvd=None, camp=1e-2, cdelay=155, cphase=2, add_cable=Tr
     ant_dist = dict(zip(ants, map(np.linalg.norm, antpos)))
 
     # get autocorr
-    autocorr = uvd.get_data(23, 23, 'xx')
+    autocorr = uvd.get_data(23, 23, 'ee')
 
     # form cable gains
     if add_cable:
@@ -105,8 +105,8 @@ class Test_ReflectionFitter_Cables(object):
 
     def test_model_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
-        bl_k = (23, 23, 'xx')
-        g_k = (23, 'Jxx')
+        bl_k = (23, 23, 'ee')
+        g_k = (23, 'Jee')
         RF.fft_data(window='blackmanharris', overwrite=True, ax='freq')  # for inspection
 
         # basic run through
@@ -166,7 +166,7 @@ class Test_ReflectionFitter_Cables(object):
         assert np.allclose(np.ravel(list(RF.ref_phs.values())), 2 * np.pi - 2.0, atol=1e-1)
 
         output = RF.refine_auto_reflections(RF.avg_data, (80, 20), RF.ref_amp, RF.ref_dly, RF.ref_phs,
-                                            keys=[bl_k, (39, 39, 'xx')], window='blackmanharris', zeropad=100,
+                                            keys=[bl_k, (39, 39, 'ee')], window='blackmanharris', zeropad=100,
                                             maxiter=100, method='BFGS', tol=1e-5)
         ref_amp = output[0]
         ref_dly = output[1]
@@ -183,7 +183,7 @@ class Test_ReflectionFitter_Cables(object):
         output = RF.refine_auto_reflections(RF.avg_data, (80, 20), RF.ref_amp, RF.ref_dly, RF.ref_phs,
                                             keys=[bl_k], window='blackmanharris', zeropad=100, clean_flags=RF.avg_flags,
                                             maxiter=100, method='BFGS', tol=1e-5)
-        assert not np.any(output[3][(23, 'Jxx')])
+        assert not np.any(output[3][(23, 'Jee')])
         RF.avg_flags[bl_k][:] = False
 
         # non-even Nfreqs
@@ -225,7 +225,7 @@ class Test_ReflectionFitter_Cables(object):
 
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
-        bl_k = (23, 23, 'xx')
+        bl_k = (23, 23, 'ee')
         a_k = (23, 'Jee')
         # add a flagged integration
         RF.flags[bl_k][0] = True
@@ -326,7 +326,7 @@ class Test_ReflectionFitter_XTalk(object):
 
     def test_svd_functions(self):
         RF = reflections.ReflectionFitter(self.uvd)
-        bl = (23, 24, 'xx')
+        bl = (23, 24, 'ee')
 
         # fft data
         RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
@@ -385,7 +385,7 @@ class Test_ReflectionFitter_XTalk(object):
         Namp = 3e0
         for k in RF.data:
             RF.data += stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs) + 1j * stats.norm.rvs(0, Namp, RF.Ntimes * RF.Nfreqs).reshape(RF.Ntimes, RF.Nfreqs)
-        bl = (23, 24, 'xx')
+        bl = (23, 24, 'ee')
 
         # fft data
         RF.fft_data(data=RF.data, window='blackmanharris', overwrite=True)
