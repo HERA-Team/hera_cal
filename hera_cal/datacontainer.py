@@ -43,7 +43,7 @@ class DataContainer:
             Orientation of the physical dipole corresponding to what is
             labelled as the x polarization ("east" or "north") to allow for
             converting from E/N strings. See corresonding parameter on UVData
-            for more details.
+            for more details. If None, will use data.x_orientation if it exists.
         """
         self._data = odict()
         if np.all([isinstance(k, (str, np.str)) for k in data.keys()]):  # Nested POL:{antpairs}
@@ -61,15 +61,14 @@ class DataContainer:
         self._antpairs = set([k[:2] for k in self._data.keys()])
         self._pols = set([k[-1] for k in self._data.keys()])
 
-        # placeholders for metadata
-        self.antpos = None
-        self.freqs = None
-        self.times = None
-        self.lsts = None
-        self.times_by_bl = None
-        self.lsts_by_bl = None
-        
-        self.x_orientation = x_orientation
+        # placeholders for metadata (or get them from data, if possible)
+        for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl', 'x_orientation']:
+            if hasattr(data, attr):
+                setattr(self, attr, getattr(data, attr))
+            else:
+                setattr(self, attr, None)
+        if x_orientation is not None:
+            self.x_orientation = x_orientation
 
     def antpairs(self, pol=None):
         '''Return a set of antenna pairs (with a specific pol or more generally).'''
