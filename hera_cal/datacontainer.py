@@ -12,7 +12,8 @@ from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
 class DataContainer:
     """Dictionary-like object that abstracts away the pol/ant pair ordering of data
     dictionaries and the the polarization case (i.e. 'xx' vs. 'XX'). Keys are in
-    the form (0,1,'xx').
+    the form (0,1,'xx'). Does not know about x_orientation, which means that
+    'xx' and 'nn' are always treated as different polarizations.
 
     Supports much of the same functionality as dictionaries, including:
         * __getitem__
@@ -31,7 +32,7 @@ class DataContainer:
     supports adding or multiplying two data containers with identical keys and
     data shapes via the overloaded + and * operators."""
 
-    def __init__(self, data, x_orientation=None):
+    def __init__(self, data):
         """Create a DataContainer object from a dictionary of data. Assumes that all
         keys have the same format and that polarization case is internally consistent.
 
@@ -39,36 +40,29 @@ class DataContainer:
             data: dictionary of visibilities with keywords of pol/ant pair
                 in any order. Supports both three element keys, e.g. data[(i,j,pol)],
                 or nested dictions, e.g. data[(i,j)][pol] or data[pol][(i,j)].
-        x_orientation : str, optional
-            Orientation of the physical dipole corresponding to what is
-            labelled as the x polarization ("east" or "north") to allow for
-            converting from E/N strings. See corresonding parameter on UVData
-            for more details. If None, will use data.x_orientation if it exists.
         """
         self._data = odict()
         if np.all([isinstance(k, (str, np.str)) for k in data.keys()]):  # Nested POL:{antpairs}
             for pol in data.keys():
                 for antpair in data[pol]:
-                    self._data[make_bl(antpair, pol, x_orientation=x_orientation)] = data[pol][antpair]
+                    self._data[make_bl(antpair, pol)] = data[pol][antpair]
         elif np.all([len(k) == 2 for k in data.keys()]):  # Nested antpair:{POL}
             for antpair in data.keys():
                 for pol in data[antpair]:
-                    self._data[make_bl(antpair, pol, x_orientation=x_orientation)] = data[antpair][pol]
+                    self._data[make_bl(antpair, pol)] = data[antpair][pol]
         elif np.all([len(k) == 3 for k in data.keys()]):
-            self._data = odict([(comply_bl(k, x_orientation=x_orientation), data[k]) for k in sorted(data.keys())])
+            self._data = odict([(comply_bl(k), data[k]) for k in sorted(data.keys())])
         else:
             raise KeyError('Unrecognized key type or mix of key types in data dictionary.')
         self._antpairs = set([k[:2] for k in self._data.keys()])
         self._pols = set([k[-1] for k in self._data.keys()])
 
         # placeholders for metadata (or get them from data, if possible)
-        for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl', 'x_orientation']:
+        for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
             if hasattr(data, attr):
                 setattr(self, attr, getattr(data, attr))
             else:
                 setattr(self, attr, None)
-        if x_orientation is not None:
-            self.x_orientation = x_orientation
 
     def antpairs(self, pol=None):
         '''Return a set of antenna pairs (with a specific pol or more generally).'''
@@ -111,11 +105,11 @@ class DataContainer:
         returns the associated entry. Abstracts away both baseline ordering (applying the
         complex conjugate when appropriate) and polarization capitalization.'''
         if isinstance(key, str):  # asking for a pol
-            return dict(zip(self._antpairs, [self[make_bl(bl, key, x_orientation=self.x_orientation)] for bl in self._antpairs]))
+            return dict(zip(self._antpairs, [self[make_bl(bl, key)] for bl in self._antpairs]))
         elif len(key) == 2:  # asking for a bl
-            return dict(zip(self._pols, [self[make_bl(key, pol, x_orientation=self.x_orientation)] for pol in self._pols]))
+            return dict(zip(self._pols, [self[make_bl(key, pol)] for pol in self._pols]))
         else:
-            bl = comply_bl(key, x_orientation=self.x_orientation)
+            bl = comply_bl(key)
             try:
                 return self._data[bl]
             except(KeyError):
@@ -132,7 +126,7 @@ class DataContainer:
         Abstracts away both baseline ordering (applying the complex conjugate when
         appropriate) and polarization capitalization.'''
         if len(key) == 3:
-            key = comply_bl(key, x_orientation=self.x_orientation)
+            key = comply_bl(key)
             # check given bl ordering
             if key in self.keys() or reverse_bl(key) in self.keys():
                 # key already exists
@@ -154,7 +148,7 @@ class DataContainer:
         '''Deletes the input key and corresponding data. Only supports the form (0,1,'xx').
         Abstracts away both baseline ordering and polarization capitalization.'''
         if len(key) == 3:
-            key = comply_bl(key, x_orientation=self.x_orientation)
+            key = comply_bl(key)
             del self._data[key]
             self._antpairs = set([k[:2] for k in self._data.keys()])
             self._pols = set([k[-1] for k in self._data.keys()])
@@ -192,7 +186,7 @@ class DataContainer:
             if self.__contains__(k):
                 newD[k] = np.concatenate([self.__getitem__(k)] + list(map(lambda d: d[k], D)), axis=axis)
 
-        return DataContainer(newD, x_orientation=self.x_orientation)
+        return DataContainer(newD)
 
     def __add__(self, D):
         '''
@@ -219,7 +213,7 @@ class DataContainer:
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) + D[k]
 
-            return DataContainer(newD, x_orientation=self.x_orientation)
+            return DataContainer(newD)
 
         else:
             newD = copy.deepcopy(self)
@@ -253,7 +247,7 @@ class DataContainer:
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) - D[k]
 
-            return DataContainer(newD, x_orientation=self.x_orientation)
+            return DataContainer(newD)
 
         else:
             newD = copy.deepcopy(self)
@@ -287,7 +281,7 @@ class DataContainer:
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) * D[k]
 
-            return DataContainer(newD, x_orientation=self.x_orientation)
+            return DataContainer(newD)
 
         else:
             newD = copy.deepcopy(self)
@@ -321,7 +315,7 @@ class DataContainer:
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) // D[k]
 
-            return DataContainer(newD, x_orientation=self.x_orientation)
+            return DataContainer(newD)
 
         else:
             newD = copy.deepcopy(self)
@@ -355,7 +349,7 @@ class DataContainer:
                 if self.__contains__(k):
                     newD[k] = self.__getitem__(k) / D[k]
 
-            return DataContainer(newD, x_orientation=self.x_orientation)
+            return DataContainer(newD)
 
         else:
             newD = copy.deepcopy(self)
@@ -404,7 +398,7 @@ class DataContainer:
     def __contains__(self, key):
         '''Returns True if the key is in the data, abstracting away case and baseline order.'''
         try:
-            bl = comply_bl(key, x_orientation=self.x_orientation)
+            bl = comply_bl(key)
             return (bl in self.keys() or reverse_bl(bl) in self.keys())
         except(BaseException):  # if key is unparsable by comply_bl or reverse_bl, then it's not in self.keys()
             return False
@@ -423,10 +417,10 @@ class DataContainer:
     def has_key(self, *args):
         '''Interface to DataContainer.__contains__(key).'''
         if len(args) == 1:
-            bl = comply_bl(args[0], x_orientation=self.x_orientation)
+            bl = comply_bl(args[0])
             return (bl in self._data or reverse_bl(bl) in self._data)
         else:
-            return make_bl(args[0], args[1], x_orientation=self.x_orientation) in self
+            return make_bl(args[0], args[1]) in self
 
     def has_antpair(self, antpair):
         '''Returns True if baseline or its complex conjugate is in the data.'''
@@ -434,8 +428,8 @@ class DataContainer:
 
     def has_pol(self, pol):
         '''Returns True if polarization (with some capitalization) is in the data.'''
-        return comply_pol(pol, x_orientation=self.x_orientation) in self._pols
+        return comply_pol(pol) in self._pols
 
     def get(self, antpair, pol):
         '''Interface to DataContainer.__getitem__(bl + (pol,)).'''
-        return self[make_bl(antpair, pol, x_orientation=self.x_orientation)]
+        return self[make_bl(antpair, pol)]
