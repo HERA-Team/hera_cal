@@ -39,7 +39,7 @@ class Test_AbsCal_Funcs(object):
         wgts = odict()
         for k in flgs.keys():
             wgts[k] = (~flgs[k]).astype(np.float)
-        wgts = DataContainer(wgts, x_orientation=data.x_orientation)
+        wgts = DataContainer(wgts)
 
         # configure baselines
         bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in data.keys()])
@@ -47,7 +47,7 @@ class Test_AbsCal_Funcs(object):
         # make mock data
         abs_gain = 0.5
         TT_phi = np.array([-0.004, 0.006, 0])
-        model = DataContainer({}, x_orientation=data.x_orientation)
+        model = DataContainer({})
         for i, k in enumerate(data.keys()):
             model[k] = data[k] * np.exp(abs_gain + 1j * np.dot(TT_phi, bls[k]))
 
@@ -69,45 +69,45 @@ class Test_AbsCal_Funcs(object):
 
     def test_array_axis_to_data_key(self):
         m, pk = abscal.data_key_to_array_axis(self.model, 2)
-        m2 = abscal.array_axis_to_data_key(m, 2, ['xx'])
-        assert m2[(24, 25, 'xx')].shape == (60, 64)
+        m2 = abscal.array_axis_to_data_key(m, 2, ['ee'])
+        assert m2[(24, 25, 'ee')].shape == (60, 64)
         # copy dict
         m, ad, pk = abscal.data_key_to_array_axis(self.model, 2, avg_dict=self.bls)
-        m2, cd = abscal.array_axis_to_data_key(m, 2, ['xx'], copy_dict=ad)
-        assert m2[(24, 25, 'xx')].shape == (60, 64)
-        assert cd[(24, 25, 'xx')].shape == (3,)
+        m2, cd = abscal.array_axis_to_data_key(m, 2, ['ee'], copy_dict=ad)
+        assert m2[(24, 25, 'ee')].shape == (60, 64)
+        assert cd[(24, 25, 'ee')].shape == (3,)
 
     def test_interp2d(self):
         # test interpolation w/ warning
         m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                     self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=False)
-        assert m[(24, 25, 'xx')].shape == (60, 64)
+        assert m[(24, 25, 'ee')].shape == (60, 64)
         # downsampling w/ no flags
         m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                     self.time_array[::2], self.freq_array[::2])
-        assert m[(24, 25, 'xx')].shape == (30, 32)
+        assert m[(24, 25, 'ee')].shape == (30, 32)
         # test flag propagation
         m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                     self.time_array, self.freq_array, flags=self.wgts, medfilt_flagged=True)
-        assert np.all(mf[(24, 25, 'xx')][10, 0])
+        assert np.all(mf[(24, 25, 'ee')][10, 0])
         # test flag extrapolation
         m, mf = abscal.interp2d_vis(self.data, self.time_array, self.freq_array,
                                     self.time_array + .0001, self.freq_array, flags=self.wgts, flag_extrapolate=True)
-        assert np.all(mf[(24, 25, 'xx')][-1].min())
+        assert np.all(mf[(24, 25, 'ee')][-1].min())
 
     def test_wiener(self):
         # test smoothing
         d = abscal.wiener(self.data, window=(5, 15), noise=None, medfilt=True, medfilt_kernel=(1, 13))
-        assert d[(24, 37, 'xx')].shape == (60, 64)
-        assert d[(24, 37, 'xx')].dtype == np.complex
+        assert d[(24, 37, 'ee')].shape == (60, 64)
+        assert d[(24, 37, 'ee')].dtype == np.complex
         # test w/ noise
         d = abscal.wiener(self.data, window=(5, 15), noise=0.1, medfilt=True, medfilt_kernel=(1, 13))
-        assert d[(24, 37, 'xx')].shape == (60, 64)
+        assert d[(24, 37, 'ee')].shape == (60, 64)
         # test w/o medfilt
         d = abscal.wiener(self.data, window=(5, 15), medfilt=False)
-        assert d[(24, 37, 'xx')].shape == (60, 64)
+        assert d[(24, 37, 'ee')].shape == (60, 64)
         # test as array
-        d = abscal.wiener(self.data[(24, 37, 'xx')], window=(5, 15), medfilt=False, array=True)
+        d = abscal.wiener(self.data[(24, 37, 'ee')], window=(5, 15), medfilt=False, array=True)
         assert d.shape == (60, 64)
         assert d.dtype == np.complex
 
@@ -133,28 +133,28 @@ class Test_AbsCal_Funcs(object):
 
     def test_match_red_baselines(self):
         model = copy.deepcopy(self.data)
-        model = DataContainer(odict([((k[0] + 1, k[1] + 1, k[2]), model[k]) for i, k in enumerate(model.keys())]), x_orientation=self.data.x_orientation)
-        del model[(25, 54, 'xx')]
+        model = DataContainer(odict([((k[0] + 1, k[1] + 1, k[2]), model[k]) for i, k in enumerate(model.keys())]))
+        del model[(25, 54, 'ee')]
         model_antpos = odict([(k + 1, self.antpos[k]) for i, k in enumerate(self.antpos.keys())])
         new_model = abscal.match_red_baselines(model, model_antpos, self.data, self.antpos, tol=2.0, verbose=False)
         assert len(new_model.keys()) == 8
-        assert (24, 37, 'xx') in new_model
-        assert (24, 53, 'xx') not in new_model
+        assert (24, 37, 'ee') in new_model
+        assert (24, 53, 'ee') not in new_model
 
     def test_mirror_data_to_red_bls(self):
         # make fake data
-        reds = redcal.get_reds(self.antpos, pols=['xx'])
-        data = DataContainer(odict(list(map(lambda k: (k[0], self.data[k[0]]), reds[:5]))), x_orientation=self.data.x_orientation)
+        reds = redcal.get_reds(self.antpos, pols=['ee'])
+        data = DataContainer(odict(list(map(lambda k: (k[0], self.data[k[0]]), reds[:5]))))
         # test execuation
         d = abscal.mirror_data_to_red_bls(data, self.antpos)
         assert len(d.keys()) == 16
-        assert (24, 25, 'xx') in d
+        assert (24, 25, 'ee') in d
         # test correct value is propagated
-        assert np.allclose(data[(24, 25, 'xx')][30, 30], d[(38, 39, 'xx')][30, 30])
+        assert np.allclose(data[(24, 25, 'ee')][30, 30], d[(38, 39, 'ee')][30, 30])
         # test reweighting
         w = abscal.mirror_data_to_red_bls(self.wgts, self.antpos, weights=True)
-        assert w[(24, 25, 'xx')].dtype == np.float
-        assert np.allclose(w[(24, 25, 'xx')].max(), 16.0)
+        assert w[(24, 25, 'ee')].dtype == np.float
+        assert np.allclose(w[(24, 25, 'ee')].max(), 16.0)
 
     def test_flatten(self):
         li = abscal.flatten([['hi']])
@@ -164,21 +164,21 @@ class Test_AbsCal_Funcs(object):
     def test_avg_data_across_red_bls(self):
         # test basic execution
         wgts = copy.deepcopy(self.wgts)
-        wgts[(24, 25, 'xx')][45, 45] = 0.0
+        wgts[(24, 25, 'ee')][45, 45] = 0.0
         data, flags, antpos, ants, freqs, times, lsts, pols = io.load_vis(self.data_file, return_meta=True)
         rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, wgts=wgts, tol=2.0, broadcast_wgts=False)
-        assert rd[(24, 25, 'xx')].shape == (60, 64)
-        assert rf[(24, 25, 'xx')][45, 45] > 0.0
+        assert rd[(24, 25, 'ee')].shape == (60, 64)
+        assert rf[(24, 25, 'ee')][45, 45] > 0.0
         # test various kwargs
-        wgts[(24, 25, 'xx')][45, 45] = 0.0
+        wgts[(24, 25, 'ee')][45, 45] = 0.0
         rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, tol=2.0, wgts=wgts, broadcast_wgts=True)
         assert len(rd.keys()) == 9
         assert len(rf.keys()) == 9
-        assert np.allclose(rf[(24, 25, 'xx')][45, 45], 0.0)
+        assert np.allclose(rf[(24, 25, 'ee')][45, 45], 0.0)
         # test averaging worked
         rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, tol=2.0, broadcast_wgts=False)
-        v = np.mean([data[(52, 53, 'xx')], data[(37, 38, 'xx')], data[(24, 25, 'xx')], data[(38, 39, 'xx')]], axis=0)
-        assert np.allclose(rd[(24, 25, 'xx')], v)
+        v = np.mean([data[(52, 53, 'ee')], data[(37, 38, 'ee')], data[(24, 25, 'ee')], data[(38, 39, 'ee')]], axis=0)
+        assert np.allclose(rd[(24, 25, 'ee')], v)
         # test mirror_red_data
         rd, rf, rk = abscal.avg_data_across_red_bls(data, antpos, wgts=self.wgts, tol=2.0, mirror_red_data=True)
         assert len(rd.keys()) == 21
@@ -290,10 +290,10 @@ class Test_AbsCal(object):
         # test bl cut
         assert not np.any(np.array(list(map(lambda k: np.linalg.norm(AC.bls[k]), AC.bls.keys()))) > 26.0)
         # test bl taper
-        assert np.median(AC.wgts[(24, 25, 'xx')]) > np.median(AC.wgts[(24, 39, 'xx')])
+        assert np.median(AC.wgts[(24, 25, 'ee')]) > np.median(AC.wgts[(24, 39, 'ee')])
 
         # test with input cal
-        bl = (24, 25, 'xx')
+        bl = (24, 25, 'ee')
         uvc = UVCal()
         uvc.read_calfits(self.input_cal)
         aa = uvc.ant_array.tolist()
@@ -433,7 +433,7 @@ class Test_AbsCal(object):
         assert AC.ant_dly_phi_gain_arr is None
         # test flags handling
         AC = abscal.AbsCal(self.AC.model, self.AC.data, freqs=self.freqs)
-        AC.wgts[(24, 25, 'xx')] *= 0
+        AC.wgts[(24, 25, 'ee')] *= 0
         AC.delay_lincal(verbose=False)
         # test medfilt
         self.AC.delay_lincal(verbose=False, medfilt=False)
@@ -474,7 +474,7 @@ class Test_AbsCal(object):
         assert self.AC.dly_slope_gain_arr.shape == (7, 60, 64, 1)
         # test flags handling
         AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
-        AC.wgts[(24, 25, 'xx')] *= 0
+        AC.wgts[(24, 25, 'ee')] *= 0
         AC.delay_slope_lincal(verbose=False)
         # test w/ no wgts
         AC.wgts = None
@@ -500,7 +500,7 @@ class Test_AbsCal(object):
             assert AC.phs_slope_gain_arr is None
             assert AC.phs_slope_ant_phs_arr is None
             AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.ap, freqs=self.freqs)
-            AC.wgts[(24, 25, 'xx')] *= 0
+            AC.wgts[(24, 25, 'ee')] *= 0
             AC.global_phase_slope_logcal(verbose=False, solver=solver)
             # test w/ no wgts
             AC.wgts = None
@@ -542,22 +542,22 @@ class Test_AbsCal(object):
     def test_fill_dict_nans(self):
         data = copy.deepcopy(self.AC.data)
         wgts = copy.deepcopy(self.AC.wgts)
-        data[(25, 38, 'xx')][15, 20] *= np.nan
-        data[(25, 38, 'xx')][20, 15] *= np.inf
+        data[(25, 38, 'ee')][15, 20] *= np.nan
+        data[(25, 38, 'ee')][20, 15] *= np.inf
         abscal.fill_dict_nans(data, wgts=wgts, nan_fill=-1, inf_fill=-2)
-        assert data[(25, 38, 'xx')][15, 20].real == -1
-        assert data[(25, 38, 'xx')][20, 15].real == -2
-        assert np.allclose(wgts[(25, 38, 'xx')][15, 20], 0)
-        assert np.allclose(wgts[(25, 38, 'xx')][20, 15], 0)
+        assert data[(25, 38, 'ee')][15, 20].real == -1
+        assert data[(25, 38, 'ee')][20, 15].real == -2
+        assert np.allclose(wgts[(25, 38, 'ee')][15, 20], 0)
+        assert np.allclose(wgts[(25, 38, 'ee')][20, 15], 0)
         data = copy.deepcopy(self.AC.data)
         wgts = copy.deepcopy(self.AC.wgts)
-        data[(25, 38, 'xx')][15, 20] *= np.nan
-        data[(25, 38, 'xx')][20, 15] *= np.inf
-        abscal.fill_dict_nans(data[(25, 38, 'xx')], wgts=wgts[(25, 38, 'xx')], nan_fill=-1, inf_fill=-2, array=True)
-        assert data[(25, 38, 'xx')][15, 20].real == -1
-        assert data[(25, 38, 'xx')][20, 15].real == -2
-        assert np.allclose(wgts[(25, 38, 'xx')][15, 20], 0)
-        assert np.allclose(wgts[(25, 38, 'xx')][20, 15], 0)
+        data[(25, 38, 'ee')][15, 20] *= np.nan
+        data[(25, 38, 'ee')][20, 15] *= np.inf
+        abscal.fill_dict_nans(data[(25, 38, 'ee')], wgts=wgts[(25, 38, 'ee')], nan_fill=-1, inf_fill=-2, array=True)
+        assert data[(25, 38, 'ee')][15, 20].real == -1
+        assert data[(25, 38, 'ee')][20, 15].real == -2
+        assert np.allclose(wgts[(25, 38, 'ee')][15, 20], 0)
+        assert np.allclose(wgts[(25, 38, 'ee')][20, 15], 0)
 
     def test_mock_data(self):
         # load into pyuvdata object
@@ -566,14 +566,14 @@ class Test_AbsCal(object):
         wgts = odict()
         for k in flgs.keys():
             wgts[k] = (~flgs[k]).astype(np.float)
-        wgts = DataContainer(wgts, x_orientation=data.x_orientation)
+        wgts = DataContainer(wgts)
         # make mock data
         dly_slope = np.array([-1e-9, 2e-9, 0])
         model = odict()
         for i, k in enumerate(data.keys()):
             bl = np.around(ap[k[0]] - ap[k[1]], 0)
             model[k] = data[k] * np.exp(2j * np.pi * f * np.dot(dly_slope, bl))
-        model = DataContainer(model, x_orientation=data.x_orientation)
+        model = DataContainer(model)
         # setup AbsCal
         AC = abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run delay_slope_cal
@@ -588,18 +588,18 @@ class Test_AbsCal(object):
         for i, k in enumerate(data.keys()):
             bl = np.around(ap[k[0]] - ap[k[1]], 0)
             model[k] = data[k] * np.exp(abs_gain + 1j * np.dot(TT_phi, bl))
-        model = DataContainer(model, x_orientation=data.x_orientation)
+        model = DataContainer(model)
         # setup AbsCal
         AC = abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run abs_amp cal
         AC.abs_amp_logcal(verbose=False)
         # run TT_phs_logcal
         AC.TT_phs_logcal(verbose=False)
-        assert np.allclose(np.median(AC.abs_eta_arr[0, :, :, 0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.abs_eta_arr[0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
                            -0.01, atol=1e-3)
-        assert np.allclose(np.median(AC.TT_Phi_arr[0, 0, :, :, 0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.TT_Phi_arr[0, 0, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
                            -1e-3, atol=1e-4)
-        assert np.allclose(np.median(AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, 'xx')].astype(np.bool)]),
+        assert np.allclose(np.median(AC.TT_Phi_arr[0, 1, :, :, 0][AC.wgts[(24, 25, 'ee')].astype(np.bool)]),
                            1e-3, atol=1e-4)
 
 
