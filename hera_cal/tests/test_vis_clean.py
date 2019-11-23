@@ -28,7 +28,7 @@ class Test_VisClean(object):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='uvh5')
         assert not hasattr(V, 'data')
-        V.read(bls=[(24, 25, 'xx')])
+        V.read(bls=[(24, 25, 'ee')])
         assert hasattr(V, 'data')
         assert hasattr(V, 'antpos')
         assert isinstance(V.hd, io.HERAData)
@@ -38,7 +38,7 @@ class Test_VisClean(object):
         fname = os.path.join(DATA_PATH, 'zen.2458098.43124.subband.uvh5')
         V = VisClean(fname, filetype='uvh5')
         assert not hasattr(V, 'data')
-        V.read(bls=[(13, 14, 'xx')])
+        V.read(bls=[(13, 14, 'ee')])
         assert set(V.hd.ant_1_array) == set([13])
         assert isinstance(V.hd, io.HERAData)
         assert isinstance(V.hd.data_array, np.ndarray)
@@ -48,7 +48,7 @@ class Test_VisClean(object):
         uvc = io.HERACal(os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits'))
         gains, _, _, _ = uvc.read()
         V1 = VisClean(fname, filetype='miriad')
-        bl = (52, 53, 'xx')
+        bl = (52, 53, 'ee')
         V1.read(bls=[bl])
         V2 = VisClean(fname, filetype='miriad', input_cal=uvc)
         V2.read(bls=[bl])
@@ -62,7 +62,7 @@ class Test_VisClean(object):
         V1.hello_there = 'bye'
         V1.foo = 'bar'
         V3 = V1.soft_copy(references=["hello*"])
-        assert hex(id(V1.data[(52, 53, 'xx')])) == hex(id(V3.data[(52, 53, 'xx')]))
+        assert hex(id(V1.data[(52, 53, 'ee')])) == hex(id(V3.data[(52, 53, 'ee')]))
         assert hasattr(V3, 'hello')
         assert hasattr(V3, 'hello_there')
         assert not hasattr(V3, 'foo')
@@ -113,51 +113,51 @@ class Test_VisClean(object):
         # actual code unit-testing coverage has been done in uvtools.dspec
 
         # basic freq clean
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='freq', overwrite=True)
-        assert np.all([i['success'] for i in V.clean_info[(24, 25, 'xx')]])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)
+        assert np.all([i['success'] for i in V.clean_info[(24, 25, 'ee')]])
 
         # basic time clean
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='time', max_frate=10., overwrite=True)
-        assert 'skipped' in V.clean_info[(24, 25, 'xx')][0]
-        assert 'success' in V.clean_info[(24, 25, 'xx')][3]
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True)
+        assert 'skipped' in V.clean_info[(24, 25, 'ee')][0]
+        assert 'success' in V.clean_info[(24, 25, 'ee')][3]
 
         # basic 2d clean
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', max_frate=10., overwrite=True,
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
                     filt2d_mode='plus')
-        assert 'success' in V.clean_info[(24, 25, 'xx')]
+        assert 'success' in V.clean_info[(24, 25, 'ee')]
 
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', flags=V.flags + True, max_frate=10.,
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
                     overwrite=True, filt2d_mode='plus')
-        assert 'skipped' in V.clean_info[(24, 25, 'xx')]
+        assert 'skipped' in V.clean_info[(24, 25, 'ee')]
 
         # test fft data
-        V.vis_clean(keys=[(24, 25, 'xx'), (24, 24, 'xx')], ax='both', max_frate=10., overwrite=True,
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
                     filt2d_mode='rect')
 
         # assert foreground peak is at 0 delay bin
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'xx')], ax='freq', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
-        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'xx')]), axis=0)) == 32
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='freq', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
+        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
 
         # assert foreground peak is at 0 FR bin (just due to FR resolution)
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'xx')], ax='time', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
-        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'xx')]), axis=1)) == 30
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='time', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
+        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=1)) == 30
 
         # assert foreground peak is at both 0 FR and 0 delay bin
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'xx')], ax='both', window='tukey', alpha=0.5, edgecut_low=10, edgecut_hi=10, overwrite=True)
-        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'xx')]), axis=0)) == 32
-        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'xx')]), axis=1)) == 30
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='both', window='tukey', alpha=0.5, edgecut_low=10, edgecut_hi=10, overwrite=True)
+        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
+        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=1)) == 30
 
         # check various kwargs
-        V.fft_data(keys=[(24, 25, 'xx')], assign='foo', ifft=True, fftshift=True)
+        V.fft_data(keys=[(24, 25, 'ee')], assign='foo', ifft=True, fftshift=True)
         delays = V.delays
         assert hasattr(V, 'foo')
-        V.fft_data(keys=[(24, 25, 'xx')], assign='foo', overwrite=True, ifft=False, fftshift=False)
+        V.fft_data(keys=[(24, 25, 'ee')], assign='foo', overwrite=True, ifft=False, fftshift=False)
         np.testing.assert_array_almost_equal(delays, np.fft.fftshift(V.delays))
 
         # test flag factorization
         flags = V.factorize_flags(inplace=False, time_thresh=0.05)
-        assert np.all(flags[(24, 25, 'xx')][45, :])
-        assert np.all(flags[(24, 25, 'xx')][:, 5])
+        assert np.all(flags[(24, 25, 'ee')][45, :])
+        assert np.all(flags[(24, 25, 'ee')][:, 5])
 
     def test_fft_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
@@ -166,7 +166,7 @@ class Test_VisClean(object):
 
         # fft
         V.fft_data(zeropad=30, ifft=False)
-        assert V.dfft[(24, 25, 'xx')].shape == (60, 124)
+        assert V.dfft[(24, 25, 'ee')].shape == (60, 124)
 
         # exceptions
         pytest.raises(ValueError, V.fft_data, ax='foo')
@@ -176,7 +176,7 @@ class Test_VisClean(object):
     def test_trim_model(self):
         # load data
         V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
-        V.read(bls=[(23, 23, 'xx'), (23, 24, 'xx')])
+        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
 
         # interpolate to 768 frequencies
         freqs = np.linspace(120e6, 180e6, 768)
@@ -188,9 +188,9 @@ class Test_VisClean(object):
 
         # add noise
         np.random.seed(0)
-        k = (23, 24, 'xx')
+        k = (23, 24, 'ee')
         Op = noise.bm_poly_to_omega_p(V.freqs / 1e9)
-        V.data[k] += noise.sky_noise_jy(V.data[(23, 23, 'xx')], V.freqs / 1e9, V.lsts, Op, inttime=50)
+        V.data[k] += noise.sky_noise_jy(V.data[(23, 23, 'ee')], V.freqs / 1e9, V.lsts, Op, inttime=50)
 
         # add lots of random flags
         f = np.zeros(V.Nfreqs, dtype=np.bool)[None, :]
@@ -248,7 +248,7 @@ class Test_VisClean(object):
         V.read()
 
         # test basic zeropad
-        d, _ = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=30, axis=-1, undo=False)
+        d, _ = vis_clean.zeropad_array(V.data[(24, 25, 'ee')], zeropad=30, axis=-1, undo=False)
         assert d.shape == (60, 124)
         assert np.allclose(d[:, :30], 0.0)
         assert np.allclose(d[:, -30:], 0.0)
@@ -256,18 +256,18 @@ class Test_VisClean(object):
         assert d.shape == (60, 64)
 
         # test zeropad with bool
-        f, _ = vis_clean.zeropad_array(V.flags[(24, 25, 'xx')], zeropad=30, axis=-1, undo=False)
+        f, _ = vis_clean.zeropad_array(V.flags[(24, 25, 'ee')], zeropad=30, axis=-1, undo=False)
         assert f.shape == (60, 124)
         assert np.all(f[:, :30])
         assert np.all(f[:, -30:])
 
         # zeropad with binvals
-        d, bval = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=30, axis=0, binvals=V.times)
+        d, bval = vis_clean.zeropad_array(V.data[(24, 25, 'ee')], zeropad=30, axis=0, binvals=V.times)
         assert np.allclose(np.median(np.diff(V.times)), np.median(np.diff(bval)))
         assert len(bval) == 120
 
         # 2d zeropad
-        d, bval = vis_clean.zeropad_array(V.data[(24, 25, 'xx')], zeropad=(30, 10), axis=(0, 1), binvals=[V.times, V.freqs])
+        d, bval = vis_clean.zeropad_array(V.data[(24, 25, 'ee')], zeropad=(30, 10), axis=(0, 1), binvals=[V.times, V.freqs])
         assert d.shape == (120, 84)
         assert (bval[0].size, bval[1].size) == (120, 84)
 
@@ -278,9 +278,9 @@ class Test_VisClean(object):
 
         # test VisClean method
         V.zeropad_data(V.data, binvals=V.times, zeropad=10, axis=0, undo=False)
-        assert V.data[(24, 25, 'xx')].shape == (80, 64)
+        assert V.data[(24, 25, 'ee')].shape == (80, 64)
         assert V.data.binvals.size == 80
 
         # exceptions
-        pytest.raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'xx')], axis=(0, 1), zeropad=0)
-        pytest.raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'xx')], axis=(0, 1), zeropad=(0,))
+        pytest.raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'ee')], axis=(0, 1), zeropad=0)
+        pytest.raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'ee')], axis=(0, 1), zeropad=(0,))
