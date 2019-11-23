@@ -17,10 +17,11 @@ dependencies:
   - pycodestyle
   - psutil
   - astropy-healpix
+  - pyephem
   - pip:
+    - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
     - git+https://github.com/HERA-Team/hera_qm
     - git+https://github.com/HERA-Team/linsolve
-    - pyephem
-    - pyuvsim
+    - git+https://github.com/RadioAstronomySoftwareGroup/pyuvsim
     - git+https://github.com/HERA-Team/uvtools
     - git+https://github.com/HERA-Team/hera_sim
