@@ -66,7 +66,6 @@ through a combination of SVD and fringe-rate filtering.
 import numpy as np
 import os
 import copy
-import pyuvdata.utils as uvutils
 from scipy.optimize import minimize
 from scipy import sparse
 from sklearn import gaussian_process as gp
@@ -86,7 +85,7 @@ from .apply_cal import calibrate_in_place
 from .datacontainer import DataContainer
 from .frf import FRFilter
 from . import vis_clean
-from .utils import echo, interp_peak, split_pol, split_bl, gp_interp1d
+from .utils import echo, interp_peak, split_pol, split_bl, gp_interp1d, comply_pol
 
 
 class ReflectionFitter(FRFilter):
@@ -365,9 +364,9 @@ class ReflectionFitter(FRFilter):
         # iterate over keys
         for k in keys:
             # get gain key
-            rkey = (k[0], uvutils.parse_jpolstr(k[2][0]))
+            rkey = (k[0], comply_pol(k[2][0]))
             if rkey not in ref_amp:
-                rkey = (k[1], uvutils.parse_jpolstr(k[2][1]))
+                rkey = (k[1], comply_pol(k[2][1]))
 
             # Ensure they exist in reflection dictionaries
             if rkey not in ref_amp or rkey not in ref_dly or rkey not in ref_phs:
