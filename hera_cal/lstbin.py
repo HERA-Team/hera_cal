@@ -33,7 +33,6 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     -----------
     data_list : type=list, list of DataContainer dictionaries holding
         complex visibility data for each night to average.
-        x_orientation is taken from data_list[0] and assumed to be the same for all data
     lst_list : type=list, list of ndarrays holding LST bin centers of each data dictionary in data_list.
         These LST arrays must be monotonically increasing, except for a possible wrap at 2pi.
     flags_list : type=list, list of DataContainer dictionaries holding flags for each data dict
@@ -302,10 +301,10 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
         data_count[key] = d_num
 
     # turn into DataContainer objects
-    data_avg = DataContainer(data_avg, x_orientation=data_list[0].x_orientation)
-    flags_min = DataContainer(flags_min, x_orientation=data_list[0].x_orientation)
-    data_std = DataContainer(data_std, x_orientation=data_list[0].x_orientation)
-    data_count = DataContainer(data_count, x_orientation=data_list[0].x_orientation)
+    data_avg = DataContainer(data_avg)
+    flags_min = DataContainer(flags_min)
+    data_std = DataContainer(data_std)
+    data_count = DataContainer(data_count)
 
     return lst_bins, data_avg, flags_min, data_std, data_count
 
@@ -531,6 +530,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     data_files : type=list of lists: nested set of lists, with each nested list containing
         paths to files from a particular night. These files should be sorted
         by ascending Julian Date. Frequency axis of each file must be identical.
+        x_orientation is inferred from the first item in this list and assumed to be the same for all files
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
     lst_stop : type=float, stopping LST for binner as it sweeps from lst_start to lst_start + 2pi.
@@ -591,6 +591,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
 
     # get metadata from the zeroth data file in the last day
     hd = io.HERAData(data_files[-1][0])
+    x_orientation = hd.x_orientation
 
     # get metadata
     freq_array = hd.freqs
@@ -600,7 +601,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['start_jd'] = start_jd
     integration_time = np.median(hd.integration_time)
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
-    x_orientation = hd.x_orientation
 
     # get baselines from data and form baseline groups
     bls = sorted(hd.get_antpairs())
@@ -712,10 +712,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             continue
 
         # join DataContainers across blgroups
-        bin_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in data_conts])), x_orientation=x_orientation)
-        flag_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in flag_conts])), x_orientation=x_orientation)
-        std_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in std_conts])), x_orientation=x_orientation)
-        num_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in num_conts])), x_orientation=x_orientation)
+        bin_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in data_conts])))
+        flag_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in flag_conts])))
+        std_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in std_conts])))
+        num_data = DataContainer(dict(functools.reduce(operator.add, [list(dc.items()) for dc in num_conts])))
 
         # update history
         file_history = history + " Input files: " + "-".join(list(map(lambda ff: os.path.basename(ff), file_list)))
