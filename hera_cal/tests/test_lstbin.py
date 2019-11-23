@@ -11,7 +11,7 @@ import glob
 import scipy.stats as stats
 from pyuvdata import UVCal, UVData
 
-from .. import io, lstbin
+from .. import io, lstbin, utils
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 
@@ -89,7 +89,7 @@ class Test_lstbin(object):
         assert len(output[2][list(output[2].keys())[0]][100]) == 3
         assert len(output[2][list(output[2].keys())[0]][100][0]) == 64
         # test switch bl
-        conj_data3 = DataContainer(odict(list(map(lambda k: (lstbin.switch_bl(k), np.conj(self.data3[k])), self.data3.keys()))))
+        conj_data3 = DataContainer(odict(list(map(lambda k: (utils.reverse_bl(k), np.conj(self.data3[k])), self.data3.keys()))))
         data_list = [self.data1, self.data2, conj_data3]
         output = lstbin.lst_bin(data_list, self.lst_list, dlst=dlst)
         assert output[1][(24, 25, 'ee')].shape == (224, 64)
@@ -301,12 +301,6 @@ class Test_lstbin(object):
         assert not np.any(out[0, 3])
         out = lstbin.sigma_clip(arr, flags=flg, min_N=1)
         assert np.all(out[0, 3])
-
-    def test_switch_bl(self):
-        # test basic execution
-        key = (1, 2, 'xx')
-        sw_k = lstbin.switch_bl(key)
-        assert sw_k == (2, 1, 'xx')
 
     def tearDown(self):
         output_files = sorted(glob.glob("./zen.ee.LST*") + glob.glob("./zen.ee.STD*"))
