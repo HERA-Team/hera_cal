@@ -365,7 +365,7 @@ class FRFilter(VisClean):
         for n in ['data', 'flags', 'nsamples']:
             name = "{}_{}".format(output_prefix, n)
             if not hasattr(self, name):
-                setattr(self, name, DataContainer({}, x_orientation=data.x_orientation))
+                setattr(self, name, DataContainer({}))
             if n == 'data':
                 avg_data = getattr(self, name)
             elif n == 'flags':
@@ -375,9 +375,9 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]), x_orientation=data.x_orientation)
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
         if nsamples is None:
-            nsamples = DataContainer(dict([(k, np.ones_like(data[k], np.float)) for k in data]), x_orientation=data.x_orientation)
+            nsamples = DataContainer(dict([(k, np.ones_like(data[k], np.float)) for k in data]))
 
         if keys is None:
             keys = data.keys()
@@ -435,7 +435,7 @@ class FRFilter(VisClean):
         for n in ['data', 'flags', 'nsamples']:
             name = "{}_{}".format(output_prefix, n)
             if not hasattr(self, name):
-                setattr(self, name, DataContainer({}, x_orientation=data.x_orientation))
+                setattr(self, name, DataContainer({}))
             if n == 'data':
                 filt_data = getattr(self, name)
             elif n == 'flags':
@@ -445,9 +445,9 @@ class FRFilter(VisClean):
 
         # setup averaging quantities
         if flags is None:
-            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]), x_orientation=data.x_orientation)
+            flags = DataContainer(dict([(k, np.zeros_like(data[k], np.bool)) for k in data]))
         if nsamples is None:
-            nsamples = DataContainer(dict([(k, np.ones_like(data[k], np.float)) for k in data]), x_orientation=data.x_orientation)
+            nsamples = DataContainer(dict([(k, np.ones_like(data[k], np.float)) for k in data]))
 
         if keys is None:
             keys = data.keys()
