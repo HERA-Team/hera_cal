@@ -1865,9 +1865,15 @@ class AbsCal(object):
             gains, cal_flags, quals, totquals = uvc.read()
             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags, gain_convention=uvc.gain_convention)
 
-        # get shared keys
+        # get shared keys and and pols
         self.keys = sorted(set(model.keys()) & set(data.keys()))
         assert len(self.keys) > 0, "no shared keys exist between model and data"
+        if pols is None:
+            pols = np.unique(list(map(lambda k: k[2], self.keys)))
+        self.pols = pols
+        self.Npols = len(self.pols)
+        self.gain_pols = np.unique(list(map(lambda p: list(split_pol(p)), self.pols)))
+        self.Ngain_pols = len(self.gain_pols)        
 
         # append attributes
         self.model = DataContainer(dict([(k, model[k]) for k in self.keys]))
@@ -1879,23 +1885,6 @@ class AbsCal(object):
             self.Nfreqs = None
         else:
             self.Nfreqs = len(self.freqs)
-
-        # get pols is not defined, if so, make sure they are string format
-        if pols is None:
-            pols = np.unique(list(map(lambda k: k[2], self.keys)))
-        elif isinstance(pols, np.ndarray) or isinstance(pols, list):
-            if np.issubdtype(type(pols[0]), int):
-                pols = list(map(lambda p: polnum2str(p), pols))
-
-        # convert to integer format
-        self.pols = pols
-        self.pols = list(map(lambda p: polstr2num(p), self.pols))
-        self.Npols = len(self.pols)
-
-        # save pols in string format and get gain_pols
-        self.polstrings = np.array(list(map(lambda p: polnum2str(p), self.pols)))
-        self.gain_pols = np.unique(list(map(lambda p: list(split_pol(p)), self.polstrings)))
-        self.Ngain_pols = len(self.gain_pols)
 
         # setup weights
         if wgts is None:
@@ -2948,11 +2937,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
     if len(matched_model_files) > 0:
         hd = io.HERAData(data_file)
         hdm = io.HERAData(matched_model_files)
-        # check for matching x_orientations
-        if len(matched_model_files) > 1:
-            assert np.all([x_or == hd.x_orientation for x_or in hdm.x_orientation.values()])
-        else:
-            assert hdm.x_orientation == hd.x_orientation
+        assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
         
         # match integrations in model to integrations in data
