@@ -39,7 +39,7 @@ class Test_AbsCal_Funcs(object):
         wgts = odict()
         for k in flgs.keys():
             wgts[k] = (~flgs[k]).astype(np.float)
-        wgts = DataContainer(wgts)
+        wgts = DataContainer(wgts, x_orientation=data.x_orientation)
 
         # configure baselines
         bls = odict([(x, self.antpos[x[0]] - self.antpos[x[1]]) for x in data.keys()])
@@ -47,7 +47,7 @@ class Test_AbsCal_Funcs(object):
         # make mock data
         abs_gain = 0.5
         TT_phi = np.array([-0.004, 0.006, 0])
-        model = odict()
+        model = DataContainer({}, x_orientation=data.x_orientation)
         for i, k in enumerate(data.keys()):
             model[k] = data[k] * np.exp(abs_gain + 1j * np.dot(TT_phi, bls[k]))
 
@@ -60,12 +60,12 @@ class Test_AbsCal_Funcs(object):
     def test_data_key_to_array_axis(self):
         m, pk = abscal.data_key_to_array_axis(self.model, 2)
         assert m[(24, 25)].shape == (60, 64, 1)
-        assert 'xx' in pk
+        assert 'ee' in pk
         # test w/ avg_dict
         m, ad, pk = abscal.data_key_to_array_axis(self.model, 2, avg_dict=self.bls)
         assert m[(24, 25)].shape == (60, 64, 1)
         assert ad[(24, 25)].shape == (3,)
-        assert 'xx' in pk
+        assert 'ee' in pk
 
     def test_array_axis_to_data_key(self):
         m, pk = abscal.data_key_to_array_axis(self.model, 2)
@@ -114,11 +114,11 @@ class Test_AbsCal_Funcs(object):
     def test_Baseline(self):
         # test basic execution
         keys = list(self.data.keys())
-        k1 = (24, 25, 'xx')    # 14.6 m E-W
+        k1 = (24, 25, 'ee')    # 14.6 m E-W
         i1 = keys.index(k1)
-        k2 = (24, 37, 'xx')    # different
+        k2 = (24, 37, 'ee')    # different
         i2 = keys.index(k2)
-        k3 = (52, 53, 'xx')   # 14.6 m E-W
+        k3 = (52, 53, 'ee')   # 14.6 m E-W
         i3 = keys.index(k3)
         bls = list(map(lambda k: abscal.Baseline(self.antpos[k[1]] - self.antpos[k[0]], tol=2.0), keys))
         bls_conj = list(map(lambda k: abscal.Baseline(self.antpos[k[0]] - self.antpos[k[1]], tol=2.0), keys))
@@ -133,7 +133,7 @@ class Test_AbsCal_Funcs(object):
 
     def test_match_red_baselines(self):
         model = copy.deepcopy(self.data)
-        model = DataContainer(odict([((k[0] + 1, k[1] + 1, k[2]), model[k]) for i, k in enumerate(model.keys())]))
+        model = DataContainer(odict([((k[0] + 1, k[1] + 1, k[2]), model[k]) for i, k in enumerate(model.keys())]), x_orientation=self.data.x_orientation)
         del model[(25, 54, 'xx')]
         model_antpos = odict([(k + 1, self.antpos[k]) for i, k in enumerate(self.antpos.keys())])
         new_model = abscal.match_red_baselines(model, model_antpos, self.data, self.antpos, tol=2.0, verbose=False)
@@ -144,7 +144,7 @@ class Test_AbsCal_Funcs(object):
     def test_mirror_data_to_red_bls(self):
         # make fake data
         reds = redcal.get_reds(self.antpos, pols=['xx'])
-        data = DataContainer(odict(list(map(lambda k: (k[0], self.data[k[0]]), reds[:5]))))
+        data = DataContainer(odict(list(map(lambda k: (k[0], self.data[k[0]]), reds[:5]))), x_orientation=self.data.x_orientation)
         # test execuation
         d = abscal.mirror_data_to_red_bls(data, self.antpos)
         assert len(d.keys()) == 16
@@ -278,7 +278,7 @@ class Test_AbsCal(object):
         assert AC.bls is None
         # init with meta
         AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.AC.antpos, freqs=self.AC.freqs)
-        assert np.allclose(AC.bls[(24, 25, 'xx')][0], -14.607842046642745)
+        assert np.allclose(AC.bls[(24, 25, 'ee')][0], -14.607842046642745)
         # init with meta
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         # test feeding file and refant and bl_cut and bl_taper
@@ -306,8 +306,8 @@ class Test_AbsCal(object):
     def test_abs_amp_logcal(self):
         # test execution and variable assignments
         self.AC.abs_amp_logcal(verbose=False)
-        assert self.AC.abs_eta[(24, 'Jxx')].shape == (60, 64)
-        assert self.AC.abs_eta_gain[(24, 'Jxx')].shape == (60, 64)
+        assert self.AC.abs_eta[(24, 'Jee')].shape == (60, 64)
+        assert self.AC.abs_eta_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.abs_eta_arr.shape == (7, 60, 64, 1)
         assert self.AC.abs_eta_gain_arr.shape == (7, 60, 64, 1)
         # test Nones
@@ -334,11 +334,11 @@ class Test_AbsCal(object):
         assert self.AC.TT_Phi_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.abs_psi_arr.shape == (7, 60, 64, 1)
         assert self.AC.abs_psi_gain_arr.shape == (7, 60, 64, 1)
-        assert self.AC.abs_psi[(24, 'Jxx')].shape == (60, 64)
-        assert self.AC.abs_psi_gain[(24, 'Jxx')].shape == (60, 64)
-        assert self.AC.TT_Phi[(24, 'Jxx')].shape == (2, 60, 64)
-        assert self.AC.TT_Phi_gain[(24, 'Jxx')].shape == (60, 64)
-        assert np.allclose(np.angle(self.AC.TT_Phi_gain[(24, 'Jxx')]), 0.0)
+        assert self.AC.abs_psi[(24, 'Jee')].shape == (60, 64)
+        assert self.AC.abs_psi_gain[(24, 'Jee')].shape == (60, 64)
+        assert self.AC.TT_Phi[(24, 'Jee')].shape == (2, 60, 64)
+        assert self.AC.TT_Phi_gain[(24, 'Jee')].shape == (60, 64)
+        assert np.allclose(np.angle(self.AC.TT_Phi_gain[(24, 'Jee')]), 0.0)
         # test merge pols
         self.AC.TT_phs_logcal(verbose=False, four_pol=True)
         assert self.AC.TT_Phi_arr.shape == (7, 2, 60, 64, 1)
@@ -357,15 +357,15 @@ class Test_AbsCal(object):
         g = self.AC.custom_TT_Phi_gain(self.gk, self.ap)
         assert len(g) == 47
         g = self.AC.custom_abs_psi_gain(self.gk)
-        assert g[(0, 'Jxx')].shape == (60, 64)
+        assert g[(0, 'Jee')].shape == (60, 64)
         # test w/ no wgts
         AC.wgts = None
         AC.TT_phs_logcal(verbose=False)
 
     def test_amp_logcal(self):
         self.AC.amp_logcal(verbose=False)
-        assert self.AC.ant_eta[(24, 'Jxx')].shape == (60, 64)
-        assert self.AC.ant_eta_gain[(24, 'Jxx')].shape == (60, 64)
+        assert self.AC.ant_eta[(24, 'Jee')].shape == (60, 64)
+        assert self.AC.ant_eta_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_eta_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_eta_arr.dtype == np.float
         assert self.AC.ant_eta_gain_arr.shape == (7, 60, 64, 1)
@@ -382,13 +382,13 @@ class Test_AbsCal(object):
 
     def test_phs_logcal(self):
         self.AC.phs_logcal(verbose=False)
-        assert self.AC.ant_phi[(24, 'Jxx')].shape == (60, 64)
-        assert self.AC.ant_phi_gain[(24, 'Jxx')].shape == (60, 64)
+        assert self.AC.ant_phi[(24, 'Jee')].shape == (60, 64)
+        assert self.AC.ant_phi_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_phi_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_phi_arr.dtype == np.float
         assert self.AC.ant_phi_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_phi_gain_arr.dtype == np.complex
-        assert np.allclose(np.angle(self.AC.ant_phi_gain[(24, 'Jxx')]), 0.0)
+        assert np.allclose(np.angle(self.AC.ant_phi_gain[(24, 'Jee')]), 0.0)
         self.AC.phs_logcal(verbose=False, avg=True)
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         assert AC.ant_phi is None
@@ -402,22 +402,22 @@ class Test_AbsCal(object):
     def test_delay_lincal(self):
         # test w/o offsets
         self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False)
-        assert self.AC.ant_dly[(24, 'Jxx')].shape == (60, 1)
-        assert self.AC.ant_dly_gain[(24, 'Jxx')].shape == (60, 64)
+        assert self.AC.ant_dly[(24, 'Jee')].shape == (60, 1)
+        assert self.AC.ant_dly_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_dly_arr.shape == (7, 60, 1, 1)
         assert self.AC.ant_dly_gain_arr.shape == (7, 60, 64, 1)
         # test w/ offsets
         self.AC.delay_lincal(verbose=False, kernel=(1, 3), medfilt=False)
-        assert self.AC.ant_dly_phi[(24, 'Jxx')].shape == (60, 1)
-        assert self.AC.ant_dly_phi_gain[(24, 'Jxx')].shape == (60, 64)
+        assert self.AC.ant_dly_phi[(24, 'Jee')].shape == (60, 1)
+        assert self.AC.ant_dly_phi_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.ant_dly_phi_arr.shape == (7, 60, 1, 1)
         assert self.AC.ant_dly_phi_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_dly_arr.shape == (7, 60, 1, 1)
         assert self.AC.ant_dly_arr.dtype == np.float
         assert self.AC.ant_dly_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.ant_dly_gain_arr.dtype == np.complex
-        assert np.allclose(np.angle(self.AC.ant_dly_gain[(24, 'Jxx')]), 0.0)
-        assert np.allclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'Jxx')]), 0.0)
+        assert np.allclose(np.angle(self.AC.ant_dly_gain[(24, 'Jee')]), 0.0)
+        assert np.allclose(np.angle(self.AC.ant_dly_phi_gain[(24, 'Jee')]), 0.0)
         # test exception
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         pytest.raises(AttributeError, AC.delay_lincal)
@@ -445,14 +445,14 @@ class Test_AbsCal(object):
     def test_delay_slope_lincal(self):
         # test w/o offsets
         self.AC.delay_slope_lincal(verbose=False, kernel=(1, 3), medfilt=False)
-        assert self.AC.dly_slope[(24, 'Jxx')].shape == (2, 60, 1)
-        assert self.AC.dly_slope_gain[(24, 'Jxx')].shape == (60, 64)
+        assert self.AC.dly_slope[(24, 'Jee')].shape == (2, 60, 1)
+        assert self.AC.dly_slope_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.dly_slope_arr.shape == (7, 2, 60, 1, 1)
         assert self.AC.dly_slope_gain_arr.shape == (7, 60, 64, 1)
         assert self.AC.dly_slope_ant_dly_arr.shape == (7, 60, 1, 1)
-        assert np.allclose(np.angle(self.AC.dly_slope_gain[(24, 'Jxx')]), 0.0)
+        assert np.allclose(np.angle(self.AC.dly_slope_gain[(24, 'Jee')]), 0.0)
         g = self.AC.custom_dly_slope_gain(self.gk, self.ap)
-        assert g[(0, 'Jxx')].shape == (60, 64)
+        assert g[(0, 'Jee')].shape == (60, 64)
         # test exception
         AC = abscal.AbsCal(self.AC.model, self.AC.data)
         pytest.raises(AttributeError, AC.delay_slope_lincal)
@@ -468,8 +468,8 @@ class Test_AbsCal(object):
         self.AC.delay_slope_lincal(verbose=False, time_avg=True)
         # test four pol
         self.AC.delay_slope_lincal(verbose=False, four_pol=True)
-        assert self.AC.dly_slope[(24, 'Jxx')].shape == (2, 60, 1)
-        assert self.AC.dly_slope_gain[(24, 'Jxx')].shape == (60, 64)
+        assert self.AC.dly_slope[(24, 'Jee')].shape == (2, 60, 1)
+        assert self.AC.dly_slope_gain[(24, 'Jee')].shape == (60, 64)
         assert self.AC.dly_slope_arr.shape == (7, 2, 60, 1, 1)
         assert self.AC.dly_slope_gain_arr.shape == (7, 60, 64, 1)
         # test flags handling
@@ -484,14 +484,14 @@ class Test_AbsCal(object):
         for solver in ['dft', 'linfit']:
             # test w/o offsets
             self.AC.global_phase_slope_logcal(verbose=False, edge_cut=31, solver=solver)
-            assert self.AC.phs_slope[(24, 'Jxx')].shape == (2, 60, 1)
-            assert self.AC.phs_slope_gain[(24, 'Jxx')].shape == (60, 64)
+            assert self.AC.phs_slope[(24, 'Jee')].shape == (2, 60, 1)
+            assert self.AC.phs_slope_gain[(24, 'Jee')].shape == (60, 64)
             assert self.AC.phs_slope_arr.shape == (7, 2, 60, 1, 1)
             assert self.AC.phs_slope_gain_arr.shape == (7, 60, 64, 1)
             assert self.AC.phs_slope_ant_phs_arr.shape == (7, 60, 1, 1)
-            assert np.allclose(np.angle(self.AC.phs_slope_gain[(24, 'Jxx')]), 0.0)
+            assert np.allclose(np.angle(self.AC.phs_slope_gain[(24, 'Jee')]), 0.0)
             g = self.AC.custom_phs_slope_gain(self.gk, self.ap)
-            assert g[(0, 'Jxx')].shape == (60, 64)
+            assert g[(0, 'Jee')].shape == (60, 64)
             # test Nones
             AC = abscal.AbsCal(self.AC.model, self.AC.data, antpos=self.antpos, freqs=self.freq_array)
             assert AC.phs_slope is None
@@ -514,15 +514,15 @@ class Test_AbsCal(object):
         self.AC.amp_logcal(verbose=False)
         gains = [self.AC.abs_eta_gain, self.AC.TT_Phi_gain, self.AC.abs_psi_gain,
                  self.AC.ant_dly_gain, self.AC.ant_eta_gain, self.AC.ant_phi_gain]
-        gains[0][(99, 'Jxx')] = 1.0
+        gains[0][(99, 'Jee')] = 1.0
         # merge shared keys
         mgains = abscal.merge_gains(gains, merge_shared=True)
-        assert (99, 'Jxx') not in mgains
+        assert (99, 'Jee') not in mgains
         # merge all keys
         mgains = abscal.merge_gains(gains, merge_shared=False)
-        assert (99, 'Jxx') in mgains
+        assert (99, 'Jee') in mgains
         # test merge
-        k = (53, 'Jxx')
+        k = (53, 'Jee')
         assert mgains[k].shape == (60, 64)
         assert mgains[k].dtype == np.complex
         assert np.allclose(np.abs(mgains[k][0, 0]), np.abs(self.AC.abs_eta_gain[k] * self.AC.ant_eta_gain[k])[0, 0])
@@ -530,14 +530,14 @@ class Test_AbsCal(object):
                                                                * self.AC.ant_dly_gain[k] * self.AC.ant_phi_gain[k])[0, 0])
 
         # test merge of flag dictionaries
-        f1 = {(1, 'Jxx'): np.zeros(5, np.bool)}
-        f2 = {(1, 'Jxx'): np.zeros(5, np.bool)}
+        f1 = {(1, 'Jee'): np.zeros(5, np.bool)}
+        f2 = {(1, 'Jee'): np.zeros(5, np.bool)}
         f3 = abscal.merge_gains([f1, f2])
-        assert f3[(1, 'Jxx')].dtype == np.bool_
-        assert not np.any(f3[(1, 'Jxx')])
-        f2[(1, 'Jxx')][:] = True
+        assert f3[(1, 'Jee')].dtype == np.bool_
+        assert not np.any(f3[(1, 'Jee')])
+        f2[(1, 'Jee')][:] = True
         f3 = abscal.merge_gains([f1, f2])
-        assert np.all(f3[(1, 'Jxx')])
+        assert np.all(f3[(1, 'Jee')])
 
     def test_fill_dict_nans(self):
         data = copy.deepcopy(self.AC.data)
@@ -566,14 +566,14 @@ class Test_AbsCal(object):
         wgts = odict()
         for k in flgs.keys():
             wgts[k] = (~flgs[k]).astype(np.float)
-        wgts = DataContainer(wgts)
+        wgts = DataContainer(wgts, x_orientation=data.x_orientation)
         # make mock data
         dly_slope = np.array([-1e-9, 2e-9, 0])
         model = odict()
         for i, k in enumerate(data.keys()):
             bl = np.around(ap[k[0]] - ap[k[1]], 0)
             model[k] = data[k] * np.exp(2j * np.pi * f * np.dot(dly_slope, bl))
-        model = DataContainer(model)
+        model = DataContainer(model, x_orientation=data.x_orientation)
         # setup AbsCal
         AC = abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run delay_slope_cal
@@ -588,7 +588,7 @@ class Test_AbsCal(object):
         for i, k in enumerate(data.keys()):
             bl = np.around(ap[k[0]] - ap[k[1]], 0)
             model[k] = data[k] * np.exp(abs_gain + 1j * np.dot(TT_phi, bl))
-        model = DataContainer(model)
+        model = DataContainer(model, x_orientation=data.x_orientation)
         # setup AbsCal
         AC = abscal.AbsCal(model, data, antpos=ap, wgts=wgts, freqs=f)
         # run abs_amp cal
@@ -721,7 +721,7 @@ class Test_Post_Redcal_Abscal_Run(object):
 
         # assert custom_* funcs with multiple pols returns different results
         # for different pols, as expected
-        gkxx, gkyy = (0, 'Jxx'), (0, 'Jyy')
+        gkxx, gkyy = (0, 'Jee'), (0, 'Jnn')
         for func, args in zip([AC.custom_abs_eta_gain, AC.custom_dly_slope_gain,
                                AC.custom_phs_slope_gain, AC.custom_TT_Phi_gain],
                               [(), (AC.antpos,), (AC.antpos,), (AC.antpos,)]):
@@ -752,7 +752,7 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert ac_flags[k].dtype == bool
             np.testing.assert_array_equal(ac_flags[k][rc_flags[k]], rc_flags[k][rc_flags[k]])
         assert not np.all(list(ac_flags.values()))
-        for pol in ['Jxx', 'Jyy']:
+        for pol in ['Jee', 'Jnn']:
             assert pol in ac_total_qual
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
             assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
