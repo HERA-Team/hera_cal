@@ -35,17 +35,10 @@ class Test_Pol_Ops(object):
         assert utils.comply_pol('ee') == 'ee'
         assert utils.comply_pol('JEE') == 'Jee'
         assert utils.comply_pol('Jee') == 'Jee'
-        assert utils.comply_pol('xx', x_orientation='east') == 'ee'
-        assert utils.comply_pol('Jxx', x_orientation='east') == 'Jee'
-        assert utils.comply_pol('XX', x_orientation='east') == 'ee'
-        assert utils.comply_pol('jXX', x_orientation='east') == 'Jee'
-        assert utils.comply_pol('XY', x_orientation='east') == 'en'
-        assert utils.comply_pol('XY', x_orientation='east') == 'en'
-        assert utils.comply_pol('jXY', x_orientation='east') == 'Jen'
-        assert utils.comply_pol('XY', x_orientation='north') == 'ne'
-        assert utils.comply_pol('JXY', x_orientation='north') == 'Jne'
+        assert utils.comply_pol('I') == 'pI'
         pytest.raises(KeyError, utils.comply_pol, 'stuff')
         pytest.raises(KeyError, utils.comply_pol, 'Jxe')
+
 
     def test_split_pol(self):
         assert utils.split_pol('xx') == ('Jxx', 'Jxx')
@@ -103,14 +96,6 @@ class Test_Pol_Ops(object):
         assert utils.comply_bl((1, 2, 'en')) == (1, 2, 'en')
         assert utils.comply_bl((1, 2, 'EE')) == (1, 2, 'ee')
 
-        assert utils.comply_bl((1, 2, 'ee'), x_orientation='north') == (1, 2, 'ee')
-        assert utils.comply_bl((1, 2, 'en'), x_orientation='north') == (1, 2, 'en')
-        assert utils.comply_bl((1, 2, 'EE'), x_orientation='north') == (1, 2, 'ee')
-
-        assert utils.comply_bl((1, 2, 'yy'), x_orientation='north') == (1, 2, 'ee')
-        assert utils.comply_bl((1, 2, 'yx'), x_orientation='north') == (1, 2, 'en')
-        assert utils.comply_bl((1, 2, 'YY'), x_orientation='north') == (1, 2, 'ee')
-        
         assert utils.comply_bl((1, 2, 'pI')) == (1, 2, 'pI')
 
     def test_make_bl(self):
@@ -121,26 +106,12 @@ class Test_Pol_Ops(object):
         assert utils.make_bl((1, 2, 'XX')) == (1, 2, 'xx')
         assert utils.make_bl((1, 2), 'XX') == (1, 2, 'xx')
 
-        assert utils.make_bl((1, 2, 'xx'), x_orientation='north') == (1, 2, 'nn')
-        assert utils.make_bl((1, 2), 'xx', x_orientation='north') == (1, 2, 'nn')
-        assert utils.make_bl((1, 2, 'xy'), x_orientation='north') == (1, 2, 'ne')
-        assert utils.make_bl((1, 2), 'xy', x_orientation='north') == (1, 2, 'ne')
-        assert utils.make_bl((1, 2, 'XX'), x_orientation='north') == (1, 2, 'nn')
-        assert utils.make_bl((1, 2), 'XX', x_orientation='north') == (1, 2, 'nn')
-
         assert utils.make_bl((1, 2, 'ee')) == (1, 2, 'ee')
         assert utils.make_bl((1, 2), 'ee') == (1, 2, 'ee')
         assert utils.make_bl((1, 2, 'en')) == (1, 2, 'en')
         assert utils.make_bl((1, 2), 'en') == (1, 2, 'en')
         assert utils.make_bl((1, 2, 'EE')) == (1, 2, 'ee')
         assert utils.make_bl((1, 2), 'EE') == (1, 2, 'ee')
-
-        assert utils.make_bl((1, 2, 'ee'), x_orientation='north') == (1, 2, 'ee')
-        assert utils.make_bl((1, 2), 'ee', x_orientation='north') == (1, 2, 'ee')
-        assert utils.make_bl((1, 2, 'en'), x_orientation='north') == (1, 2, 'en')
-        assert utils.make_bl((1, 2), 'en', x_orientation='north') == (1, 2, 'en')
-        assert utils.make_bl((1, 2, 'EE'), x_orientation='north') == (1, 2, 'ee')
-        assert utils.make_bl((1, 2), 'EE', x_orientation='north') == (1, 2, 'ee')
 
         assert utils.make_bl((1, 2, 'pI')) == (1, 2, 'pI')
         assert utils.make_bl((1, 2), 'pI') == (1, 2, 'pI')
@@ -217,8 +188,8 @@ class TestFftDly(object):
         d, fl, antpos, a, freqs, t, l, p = io.load_vis(data_fname, return_meta=True, pick_data_ants=False)
         freqs /= 1e9  # in GHz
         # test basic execution
-        k1 = (24, 25, 'xx')
-        k2 = (37, 38, 'xx')
+        k1 = (24, 25, 'ee')
+        k2 = (37, 38, 'ee')
         flat_phs = d[k1] * d[k2].conj()
         df = np.median(np.diff(freqs))
         # basic execution
@@ -382,7 +353,7 @@ def test_lst_rephase():
     # basic test: single dlst for all integrations
     utils.lst_rephase(data, bls, freqs, dlst, lat=0.0)
     # get phase error on shortest EW baseline
-    k = (0, 1, 'xx')
+    k = (0, 1, 'ee')
     # check error at transit
     phs_err = np.angle(data[k][transit_integration, 4] / data_drift[k][transit_integration + 1, 4])
     assert np.isclose(phs_err, 0, atol=1e-7)
@@ -522,8 +493,8 @@ def test_gp_interp1d():
     uvd.read(dfiles, bls=[(37, 39)])
     times = np.unique(uvd.time_array) * 24 * 60
     times -= times.min()
-    y = uvd.get_data(37, 39, 'xx')
-    f = uvd.get_flags(37, 39, 'xx')
+    y = uvd.get_data(37, 39, 'ee')
+    f = uvd.get_flags(37, 39, 'ee')
 
     # interpolate
     yint = utils.gp_interp1d(times, y, length_scale=5.0, Nmirror=20, flags=f, nl=1e-10)
@@ -568,7 +539,7 @@ def test_red_average():
     antpos, ants = hd.get_ENU_antpos(pick_data_ants=True)
     antposd = dict(zip(ants, antpos))
     reds = redcal.get_pos_reds(antposd)
-    blkey = reds[0][0] + ('xx',)
+    blkey = reds[0][0] + ('ee',)
 
     # test redundant average
     hda = utils.red_average(hd, reds, inplace=False)
@@ -576,10 +547,10 @@ def test_red_average():
     # assert type and averaging is correct
     assert isinstance(hda, io.HERAData)
     assert hda.Nbls == len(reds)
-    nsamp = np.sum([hd.get_nsamples(bl + ('xx',)) * ~hd.get_flags(bl + ('xx',)) for bl in reds[0]], axis=0)
+    nsamp = np.sum([hd.get_nsamples(bl + ('ee',)) * ~hd.get_flags(bl + ('ee',)) for bl in reds[0]], axis=0)
     assert np.isclose(hda.get_nsamples(blkey), nsamp).all()
-    d = np.asarray([hd.get_data(bl + ('xx',)) for bl in reds[0]])
-    w = np.asarray([(~hd.get_flags(bl + ('xx',))).astype(float) for bl in reds[0]])
+    d = np.asarray([hd.get_data(bl + ('ee',)) for bl in reds[0]])
+    w = np.asarray([(~hd.get_flags(bl + ('ee',))).astype(float) for bl in reds[0]])
     davg = np.sum(d * w, axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf)
     assert np.isclose(hda.get_data(blkey), davg).all()
 
@@ -591,7 +562,7 @@ def test_red_average():
     assert np.isclose(flag_avg[blkey], hda.get_flags(blkey)).all()
     # try with no flags
     data_avg2, _, _ = utils.red_average(data, reds, inplace=False)
-    assert np.isclose(data_avg2[blkey], np.mean([data[bl + ('xx',)] for bl in reds[0]], axis=0)).all()
+    assert np.isclose(data_avg2[blkey], np.mean([data[bl + ('ee',)] for bl in reds[0]], axis=0)).all()
 
     # test inplace
     _hda = copy.deepcopy(hd)
@@ -617,11 +588,11 @@ def test_red_average():
     # now try with modified nsamples
     _hd = copy.deepcopy(hd)
     _hd.nsample_array[:] = 0.0
-    _hd.nsample_array[hd.antpair2ind(reds[0][0] + ('xx',))] = 1.0
+    _hd.nsample_array[hd.antpair2ind(reds[0][0] + ('ee',))] = 1.0
     _hd.flag_array[:] = False
     hda3 = utils.red_average(_hd, inplace=False)
     # averaged data should equal original, unaveraged data due to weighting
-    assert np.isclose(hda3.get_data(reds[0][0] + ('xx',)), hd.get_data(reds[0][0] + ('xx',))).all()
+    assert np.isclose(hda3.get_data(reds[0][0] + ('ee',)), hd.get_data(reds[0][0] + ('ee',))).all()
 
     # try with manual weights
     wgts = datacontainer.DataContainer({k: _hd.get_nsamples(k) for k in _hd.get_antpairpols()})
@@ -675,21 +646,4 @@ def test_echo(capsys):
     assert output[4:] == '-' * 40 + '\n'
 
 
-def test_comply_vispol():
-    output = utils._comply_vispol('I')
-    assert output == 'pI'
 
-
-def test_comply_vispol_nn():
-    output = utils._comply_vispol('nn', x_orientation='n')
-    assert output == 'nn'
-
-
-def test_comply_antpol():
-    output = utils._comply_antpol('xx')
-    assert output == 'Jxx'
-
-
-def test_comply_antpol_nn():
-    output = utils._comply_antpol('nn', x_orientation='n')
-    assert output == 'Jnn'
