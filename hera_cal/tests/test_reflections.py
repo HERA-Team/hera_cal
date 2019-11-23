@@ -226,7 +226,7 @@ class Test_ReflectionFitter_Cables(object):
     def test_write_auto_reflections(self):
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (23, 23, 'xx')
-        a_k = (23, 'Jxx')
+        a_k = (23, 'Jee')
         # add a flagged integration
         RF.flags[bl_k][0] = True
         RF._clear_ref()
