@@ -1407,7 +1407,7 @@ class TestRunMethods(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             rv = om.redcal_iteration(hd, pol_mode='4pol')
-        np.testing.assert_array_equal(rv['chisq']['Jxx'], rv['chisq']['Jyy'])
+        np.testing.assert_array_equal(rv['chisq']['Jee'], rv['chisq']['Jnn'])
 
         hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  # move array longitude
         rv = om.redcal_iteration(hd, solar_horizon=0.0)
@@ -1425,7 +1425,7 @@ class TestRunMethods(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             rv = om.redcal_iteration(hd, pol_mode='2pol', ex_ants=[1, 27], min_bl_cut=15)
-        for pol in ['xx', 'yy']:
+        for pol in ['ee', 'nn']:
             for key in ['v_omnical', 'vf_omnical', 'vns_omnical']:
                 # test that the unique baseline is keyed by the first entry in all_reds, not filtered_reds
                 assert (1, 12, pol) in rv[key].keys()
@@ -1435,7 +1435,7 @@ class TestRunMethods(object):
             np.testing.assert_array_equal(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]], 4.0)
             np.testing.assert_array_equal(rv['vns_omnical'][(23, 27, pol)], 0.0)
             np.testing.assert_array_equal(rv['vns_omnical'][(1, 27, pol)], 0.0)
-        for ant in [(1, 'Jxx'), (1, 'Jyy'), (27, 'Jxx'), (27, 'Jyy')]:
+        for ant in [(1, 'Jee'), (1, 'Jnn'), (27, 'Jee'), (27, 'Jnn')]:
             assert not np.all(rv['g_omnical'][ant] == 1.0)
             assert not np.all(rv['chisq_per_ant'][ant] == 0.0)
             np.testing.assert_array_equal(rv['gf_omnical'][ant], True)
