@@ -313,8 +313,8 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs['polarizations'] is None
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(53, 54, parse_polstr('XX', x_orientation=dc.x_orientation))]
-            assert dc[53, 54, 'xx'].shape == (10, 100)
+            assert list(dc.keys()) == [(53, 54, parse_polstr('XX', x_orientation=hd.x_orientation))]
+            assert dc[53, 54, 'ee'].shape == (10, 100)
         with pytest.raises(ValueError):
             d, f, n = hd.read(polarizations=['xy'])
 
@@ -323,11 +323,11 @@ class Test_HERAData(object):
         assert o is None
 
         # assert __getitem__ isn't a read when key exists
-        o = hd[(53, 53, 'xx')]
+        o = hd[(53, 53, 'ee')]
         assert len(hd._blt_slices) == 2
 
         # assert __getitem__ is a read when key does not exist
-        o = hd[(54, 54, 'xx')]
+        o = hd[(54, 54, 'ee')]
         assert len(hd._blt_slices) == 1
 
         # miriad
@@ -338,8 +338,8 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs['polarizations'] == ['XX']
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(52, 53, parse_polstr('XX', x_orientation=dc.x_orientation))]
-            assert dc[52, 53, 'xx'].shape == (10, 30)
+            assert list(dc.keys()) == [(52, 53, parse_polstr('XX', x_orientation=hd.x_orientation))]
+            assert dc[52, 53, 'ee'].shape == (10, 30)
         with pytest.raises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
 
@@ -349,8 +349,8 @@ class Test_HERAData(object):
         assert hd.last_read_kwargs['freq_chans'] == list(range(10))
         for dc in [d, f, n]:
             assert len(dc) == 1
-            assert list(dc.keys()) == [(0, 1, parse_polstr('XX', x_orientation=dc.x_orientation))]
-            assert dc[0, 1, 'xx'].shape == (60, 10)
+            assert list(dc.keys()) == [(0, 1, parse_polstr('XX', x_orientation=hd.x_orientation))]
+            assert dc[0, 1, 'ee'].shape == (60, 10)
         with pytest.raises(NotImplementedError):
             d, f, n = hd.read(read_data=False)
 
@@ -378,8 +378,8 @@ class Test_HERAData(object):
         hd = HERAData(self.uvh5_1)
         assert hd._writers == {}
         d, f, n = hd.read(bls=hd.bls[0])
-        assert hd.last_read_kwargs['bls'] == (53, 53, parse_polstr('XX', x_orientation=d.x_orientation))
-        d[(53, 53, 'XX')] *= (2.0 + 1.0j)
+        assert hd.last_read_kwargs['bls'] == (53, 53, parse_polstr('XX', x_orientation=hd.x_orientation))
+        d[(53, 53, 'EE')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True)
         assert 'out.h5' in hd._writers
         assert isinstance(hd._writers['out.h5'], HERAData)
@@ -391,16 +391,16 @@ class Test_HERAData(object):
                     assert np.all(getattr(hd, meta)[k] == getattr(hd._writers['out.h5'], meta)[k])
 
         d, f, n = hd.read(bls=hd.bls[1])
-        assert hd.last_read_kwargs['bls'] == (53, 54, parse_polstr('XX', x_orientation=d.x_orientation))
-        d[(53, 54, 'XX')] *= (2.0 + 1.0j)
+        assert hd.last_read_kwargs['bls'] == (53, 54, parse_polstr('XX', x_orientation=hd.x_orientation))
+        d[(53, 54, 'EE')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True)
 
         d, f, n = hd.read(bls=hd.bls[2])
-        assert hd.last_read_kwargs['bls'] == (54, 54, parse_polstr('XX', x_orientation=d.x_orientation))
-        d[(54, 54, 'XX')] *= (2.0 + 1.0j)
+        assert hd.last_read_kwargs['bls'] == (54, 54, parse_polstr('XX', x_orientation=hd.x_orientation))
+        d[(54, 54, 'EE')] *= (2.0 + 1.0j)
         hd.partial_write('out.h5', data=d, clobber=True, inplace=True)
         d_after, _, _ = hd.build_datacontainers()
-        np.testing.assert_array_almost_equal(d[(54, 54, 'XX')], d_after[(54, 54, 'XX')])
+        np.testing.assert_array_almost_equal(d[(54, 54, 'EE')], d_after[(54, 54, 'EE')])
 
         hd = HERAData(self.uvh5_1)
         d, f, n = hd.read()
@@ -436,7 +436,7 @@ class Test_HERAData(object):
 
         hd = HERAData(self.miriad_1, filetype='miriad')
         d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')]))
-        assert list(d.keys()) == [(52, 53, parse_polstr('XX', x_orientation=dc.x_orientation))]
+        assert list(d.keys()) == [(52, 53, parse_polstr('XX', x_orientation=hd.x_orientation))]
         with pytest.raises(NotImplementedError):
             next(hd.iterate_over_bls())
 
@@ -515,29 +515,29 @@ class Test_Visibility_IO_Legacy(object):
 
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         data, flags = io.load_vis(fname, pop_autos=False)
-        assert data[(24, 25, 'xx')].shape == (60, 64)
-        assert flags[(24, 25, 'xx')].shape == (60, 64)
-        assert (24, 24, parse_polstr('XX')) in data
+        assert data[(24, 25, 'ee')].shape == (60, 64)
+        assert flags[(24, 25, 'ee')].shape == (60, 64)
+        assert (24, 24, parse_polstr('EE', x_orientation=self.uvd.x_orientation)) in data
         data, flags = io.load_vis([fname])
-        assert data[(24, 25, 'xx')].shape == (60, 64)
+        assert data[(24, 25, 'ee')].shape == (60, 64)
 
         # test pop autos
         data, flags = io.load_vis(fname, pop_autos=True)
-        assert (24, 24, parse_polstr('XX')) not in data
+        assert (24, 24, parse_polstr('EE', x_orientation=self.uvd.x_orientation)) not in data
 
         # test uvd object
         uvd = UVData()
         uvd.read_miriad(fname)
         data, flags = io.load_vis(uvd)
-        assert data[(24, 25, 'xx')].shape == (60, 64)
+        assert data[(24, 25, 'ee')].shape == (60, 64)
         data, flags = io.load_vis([uvd])
-        assert data[(24, 25, 'xx')].shape == (60, 64)
+        assert data[(24, 25, 'ee')].shape == (60, 64)
 
         # test multiple
         fname2 = os.path.join(DATA_PATH, "zen.2458043.13298.xx.HH.uvORA")
         data, flags = io.load_vis([fname, fname2])
-        assert data[(24, 25, 'xx')].shape == (120, 64)
-        assert flags[(24, 25, 'xx')].shape == (120, 64)
+        assert data[(24, 25, 'ee')].shape == (120, 64)
+        assert flags[(24, 25, 'ee')].shape == (120, 64)
 
         # test w/ meta
         d, f, ap, a, f, t, l, p = io.load_vis([fname, fname2], return_meta=True)
@@ -620,16 +620,16 @@ class Test_Visibility_IO_Legacy(object):
         assert os.path.exists('ex.uv')
         assert uvd.data_array.shape == (1680, 1, 64, 1)
         assert uvd2.data_array.shape == (1680, 1, 64, 1)
-        assert np.allclose(data[(24, 25, 'xx')][30, 32], uvd.get_data(24, 25, 'xx')[30, 32])
-        assert np.allclose(data[(24, 25, 'xx')][30, 32], uvd2.get_data(24, 25, 'xx')[30, 32])
+        assert np.allclose(data[(24, 25, 'ee')][30, 32], uvd.get_data(24, 25, 'ee')[30, 32])
+        assert np.allclose(data[(24, 25, 'ee')][30, 32], uvd2.get_data(24, 25, 'ee')[30, 32])
         assert uvd2.x_orientation.lower() == 'east'
 
         # test with nsample and flags
         uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='east', return_uvd=True, overwrite=True, verbose=True)
         assert uvd.nsample_array.shape == (1680, 1, 64, 1)
         assert uvd.flag_array.shape == (1680, 1, 64, 1)
-        assert np.allclose(nsample[(24, 25, 'xx')][30, 32], uvd.get_nsamples(24, 25, 'xx')[30, 32])
-        assert np.allclose(flgs[(24, 25, 'xx')][30, 32], uvd.get_flags(24, 25, 'xx')[30, 32])
+        assert np.allclose(nsample[(24, 25, 'ee')][30, 32], uvd.get_nsamples(24, 25, 'ee')[30, 32])
+        assert np.allclose(flgs[(24, 25, 'ee')][30, 32], uvd.get_flags(24, 25, 'ee')[30, 32])
         assert uvd.x_orientation.lower() == 'east'
 
         # test exceptions
