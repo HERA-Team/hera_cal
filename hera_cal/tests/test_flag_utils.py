@@ -25,7 +25,7 @@ def test_solar_flag():
     a = utils.get_sun_alt([2458043, 2458043.5])
     assert isinstance(a, (np.ndarray))
     # test solar flag
-    bl = (24, 25, 'xx')
+    bl = (24, 25, 'ee')
     _flags = flag_utils.solar_flag(flags, times=t, flag_alt=20.0, inplace=False)
     assert _flags[bl][:41].all()
     assert not flags[bl][:41].all()
@@ -71,24 +71,24 @@ def test_factorize_flags():
     data, flags, _ = hd.read(bls=[(24, 25)])
 
     # run on ndarray
-    f = flag_utils.factorize_flags(flags[(24, 25, 'xx')].copy(), time_thresh=1.5 / 60, inplace=False)
+    f = flag_utils.factorize_flags(flags[(24, 25, 'ee')].copy(), time_thresh=1.5 / 60, inplace=False)
     assert f[52].all()
     assert f[:, 60:62].all()
 
-    f = flag_utils.factorize_flags(flags[(24, 25, 'xx')].copy(), spw_ranges=[(45, 60)],
+    f = flag_utils.factorize_flags(flags[(24, 25, 'ee')].copy(), spw_ranges=[(45, 60)],
                                    time_thresh=0.5 / 60, inplace=False)
     assert f[:, 48].all()
     assert not np.min(f, axis=1).any()
     assert not f[:, 24].all()
 
-    f = flags[(24, 25, 'xx')].copy()
+    f = flags[(24, 25, 'ee')].copy()
     flag_utils.factorize_flags(f, time_thresh=0.5 / 60, inplace=True)
     assert f[:, 48].all()
     assert not np.min(f, axis=1).any()
 
     # run on datacontainer
     f2 = flag_utils.factorize_flags(copy.deepcopy(flags), time_thresh=0.5 / 60, inplace=False)
-    np.testing.assert_array_equal(f2[(24, 25, 'xx')], f)
+    np.testing.assert_array_equal(f2[(24, 25, 'ee')], f)
 
     # test exceptions
     pytest.raises(ValueError, flag_utils.factorize_flags, flags, spw_ranges=(0, 1))
