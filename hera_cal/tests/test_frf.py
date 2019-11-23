@@ -110,21 +110,21 @@ class Test_FRFilter(object):
 
     def test_timeavg_data(self):
         # test basic time average
-        self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35, rephase=True, keys=[(24, 25, 'xx')])
+        self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 35, rephase=True, keys=[(24, 25, 'ee')])
         assert self.F.Navg == 3
         assert len(self.F.avg_data) == 1
-        assert self.F.avg_data[(24, 25, 'xx')].shape == (20, 64)
+        assert self.F.avg_data[(24, 25, 'ee')].shape == (20, 64)
 
         # test full time average and overwrite
         self.F.timeavg_data(self.F.data, self.F.times, self.F.lsts, 1e10, rephase=True, verbose=False, overwrite=False)
         assert self.F.Navg == 60
         assert len(self.F.avg_data) == 28
-        assert self.F.avg_data[(24, 25, 'xx')].shape == (20, 64)
-        assert self.F.avg_data[(24, 37, 'xx')].shape == (1, 64)
+        assert self.F.avg_data[(24, 25, 'ee')].shape == (20, 64)
+        assert self.F.avg_data[(24, 37, 'ee')].shape == (1, 64)
 
         # test weight by nsample
         F = copy.deepcopy(self.F)
-        k = (24, 25, 'xx')
+        k = (24, 25, 'ee')
         F.nsamples[k][:3] = 0.0
         F.timeavg_data(F.data, F.times, F.lsts, 35, nsamples=F.nsamples, keys=[k], overwrite=True,
                        wgt_by_nsample=True)
@@ -146,10 +146,10 @@ class Test_FRFilter(object):
         frates = np.fft.fftshift(np.fft.fftfreq(self.F.Ntimes, self.F.dtime)) * 1e3
         w = np.ones((self.F.Ntimes, self.F.Nfreqs), dtype=np.float)
         w[np.abs(frates) < 20] = 0.0
-        frps = datacontainer.DataContainer(dict([(k, w) for k in self.F.data]), x_orientation=self.F.data.x_orientation)
+        frps = datacontainer.DataContainer(dict([(k, w) for k in self.F.data]))
 
         # make gaussian random noise
-        bl = (24, 25, 'xx')
+        bl = (24, 25, 'ee')
         window = 'blackmanharris'
         ec = 0
         np.random.seed(0)
