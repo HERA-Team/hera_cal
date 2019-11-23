@@ -23,8 +23,8 @@ class Test_tempcal():
 
     def test_gains_from_autos(self):
         # test gains from autos
-        key = (24, 24, 'xx')
-        gkey = (24, 'Jxx')
+        key = (24, 24, 'ee')
+        gkey = (24, 'Jee')
         gain, gfalg, smooth = tempcal.gains_from_autos(self.data, self.times, flags=self.flags, smooth_frate=1.0,
                                                        nl=1e-10, Nmirror=20, edgeflag=10, verbose=False)
         assert isinstance(gain, dict)
@@ -47,22 +47,22 @@ class Test_tempcal():
         assert np.all(gf[gkey])
 
     def test_avg_ants(self):
-        key = (24, 24, 'xx')
-        gkey = (24, 'Jxx')
+        key = (24, 24, 'ee')
+        gkey = (24, 'Jee')
         gain, gflag, smooth = tempcal.gains_from_autos(self.data, self.times, flags=self.flags, smooth_frate=1.0,
                                                        nl=1e-10, Nmirror=20, edgeflag=10, verbose=False)
         # test avg_ants
         ag, af = tempcal.avg_gain_ants(gain, list(gain.keys()), gflags=gflag, inplace=False)
-        assert not np.all(np.isclose(gain[(24, 'Jxx')], gain[(25, 'Jxx')]))
-        assert np.all([np.isclose(ag[_k] - ag[(24, 'Jxx')], 0.0).all() for _k in ag])
+        assert not np.all(np.isclose(gain[(24, 'Jee')], gain[(25, 'Jee')]))
+        assert np.all([np.isclose(ag[_k] - ag[(24, 'Jee')], 0.0).all() for _k in ag])
 
         # test inplace
         tempcal.avg_gain_ants(gain, list(gain.keys()), gflags=gflag, inplace=True)
-        assert np.all([np.isclose(gain[_k] - gain[(24, 'Jxx')], 0.0).all() for _k in gain])
+        assert np.all([np.isclose(gain[_k] - gain[(24, 'Jee')], 0.0).all() for _k in gain])
 
     def test_normalize_tempgains(self):
-        key = (24, 24, 'xx')
-        gkey = (24, 'Jxx')
+        key = (24, 24, 'ee')
+        gkey = (24, 'Jee')
         gain, gflag, smooth = tempcal.gains_from_autos(self.data, self.times, flags=self.flags, smooth_frate=1.0,
                                                        nl=1e-10, Nmirror=20, edgeflag=10, verbose=False)
 
