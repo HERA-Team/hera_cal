@@ -1080,7 +1080,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     -----------
     model : type=DataContainer, holds complex visibility for model
         keys are antenna-pair + pol tuples, values are 2d complex visibility
-        with shape (Ntimes, Nfreqs)
+        with shape (Ntimes, Nfreqs). x_orientation inferred from this object.
 
     model_lsts : 1D array of the model time axis, dtype=float, shape=(Ntimes,)
 
@@ -1141,7 +1141,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
     # ensure flags are booleans
     if flags is not None:
         if np.issubdtype(flags[list(flags.keys())[0]].dtype, np.floating):
-            flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys()))))
+            flags = DataContainer(odict(list(map(lambda k: (k, ~flags[k].astype(np.bool)), flags.keys()))), x_orientation=model.x_orientation)
 
     # loop over keys
     for i, k in enumerate(list(model.keys())):
@@ -1232,7 +1232,7 @@ def interp2d_vis(model, model_lsts, model_freqs, data_lsts, data_freqs, flags=No
         new_model[k] = interp_real + 1j * interp_imag
         new_flags[k] = f
 
-    return DataContainer(new_model), DataContainer(new_flags)
+    return DataContainer(new_model, x_orientation=model.x_orientation), DataContainer(new_flags, x_orientation=model.x_orientation)
 
 
 def rephase_vis(model, model_lsts, data_lsts, bls, freqs, inplace=False, flags=None, max_dlst=0.005, latitude=-30.72152):
