@@ -18,6 +18,7 @@ dependencies:
   - psutil
   - astropy-healpix
   - pyephem
+  - basemap
   - pip:
     - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
     - git+https://github.com/HERA-Team/hera_qm
