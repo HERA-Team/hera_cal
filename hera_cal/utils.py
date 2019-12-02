@@ -13,7 +13,7 @@ from scipy import signal
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
-from pyuvdata.utils import POL_STR2NUM_DICT, _x_orientation_rep_dict
+from pyuvdata.utils import POL_STR2NUM_DICT, _x_orientation_rep_dict, JONES_NUM2STR_DICT
 import sklearn.gaussian_process as gp
 
 try:
@@ -23,13 +23,16 @@ except ImportError:
     AIPY = False
 
 
-# Defines characters to look for to see if the polarization string is in east/north format. Nominally ['e', 'n'].
-_KEY_CARDINAL_CHARS = [c.lower() for c in _x_orientation_rep_dict('north').values()]
+# Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
+_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()])
+# Define characters that appear in all Jones polarization strings. Nominally {'j'}.
+_KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
+                       if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])
 
 
 def _is_cardinal(polstr):
-    '''Returns true if any characters in the polarization match those in _KEY_CARDINAL_CHARS.'''
-    return np.any([c.lower() in _KEY_CARDINAL_CHARS for c in polstr])
+    '''Returns true if all characters in polstr match those in _KEY_CARDINAL_CHARS or _KEY_JONES_CHARS.'''
+    return np.all([(c.lower() in _KEY_CARDINAL_CHARS) or (c.lower() in _KEY_JONES_CHARS) for c in polstr])
 
 
 def _comply_antpol(antpol):
