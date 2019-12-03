@@ -1426,10 +1426,11 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
-    hd.read(bls=cal['v_omnical'].keys())
-    hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
-    hd.history += version.history_string(add_to_history)
-    hd.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
+    hd_out = HERAData(hd.filepaths[0], filetype=hd.filetype)
+    hd_out.read(bls=cal['v_omnical'].keys())
+    hd_out.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
+    hd_out.history += version.history_string(add_to_history)
+    hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', 
@@ -1542,9 +1543,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                                       add_to_history=add_to_history + '\n' + 'Iteration 0 Results.\n')
 
     # output results files
-    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext,
-                              filename_no_ext + omnivis_ext, outdir, clobber=clobber, verbose=verbose,
-                              add_to_history=add_to_history + '\n' + high_z_ant_hist)
+    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext, filename_no_ext + omnivis_ext,
+                              outdir, clobber=clobber, verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
 
     return cal
 
