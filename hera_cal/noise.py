@@ -38,7 +38,7 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
     '''Predict the noise variance on a baseline using autocorrelation data.
 
     Arguments:
-        bl: baseline tuple of the form (0, 1, 'xx')
+        bl: baseline tuple of the form (0, 1, 'nn')
         data: DataContainer containing autocorrelation data of the two antennas in bl
         dt: integration time in seconds. If None, will try infer this
             from the times stored in the DataContainer.
@@ -67,7 +67,7 @@ def predict_noise_variance_from_autos(bl, data, dt=None, df=None, nsamples=None)
 
 def per_antenna_noise_std(autos, dt=None, df=None):
     '''Predicts per-antenna noise using autocorrelation data. The result is a noise standard deviation. To predict
-    the noise variance on e.g. (1, 2, 'xy'), one would use noise[1, 1, 'xx'] * noise[2, 2, 'yy'].
+    the noise variance on e.g. (1, 2, 'ne'), one would use noise[1, 1, 'nn'] * noise[2, 2, 'ee'].
     
     Arguments:
         autos: DataContainer containing autocorrelation data
@@ -75,7 +75,7 @@ def per_antenna_noise_std(autos, dt=None, df=None):
         df: channel width in Hz. If None, will try to infer this from the frequencies stored in the DataContainer
 
     Returns:
-        noise: DataContainer mapping autocorrelation baselines like (1, 1, 'xx') to predictions for the standard
+        noise: DataContainer mapping autocorrelation baselines like (1, 1, 'nn') to predictions for the standard
             deviation of noise for that antenna (in the same units as the autocorrelations themselves).
     '''
     noise = {}
@@ -87,7 +87,7 @@ def per_antenna_noise_std(autos, dt=None, df=None):
 
 def write_per_antenna_noise_std_from_autos(infile, outfile, calfile=None, gain_convention='divide', add_to_history='', clobber=False):
     '''Loads autocorrelations and uses them to predict the per-antenna noise standard deviation on visibilities (e.g. to predict
-    the noise variance on e.g. (1, 2, 'xy'), one would use noise[1, 1, 'xx'] * noise[2, 2, 'yy']). Optionally applies calibration
+    the noise variance on e.g. (1, 2, 'ne'), one would use noise[1, 1, 'nn'] * noise[2, 2, 'ee']). Optionally applies calibration
     solutions with associated flags. Only reads and writes to .uhv5 files.
 
     Arguments:
