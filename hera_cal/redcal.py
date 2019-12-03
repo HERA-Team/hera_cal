@@ -75,18 +75,18 @@ def get_pos_reds(antpos, bl_error_tol=1.0):
             else sorted([reverse_bl(bl) for bl in reds[delta]]) for delta in orderedDeltas]
 
 
-def add_pol_reds(reds, pols=['xx'], pol_mode='1pol'):
+def add_pol_reds(reds, pols=['nn'], pol_mode='1pol'):
     """ Takes positonal reds (antenna indices only, no polarizations) and converts them
     into baseline tuples with polarization, depending on pols and pol_mode specified.
 
     Args:
         reds: list of list of antenna index tuples considered redundant
-        pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
+        pols: a list of polarizations e.g. ['nn', 'ne', 'en', 'ee']
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
-            '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
+            '1pol': 1 antpol and 1 vispol (e.g. 'Jnn' and 'nn'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'Jnn','Jee' and 'nn','ee')
+            '4pol': 2 antpols, 4 vispols (e.g. 'Jnn','Jee' and 'nn','ne','en','ee')
+            '4pol_minV': 2 antpols, 4 vispols in data but assuming V_ne = V_en in model
 
     Returns:
         reds: list of lists of redundant baseline tuples, e.g. (ind1,ind2,pol)
@@ -99,24 +99,24 @@ def add_pol_reds(reds, pols=['xx'], pol_mode='1pol'):
         if pol_mode is not '4pol_minV' or pol[0] == pol[1]:
             redsWithPols += [[bl + (pol,) for bl in bls] for bls in reds]
         elif pol_mode is '4pol_minV' and not didBothCrossPolsForMinV:
-            # Combine together e.g. 'xy' and 'yx' visibilities as redundant
+            # Combine together e.g. 'ne' and 'en' visibilities as redundant
             redsWithPols += [([bl + (pol,) for bl in bls]
                               + [bl + (conj_pol(pol),) for bl in bls]) for bls in reds]
             didBothCrossPolsForMinV = True
     return redsWithPols
 
 
-def get_reds(antpos, pols=['xx'], pol_mode='1pol', bl_error_tol=1.0):
+def get_reds(antpos, pols=['nn'], pol_mode='1pol', bl_error_tol=1.0):
     """ Combines redcal.get_pos_reds() and redcal.add_pol_reds(). See their documentation.
 
     Args:
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}.
-        pols: a list of polarizations e.g. ['xx', 'xy', 'yx', 'yy']
+        pols: a list of polarizations e.g. ['nn', 'ne', 'en', 'ee']
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
-            '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
+            '1pol': 1 antpol and 1 vispol (e.g. 'Jnn' and 'nn'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'Jnn','Jee' and 'nn','ee')
+            '4pol': 2 antpols, 4 vispols (e.g. 'Jnn','Jee' and 'nn','ne','en','ee')
+            '4pol_minV': 2 antpols, 4 vispols in data but assuming V_ne = V_en in model
         bl_error_tol: the largest allowable difference between baselines in a redundant group
             (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
 
