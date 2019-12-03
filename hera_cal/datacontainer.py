@@ -11,8 +11,8 @@ from .utils import conj_pol, comply_pol, make_bl, comply_bl, reverse_bl
 
 class DataContainer:
     """Dictionary-like object that abstracts away the pol/ant pair ordering of data
-    dictionaries and the the polarization case (i.e. 'xx' vs. 'XX'). Keys are in
-    the form (0,1,'xx'). Does not know about x_orientation, which means that
+    dictionaries and the the polarization case (i.e. 'nn' vs. 'NN'). Keys are in
+    the form (0,1,'nn'). Does not know about x_orientation, which means that
     'xx' and 'nn' are always treated as different polarizations.
 
     Supports much of the same functionality as dictionaries, including:
@@ -101,7 +101,7 @@ class DataContainer:
     def __getitem__(self, key):
         '''Returns the data corresponding to the key. If the key is just a polarization,
         returns all baselines for that polarization. If the key is just a baseline,
-        returns all polarizations for that baseline. If the key is of the form (0,1,'xx'),
+        returns all polarizations for that baseline. If the key is of the form (0,1,'nn'),
         returns the associated entry. Abstracts away both baseline ordering (applying the
         complex conjugate when appropriate) and polarization capitalization.'''
         if isinstance(key, str):  # asking for a pol
@@ -122,7 +122,7 @@ class DataContainer:
                     raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
 
     def __setitem__(self, key, value):
-        '''Sets the data corresponding to the key. Only supports the form (0,1,'xx').
+        '''Sets the data corresponding to the key. Only supports the form (0,1,'nn').
         Abstracts away both baseline ordering (applying the complex conjugate when
         appropriate) and polarization capitalization.'''
         if len(key) == 3:
@@ -145,7 +145,7 @@ class DataContainer:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
     def __delitem__(self, key):
-        '''Deletes the input key and corresponding data. Only supports the form (0,1,'xx').
+        '''Deletes the input key and corresponding data. Only supports the form (0,1,'nn').
         Abstracts away both baseline ordering and polarization capitalization.'''
         if len(key) == 3:
             key = comply_bl(key)
