@@ -1447,7 +1447,7 @@ class TestRunMethods(object):
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
             cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
-                    iter0_prefix='.iter0', ant_metrics_file=ant_metrics_file, clobber=True)
+                                iter0_prefix='.iter0', ant_metrics_file=ant_metrics_file, clobber=True)
 
             hd = io.HERAData(input_data)
             ex_ants = set([])
