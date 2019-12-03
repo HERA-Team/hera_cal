@@ -1558,6 +1558,8 @@ def redcal_argparser():
     a.add_argument("--omnical_ext", default='.omni.calfits', type=str, help="string to replace file extension of input_data for saving omnical calfits")
     a.add_argument("--omnivis_ext", default='.omni_vis.uvh5', type=str, help="string to replace file extension of input_data for saving omnical visibilities as uvh5")
     a.add_argument("--outdir", default=None, type=str, help="folder to save data products. Default is the same as the folder containing input_data")
+    a.add_argument("--iter0_prefix", default='', type=str, help="if not default '', save the omnical results with this prefix appended to each file after the 0th iteration, \
+                   but only if redcal has found any antennas to exclude and re-run without.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing files for the firstcal and omnical results")
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
 
