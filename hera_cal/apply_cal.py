@@ -25,15 +25,15 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
         data_flags: DataContainer containing data flags. They are updated based on the flags of the
             calibration solutions.
-        new_gains: Dictionary of complex calibration gains to apply with keys like (1,'Jxx')
-        new_flags: Dictionary with keys like (1,'Jxx') of per-antenna boolean flags to update data_flags
+        new_gains: Dictionary of complex calibration gains to apply with keys like (1,'Jnn')
+        new_flags: Dictionary with keys like (1,'Jnn') of per-antenna boolean flags to update data_flags
             if either antenna in a visibility is flagged. Must have all keys in new_gains.
-        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). Must be a superset of
+        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'nn'). Must be a superset of
             the reds used for producing cal
-        old_gains: Dictionary of complex calibration gains to take out with keys like (1,'Jxx').
+        old_gains: Dictionary of complex calibration gains to take out with keys like (1,'Jnn').
             Default of None implies means that the "old" gains are all 1s. Must be either None or
             have all the same keys as new_gains.
-        old_flags: Dictionary with keys like (1,'Jxx') of per-antenna boolean flags to update data_flags
+        old_flags: Dictionary with keys like (1,'Jnn') of per-antenna boolean flags to update data_flags
             if either antenna in a visibility is flagged. Default of None all old_gains are unflagged.
             Must be either None or have all the same keys as new_flags.
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
@@ -97,12 +97,12 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
     Arguments:
         data: DataContainer containing baseline-pol complex visibility data. This is modified in place.
-        new_gains: Dictionary of complex calibration gains to apply with keys like (1,'Jxx')
+        new_gains: Dictionary of complex calibration gains to apply with keys like (1,'Jnn')
         data_flags: DataContainer containing data flags. This is modified in place if its not None.
-        cal_flags: Dictionary with keys like (1,'Jxx') of per-antenna boolean flags to update data_flags
+        cal_flags: Dictionary with keys like (1,'Jnn') of per-antenna boolean flags to update data_flags
             if either antenna in a visibility is flagged. Any missing antennas are assumed to be totally
             flagged, so leaving this as None will result in input data_flags becoming totally flagged.
-        old_gains: Dictionary of complex calibration gains to take out with keys like (1,'Jxzx').
+        old_gains: Dictionary of complex calibration gains to take out with keys like (1,'Jnn').
             Default of None implies that the data is raw (i.e. uncalibrated).
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
