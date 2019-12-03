@@ -64,7 +64,7 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     Parameters:
     -----------
     model : visibility data of refence model, type=DataContainer
-            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
             values are complex ndarray visibilities.
             these must be 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
@@ -140,7 +140,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     Parameters:
     -----------
     model : visibility data of refence model, type=DataContainer
-            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
@@ -256,7 +256,7 @@ def amp_logcal(model, data, wgts=None, verbose=True):
     Parameters:
     -----------
     model : visibility data of refence model, type=DataContainer
-            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
@@ -321,7 +321,7 @@ def phs_logcal(model, data, wgts=None, refant=None, verbose=True):
     Parameters:
     -----------
     model : visibility data of refence model, type=DataContainer
-            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
@@ -401,7 +401,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
     Parameters:
     -----------
     model : visibility data of refence model, type=DataContainer
-            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
@@ -551,7 +551,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     Parameters:
     -----------
     model : visibility data of refence model, type=DataContainer
-            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
@@ -731,7 +731,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
     Parameters:
     -----------
     model : visibility data of refence model, type=DataContainer
-            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
             values are complex ndarray visibilities.
             these must 2D arrays, with [0] axis indexing time
             and [1] axis indexing frequency.
@@ -1775,13 +1775,13 @@ class AbsCal(object):
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
         The format of model, data and wgts is in a dictionary format, with the convention that
-        keys contain antennas-pairs + polarization, Ex. (1, 2, 'xx'), and values contain 2D complex
+        keys contain antennas-pairs + polarization, Ex. (1, 2, 'nn'), and values contain 2D complex
         ndarrays with [0] axis indexing time and [1] axis frequency.
 
         Parameters:
         -----------
         model : Visibility data of refence model, type=dictionary or DataContainer
-                keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+                keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
                 values are complex ndarray visibilities.
                 these must be 2D arrays, with [0] axis indexing time
                 and [1] axis indexing frequency.
@@ -1791,7 +1791,7 @@ class AbsCal(object):
                 or a list of either.
 
         data :  Visibility data, type=dictionary or DataContainer
-                keys are antenna-pair + polarization tuples, Ex. (1, 2, 'xx').
+                keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
                 values are complex ndarray visibilities.
                 these must be 2D arrays, with [0] axis indexing time
                 and [1] axis indexing frequency.
@@ -2824,7 +2824,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         model: DataContainer containing externally calibrated visibilities, LST-matched to the data
         data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
         flags: DataContainer containing combined data and model flags
-        rc_flags: dictionary mapping keys like (1, 'Jxx') to flag waterfalls from redundant calibration
+        rc_flags: dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration
         min_bl_cut : float, eliminate all visibilities with baseline separation lengths
             smaller than min_bl_cut. This is assumed to be in ENU coordinates with units of meters.
         max_bl_cut : float, eliminate all visibilities with baseline separation lengths
@@ -2839,7 +2839,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
 
     Returns:
-        abscal_delta_gains: gain dictionary mapping keys like (1, 'Jxx') to waterfalls containing 
+        abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
             the updates to the gains between redcal and abscal
         AC: AbsCal object containing absolutely calibrated data, model, and other useful metadata
     '''
@@ -2904,7 +2904,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         tol: baseline match tolerance in units of baseline vectors (e.g. meters)
         phs_max_iter: integer maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.
-        refant: tuple of the form (0, 'Jxx') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
+        refant: tuple of the form (0, 'Jnn') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
 
