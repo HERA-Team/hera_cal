@@ -760,20 +760,20 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     number of unflagged observations that go into each chi^2 waterfall, both overall and per-antenna.
 
     Arguments:
-        data: dictionary or DataContainer mapping baseline-pol keys like (1,2,'xx') to complex 2D
+        data: dictionary or DataContainer mapping baseline-pol keys like (1,2,'nn') to complex 2D
             visibility data, with [0] axis time and [1] axis frequency.
-        model: dictionary or DataContainer mapping baseline-pol keys like (1,2,'xx') to complex 2D
+        model: dictionary or DataContainer mapping baseline-pol keys like (1,2,'nn') to complex 2D
             visibility data, with [0] axis time and [1] axis frequency. Gains are multiplied by model
             before comparing them to the data.
-        data_wgts: dictionary or DataContainer mapping baseline-pol keys like (1,2,'xx') to real
+        data_wgts: dictionary or DataContainer mapping baseline-pol keys like (1,2,'nn') to real
             weights with [0] axis time and [1] axis frequency. Weights are interpeted as 1/sigma^2
             where sigma is the noise on the data (but not necessarily the model if gains are provided).
             Flags are be expressed as data_wgts equal to 0, so (~flags) produces binary weights.
             If None, assumed to be all 1.0s with the same keys as data.
-        gains: optional dictionary mapping ant-pol keys like (1,'x') to a waterfall of complex gains to
+        gains: optional dictionary mapping ant-pol keys like (1,'Jnn') to a waterfall of complex gains to
             be multiplied into the model (or, equivalently, divided out from the data). Default: None,
             which is interpreted as all gains are 1.0 (ie..e the data is already calibrated)
-        gain_flags: optional dictionary mapping ant-pol keys like (1,'x') to a boolean flags waterfall
+        gain_flags: optional dictionary mapping ant-pol keys like (1,'Jnn') to a boolean flags waterfall
             with the same shape as the data. Default: None, which means no per-antenna flagging.
         split_by_antpol: if True, chisq and nObs are dictionaries mapping antenna polarizations to numpy
             arrays. Additionally, if split_by_antpol is True, cross-polarized visibilities are ignored.
@@ -795,10 +795,10 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
             each time and frequency of the chisq calculation. If nObs is specified, this updates that
             with a count of any new unflagged data-to-model comparisons. If split_by_antpol is True,
             instead returns a dictionary that maps antenna polarization strings to these numpy arrays.
-        chisq_per_ant: dictionary mapping ant-pol keys like (1,'x') to chisq per antenna, computed as
+        chisq_per_ant: dictionary mapping ant-pol keys like (1,'Jnn') to chisq per antenna, computed as
             above but keeping i fixed and varying only j. If chisq_per_ant is specified, this adds in
             new chisq calculations that include this antenna
-        nObs_per_ant: dictionary mapping ant-pol keys like (1,'x') to the integer number of unflagged
+        nObs_per_ant: dictionary mapping ant-pol keys like (1,'Jnn') to the integer number of unflagged
             data-to-model comparisons that go into each time and frequency of the per-antenna chisq
             calculation. If nObs_per_ant, this is updated to include all new unflagged observations.
     """
@@ -1021,18 +1021,18 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     (e.g. abscal and smooth_cal), as well as antenna-averaged relative gain differences.
 
     Arguments:
-        old_gains: dictionary mapping keys like (0, 'Jxx') to waterfalls of complex gains.
+        old_gains: dictionary mapping keys like (0, 'Jnn') to waterfalls of complex gains.
             Must contain all keys in new_gains.
-        new_gains: dictionary mapping keys like (0, 'Jxx') to waterfalls of complex gains
-        flags: dictionary mapping keys like (0, 'Jxx') to boolean flag waterfalls. Must
+        new_gains: dictionary mapping keys like (0, 'Jnn') to waterfalls of complex gains
+        flags: dictionary mapping keys like (0, 'Jnn') to boolean flag waterfalls. Must
             contain all keys in new_gains.
         denom: gain dictionary to use to normalize the relative difference. Default None
             uses old_gains. Anywhere denom is 0 must also be flagged.
 
     Returns:
-        relative_diff: dictionary mapping keys like (0, 'Jxx') to waterfalls of relative
+        relative_diff: dictionary mapping keys like (0, 'Jnn') to waterfalls of relative
             differences between old and new gains
-        avg_relative_diff: dictionary mapping antpols (e.g. 'Jxx') to waterfalls. Flagged
+        avg_relative_diff: dictionary mapping antpols (e.g. 'Jnn') to waterfalls. Flagged
             gains are excluded from the average; completely flagged times and channels are
             replaced by 0s to match the convention of chi^2 above
 
