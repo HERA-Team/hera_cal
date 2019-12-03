@@ -149,7 +149,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             represent the redundant group containing it. Baselines of the form (i,j) are broadcast across all
             polarizations, otherwise (i,j,pol) selects a specific redundant group.
         ex_ubls (optional): same as ubls, but excludes groups.
-        pols (optional): polarizations to include in reds. e.g. ['xx','yy','xy','yx']. Default includes all
+        pols (optional): polarizations to include in reds. e.g. ['nn','ee','ne','en']. Default includes all
             polarizations in reds.
         ex_pols (optional): same as pols, but excludes polarizations.
         antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}. 1D and 2D also OK.
@@ -254,8 +254,8 @@ def reds_to_antpos(reds, tol=1e-10):
 
 def _check_polLists_minV(polLists):
     """Given a list of unique visibility polarizations (e.g. for each red group), returns whether
-    they are all either single identical polarizations (e.g. 'xx') or both cross polarizations
-    (e.g. ['xy','yx']) so that the 4pol_minV can be assumed."""
+    they are all either single identical polarizations (e.g. 'nn') or both cross polarizations
+    (e.g. ['ne','en']) so that the 4pol_minV can be assumed."""
 
     for polList in polLists:
         ps = list()
@@ -278,10 +278,10 @@ def parse_pol_mode(reds):
 
     Returns:
         pol_mode: polarization mode of calibration
-            '1pol': 1 antpol and 1 vispol (e.g. 'jxx' and 'xx'). Default.
-            '2pol': 2 antpols, no cross-vispols (e.g. 'jxx','jyy' and 'xx','yy')
-            '4pol': 2 antpols, 4 vispols (e.g. 'jxx','jyy' and 'xx','xy','yx','yy')
-            '4pol_minV': 2 antpols, 4 vispols in data but assuming V_xy = V_yx in model
+            '1pol': 1 antpol and 1 vispol (e.g. 'Jnn' and 'nn'). Default.
+            '2pol': 2 antpols, no cross-vispols (e.g. 'Jnn','Jee' and 'nn','ee')
+            '4pol': 2 antpols, 4 vispols (e.g. 'Jnn','Jee' and 'nn','ne','en','ee')
+            '4pol_minV': 2 antpols, 4 vispols in data but assuming V_ne = V_en in model
             'unrecognized_pol_mode': something else
     """
 
@@ -950,23 +950,23 @@ def normalized_chisq(data, data_wgts, reds, vis_sols, gains):
     source of non-redundancy is noise, these quantities should have expectation values of 1.
 
     Arguments:
-        data: DataContainer mapping baseline-pol tuples like (0,1,'xx') to complex data of 
+        data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex data of 
             shape (Nt, Nf).
         data_wgts: multiplicative weights with which to combine chisq per visibility. Usually
             equal to (visibility noise variance)**-1.
-        reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+        reds: list of lists of redundant baseline tuples, e.g. (0,1,'nn'). The first
             item in each list will be treated as the key for the unique baseline.
         vis_sols: omnical visibility solutions dictionary with baseline-pol tuple keys that are the
             first elements in each of the sub-lists of reds. 
-        gains: gain dictionary keyed by ant-pol tuples like (1,'Jxx')
+        gains: gain dictionary keyed by ant-pol tuples like (1,'Jnn')
 
     Returns:
         chisq: chi^2 per degree of freedom for the calibration solution. Normalized using noise derived
             from autocorrelations and a number of DoF derived from the reds using predict_chisq_per_ant.
             If the inferred pol_mode from reds (see redcal.parse_pol_mode) is '1pol' or '2pol', this 
-            is a dictionary mapping antenna polarization (e.g. 'Jxx') to chi^2. Otherwise, there is a 
+            is a dictionary mapping antenna polarization (e.g. 'Jnn') to chi^2. Otherwise, there is a 
             single chisq (because polarizations mix) and this is a numpy array.
-        chisq_per_ant: dictionary mapping ant-pol tuples like (1,'Jxx') to the sum of all chisqs for
+        chisq_per_ant: dictionary mapping ant-pol tuples like (1,'Jnn') to the sum of all chisqs for
             visibilities that an antenna participates in, DoF normalized using predict_chisq_per_ant
     '''
     pol_mode = parse_pol_mode(reds)
@@ -1003,7 +1003,7 @@ def rekey_vis_sols(cal, reds):
     Arguments:
         cal: dictionary of redundant calibration solutions, updated in place, like the one 
             produced by redcal.redundantly_calibrate(). See that function more details.
-        reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx')
+        reds: list of lists of redundant baseline tuples, e.g. (0,1,'nn')
     '''
     for red in reds:
         for bl in red[1:]:
@@ -1018,14 +1018,14 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
     using existing gain/visibility solutions in cal.
     
     Arguments:
-        bls: list of baseline tuples like (0,1,'xx') to solve for the single remaining term
+        bls: list of baseline tuples like (0,1,'nn') to solve for the single remaining term
             using the corresponding data and the prior gain/visibility solutions. If any 
             bl has two unsolved terms, linsolve will throw an error.
         cal: dictionary of redundant calibration solutions, updated in place, like the one 
             produced by redcal.redundantly_calibrate(). See that function more details.
-        data: DataContainer mapping baseline-pol tuples like (0,1,'xx') to complex data of 
+        data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex data of 
             shape (Nt, Nf). Must have data for all baselines in bls.
-        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'nn'). The first
             item in each list will be treated as the key for the unique baseline. Must be 
             a superset of the reds used for producing cal.
         weight_by_nsamples: if True, weight equations by the number of observations that 
@@ -1109,14 +1109,14 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             Modified in place, including adding an entry with key 'vns_omnical' that gives a number of
             samples that went into each unique baseline visibility solution. Excluded antennas are
             assumed to be missing from cal['g_omnical'] and cal['chisq_per_ant'].
-        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+        all_reds: list of lists of redundant baseline tuples, e.g. (0,1,'nn'). The first
             item in each list will be treated as the key for the unique baseline. Must be a superset of
             the reds used for producing cal
-        data: DataContainer mapping baseline-pol tuples like (0,1,'xx') to complex data of 
+        data: DataContainer mapping baseline-pol tuples like (0,1,'nn') to complex data of 
             shape (Nt, Nf).
-        flags: DataContainer mapping baseline-pol tuples like (0,1,'xx') to boolean flags of
+        flags: DataContainer mapping baseline-pol tuples like (0,1,'nn') to boolean flags of
             shape (Nt, Nf).
-        nsamples: DataContainer mapping baseline-pol tuples like (0,1,'xx') to float number of samples.
+        nsamples: DataContainer mapping baseline-pol tuples like (0,1,'nn') to float number of samples.
             Used for counting the number of non-flagged visibilities that went into each redundant group.
     '''
     # Solve for unsolved-for unique baselines whose antennas are both in cal['g_omnical']
@@ -1200,9 +1200,9 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
-        data: dictionary or DataContainer mapping baseline-pol tuples like (0,1,'xx') to
+        data: dictionary or DataContainer mapping baseline-pol tuples like (0,1,'nn') to
             complex data of shape. Asummed to have no flags.
-        reds: list of lists of redundant baseline tuples, e.g. (0,1,'xx'). The first
+        reds: list of lists of redundant baseline tuples, e.g. (0,1,'nn'). The first
             item in each list will be treated as the key for the unique baseline.
         freqs: 1D numpy array frequencies in Hz. Optional if inferable from data DataContainer,
             but must be provided if data is a dictionary, if it doesn't have .freqs, or if the
@@ -1220,7 +1220,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
 
     Returns a dictionary of results with the following keywords:
-        'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jxx').
+        'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
             Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
         'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
         'g_omnical': full omnical gain dictionary (which include firstcal gains) in the same format.
@@ -1231,9 +1231,9 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         'vf_omnical': omnical visibility flag dictionary in the same format. Flags arise from NaNs.
         'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
             from autocorrelations. If the inferred pol_mode from reds (see redcal.parse_pol_mode) is
-            '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jxx') to chi^2.
+            '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jnn') to chi^2.
             Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
-        'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jxx') to the average chisq
+        'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jnn') to the average chisq
             for all visibilities that an antenna participates in.
         'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
@@ -1304,7 +1304,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
     Returns a dictionary of results with the following keywords:
-        'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jxx').
+        'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
             Gains are Ntimes x Nfreqs gains but fully described by a per-antenna delay.
         'gf_firstcal': firstcal gain flags in the same format as 'g_firstcal'. Will be all False.
         'g_omnical': full omnical gain dictionary (which include firstcal gains) in the same format.
@@ -1316,9 +1316,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         'vns_omnical': omnical visibility nsample dictionary that counts the number of unflagged redundancies.
         'chisq': chi^2 per degree of freedom for the omnical solution. Normalized using noise derived
             from autocorrelations. If the inferred pol_mode from reds (see redcal.parse_pol_mode) is
-            '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jxx') to chi^2.
+            '1pol' or '2pol', this is a dictionary mapping antenna polarization (e.g. 'Jnn') to chi^2.
             Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
-        'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jxx') to the average chisq
+        'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jnn') to the average chisq
             for all visibilities that an antenna participates in.
     '''
     if nInt_to_load is not None:
