@@ -1446,49 +1446,74 @@ class TestRunMethods(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
-            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing', ant_metrics_file=ant_metrics_file, clobber=True)
+            cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+                    iter0_prefix='.iter0', ant_metrics_file=ant_metrics_file, clobber=True)
+
+            hd = io.HERAData(input_data)
+            ex_ants = set([])
+            from hera_qm.metrics_io import load_metric_file
+            for ant in load_metric_file(ant_metrics_file)['xants']:
+                ex_ants.add(ant[0])
+            cal0 = om.redcal_iteration(hd)
+            
             sys.stdout = sys.__stdout__
 
-        bad_ants = [50, 12]  # this is based on experiments with this particular file
-        hc = io.HERACal(os.path.splitext(input_data)[0] + '.first.calfits')
-        gains, flags, quals, total_qual = hc.read()
-        for ant in gains.keys():
-            np.testing.assert_almost_equal(gains[ant], cal['g_firstcal'][ant])
-            np.testing.assert_almost_equal(flags[ant], cal['gf_firstcal'][ant])
-            if ant[0] in bad_ants:
-                np.testing.assert_array_equal(gains[ant], 1.0)
-                np.testing.assert_array_equal(flags[ant], True)
-        assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
-        assert 'Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', '')
+        for prefix, cal_here, bad_ants in [('', cal, [50, 12]), ('.iter0', cal0, [50])]:
+            # bad_ants is based on experiments with this particular file
+            hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.first.calfits')
+            gains, flags, quals, total_qual = hc.read()
+            for ant in gains.keys():
+                np.testing.assert_almost_equal(gains[ant], cal_here['g_firstcal'][ant])
+                np.testing.assert_almost_equal(flags[ant], cal_here['gf_firstcal'][ant])
+                if ant[0] in bad_ants:
+                    np.testing.assert_array_equal(gains[ant], 1.0)
+                    np.testing.assert_array_equal(flags[ant], True)
+            assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
+            if prefix == '':
+                assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
+            else:
+                assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
+            assert 'Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', '')
 
-        hc = io.HERACal(os.path.splitext(input_data)[0] + '.omni.calfits')
-        gains, flags, quals, total_qual = hc.read()
-        for ant in gains.keys():
-            zero_check = np.isclose(cal['g_omnical'][ant], 0, rtol=1e-10, atol=1e-10)
-            np.testing.assert_array_almost_equal(gains[ant][~zero_check], cal['g_omnical'][ant][~zero_check])
-            np.testing.assert_array_almost_equal(flags[ant][~zero_check], cal['gf_omnical'][ant][~zero_check])
-            if np.sum(zero_check) > 0:
-                np.testing.assert_array_equal(flags[ant][zero_check], True)
-            np.testing.assert_array_almost_equal(quals[ant][~zero_check], cal['chisq_per_ant'][ant][~zero_check])
-            if ant[0] in bad_ants:
-                np.testing.assert_array_equal(flags[ant], True)
-        for antpol in total_qual.keys():
-            np.testing.assert_array_almost_equal(total_qual[antpol], cal['chisq'][antpol])
-        assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
-        assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
-        assert 'Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', '')
+            hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.omni.calfits')
+            gains, flags, quals, total_qual = hc.read()
+            for ant in gains.keys():
+                zero_check = np.isclose(cal_here['g_omnical'][ant], 0, rtol=1e-10, atol=1e-10)
+                np.testing.assert_array_almost_equal(gains[ant][~zero_check], cal_here['g_omnical'][ant][~zero_check])
+                np.testing.assert_array_almost_equal(flags[ant][~zero_check], cal_here['gf_omnical'][ant][~zero_check])
+                if np.sum(zero_check) > 0:
+                    np.testing.assert_array_equal(flags[ant][zero_check], True)
+                np.testing.assert_array_almost_equal(quals[ant][~zero_check], cal_here['chisq_per_ant'][ant][~zero_check])
+                if ant[0] in bad_ants:
+                    np.testing.assert_array_equal(flags[ant], True)
+            for antpol in total_qual.keys():
+                np.testing.assert_array_almost_equal(total_qual[antpol], cal_here['chisq'][antpol])
+            assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
+            if prefix == '':
+                assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
+            else:
+                assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
+            assert 'Thisfilewasproducedbythefunction' in hc.history.replace('\n', '').replace(' ', '')
 
-        hd = io.HERAData(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
-        data, flags, nsamples = hd.read()
-        for bl in data.keys():
-            np.testing.assert_array_almost_equal(data[bl], cal['v_omnical'][bl])
-            np.testing.assert_array_almost_equal(flags[bl], cal['vf_omnical'][bl])
-            np.testing.assert_array_almost_equal(nsamples[bl], cal['vns_omnical'][bl])
-        assert 'testing' in hd.history.replace('\n', '').replace(' ', '')
-        assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+            hd = io.HERAData(os.path.splitext(input_data)[0] + prefix + '.omni_vis.uvh5')
+            data, flags, nsamples = hd.read()
+            for bl in data.keys():
+                np.testing.assert_array_almost_equal(data[bl], cal_here['v_omnical'][bl])
+                np.testing.assert_array_almost_equal(flags[bl], cal_here['vf_omnical'][bl])
+                np.testing.assert_array_almost_equal(nsamples[bl], cal_here['vns_omnical'][bl])
+            assert 'testing' in hd.history.replace('\n', '').replace(' ', '')
+            if prefix == '':
+                assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
+            else:
+                assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
+            assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+        
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
+        os.remove(os.path.splitext(input_data)[0] + '.iter0.first.calfits')
+        os.remove(os.path.splitext(input_data)[0] + '.iter0.omni.calfits')
+        os.remove(os.path.splitext(input_data)[0] + '.iter0.omni_vis.uvh5')
 
         hd = io.HERAData(input_data)
         hd.read()
