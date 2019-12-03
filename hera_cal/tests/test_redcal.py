@@ -1066,7 +1066,7 @@ class TestRedundantCalibrator(object):
         # Test linear array
         antpos = linear_array(7)
         ants = [(ant, 'Jxx') for ant in antpos]
-        reds = om.get_reds(antpos)
+        reds = om.get_reds(antpos, pols=['xx'])
         nubl = len(reds)
         nbl = np.sum([len(red) for red in reds])
         nant = len(antpos)
@@ -1091,7 +1091,7 @@ class TestRedundantCalibrator(object):
         # Test hex array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         ants = [(ant, 'Jxx') for ant in antpos]
-        reds = om.get_reds(antpos)
+        reds = om.get_reds(antpos, pols=['xx'])
         nubl = len(reds)
         nbl = np.sum([len(red) for red in reds])
         nant = len(antpos)
@@ -1132,7 +1132,7 @@ class TestRedundantCalibrator(object):
         # Show that chisq prediction works pretty well for small arrays
         np.random.seed(21)
         antpos = hex_array(2, split_core=False, outriggers=0)
-        reds = om.get_reds(antpos)
+        reds = om.get_reds(antpos, pols=['xx'])
         freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
         times = np.linspace(0, 600. / 60 / 60 / 24, 60, endpoint=False)
         df = np.median(np.diff(freqs))
@@ -1183,7 +1183,7 @@ class TestRedundantCalibrator(object):
     def test_predict_chisq_statistically_with_excluded_antenna(self):
         np.random.seed(21)
         antpos = hex_array(2, split_core=False, outriggers=0)
-        reds = om.get_reds(antpos)
+        reds = om.get_reds(antpos, pols=['xx'])
         freqs = np.linspace(100e6, 200e6, 64, endpoint=False)
         times = np.linspace(0, 600. / 60 / 60 / 24, 60, endpoint=False)
         df = np.median(np.diff(freqs))
