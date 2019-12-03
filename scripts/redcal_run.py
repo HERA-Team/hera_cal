@@ -12,8 +12,8 @@ import sys
 
 a = redcal_argparser()
 
-redcal_run(a.input_data, firstcal_ext=a.firstcal_ext, omnical_ext=a.omnical_ext, omnivis_ext=a.omnivis_ext,
-           outdir=a.outdir, ant_metrics_file=a.ant_metrics_file, clobber=a.clobber, nInt_to_load=a.nInt_to_load, pol_mode=a.pol_mode,
+redcal_run(a.input_data, firstcal_ext=a.firstcal_ext, omnical_ext=a.omnical_ext, omnivis_ext=a.omnivis_ext, outdir=a.outdir,
+           iter0_prefix=a.iter0_prefix, ant_metrics_file=a.ant_metrics_file, clobber=a.clobber, nInt_to_load=a.nInt_to_load, pol_mode=a.pol_mode,
            ex_ants=a.ex_ants, ant_z_thresh=a.ant_z_thresh, max_rerun=a.max_rerun, solar_horizon=a.solar_horizon, flag_nchan_low=a.flag_nchan_low,
            flag_nchan_high=a.flag_nchan_high, bl_error_tol=a.bl_error_tol, min_bl_cut=a.min_bl_cut, max_bl_cut=a.max_bl_cut, 
            fc_conv_crit=a.fc_conv_crit, fc_maxiter=a.fc_maxiter, oc_conv_crit=a.oc_conv_crit, oc_maxiter=a.oc_maxiter, 
