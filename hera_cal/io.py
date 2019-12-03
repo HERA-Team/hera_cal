@@ -305,9 +305,9 @@ class HERAData(UVData):
         Arguments:
             data_array: numpy array of shape (Nblts, 1, Nfreq, Npol), i.e. the size of the full data.
                 One generally uses this object's own self.data_array, self.flag_array, or self.nsample_array.
-            key: if of the form (0,1,'xx'), return anumpy array.
+            key: if of the form (0,1,'nn'), return anumpy array.
                  if of the form (0,1), return a dict mapping pol strings to waterfalls.
-                 if of of the form 'xx', return a dict mapping ant-pair tuples to waterfalls.
+                 if of of the form 'nn', return a dict mapping ant-pair tuples to waterfalls.
         '''
         if isinstance(key, str):  # asking for a pol
             return {antpair: self._get_slice(data_array, antpair + (key,)) for antpair in self.get_antpairs()}
@@ -331,7 +331,7 @@ class HERAData(UVData):
         Arguments:
             data_array: numpy array of shape (Nblts, 1, Nfreq, Npol), i.e. the size of the full data.
                 One generally uses this object's own self.data_array, self.flag_array, or self.nsample_array.
-            key: baseline (e.g. (0,1,'xx)), ant-pair tuple (e.g. (0,1)), or pol str (e.g. 'xx')
+            key: baseline (e.g. (0,1,'nn)), ant-pair tuple (e.g. (0,1)), or pol str (e.g. 'nn')
             value: if key is a baseline, must be an (Nint, Nfreq) numpy array;
                    if key is an ant-pair tuple, must be a dict mapping pol strings to waterfalls;
                    if key is a pol str, must be a dict mapping ant-pair tuples to waterfalls
@@ -388,7 +388,7 @@ class HERAData(UVData):
 
         Arguments:
             bls: A list of antenna number tuples (e.g. [(0,1), (3,2)]) or a list of
-                baseline 3-tuples (e.g. [(0,1,'xx'), (2,3,'yy')]) specifying baselines
+                baseline 3-tuples (e.g. [(0,1,'nn'), (2,3,'ee')]) specifying baselines
                 to keep in the object. For length-2 tuples, the  ordering of the numbers
                 within the tuple does not matter. For length-3 tuples, the polarization
                 string is in the order of the two antennas. If length-3 tuples are provided,
@@ -662,9 +662,9 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
 
     Returns:
         flags: dictionary or DataContainer mapping keys to Ntimes x Nfreqs numpy arrays.
-            if 'h5' and 'baseline' mode or 'npz': DataContainer with keys like (0,1,'xx')
-            if 'h5' and 'antenna' mode: dictionary with keys like (0,'Jxx')
-            if 'h5' and 'waterfall' mode: dictionary with keys like 'Jxx'
+            if 'h5' and 'baseline' mode or 'npz': DataContainer with keys like (0,1,'nn')
+            if 'h5' and 'antenna' mode: dictionary with keys like (0,'Jnn')
+            if 'h5' and 'waterfall' mode: dictionary with keys like 'Jnn'
         meta: (only returned if return_meta is True)
     '''
     flags = {}
@@ -900,7 +900,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         pop_autos: boolean, if True: remove autocorrelations
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
-            where visibilities and flags are accessed as data[(0,1)]['xx']
+            where visibilities and flags are accessed as data[(0,1)]['nn']
         read_kwargs : keyword arguments to pass to HERAData.read()
 
     Returns:
@@ -910,7 +910,7 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
             (data, flags)
 
         data: DataContainer containing baseline-pol complex visibility data with keys
-            like (0,1,'xx') and with shape=(Ntimes,Nfreqs)
+            like (0,1,'nn') and with shape=(Ntimes,Nfreqs)
         flags: DataContainer containing data flags
         antpos: dictionary containing antennas numbers as keys and position vectors
         ants: ndarray containing unique antenna indices
@@ -1154,7 +1154,7 @@ def update_uvdata(uvd, data=None, flags=None, nsamples=None, add_to_history='', 
     Arguments:
         uv: UVData/HERAData object to be updated
         data: dictionary or DataContainer of complex visibility data to update. Keys
-            like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update.
+            like (0,1,'nn') and shape=(Ntimes,Nfreqs). Default (None) does not update.
         flags: dictionary or DataContainer of data flags to update.
             Default (None) does not update.
         nsamples: dictionary or DataContainer of nsamples to update.
@@ -1190,7 +1190,7 @@ def update_vis(infilename, outfilename, filetype_in='miriad', filetype_out='miri
         filetype_in: either 'miriad' or 'uvfits' (ignored if infile is a UVData/HERAData object)
         filetype_out: either 'miriad' or 'uvfits'
         data: dictionary or DataContainer of complex visibility data to update. Keys
-            like (0,1,'xx') and shape=(Ntimes,Nfreqs). Default (None) does not update.
+            like (0,1,'nn') and shape=(Ntimes,Nfreqs). Default (None) does not update.
         flags: dictionary or DataContainer of data flags to update.
             Default (None) does not update.
         nsamples: dictionary or DataContainer of nsamples to update.
