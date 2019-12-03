@@ -1409,8 +1409,31 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     return rv
 
 
+def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename, 
+                              outdir, clobber=False, verbose=False, add_to_history=''):
+    '''Helper function for writing the results of redcal_run.'''
+    if verbose:
+        print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
+    write_cal(fistcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
+              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, 
+              x_orientation=hd.x_orientation, history=version.history_string(add_to_history))
+
+    if verbose:
+        print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
+    write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
+              quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
+              x_orientation=hd.x_orientation, history=version.history_string(add_to_history))
+
+    if verbose:
+        print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))
+    hd.read(bls=cal['v_omnical'].keys())
+    hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
+    hd.history += version.history_string(add_to_history)
+    hd.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
+
+
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', 
-               omnivis_ext='.omni_vis.uvh5', outdir=None, ant_metrics_file=None, clobber=False, 
+               omnivis_ext='.omni_vis.uvh5', iter0_prefix='', outdir=None, ant_metrics_file=None, clobber=False, 
                nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, 
                max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
                fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, 
@@ -1425,6 +1448,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         firstcal_ext: string to replace file extension of input_data for saving firstcal calfits
         omnical_ext: string to replace file extension of input_data for saving omnical calfits
         omnivis_ext: string to replace file extension of input_data for saving omnical visibilities as uvh5
+        iter0_prefix: if not '', save the omnical results with this prefix appended to each file after the 0th
+            iteration, but only if redcal has found any antennas to exclude and re-run without
         outdir: folder to save data products. If None, will be the same as the folder containing input_data
         ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
             Used for finding ex_ants and is combined with antennas excluded via ex_ants.
@@ -1479,6 +1504,11 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
             ex_ants.add(ant[0])  # Just take the antenna number, flagging both polarizations
     high_z_ant_hist = ''
 
+    # setup output 
+    filename_no_ext = os.path.splitext(os.path.basename(input_data))[0]
+    if outdir is None:
+        outdir = os.path.dirname(input_data)
+
     # loop over calibration, removing bad antennas and re-running if necessary
     from hera_qm.ant_metrics import per_antenna_modified_z_scores
     run_number = 0
@@ -1505,30 +1535,16 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         run_number += 1
         if len(ex_ants) == n_ex or run_number >= max_rerun:
             break
+        # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
+        if run_number == 1 and len(iter0_prefix) > 0:
+            _redcal_run_write_results(cal, hd, filename_no_ext + iter0_prefix + firstcal_ext, filename_no_ext + iter0_prefix + omnical_ext,
+                                      filename_no_ext + iter0_prefix + omnivis_ext, outdir, clobber=clobber, verbose=verbose,
+                                      add_to_history=add_to_history + '\n' + 'Iteration 0 Results.\n')
 
     # output results files
-    filename_no_ext = os.path.splitext(os.path.basename(input_data))[0]
-    if outdir is None:
-        outdir = os.path.dirname(input_data)
-
-    if verbose:
-        print('\nNow saving firstcal gains to', os.path.join(outdir, filename_no_ext + firstcal_ext))
-    write_cal(filename_no_ext + firstcal_ext, cal['g_firstcal'], hd.freqs, hd.times,
-              flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, 
-              x_orientation=hd.x_orientation, history=version.history_string(add_to_history))
-
-    if verbose:
-        print('Now saving omnical gains to', os.path.join(outdir, filename_no_ext + omnical_ext))
-    write_cal(filename_no_ext + omnical_ext, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
-              quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, history=version.history_string(add_to_history + '\n' + high_z_ant_hist))
-
-    if verbose:
-        print('Now saving omnical visibilities to', os.path.join(outdir, filename_no_ext + omnivis_ext))
-    hd.read(bls=cal['v_omnical'].keys())
-    hd.update(data=cal['v_omnical'], flags=cal['vf_omnical'], nsamples=cal['vns_omnical'])
-    hd.history += version.history_string(add_to_history + '\n' + high_z_ant_hist)
-    hd.write_uvh5(os.path.join(outdir, filename_no_ext + omnivis_ext), clobber=True)
+    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext,
+                              filename_no_ext + omnivis_ext, outdir, clobber=clobber, verbose=verbose,
+                              add_to_history=add_to_history + '\n' + high_z_ant_hist)
 
     return cal
 
