@@ -130,7 +130,7 @@ def make_bl(*args):
 
 
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
-    """Get delay of visibility across band using FFT and quadratic fit to delay peak.
+    """Get delay of visibility across band using FFT and Quinn's Second Method to fit the delay and phase offset.
     Arguments:
         data : ndarray of complex data (e.g. gains or visibilities) of shape (Ntimes, Nfreqs)
         df : frequency channel width in Hz
