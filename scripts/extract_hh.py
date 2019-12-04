@@ -47,6 +47,24 @@ uvd.antenna_names = [uvd.antenna_names[ind] for ind in data_ants]
 uvd.antenna_numbers = uvd.antenna_numbers[data_ants]
 uvd.antenna_positions = uvd.antenna_positions[data_ants, :]
 uvd.antenna_diameters = uvd.antenna_diameters[data_ants]
+
+# try to add apriori_status
+try:
+    from hera_mc.cm_sysutils import Handling
+    handling = Handling()
+    status_set = handling.get_apriori_antenna_status_set()
+    apriori_status = [""] * 350
+
+    for status in status_set.keys():
+        ant_list = status_set[status]
+        for ant in ant_list:
+            ant_num = int(ant[2:])
+            apriori_status[ant_num] = status
+
+    uvd.extra_keywords["apriori"] = ",".join(apriori_status)
+except (ImportError, ModuleNotFoundError):
+    pass
+
 print("writing {}...".format(fn_out))
 uvd.write_uvh5(fn_out, data_write_dtype=_hera_corr_dtype, flags_compression='lzf',
                nsample_compression='lzf', clobber=True)
