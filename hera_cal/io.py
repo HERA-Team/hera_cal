@@ -42,7 +42,7 @@ class HERACal(UVCal):
         Arguments:
             input_cal: string calfits file path or list of paths
         '''
-        super(HERACal, self).__init__()
+        super().__init__()
 
         # parse input_data as filepath(s)
         if isinstance(input_cal, str):
@@ -211,7 +211,7 @@ class HERAData(UVData):
                 See UVData.read for more details.
         '''
         # initialize as empty UVData object
-        super(HERAData, self).__init__()
+        super().__init__()
 
         # parse input_data as filepath(s)
         if isinstance(input_data, str):
