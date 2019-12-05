@@ -382,8 +382,8 @@ class HERAData(UVData):
         return data, flags, nsamples
 
     def read(self, bls=None, polarizations=None, times=None, frequencies=None,
-             freq_chans=None, read_data=True, return_data=True, run_check=True,
-             check_extra=True, run_check_acceptability=True):
+             freq_chans=None, axis=None, read_data=True, return_data=True,
+             run_check=True, check_extra=True, run_check_acceptability=True):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -401,6 +401,8 @@ class HERAData(UVData):
                 is False. Miriad will load then select on this axis.
             freq_chans: The frequency channel numbers to include when reading data. Ignored
                 if read_data is False. Miriad will load then select on this axis.
+            axis: Axis for fast concatenation of files (if len(self.filepaths) > 1).
+                Allowed values are: 'blt', 'freq', 'polarization'.
             read_data: Read in the visibility and flag data. If set to false, only the
                 basic metadata will be read in and nothing will be returned. Results in an
                 incompletely defined object (check will not pass). Default True.
@@ -427,26 +429,23 @@ class HERAData(UVData):
         if self.filepaths is not None:
             # load data
             if self.filetype == 'uvh5':
-                self.read_uvh5(self.filepaths, bls=bls, polarizations=polarizations, times=times,
-                               frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
-                               run_check=run_check, check_extra=check_extra,
-                               run_check_acceptability=run_check_acceptability)
+                super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
+                             times=times, frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
+                             run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability)
             else:
                 if not read_data:
                     raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
                 if self.filetype == 'miriad':
-                    self.read_miriad(self.filepaths, bls=bls, polarizations=polarizations,
-                                     run_check=run_check, check_extra=check_extra,
-                                     run_check_acceptability=run_check_acceptability)
+                    super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
+                                 run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability)
                     if any([times is not None, frequencies is not None, freq_chans is not None]):
                         warnings.warn('miriad does not support partial loading for times and frequencies. '
                                       'Loading the file first and then performing select.')
                         self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
                 elif self.filetype == 'uvfits':
-                    self.read_uvfits(self.filepaths, bls=bls, polarizations=polarizations,
-                                     times=times, frequencies=frequencies, freq_chans=freq_chans,
-                                     run_check=run_check, check_extra=check_extra,
-                                     run_check_acceptability=run_check_acceptability)
+                    super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations,
+                                 times=times, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
+                                 check_extra=check_extra, run_check_acceptability=run_check_acceptability)
                     self.unphase_to_drift()
 
         # process data into DataContainers
