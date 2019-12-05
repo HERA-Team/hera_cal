@@ -233,7 +233,7 @@ class Test_HERAData(object):
         hd = HERAData(self.uvh5_1)
         assert hd._polnum_indices == {-5: 0}
         hd = HERAData(self.four_pol, filetype='miriad')
-        hd.read(bls=[(53, 53)])
+        hd.read(bls=[(53, 53)], axis='polarization')
         assert hd._polnum_indices == {-8: 3, -7: 2, -6: 1, -5: 0}
 
     def test_get_slice(self):
@@ -329,6 +329,20 @@ class Test_HERAData(object):
         # assert __getitem__ is a read when key does not exist
         o = hd[(54, 54, 'ee')]
         assert len(hd._blt_slices) == 1
+
+        # test read list
+        hd = HERAData([self.uvh5_1, self.uvh5_2])
+        d, f, n = hd.read(axis='blt')
+        for dc in [d, f, n]:
+            assert len(dc) == 3
+            assert len(dc.times) == 120
+            assert len(dc.lsts) == 120
+            assert len(dc.freqs) == 1024
+            for i in [53, 54]:
+                for j in [53, 54]:
+                    assert (i, j, 'ee') in dc
+            for bl in dc:
+                assert dc[bl].shape == (120, 1024)
 
         # miriad
         hd = HERAData(self.miriad_1, filetype='miriad')
