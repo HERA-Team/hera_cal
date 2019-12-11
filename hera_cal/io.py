@@ -427,26 +427,31 @@ class HERAData(UVData):
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
         if self.filepaths is not None:
+            temp_read = self.read  # store self.read while it's being overwritten
+            self.read = super().read  # re-define self.read so UVData can call self.read recursively for lists of files
             # load data
-            if self.filetype == 'uvh5':
-                super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
-                             times=times, frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
-                             run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability)
-            else:
-                if not read_data:
-                    raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
-                if self.filetype == 'miriad':
-                    super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
+            try: 
+                if self.filetype == 'uvh5':
+                    super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
+                                 times=times, frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
                                  run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability)
-                    if any([times is not None, frequencies is not None, freq_chans is not None]):
-                        warnings.warn('miriad does not support partial loading for times and frequencies. '
-                                      'Loading the file first and then performing select.')
-                        self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
-                elif self.filetype == 'uvfits':
-                    super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations,
-                                 times=times, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
-                                 check_extra=check_extra, run_check_acceptability=run_check_acceptability)
-                    self.unphase_to_drift()
+                else:
+                    if not read_data:
+                        raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
+                    if self.filetype == 'miriad':
+                        super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
+                                     run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability)
+                        if any([times is not None, frequencies is not None, freq_chans is not None]):
+                            warnings.warn('miriad does not support partial loading for times and frequencies. '
+                                          'Loading the file first and then performing select.')
+                            self.select(times=times, frequencies=frequencies, freq_chans=freq_chans)
+                    elif self.filetype == 'uvfits':
+                        super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations,
+                                     times=times, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
+                                     check_extra=check_extra, run_check_acceptability=run_check_acceptability)
+                        self.unphase_to_drift()
+            finally:
+                self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully
 
         # process data into DataContainers
         if read_data or self.filetype == 'uvh5':
