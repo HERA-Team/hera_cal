@@ -266,8 +266,20 @@ class HERAData(UVData):
         Returns:
             metadata_dict: dictionary of all items in self.HERAData_metas
         '''
+        # This hack removes antennas not in data from antenna position calculation, to avoid the issue with the radius of the earth
+        temp_antenna_positions = copy.deepcopy(self.antenna_positions)
+        temp_antenna_numbers = copy.deepcopy(self.antenna_numbers)
+        data_ant_nums = np.unique(np.concatenate([self.ant_1_array, self.ant_2_array]))
+        antnum_selection = np.array([ant in data_ant_nums for ant in self.antenna_numbers])
+        self.antenna_positions = self.antenna_positions[antnum_selection]
+        self.antenna_numbers = self.antenna_numbers[antnum_selection]
         antpos, ants = self.get_ENU_antpos()
+        self.antenna_positions = temp_antenna_positions
+        self.antenna_numbers = temp_antenna_numbers
         antpos = odict(zip(ants, antpos))
+        # TODO: go back to this simpler version
+        # antpos, ants = self.get_ENU_antpos()
+        # antpos = odict(zip(ants, antpos))
 
         freqs = np.unique(self.freq_array)
         times = np.unique(self.time_array)
