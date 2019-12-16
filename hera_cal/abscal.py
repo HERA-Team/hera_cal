@@ -2912,7 +2912,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history.
             This HERACal object has been updated with the following properties accessible on hc.build_calcontainers():
                 * gains: abscal gains for times that could be calibrated, redcal gains otherwise (but flagged)
-                * flags: redcal flags, with additional flagging if the data or model are flagged (see flag_utils.synthesize_ant_flags)
+                * flags: redcal flags, with additional flagging if the data is flagged (see flag_utils.synthesize_ant_flags) or if 
+                    if the model is completely flagged for a given freq/channel when reduced to a single flagging waterfall
                 * quals: abscal chi^2 per antenna based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
                 * total_qual: abscal chi^2 based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
     '''
@@ -2978,13 +2979,17 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                         utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
                                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
                         
-                        # update data flags w/ model flags
+                        # update data flags w/ model flags. Anything flagged in the model is ignored in post_redcal_abscal,
+                        # but only times/channels that are flagged in the model for all baselines are also flagged the final calibration
+                        model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
+                        flags_for_abscal_wgts = copy.deepcopy(flags)
                         for k in flags.keys():
+                            flags[k] += model_flag_waterfall
                             if k in model_flags:
-                                flags[k] += model_flags[k]
+                                flags_for_abscal_wgts[k] += model_flags[k]
 
                         # run absolute calibration, copying data because it gets modified internally
-                        delta_gains, AC = post_redcal_abscal(model, data, flags, rc_flags_subset, edge_cut=edge_cut, 
+                        delta_gains, AC = post_redcal_abscal(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
                                                              phs_conv_crit=phs_conv_crit, verbose=verbose,
