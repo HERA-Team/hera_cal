@@ -17,6 +17,7 @@ from ..data import DATA_PATH
 from ..datacontainer import DataContainer
 from ..utils import split_pol
 from ..apply_cal import calibrate_in_place
+from ..flag_utils import synthesize_ant_flags
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -746,11 +747,20 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert k in ac_gains
             assert ac_gains[k].shape == rc_gains[k].shape
             assert ac_gains[k].dtype == complex
+        
+        hd = io.HERAData(self.data_file)
+        _, data_flags, _ = hd.read()
+        ac_flags_expected = synthesize_ant_flags(data_flags)
+        ac_flags_waterfall = np.all([f for f in ac_flags.values()], axis=0)
+        for ant in ac_flags_expected:
+            ac_flags_expected[ant] += rc_flags[ant]
+            ac_flags_expected[ant] += ac_flags_waterfall
         for k in rc_flags:
             assert k in ac_flags
             assert ac_flags[k].shape == rc_flags[k].shape
             assert ac_flags[k].dtype == bool
-            np.testing.assert_array_equal(ac_flags[k][rc_flags[k]], rc_flags[k][rc_flags[k]])
+            np.testing.assert_array_equal(ac_flags[k], ac_flags_expected[k])
+
         assert not np.all(list(ac_flags.values()))
         for pol in ['Jee', 'Jnn']:
             assert pol in ac_total_qual
