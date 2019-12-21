@@ -11,7 +11,6 @@ import sys
 import shutil
 from scipy import constants
 import warnings
-from pyuvdata.utils import check_histories
 from pyuvdata import UVCal, UVData
 
 from .. import io, smooth_cal, utils
