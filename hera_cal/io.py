@@ -1104,7 +1104,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
     # get antenna positions in ITRF frame
     tel_lat_lon_alt = uvutils.LatLonAlt_from_XYZ(telescope_location)
     antenna_positions = np.array(list(map(lambda k: antpos[k], antenna_numbers)))
-    antenna_positions = uvutils.ECEF_from_ENU(antenna_positions.T, *tel_lat_lon_alt).T - telescope_location
+    antenna_positions = uvutils.ECEF_from_ENU(antenna_positions, *tel_lat_lon_alt) - telescope_location
 
     # get zenith location: can only write drift phase
     phase_type = 'drift'
