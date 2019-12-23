@@ -628,15 +628,18 @@ class Test_Visibility_IO_Legacy(object):
             nsample[k] = np.ones_like(nsample[k], np.float)
 
         # test basic execution
-        uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east')
-        uvd2 = UVData()
-        uvd2.read_miriad('ex.uv')
-        assert os.path.exists('ex.uv')
+        uvd = io.write_vis("ex.uvh5", data, l, f, ap, start_jd=2458044, return_uvd=True, overwrite=True, verbose=True, x_orientation='east', filetype='uvh5')
+        hd = HERAData("ex.uvh5")
+        hd.read()
+        assert os.path.exists('ex.uvh5')
         assert uvd.data_array.shape == (1680, 1, 64, 1)
-        assert uvd2.data_array.shape == (1680, 1, 64, 1)
+        assert hd.data_array.shape == (1680, 1, 64, 1)
         assert np.allclose(data[(24, 25, 'ee')][30, 32], uvd.get_data(24, 25, 'ee')[30, 32])
-        assert np.allclose(data[(24, 25, 'ee')][30, 32], uvd2.get_data(24, 25, 'ee')[30, 32])
-        assert uvd2.x_orientation.lower() == 'east'
+        assert np.allclose(data[(24, 25, 'ee')][30, 32], hd.get_data(24, 25, 'ee')[30, 32])
+        assert hd.x_orientation.lower() == 'east'
+        for ant in ap:
+            np.testing.assert_array_almost_equal(hd.antpos[ant], ap[ant])
+        os.remove("ex.uvh5")
 
         # test with nsample and flags
         uvd = io.write_vis("ex.uv", data, l, f, ap, start_jd=2458044, flags=flgs, nsamples=nsample, x_orientation='east', return_uvd=True, overwrite=True, verbose=True)
