@@ -341,8 +341,6 @@ class Test_ReflectionFitter_XTalk(object):
         # test containers exist
         assert np.all([hasattr(RF, o) for o in ['umodes', 'vmodes', 'svals', 'uflags', 'pcomp_model', 'dfft']])
         # test good information compression
-        print(RF.data[bl])
-        print(RF.svals[bl])
         assert RF.svals[bl][0] / RF.svals[bl][1] > 20
 
         # assert its a good fit to the xtalk at 250 ns delay

@@ -580,6 +580,11 @@ class ReflectionFitter(FRFilter):
                 if Nk is None:
                     Nk = min(dfft[k].shape) - 2
                 u, svals, v = sparse.linalg.svds(dfft[k] * wgts[k], k=Nk, which='LM')
+                # some numpy versions flip SV ordering here: make sure its high-to-low
+                if svals[1] > svals[0]:
+                    svals = svals[::-1]
+                    u = u[:, ::-1]
+                    v = v[::-1, :]
             else:
                 u, svals, v = np.linalg.svd(dfft[k] * wgts[k], full_matrices=False)
 
