@@ -25,6 +25,21 @@ from .. import utils
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 @pytest.mark.filterwarnings("ignore:Mean of empty slice")
 class Test_Update_Cal(object):
+    def test_check_polarization_consistency(self):
+        gains = {(0, 'Jnn'): np.zeros((2, 2))}
+        data = {(0, 1, 'nn'): np.zeros((2, 2))}
+        ac._check_polarization_consistency(data, gains)
+
+        gains = {(0, 'Jnn'): np.zeros((2, 2))}
+        data = {(0, 1, 'xx'): np.zeros((2, 2))}
+        with pytest.raises(KeyError):
+            ac._check_polarization_consistency(data, gains)
+
+        gains = {(0, 'Jxx'): np.zeros((2, 2))}
+        data = {(0, 1, 'nn'): np.zeros((2, 2))}
+        with pytest.raises(KeyError):
+            ac._check_polarization_consistency(data, gains)
+
     def test_calibrate_avg_gains_in_place(self):
         np.random.seed(20)
         vis = np.random.randn(10, 10) + 1.0j * np.random.randn(10, 10)
