@@ -12,6 +12,17 @@ from . import version
 from . import utils
 
 
+def _check_polarization_consistency(data, gains):
+    '''This fucntion raises an error if all the gain keys are cardinal but none of the data keys are 
+    cardinal (e/n rather than x/y), or vice versa. In the mixed case, no errors are raised.'''
+    data_keys_cardinal = [utils._is_cardinal(bl[2]) for bl in data.keys()]
+    gain_keys_cardinal = [utils._is_cardinal(ant[1]) for ant in gains.keys()]
+    if np.all(data_keys_cardinal) and not np.any(gain_keys_cardinal):
+        raise KeyError("All the data keys are cardinal (e.g. 'nn' or 'ee'), but none of the gain keys are.")
+    elif np.all(gain_keys_cardinal) and not np.any(data_keys_cardinal):
+        KeyError("All the gain keys are cardinal (e.g. 'Jnn' or 'Jee'), but none of the data keys are.")
+
+
 def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds,
                                  old_gains=None, old_flags=None, gain_convention='divide'):
     '''Update the calibrtion of a redundant visibility solution (or redundantly averaged visibilities).
@@ -40,6 +51,8 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
     '''
 
+    _check_polarization_consistency(data, new_gains)
+    _check_polarization_consistency(data_flags, new_flags)
     exponent = {'divide': 1, 'multiply': -1}[gain_convention]
     if old_gains is None:
         old_gains = {ant: np.ones_like(new_gains[ant]) for ant in new_gains}
@@ -109,6 +122,8 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
         flags_are_weights: bool, if True, treat data_flags as weights where 0s represent flags and
             non-zero weights are unflagged data.
     '''
+
+    _check_polarization_consistency(data, new_gains)
     exponent = {'divide': 1, 'multiply': -1}[gain_convention]
     # loop over baselines in data
     for (i, j, pol) in data.keys():
