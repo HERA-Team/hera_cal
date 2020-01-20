@@ -151,11 +151,12 @@ class Test_Update_Cal(object):
         # test flag propagation when missing antennas in gains
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
-        ac.calibrate_in_place(dc, {}, flags, cal_flags, gain_convention='divide')
+        wrong_ant_gains = {(2, 'Jxx'): deepcopy(g0_new)}
+        ac.calibrate_in_place(dc, wrong_ant_gains, flags, cal_flags, gain_convention='divide')
         np.testing.assert_array_equal(flags[(0, 1, 'xx')], True)
         dc = DataContainer({(0, 1, 'xx'): deepcopy(vis)})
         flags = DataContainer({(0, 1, 'xx'): deepcopy(f)})
-        ac.calibrate_in_place(dc, g_new, flags, cal_flags, old_gains={}, gain_convention='divide')
+        ac.calibrate_in_place(dc, g_new, flags, cal_flags, old_gains=wrong_ant_gains, gain_convention='divide')
         np.testing.assert_array_equal(flags[(0, 1, 'xx')], True)
 
         # test error
