@@ -13,14 +13,15 @@ from . import utils
 
 
 def _check_polarization_consistency(data, gains):
-    '''This fucntion raises an error if all the gain keys are cardinal but none of the data keys are 
-    cardinal (e/n rather than x/y), or vice versa. In the mixed case, no errors are raised.'''
-    data_keys_cardinal = [utils._is_cardinal(bl[2]) for bl in data.keys()]
-    gain_keys_cardinal = [utils._is_cardinal(ant[1]) for ant in gains.keys()]
-    if np.all(data_keys_cardinal) and not np.any(gain_keys_cardinal):
-        raise KeyError("All the data keys are cardinal (e.g. 'nn' or 'ee'), but none of the gain keys are.")
-    elif np.all(gain_keys_cardinal) and not np.any(data_keys_cardinal):
-        raise KeyError("All the gain keys are cardinal (e.g. 'Jnn' or 'Jee'), but none of the data keys are.")
+    '''This fucntion raises an error if all the gain keys are cardinal but none of the data keys are cardinal
+    (e/n rather than x/y), or vice versa. In the mixed case, or if one is empty, no errors are raised.'''
+    if (len(data) > 0) and (len(gains) > 0):
+        data_keys_cardinal = [utils._is_cardinal(bl[2]) for bl in data.keys()]
+        gain_keys_cardinal = [utils._is_cardinal(ant[1]) for ant in gains.keys()]
+        if np.all(data_keys_cardinal) and not np.any(gain_keys_cardinal):
+            raise KeyError("All the data keys are cardinal (e.g. 'nn' or 'ee'), but none of the gain keys are.")
+        elif np.all(gain_keys_cardinal) and not np.any(data_keys_cardinal):
+            raise KeyError("All the gain keys are cardinal (e.g. 'Jnn' or 'Jee'), but none of the data keys are.")
 
 
 def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds,
