@@ -935,5 +935,11 @@ def test_get_file_times():
     assert np.isclose(larrs[-1], 1.3669679333582787)
     assert np.isclose(dlsts, 0.015659698505080533)
 
+    # test uvh5 no lsts in header
+    fp = os.path.join(DATA_PATH, 'test_input/zen.2458863.28532.HH.metadata_only_no_lsts_in_header.uvh5')
+    dlsts, dtimes, larrs, tarrs = io.get_file_times(fp, filetype='uvh5')
+    assert np.isclose(larrs[0], 1.00925787)
+    assert np.isclose(larrs[1], 1.00996256)
+
     # exceptions
     pytest.raises(ValueError, io.get_file_times, fp, filetype='foo')
