@@ -793,15 +793,14 @@ def get_file_times(filepaths, filetype='uvh5'):
         elif filetype == 'uvh5':
             # get times directly from uvh5 file's header: faster than loading entire file via HERAData
             with h5py.File(f, mode='r') as _f:
-                try:
+                time_array = np.unique(_f[u'Header'][u'time_array'])
+                if u'lst_array' in _f[u'Header']:
                     lst_array = np.ravel(_f[u'Header'][u'lst_array'])
-                    time_array = np.unique(_f[u'Header'][u'time_array'])
-                except KeyError as ioerror:
-                    print(ioerror)
-                    print('Cant find lst arrays in headers. Trying to get lst_arrays from time_arrays...')
-                    hd = HERAData(filepaths)
-                    time_array = np.unique(hd.time_array)
-                    lst_array = np.ravel(hd.lst_array)
+                else:
+                    lst_array = np.ravel(uvutils.get_lst_for_time(_f[u'Header'][u'time_array'],
+                                                                  _f[u'Header'][u'latitude'][()],
+                                                                  _f[u'Header'][u'longitude'][()],
+                                                                  _f[u'Header'][u'altitude'][()]))
             lst_indices = np.unique(lst_array, return_index=True)[1]
             # resort by their appearance in lst_array, then unwrap
             lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
