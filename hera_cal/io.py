@@ -807,8 +807,7 @@ def get_file_times(filepaths, filetype='uvh5'):
             lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
             int_time_rad = np.median(np.diff(lst_array))
             int_time = np.median(np.diff(time_array))
-
-
+            
         dlsts.append(int_time_rad)
         dtimes.append(int_time)
         file_lst_arrays.append(lst_array)
