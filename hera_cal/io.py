@@ -796,7 +796,7 @@ def get_file_times(filepaths, filetype='uvh5'):
                 try:
                     lst_array = np.ravel(_f[u'Header'][u'lst_array'])
                     time_array = np.unique(_f[u'Header'][u'time_array'])
-                except KeyError ioerror:
+                except KeyError as ioerror:
                     print(ioerror)
                     print('Cant find lst arrays in headers. Trying to get lst_arrays from time_arrays...')
                     hd = HERAData(filepaths)
