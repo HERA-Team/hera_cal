@@ -430,7 +430,7 @@ class HERAData(UVData):
             temp_read = self.read  # store self.read while it's being overwritten
             self.read = super().read  # re-define self.read so UVData can call self.read recursively for lists of files
             # load data
-            try: 
+            try:
                 if self.filetype == 'uvh5':
                     super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
@@ -793,13 +793,21 @@ def get_file_times(filepaths, filetype='uvh5'):
         elif filetype == 'uvh5':
             # get times directly from uvh5 file's header: faster than loading entire file via HERAData
             with h5py.File(f, mode='r') as _f:
-                lst_array = np.ravel(_f[u'Header'][u'lst_array'])
-                time_array = np.unique(_f[u'Header'][u'time_array'])
+                try:
+                    lst_array = np.ravel(_f[u'Header'][u'lst_array'])
+                    time_array = np.unique(_f[u'Header'][u'time_array'])
+                except KeyError ioerror:
+                    print(ioerror)
+                    print('Cant find lst arrays in headers. Trying to get lst_arrays from time_arrays...')
+                    hd = HERAData(filepaths)
+                    time_array = np.unique(hd.time_array)
+                    lst_array = np.ravel(hd.lst_array)
             lst_indices = np.unique(lst_array, return_index=True)[1]
             # resort by their appearance in lst_array, then unwrap
             lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
             int_time_rad = np.median(np.diff(lst_array))
             int_time = np.median(np.diff(time_array))
+
 
         dlsts.append(int_time_rad)
         dtimes.append(int_time)
