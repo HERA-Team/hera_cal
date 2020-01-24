@@ -3010,6 +3010,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                             chisq_wgts[bl] = noise_var**-1 * (~flags[bl]).astype(np.float)
                         total_qual, nObs, quals, nObs_per_ant = utils.chisq(AC.data, AC.model, chisq_wgts,
                                                                             gain_flags=rc_flags_subset, split_by_antpol=True)
+                        model_ants = set([ant for bl in model.keys() for ant in split_bl(bl)])
                     
                         # update results
                         delta_flags = synthesize_ant_flags(flags)
@@ -3025,6 +3026,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         # impose a single reference antenna on the final antenna solution
         if refant is None:
             refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
+        else:
+            refant = {pol:(refant, 'J'+pol) for pol in pol_load_list}
         rephase_to_refant(abscal_gains, refant, flags=abscal_flags)
     else:
         echo("No model files overlap with data files in LST. Result will be fully flagged.", verbose=verbose)
