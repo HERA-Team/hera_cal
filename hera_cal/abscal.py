@@ -2822,8 +2822,8 @@ def abscal_step(data, gains_to_update, fit, cal_step_name, antpos=None, gain_con
     return gains_here
 
 
-def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, kernel=(1, 15),
-                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
+def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0,
+                       kernel=(1, 15), gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -2843,7 +2843,6 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
             the updates to all 1.0s.
-        refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
 
     Returns:
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
@@ -2851,10 +2850,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     '''
     # TODO: handle overlap between data and model better
     # TODO: handle cuts
-    ants = list(rc_flags.keys())
     abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
-    if refant_num is None:
-        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})  # TODO: update with nsamples
 
@@ -2865,7 +2861,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     # Abscal Step 2: Global Delay Slope Calibration
     df = np.median(np.diff(data.freqs))
     for time_avg in [True, False]:
-        fit = delay_slope_lincal(model, data, idealized_antpos, wgts=wgts, refant=refant_num, df=df, medfilt=True,
+        fit = delay_slope_lincal(model, data, idealized_antpos, wgts=wgts, df=df, medfilt=True,
                                  kernel=kernel, verbose=verbose, edge_cut=edge_cut)
         if time_avg:
             fit = {key: np.ones_like(val) * np.median(val, axis=0, keepdims=True) for key, val in fit.items()}
@@ -2874,12 +2870,12 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
     fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=wgts, 
-                                    refant=refant_num, verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
+                                    verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
     abscal_step(data, abscal_delta_gains, fit, 'global_phase_slope_logcal',
                 antpos=idealized_antpos, gain_convention=gain_convention)
     for i in range(phs_max_iter):
         fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=wgts, 
-                                        refant=refant_num, verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
+                                        verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
         gains_here = abscal_step(data, abscal_delta_gains, fit, 'global_phase_slope_logcal', 
                                  antpos=idealized_antpos, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
@@ -2889,7 +2885,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
     for i in range(phs_max_iter):
-        fit = TT_phs_logcal(model, data, idealized_antpos, wgts=wgts, refant=refant_num, verbose=verbose)
+        fit = TT_phs_logcal(model, data, idealized_antpos, wgts=wgts, verbose=verbose)
         gains_here = abscal_step(data, abscal_delta_gains, fit, 'TT_phs_logcal',
                                  antpos=idealized_antpos, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
@@ -3010,8 +3006,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                         delta_gains = post_redcal_abscal(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
                                                          tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
                                                          gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
-                                                         phs_conv_crit=phs_conv_crit, verbose=verbose,
-                                                         refant_num=(None if refant is None else refant[0]))
+                                                         phs_conv_crit=phs_conv_crit, verbose=verbose)
 
                         # calibrate autos, abscal them, and generate abscal Chi^2
                         calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
