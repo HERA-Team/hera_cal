@@ -2816,9 +2816,25 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
                 break
 
 
-def abscal_step_2(data, gains_to_update, fit, cal_step_name, ants, freqs, antpos=None, gain_convention='divide'):
-    '''TODO: document and remove 2'''
+def abscal_step_2(data, gains_to_update, fit, cal_step_name, antpos=None, gain_convention='divide'):
+    '''Generalized function for taking a particular abscal step fit and updating the abscal solution accordingly.
+
+    Arguments:
+        data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
+        gains_to_update: dictionary of gains produced by abscal up until this step. Updated in place.
+        fit: dictionary result of one of the above fitting functions, see cal_step_name
+        cal_step_name: string name of function used to produce fit. Acceptable options are:
+            'abs_amp_logcal', 'delay_slope_lincal', 'global_phase_slope_logcal', 'TT_phs_logcal'.
+        antpos: antenna position dictionary mapping antenna number to length 3 numpy array. Needed for all 
+            steps involved delay of phase slopes. 
+        gain_convention: either 'divide' if raw data is calibrated by dividing it by the gains
+            otherwise, 'multiply'.
+
+    Returns:
+        gains_here: gain dictionary derived at this step. The gains_to_update will be updated by this.
+    '''
     # Convert fit dictionary to gains, depending on the calibrations step
+    ants = list(gains_to_update.keys())
     if cal_step_name == 'abs_amp_logcal':
         gains_here = {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(np.complex) for ant in ants}
     elif cal_step_name == 'delay_slope_lincal':
