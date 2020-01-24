@@ -1283,7 +1283,7 @@ class TestRedcalAndAbscal(object):
         model = DataContainer({bl: true_vis[red[0]] for red in reds for bl in red})
         
         # run abscal
-        abscal_delta_gains, AC = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=True)
+        abscal_delta_gains = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=True)
 
         # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
