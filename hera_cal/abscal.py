@@ -2816,6 +2816,58 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
                 break
 
 
+def post_redcal_abscal_2(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, kernel=(1, 15),
+                         gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
+    '''TODO: document, pass kernel'''
+    ants = list(rc_flags.keys())
+    abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
+    if refant_num is None:
+        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
+    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
+    wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()}) # TODO: update with nsamples
+
+    # Per-Channel Absolute Amplitude Calibration
+    fit = abs_amp_logcal(model, data, wgts=wgts, verbose=verbose)
+    abscal_step_2(data, abscal_delta_gains, fit, 'abs_amp_logcal', ants, data.freqs, gain_convention=gain_convention)
+
+    # Global Delay Slope Calibration
+    df = np.median(np.diff(data.freqs))
+    for time_avg in [True, False]:
+        fit = delay_slope_lincal(model, data, idealized_antpos, wgts=wgts, refant=refant_num, df=df, medfilt=True,
+                                 kernel=kernel, verbose=verbose, edge_cut=edge_cut)
+        if time_avg:
+            fit = {key: np.ones_like(val) * np.median(val, axis=0, keepdims=True) for key, val in fit.items()}
+        abscal_step_2(data, abscal_delta_gains, fit, 'delay_slope_lincal', ants, data.freqs,
+                      antpos=idealized_antpos, gain_convention=gain_convention)
+
+    # Global Phase Slope Calibration (first using dft, then using linfit)
+    fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=wgts, 
+                                    refant=refant_num, verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
+    abscal_step_2(data, abscal_delta_gains, fit, 'global_phase_slope_logcal', ants, data.freqs,
+                  antpos=idealized_antpos, gain_convention=gain_convention)
+    for i in range(phs_max_iter):
+        fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=wgts, 
+                                refant=refant_num, verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
+        gains_here = abscal_step_2(data, abscal_delta_gains, fit, 'global_phase_slope_logcal', ants, data.freqs,
+                                   antpos=idealized_antpos, gain_convention=gain_convention)
+        crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
+        echo("global_phase_slope_logcal convergence criterion: " + str(crit), verbose=verbose)
+        if crit < phs_conv_crit:
+            break
+
+    # Per-Channel Tip-Tilt Phase Calibration
+    for i in range(phs_max_iter):
+        fit = TT_phs_logcal(model, data, idealized_antpos, wgts=wgts, refant=refant_num, verbose=verbose)
+        gains_here = abscal_step_2(data, abscal_delta_gains, fit, 'TT_phs_logcal', ants, data.freqs,
+                                   antpos=idealized_antpos, gain_convention=gain_convention)
+        crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
+        echo("TT_phs_logcal convergence criterion: " + str(crit), verbose=verbose)
+        if crit < phs_conv_crit:
+            break
+
+    return abscal_delta_gains
+
+
 def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, 
                        gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
