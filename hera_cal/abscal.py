@@ -46,6 +46,7 @@ from . import io
 from . import apply_cal
 from .datacontainer import DataContainer
 from .utils import echo, polnum2str, polstr2num, reverse_bl, split_pol, split_bl
+from itertools import combinations
 
 PHASE_SLOPE_SOLVERS = ['linfit', 'dft']  # list of valid solvers for global_phase_slope_logcal
 IDEALIZED_BL_TOL = 1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
@@ -211,13 +212,13 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
 
     # setup linsolve equations
     if four_pol:
-        eqns = odict([((ant1, ant2, pol), 
+        eqns = odict([((ant1, ant2, pol),
                        "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
                        "".format(split_pol(pol)[0], split_pol(pol)[1], r_ew[ant1],
-                                 r_ns[ant1], r_ew[ant2], r_ns[ant2])) 
+                                 r_ns[ant1], r_ew[ant2], r_ns[ant2]))
                       for i, (ant1, ant2, pol) in enumerate(keys)])
     else:
-        eqns = odict([((ant1, ant2, pol), 
+        eqns = odict([((ant1, ant2, pol),
                        "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
                        "".format(split_pol(pol)[0], split_pol(pol)[1], split_pol(pol)[0],
                                  r_ew[ant1], split_pol(pol)[0], r_ns[ant1], split_pol(pol)[1],
@@ -679,25 +680,25 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
 def dft_phase_slope_solver(xs, ys, data, flags=None):
     '''Solve for spatial phase slopes across an array by looking for the peak in the DFT.
-    This is analogous to the method in utils.fft_dly(), except its in 2D and does not 
+    This is analogous to the method in utils.fft_dly(), except its in 2D and does not
     assume a regular grid for xs and ys.
 
     Arguments:
         xs: 1D array of x positions (e.g. of antennas or baselines)
         ys: 1D array of y positions (must be same length as xs)
-        data: ndarray of complex numbers to fit with a phase slope. The first dimension must match 
-            xs and ys, but subsequent dimensions will be preserved and solved independently. 
+        data: ndarray of complex numbers to fit with a phase slope. The first dimension must match
+            xs and ys, but subsequent dimensions will be preserved and solved independently.
             Any np.nan in data is interpreted as a flag.
         flags: optional array of flags of data not to include in the phase slope solver.
 
     Returns:
         slope_x, slope_y: phase slopes in units of 1/[xs] where the best fit phase slope plane
-            is np.exp(2.0j * np.pi * (xs * slope_x + ys * slope_y)). Both have the same shape 
+            is np.exp(2.0j * np.pi * (xs * slope_x + ys * slope_y)). Both have the same shape
             the data after collapsing along the first dimension.
     '''
 
     # use the minimum and maximum difference between positions to define the search range and sampling in Fourier space
-    deltas = [((xi - xj)**2 + (yi - yj)**2)**.5 for i, (xi, yi) in enumerate(zip(xs, ys)) 
+    deltas = [((xi - xj)**2 + (yi - yj)**2)**.5 for i, (xi, yi) in enumerate(zip(xs, ys))
               for (xj, yj) in zip(xs[i + 1:], ys[i + 1:])]
     search_slice = slice(-1.0 / np.min(deltas), 1.0 / np.min(deltas), 1.0 / np.max(deltas))
 
@@ -717,15 +718,15 @@ def dft_phase_slope_solver(xs, ys, data, flags=None):
     slope_y = np.zeros_like(dflat[0, :].real)
     for i in range(dflat.shape[1]):
         if not np.all(np.isnan(dflat[:, i])):
-            dft_peak = brute(dft_abs, (search_slice, search_slice), 
-                             (xs[~fflat[:, i]], ys[~fflat[:, i]], 
+            dft_peak = brute(dft_abs, (search_slice, search_slice),
+                             (xs[~fflat[:, i]], ys[~fflat[:, i]],
                               dflat[:, i][~fflat[:, i]]), finish=minimize)
             slope_x[i] = dft_peak[0]
             slope_y[i] = dft_peak[1]
     return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
 
 
-def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, 
+def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
                               refant=None, verbose=True, tol=1.0, edge_cut=0):
     """
     Solve for a frequency-independent spatial phase slope using the equation
@@ -747,7 +748,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
 
     solver : 'linfit' uses linsolve to fit phase slope across the array,
-             'dft' uses a spatial Fourier transform to find a phase slope 
+             'dft' uses a spatial Fourier transform to find a phase slope
 
     wgts : weights of data, type=DataContainer, [default=None]
            keys are antenna pair + pol tuples (must match model), values are real floats
@@ -1774,7 +1775,7 @@ class AbsCal(object):
     """
     def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None,
                  min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, verbose=True,
-                 filetype='miriad', input_cal=None):
+                 filetype='miriad', input_cal=None, expand_model_red=True):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -1803,7 +1804,7 @@ class AbsCal(object):
                 Optionally, data can be a path to a pyuvdata-supported file, a
                 pyuvdata.UVData object or hera_cal.HERAData object,
                 or a list of either. In this case, antpos, freqs
-                and wgts are overwritten from arrays in data. 
+                and wgts are overwritten from arrays in data.
 
         refant : antenna number integer for reference antenna
             The refence antenna is used in the phase solvers, where an absolute phase is applied to all
@@ -1844,6 +1845,10 @@ class AbsCal(object):
 
         input_cal : filepath to calfits, UVCal or HERACal object with gain solutions to
             apply to data on-the-fly via hera_cal.apply_cal.calibrate_in_place
+
+        expand_model_red : bool, optional
+            if True, expand the model to include as many baselines from data as possible
+            using redundancies.
         """
         # set pols to None
         pols = None
@@ -1868,7 +1873,10 @@ class AbsCal(object):
             uvc = io.to_HERACal(input_cal)
             gains, cal_flags, quals, totquals = uvc.read()
             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags, gain_convention=uvc.gain_convention)
-
+        # expand model to data using baseline redundancies.
+        if extend_model_red:
+            self.model = utils.expand_model_from_redundancies(data=self.data, model=self.model, model_flags=model_flags,
+                                                              data_antpos=data_antpos, model_antpos=model_antpos)
         # get shared keys and and pols
         self.keys = sorted(set(model.keys()) & set(data.keys()))
         assert len(self.keys) > 0, "no shared keys exist between model and data"
@@ -1877,7 +1885,7 @@ class AbsCal(object):
         self.pols = pols
         self.Npols = len(self.pols)
         self.gain_pols = np.unique(list(map(lambda p: list(split_pol(p)), self.pols)))
-        self.Ngain_pols = len(self.gain_pols)        
+        self.Ngain_pols = len(self.gain_pols)
 
         # append attributes
         self.model = DataContainer(dict([(k, model[k]) for k in self.keys]))
@@ -2067,7 +2075,7 @@ class AbsCal(object):
         df = np.median(np.diff(self.freqs))
 
         # run delay_lincal
-        fit = delay_lincal(model, data, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df, 
+        fit = delay_lincal(model, data, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df,
                            f0=self.freqs[0], kernel=kernel, verbose=verbose, edge_cut=edge_cut)
 
         # time average
@@ -2170,7 +2178,7 @@ class AbsCal(object):
         Parameters:
         -----------
         solver : 'linfit' uses linsolve to fit phase slope across the array,
-                 'dft' uses a spatial Fourier transform to find a phase slope 
+                 'dft' uses a spatial Fourier transform to find a phase slope
 
         tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
 
@@ -2737,9 +2745,9 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
     if len(hd.filepaths) > 1:  # in this case, it's a dictionary
         all_times = np.array([time for f in hd.filepaths for time in all_times[f]])
         all_lsts = np.array([lst for f in hd.filepaths for lst in all_lsts[f]])[np.argsort(all_times)]
-    if unwrap:  # avoid phase wraps 
+    if unwrap:  # avoid phase wraps
         all_lsts[all_lsts < all_lsts[0]] += 2 * np.pi
-        
+
     # remove times when sun was too high
     if solar_horizon < 90.0:
         lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
@@ -2761,8 +2769,8 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
         unwrap: increase all LSTs smaller than the first one by 2pi to avoid phase wrapping
 
     Returns:
-        d2m_time_map: dictionary uniqely mapping times in the data to times in the model 
-            that are closest in LST. Each model time maps to at most one data time and 
+        d2m_time_map: dictionary uniqely mapping times in the data to times in the model
+            that are closest in LST. Each model time maps to at most one data time and
             each model time maps to at most one data time. Data times without corresponding
             model times map to None.
     '''
@@ -2771,7 +2779,7 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
         model_lsts[model_lsts < model_lsts[0]] += 2 * np.pi
 
     # first produce a map of indices using the LSTs
-    m2d_ind_map = {}  
+    m2d_ind_map = {}
     for dind, dlst in enumerate(data_lsts):
         nearest_mind = np.argmin(np.abs(model_lsts - dlst))
         if nearest_mind in m2d_ind_map:
@@ -2787,15 +2795,15 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
     return d2m_time_map
 
 
-def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_list, gain_flags, 
+def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_list, gain_flags,
                 gain_convention='divide', max_iter=1, phs_conv_crit=1e-6, verbose=True):
     '''Generalized function for performing an abscal step (e.g. abs_amp_logcal or TT_phs_logcal).
 
     Arguments:
         gains_to_update: the gains produced by abscal up until this step. Updated in place.
-        AC: AbsCal object containing data, model, and other metadata. AC.data is recalibrated 
+        AC: AbsCal object containing data, model, and other metadata. AC.data is recalibrated
             in place using the gains solved for during this step
-        AC_func: function (usually a class method of AC) to call to instantiate the new gains 
+        AC_func: function (usually a class method of AC) to call to instantiate the new gains
             which are then accessible as class properties of AC
         AC_kwargs: dictionary of kwargs to pass into AC_func
         gain_funcs: list of functions to call to return gains after AC_func has been called
@@ -2806,25 +2814,25 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
         max_iter: maximum number of times to run phase solvers iteratively to avoid the effect
             of phase wraps in, e.g. phase_slope_cal or TT_phs_logcal
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
-            the updates to all 1.0s. 
+            the updates to all 1.0s.
         verbose: If True, will print the progress of iterative convergence
     '''
     for i in range(max_iter):
         AC_func(**AC_kwargs)
         gains_here = merge_gains([gf(*gargs) for gf, gargs in zip(gain_funcs, gain_args_list)])
-        apply_cal.calibrate_in_place(AC.data, gains_here, AC.wgts, gain_flags, 
+        apply_cal.calibrate_in_place(AC.data, gains_here, AC.wgts, gain_flags,
                                      gain_convention=gain_convention, flags_are_wgts=True)
         for k in gains_to_update.keys():
             gains_to_update[k] *= gains_here[k]
         if max_iter > 1:
-            crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for 
+            crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for
                                              k in gains_here.keys()], axis=(0, 1)))
             echo(AC_func.__name__ + " convergence criterion: " + str(crit), verbose=verbose)
             if crit < phs_conv_crit:
                 break
 
 
-def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, 
+def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0,
                        gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
@@ -2847,7 +2855,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
 
     Returns:
-        abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
+        abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing
             the updates to the gains between redcal and abscal
         AC: AbsCal object containing absolutely calibrated data, model, and other useful metadata
     '''
@@ -2859,13 +2867,13 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
     AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
-    
+
     # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
     AC._set_antpos(idealized_antpos)
 
     # Per-Channel Absolute Amplitude Calibration
-    abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {'verbose': verbose}, [AC.custom_abs_eta_gain], 
+    abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {'verbose': verbose}, [AC.custom_abs_eta_gain],
                 [(rc_flags.keys(),)], rc_flags, gain_convention=gain_convention, verbose=verbose)
 
     # Global Delay Slope Calibration
@@ -2876,14 +2884,14 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # Global Phase Slope Calibration (first using dft, then using linfit)
     abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'solver': 'dft', 'tol': IDEALIZED_BL_TOL,
-                'edge_cut': edge_cut, 'verbose': verbose}, [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], 
+                'edge_cut': edge_cut, 'verbose': verbose}, [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)],
                 rc_flags, gain_convention=gain_convention, verbose=verbose)
     abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': IDEALIZED_BL_TOL, 'edge_cut': edge_cut, 'verbose': verbose},
                 [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
     # Per-Channel Tip-Tilt Phase Calibration
-    abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
+    abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain],
                 [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], rc_flags,
                 gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
@@ -2891,15 +2899,15 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
 
 def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None, nInt_to_load=None,
-                           data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0, 
+                           data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0,
                            tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     Does not work on data (or models) with baseline-dependant averaging.
-    
+
     Arguments:
         data_file: string path to raw uvh5 visibility file
         redcal_file: string path to calfits file that redundantly calibrates the data_file
-        model_files: list of string paths to externally calibrated data. Strings must be sortable 
+        model_files: list of string paths to externally calibrated data. Strings must be sortable
             to produce a chronological list in LST (wrapping over 2*pi is OK)
         output_file: string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.')
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
@@ -2920,7 +2928,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history.
             This HERACal object has been updated with the following properties accessible on hc.build_calcontainers():
                 * gains: abscal gains for times that could be calibrated, redcal gains otherwise (but flagged)
-                * flags: redcal flags, with additional flagging if the data is flagged (see flag_utils.synthesize_ant_flags) or if 
+                * flags: redcal flags, with additional flagging if the data is flagged (see flag_utils.synthesize_ant_flags) or if
                     if the model is completely flagged for a given freq/channel when reduced to a single flagging waterfall
                 * quals: abscal chi^2 per antenna based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
                 * total_qual: abscal chi^2 based on calibrated data minus model (Normalized by noise/nObs, but not with proper DoF)
@@ -2949,12 +2957,12 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         hdm = io.HERAData(matched_model_files)
         assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
-        
+
         # match integrations in model to integrations in data
         all_data_times, all_data_lsts = get_all_times_and_lsts(hd, solar_horizon=data_solar_horizon, unwrap=True)
         all_model_times, all_model_lsts = get_all_times_and_lsts(hdm, solar_horizon=model_solar_horizon, unwrap=True)
         d2m_time_map = get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)
-        
+
         # group matched time indices for partial I/O
         matched_tinds = [tind for tind, time in enumerate(hd.times) if time in d2m_time_map and d2m_time_map[time] is not None]
         if len(matched_tinds) > 0:
@@ -2969,13 +2977,13 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                 for tinds in tind_groups:
                     echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
                          + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
-                    
+
                     # load data and apply calibration
                     data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=[pol])
                     data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
                     rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
                     rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
-                    calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
+                    calibrate_in_place(data, rc_gains_subset, data_flags=flags,
                                        cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
                     auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
                     autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
@@ -2987,7 +2995,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                         model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
                         utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
                                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
-                        
+
                         # update data flags w/ model flags. Anything flagged in the model is ignored in post_redcal_abscal,
                         # but only times/channels that are flagged in the model for all baselines are also flagged the final calibration
                         model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
@@ -2998,14 +3006,14 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                                 flags_for_abscal_wgts[k] += model_flags[k]
 
                         # run absolute calibration, copying data because it gets modified internally
-                        delta_gains, AC = post_redcal_abscal(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
-                                                             tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
-                                                             gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
+                        delta_gains, AC = post_redcal_abscal(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut,
+                                                             tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut,
+                                                             gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter,
                                                              phs_conv_crit=phs_conv_crit, verbose=verbose,
                                                              refant_num=(None if refant is None else refant))
 
                         # calibrate autos, abscal them, and generate abscal Chi^2
-                        calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
+                        calibrate_in_place(autocorrs, delta_gains, data_flags=flags,
                                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
                         chisq_wgts = {}
                         for bl in AC.data.keys():
@@ -3014,7 +3022,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                             chisq_wgts[bl] = noise_var**-1 * (~flags[bl]).astype(np.float)
                         total_qual, nObs, quals, nObs_per_ant = utils.chisq(AC.data, AC.model, chisq_wgts,
                                                                             gain_flags=rc_flags_subset, split_by_antpol=True)
-                    
+
                         # update results
                         delta_flags = synthesize_ant_flags(flags)
                         for ant in data_ants:
@@ -3024,7 +3032,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                                 abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
                         for antpol in total_qual.keys():
                             abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
-                            
+
         # impose a single reference antenna on the final antenna solution
         if refant is None:
             refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)

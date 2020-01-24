@@ -595,6 +595,79 @@ def get_sun_alt(jds, longitude=21.42830, latitude=-30.72152):
     else:
         return alts[0]
 
+def expand_model_from_redundancies(data, model, model_flags,
+                                   data_antpos, model_antpos, tol=1e-2):
+    """
+    Expand model data container as much as possible to include
+    keys in data container using data redundancies.
+
+    Parameters
+    -----------
+    data: DataContainer
+        dictionary of data visibilities.
+    model: DataContainer
+        dictionary of model visibilities.
+    model_flags:  DataContainer
+        dictionary of model flags.
+    data_antpos: dict
+        dictionary with data antenna numbers as keys
+        and 3-vector antenna positions as items
+    model_antpos: dict
+        dictionary with model antenna numbers as keys
+        and 3-vector antenna positions as items
+
+    tol: float, distance tolerance for redundancy.
+    Returns
+    -----------
+    expanded_model DataContainer
+        model data container expanded as much as possible to
+        include keys from data DataContainer by adding missing
+        visibilities equal to the redundant visibility in model
+        with the least number of flags.
+    """
+
+    model_baseline_vecs = {(k[0], k[1]): model_antpos[i] - model_antpos[j]\
+                           for k in model.keys()}
+    data_baseline_vecs = {(k[0], k[1]): data_antpos[i] - data_antpos[j]\
+                           for k in data.keys()}
+    expanded_model = copy.deepcopy(model)
+    for blkey in data:
+        antpair = (blkey[0], blkey[1])
+        if not blkey in model:
+            #find set of baselines in model that are redundant
+            lens=np.asarray([float(k[0]),float(k[1]),np.linalg.norm(data_baseline_vecs[antpair]
+                  model_baseline_vecs[(k[0],k[1])]) for k in model_baseline_vecs\
+                  if k[2] == blkey[2]])
+            candidate_matches = lens[:,2] <= tol
+            #if we only have a single candidate match:
+            if np.count_nonzero(candidate_matches)==1:
+                expanded_model[blkey] = model[(int(lens[candidate_matches,0]),
+                                     int(lens[candidate_matches,1]),
+                                     blkey[2])]
+            #if there are multiple matches.
+            #for each time, find match with minimum flagging,
+            #if multiple candidates exist
+            #choose the first with the smallest displacement.
+            elif np.count_nonzero(candidate_matches)>1:
+                model_waterfall = np.zeros_like(data[blkey])
+                for tind in data[lbkey].shape[0]:
+                    nflags = np.asarray([i, j, np.sum((~model_flags[(i,j,blkey[2])][tind,:]).astype(float))
+                                        for i, j in lens[candidate_matches,:2] ])
+                    flag_matches = nflags[:,2] == nflags[:,2].min()
+                    if np.count_nonzero(flag_matches) == 1:
+                        expanded_model[blkey][tind] = model[(int(lens[flag_matches,0]),
+                                                    int(lens[flag_matches,1]),
+                                                    blkey[2])]
+                    elif np.count_nonzero(flag_matches) > 1:
+                        final_lens = np.asarray([int(i), int(j) ,np.linalg.norm(data_baseline_vecs[antpair] - \
+                              model_baseline_vecs[(int(i), int(j))]) for i,j in lens[flag_matches,:2]])
+                        select_ind = np.argmin(final_lens[:,2])
+                        expanded_model[blkey][tind] = model[(int(final_lens[select_ind][0]),
+                                                            int(final_lens[select_ind][1]),
+                                                            blkey[2])][tind]
+            return model
+
+
 
 def combine_calfits(files, fname, outdir=None, overwrite=False, broadcast_flags=True, verbose=True):
     """
