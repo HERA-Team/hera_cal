@@ -635,8 +635,8 @@ def expand_model_from_redundancies(data, model, model_flags,
         antpair = (blkey[0], blkey[1])
         if not blkey in model:
             #find set of baselines in model that are redundant
-            lens=np.asarray([float(k[0]),float(k[1]),np.linalg.norm(data_baseline_vecs[antpair]
-                  model_baseline_vecs[(k[0],k[1])]) for k in model_baseline_vecs\
+            lens=np.asarray([ [float(k[0]),float(k[1]),np.linalg.norm(data_baseline_vecs[antpair]
+                  model_baseline_vecs[(k[0],k[1])])] for k in model_baseline_vecs\
                   if k[2] == blkey[2]])
             candidate_matches = lens[:,2] <= tol
             #if we only have a single candidate match:
@@ -659,8 +659,8 @@ def expand_model_from_redundancies(data, model, model_flags,
                                                     int(lens[flag_matches,1]),
                                                     blkey[2])]
                     elif np.count_nonzero(flag_matches) > 1:
-                        final_lens = np.asarray([int(i), int(j) ,np.linalg.norm(data_baseline_vecs[antpair] - \
-                              model_baseline_vecs[(int(i), int(j))]) for i,j in lens[flag_matches,:2]])
+                        final_lens = np.asarray([[int(i), int(j) ,np.linalg.norm(data_baseline_vecs[antpair] - \
+                              model_baseline_vecs[(int(i), int(j))])] for i,j in lens[flag_matches,:2]])
                         select_ind = np.argmin(final_lens[:,2])
                         expanded_model[blkey][tind] = model[(int(final_lens[select_ind][0]),
                                                             int(final_lens[select_ind][1]),
