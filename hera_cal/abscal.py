@@ -198,6 +198,10 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     # center antenna positions about the reference antenna
     if refant is None:
         refant = keys[0][0]
+    print('ants=')
+    print(ants)
+    print('refant=')
+    print(refant)
     assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
     antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
 
@@ -1905,6 +1909,10 @@ class AbsCal(object):
             refant = self.keys[0][0]
             print("using {} for reference antenna".format(refant))
         else:
+            #print('refant=')
+            #print(refant)
+            #print('ants=')
+            #print(self.ants)
             assert refant in self.ants, "refant {} not found in self.ants".format(refant)
         self.refant = refant
 
@@ -2904,7 +2912,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         tol: baseline match tolerance in units of baseline vectors (e.g. meters)
         phs_max_iter: integer maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.
-        refant: tuple of the form (0, 'Jnn') indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
+        refant: integer indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
 
@@ -2924,6 +2932,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         raise IOError("{} exists, not overwriting.".format(output_file))
 
     # Load redcal calibration
+    print('redcal_file=%s'%(redcal_file))
     hc = io.HERACal(redcal_file)
     rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
 
@@ -2993,7 +3002,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
                                                              phs_conv_crit=phs_conv_crit, verbose=verbose,
-                                                             refant_num=(None if refant is None else refant[0]))
+                                                             refant_num=(None if refant is None else refant))
 
                         # calibrate autos, abscal them, and generate abscal Chi^2
                         calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
@@ -3052,5 +3061,6 @@ def post_redcal_abscal_argparser():
     a.add_argument("--phs_conv_crit", default=1e-6, type=float, help="convergence criterion for updates to iterative phase calibration that compares them to all 1.0s.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrites existing abscal calfits file at the output path")
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
+    a.add_argument("--refant", default=None, type=int, help="integer specifying the reference antenna to use. If None, redcal will determine a refant automatically and possibly crash.")
     args = a.parse_args()
     return args
