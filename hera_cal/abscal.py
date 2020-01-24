@@ -1901,7 +1901,7 @@ class AbsCal(object):
                 for k in self.keys:
                     wgts[k] *= (~model_flags[k]).astype(np.float)
         self.wgts = wgts
-
+        self.wgts = DataContainer(dict([(k, wgts[k]) for k in self.keys]))
         # setup ants
         self.ants = np.unique(np.concatenate(list(map(lambda k: k[:2], self.keys))))
         self.Nants = len(self.ants)
@@ -1909,10 +1909,6 @@ class AbsCal(object):
             refant = self.keys[0][0]
             print("using {} for reference antenna".format(refant))
         else:
-            #print('refant=')
-            #print(refant)
-            #print('ants=')
-            #print(self.ants)
             assert refant in self.ants, "refant {} not found in self.ants".format(refant)
         self.refant = refant
 
@@ -3021,6 +3017,12 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                             abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
                             abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + delta_flags[ant]
                             if not np.all(abscal_flags[ant][tinds, :]):
+                                print('%s in nObs? %s'%(str(ant), str(ant in nObs_per_ant)))
+                                print('%s in chisq? %s'%(str(ant),str(ant in abscal_chisq_per_ant)))
+                                print('%s in quals? %s'%(str(ant), str(ant in quals)))
+                                print(nObs_per_ant.keys())
+                                print(abscal_chisq_per_ant.keys())
+                                print(quals.keys())
                                 abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
                         for antpol in total_qual.keys():
                             abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
