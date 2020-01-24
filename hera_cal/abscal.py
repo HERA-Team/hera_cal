@@ -2822,17 +2822,17 @@ def abscal_step_2(data, gains_to_update, fit, cal_step_name, ants, freqs, antpos
     if cal_step_name == 'abs_amp_logcal':
         gains_here = {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(np.complex) for ant in ants}
     elif cal_step_name == 'delay_slope_lincal':
-        gains_here = {ant: np.exp(np.outer(np.dot(antpos[ant[0]][:2], 
-                                                  [fit['T_ew_{}'.format(ant[1])], fit['T_ns_{}'.format(ant[1])]]),
-                                           data.freqs) * 2j * np.pi) for ant in ants}
+        gains_here = {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2], 
+                                            [fit['T_ew_{}'.format(ant[1])], fit['T_ns_{}'.format(ant[1])]], 
+                                            data.freqs) * 2j * np.pi) for ant in ants}
     elif cal_step_name == 'global_phase_slope_logcal':
-        gains_here = {ant: np.exp(np.outer(np.dot(antpos[ant[0]][:2], 
-                                                  [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]]),
-                                           np.ones_like(data.freqs)) * 1j) for ant in ants}
+        gains_here = {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2], 
+                                            [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]],
+                                            np.ones_like(data.freqs)) * 1j) for ant in ants}
     elif cal_step_name == 'TT_phs_logcal':
-        gains_here = {ant: np.exp(1.0j*(np.dot(antpos[ant[0]][:2], 
-                                               [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]]) + 
-                                        fit['psi_{}'.format(ant[1])])) for ant in ants}
+        gains_here = {ant: np.exp(1.0j * (np.einsum('i,ijk->jk', antpos[ant[0]][:2], 
+                                                    [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]])
+                                          + fit['psi_{}'.format(ant[1])])) for ant in ants}
     else:
         raise ValueError('Unrecognized calibration step name {}'.format())
 
