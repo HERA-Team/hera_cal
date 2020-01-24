@@ -3068,7 +3068,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                                 flags_for_abscal_wgts[k] += model_flags[k]
 
                         # run absolute calibration, copying data because it gets modified internally
-                        delta_gains, AC = post_redcal_abscal(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
+                        delta_gains = post_redcal_abscal_2(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
                                                              phs_conv_crit=phs_conv_crit, verbose=verbose,
@@ -3078,11 +3078,11 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                         calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
                                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
                         chisq_wgts = {}
-                        for bl in AC.data.keys():
+                        for bl in data.keys():
                             dt = (np.median(np.ediff1d(hd.times_by_bl[bl[:2]])) * 86400.)
                             noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=np.median(np.ediff1d(data.freqs)))
                             chisq_wgts[bl] = noise_var**-1 * (~flags[bl]).astype(np.float)
-                        total_qual, nObs, quals, nObs_per_ant = utils.chisq(AC.data, AC.model, chisq_wgts,
+                        total_qual, nObs, quals, nObs_per_ant = utils.chisq(data, model, chisq_wgts,
                                                                             gain_flags=rc_flags_subset, split_by_antpol=True)
                     
                         # update results
