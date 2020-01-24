@@ -690,7 +690,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         # run function
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            delta_gains, AC = abscal.post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, min_bl_cut=1, verbose=False)
+            delta_gains = abscal.post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, min_bl_cut=1, verbose=False)
 
         # use returned gains to calibrate data
         calibrate_in_place(data, delta_gains, data_flags=flags, 
@@ -701,33 +701,6 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert k in delta_gains
             assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
             assert delta_gains[k].dtype == np.complex
-        for k in AC.model.keys():
-            np.testing.assert_array_equal(model[k], AC.model[k])
-        for k in AC.data.keys():
-            np.testing.assert_array_almost_equal(data[k][~flags[k]], AC.data[k][~flags[k]], decimal=4)
-        assert AC.ant_dly is None
-        assert AC.ant_dly_arr is None
-        assert AC.ant_dly_phi is None
-        assert AC.ant_dly_phi_arr is None
-        assert AC.dly_slope is not None
-        assert AC.dly_slope_arr is not None
-        assert AC.phs_slope is not None
-        assert AC.dly_slope_arr is not None
-        assert AC.abs_eta is not None
-        assert AC.abs_eta_arr is not None
-        assert AC.abs_psi is not None
-        assert AC.abs_psi_arr is not None
-        assert AC.TT_Phi is not None
-        assert AC.TT_Phi_arr is not None
-
-        # assert custom_* funcs with multiple pols returns different results
-        # for different pols, as expected
-        gkxx, gkyy = (0, 'Jee'), (0, 'Jnn')
-        for func, args in zip([AC.custom_abs_eta_gain, AC.custom_dly_slope_gain,
-                               AC.custom_phs_slope_gain, AC.custom_TT_Phi_gain],
-                              [(), (AC.antpos,), (AC.antpos,), (AC.antpos,)]):
-            custom_gains = func([gkxx, gkyy], *args)
-            assert not np.all(np.isclose(np.abs(custom_gains[gkxx] - custom_gains[gkyy]), 0.0, atol=1e-12))
 
     def test_post_redcal_abscal_run(self):
         with warnings.catch_warnings():
