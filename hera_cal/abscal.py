@@ -2816,6 +2816,33 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
                 break
 
 
+def abscal_step_2(data, gains_to_update, fit, cal_step_name, ants, freqs, antpos=None, gain_convention='divide'):
+    '''TODO: document and remove 2'''
+    # Convert fit dictionary to gains, depending on the calibrations step
+    if cal_step_name == 'abs_amp_logcal':
+        gains_here = {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(np.complex) for ant in ants}
+    elif cal_step_name == 'delay_slope_lincal':
+        gains_here = {ant: np.exp(np.outer(np.dot(antpos[ant[0]][:2], 
+                                                  [fit['T_ew_{}'.format(ant[1])], fit['T_ns_{}'.format(ant[1])]]),
+                                           data.freqs) * 2j * np.pi) for ant in ants}
+    elif cal_step_name == 'global_phase_slope_logcal':
+        gains_here = {ant: np.exp(np.outer(np.dot(antpos[ant[0]][:2], 
+                                                  [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]]),
+                                           np.ones_like(data.freqs)) * 1j) for ant in ants}
+    elif cal_step_name == 'TT_phs_logcal':
+        gains_here = {ant: np.exp(1.0j*(np.dot(antpos[ant[0]][:2], 
+                                               [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]]) + 
+                                        fit['psi_{}'.format(ant[1])])) for ant in ants}
+    else:
+        raise ValueError('Unrecognized calibration step name {}'.format())
+
+    # Update cumulative gains and re-calibrate data
+    for k in gains_to_update.keys():
+        gains_to_update[k] *= gains_here[k]
+    apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
+    return gains_here
+
+
 def post_redcal_abscal_2(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, kernel=(1, 15),
                          gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
     '''TODO: document, pass kernel'''
