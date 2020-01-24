@@ -2779,44 +2779,7 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
     return d2m_time_map
 
 
-def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_list, gain_flags, 
-                gain_convention='divide', max_iter=1, phs_conv_crit=1e-6, verbose=True):
-    '''Generalized function for performing an abscal step (e.g. abs_amp_logcal or TT_phs_logcal).
-
-    Arguments:
-        gains_to_update: the gains produced by abscal up until this step. Updated in place.
-        AC: AbsCal object containing data, model, and other metadata. AC.data is recalibrated 
-            in place using the gains solved for during this step
-        AC_func: function (usually a class method of AC) to call to instantiate the new gains 
-            which are then accessible as class properties of AC
-        AC_kwargs: dictionary of kwargs to pass into AC_func
-        gain_funcs: list of functions to call to return gains after AC_func has been called
-        gain_args_list: list of tuples of arguments to pass to the corresponding gain_funcs
-        gain_flags: per-antenna flags to apply to AC.Data when performing recalibration
-        gain_convention: either 'divide' if raw data is calibrated by dividing it by the gains
-            otherwise, 'multiply'.
-        max_iter: maximum number of times to run phase solvers iteratively to avoid the effect
-            of phase wraps in, e.g. phase_slope_cal or TT_phs_logcal
-        phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
-            the updates to all 1.0s. 
-        verbose: If True, will print the progress of iterative convergence
-    '''
-    for i in range(max_iter):
-        AC_func(**AC_kwargs)
-        gains_here = merge_gains([gf(*gargs) for gf, gargs in zip(gain_funcs, gain_args_list)])
-        apply_cal.calibrate_in_place(AC.data, gains_here, AC.wgts, gain_flags, 
-                                     gain_convention=gain_convention, flags_are_wgts=True)
-        for k in gains_to_update.keys():
-            gains_to_update[k] *= gains_here[k]
-        if max_iter > 1:
-            crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for 
-                                             k in gains_here.keys()], axis=(0, 1)))
-            echo(AC_func.__name__ + " convergence criterion: " + str(crit), verbose=verbose)
-            if crit < phs_conv_crit:
-                break
-
-
-def abscal_step_2(data, gains_to_update, fit, cal_step_name, antpos=None, gain_convention='divide'):
+def abscal_step(data, gains_to_update, fit, cal_step_name, antpos=None, gain_convention='divide'):
     '''Generalized function for taking a particular abscal step fit and updating the abscal solution accordingly.
 
     Arguments:
@@ -2859,8 +2822,8 @@ def abscal_step_2(data, gains_to_update, fit, cal_step_name, antpos=None, gain_c
     return gains_here
 
 
-def post_redcal_abscal_2(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, kernel=(1, 15),
-                         gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
+def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, kernel=(1, 15),
+                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -2897,7 +2860,7 @@ def post_redcal_abscal_2(model, data, flags, rc_flags, min_bl_cut=None, max_bl_c
 
     # Abscal Step 1: Per-Channel Absolute Amplitude Calibration
     fit = abs_amp_logcal(model, data, wgts=wgts, verbose=verbose)
-    abscal_step_2(data, abscal_delta_gains, fit, 'abs_amp_logcal', gain_convention=gain_convention)
+    abscal_step(data, abscal_delta_gains, fit, 'abs_amp_logcal', gain_convention=gain_convention)
 
     # Abscal Step 2: Global Delay Slope Calibration
     df = np.median(np.diff(data.freqs))
@@ -2906,19 +2869,19 @@ def post_redcal_abscal_2(model, data, flags, rc_flags, min_bl_cut=None, max_bl_c
                                  kernel=kernel, verbose=verbose, edge_cut=edge_cut)
         if time_avg:
             fit = {key: np.ones_like(val) * np.median(val, axis=0, keepdims=True) for key, val in fit.items()}
-        abscal_step_2(data, abscal_delta_gains, fit, 'delay_slope_lincal',
-                      antpos=idealized_antpos, gain_convention=gain_convention)
+        abscal_step(data, abscal_delta_gains, fit, 'delay_slope_lincal',
+                    antpos=idealized_antpos, gain_convention=gain_convention)
 
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
     fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=wgts, 
                                     refant=refant_num, verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
-    abscal_step_2(data, abscal_delta_gains, fit, 'global_phase_slope_logcal',
-                  antpos=idealized_antpos, gain_convention=gain_convention)
+    abscal_step(data, abscal_delta_gains, fit, 'global_phase_slope_logcal',
+                antpos=idealized_antpos, gain_convention=gain_convention)
     for i in range(phs_max_iter):
         fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=wgts, 
                                         refant=refant_num, verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
-        gains_here = abscal_step_2(data, abscal_delta_gains, fit, 'global_phase_slope_logcal', 
-                                   antpos=idealized_antpos, gain_convention=gain_convention)
+        gains_here = abscal_step(data, abscal_delta_gains, fit, 'global_phase_slope_logcal', 
+                                 antpos=idealized_antpos, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
         echo("global_phase_slope_logcal convergence criterion: " + str(crit), verbose=verbose)
         if crit < phs_conv_crit:
@@ -2927,80 +2890,14 @@ def post_redcal_abscal_2(model, data, flags, rc_flags, min_bl_cut=None, max_bl_c
     # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
     for i in range(phs_max_iter):
         fit = TT_phs_logcal(model, data, idealized_antpos, wgts=wgts, refant=refant_num, verbose=verbose)
-        gains_here = abscal_step_2(data, abscal_delta_gains, fit, 'TT_phs_logcal',
-                                   antpos=idealized_antpos, gain_convention=gain_convention)
+        gains_here = abscal_step(data, abscal_delta_gains, fit, 'TT_phs_logcal',
+                                 antpos=idealized_antpos, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
         echo("TT_phs_logcal convergence criterion: " + str(crit), verbose=verbose)
         if crit < phs_conv_crit:
             break
 
     return abscal_delta_gains
-
-
-def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, 
-                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
-    '''Performs Abscal for data that has already been redundantly calibrated.
-
-    Arguments:
-        model: DataContainer containing externally calibrated visibilities, LST-matched to the data
-        data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
-        flags: DataContainer containing combined data and model flags
-        rc_flags: dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration
-        min_bl_cut : float, eliminate all visibilities with baseline separation lengths
-            smaller than min_bl_cut. This is assumed to be in ENU coordinates with units of meters.
-        max_bl_cut : float, eliminate all visibilities with baseline separation lengths
-            larger than max_bl_cut. This is assumed to be in ENU coordinates with units of meters.
-        edge_cut : integer number of channels to exclude at each band edge in delay and global phase solvers
-        tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
-        gain_convention: either 'divide' if raw data is calibrated by dividing it by the gains
-            otherwise, 'multiply'.
-        phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
-        phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
-            the updates to all 1.0s.
-        refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
-
-    Returns:
-        abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
-            the updates to the gains between redcal and abscal
-        AC: AbsCal object containing absolutely calibrated data, model, and other useful metadata
-    '''
-    abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
-
-    # instantiate Abscal object
-    if refant_num is None:
-        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
-    wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
-    AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
-                refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
-    
-    # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
-    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
-    AC._set_antpos(idealized_antpos)
-
-    # Per-Channel Absolute Amplitude Calibration
-    abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {'verbose': verbose}, [AC.custom_abs_eta_gain], 
-                [(rc_flags.keys(),)], rc_flags, gain_convention=gain_convention, verbose=verbose)
-
-    # Global Delay Slope Calibration
-    for time_avg in [True, False]:
-        abscal_step(abscal_delta_gains, AC, AC.delay_slope_lincal, {'time_avg': time_avg, 'edge_cut': edge_cut, 'verbose': verbose},
-                    [AC.custom_dly_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
-                    gain_convention=gain_convention, verbose=verbose)
-
-    # Global Phase Slope Calibration (first using dft, then using linfit)
-    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'solver': 'dft', 'tol': IDEALIZED_BL_TOL,
-                'edge_cut': edge_cut, 'verbose': verbose}, [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], 
-                rc_flags, gain_convention=gain_convention, verbose=verbose)
-    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': IDEALIZED_BL_TOL, 'edge_cut': edge_cut, 'verbose': verbose},
-                [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
-                gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
-
-    # Per-Channel Tip-Tilt Phase Calibration
-    abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
-                [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], rc_flags,
-                gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
-
-    return abscal_delta_gains, AC
 
 
 def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None, nInt_to_load=None,
@@ -3110,11 +3007,11 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                                 flags_for_abscal_wgts[k] += model_flags[k]
 
                         # run absolute calibration, copying data because it gets modified internally
-                        delta_gains = post_redcal_abscal_2(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
-                                                           tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
-                                                           gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
-                                                           phs_conv_crit=phs_conv_crit, verbose=verbose,
-                                                           refant_num=(None if refant is None else refant[0]))
+                        delta_gains = post_redcal_abscal(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
+                                                         tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
+                                                         gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
+                                                         phs_conv_crit=phs_conv_crit, verbose=verbose,
+                                                         refant_num=(None if refant is None else refant[0]))
 
                         # calibrate autos, abscal them, and generate abscal Chi^2
                         calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
