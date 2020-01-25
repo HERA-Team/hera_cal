@@ -2960,6 +2960,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
     # match times to narrow down model_files
     matched_model_files = sorted(set(match_times(data_file, model_files, filetype='uvh5')))
     if len(matched_model_files) > 0:
+        echo("The following model files overlap with data files in LST:\n" + "\n".join(matched_model_files), verbose=verbose)
         hd = io.HERAData(data_file)
         hdm = io.HERAData(matched_model_files)
         assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
