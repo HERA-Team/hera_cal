@@ -2848,20 +2848,30 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
             the updates to the gains between redcal and abscal
     '''
-    # TODO: handle overlap between data and model better
-    # TODO: handle cuts
+    # Pick out baselines to use by restricting the model. Abscal steps will only use shared keys in model and data.
+    model_to_use = {}
+    for bl in model:
+        if bl in data:
+            ant1, ant2 = split_bl(bl)
+            bl_length = np.linalg.norm(model.antpos[ant2[0]] - model.antpos[ant1[0]])
+            if (min_bl_cut is None) or (bl_length >= min_bl_cut):
+                if (max_bl_cut is None) or (bl_length <= max_bl_cut):
+                    model_to_use[bl] = model[bl]
+    model_to_use = DataContainer(model_to_use)
+    
+    # setup: initialize gains, get idealized antenna positions, initialze wgts
     abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})  # TODO: update with nsamples
 
     # Abscal Step 1: Per-Channel Absolute Amplitude Calibration
-    fit = abs_amp_logcal(model, data, wgts=wgts, verbose=verbose)
+    fit = abs_amp_logcal(model_to_use, data, wgts=wgts, verbose=verbose)
     abscal_step(data, abscal_delta_gains, fit, 'abs_amp_logcal', gain_convention=gain_convention)
 
     # Abscal Step 2: Global Delay Slope Calibration
     df = np.median(np.diff(data.freqs))
     for time_avg in [True, False]:
-        fit = delay_slope_lincal(model, data, idealized_antpos, wgts=wgts, df=df, medfilt=True,
+        fit = delay_slope_lincal(model_to_use, data, idealized_antpos, wgts=wgts, df=df, medfilt=True,
                                  kernel=kernel, verbose=verbose, edge_cut=edge_cut)
         if time_avg:
             fit = {key: np.ones_like(val) * np.median(val, axis=0, keepdims=True) for key, val in fit.items()}
@@ -2869,12 +2879,12 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                     antpos=idealized_antpos, gain_convention=gain_convention)
 
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
-    fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=wgts, 
+    fit = global_phase_slope_logcal(model_to_use, data, idealized_antpos, solver='dft', wgts=wgts, 
                                     verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
     abscal_step(data, abscal_delta_gains, fit, 'global_phase_slope_logcal',
                 antpos=idealized_antpos, gain_convention=gain_convention)
     for i in range(phs_max_iter):
-        fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=wgts, 
+        fit = global_phase_slope_logcal(model_to_use, data, idealized_antpos, solver='linfit', wgts=wgts, 
                                         verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
         gains_here = abscal_step(data, abscal_delta_gains, fit, 'global_phase_slope_logcal', 
                                  antpos=idealized_antpos, gain_convention=gain_convention)
@@ -2885,7 +2895,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
     for i in range(phs_max_iter):
-        fit = TT_phs_logcal(model, data, idealized_antpos, wgts=wgts, verbose=verbose)
+        fit = TT_phs_logcal(model_to_use, data, idealized_antpos, wgts=wgts, verbose=verbose)
         gains_here = abscal_step(data, abscal_delta_gains, fit, 'TT_phs_logcal',
                                  antpos=idealized_antpos, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
