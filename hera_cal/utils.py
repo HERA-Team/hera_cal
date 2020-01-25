@@ -635,7 +635,7 @@ def expand_model_from_redundancies(data, model, model_flags,
         antpair = (blkey[0], blkey[1])
         if not blkey in model:
             #find set of baselines in model that are redundant
-            lens=np.asarray([ [float(k[0]),float(k[1]),np.linalg.norm(data_baseline_vecs[antpair]
+            lens=np.asarray([ [float(k[0]),float(k[1]),np.linalg.norm(data_baseline_vecs[antpair] - \
                   model_baseline_vecs[(k[0],k[1])])] for k in model_baseline_vecs\
                   if k[2] == blkey[2]])
             candidate_matches = lens[:,2] <= tol
@@ -651,7 +651,7 @@ def expand_model_from_redundancies(data, model, model_flags,
             elif np.count_nonzero(candidate_matches)>1:
                 model_waterfall = np.zeros_like(data[blkey])
                 for tind in data[lbkey].shape[0]:
-                    nflags = np.asarray([i, j, np.sum((~model_flags[(i,j,blkey[2])][tind,:]).astype(float))
+                    nflags = np.asarray([ [i, j, np.sum((~model_flags[(i,j,blkey[2])][tind,:]).astype(float))] \
                                         for i, j in lens[candidate_matches,:2] ])
                     flag_matches = nflags[:,2] == nflags[:,2].min()
                     if np.count_nonzero(flag_matches) == 1:
