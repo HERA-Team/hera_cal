@@ -1849,10 +1849,7 @@ class AbsCal(object):
         # set pols to None
         pols = None
 
-        # load model if necessary
-        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or issubclass(model.__class__, UVData):
-            (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
-             model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True, filetype=filetype)
+
 
         # load data if necessary
         if isinstance(data, list) or isinstance(data, np.ndarray) or isinstance(data, str) or issubclass(data.__class__, UVData):
@@ -1862,6 +1859,13 @@ class AbsCal(object):
             freqs = data_freqs
             antpos = data_antpos
 
+        # load model if necessary
+        if isinstance(model, list) or isinstance(model, np.ndarray) or isinstance(model, str) or issubclass(model.__class__, UVData):
+            (model, model_flags, model_antpos, model_ants, model_freqs, model_lsts,
+             model_times, model_pols) = io.load_vis(model, pop_autos=True, return_meta=True, filetype=filetype)
+            #model = utils.expand_model_from_redundancies(data=data, model=model, model_flags=model_flags, data_antpos=data_antpos, model_antpos=model_antpos)
+
+        # expand model to data using baseline redundancies.
         # apply calibration
         if input_cal is not None:
             if 'flags' not in locals():
@@ -1869,9 +1873,7 @@ class AbsCal(object):
             uvc = io.to_HERACal(input_cal)
             gains, cal_flags, quals, totquals = uvc.read()
             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags, gain_convention=uvc.gain_convention)
-        # expand model to data using baseline redundancies.
-        model = utils.expand_model_from_redundancies(data=data, model=model, model_flags=model_flags,
-                                                          data_antpos=data_antpos, model_antpos=model_antpos)
+
         # get shared keys and and pols
         self.keys = sorted(set(model.keys()) & set(data.keys()))
         assert len(self.keys) > 0, "no shared keys exist between model and data"

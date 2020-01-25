@@ -626,9 +626,9 @@ def expand_model_from_redundancies(data, model, model_flags,
         with the least number of flags.
     """
 
-    model_baseline_vecs = {(k[0], k[1]): model_antpos[i] - model_antpos[j]\
+    model_baseline_vecs = {(k[0], k[1]): model_antpos[k[0]] - model_antpos[k[1]]\
                            for k in model.keys()}
-    data_baseline_vecs = {(k[0], k[1]): data_antpos[i] - data_antpos[j]\
+    data_baseline_vecs = {(k[0], k[1]): data_antpos[k[0]] - data_antpos[k[1]]\
                            for k in data.keys()}
     expanded_model = copy.deepcopy(model)
     for blkey in data:
@@ -665,7 +665,7 @@ def expand_model_from_redundancies(data, model, model_flags,
                         expanded_model[blkey][tind] = model[(int(final_lens[select_ind][0]),
                                                             int(final_lens[select_ind][1]),
                                                             blkey[2])][tind]
-            return model
+    return expanded_model
 
 
 
