@@ -1775,7 +1775,7 @@ class AbsCal(object):
     """
     def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None,
                  min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, verbose=True,
-                 filetype='miriad', input_cal=None, extend_model_red=False):
+                 filetype='miriad', input_cal=None):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
@@ -1845,10 +1845,6 @@ class AbsCal(object):
 
         input_cal : filepath to calfits, UVCal or HERACal object with gain solutions to
             apply to data on-the-fly via hera_cal.apply_cal.calibrate_in_place
-
-        extend_model_red : bool, optional
-            if True, expand the model to include as many baselines from data as possible
-            using redundancies.
         """
         # set pols to None
         pols = None
@@ -1874,9 +1870,8 @@ class AbsCal(object):
             gains, cal_flags, quals, totquals = uvc.read()
             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags, gain_convention=uvc.gain_convention)
         # expand model to data using baseline redundancies.
-        if extend_model_red:
-            model = utils.expand_model_from_redundancies(data=data, model=model, model_flags=model_flags,
-                                                              data_antpos=data_antpos, model_antpos=model_antpos)
+        model = utils.expand_model_from_redundancies(data=data, model=model, model_flags=model_flags,
+                                                          data_antpos=data_antpos, model_antpos=model_antpos)
         # get shared keys and and pols
         self.keys = sorted(set(model.keys()) & set(data.keys()))
         assert len(self.keys) > 0, "no shared keys exist between model and data"
@@ -2830,7 +2825,7 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
 
 def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0,
                        gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6,
-                       refant_num=None, verbose=True, extend_model_red=False):
+                       refant_num=None, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -2850,9 +2845,6 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
             the updates to all 1.0s.
         refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
-        extend_model_red : bool, optional
-            if True, expand the model to include as many baselines from data as possible
-            using redundancies.
     Returns:
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing
             the updates to the gains between redcal and abscal
@@ -2865,8 +2857,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
     wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
     AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
-                refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut,
-                extend_model_red=extend_model_red)
+                refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
 
     # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
@@ -2901,7 +2892,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None, nInt_to_load=None,
                            data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0,
                            tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='',
-                           extend_model_red=False, verbose=True):
+                           verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     Does not work on data (or models) with baseline-dependant averaging.
 
@@ -2924,9 +2915,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         refant: integer indicating the antenna defined to have 0 phase. If None, refant will be automatically chosen.
         clobber: if True, overwrites existing abscal calfits file at the output path
         add_to_history: string to add to history of output abscal file
-        extend_model_red : bool, optional
-            if True, expand the model to include as many baselines from data as possible
-            using redundancies.
     Returns:
         hc: HERACal object which was written to disk. Matches the input redcal_file with an updated history.
             This HERACal object has been updated with the following properties accessible on hc.build_calcontainers():
@@ -3013,8 +3001,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
                                                              tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut,
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter,
                                                              phs_conv_crit=phs_conv_crit, verbose=verbose,
-                                                             refant_num=(None if refant is None else refant),
-                                                             extend_model_red=extend_model_red)
+                                                             refant_num=(None if refant is None else refant))
 
                         # calibrate autos, abscal them, and generate abscal Chi^2
                         calibrate_in_place(autocorrs, delta_gains, data_flags=flags,
