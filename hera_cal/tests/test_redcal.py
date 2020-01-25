@@ -1281,6 +1281,9 @@ class TestRedcalAndAbscal(object):
         f_omnicaled = DataContainer({bl: np.zeros_like(d[bl], dtype=bool) for bl in d.keys()})
         calibrate_in_place(d_omnicaled, cal['g_omnical'], data_flags=f_omnicaled, cal_flags=cal['gf_omnical'])
         model = DataContainer({bl: true_vis[red[0]] for red in reds for bl in red})
+        model.freqs = freqs
+        model.times_by_bl = {bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in model.keys()}
+        model.antpos = antpos
         
         # run abscal
         abscal_delta_gains = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=True)
