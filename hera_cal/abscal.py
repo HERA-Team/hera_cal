@@ -1775,7 +1775,7 @@ class AbsCal(object):
     """
     def __init__(self, model, data, refant=None, wgts=None, antpos=None, freqs=None,
                  min_bl_cut=None, max_bl_cut=None, bl_taper_fwhm=None, verbose=True,
-                 filetype='miriad', input_cal=None, expand_model_red=True):
+                 filetype='miriad', input_cal=None, extend_model_red=True):
         """
         AbsCal object used to for phasing and scaling visibility data to an absolute reference model.
 
