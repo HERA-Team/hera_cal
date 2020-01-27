@@ -170,6 +170,7 @@ class Test_lstbin(object):
         assert os.path.exists(output_std_file)
         uv2 = UVData()
         uv2.read(output_lst_file)
+        uv2.history = uv1.history
         assert uv1 == uv2
         # cleanup
         os.remove(output_lst_file)
@@ -296,6 +297,10 @@ class Test_lstbin(object):
 
         os.remove(output_lst_file)
         os.remove(output_std_file)
+
+        # cleanup flag files
+        for ff in np.ravel(flag_files):
+            os.remove(ff)
 
     def test_lst_bin_arg_parser(self):
         a = lstbin.lst_bin_arg_parser()
