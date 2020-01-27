@@ -2779,6 +2779,39 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
     return d2m_time_map
 
 
+def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=None, data_is_redsol=False, 
+                    model_is_redsol=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, verbose=False):
+    if data_is_redsol and not model_is_redsol:
+        raise NotImplementedError('If the data is just unique baselines, the model must also be just unique baselines.')
+    if model_antpos is None:
+        model_antpos = data_antpos
+    
+    # Perform cut on baseline length and polarization
+    if pols is None:
+        pols = list(set([bl[2] for bl_list in [data_bls, model_bls] for bl in bl_list]))
+    def _cut_bl_and_pol(bls, antpos):
+        bls_to_load = []
+        for bl in bls:
+            if (pol_load_list is None) or (bl[2] in pols):
+                ant1, ant2 = split_bl(bl)
+                bl_length = np.linalg.norm(antpos[ant2[0]] - antpos[ant1[0]])
+                if (min_bl_cut is None) or (bl_length >= min_bl_cut):
+                    if (max_bl_cut is None) or (bl_length <= max_bl_cut):
+                        bls_to_load.append(bl)
+        return bls_to_load
+    data_bl_to_load = _cut_bl_and_pol(data_bls, data_antpos)
+    model_bl_to_load = _cut_bl_and_pol(model_bls, model_antpos)
+
+    # If we're working with full data sets, only pick out matching keys
+    if not data_is_redsol and not model_is_redsol:
+        data_bl_to_load = [bl for bl in data_bl_to_load if bl in model_bl_to_load]
+        model_bl_to_load = [bl for bl in model_bl_to_load if bl in data_bl_to_load]
+        data_to_model_bl_map = {bl: bl for bl in data_bl_to_load}  # i.e. all baselines
+
+    echo("Selected {} data baselines and {} model baselines to load.".format(len(data_bl_to_load), len(model_bl_to_load)), verbose=verbose)
+    return data_bl_to_load, model_bl_to_load, data_to_model_bl_map
+
+
 def abscal_step(data, gains_to_update, fit, cal_step_name, antpos=None, gain_convention='divide'):
     '''Generalized function for taking a particular abscal step fit and updating the abscal solution accordingly.
 
@@ -2908,8 +2941,8 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
     return abscal_delta_gains
 
 
-def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None, nInt_to_load=None,
-                           data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0, 
+def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=False, model_is_redsol=False, raw_auto_file=None, output_file=None,
+                           nInt_to_load=None, data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0,
                            tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     Does not work on data (or models) with baseline-dependant averaging.
@@ -2919,6 +2952,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         redcal_file: string path to calfits file that redundantly calibrates the data_file
         model_files: list of string paths to externally calibrated data. Strings must be sortable 
             to produce a chronological list in LST (wrapping over 2*pi is OK)
+        abscal_visibility_solutions: TODO: document
+        raw_auto_file: TODO: document
         output_file: string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.')
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
         data_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.
@@ -2966,6 +3001,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         hd = io.HERAData(data_file)
         hdm = io.HERAData(matched_model_files)
         assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
+        assert hc.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation, hc.x_orientation)
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
         
         # match integrations in model to integrations in data
