@@ -3096,6 +3096,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                     rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
                     calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                                        cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+                    # TODO: update this for raw_auto_file
                     auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
                     autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
 
@@ -3107,22 +3108,16 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                         utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
                                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
                         
-                        # update data flags w/ model flags. Anything flagged in the model is ignored in post_redcal_abscal,
-                        # but only times/channels that are flagged in the model for all baselines are also flagged the final calibration
-                        model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
-                        flags_for_abscal_wgts = copy.deepcopy(flags)
-                        for k in flags.keys():
-                            flags[k] += model_flag_waterfall
-                            if k in model_flags:
-                                flags_for_abscal_wgts[k] += model_flags[k]
+                        # get the relative wgts for each piece of data
+                        data_wgts = build_data_wgts(data_flags, model_flags)
 
-                        # run absolute calibration, copying data because it gets modified internally
-                        delta_gains = post_redcal_abscal(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
-                                                         tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
+                        # run absolute calibration
+                        delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
                                                          gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
                                                          phs_conv_crit=phs_conv_crit, verbose=verbose)
 
                         # calibrate autos, abscal them, and generate abscal Chi^2
+                        # TODO: update to better integrate with wgts
                         calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
                                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
                         chisq_wgts = {}
