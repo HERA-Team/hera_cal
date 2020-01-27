@@ -2921,19 +2921,17 @@ def abscal_step(data, gains_to_update, fit, cal_step_name, antpos=None, gain_con
     return gains_here
 
 
-def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0,
-                       kernel=(1, 15), gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
+def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15), 
+                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
-        model: DataContainer containing externally calibrated visibilities, LST-matched to the data
+        model: DataContainer containing externally calibrated visibilities, LST-matched to the data.
+            The model keys must match the data keys.
         data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
-        flags: DataContainer containing combined data and model flags
+        data_wgts: DataContainer containing same keys as data, determines their relative weight in the abscal
+            linear equation solvers.
         rc_flags: dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration
-        min_bl_cut : float, eliminate all visibilities with baseline separation lengths
-            smaller than min_bl_cut. This is assumed to be in ENU coordinates with units of meters.
-        max_bl_cut : float, eliminate all visibilities with baseline separation lengths
-            larger than max_bl_cut. This is assumed to be in ENU coordinates with units of meters.
         edge_cut : integer number of channels to exclude at each band edge in delay and global phase solvers
         tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
         kernel: tuple of integers, size of medfilt kernel used in the first step of delay slope calibration.
@@ -2947,32 +2945,19 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
             the updates to the gains between redcal and abscal
     '''
-    # Pick out baselines to use by restricting the model. Abscal steps will only use shared keys in model and data.
-    model_to_fit, data_to_fit = {}, {}
-    for bl in model:
-        if bl in data:
-            ant1, ant2 = split_bl(bl)
-            bl_length = np.linalg.norm(model.antpos[ant2[0]] - model.antpos[ant1[0]])
-            if (min_bl_cut is None) or (bl_length >= min_bl_cut):
-                if (max_bl_cut is None) or (bl_length <= max_bl_cut):
-                    model_to_fit[bl] = model[bl]
-                    data_to_fit[bl] = data[bl]
-    model_to_fit, data_to_fit = DataContainer(model_to_fit), DataContainer(data_to_fit)
-    data_to_fit.antpos, data_to_fit.freqs = data.antpos, data.freqs
     
     # setup: initialize gains, get idealized antenna positions, initialze wgts
     abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
-    wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})  # TODO: update with nsamples
 
     # Abscal Step 1: Per-Channel Absolute Amplitude Calibration
-    fit = abs_amp_logcal(model_to_fit, data_to_fit, wgts=wgts, verbose=verbose)
+    fit = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose)
     abscal_step(data, abscal_delta_gains, fit, 'abs_amp_logcal', gain_convention=gain_convention)
 
     # Abscal Step 2: Global Delay Slope Calibration
     df = np.median(np.diff(data.freqs))
     for time_avg in [True, False]:
-        fit = delay_slope_lincal(model_to_fit, data_to_fit, idealized_antpos, wgts=wgts, df=df, medfilt=True,
+        fit = delay_slope_lincal(model, data, idealized_antpos, wgts=data_wgts, df=df, medfilt=True,
                                  kernel=kernel, verbose=verbose, edge_cut=edge_cut)
         if time_avg:
             fit = {key: np.ones_like(val) * np.median(val, axis=0, keepdims=True) for key, val in fit.items()}
@@ -2980,12 +2965,12 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                     antpos=idealized_antpos, gain_convention=gain_convention)
 
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
-    fit = global_phase_slope_logcal(model_to_fit, data_to_fit, idealized_antpos, solver='dft', wgts=wgts, 
+    fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=data_wgts, 
                                     verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
     abscal_step(data, abscal_delta_gains, fit, 'global_phase_slope_logcal',
                 antpos=idealized_antpos, gain_convention=gain_convention)
     for i in range(phs_max_iter):
-        fit = global_phase_slope_logcal(model_to_fit, data_to_fit, idealized_antpos, solver='linfit', wgts=wgts, 
+        fit = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=data_wgts, 
                                         verbose=verbose, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut)
         gains_here = abscal_step(data, abscal_delta_gains, fit, 'global_phase_slope_logcal', 
                                  antpos=idealized_antpos, gain_convention=gain_convention)
@@ -2996,7 +2981,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
 
     # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
     for i in range(phs_max_iter):
-        fit = TT_phs_logcal(model_to_fit, data_to_fit, idealized_antpos, wgts=wgts, verbose=verbose)
+        fit = TT_phs_logcal(model, data, idealized_antpos, wgts=data_wgts, verbose=verbose)
         gains_here = abscal_step(data, abscal_delta_gains, fit, 'TT_phs_logcal',
                                  antpos=idealized_antpos, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
