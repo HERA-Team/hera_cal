@@ -2810,6 +2810,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=No
     # Perform cut on baseline length and polarization
     if pols is None:
         pols = list(set([bl[2] for bl_list in [data_bls, model_bls] for bl in bl_list]))
+    
     def _cut_bl_and_pol(bls, antpos):
         bls_to_load = []
         for bl in bls:
@@ -2832,14 +2833,14 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=No
     # Either the model is just unique baselines, or both the data and the model are just unique baselines
     else:
         # build reds using both sets of antpos to find matching baselines
-        ant_offset = np.max(list(hd.antpos.keys())) + 1
+        ant_offset = np.max(list(hd.antpos.keys())) + 1  # increase all antenna indices by this amount
         joint_antpos = {**hd.antpos, **{ant + ant_offset: pos for ant, pos in model_antpos.items()}}
         joint_reds = redcal.get_reds(joint_antpos, pols=pols, bl_error_tol=tol)
 
         # filter out baselines not in data or model or between data and model
         joint_reds = [[bl for bl in red if not ((bl[0] < ant_offset) ^ (bl[1] < ant_offset))] for red in joint_reds]
-        joint_reds = [[bl for bl in red if (bl in data_bl_to_load) or 
-                       ((bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) in model_bl_to_load)] for red in joint_reds]
+        joint_reds = [[bl for bl in red if (bl in data_bl_to_load)
+                       or ((bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) in model_bl_to_load)] for red in joint_reds]
         joint_reds = [red for red in joint_reds if len(red) > 0]
 
         # map baselines in data to unique baselines in model
