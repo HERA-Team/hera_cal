@@ -9,7 +9,7 @@ from collections import OrderedDict as odict
 import copy
 import glob
 import scipy.stats as stats
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, UVFlag
 
 from .. import io, lstbin, utils
 from ..datacontainer import DataContainer
@@ -28,13 +28,21 @@ class Test_lstbin(object):
         self.data_files = [sorted(glob.glob(DATA_PATH + '/zen.2458043.4*XRAA.uvh5')),
                            sorted(glob.glob(DATA_PATH + '/zen.2458044.4*XRAA.uvh5')),
                            sorted(glob.glob(DATA_PATH + '/zen.2458045.4*XRAA.uvh5'))]
+        self.data_uvd = []
+        for dfs in self.data_files:
+            _uvds = []
+            for df in dfs:
+                uvd = UVData()
+                uvd.read(df)
+                _uvds.append(uvd)
+            self.data_uvd.append(_uvds)
 
         (self.data1, self.flgs1, self.ap1, a, self.freqs1, t, self.lsts1,
-         p) = io.load_vis(self.data_files[0], return_meta=True, filetype="uvh5")
+         p) = io.load_vis(self.data_uvd[0], return_meta=True, filetype="uvh5")
         (self.data2, self.flgs2, ap, a, self.freqs2, t, self.lsts2,
-         p) = io.load_vis(self.data_files[1], return_meta=True, filetype="uvh5")
+         p) = io.load_vis(self.data_uvd[1], return_meta=True, filetype="uvh5")
         (self.data3, self.flgs3, ap, a, self.freqs3, t, self.lsts3,
-         p) = io.load_vis(self.data_files[2], return_meta=True, filetype="uvh5")
+         p) = io.load_vis(self.data_uvd[2], return_meta=True, filetype="uvh5")
         self.data_list = [self.data1, self.data2, self.data3]
         self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]
@@ -124,6 +132,19 @@ class Test_lstbin(object):
     @pytest.mark.filterwarnings("ignore:The expected shape of the ENU array")
     @pytest.mark.filterwarnings("ignore:antenna_diameters is not set")
     def test_lst_bin_files(self):
+        # generate fake UVFlag files
+        flag_files = []
+        for dfs, uvds in zip(self.data_files, self.data_uvd):
+            _ffiles = []
+            for df, uvd in zip(dfs, uvds):
+                uvf = UVFlag()
+                uvf.from_uvdata(uvd, mode='flag', waterfall=True)
+                uvf.flag_array[:, 20] = True
+                dfile = df.replace(".uvh5", ".tempflagtest.h5")
+                _ffiles.append(dfile)
+                uvf.write(dfile, clobber=True)
+            flag_files.append(_ffiles)
+
         # basic execution
         file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
         lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
@@ -138,6 +159,7 @@ class Test_lstbin(object):
         nsamps = np.mean(uv1.get_nsamples(52, 52, 'ee'), axis=1)
         expectation = np.concatenate([np.ones(22), np.ones(22) * 2, np.ones(136) * 3, np.ones(22) * 2, np.ones(21)]).astype(np.float)
         assert np.allclose(nsamps, expectation)
+        # cleanup
         os.remove(output_lst_file)
         os.remove(output_std_file)
 
@@ -149,16 +171,22 @@ class Test_lstbin(object):
         uv2 = UVData()
         uv2.read(output_lst_file)
         assert uv1 == uv2
+        # cleanup
         os.remove(output_lst_file)
         os.remove(output_std_file)
 
-        # test rephase
-        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
-                             verbose=False, rephase=True, file_ext=file_ext)
+        # test rephase and flag_filles
+        lstbin.lst_bin_files(self.data_files, flag_files=flag_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, rephase=True, file_ext=file_ext, ignore_flags=False)
         output_lst_file = "./zen.ee.LST.0.20124.uvh5"
         output_std_file = "./zen.ee.STD.0.20124.uvh5"
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
+        # check channel flagged in flag files is flagged
+        uv1 = UVData()
+        uv1.read(output_lst_file)
+        assert np.all(uv1.flag_array[:, 0, 20, :])
+        # cleanup
         os.remove(output_lst_file)
         os.remove(output_std_file)
 
@@ -247,6 +275,7 @@ class Test_lstbin(object):
         output_std_file = "./zen.ee.STD.0.20124.uvh5"
         assert os.path.exists(output_lst_file)
         assert os.path.exists(output_std_file)
+        # cleanup
         os.remove(output_lst_file)
         os.remove(output_std_file)
 

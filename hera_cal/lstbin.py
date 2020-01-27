@@ -11,6 +11,7 @@ import numpy as np
 import operator
 import gc as garbage_collector
 import datetime
+from pyuvdata import UVFlag, utils as uvutils
 
 from . import utils
 from . import version
@@ -387,6 +388,7 @@ def lst_bin_arg_parser():
                                 "Consult lstbin.lst_bin_files() for further details on functionality.")
     a.add_argument('data_files', nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly data files (UVH5)")
     a.add_argument("--input_cals", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly calibration files")
+    a.add_argument("--flag_files", nargs='*', type=str, help="quotation-bounded, space-delimited, glob-parsable search strings to time-contiguous nightly UVFlag .h5 files")
     a.add_argument("--dlst", type=float, default=None, help="LST grid bin width")
     a.add_argument("--lst_start", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is first LST of first file.")
     a.add_argument("--lst_stop", type=float, default=None, help="starting LST for binner as it sweeps across 2pi LST. Default is lst_start + 2pi")
@@ -405,6 +407,7 @@ def lst_bin_arg_parser():
     a.add_argument("--output_file_select", default=None, nargs='*', help="list of output file integers ot run on. Default is all output files.")
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
     a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
+    a.add_argument("--ignore_cal_flags", default=False, action='store_true', help="Ignore flags in calibration files.")
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
     return a
 
@@ -511,10 +514,10 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
     return lst_grid, dlst, file_lsts, begin_lst, lst_arrays, time_arrays
 
 
-def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
+def lst_bin_files(data_files, input_cals=None, flag_files=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None, 
                   lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
-                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, **kwargs):
+                  output_file_select=None, Nbls_to_load=None, ignore_cal_flags=False, ignore_flags=False, **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
@@ -531,6 +534,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         paths to files from a particular night. These files should be sorted
         by ascending Julian Date. Frequency axis of each file must be identical.
         x_orientation is inferred from the first item in this list and assumed to be the same for all files
+    input_cals : type=list of lists: nested set of lists matching data_files containing
+        filepath to calfits, UVCal or HERACal objects with gain solutions to
+        apply to data on-the-fly before binning via hera_cal.apply_cal.calibrate_in_place.
+        If no apply cal is desired for a particular file, feed as None in input_cals.
+    flag_files : type=list of lists: matching data_files structure, containing UVFlag h5 files.
+        If fed, these flags are applied to the data.
     dlst : type=float, LST bin width. If None, will get this from the first file in data_files.
     lst_start : type=float, starting LST for binner as it sweeps from lst_start to lst_start + 2pi.
     lst_stop : type=float, stopping LST for binner as it sweeps from lst_start to lst_start + 2pi.
@@ -549,13 +558,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     atol : type=float, absolute tolerance for LST bin float comparison
     output_file_select : type=int or integer list, list of integer indices of the output files to run on.
         Default is all files.
-    input_cals : type=list of lists: nested set of lists matching data_files containing
-        filepath to calfits, UVCal or HERACal objects with gain solutions to
-        apply to data on-the-fly before binning via hera_cal.apply_cal.calibrate_in_place.
-        If no apply cal is desired for a particular file, feed as None in input_cals.
     Nbls_to_load : int, default=None, Number of baselines to load and bin simultaneously. If Nbls exceeds this
         than iterate over an outer loop until all baselines are binned. Default is to load all baselines at once.
-    ignore_flags : bool, if True, ignore the flags in the input files, such that all input data in included in binning.
+    ignore_cal_flags : type=boolean, default=False, if True, ignore flags in calibration files.
+    ignore_flags : bool, if True, ignore the flags in the input files, such that all input data are included in binning.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
@@ -651,7 +657,15 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     # load data: only times needed for this output LST-bin file
                     hd = io.HERAData(data_files[j][k], filetype='uvh5')
                     try:
-                        data, flags, nsamps = hd.read(bls=blgroup, times=tarr[tinds])
+                        # read data into hd
+                        hd.read(bls=blgroup, times=tarr[tinds], return_data=False)
+                        # apply flags if fed
+                        if flag_files is not None:
+                            uvf = UVFlag(flag_files[j][k])
+                            uvf.select(times=tarr[tinds])
+                            uvutils.apply_uvflag(hd, uvf, inplace=True)
+                        # get conatiners
+                        data, flags, nsamps = hd.build_datacontainers()
                         data.phase_type = 'drift'
                     except ValueError:
                         # if no baselines in the file, skip this file
@@ -669,6 +683,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                 # If uvc has Ntimes == 1, then broadcast across time will work automatically
                                 uvc.select(times=uvc.time_array[tinds])
                                 gains, cal_flags, quals, totquals = uvc.build_calcontainers()
+                                if ignore_cal_flags:
+                                    cal_flags = None
                             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
                                                          gain_convention=uvc.gain_convention)
 
