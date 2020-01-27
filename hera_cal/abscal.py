@@ -2860,6 +2860,23 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=No
     return data_bl_to_load, model_bl_to_load, data_to_model_bl_map
 
 
+def build_data_wgts(data_flags, model_flags):
+    '''TODO: document 
+       TODO: expand to handle data autocorrelations and n-samples'''
+    
+    # update data flags w/ model flags. Anything flagged in the model is ignored in post_redcal_abscal,
+    # but only times/channels that are flagged in the model for all baselines are also flagged the final calibration
+    model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
+    flags_for_abscal_wgts = copy.deepcopy(data_flags)
+    for k in data_flags.keys():
+        data_flags[k] += model_flag_waterfall
+        if k in model_flags:
+            flags_for_abscal_wgts[k] += model_flags[k]
+
+    wgts = DataContainer({k: (~flags_for_abscal_wgts[k]).astype(np.float) for k in flags_for_abscal_wgts.keys()})
+    return wgts
+
+
 def abscal_step(data, gains_to_update, fit, cal_step_name, antpos=None, gain_convention='divide'):
     '''Generalized function for taking a particular abscal step fit and updating the abscal solution accordingly.
 
@@ -3051,7 +3068,14 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
         assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
         assert hc.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation, hc.x_orientation)
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
-        
+
+        # get model bls and antpos
+        model_bls = hdm.bls
+        model_antpos = hdm.antpos
+        if len(matched_model_files) > 1:  # in this case, it's a dictionary
+            model_bls = list(set([bl for bls in list(hdm.bls.values()) for bl in bls]))
+            model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
+
         # match integrations in model to integrations in data
         all_data_times, all_data_lsts = get_all_times_and_lsts(hd, solar_horizon=data_solar_horizon, unwrap=True)
         all_model_times, all_model_lsts = get_all_times_and_lsts(hdm, solar_horizon=model_solar_horizon, unwrap=True)
@@ -3072,8 +3096,15 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                     echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
                          + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
                     
-                    # load data and apply calibration
-                    data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=[pol])
+                    # match baselines and get map that maps data baselines to model baselines
+                    (data_bl_to_load,
+                     model_bl_to_load,
+                     data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
+                                                             data_is_redsol=data_is_redsol, model_is_redsol=model_is_redsol,
+                                                             tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
+
+                    # load data and apply calibration TODO: this has to change if data is redsol
+                    data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
                     data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
                     rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
                     rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
@@ -3085,9 +3116,9 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                     if not np.all(list(flags.values())):
                         # load model and rephase
                         model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-                        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=[pol])
-                        model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
-                        utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
+                        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
+                        model_blvecs = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
+                        utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
                                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
                         
                         # update data flags w/ model flags. Anything flagged in the model is ignored in post_redcal_abscal,
