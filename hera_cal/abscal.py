@@ -2781,6 +2781,27 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
 
 def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=None, data_is_redsol=False, 
                     model_is_redsol=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, verbose=False):
+    '''Figure out which baselines to use in the data and the model for abscal and their correspondence.
+
+    Arguments:
+        data_bls: list of baselines in data file in the form (0, 1, 'ee')
+        model_bls: list of baselines in model files in the form (0, 1, 'ee')
+        data_antpos: dictionary mapping antenna number to ENU position in meters for antennas in the data
+        model_antpos: same as data_antpos, but for the model. If None, assumed to match data_antpos
+        pols: list of polarizations to use. If None, will use all polarizations in the data or model.
+        data_is_redsol: if True, the data file only contains one visibility per unique baseline
+        model_is_redsol: if True, the model file only contains one visibility per unique baseline
+        tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
+        min_bl_cut : float, eliminate all visibilities with baseline separation lengths
+            smaller than min_bl_cut. This is assumed to be in ENU coordinates with units of meters.
+        max_bl_cut : float, eliminate all visibilities with baseline separation lengths
+            larger than max_bl_cut. This is assumed to be in ENU coordinates with units of meters.
+
+    Returns:
+        data_bl_to_load: list of baseline tuples in the form (0, 1, 'ee') to load from the data file
+        model_bl_to_load: list of baseline tuples in the form (0, 1, 'ee') to load from the model file(s)
+        data_to_model_bl_map: dictionary mapping data baselines to the corresponding model baseline
+    '''
     if data_is_redsol and not model_is_redsol:
         raise NotImplementedError('If the data is just unique baselines, the model must also be just unique baselines.')
     if model_antpos is None:
