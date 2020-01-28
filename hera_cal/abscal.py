@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2019 the HERA Project
+# Copyright 2020 the HERA Project
 # Licensed under the MIT License
 """
 abscal.py
@@ -3209,7 +3209,7 @@ def post_redcal_abscal_argparser():
     a.add_argument("redcal_file", type=str, help="string path to calfits file that serves as the starting point of abscal")
     a.add_argument("model_files", type=str, nargs='+', help="list of string paths to externally calibrated data or reference solution. Strings \
                                                              must be sortable to produce a chronological list in LST (wrapping over 2*pi is OK)")
-    a.add_argument("raw_auto_file", default=None, type=str, help="path to data file that contains raw autocorrelations for all antennas in redcal_file. \
+    a.add_argument("--raw_auto_file", default=None, type=str, help="path to data file that contains raw autocorrelations for all antennas in redcal_file. \
                                                                   If not provided, data_file is used instead. Required if data_is_redsol is True.")
     a.add_argument("--data_is_redsol", default=False, action="store_true", help="If True, data_file only contains unique, redcal'ed visibilities.")
     a.add_argument("--model_is_redundant", default=False, action="store_true", help="If True, then model_files only containe unique visibilities.")
