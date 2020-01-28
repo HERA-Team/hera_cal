@@ -3205,10 +3205,14 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 def post_redcal_abscal_argparser():
     ''' Argparser for commandline operation of hera_cal.abscal.post_redcal_abscal_run() '''
     a = argparse.ArgumentParser(description="Command-line drive script for post-redcal absolute calibration using hera_cal.abscal module")
-    a.add_argument("data_file", type=str, help="string path to raw uvh5 visibility file")
-    a.add_argument("redcal_file", type=str, help="string path to calfits file that redundantly calibrates the data_file")
-    a.add_argument("model_files", type=str, nargs='+', help="list of string paths to externally calibrated data. Strings must be sortable to produce a chronological list in LST \
-                                                             (wrapping over 2*pi is OK)")
+    a.add_argument("data_file", type=str, help="string path to raw uvh5 visibility file or omnical_visibility solution")
+    a.add_argument("redcal_file", type=str, help="string path to calfits file that serves as the starting point of abscal")
+    a.add_argument("model_files", type=str, nargs='+', help="list of string paths to externally calibrated data or reference solution. Strings \
+                                                             must be sortable to produce a chronological list in LST (wrapping over 2*pi is OK)")
+    a.add_argument("raw_auto_file", default=None, type=str, help="path to data file that contains raw autocorrelations for all antennas in redcal_file. \
+                                                                  If not provided, data_file is used instead. Required if data_is_redsol is True.")
+    a.add_argument("--data_is_redsol", default=False, action="store_true", help="If True, data_file only contains unique, redcal'ed visibilities.")
+    a.add_argument("--model_is_redundant", default=False, action="store_true", help="If True, then model_files only containe unique visibilities.")
     a.add_argument("--output_file", default=None, type=str, help="string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.'")
     a.add_argument("--nInt_to_load", default=None, type=int, help="number of integrations to load and calibrate simultaneously. Default None loads all integrations.")
     a.add_argument("--data_solar_horizon", default=90.0, type=float, help="Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.")
