@@ -2779,7 +2779,7 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
     return d2m_time_map
 
 
-def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=None, data_is_redsol=False, 
+def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[], data_is_redsol=False, 
                     model_is_redsol=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, verbose=False):
     '''Figure out which baselines to use in the data and the model for abscal and their correspondence.
 
@@ -2788,7 +2788,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=No
         model_bls: list of baselines in model files in the form (0, 1, 'ee')
         data_antpos: dictionary mapping antenna number to ENU position in meters for antennas in the data
         model_antpos: same as data_antpos, but for the model. If None, assumed to match data_antpos
-        pols: list of polarizations to use. If None, will use all polarizations in the data or model.
+        pols: list of polarizations to use. If empty, will use all polarizations in the data or model.
         data_is_redsol: if True, the data file only contains one visibility per unique baseline
         model_is_redsol: if True, the model file only contains one visibility per unique baseline
         tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
@@ -2808,13 +2808,13 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=No
         model_antpos = data_antpos
     
     # Perform cut on baseline length and polarization
-    if pols is None:
+    if len(pols) == 0:
         pols = list(set([bl[2] for bl_list in [data_bls, model_bls] for bl in bl_list]))
     
     def _cut_bl_and_pol(bls, antpos):
         bls_to_load = []
         for bl in bls:
-            if (pol_load_list is None) or (bl[2] in pols):
+            if bl[2] in pols:
                 ant1, ant2 = split_bl(bl)
                 bl_length = np.linalg.norm(antpos[ant2[0]] - antpos[ant1[0]])
                 if (min_bl_cut is None) or (bl_length >= min_bl_cut):
