@@ -1280,13 +1280,14 @@ class TestRedcalAndAbscal(object):
         d_omnicaled = deepcopy(d)
         f_omnicaled = DataContainer({bl: np.zeros_like(d[bl], dtype=bool) for bl in d.keys()})
         calibrate_in_place(d_omnicaled, cal['g_omnical'], data_flags=f_omnicaled, cal_flags=cal['gf_omnical'])
+        wgts = DataContainer({k: (~f_omnicaled[k]).astype(np.float) for k in f_omnicaled.keys()})
         model = DataContainer({bl: true_vis[red[0]] for red in reds for bl in red})
         model.freqs = freqs
         model.times_by_bl = {bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in model.keys()}
         model.antpos = antpos
         
         # run abscal
-        abscal_delta_gains = abscal.post_redcal_abscal(model, d_omnicaled, f_omnicaled, cal['gf_omnical'], verbose=True)
+        abscal_delta_gains = abscal.post_redcal_abscal(model, d_omnicaled, wgts, cal['gf_omnical'], verbose=True)
 
         # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
