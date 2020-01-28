@@ -224,6 +224,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
 def reds_to_antpos(reds, tol=1e-10):
     '''Computes a set of antenna positions consistent with the given redundancies.
     Useful for projecting out phase slope degeneracies, see https://arxiv.org/abs/1712.07212
+
     Arguments:
         reds: list of lists of redundant baseline tuples, either (i,j,pol) or (i,j)
         tol: level for two vectors to be considered equal (enabling dimensionality reduction)
