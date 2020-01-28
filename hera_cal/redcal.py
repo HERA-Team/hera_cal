@@ -224,7 +224,6 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
 def reds_to_antpos(reds, tol=1e-10):
     '''Computes a set of antenna positions consistent with the given redundancies.
     Useful for projecting out phase slope degeneracies, see https://arxiv.org/abs/1712.07212
-
     Arguments:
         reds: list of lists of redundant baseline tuples, either (i,j,pol) or (i,j)
         tol: level for two vectors to be considered equal (enabling dimensionality reduction)
@@ -232,7 +231,8 @@ def reds_to_antpos(reds, tol=1e-10):
         antpos: dictionary of antenna positions in the form {ant_index: np.ndarray}.
             These positions may differ from the true positions of antennas by an arbitrary
             linear transformation. The dimensionality of the positions will be the minimum
-            necessary to describe all redundancies (non-redundancy introduces extra dimensions.)
+            necessary to describe all redundancies (non-redundancy introduces extra dimensions),
+            though the most used dimensions will come first.
     '''
     ants = set([ant for red in reds for bl in red for ant in bl[:2]])
     # start with all antennas (except the first) having their own dimension, then reduce the dimensionality
@@ -249,6 +249,10 @@ def reds_to_antpos(reds, tol=1e-10):
     # remove any all-zero dimensions
     dim_to_elim = np.argwhere(np.sum(np.abs(list(antpos.values())), axis=0) == 0).flatten()
     antpos = {ant: np.delete(pos, dim_to_elim) for ant, pos in antpos.items()}
+
+    # sort dims so that most-used dimensions come first
+    dim_usage = np.sum(np.abs(list(antpos.values())) > tol, axis=0)
+    antpos = {ant: pos[np.argsort(dim_usage)[::-1]] for ant, pos in antpos.items()}
     return antpos
 
 
