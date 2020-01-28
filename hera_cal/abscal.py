@@ -2853,10 +2853,14 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
     
     # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
-    ex_ants = [ant for ant in data.antpos if np.all([np.all(f) for a, f in rc_flags.items() if ant in a])]
-    reds = redcal.filter_reds(redcal.get_reds(data.antpos, bl_error_tol=tol), ex_ants=ex_ants)
-    idealized_antpos = redcal.reds_to_antpos(reds, tol=IDEALIZED_BL_TOL)
-    idealized_antpos.update({xa: np.zeros_like(list(idealized_antpos.values())[0]) for xa in ex_ants})
+    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=IDEALIZED_BL_TOL)
+    if np.max([len(pos) for pos in idealized_antpos.values()]) > 2:  # the array is not redundant (i.e. extra degeneracies)
+        suspected_off_grid = [ant for ant, pos in idealized_antpos.items() if np.any(np.abs(pos[2:]) > IDEALIZED_BL_TOL)]
+        ex_ants = [ant for ant in idealized_antpos if np.all([np.all(f) for a, f in rc_flags.items() if ant in a])]
+        warnings.warn(('WARNING: The following antennas appear not to be redundant with the main array:\n{}\n'
+                       '         Of them, {} is not flagged').format(suspected_off_grid, 
+                                                                      [ant for ant in suspected_off_grid if ant not in ex_ants]))
+        idealized_antpos = {ant: pos[:2] for ant, pos in idealized_antpos.items()}
     AC._set_antpos(idealized_antpos)
 
     # Per-Channel Absolute Amplitude Calibration
