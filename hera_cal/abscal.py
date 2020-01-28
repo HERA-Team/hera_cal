@@ -2867,10 +2867,8 @@ def build_data_wgts(data_flags, model_flags):
     
     # update data flags w/ model flags. Anything flagged in the model is ignored in post_redcal_abscal,
     # but only times/channels that are flagged in the model for all baselines are also flagged the final calibration
-    model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
     flags_for_abscal_wgts = copy.deepcopy(data_flags)
     for k in data_flags.keys():
-        data_flags[k] += model_flag_waterfall
         if k in model_flags:
             flags_for_abscal_wgts[k] += model_flags[k]
 
@@ -3108,8 +3106,13 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                         utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
                                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
                         
+                        # Flag frequencies and times in the data that are entirely flagged in the model
+                        model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
+                        for k in flags.keys():
+                            flags[k] += model_flag_waterfall
+
                         # get the relative wgts for each piece of data
-                        data_wgts = build_data_wgts(data_flags, model_flags)
+                        data_wgts = build_data_wgts(flags, model_flags)
 
                         # run absolute calibration
                         delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
