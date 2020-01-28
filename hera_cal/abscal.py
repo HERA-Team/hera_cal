@@ -2853,7 +2853,9 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
                 refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
     
     # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
-    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol))
+    ex_ants = [ant for ant in data.antpos if np.all([np.all(f) for a, f in rc_flags.items() if ant in a])]
+    reds = redcal.filter_reds(redcal.get_reds(data.antpos, bl_error_tol=tol), ex_ants=ex_ants)
+    idealized_antpos = redcal.reds_to_antpos(reds, tol=IDEALIZED_BL_TOL)
     AC._set_antpos(idealized_antpos)
 
     # Per-Channel Absolute Amplitude Calibration
