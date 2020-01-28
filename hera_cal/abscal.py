@@ -3083,7 +3083,9 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
     # match times to narrow down model_files
     matched_model_files = sorted(set(match_times(data_file, model_files, filetype='uvh5')))
-    if len(matched_model_files) > 0:
+    if len(matched_model_files) == 0:
+        echo("No model files overlap with data files in LST. Result will be fully flagged.", verbose=verbose)
+    else:
         echo("The following model files overlap with data files in LST:\n" + "\n".join(matched_model_files), verbose=verbose)
         hd = io.HERAData(data_file)
         hdm = io.HERAData(matched_model_files)
@@ -3091,17 +3093,12 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         assert hc.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation, hc.x_orientation)
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
 
-        # get model bls and antpos and then match model baselines and data baselines
+        # get model bls and antpos to use later in baseline matching
         model_bls = hdm.bls
         model_antpos = hdm.antpos
         if len(matched_model_files) > 1:  # in this case, it's a dictionary
             model_bls = list(set([bl for bls in list(hdm.bls.values()) for bl in bls]))
             model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
-        (data_bl_to_load,
-         model_bl_to_load,
-         data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
-                                                 data_is_redsol=data_is_redsol, model_is_redundant=model_is_redundant,
-                                                 tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
 
         # match integrations in model to integrations in data
         all_data_times, all_data_lsts = get_all_times_and_lsts(hd, solar_horizon=data_solar_horizon, unwrap=True)
@@ -3110,7 +3107,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         
         # group matched time indices for partial I/O
         matched_tinds = [tind for tind, time in enumerate(hd.times) if time in d2m_time_map and d2m_time_map[time] is not None]
-        if (len(matched_tinds) > 0) and (len(data_bl_to_load) > 0) and (len(model_bl_to_load) > 0):
+        if (len(matched_tinds) > 0):
             tind_groups = np.array([matched_tinds])  # just load a single group
             if nInt_to_load is not None:  # split up the integrations to load nInt_to_load at a time
                 tind_groups = np.split(matched_tinds, np.arange(nInt_to_load, len(matched_tinds), nInt_to_load))
@@ -3118,74 +3115,82 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
             # loop over polarizations
             for pol in pol_load_list:
                 echo('\n\nNow calibrating ' + pol + '-polarization...', verbose=verbose)
-                # loop over groups of time indices
-                for tinds in tind_groups:
-                    echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
-                         + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
-                    
-                    # load data and apply calibration (unless data_is_redsol, so it's already redcal'ed)
-                    data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
-                    data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
-                    rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
-                    rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
-                    if not data_is_redsol:
-                        calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
-                                           cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
 
-                    if not np.all(list(flags.values())):
-                        # load model and rephase
-                        model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-                        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
-                        model_blvecs = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
-                        utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
-                                          lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
+                # figure out whic 
+                (data_bl_to_load,
+                 model_bl_to_load,
+                 data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
+                                                         data_is_redsol=data_is_redsol, model_is_redundant=model_is_redundant,
+                                                         tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
+                if (len(data_bl_to_load) == 0) or (len(model_bl_to_load) > 0):
+                    echo("No baselines in the data match baselines in the model. Results for this polarization will be fully flagged.", verbose=verbose)
+                else:
+                    # loop over groups of time indices
+                    for tinds in tind_groups:
+                        echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
+                             + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
+                        
+                        # load data and apply calibration (unless data_is_redsol, so it's already redcal'ed)
+                        data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
+                        data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
+                        rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
+                        rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
+                        if not data_is_redsol:
+                            calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
+                                               cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
 
-                        # Flag frequencies and times in the data that are entirely flagged in the model
-                        model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
-                        for k in flags.keys():
-                            flags[k] += model_flag_waterfall
+                        if not np.all(list(flags.values())):
+                            # load model and rephase
+                            model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
+                            model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
+                            model_blvecs = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
+                            utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
+                                              lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
 
-                        # get the relative wgts for each piece of data
-                        hd_autos = HERAData(raw_auto_file)
-                        autocorrs, _, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
-                        calibrate_in_place(autocorrs, rc_gains_subset, gain_convention=hc.gain_convention)
+                            # Flag frequencies and times in the data that are entirely flagged in the model
+                            model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
+                            for k in flags.keys():
+                                flags[k] += model_flag_waterfall
 
-                        # use data_to_model_bl_map to rekey model. Does not copy to save memory.
-                        model = DataContainer({bl: model[data_to_model_bl_map[bl]] for bl in data})
-                        model_flags = DataContainer({bl: model_flags[data_to_model_bl_map[bl]] for bl in data})
+                            # get the relative wgts for each piece of data
+                            hd_autos = HERAData(raw_auto_file)
+                            autocorrs, _, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
+                            calibrate_in_place(autocorrs, rc_gains_subset, gain_convention=hc.gain_convention)
 
-                        # build data weights based on inverse noise variance and nsamples and flags
-                        data_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
-                                                    df=np.median(np.ediff1d(data.freqs)))
+                            # use data_to_model_bl_map to rekey model. Does not copy to save memory.
+                            model = DataContainer({bl: model[data_to_model_bl_map[bl]] for bl in data})
+                            model_flags = DataContainer({bl: model_flags[data_to_model_bl_map[bl]] for bl in data})
 
-                        # run absolute calibration
-                        delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
-                                                         gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
-                                                         phs_conv_crit=phs_conv_crit, verbose=verbose)
+                            # build data weights based on inverse noise variance and nsamples and flags
+                            data_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
+                                                        df=np.median(np.ediff1d(data.freqs)))
 
-                        # abscal autos, rebuild weights, and generate abscal Chi^2
-                        calibrate_in_place(autocorrs, delta_gains, gain_convention=hc.gain_convention)
-                        chisq_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
-                                                     df=np.median(np.ediff1d(data.freqs)))
-                        total_qual, nObs, quals, nObs_per_ant = utils.chisq(data, model, chisq_wgts,
-                                                                            gain_flags=rc_flags_subset, split_by_antpol=True)
-                    
-                        # update results
-                        delta_flags = synthesize_ant_flags(flags)
-                        for ant in data_ants:
-                            abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
-                            abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + delta_flags[ant]
-                            if not np.all(abscal_flags[ant][tinds, :]):
-                                abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
-                        for antpol in total_qual.keys():
-                            abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
+                            # run absolute calibration
+                            delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
+                                                             gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
+                                                             phs_conv_crit=phs_conv_crit, verbose=verbose)
+
+                            # abscal autos, rebuild weights, and generate abscal Chi^2
+                            calibrate_in_place(autocorrs, delta_gains, gain_convention=hc.gain_convention)
+                            chisq_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
+                                                         df=np.median(np.ediff1d(data.freqs)))
+                            total_qual, nObs, quals, nObs_per_ant = utils.chisq(data, model, chisq_wgts,
+                                                                                gain_flags=rc_flags_subset, split_by_antpol=True)
+                        
+                            # update results
+                            delta_flags = synthesize_ant_flags(flags)
+                            for ant in data_ants:
+                                abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
+                                abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + delta_flags[ant]
+                                if not np.all(abscal_flags[ant][tinds, :]):
+                                    abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
+                            for antpol in total_qual.keys():
+                                abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
                             
         # impose a single reference antenna on the final antenna solution
         if refant is None:
             refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
         rephase_to_refant(abscal_gains, refant, flags=abscal_flags)
-    else:
-        echo("No model files overlap with data files in LST. Result will be fully flagged.", verbose=verbose)
 
     # Save results to disk
     hc.update(gains=abscal_gains, flags=abscal_flags, quals=abscal_chisq_per_ant, total_qual=abscal_chisq)
