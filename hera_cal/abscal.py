@@ -2805,7 +2805,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     if data_is_redsol and not model_is_redsol:
         raise NotImplementedError('If the data is just unique baselines, the model must also be just unique baselines.')
     if model_antpos is None:
-        model_antpos = data_antpos
+        model_antpos = copy.deepcopy(data_antpos)
     
     # Perform cut on baseline length and polarization
     if len(pols) == 0:
@@ -3054,12 +3054,17 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
         assert hc.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation, hc.x_orientation)
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
 
-        # get model bls and antpos
+        # get model bls and antpos and then match model baselines and data baselines
         model_bls = hdm.bls
         model_antpos = hdm.antpos
         if len(matched_model_files) > 1:  # in this case, it's a dictionary
             model_bls = list(set([bl for bls in list(hdm.bls.values()) for bl in bls]))
             model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
+        (data_bl_to_load,
+         model_bl_to_load,
+         data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
+                                                 data_is_redsol=data_is_redsol, model_is_redsol=model_is_redsol,
+                                                 tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
 
         # match integrations in model to integrations in data
         all_data_times, all_data_lsts = get_all_times_and_lsts(hd, solar_horizon=data_solar_horizon, unwrap=True)
@@ -3068,7 +3073,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
         
         # group matched time indices for partial I/O
         matched_tinds = [tind for tind, time in enumerate(hd.times) if time in d2m_time_map and d2m_time_map[time] is not None]
-        if len(matched_tinds) > 0:
+        if (len(matched_tinds) > 0) and (len(data_bl_to_load) > 0) and (len(model_bl_to_load) > 0):
             tind_groups = np.array([matched_tinds])  # just load a single group
             if nInt_to_load is not None:  # split up the integrations to load nInt_to_load at a time
                 tind_groups = np.split(matched_tinds, np.arange(nInt_to_load, len(matched_tinds), nInt_to_load))
@@ -3081,13 +3086,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                     echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
                          + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
                     
-                    # match baselines and get map that maps data baselines to model baselines
-                    (data_bl_to_load,
-                     model_bl_to_load,
-                     data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
-                                                             data_is_redsol=data_is_redsol, model_is_redsol=model_is_redsol,
-                                                             tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
-
+                    
                     # load data and apply calibration TODO: this has to change if data is redsol
                     data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
                     data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
