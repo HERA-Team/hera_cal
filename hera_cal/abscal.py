@@ -2891,8 +2891,8 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_
     for bl in data_flags:
         dt = (np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.)
         noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=df)
-        wgt = (noise_var * data_nsamples[bl])**-1 * (~data_flags[bl]) * (~model_flags[bl])
-        wgt[~np.isfinite(wgt)] = 0.0
+        wgts[bl] = (noise_var * data_nsamples[bl])**-1 * (~data_flags[bl]) * (~model_flags[bl])
+        wgts[bl][~np.isfinite(wgts[bl])] = 0.0
 
     return DataContainer(wgts)
 
@@ -3032,7 +3032,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
             redundantly calibrated by the gains in redcal_file already. If this is True, model_is_redundant must also be True
             and raw_auto_file must be provided. If both this and model_is_redundant are False, then only exact baseline
             matches are used in absolute calibration.
-        model_is_redundant: If True, then model_files only containe unique visibilities. 
+        model_is_redundant: If True, then model_files only containe unique visibilities. In this case, data and model
+            antenna numbering do not need to agree, as redundant baselines will be found automatically.
         output_file: string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.')
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
         data_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.
@@ -3122,7 +3123,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                  data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
                                                          data_is_redsol=data_is_redsol, model_is_redundant=model_is_redundant,
                                                          tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
-                if (len(data_bl_to_load) == 0) or (len(model_bl_to_load) > 0):
+                if (len(data_bl_to_load) == 0) or (len(model_bl_to_load) == 0):
                     echo("No baselines in the data match baselines in the model. Results for this polarization will be fully flagged.", verbose=verbose)
                 else:
                     # loop over groups of time indices
@@ -3153,7 +3154,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                                 flags[k] += model_flag_waterfall
 
                             # get the relative wgts for each piece of data
-                            hd_autos = HERAData(raw_auto_file)
+                            hd_autos = io.HERAData(raw_auto_file)
                             autocorrs, _, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
                             calibrate_in_place(autocorrs, rc_gains_subset, gain_convention=hc.gain_convention)
 
@@ -3165,7 +3166,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                             data_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
                                                         df=np.median(np.ediff1d(data.freqs)))
 
-                            # run absolute calibration
+                            # run absolute calibration to get the gain updates
                             delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
                                                              phs_conv_crit=phs_conv_crit, verbose=verbose)
