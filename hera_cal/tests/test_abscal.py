@@ -672,7 +672,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
         (data_bl_to_load,
          model_bl_to_load,
-         data_to_model_bl_map) = abscal.match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=['xx', 'yy'], min_bl_cut=1.0)
+         data_to_model_bl_map) = abscal.match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=['ee', 'nn'], min_bl_cut=1.0)
 
         rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
         all_data_times, all_data_lsts = abscal.get_all_times_and_lsts(hd)
