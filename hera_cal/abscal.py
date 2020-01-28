@@ -2859,7 +2859,7 @@ def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut
         ex_ants = [ant for ant in idealized_antpos if np.all([np.all(f) for a, f in rc_flags.items() if ant in a])]
         warnings.warn(('WARNING: The following antennas appear not to be redundant with the main array:\n{}\n'
                        '         Of them, {} is not flagged').format(suspected_off_grid, 
-                                                                      [ant for ant in suspected_off_grid if ant not in ex_ants]))
+                                                                     [ant for ant in suspected_off_grid if ant not in ex_ants]))
         idealized_antpos = {ant: pos[:2] for ant, pos in idealized_antpos.items()}
     AC._set_antpos(idealized_antpos)
 
