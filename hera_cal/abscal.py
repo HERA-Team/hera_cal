@@ -45,7 +45,7 @@ from . import redcal
 from . import io
 from . import apply_cal
 from .datacontainer import DataContainer
-from .utils import echo, polnum2str, polstr2num, reverse_bl, split_pol, split_bl
+from .utils import echo, polnum2str, polstr2num, reverse_bl, split_pol, split_bl, join_bl
 
 PHASE_SLOPE_SOLVERS = ['linfit', 'dft']  # list of valid solvers for global_phase_slope_logcal
 IDEALIZED_BL_TOL = 1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
@@ -2780,7 +2780,7 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
 
 
 def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[], data_is_redsol=False, 
-                    model_is_redsol=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, verbose=False):
+                    model_is_redundant=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, verbose=False):
     '''Figure out which baselines to use in the data and the model for abscal and their correspondence.
 
     Arguments:
@@ -2790,7 +2790,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
         model_antpos: same as data_antpos, but for the model. If None, assumed to match data_antpos
         pols: list of polarizations to use. If empty, will use all polarizations in the data or model.
         data_is_redsol: if True, the data file only contains one visibility per unique baseline
-        model_is_redsol: if True, the model file only contains one visibility per unique baseline
+        model_is_redundant: if True, the model file only contains one visibility per unique baseline
         tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
         min_bl_cut : float, eliminate all visibilities with baseline separation lengths
             smaller than min_bl_cut. This is assumed to be in ENU coordinates with units of meters.
@@ -2802,7 +2802,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
         model_bl_to_load: list of baseline tuples in the form (0, 1, 'ee') to load from the model file(s)
         data_to_model_bl_map: dictionary mapping data baselines to the corresponding model baseline
     '''
-    if data_is_redsol and not model_is_redsol:
+    if data_is_redsol and not model_is_redundant:
         raise NotImplementedError('If the data is just unique baselines, the model must also be just unique baselines.')
     if model_antpos is None:
         model_antpos = copy.deepcopy(data_antpos)
@@ -2825,7 +2825,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     model_bl_to_load = _cut_bl_and_pol(model_bls, model_antpos)
 
     # If we're working with full data sets, only pick out matching keys
-    if not data_is_redsol and not model_is_redsol:
+    if not data_is_redsol and not model_is_redundant:
         data_bl_to_load = [bl for bl in data_bl_to_load if bl in model_bl_to_load]
         model_bl_to_load = [bl for bl in model_bl_to_load if bl in data_bl_to_load]
         data_to_model_bl_map = {bl: bl for bl in data_bl_to_load}  # i.e. all baselines
@@ -2847,7 +2847,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
         data_to_model_bl_map = {}
         for red in joint_reds:
             model_bl_candidates = [(bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) for bl in red if bl[0] >= ant_offset]
-            assert len(model_bl_candidates) < 2, ('model_is_redsol is True, but the following model baselines are '
+            assert len(model_bl_candidates) < 2, ('model_is_redundant is True, but the following model baselines are '
                                                   'redundant and in the model file: {}'.format(model_bl_candidates))
             if len(model_bl_candidates) == 1:
                 for bl in red:
@@ -3012,7 +3012,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     return abscal_delta_gains
 
 
-def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=False, model_is_redsol=False, raw_auto_file=None, output_file=None,
+def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=None, data_is_redsol=False, model_is_redundant=False, output_file=None,
                            nInt_to_load=None, data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0,
                            tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
@@ -3055,9 +3055,17 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
     if os.path.exists(output_file) and not clobber:
         raise IOError("{} exists, not overwriting.".format(output_file))
 
+    # Make raw_auto_file the data_file if None when appropriate, otherwise raise an error
+    if raw_auto_file is None:
+        if not data_is_redsol:
+            raw_auto_file = data_file
+        else:
+            raise ValueError('If the data is a redundant visibility solution, raw_auto_file must be specified.')
+
     # Load redcal calibration
     hc = io.HERACal(redcal_file)
     rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
+    auto_bls = [join_bl(ant, ant) for ant in rc_gains]
 
     # Initialize full-size, totally-flagged abscal gain/flag/etc. dictionaries
     abscal_gains = copy.deepcopy(rc_gains)
@@ -3084,7 +3092,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
         (data_bl_to_load,
          model_bl_to_load,
          data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
-                                                 data_is_redsol=data_is_redsol, model_is_redsol=model_is_redsol,
+                                                 data_is_redsol=data_is_redsol, model_is_redundant=model_is_redundant,
                                                  tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
 
         # match integrations in model to integrations in data
@@ -3107,13 +3115,14 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                     echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
                          + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
                     
-                    # load data and apply calibration TODO: this has to change if data is redsol
+                    # load data and apply calibration (unless data_is_redsol, so it's already redcal'ed)
                     data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
                     data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
                     rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
                     rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
-                    calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
-                                       cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+                    if not data_is_redsol:
+                        calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
+                                           cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
 
                     if not np.all(list(flags.values())):
                         # load model and rephase
@@ -3122,32 +3131,34 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                         model_blvecs = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
                         utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
                                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
-                        
+
                         # Flag frequencies and times in the data that are entirely flagged in the model
                         model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
                         for k in flags.keys():
                             flags[k] += model_flag_waterfall
 
                         # get the relative wgts for each piece of data
-                        data_wgts = build_data_wgts(flags, model_flags)
+                        hd_autos = HERAData(raw_auto_file)
+                        autocorrs, _, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
+                        calibrate_in_place(autocorrs, rc_gains_subset, gain_convention=hc.gain_convention)
+
+                        # use data_to_model_bl_map to rekey model. Does not copy to save memory.
+                        model = DataContainer({bl: model[data_to_model_bl_map[bl]] for bl in data})
+                        model_flags = DataContainer({bl: model_flags[data_to_model_bl_map[bl]] for bl in data})
+
+                        # build data weights based on inverse noise variance and nsamples and flags
+                        data_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
+                                                    df=np.median(np.ediff1d(data.freqs)))
 
                         # run absolute calibration
                         delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
                                                          gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
                                                          phs_conv_crit=phs_conv_crit, verbose=verbose)
 
-                        # calibrate autos, abscal them, and generate abscal Chi^2
-                        # TODO: update to better integrate with wgts
-                        # TODO: update this for raw_auto_file
-                        auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
-                        autocorrs, auto_flags, _ = hd.read(times=hd.times[tinds], bls=auto_bls)
-                        calibrate_in_place(autocorrs, delta_gains, data_flags=auto_flags, 
-                                           cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
-                        chisq_wgts = {}
-                        for bl in data.keys():
-                            dt = (np.median(np.ediff1d(hd.times_by_bl[bl[:2]])) * 86400.)
-                            noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=np.median(np.ediff1d(data.freqs)))
-                            chisq_wgts[bl] = noise_var**-1 * (~flags[bl]).astype(np.float)
+                        # abscal autos, rebuild weights, and generate abscal Chi^2
+                        calibrate_in_place(autocorrs, delta_gains, gain_convention=hc.gain_convention)
+                        chisq_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
+                                                     df=np.median(np.ediff1d(data.freqs)))
                         total_qual, nObs, quals, nObs_per_ant = utils.chisq(data, model, chisq_wgts,
                                                                             gain_flags=rc_flags_subset, split_by_antpol=True)
                     
