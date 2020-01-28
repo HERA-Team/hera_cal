@@ -3019,12 +3019,20 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     Does not work on data (or models) with baseline-dependant averaging.
     
     Arguments:
-        data_file: string path to raw uvh5 visibility file
-        redcal_file: string path to calfits file that redundantly calibrates the data_file
-        model_files: list of string paths to externally calibrated data. Strings must be sortable 
-            to produce a chronological list in LST (wrapping over 2*pi is OK)
-        abscal_visibility_solutions: TODO: document
-        raw_auto_file: TODO: document
+        data_file: string path to raw uvh5 visibility file or omnical_visibility solution 
+            (in the later case, one must also set data_is_redsol to True).
+        redcal_file: string path to redcal calfits file. This forms the basis of the resultant abscal calfits file.
+            If data_is_redsol is False, this will also be used to calibrate the data_file and raw_auto_file
+        model_files: list of string paths to externally calibrated data or a reference simulation. 
+            Strings must be sortable to produce a chronological list in LST (wrapping over 2*pi is OK).
+        raw_auto_file: path to data file that contains raw autocorrelations for all antennas in redcal_file. 
+            These are used for weighting and calculating chi^2. If data_is_redsol, this must be provided. 
+            If this is None and data_file will be used.
+        data_is_redsol: If True, data_file only contains unique visibilities for each baseline group. This means it has been 
+            redundantly calibrated by the gains in redcal_file already. If this is True, model_is_redundant must also be True
+            and raw_auto_file must be provided. If both this and model_is_redundant are False, then only exact baseline
+            matches are used in absolute calibration.
+        model_is_redundant: If True, then model_files only containe unique visibilities. 
         output_file: string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.')
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
         data_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.
