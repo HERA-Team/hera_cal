@@ -3089,7 +3089,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                     echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
                          + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
                     
-                    
                     # load data and apply calibration TODO: this has to change if data is redsol
                     data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
                     data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
