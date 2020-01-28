@@ -2929,6 +2929,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
         data_wgts: DataContainer containing same keys as data, determines their relative weight in the abscal
             linear equation solvers.
+        # TODO: simplify rc_flags
         rc_flags: dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration
         edge_cut : integer number of channels to exclude at each band edge in delay and global phase solvers
         tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
@@ -3094,9 +3095,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
                     rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
                     calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                                        cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
-                    # TODO: update this for raw_auto_file
-                    auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
-                    autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
 
                     if not np.all(list(flags.values())):
                         # load model and rephase
@@ -3121,7 +3119,10 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, data_is_redsol=F
 
                         # calibrate autos, abscal them, and generate abscal Chi^2
                         # TODO: update to better integrate with wgts
-                        calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
+                        # TODO: update this for raw_auto_file
+                        auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
+                        autocorrs, auto_flags, _ = hd.read(times=hd.times[tinds], bls=auto_bls)
+                        calibrate_in_place(autocorrs, delta_gains, data_flags=auto_flags, 
                                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
                         chisq_wgts = {}
                         for bl in data.keys():
