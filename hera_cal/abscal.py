@@ -2864,19 +2864,37 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     return data_bl_to_load, model_bl_to_load, data_to_model_bl_map
 
 
-def build_data_wgts(data_flags, model_flags):
-    '''TODO: document 
-       TODO: expand to handle data autocorrelations and n-samples'''
+def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_bl=None, df=None):
+    '''Build linear weights for data in abscal (or calculating chisq) defined as
+    wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged).
     
-    # update data flags w/ model flags. Anything flagged in the model is ignored in post_redcal_abscal,
-    # but only times/channels that are flagged in the model for all baselines are also flagged the final calibration
-    flags_for_abscal_wgts = copy.deepcopy(data_flags)
-    for k in data_flags.keys():
-        if k in model_flags:
-            flags_for_abscal_wgts[k] += model_flags[k]
+    Arguments:
+        data_flags: DataContainer containing flags on data to be abscaled
+        data_nsamples: DataContainer containing the number of samples in each data point
+        model_flags: DataContainer with model flags. Assumed to have all the same keys as the data_flags.
+        autocorrs: DataContainer with autocorrelation visibilities
+        times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
+            inferable from data_flags and all times have length > 1. 
+        df: If None, inferred from data_flags.freqs
 
-    wgts = DataContainer({k: (~flags_for_abscal_wgts[k]).astype(np.float) for k in flags_for_abscal_wgts.keys()})
-    return wgts
+    Returns:
+        wgts: Datacontainer mapping data_flags baseline to weights
+    '''
+    # infer times and df if necessary
+    if times_by_bl is None:
+        times_by_bl = data_flags.times_by_bl
+    if df is None:
+        df = np.median(np.ediff1d(data_flags.freqs))
+
+    # build weights dict using (noise variance * nsamples)^-1 * (0 if data or model is flagged)
+    wgts = {}
+    for bl in data_flags:
+        dt = (np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.)
+        noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=df)
+        wgt = (noise_var * data_nsamples[bl])**-1 * (~data_flags[bl]) * (~model_flags[bl])
+        wgt[~np.isfinite(wgt)] = 0.0
+
+    return DataContainer(wgts)
 
 
 def abscal_step(data, gains_to_update, fit, cal_step_name, antpos=None, gain_convention='divide'):
