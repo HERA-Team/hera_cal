@@ -2853,6 +2853,9 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
                 for bl in red:
                     if bl[0] < ant_offset:
                         data_to_model_bl_map[bl] = model_bl_candidates[0]
+            assert ((len(red) - len(model_bl_candidates) < 2)
+                    or (not data_is_redsol)), ('data_is_redsol is True, but the following data baselines are redundant in the ',
+                                               'data file: {}'.format([bl for bl in red if bl not in model_bl_candidates]))
         # only load baselines in map
         data_bl_to_load = [bl for bl in data_bl_to_load if bl in data_to_model_bl_map.keys()]
         model_bl_to_load = [bl for bl in model_bl_to_load if bl in data_to_model_bl_map.values()]
