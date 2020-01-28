@@ -667,14 +667,21 @@ class Test_Post_Redcal_Abscal_Run(object):
         hd = io.HERAData(self.data_file)
         hdm = io.HERAData(self.model_files)
         hc = io.HERACal(self.redcal_file)
+
+        model_bls = list(set([bl for bls in list(hdm.bls.values()) for bl in bls]))
+        model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
+        (data_bl_to_load,
+         model_bl_to_load,
+         data_to_model_bl_map) = abscal.match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=['xx', 'yy'], min_bl_cut=1.0)
+
         rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
         all_data_times, all_data_lsts = abscal.get_all_times_and_lsts(hd)
         all_model_times, all_model_lsts = abscal.get_all_times_and_lsts(hdm)
         d2m_time_map = abscal.get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)
         tinds = [0, 1, 2]
-        data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=['xx', 'yy'])
+        data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
         model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=['xx', 'yy'])
+        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
         model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
         utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
@@ -686,11 +693,12 @@ class Test_Post_Redcal_Abscal_Run(object):
         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
         calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+        wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
 
         # run function
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            delta_gains = abscal.post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, min_bl_cut=1, verbose=False)
+            delta_gains = abscal.post_redcal_abscal(model, copy.deepcopy(data), wgts, rc_flags_subset, verbose=False)
 
         # use returned gains to calibrate data
         calibrate_in_place(data, delta_gains, data_flags=flags, 
