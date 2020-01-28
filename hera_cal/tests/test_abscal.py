@@ -727,7 +727,8 @@ class Test_Post_Redcal_Abscal_Run(object):
                                AC.custom_phs_slope_gain, AC.custom_TT_Phi_gain],
                               [(), (AC.antpos,), (AC.antpos,), (AC.antpos,)]):
             custom_gains = func([gkxx, gkyy], *args)
-            assert not np.all(np.isclose(np.abs(custom_gains[gkxx] - custom_gains[gkyy]), 0.0, atol=1e-12))
+            if not np.all(rc_gains_subset[gkxx]) and not np.all(rc_gains_subset[gkyy]):
+                assert not np.all(np.isclose(np.abs(custom_gains[gkxx] - custom_gains[gkyy]), 0.0, atol=1e-12))
 
     def test_post_redcal_abscal_run(self):
         with warnings.catch_warnings():
