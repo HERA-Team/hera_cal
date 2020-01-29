@@ -2966,7 +2966,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
             the updates to the gains between redcal and abscal. Uses keys from rc_flags
     '''
-    
+
     # setup: initialize gains, get idealized antenna positions
     abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=IDEALIZED_BL_TOL)
