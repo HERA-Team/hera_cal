@@ -739,6 +739,66 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert data_to_model_bl_map[(1, 2, 'ee')] == (100, 101, 'ee')
         assert data_to_model_bl_map[(0, 2, 'ee')] == (100, 102, 'ee')
 
+    def test_build_data_wgts(self):
+        # test non-redundant version
+        bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee')]
+        auto_bls = [(0, 0, 'ee'), (1, 1, 'ee'), (2, 2, 'ee')]
+        data_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in bls})
+        data_flags[(0, 1, 'ee')][0, 0] = True
+        data_flags.times_by_bl = {bl[:2]: np.arange(3) / 86400 for bl in bls}
+        data_flags.freqs = np.arange(4)
+        data_flags.antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0])}
+        data_nsamples = DataContainer({bl: np.ones((3, 4), dtype=float) for bl in bls})
+        data_nsamples[(0, 1, 'ee')][1, 1] = 2
+        model_flags = data_flags
+        autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
+        autocorrs[(1, 1, 'ee')][2, 2] = 3
+        
+        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs)
+        for bl in wgts:
+            for t in range(3):
+                for f in range(4):
+                    if 1 in bl and t == 2 and f == 2:
+                        assert wgts[bl][t, f] == 1/3
+                    elif bl == (0, 1, 'ee'):
+                        if t == 0 and f == 0:
+                            assert wgts[bl][t, f] == 0
+                        elif t == 1 and f == 1:
+                            assert wgts[bl][t, f] == 2
+                        else:
+                            assert wgts[bl][t, f] == 1
+                    else:
+                        assert wgts[bl][t, f] == 1
+
+        # test redundant verison
+        bls = [(0, 1, 'ee'), (0, 2, 'ee')]
+        data_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in bls})
+        data_flags.times_by_bl = {bl[:2]: np.arange(3) / 86400 for bl in bls}
+        data_flags.freqs = np.arange(4)
+        data_flags.antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0])}
+        data_nsamples = DataContainer({bl: np.ones((3, 4), dtype=float) for bl in bls})
+        data_nsamples[(0, 1, 'ee')] *= 2
+        model_flags = data_flags
+        autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
+        autocorrs[(2, 2, 'ee')][2, 2] = 3
+
+        gain_flags = {ant: np.zeros((3, 4), dtype=bool) for ant in [(0, 'Jee'), (1, 'Jee'), (2, 'Jee')]}
+        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, data_is_redsol=True, gain_flags=gain_flags, tol=1.0)
+        for bl in wgts:
+            for t in range(3):
+                for f in range(3):
+                    if bl == (0, 1, 'ee'):
+                        if t == 2 and f == 2:
+                            assert wgts[bl][t, f] == 2 / (((1 / 3) + (1 / 1))**-1 * 2)
+                        else:
+                            assert wgts[bl][t, f] == 2
+                    elif bl == (0, 2, 'ee'):
+                        if t == 2 and f == 2:
+                            assert wgts[bl][t, f] == 1 / (((1 / 3))**-1 * 1)
+                        else:
+                            assert wgts[bl][t, f] == 1       
+
+
     def test_post_redcal_abscal(self):
         # setup
         hd = io.HERAData(self.data_file)
