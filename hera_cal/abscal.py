@@ -2877,9 +2877,8 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     # If we're working with full data sets, only pick out matching keys (or ones that work reversably)
     if not data_is_redsol and not model_is_redundant:
         data_bl_to_load = [bl for bl in data_bl_to_load if (bl in model_bl_to_load) or (reverse_bl(bl) in model_bl_to_load)]
-        model_bl_to_load = [bl for bl in model_bl_to_load if bl in data_bl_to_load]
-        model_bl_to_load += [reverse_bl(bl) for bl in model_bl_to_load if reverse_bl(bl) in data_bl_to_load]
-        data_to_model_bl_map = {bl: bl for bl in data_bl_to_load if bl in model_bl_to_load}  # i.e. all baselines
+        model_bl_to_load = [bl for bl in model_bl_to_load if (bl in data_bl_to_load) or (reverse_bl(bl) in data_bl_to_load)]
+        data_to_model_bl_map = {bl: bl for bl in data_bl_to_load if bl in model_bl_to_load}
         data_to_model_bl_map.update({bl: reverse_bl(bl) for bl in data_bl_to_load if reverse_bl(bl) in model_bl_to_load})
 
     # Either the model is just unique baselines, or both the data and the model are just unique baselines
@@ -2891,8 +2890,9 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
 
         # filter out baselines not in data or model or between data and model
         joint_reds = [[bl for bl in red if not ((bl[0] < ant_offset) ^ (bl[1] < ant_offset))] for red in joint_reds]
-        joint_reds = [[bl for bl in red if (bl in data_bl_to_load)
-                       or ((bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) in model_bl_to_load)] for red in joint_reds]
+        joint_reds = [[bl for bl in red if (bl in data_bl_to_load) or (reverse_bl(bl) in data_bl_to_load)
+                       or ((bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) in model_bl_to_load)
+                       or reverse_bl((bl[0] - ant_offset, bl[1] - ant_offset, bl[2])) in model_bl_to_load] for red in joint_reds]
         joint_reds = [red for red in joint_reds if len(red) > 0]
 
         # map baselines in data to unique baselines in model
@@ -2909,8 +2909,10 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
                     or (not data_is_redsol)), ('data_is_redsol is True, but the following data baselines are redundant in the ',
                                                'data file: {}'.format([bl for bl in red if bl not in model_bl_candidates]))
         # only load baselines in map
-        data_bl_to_load = [bl for bl in data_bl_to_load if bl in data_to_model_bl_map.keys()]
-        model_bl_to_load = [bl for bl in model_bl_to_load if (bl in data_to_model_bl_map.values()) or (reverse_bl(bl) in data_to_model_bl_map.values())]
+        data_bl_to_load = [bl for bl in data_bl_to_load if bl in data_to_model_bl_map.keys()
+                           or reverse_bl(bl) in data_to_model_bl_map.keys()]
+        model_bl_to_load = [bl for bl in model_bl_to_load if (bl in data_to_model_bl_map.values()) 
+                            or (reverse_bl(bl) in data_to_model_bl_map.values())]
 
     echo("Selected {} data baselines and {} model baselines to load.".format(len(data_bl_to_load), len(model_bl_to_load)), verbose=verbose)
     return data_bl_to_load, model_bl_to_load, data_to_model_bl_map
