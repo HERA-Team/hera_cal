@@ -3233,10 +3233,11 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                                                                                 gain_flags=rc_flags_subset, split_by_antpol=True)
                         
                             # update results
-                            delta_flags = synthesize_ant_flags(flags)
                             for ant in data_ants:
+                                # new gains are the product of redcal gains and delta gains from abscal
                                 abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
-                                abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + delta_flags[ant]
+                                # new flags are the OR of redcal flags and times/freqs totally flagged in the model
+                                abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + model_flag_waterfall
                                 if not np.all(abscal_flags[ant][tinds, :]):
                                     abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
                             for antpol in total_qual.keys():
