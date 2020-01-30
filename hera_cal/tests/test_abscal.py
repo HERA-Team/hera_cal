@@ -689,6 +689,17 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert data_to_model_bl_map[(1, 2, 'ee')] == (0, 1, 'ee')
         assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
 
+        # try with cutting on baseline length
+        with pytest.raises(AssertionError):
+            abscal.match_baselines(hd.bls, hdm.bls, hd.antpos, model_is_redundant=True)
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
+        model_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 3, 'ee'), (0, 3, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_is_redundant=True, min_bl_cut=15, max_bl_cut=50)
+        assert len(data_bl_to_load) == 1
+        assert len(model_bl_to_load) == 1
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
+
         # try with redundant model and some reversed baselines
         with pytest.raises(AssertionError):
             abscal.match_baselines(hd.bls, hdm.bls, hd.antpos, model_is_redundant=True)
@@ -702,7 +713,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert data_to_model_bl_map[(1, 2, 'ee')] == (0, 1, 'ee')
         assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
 
-        #try with different antenna numbering in model
+        # try with different antenna numbering in model
         antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
         model_antpos = {100: np.array([0, 0, 0]), 101: np.array([10, 0, 0]), 102: np.array([20, 0, 0]), 103: np.array([100, 100, 0])}
         data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
