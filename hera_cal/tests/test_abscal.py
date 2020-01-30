@@ -850,7 +850,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files, phs_conv_crit=1e-4, 
-                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+                                                nInt_to_load=10, verbose=False, add_to_history='testing')
         pytest.raises(IOError, abscal.post_redcal_abscal_run, self.data_file, self.redcal_file, self.model_files, clobber=False)
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
