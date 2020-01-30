@@ -2949,49 +2949,6 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_
     return DataContainer(wgts)
 
 
-def abscal_step(data, gains_to_update, fit, cal_step_name, antpos=None, gain_convention='divide'):
-    '''Generalized function for taking a particular abscal step fit and updating the abscal solution accordingly.
-
-    Arguments:
-        data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
-        gains_to_update: dictionary of gains produced by abscal up until this step. Updated in place.
-        fit: dictionary result of one of the above fitting functions, see cal_step_name
-        cal_step_name: string name of function used to produce fit. Acceptable options are:
-            'abs_amp_logcal', 'delay_slope_lincal', 'global_phase_slope_logcal', 'TT_phs_logcal'.
-        antpos: antenna position dictionary mapping antenna number to length 3 numpy array. Needed for all 
-            steps involved delay of phase slopes. 
-        gain_convention: either 'divide' if raw data is calibrated by dividing it by the gains
-            otherwise, 'multiply'.
-
-    Returns:
-        gains_here: gain dictionary derived at this step. The gains_to_update will be updated by this.
-    '''
-    # Convert fit dictionary to gains, depending on the calibrations step
-    ants = list(gains_to_update.keys())
-    if cal_step_name == 'abs_amp_logcal':
-        gains_here = {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(np.complex) for ant in ants}
-    elif cal_step_name == 'delay_slope_lincal':
-        gains_here = {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2], 
-                                            [fit['T_ew_{}'.format(ant[1])], fit['T_ns_{}'.format(ant[1])]], 
-                                            data.freqs) * 2j * np.pi) for ant in ants}
-    elif cal_step_name == 'global_phase_slope_logcal':
-        gains_here = {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2], 
-                                            [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]],
-                                            np.ones_like(data.freqs)) * 1j) for ant in ants}
-    elif cal_step_name == 'TT_phs_logcal':
-        gains_here = {ant: np.exp(1.0j * (np.einsum('i,ijk->jk', antpos[ant[0]][:2], 
-                                                    [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]])
-                                          + fit['psi_{}'.format(ant[1])])) for ant in ants}
-    else:
-        raise ValueError('Unrecognized calibration step name {}'.format())
-
-    # Update cumulative gains and re-calibrate data
-    for k in gains_to_update.keys():
-        gains_to_update[k] *= gains_here[k]
-    apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
-    return gains_here
-
-
 def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15), 
                        gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
