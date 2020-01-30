@@ -759,7 +759,7 @@ class Test_Post_Redcal_Abscal_Run(object):
             for t in range(3):
                 for f in range(4):
                     if 1 in bl and t == 2 and f == 2:
-                        assert wgts[bl][t, f] == 1/3
+                        assert wgts[bl][t, f] == 1 / 3
                     elif bl == (0, 1, 'ee'):
                         if t == 0 and f == 0:
                             assert wgts[bl][t, f] == 0
@@ -796,8 +796,7 @@ class Test_Post_Redcal_Abscal_Run(object):
                         if t == 2 and f == 2:
                             assert wgts[bl][t, f] == 1 / (((1 / 3))**-1 * 1)
                         else:
-                            assert wgts[bl][t, f] == 1       
-
+                            assert wgts[bl][t, f] == 1
 
     def test_post_redcal_abscal(self):
         # setup
