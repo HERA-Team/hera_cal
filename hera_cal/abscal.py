@@ -2485,7 +2485,7 @@ class AbsCal(object):
         """
         return dly_slope_gain with custom gain keys and antenna positions
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant position vectors
         """
         if hasattr(self, '_dly_slope'):
@@ -2554,7 +2554,7 @@ class AbsCal(object):
         """
         return phs_slope_gain with custom gain keys and antenna positions
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant position vectors
         """
         if hasattr(self, '_phs_slope'):
@@ -2620,7 +2620,7 @@ class AbsCal(object):
         """
         return abs_eta_gain with custom gain keys
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         """
         if hasattr(self, '_abs_eta'):
             # form dict of abs eta for each polarization in self._gain_keys
@@ -2674,7 +2674,7 @@ class AbsCal(object):
         """
         return abs_psi_gain with custom gain keys
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         """
         if hasattr(self, '_abs_psi'):
             # form dict of abs psi for each polarization in self._gain_keys
@@ -2727,7 +2727,7 @@ class AbsCal(object):
         """
         return TT_Phi_gain with custom gain keys and antenna positions
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant positions
         """
         if hasattr(self, '_TT_Phi'):
