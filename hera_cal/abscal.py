@@ -2885,8 +2885,8 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     # Either the model is just unique baselines, or both the data and the model are just unique baselines
     else:
         # build reds using both sets of antpos to find matching baselines
-        ant_offset = np.max(list(hd.antpos.keys())) + 1  # increase all antenna indices by this amount
-        joint_antpos = {**hd.antpos, **{ant + ant_offset: pos for ant, pos in model_antpos.items()}}
+        ant_offset = np.max(list(data_antpos.keys())) + 1  # increase all antenna indices by this amount
+        joint_antpos = {**data_antpos, **{ant + ant_offset: pos for ant, pos in model_antpos.items()}}
         joint_reds = redcal.get_reds(joint_antpos, pols=pols, bl_error_tol=tol)
 
         # filter out baselines not in data or model or between data and model
