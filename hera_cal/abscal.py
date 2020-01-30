@@ -2916,7 +2916,8 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     return data_bl_to_load, model_bl_to_load, data_to_model_bl_map
 
 
-def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_bl=None, df=None):
+def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_bl=None, df=None,
+                    data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None):
     '''Build linear weights for data in abscal (or calculating chisq) defined as
     wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged).
     
@@ -2928,7 +2929,16 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_
         times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data_flags and all times have length > 1. 
         df: If None, inferred from data_flags.freqs
-
+        data_is_redsol: If True, data_file only contains unique visibilities for each baseline group.
+            In this case, gain_flags and tol are required and antpos is required if not derivable 
+            from data_flags. In this case, the noise variance is inferred from autocorrelations from
+            all baselines in the represented unique baseline group.
+        gain_flags: Used to exclude ants from the noise variance calculation from the autocorrelations
+            Ignored if data_is_redsol is False.
+        tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters).
+            Ignored if data_is_redsol is False.
+        antpos: dictionary mapping antenna number to ENU position in meters for antennas in the data.
+            Ignored if data_is_redsol is False. If left as None, can be inferred from data_flags.antpos.
     Returns:
         wgts: Datacontainer mapping data_flags baseline to weights
     '''
@@ -2937,13 +2947,37 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_
         times_by_bl = data_flags.times_by_bl
     if df is None:
         df = np.median(np.ediff1d(data_flags.freqs))
+    
+    # if data_is_redsol, get reds, using data_flags.antpos if antpos is unspecified
+    if data_is_redsol:
+        if antpos is None:
+            antpos = data_flags.antpos
+        reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data_flags.pols())
+        ex_ants = [ant for ant, flags in gain_flags.items() if np.all(flags)]
+        reds = redcal.filter_reds(reds, ex_ants=ex_ants)
 
     # build weights dict using (noise variance * nsamples)^-1 * (0 if data or model is flagged)
     wgts = {}
     for bl in data_flags:
         dt = (np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.)
-        noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=df)
-        wgts[bl] = (noise_var * data_nsamples[bl])**-1 * (~data_flags[bl]) * (~model_flags[bl])
+        wgts[bl] = (data_nsamples[bl]**-1 * (~data_flags[bl]) * (~model_flags[bl])).astype(np.float)
+        if not np.all(wgts[bl] == 0.0):
+            # use autocorrelations to produce weights
+            if not data_is_redsol:
+                noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=df)
+            # use autocorrelations from all unflagged antennas in unique baseline to produce weights
+            else:
+                try:  # get redundant group that includes this baseline
+                    red_here = [red for red in reds if bl in red][0]
+                except IndexError:  # this baseline has no unflagged redundancies
+                    wgts[bl] *= 0.0
+                else:
+                    noise_vars = [predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=df) for bl in red_here]
+                    # estimate noise variance per baseline, assuming inverse variance weighting
+                    noise_var = np.sum(np.array(noise_vars)**-1, axis=0)**-1 * len(noise_vars)
+            wgts[bl] *= noise_var**-1
+
+        # wgts[bl] = (noise_var * data_nsamples[bl])**-1 * (~data_flags[bl]) * (~model_flags[bl])
         wgts[bl][~np.isfinite(wgts[bl])] = 0.0
 
     return DataContainer(wgts)
