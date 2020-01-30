@@ -1915,7 +1915,7 @@ class AbsCal(object):
             gains, cal_flags, quals, totquals = uvc.read()
             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags, gain_convention=uvc.gain_convention)
 
-        # get shared keys and and pols
+        # get shared keys and pols
         self.keys = sorted(set(model.keys()) & set(data.keys()))
         assert len(self.keys) > 0, "no shared keys exist between model and data"
         if pols is None:
