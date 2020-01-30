@@ -3008,9 +3008,8 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
             the updates to the gains between redcal and abscal. Uses keys from rc_flags
     '''
 
-    # setup: initialize gains, get idealized antenna positions
+    # setup: initialize ants, get idealized antenna positions
     ants = list(rc_flags.keys())
-    abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=IDEALIZED_BL_TOL)
     
     # If the array is not redundant (i.e. extra degeneracies), lop off extra dimensions and warn user
@@ -3023,8 +3022,8 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
     # Abscal Step 1: Per-Channel Absolute Amplitude Calibration
     gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+    abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
     apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
-    abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
 
     # Abscal Step 2: Global Delay Slope Calibration
     df = np.median(np.diff(data.freqs))
@@ -3033,19 +3032,19 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
                                         verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
         if time_avg:
             gains_here = {ant: np.ones_like(gain) * np.median(gain, axis=0, keepdims=True) for ant, gain in gains_here.items()}
-        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
 
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
     gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=data_wgts, verbose=verbose, 
                                            tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
-    apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
     abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+    apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
     for i in range(phs_max_iter):
         gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=data_wgts, verbose=verbose,
                                                tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
-        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
         echo("global_phase_slope_logcal convergence criterion: " + str(crit), verbose=verbose)
         if crit < phs_conv_crit:
@@ -3054,8 +3053,8 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
     for i in range(phs_max_iter):
         gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
-        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
         echo("TT_phs_logcal convergence criterion: " + str(crit), verbose=verbose)
         if crit < phs_conv_crit:
