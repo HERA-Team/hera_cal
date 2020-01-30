@@ -3159,7 +3159,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         
         # group matched time indices for partial I/O
         matched_tinds = [tind for tind, time in enumerate(hd.times) if time in d2m_time_map and d2m_time_map[time] is not None]
-        if (len(matched_tinds) > 0):
+        if len(matched_tinds) > 0:
             tind_groups = np.array([matched_tinds])  # just load a single group
             if nInt_to_load is not None:  # split up the integrations to load nInt_to_load at a time
                 tind_groups = np.split(matched_tinds, np.arange(nInt_to_load, len(matched_tinds), nInt_to_load))
