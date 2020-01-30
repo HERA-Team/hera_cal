@@ -662,6 +662,72 @@ class Test_Post_Redcal_Abscal_Run(object):
                 assert np.abs(dlst - mlst) < np.median(np.ediff1d(all_data_lsts))
                 assert np.min(np.abs(all_data_lsts - mlst)) == np.abs(dlst - mlst)
 
+    def test_match_baselines(self):
+        with pytest.raises(NotImplementedError):
+            abscal.match_baselines(None, None, None, model_is_redundant=False, data_is_redsol=True)
+
+        # try with data files:
+        hd = io.HERAData(self.data_file)
+        hdm = io.HERAData(self.model_files[0])
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(hd.bls, hdm.bls, hd.antpos)
+        for bl in data_bl_to_load:
+            assert bl in model_bl_to_load
+            assert data_to_model_bl_map[bl] == bl
+        for bl in model_bl_to_load:
+            assert bl in data_bl_to_load
+
+        # try with redundant model
+        with pytest.raises(AssertionError):
+            abscal.match_baselines(hd.bls, hdm.bls, hd.antpos, model_is_redundant=True)
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
+        model_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 3, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_is_redundant=True)
+        assert len(data_bl_to_load) == 3
+        assert len(model_bl_to_load) == 2
+        assert data_to_model_bl_map[(0, 1, 'ee')] == (0, 1, 'ee')
+        assert data_to_model_bl_map[(1, 2, 'ee')] == (0, 1, 'ee')
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
+
+        # try with redundant model and some reversed baselines
+        with pytest.raises(AssertionError):
+            abscal.match_baselines(hd.bls, hdm.bls, hd.antpos, model_is_redundant=True)
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (2, 1, 'ee'), (0, 3, 'ee')]
+        model_bls = [(0, 1, 'ee'), (2, 0, 'ee'), (1, 3, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_is_redundant=True)
+        assert len(data_bl_to_load) == 3
+        assert len(model_bl_to_load) == 2
+        assert data_to_model_bl_map[(0, 1, 'ee')] == (0, 1, 'ee')
+        assert data_to_model_bl_map[(1, 2, 'ee')] == (0, 1, 'ee')
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
+
+        #try with different antenna numbering in model
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        model_antpos = {100: np.array([0, 0, 0]), 101: np.array([10, 0, 0]), 102: np.array([20, 0, 0]), 103: np.array([100, 100, 0])}
+        data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
+        model_bls = [(100, 101, 'ee'), (100, 102, 'ee'), (101, 103, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos, model_is_redundant=True)
+        assert len(data_bl_to_load) == 3
+        assert len(model_bl_to_load) == 2
+        assert data_to_model_bl_map[(0, 1, 'ee')] == (100, 101, 'ee')
+        assert data_to_model_bl_map[(1, 2, 'ee')] == (100, 101, 'ee')
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (100, 102, 'ee')
+
+        # try with both redundant
+        with pytest.raises(AssertionError):
+            abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos, model_is_redundant=True, data_is_redsol=True)
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        model_antpos = {100: np.array([0, 0, 0]), 101: np.array([10, 0, 0]), 102: np.array([20, 0, 0]), 103: np.array([100, 100, 0])}
+        data_bls = [(0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
+        model_bls = [(100, 101, 'ee'), (100, 102, 'ee'), (101, 103, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos, 
+                                                                                         data_is_redsol=True, model_is_redundant=True)
+        assert len(data_bl_to_load) == 2
+        assert len(model_bl_to_load) == 2
+        assert data_to_model_bl_map[(1, 2, 'ee')] == (100, 101, 'ee')
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (100, 102, 'ee')
+
     def test_post_redcal_abscal(self):
         # setup
         hd = io.HERAData(self.data_file)
