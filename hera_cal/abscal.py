@@ -2962,7 +2962,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_
     wgts = {}
     for bl in data_flags:
         dt = (np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.)
-        wgts[bl] = (data_nsamples[bl]**-1 * (~data_flags[bl]) * (~model_flags[bl])).astype(np.float)
+        wgts[bl] = (data_nsamples[bl] * (~data_flags[bl]) * (~model_flags[bl])).astype(np.float)
         if not np.all(wgts[bl] == 0.0):
             # use autocorrelations to produce weights
             if not data_is_redsol:
