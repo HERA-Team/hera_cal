@@ -51,7 +51,7 @@ PHASE_SLOPE_SOLVERS = ['linfit', 'dft']  # list of valid solvers for global_phas
 IDEALIZED_BL_TOL = 1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
 
 
-def abs_amp_logcal(model, data, wgts=None, verbose=True):
+def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gain_ants=[]):
     """
     calculate absolute (array-wide) gain amplitude scalar
     with a linear solver using the logarithmically linearized equation:
@@ -77,12 +77,19 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+
     verbose : print output, type=boolean, [default=False]
 
     Output:
     -------
-    fit : dictionary with 'eta_{}' key for amplitude scalar for {} polarization,
-            which has the same shape as the ndarrays in the model
+    if not return_gains:
+        fit : dictionary with 'eta_{}' key for amplitude scalar for {} polarization,
+                which has the same shape as the ndarrays in the model
+    else:
+        gains: dictionary with gain_ants as keys and gain waterfall arrays as values
     """
     echo("...configuring linsolve data for abs_amp_logcal", verbose=verbose)
 
@@ -117,11 +124,14 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    return fit
+    if not return_gains:
+        return fit
+    else:
+        return {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(np.complex) for ant in gain_ants}
 
 
 def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zero_psi=True,
-                  four_pol=False):
+                  four_pol=False, return_gains=False, gain_ants=[]):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
     with a linear solver applied to the logarithmically linearized equation:
@@ -170,11 +180,20 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
 
     verbose : print output, type=boolean, [default=False]
 
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+
     Output:
     -------
-    fit : dictionary with psi key for overall gain phase and Phi_ew and Phi_ns array containing
-            phase slopes across the EW and NS directions of the array. There is a set of each
-            of these variables per polarization.
+
+    if not return_gains:
+        fit : dictionary with psi key for overall gain phase and Phi_ew and Phi_ns array containing
+                phase slopes across the EW and NS directions of the array. There is a set of each
+                of these variables per polarization.
+    else:
+        gains: dictionary with gain_ants as keys and gain waterfall arrays as values
+
     """
     echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
 
@@ -239,7 +258,12 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    return fit
+    if not return_gains:
+        return fit
+    else:
+        return {ant: np.exp(1.0j * (np.einsum('i,ijk->jk', antpos[ant[0]][:2], 
+                                              [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]])
+                                    + fit['psi_{}'.format(ant[1])])) for ant in gain_ants}
 
 
 def amp_logcal(model, data, wgts=None, verbose=True):
@@ -540,7 +564,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True,
-                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0):
+                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0, 
+                       return_gains=False, gain_ants=[]):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -582,9 +607,16 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
 
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+
     Output:
     -------
-    fit : dictionary containing delay slope (T_x) for each pol [seconds / meter].
+    if not return_gains:
+        fit : dictionary containing delay slope (T_x) for each pol [seconds / meter].
+    else:
+        gains: dictionary with gain_ants as keys and gain waterfall arrays as values
     """
     echo("...configuring linsolve data for delay_slope_lincal", verbose=verbose)
 
@@ -670,7 +702,13 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    return fit
+    if not return_gains:
+        return fit
+    else:
+        freqs = np.arange(list(data.values())[0].shape[1]) * df
+        return {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2], 
+                                      [fit['T_ew_{}'.format(ant[1])], fit['T_ns_{}'.format(ant[1])]], 
+                                      freqs) * 2j * np.pi) for ant in gain_ants}
 
 
 def dft_phase_slope_solver(xs, ys, data, flags=None):
@@ -721,8 +759,8 @@ def dft_phase_slope_solver(xs, ys, data, flags=None):
     return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
 
 
-def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, 
-                              refant=None, verbose=True, tol=1.0, edge_cut=0):
+def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, 
+                              verbose=True, tol=1.0, edge_cut=0, return_gains=False, gain_ants=[]):
     """
     Solve for a frequency-independent spatial phase slope using the equation
 
@@ -761,10 +799,17 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
 
     edge_cut : int, number of channels to exclude at each band edge in phase slope solver
 
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+
     Output:
     -------
-    fit : dictionary containing frequency-indpendent phase slope, e.g. Phi_ns_x
-          for each position component and polarization [radians / meter].
+    if not return_gains:
+        fit : dictionary containing frequency-indpendent phase slope, e.g. Phi_ns_x
+              for each position component and polarization [radians / meter].
+    else:
+        gains : dictionary with gain_ants as keys and gain waterfall arrays as values
     """
     # check solver and edgecut
     assert solver in PHASE_SLOPE_SOLVERS, "Unrecognized solver {}".format(solver)
@@ -849,7 +894,12 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
             fit['Phi_ew_{}'.format(split_pol(pol)[0])] = slope_x * 2.0 * np.pi  # 2pi matches custom_phs_slope_gain
             fit['Phi_ns_{}'.format(split_pol(pol)[0])] = slope_y * 2.0 * np.pi
 
-    return fit
+    if not return_gains:
+        return fit
+    else:
+        return {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2], 
+                                      [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]],
+                                      np.ones(list(data.values())[0].shape[1])) * 1j) for ant in gain_ants}
 
 
 def merge_gains(gains, merge_shared=True):
