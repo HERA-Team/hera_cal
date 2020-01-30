@@ -2898,16 +2898,17 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
         # map baselines in data to unique baselines in model
         data_to_model_bl_map = {}
         for red in joint_reds:
+            data_bl_candidates = [bl for bl in red if bl[0] < ant_offset]
             model_bl_candidates = [(bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) for bl in red if bl[0] >= ant_offset]
-            assert len(model_bl_candidates) < 2, ('model_is_redundant is True, but the following model baselines are '
+            assert len(model_bl_candidates) <= 1, ('model_is_redundant is True, but the following model baselines are '
                                                   'redundant and in the model file: {}'.format(model_bl_candidates))
             if len(model_bl_candidates) == 1:
                 for bl in red:
                     if bl[0] < ant_offset:
                         data_to_model_bl_map[bl] = model_bl_candidates[0]
-            assert ((len(red) - len(model_bl_candidates) < 2)
+            assert ((len(data_bl_candidates) <= 1)
                     or (not data_is_redsol)), ('data_is_redsol is True, but the following data baselines are redundant in the ',
-                                               'data file: {}'.format([bl for bl in red if bl not in model_bl_candidates]))
+                                               'data file: {}'.format(data_bl_candidates))
         # only load baselines in map
         data_bl_to_load = [bl for bl in data_bl_to_load if bl in data_to_model_bl_map.keys()
                            or reverse_bl(bl) in data_to_model_bl_map.keys()]
