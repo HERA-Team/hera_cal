@@ -3133,7 +3133,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     # Initialize full-size, totally-flagged abscal gain/flag/etc. dictionaries
     abscal_gains = copy.deepcopy(rc_gains)
     abscal_flags = {ant: np.ones_like(rf) for ant, rf in rc_flags.items()}
-    abscal_chisq_per_ant = {ant: np.zeros_like(rq) for ant, rq in rc_quals.items()}
+    abscal_chisq_per_ant = {ant: np.zeros_like(rq) for ant, rq in rc_quals.items()}  # this stays zero, as it's not particularly meaningful
     abscal_chisq = {pol: np.zeros_like(rtq) for pol, rtq in rc_tot_qual.items()}
 
     # match times to narrow down model_files
@@ -3238,8 +3238,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                                 abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
                                 # new flags are the OR of redcal flags and times/freqs totally flagged in the model
                                 abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + model_flag_waterfall
-                                if not np.all(abscal_flags[ant][tinds, :]):
-                                    abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
                             for antpol in total_qual.keys():
                                 abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
                             
