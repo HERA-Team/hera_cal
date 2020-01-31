@@ -994,8 +994,8 @@ class Test_Post_Redcal_Abscal_Run(object):
 
         for ant in g1:
             if not np.all(f1[ant]):
-                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]]/g2[ant][~f2[ant]])) - 1) < .2
-                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]]/g3[ant][~f3[ant]])) - 1) < .2
+                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g2[ant][~f2[ant]])) - 1) < .2
+                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g3[ant][~f3[ant]])) - 1) < .2
 
     def test_post_redcal_abscal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--nInt_to_load', '6', '--verbose']

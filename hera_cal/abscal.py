@@ -2901,7 +2901,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
             data_bl_candidates = [bl for bl in red if bl[0] < ant_offset]
             model_bl_candidates = [(bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) for bl in red if bl[0] >= ant_offset]
             assert len(model_bl_candidates) <= 1, ('model_is_redundant is True, but the following model baselines are '
-                                                  'redundant and in the model file: {}'.format(model_bl_candidates))
+                                                   'redundant and in the model file: {}'.format(model_bl_candidates))
             if len(model_bl_candidates) == 1:
                 for bl in red:
                     if bl[0] < ant_offset:
