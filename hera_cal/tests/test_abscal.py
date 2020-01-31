@@ -611,6 +611,9 @@ class Test_Post_Redcal_Abscal_Run(object):
         self.redcal_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.omni.calfits_downselected')
         self.model_files = [os.path.join(DATA_PATH, 'test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected'),
                             os.path.join(DATA_PATH, 'test_input/zen.2458042.61034.HH.uvRXLS.uvh5_downselected')]
+        self.red_data_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.uvh5_downselected_redavg')
+        self.red_model_files = [os.path.join(DATA_PATH, 'test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected_redavg'),
+                                os.path.join(DATA_PATH, 'test_input/zen.2458042.61034.HH.uvRXLS.uvh5_downselected_redavg')]
 
     def test_get_all_times_and_lsts(self):
         hd = io.HERAData(self.model_files)
@@ -847,16 +850,37 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert delta_gains[k].dtype == np.complex
 
     def test_post_redcal_abscal_run(self):
+        # test no model overlap
+        hcr = io.HERACal(self.redcal_file)
+        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
+
+        hd = io.HERAData(self.model_files[0])
+        hd.read(return_data=False)
+        hd.lst_array += 1
+        temp_outfile = os.path.join(DATA_PATH, 'test_output/temp.uvh5')
+        hd.write_uvh5(temp_outfile, clobber=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4, 
+                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+        assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
+        np.testing.assert_array_equal(hca.total_quality_array, 0.0)
+        np.testing.assert_array_equal(hca.gain_array, hcr.gain_array)
+        np.testing.assert_array_equal(hca.flag_array, True)
+        np.testing.assert_array_equal(hca.quality_array, 0.0)
+        os.remove(self.redcal_file.replace('.omni.', '.abs.'))
+        os.remove(temp_outfile)
+
+        # test normal operation of abscal
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files, phs_conv_crit=1e-4, 
-                                                nInt_to_load=10, verbose=False, add_to_history='testing')
+                                                nInt_to_load=30, verbose=False, add_to_history='testing')
         pytest.raises(IOError, abscal.post_redcal_abscal_run, self.data_file, self.redcal_file, self.model_files, clobber=False)
+
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
         ac_gains, ac_flags, ac_quals, ac_total_qual = hca.build_calcontainers()
-        hcr = io.HERACal(self.redcal_file)
-        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
 
         assert hcr.history.replace('\n', '').replace(' ', '') in hca.history.replace('\n', '').replace(' ', '')
         assert 'testing' in hca.history.replace('\n', '').replace(' ', '')
@@ -864,7 +888,7 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert k in ac_gains
             assert ac_gains[k].shape == rc_gains[k].shape
             assert ac_gains[k].dtype == complex
-        
+
         hd = io.HERAData(self.data_file)
         _, data_flags, _ = hd.read()
         ac_flags_expected = synthesize_ant_flags(data_flags)
@@ -884,22 +908,94 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
             assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
 
-        hd = io.HERAData(self.model_files[0])
-        hd.read(return_data=False)
-        hd.lst_array += 1
-        temp_outfile = os.path.join(DATA_PATH, 'test_output/temp.uvh5')
-        hd.write_uvh5(temp_outfile, clobber=True)
+        # test redundant model and full data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4, 
-                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+            hca_red = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4, 
+                                                    nInt_to_load=10, verbose=False, add_to_history='testing2', model_is_redundant=True)
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
-        np.testing.assert_array_equal(hca.total_quality_array, 0.0)
-        np.testing.assert_array_equal(hca.gain_array, hcr.gain_array)
-        np.testing.assert_array_equal(hca.flag_array, True)
-        np.testing.assert_array_equal(hca.quality_array, 0.0)
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
-        os.remove(temp_outfile)
+        ac_gains, ac_flags, ac_quals, ac_total_qual = hca_red.build_calcontainers()
+        hcr = io.HERACal(self.redcal_file)
+        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
+
+        assert hcr.history.replace('\n', '').replace(' ', '') in hca_red.history.replace('\n', '').replace(' ', '')
+        assert 'testing2' in hca_red.history.replace('\n', '').replace(' ', '')
+        for k in rc_gains:
+            assert k in ac_gains
+            assert ac_gains[k].shape == rc_gains[k].shape
+            assert ac_gains[k].dtype == complex
+
+        hd = io.HERAData(self.data_file)
+        _, data_flags, _ = hd.read()
+        ac_flags_expected = synthesize_ant_flags(data_flags)
+        ac_flags_waterfall = np.all([f for f in ac_flags.values()], axis=0)
+        for ant in ac_flags_expected:
+            ac_flags_expected[ant] += rc_flags[ant]
+            ac_flags_expected[ant] += ac_flags_waterfall
+        for k in rc_flags:
+            assert k in ac_flags
+            assert ac_flags[k].shape == rc_flags[k].shape
+            assert ac_flags[k].dtype == bool
+            np.testing.assert_array_equal(ac_flags[k], ac_flags_expected[k])
+
+        assert not np.all(list(ac_flags.values()))
+        for pol in ['Jee', 'Jnn']:
+            assert pol in ac_total_qual
+            assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
+            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
+
+        # test redundant model and redundant data
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            hca_red_red = abscal.post_redcal_abscal_run(self.red_data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4, 
+                                                        nInt_to_load=10, verbose=False, add_to_history='testing3', model_is_redundant=True, 
+                                                        data_is_redsol=True, raw_auto_file=self.data_file)
+        assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
+        os.remove(self.redcal_file.replace('.omni.', '.abs.'))
+        ac_gains, ac_flags, ac_quals, ac_total_qual = hca_red_red.build_calcontainers()
+        hcr = io.HERACal(self.redcal_file)
+        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
+
+        assert hcr.history.replace('\n', '').replace(' ', '') in hca_red_red.history.replace('\n', '').replace(' ', '')
+        assert 'testing3' in hca_red_red.history.replace('\n', '').replace(' ', '')
+        for k in rc_gains:
+            assert k in ac_gains
+            assert ac_gains[k].shape == rc_gains[k].shape
+            assert ac_gains[k].dtype == complex
+
+        hd = io.HERAData(self.data_file)
+        _, data_flags, _ = hd.read()
+        ac_flags_expected = synthesize_ant_flags(data_flags)
+        ac_flags_waterfall = np.all([f for f in ac_flags.values()], axis=0)
+        for ant in ac_flags_expected:
+            ac_flags_expected[ant] += rc_flags[ant]
+            ac_flags_expected[ant] += ac_flags_waterfall
+        for k in rc_flags:
+            assert k in ac_flags
+            assert ac_flags[k].shape == rc_flags[k].shape
+            assert ac_flags[k].dtype == bool
+            np.testing.assert_array_equal(ac_flags[k], ac_flags_expected[k])
+
+        assert not np.all(list(ac_flags.values()))
+        for pol in ['Jee', 'Jnn']:
+            assert pol in ac_total_qual
+            assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
+            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
+
+        # compare all 3 versions
+        g1, f1, q1, tq1 = hca.build_calcontainers()
+        g2, f2, q2, tq2 = hca_red.build_calcontainers()
+        g3, f3, q3, tq3 = hca_red_red.build_calcontainers()
+
+        for ant in f1:
+            np.testing.assert_array_equal(f1[ant], f2[ant])
+            np.testing.assert_array_equal(f1[ant], f3[ant])
+
+        for ant in g1:
+            if not np.all(f1[ant]):
+                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]]/g2[ant][~f2[ant]])) - 1) < .2
+                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]]/g3[ant][~f3[ant]])) - 1) < .2
 
     def test_post_redcal_abscal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--nInt_to_load', '6', '--verbose']
