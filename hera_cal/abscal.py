@@ -2905,13 +2905,17 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
             if len(model_bl_candidates) == 1:
                 for bl in red:
                     if bl[0] < ant_offset:
-                        data_to_model_bl_map[bl] = model_bl_candidates[0]
+                        if bl in data_bl_to_load:
+                            data_to_model_bl_map[bl] = model_bl_candidates[0]
+                        elif reverse_bl(bl) in data_bl_to_load:
+                            data_to_model_bl_map[reverse_bl(bl)] = reverse_bl(model_bl_candidates[0])
+                        else:
+                            raise ValueError("Baseline {} looks like a data baseline, but isn't in data_bl_to_load.".format(bl))
             assert ((len(data_bl_candidates) <= 1)
                     or (not data_is_redsol)), ('data_is_redsol is True, but the following data baselines are redundant in the ',
                                                'data file: {}'.format(data_bl_candidates))
         # only load baselines in map
-        data_bl_to_load = [bl for bl in data_bl_to_load if bl in data_to_model_bl_map.keys()
-                           or reverse_bl(bl) in data_to_model_bl_map.keys()]
+        data_bl_to_load = [bl for bl in data_bl_to_load if bl in data_to_model_bl_map.keys()]
         model_bl_to_load = [bl for bl in model_bl_to_load if (bl in data_to_model_bl_map.values()) 
                             or (reverse_bl(bl) in data_to_model_bl_map.values())]
 

@@ -713,7 +713,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         assert len(data_bl_to_load) == 3
         assert len(model_bl_to_load) == 2
         assert data_to_model_bl_map[(0, 1, 'ee')] == (0, 1, 'ee')
-        assert data_to_model_bl_map[(1, 2, 'ee')] == (0, 1, 'ee')
+        assert data_to_model_bl_map[(2, 1, 'ee')] == (1, 0, 'ee')
         assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
 
         # try with different antenna numbering in model
@@ -1001,8 +1001,6 @@ class Test_Post_Redcal_Abscal_Run(object):
             np.testing.assert_array_equal(q1[ant], 0.0)
             np.testing.assert_array_equal(q2[ant], 0.0)
             np.testing.assert_array_equal(q3[ant], 0.0)
-
-
 
     def test_post_redcal_abscal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--nInt_to_load', '6', '--verbose']
