@@ -3019,7 +3019,8 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     # setup: initialize ants, get idealized antenna positions
     if refant_num is None:
         flags = DataContainer({bl: (data_wgts == 0) for bl in data_wgts})
-        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
+        refant_num = pick_reference_antenna({ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}, 
+                                            synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
     ants = list(rc_flags.keys())
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=IDEALIZED_BL_TOL)
     
