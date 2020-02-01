@@ -2990,8 +2990,8 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_
     return DataContainer(wgts)
 
 
-def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15), 
-                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
+def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15), gain_convention='divide', 
+                       phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -3009,6 +3009,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
             the updates to all 1.0s.
+        refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
 
     Returns:
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
@@ -3016,6 +3017,9 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     '''
 
     # setup: initialize ants, get idealized antenna positions
+    if refant_num is None:
+        flags = DataContainer({bl: (data_wgts == 0) for bl in data_wgts})
+        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
     ants = list(rc_flags.keys())
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=IDEALIZED_BL_TOL)
     
@@ -3036,7 +3040,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     df = np.median(np.diff(data.freqs))
     for time_avg in [True, False]:
         gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=data_wgts, df=df, medfilt=True, kernel=kernel,
-                                        verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
+                                        refant=refant_num, verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
         if time_avg:
             gains_here = {ant: np.ones_like(gain) * np.median(gain, axis=0, keepdims=True) for ant, gain in gains_here.items()}
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
@@ -3044,12 +3048,12 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
     gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=data_wgts, verbose=verbose, 
-                                           tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
+                                           refant=refant_num, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
     abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
     apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
     for i in range(phs_max_iter):
         gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=data_wgts, verbose=verbose,
-                                               tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
+                                               refant=refant_num, tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
@@ -3059,7 +3063,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
     # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
     for i in range(phs_max_iter):
-        gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+        gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=data_wgts, refant=refant_num, verbose=verbose, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
@@ -3133,6 +3137,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     hc = io.HERACal(redcal_file)
     rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
     auto_bls = [join_bl(ant, ant) for ant in rc_gains]
+    hc.test_dict = {}
 
     # Initialize full-size, totally-flagged abscal gain/flag/etc. dictionaries
     abscal_gains = copy.deepcopy(rc_gains)
@@ -3227,7 +3232,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                             # run absolute calibration to get the gain updates
                             delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
                                                              gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
-                                                             phs_conv_crit=phs_conv_crit, verbose=verbose)
+                                                             phs_conv_crit=phs_conv_crit, verbose=verbose,
+                                                             refant_num=(None if refant is None else refant[0]))
 
                             # abscal autos, rebuild weights, and generate abscal Chi^2
                             calibrate_in_place(autocorrs, delta_gains, gain_convention=hc.gain_convention)
