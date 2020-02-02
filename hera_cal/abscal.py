@@ -2923,8 +2923,8 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     return data_bl_to_load, model_bl_to_load, data_to_model_bl_map
 
 
-def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_bl=None, df=None,
-                    data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None):
+def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags, times_by_bl=None,
+                    df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None):
     '''Build linear weights for data in abscal (or calculating chisq) defined as
     wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged).
     
@@ -2933,6 +2933,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_
         data_nsamples: DataContainer containing the number of samples in each data point
         model_flags: DataContainer with model flags. Assumed to have all the same keys as the data_flags.
         autocorrs: DataContainer with autocorrelation visibilities
+        auto_flags: DataContainer containing flags for autocorrelation visibilities
         times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
             inferable from data_flags and all times have length > 1. 
         df: If None, inferred from data_flags.freqs
@@ -2979,12 +2980,16 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, times_by_
                 except IndexError:  # this baseline has no unflagged redundancies
                     wgts[bl] *= 0.0
                 else:
-                    noise_vars = [predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=df) for bl in red_here]
-                    # estimate noise variance per baseline, assuming inverse variance weighting
-                    noise_var = np.sum(np.array(noise_vars)**-1, axis=0)**-1 * len(noise_vars)
+                    noise_vars = []
+                    for rbl in red_here:
+                        noise_var_here = predict_noise_variance_from_autos(rbl, autocorrs, dt=dt, df=df)
+                        for ant in split_bl(rbl):
+                            noise_var_here[auto_flags[join_bl(ant, ant)]] = np.nan
+                        noise_vars.append(noise_var_here)
+                    # estimate noise variance per baseline, assuming inverse variance weighting, but excluding flagged autos
+                    noise_var = np.nansum(np.array(noise_vars)**-1, axis=0)**-1 * np.sum(~np.isnan(noise_vars), axis=0)
             wgts[bl] *= noise_var**-1
 
-        # wgts[bl] = (noise_var * data_nsamples[bl])**-1 * (~data_flags[bl]) * (~model_flags[bl])
         wgts[bl][~np.isfinite(wgts[bl])] = 0.0
 
     return DataContainer(wgts)
@@ -3200,7 +3205,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                         data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
                         rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
                         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
-                        if not data_is_redsol:
+                        if not data_is_redsol:  # data is raw, so redundantly calibrate it
                             calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                                                cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
 
@@ -3219,16 +3224,17 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
                             # get the relative wgts for each piece of data
                             hd_autos = io.HERAData(raw_auto_file)
-                            autocorrs, _, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
-                            calibrate_in_place(autocorrs, rc_gains_subset, gain_convention=hc.gain_convention)
+                            autocorrs, auto_flags, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
+                            calibrate_in_place(autocorrs, rc_gains_subset, data_flags=auto_flags,
+                                               cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
 
                             # use data_to_model_bl_map to rekey model. Does not copy to save memory.
                             model = DataContainer({bl: model[data_to_model_bl_map[bl]] for bl in data})
                             model_flags = DataContainer({bl: model_flags[data_to_model_bl_map[bl]] for bl in data})
 
                             # build data weights based on inverse noise variance and nsamples and flags
-                            data_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
-                                                        df=np.median(np.ediff1d(data.freqs)))
+                            data_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, auto_flags,
+                                                        times_by_bl=hd.times_by_bl, df=np.median(np.ediff1d(data.freqs)))
 
                             # run absolute calibration to get the gain updates
                             delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
@@ -3238,8 +3244,8 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
                             # abscal autos, rebuild weights, and generate abscal Chi^2
                             calibrate_in_place(autocorrs, delta_gains, gain_convention=hc.gain_convention)
-                            chisq_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, times_by_bl=hd.times_by_bl, 
-                                                         df=np.median(np.ediff1d(data.freqs)))
+                            chisq_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, auto_flags,
+                                                         times_by_bl=hd.times_by_bl, df=np.median(np.ediff1d(data.freqs)))
                             total_qual, nObs, quals, nObs_per_ant = utils.chisq(data, model, chisq_wgts,
                                                                                 gain_flags=rc_flags_subset, split_by_antpol=True)
                         

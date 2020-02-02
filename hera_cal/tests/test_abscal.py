@@ -756,8 +756,9 @@ class Test_Post_Redcal_Abscal_Run(object):
         model_flags = data_flags
         autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
         autocorrs[(1, 1, 'ee')][2, 2] = 3
+        auto_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls})
         
-        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs)
+        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags)
         for bl in wgts:
             for t in range(3):
                 for f in range(4):
@@ -784,9 +785,12 @@ class Test_Post_Redcal_Abscal_Run(object):
         model_flags = data_flags
         autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
         autocorrs[(2, 2, 'ee')][2, 2] = 3
+        auto_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls})
+        auto_flags[(0, 0, 'ee')][1, 1] = True
 
         gain_flags = {ant: np.zeros((3, 4), dtype=bool) for ant in [(0, 'Jee'), (1, 'Jee'), (2, 'Jee')]}
-        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, data_is_redsol=True, gain_flags=gain_flags, tol=1.0)
+        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags,
+                                      data_is_redsol=True, gain_flags=gain_flags, tol=1.0)
         for bl in wgts:
             for t in range(3):
                 for f in range(3):
@@ -798,6 +802,8 @@ class Test_Post_Redcal_Abscal_Run(object):
                     elif bl == (0, 2, 'ee'):
                         if t == 2 and f == 2:
                             assert wgts[bl][t, f] == 1 / (((1 / 3))**-1 * 1)
+                        elif t == 1 and f == 1:
+                            assert wgts[bl][t, f] == 0
                         else:
                             assert wgts[bl][t, f] == 1
 
