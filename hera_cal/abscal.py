@@ -2958,6 +2958,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
             antpos = data_flags.antpos
         reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data_flags.pols())
         ex_ants = [ant for ant, flags in gain_flags.items() if np.all(flags)]
+        reds = redcal.filter_reds(reds, ants=[split_bl(bl)[0] for bl in autocorrs])
         reds = redcal.filter_reds(reds, ex_ants=ex_ants)
 
     # build weights dict using (noise variance * nsamples)^-1 * (0 if data or model is flagged)
@@ -2965,6 +2966,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
     for bl in data_flags:
         dt = (np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.)
         wgts[bl] = (data_nsamples[bl] * (~data_flags[bl]) * (~model_flags[bl])).astype(np.float)
+
         if not np.all(wgts[bl] == 0.0):
             # use autocorrelations to produce weights
             if not data_is_redsol:
@@ -2974,7 +2976,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
                 try:  # get redundant group that includes this baseline
                     red_here = [red for red in reds if bl in red][0]
                 except IndexError:  # this baseline has no unflagged redundancies
-                    wgts[bl] *= 0.0
+                    noise_var = np.inf
                 else:
                     noise_vars = []
                     for rbl in red_here:
@@ -2984,8 +2986,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
                         noise_vars.append(noise_var_here)
                     # estimate noise variance per baseline, assuming inverse variance weighting, but excluding flagged autos
                     noise_var = np.nansum(np.array(noise_vars)**-1, axis=0)**-1 * np.sum(~np.isnan(noise_vars), axis=0)
-                    wgts[bl] *= noise_var**-1
-
+            wgts[bl] *= noise_var**-1
         wgts[bl][~np.isfinite(wgts[bl])] = 0.0
 
     return DataContainer(wgts)
