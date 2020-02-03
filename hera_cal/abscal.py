@@ -564,7 +564,7 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True,
-                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0, 
+                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0, time_avg=False,
                        return_gains=False, gain_ants=[]):
     """
     Solve for an array-wide delay slope according to the equation
@@ -606,6 +606,8 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     four_pol : type=boolean, if True, fit multiple polarizations together
 
     edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
+
+    time_avg : boolean, if True, average resultant antenna delays across time
 
     return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
 
@@ -701,6 +703,12 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     echo("...running linsolve", verbose=verbose)
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
+
+    # time average
+    if time_avg:
+        Ntimes = list(fit.values())[0].shape[0]
+        for k in fit:
+            fit[k] = np.repeat(np.moveaxis(np.median(fit[k], axis=0)[np.newaxis], 0, 0), Ntimes, axis=0)
 
     if not return_gains:
         return fit
@@ -2178,7 +2186,7 @@ class AbsCal(object):
 
         # run delay_slope_lincal
         fit = delay_slope_lincal(model, data, antpos, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df,
-                                 kernel=kernel, verbose=verbose, four_pol=four_pol, edge_cut=edge_cut)
+                                 time_avg=time_avg, kernel=kernel, verbose=verbose, four_pol=four_pol, edge_cut=edge_cut)
 
         # separate pols if four_pol
         if four_pol:
@@ -2187,18 +2195,6 @@ class AbsCal(object):
                 fit['T_ns_{}'.format(gp)] = fit["T_ns"]
                 fit.pop('T_ew')
                 fit.pop('T_ns')
-
-        # time average
-        if time_avg:
-            k = flatten(self._gain_keys)[0]
-            Ntimes = fit["T_ew_{}".format(k[1])].shape[0]
-            for i, k in enumerate(flatten(self._gain_keys)):
-                ew_key = "T_ew_{}".format(k[1])
-                ns_key = "T_ns_{}".format(k[1])
-                ew_avg = np.moveaxis(np.median(fit[ew_key], axis=0)[np.newaxis], 0, 0)
-                ns_avg = np.moveaxis(np.median(fit[ns_key], axis=0)[np.newaxis], 0, 0)
-                fit[ew_key] = np.repeat(ew_avg, Ntimes, axis=0)
-                fit[ns_key] = np.repeat(ns_avg, Ntimes, axis=0)
 
         # form result
         self._dly_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
@@ -3042,9 +3038,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     df = np.median(np.diff(data.freqs))
     for time_avg in [True, False]:
         gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=binary_wgts, df=df, medfilt=True, kernel=kernel,
-                                        verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
-        if time_avg:
-            gains_here = {ant: np.ones_like(gain) * np.median(gain, axis=0, keepdims=True) for ant, gain in gains_here.items()}
+                                        time_avg=time_avg, verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
 
