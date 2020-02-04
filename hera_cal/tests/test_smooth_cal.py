@@ -157,6 +157,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
                  (1, 'Jxx'): np.array([True, False])}
         with pytest.raises(ValueError):
             smooth_cal.rephase_to_refant(gains, (0, 'Jxx'), flags=flags)
+        smooth_cal.rephase_to_refant(gains, (0, 'Jxx'), flags=flags, propagate_refant_flags=True)
+        np.testing.assert_array_equal(flags[0, 'Jxx'], np.array([False, True]))
+        np.testing.assert_array_equal(flags[1, 'Jxx'], np.array([True, True]))
 
 
 class Test_Calibration_Smoother(object):
