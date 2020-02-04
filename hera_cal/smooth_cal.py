@@ -333,6 +333,9 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
         flags: Optional dictionary mapping antenna keys to flag waterfall.
             Used only to verify that all gains are flagged where the refant is flagged.
         propagate_refant_flags: If True and flags is not None, update flags so that all antennas are flagged
+            at the specific frequencies and times that the reference antenna is also flagged. If False and
+            there exists times and frequencies where the reference antenna is flagged but another antenna
+            is not flagged, a ValueError will be raised.
     '''
     for pol, ref in (refant.items() if not isinstance(refant, tuple) else [(None, refant)]):
         refant_phasor = gains[ref] / np.abs(gains[ref])
