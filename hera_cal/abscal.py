@@ -3070,7 +3070,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
     # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
     for i in range(phs_max_iter):
-        gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants) #TODO
+        gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
