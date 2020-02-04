@@ -3025,7 +3025,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
         # impose a single reference antenna on the final antenna solution
         if refant is None:
             refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
-        rephase_to_refant(abscal_gains, refant, flags=abscal_flags)
+        rephase_to_refant(abscal_gains, refant, flags=abscal_flags, propagate_refant_flags=True)
     else:
         echo("No model files overlap with data files in LST. Result will be fully flagged.", verbose=verbose)
 
