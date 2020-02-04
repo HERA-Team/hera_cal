@@ -324,7 +324,7 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
     return refant
 
 
-def rephase_to_refant(gains, refant, flags=None):
+def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
     '''Rephase all gains in place so that the phase of the reference antenna is 0 for all times and frequencies.
 
     Arguments:
@@ -332,16 +332,19 @@ def rephase_to_refant(gains, refant, flags=None):
         refant: Antenna key of antenna to make the reference antenna (or dictionary mapping pols to keys)
         flags: Optional dictionary mapping antenna keys to flag waterfall.
             Used only to verify that all gains are flagged where the refant is flagged.
+        propagate_refant_flags: If True and flags is not None, update flags so that all antennas are flagged
     '''
     for pol, ref in (refant.items() if not isinstance(refant, tuple) else [(None, refant)]):
         refant_phasor = gains[ref] / np.abs(gains[ref])
         for ant in gains.keys():
             if ((pol is None) or (ant[1] == pol)):
-                if flags is not None and np.any(flags[ref][np.logical_not(flags[ant])]):
-                    raise ValueError('The chosen reference antenna', refant, 'is flagged in at least one place where antenna',
-                                     ant, 'is not, so automatic reference antenna selection has failed.')
-                else:
-                    gains[ant] = gains[ant] / refant_phasor
+                if flags is not None:
+                    if propagate_refant_flags:
+                        flags[ant][flags[ref]] = True
+                    elif np.any(flags[ref][np.logical_not(flags[ant])]):
+                        raise ValueError('The chosen reference antenna', refant, 'is flagged in at least one place where antenna',
+                                         ant, 'is not, so automatic reference antenna selection has failed.')
+                gains[ant] = gains[ant] / refant_phasor
 
 
 class CalibrationSmoother():
