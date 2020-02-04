@@ -767,8 +767,8 @@ def dft_phase_slope_solver(xs, ys, data, flags=None):
     return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
 
 
-def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, 
-                              verbose=True, tol=1.0, edge_cut=0, return_gains=False, gain_ants=[]):
+def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, verbose=True,
+                              tol=1.0, edge_cut=0, time_avg=False, return_gains=False, gain_ants=[]):
     """
     Solve for a frequency-independent spatial phase slope using the equation
 
@@ -806,6 +806,8 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, r
     tol : type=float, baseline match tolerance in units of baseline vectors (e.g. meters)
 
     edge_cut : int, number of channels to exclude at each band edge in phase slope solver
+
+    time_avg : boolean, if True, average resultant antenna delays across time
 
     return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
 
@@ -901,6 +903,12 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, r
             slope_x, slope_y = dft_phase_slope_solver(blx, bly, data_array)
             fit['Phi_ew_{}'.format(split_pol(pol)[0])] = slope_x * 2.0 * np.pi  # 2pi matches custom_phs_slope_gain
             fit['Phi_ns_{}'.format(split_pol(pol)[0])] = slope_y * 2.0 * np.pi
+
+    # time average
+    if time_avg:
+        Ntimes = list(fit.values())[0].shape[0]
+        for k in fit:
+            fit[k] = np.repeat(np.moveaxis(np.median(fit[k], axis=0)[np.newaxis], 0, 0), Ntimes, axis=0)
 
     if not return_gains:
         return fit
@@ -3044,19 +3052,21 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
 
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
-    gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=binary_wgts, verbose=verbose, 
-                                           tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
-    abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
-    apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
-    for i in range(phs_max_iter):
-        gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=binary_wgts, verbose=verbose,
-                                               tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
+    for time_avg in [True, False]:
+        gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=binary_wgts, verbose=verbose, 
+                                               tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
-        crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
-        echo("global_phase_slope_logcal convergence criterion: " + str(crit), verbose=verbose)
-        if crit < phs_conv_crit:
-            break
+    for time_avg in [True, False]:
+        for i in range(phs_max_iter):
+            gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=binary_wgts, verbose=verbose,
+                                                   tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
+            abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+            apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
+            crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
+            echo("global_phase_slope_logcal convergence criterion: " + str(crit), verbose=verbose)
+            if crit < phs_conv_crit:
+                break
 
     # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
     for i in range(phs_max_iter):
@@ -3249,6 +3259,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                                 abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + model_flag_waterfall
                             for antpol in total_qual.keys():
                                 abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
+                                abscal_chisq[antpol][tinds, :][~np.isfinite(abscal_chisq[antpol][tinds, :])] = 0.
                             
         # impose a single reference antenna on the final antenna solution
         if refant is None:
