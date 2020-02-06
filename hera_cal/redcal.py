@@ -834,9 +834,10 @@ class RedundantCalibrator:
                 # build metadata and apply detected polarities as a firstcal starting point
                 meta = {'dlys': dlys}
                 meta['polarity_flipped'] = find_polarity_flipped_ants(data, self.reds)
-                polarities = {ant: -1.0 if meta['polarity_flipped'][ant] else 1.0 for ant in g_fc}
-                calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
-                g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
+                if meta['polarity_flipped'] is not None:
+                    polarities = {ant: -1.0 if meta['polarity_flipped'][ant] else 1.0 for ant in g_fc}
+                    calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
+                    g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
             
             else:  # on second and subsequent iterations, do phase shifts
                 delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
