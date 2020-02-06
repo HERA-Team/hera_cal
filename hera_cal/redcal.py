@@ -814,6 +814,7 @@ class RedundantCalibrator:
             kernel : size of median filter kernel along (time, freq) axes
 
         Returns:
+            meta: dictionary of metadata (including delays a list of suspected flipped antennas)
             g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the 
                 {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
         """
@@ -825,20 +826,31 @@ class RedundantCalibrator:
             dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
                                                        offsets_only=(i > 0), sparse=sparse, mode=mode, 
                                                        norm=norm, medfilt=medfilt, kernel=kernel)
-            if i == 0:  # only solve for delays on the first iteration
+            if i == 0:  # only solve for delays on the first iteration, also apply polarity flips
                 g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)),
                                       dtype=dtype) for ant, dly in dlys.items()}
                 calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
+                
+                # build metadata and apply detected polarities as a firstcal starting point
+                meta = {'dlys': dlys}
+                meta['polarity_flipped'] = find_polarity_flipped_ants(data, self.reds)
+                print(meta['polarity_flipped'])
+                polarities = {ant: -1.0 if meta['polarity_flipped'][ant] else 1.0 for ant in g_fc}
+                calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
+                g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
             
-            if np.linalg.norm(list(delta_off.values())) < conv_crit:
+            else:  # on second and subsequent iterations, do phase shifts
+                delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
+                                             dtype=dtype) for ant in g_fc.keys()}
+                calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
+                g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
+            
+            print('conv crit:', np.linalg.norm(list(delta_off.values())))
+            if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
                 break
-            delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
-                                         dtype=dtype) for ant in g_fc.keys()}
-            calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
-            g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
 
         calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
-        return g_fc
+        return meta, g_fc
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
