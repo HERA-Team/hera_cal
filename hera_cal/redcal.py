@@ -868,6 +868,7 @@ class RedundantCalibrator:
                 More documentation of modes in linsolve.LinearSolver.solve().
 
         Returns:
+            meta: empty dictionary (to maintain consistency with related functions)
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
@@ -879,7 +880,7 @@ class RedundantCalibrator:
         for ubl_key in [k for k in sol.keys() if len(k) == 3]:
             sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
         sol_with_fc = {key: (sol[key] * sol0[key] if (key in sol0 and len(key) == 2) else sol[key]) for key in sol.keys()}
-        return sol_with_fc
+        return {}, sol_with_fc
 
     def lincal(self, data, sol0, wgts={}, sparse=False, mode='default', conv_crit=1e-10, maxiter=50, verbose=False):
         """Taylor expands to linearize redcal equations and iteratively minimizes chi^2.
@@ -1454,11 +1455,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit)
+    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit)
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
     # perform logcal and omnical
-    log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
+    log_sol = _, rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
     data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
                                                                      * SEC_PER_DAY))**-1 for bl in data.keys()}
