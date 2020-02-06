@@ -387,7 +387,7 @@ def _check_polarity_results(polarity_groups, is_flipped, even_vs_odd_IDs):
             assert is_flipped[ant0] != is_flipped[ant1], str((ant0, ant1))
 
 
-def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=np.pi/4, max_assumptions=5):
+def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=np.pi/8, max_assumptions=4):
     '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
     antennas appear to have reversed polarities (effectively a factor of -1 in the gains). 
 
