@@ -258,7 +258,7 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
-def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=np.pi/4):
+def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8)):
     '''This function looks at all redundant baselines and sees whether they mostly agree with the median
     baseline or whether they look closer to being off by pi radians. The ones close to the median are the
     "majority". The ones close to pi phase are the "minority." The rest are ambiguious and ignored in our
@@ -270,7 +270,7 @@ def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angl
     assert 0 < max_rel_angle <= np.pi / 2, "max_rel_angle must be between 0 and np.pi/2."
     Nfreqs = list(dly_cal_data.values())[0].shape[1]
     assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
-    fslice = slice(edge_cut, Nfreqs-edge_cut)
+    fslice = slice(edge_cut, Nfreqs - edge_cut)
 
     polarity_groups = {}
     for red in reds:
@@ -312,7 +312,7 @@ def _determine_polarity_flips(polarity_groups, even_vs_odd_assumptions):
     for key, (grp1, grp2) in polarity_groups.items():
         if key in even_vs_odd_IDs:
             even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
-            for grp, to_add  in zip([even, odd], [1, -1]):
+            for grp, to_add in zip([even, odd], [1, -1]):
                 for bl in grp:
                     ant_even_counts[utils.split_bl(bl)[0]] += to_add
                     ant_even_counts[utils.split_bl(bl)[1]] += to_add
@@ -364,8 +364,8 @@ def _determine_polarity_flips(polarity_groups, even_vs_odd_assumptions):
             break
 
     # Raise an assertion error if less than all antennas and polarity groups were properly identified.
-    err = 'Only identified {}/{} flips and {}/{} polarity_groups.'.format(
-           n_flipped, len(ants), n_groups_IDed, len(polarity_groups))
+    err = 'Only identified {}/{} flips and {}/{} polarity_groups.'
+    err = err.format(n_flipped, len(ants), n_groups_IDed, len(polarity_groups))
     assert (n_flipped == len(ants)) and (n_groups_IDed == len(polarity_groups)), err
     return is_flipped, even_vs_odd_IDs
 
@@ -387,7 +387,7 @@ def _check_polarity_results(polarity_groups, is_flipped, even_vs_odd_IDs):
             assert is_flipped[ant0] != is_flipped[ant1], str((ant0, ant1))
 
 
-def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=np.pi/8, max_assumptions=4):
+def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8), max_assumptions=4):
     '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
     antennas appear to have reversed polarities (effectively a factor of -1 in the gains). 
 
