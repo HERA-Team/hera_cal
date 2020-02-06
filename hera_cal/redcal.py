@@ -445,7 +445,7 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
                 # if it succeeds, reutrn current value of is_flipped
                 break
             except AssertionError:
-                is_flipped = None  # this means it hasn't succeded.
+                is_flipped = {ant: None for ant in ants}  # this means it hasn't succeded.
     return is_flipped
 
 
@@ -834,7 +834,7 @@ class RedundantCalibrator:
                 # build metadata and apply detected polarities as a firstcal starting point
                 meta = {'dlys': dlys}
                 meta['polarity_flipped'] = find_polarity_flipped_ants(data, self.reds)
-                if meta['polarity_flipped'] is not None:
+                if np.all([flip is not None for flip in meta['polarity_flipped'].values()]):
                     polarities = {ant: -1.0 if meta['polarity_flipped'][ant] else 1.0 for ant in g_fc}
                     calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
                     g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
