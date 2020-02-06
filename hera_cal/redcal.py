@@ -387,7 +387,7 @@ def _check_polarity_results(polarity_groups, is_flipped, even_vs_odd_IDs):
             assert is_flipped[ant0] != is_flipped[ant1], str((ant0, ant1))
 
 
-def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8), max_assumptions=4):
+def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8), max_assumptions=5):
     '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
     antennas appear to have reversed polarities (effectively a factor of -1 in the gains). 
 
@@ -412,7 +412,7 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
     Arugments:
         dly_cal_data: DataContainer mapping baseline tuples e.g. (0, 1, 'Jee') to delay-only calibrated visibilities
         reds: list of list of baselines tuples considered redundant
-        edge_cut: number of channels to exclude for each edge of the band when 
+        edge_cut: number of channels to exclude for each edge of the band when computing median phase
         max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
             (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
         max_assumptions: maximum number of assumptions to try before giving up. Warning: the complexity
@@ -420,9 +420,10 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
 
     Returns:
         is_flipped: dictionary mapping antenna tuple e.g. (0, 'Jee') to Booleans.
-            If no solution is found return None.
+            If no solution is found returns a dictionary mapping antennas to None.
     '''
     polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=edge_cut, max_rel_angle=max_rel_angle)
+    ants = set([ant for grp_pair in polarity_groups.values() for grp in grp_pair for bl in grp for ant in utils.split_bl(bl)])
 
     for n_asssumptions in range(1, max_assumptions + 1):
 
@@ -742,7 +743,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False,
+    def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False, edge_cut=0,
                             sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
         '''Runs a single iteration of firstcal, which uses phase differences between nominally
         redundant meausrements to solve for delays and phase offsets that produce gains of the
@@ -773,7 +774,8 @@ class RedundantCalibrator:
                         ad12 = np.abs(d12)
                         d12 /= np.where(ad12 == 0, np.float32(1), ad12)
                     w12 = w1 * wgts[bl2]
-                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt, kernel=kernel)
+                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt, 
+                                                          kernel=kernel, edge_cut=edge_cut)
                     twgts[(bl1, bl2)] = np.sum(w12)
         d_ls, w_ls = {}, {}
         for (bl1, bl2), tau_off_ij in taus_offs.items():
@@ -790,7 +792,8 @@ class RedundantCalibrator:
         return dly_sol, off_sol
 
     def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
-                 sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
+                 sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11),
+                 edge_cut=0, max_rel_angle=(np.pi / 8), max_assumptions=5):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redundant measurements. 
         Delays are solved in a single iteration, but phase offsets are solved for 
@@ -812,6 +815,12 @@ class RedundantCalibrator:
             medfilt : boolean, median filter data before fft.  This can work for data containing
                 unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
             kernel : size of median filter kernel along (time, freq) axes
+            edge_cut: number of channels to exclude for each edge of the band when computing median phase
+                for find_polarity_flipped_ants or when computing delays and offsets in utils.fft_dly
+            max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
+                (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
+            max_assumptions: maximum number of assumptions to try before giving up. Warning: the complexity
+                of this scales exponentially as 2^max_assumptions.
 
         Returns:
             meta: dictionary of metadata (including delays a list of suspected flipped antennas)
@@ -823,7 +832,7 @@ class RedundantCalibrator:
         
         # iteratively solve for offsets to account for phase wrapping
         for i in range(maxiter):
-            dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
+            dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, edge_cut=edge_cut,
                                                        offsets_only=(i > 0), sparse=sparse, mode=mode, 
                                                        norm=norm, medfilt=medfilt, kernel=kernel)
             if i == 0:  # only solve for delays on the first iteration, also apply polarity flips
@@ -833,7 +842,9 @@ class RedundantCalibrator:
                 
                 # build metadata and apply detected polarities as a firstcal starting point
                 meta = {'dlys': dlys}
-                meta['polarity_flipped'] = find_polarity_flipped_ants(data, self.reds)
+                meta['polarity_flipped'] = find_polarity_flipped_ants(data, self.reds, edge_cut=edge_cut,
+                                                                      max_rel_angle=max_rel_angle,
+                                                                      max_assumptions=max_assumptions)
                 if np.all([flip is not None for flip in meta['polarity_flipped'].values()]):
                     polarities = {ant: -1.0 if meta['polarity_flipped'][ant] else 1.0 for ant in g_fc}
                     calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
