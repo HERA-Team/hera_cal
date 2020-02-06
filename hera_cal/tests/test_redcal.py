@@ -344,7 +344,7 @@ class TestRedundantCalibrator(object):
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
             gains[ant] *= fc_gains[ant]
-        g_fc = rc.firstcal(d, freqs, conv_crit=0)
+        meta, g_fc = rc.firstcal(d, freqs, conv_crit=0)
         np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, decimal=3)
 
         # test firstcal with only phases (no delays)
@@ -358,7 +358,7 @@ class TestRedundantCalibrator(object):
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
             gains[ant] *= fc_gains[ant]
-        g_fc = rc.firstcal(d, freqs, conv_crit=0)
+        meta, g_fc = rc.firstcal(d, freqs, conv_crit=0)
         np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, decimal=10)  # much higher precision
 
     def test_logcal(self):
@@ -368,7 +368,7 @@ class TestRedundantCalibrator(object):
         info = om.RedundantCalibrator(reds)
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
         w = dict([(k, 1.) for k in d.keys()])
-        sol = info.logcal(d)
+        meta, sol = info.logcal(d)
         for i in range(NANTS):
             assert sol[(i, 'Jxx')].shape == (10, 10)
         for bls in reds:
@@ -384,7 +384,7 @@ class TestRedundantCalibrator(object):
             d[k] = np.zeros_like(d[k])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            sol = info.logcal(d)
+            meta, sol = info.logcal(d)
         om.make_sol_finite(sol)
         for red in reds:
             np.testing.assert_array_equal(sol[red[0]], 0.0)
@@ -578,7 +578,7 @@ class TestRedundantCalibrator(object):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k, 1.) for k in d.keys()])
-        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
+        meta, sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50 * np.ones_like(meta['iter']))
@@ -645,7 +645,7 @@ class TestRedundantCalibrator(object):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k, 1.) for k in d.keys()])
-        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
+        meta, sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50 * np.ones_like(meta['iter']))
@@ -730,7 +730,7 @@ class TestRedundantCalibrator(object):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k, 1.) for k in d.keys()])
-        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
+        meta, sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         assert np.all(meta['iter'] < 50 * np.ones_like(meta['iter']))
@@ -828,7 +828,7 @@ class TestRedundantCalibrator(object):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k, 1.) for k in d.keys()])
-        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
+        meta, sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         assert np.all(meta['iter'] < 50 * np.ones_like(meta['iter']))
