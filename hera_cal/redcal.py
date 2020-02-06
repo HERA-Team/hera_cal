@@ -834,7 +834,6 @@ class RedundantCalibrator:
                 # build metadata and apply detected polarities as a firstcal starting point
                 meta = {'dlys': dlys}
                 meta['polarity_flipped'] = find_polarity_flipped_ants(data, self.reds)
-                print(meta['polarity_flipped'])
                 polarities = {ant: -1.0 if meta['polarity_flipped'][ant] else 1.0 for ant in g_fc}
                 calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
                 g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
@@ -845,7 +844,6 @@ class RedundantCalibrator:
                 calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
                 g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
             
-            print('conv crit:', np.linalg.norm(list(delta_off.values())))
             if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
                 break
 
