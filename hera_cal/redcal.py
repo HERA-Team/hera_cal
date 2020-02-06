@@ -1457,7 +1457,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
     # perform logcal and omnical
-    log_sol = _, rc.logcal(data, sol0=rv['g_firstcal'])
+    _, log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
     data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
                                                                      * SEC_PER_DAY))**-1 for bl in data.keys()}
