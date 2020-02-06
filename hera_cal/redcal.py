@@ -257,6 +257,37 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
+def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=np.pi/4):
+    '''This function looks at all redundant baselines and sees whether they mostly agree with the median
+    baseline or whether they look closer to being off by pi radians. The ones close to the median are the
+    "majority". The ones close to pi phase are the "minority." The rest are ambiguious and ignored in our
+    analysis. This function returns a dictionary that maps unique baselines to two groups of baselines,
+    both of which have the same internal polarity, through we don't know if it's "odd" (one flipped antenna)
+    or "even" (two or zero flipped antennas). See find_polarity_flipped_ants() for parameter descriptions.
+    '''
+    # make sure edge_cut and max_rel_angle are sensible
+    assert 0 < max_rel_angle < np.pi / 2, "max_rel_angle must be between 0 and np.pi/2."
+    Nfreqs = list(dly_cal_data.values())[0].shape[1]
+    assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
+    fslice = slice(edge_cut, Nfreqs-edge_cut)
+
+    polarity_groups = {}
+    for red in reds:
+        grp1, grp2 = [], []
+        # find the median baseline for this redundant group
+        conj_median_bl = np.conj(np.median([dly_cal_data[bl][:, fslice] for bl in red], axis=0))
+        for bl in red:
+            # compare the median baseline to this baseline, taking the median abs of the angle over time and freq
+            median_abs_relative_angle = np.median(np.abs(np.angle(conj_median_bl * dly_cal_data[bl][:, fslice])))
+            # sort baseline ito group based on max_rel_angle, ignoring ambiguous baselines in between
+            if median_abs_relative_angle < max_rel_angle:
+                grp1.append(bl)
+            elif median_abs_relative_angle > np.pi - max_rel_angle:
+                grp2.append(bl)
+        if (len(grp1) > 0) or (len(grp2) > 0):  # if any baselines are unambiguous
+            polarity_groups[red[0]] = (grp1, grp2)
+
+    return polarity_groups
 def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=np.pi/4, max_assumptions=5):
     '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
     antennas appear to have reversed polarities (effectively a factor of -1 in the gains). 
