@@ -257,6 +257,68 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
+def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=np.pi/4, max_assumptions=5):
+    '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
+    antennas appear to have reversed polarities (effectively a factor of -1 in the gains). 
+
+    The basic algorithm is as follows:
+        1) For each redundant baseline group, split the baselines into two classes based on phases relative
+           to the median baseline. One of these is the "even" group (0 or 2 polarity flips) and one is the
+           "odd" group (1 flip), but we don't know which is which yet. Usually the larger group is the 
+           even one, but if a redundant baseline has involves many polarity flipped antennas, the majority 
+           group might be the odd one. 
+        2) Make a set of assumptions about which group is odd and even for some of the baseline groups.
+        3) Given the set of assumptions, pick an reference antenna that's involved mostly in even groups
+           and define its polarity as "not flipped."
+        4) Use the reference antenna and the assumptions to iteratively infer which antennas have polarity
+           flips and which groups are odd/even for a redundant group (beyond the initial assumptions)
+        5) If the code reaches a conclusion, check that all results are internally consistent.
+        6) If the code gets stuck or reaches a contradiction, raise an assertion error.
+        7) Catch the error and try a new set of assumptions.
+        8) Loop over assumptions: pick the top N baseline groups ranked by the number of baselines with small
+           phases relative to the median minus the number with large phases. Try all possible combinations of
+           assumptions. If none work, increase N up to max_assumptions.
+
+    Arugments:
+        dly_cal_data: DataContainer mapping baseline tuples e.g. (0, 1, 'Jee') to delay-only calibrated visibilities
+        reds: list of list of baselines tuples considered redundant
+        edge_cut: number of channels to exclude for each edge of the band when 
+        max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
+            (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
+        max_assumptions: maximum number of assumptions to try before giving up. Warning: the complexity
+            of this scales exponentially as 2^max_assumptions.
+
+    Returns:
+        is_flipped: dictionary mapping antenna tuple e.g. (0, 'Jee') to Booleans.
+            If no solution is found return None.
+    '''
+    polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=edge_cut, max_rel_angle=max_rel_angle)
+
+    for n_asssumptions in range(1, max_assumptions + 1):
+
+        # sort polarity_group keys by number of "group 1" baselines minus "group 2" baselines and take the top n_asssumptions
+        group_keys = sorted(polarity_groups, key=lambda k: len(polarity_groups[k][0]) - len(polarity_groups[k][1]), reverse=True)
+        group_keys = group_keys[0:n_asssumptions]
+        
+        # build all permutations of 'even/odd' and 'odd/even' of length(n_asssumptions) sorted by more 'even/odd's
+        assumption_maps = set([item for combo in combinations_with_replacement(['even/odd','odd/even'], n_asssumptions) 
+                               for item in permutations(combo)])
+        assumption_maps = sorted(assumption_maps, key=lambda k: np.sum(np.array(k) == 'odd/even'))
+        
+        # build an assumption dictionary mapping group_keys to assumption_maps, try to determine polarity 
+        for assumption_map in assumption_maps:
+            even_vs_odd_assumptions = {key: assumption for key, assumption in zip(group_keys, assumption_map)}
+            try:
+                # if either of these fails, it will raise an AssertionError
+                is_flipped, even_vs_odd_IDs = _determine_polarity_flips(polarity_groups, even_vs_odd_assumptions)
+                _check_polarity_results(polarity_groups, is_flipped, even_vs_odd_IDs)
+                # if it succeeds, reutrn current value of is_flipped
+                break
+            except AssertionError:
+                is_flipped = None  # this means it hasn't succeded.
+    return is_flipped
+
+
 def _check_polLists_minV(polLists):
     """Given a list of unique visibility polarizations (e.g. for each red group), returns whether
     they are all either single identical polarizations (e.g. 'nn') or both cross polarizations
