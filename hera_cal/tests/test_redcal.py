@@ -11,6 +11,7 @@ import sys
 import shutil
 from hera_sim.antpos import linear_array, hex_array
 from hera_sim.vis import sim_red_data
+from hera_sim.sigchain import gen_gains
 
 from .. import redcal as om
 from .. import io, abscal
@@ -221,6 +222,36 @@ class TestMethods(object):
                     assert len(set(nred).difference(set(red))) == 0
             assert found_match
             found_match = False
+
+    def test_find_polarity_flipped_ants(self):
+        # test normal operation
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        freqs = np.linspace(.1, .2, 100)
+        ants = [(ant, 'Jee') for ant in antpos]
+        gains = gen_gains(freqs, ants)
+        for ant in [3, 10, 11]:
+            gains[ant, 'Jee'] *= -1
+        _, true_vis, data = sim_red_data(reds, gains=gains, shape=(2, len(freqs)))
+        meta, g_fc = rc.firstcal(data, freqs)
+        for ant in antpos:
+            if ant in [3, 10, 11]:
+                assert meta['polarity_flipped'][ant, 'Jee'] == True
+            else:
+                assert meta['polarity_flipped'][ant, 'Jee'] == False
+
+        # test operation where no good answer is possible, so we expect it to fail
+        data[(0, 1, 'ee')] *= -1
+        meta, g_fc = rc.firstcal(data, freqs)
+        for ant in meta['polarity_flipped']:
+            assert meta['polarity_flipped'][ant] is None
+
+        # test errors
+        with pytest.raises(AssertionError):
+            meta, g_fc = rc.firstcal(data, freqs, edge_cut=100)
+        with pytest.raises(AssertionError):
+            meta, g_fc = rc.firstcal(data, freqs, max_rel_angle=np.pi)
 
 
 class TestRedundantCalibrator(object):
