@@ -7,6 +7,7 @@ from copy import deepcopy
 import argparse
 import os
 import linsolve
+from itertools import permutations, combinations_with_replacement
 
 from . import utils
 from . import version
@@ -367,6 +368,25 @@ def _determine_polarity_flips(polarity_groups, even_vs_odd_assumptions):
            n_flipped, len(ants), n_groups_IDed, len(polarity_groups))
     assert (n_flipped == len(ants)) and (n_groups_IDed == len(polarity_groups)), err
     return is_flipped, even_vs_odd_IDs
+
+
+def _check_polarity_results(polarity_groups, is_flipped, even_vs_odd_IDs):
+    '''For a set of polarity_groups (see _build_polarity_baseline_groups()) determine of the proposed solution
+    set of is_flipped dictionary and even_vs_odd_IDs built by _determine_polarity_flips() is consistent.
+    '''
+    for key, (grp1, grp2) in polarity_groups.items():
+        # parse majority and minority groups into "even/odd" or "odd/even"
+        even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
+        # assert that antennas in even baselines have the same polarity
+        for bl in even:
+            ant0, ant1 = utils.split_bl(bl)
+            assert is_flipped[ant0] == is_flipped[ant1], str((ant0, ant1))
+        # assert that antennas in oddd baselines have different polarities
+        for bl in odd:
+            ant0, ant1 = utils.split_bl(bl)
+            assert is_flipped[ant0] != is_flipped[ant1], str((ant0, ant1))
+
+
 def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=np.pi/4, max_assumptions=5):
     '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
     antennas appear to have reversed polarities (effectively a factor of -1 in the gains). 
