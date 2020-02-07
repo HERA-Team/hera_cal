@@ -823,7 +823,7 @@ class RedundantCalibrator:
                 of this scales exponentially as 2^max_assumptions.
 
         Returns:
-            meta: dictionary of metadata (including delays a list of suspected flipped antennas)
+            meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
             g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the 
                 {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
         """
@@ -841,12 +841,13 @@ class RedundantCalibrator:
                 calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
                 
                 # build metadata and apply detected polarities as a firstcal starting point
-                meta = {'dlys': dlys}
-                meta['polarity_flipped'] = find_polarity_flipped_ants(data, self.reds, edge_cut=edge_cut,
-                                                                      max_rel_angle=max_rel_angle,
-                                                                      max_assumptions=max_assumptions)
-                if np.all([flip is not None for flip in meta['polarity_flipped'].values()]):
-                    polarities = {ant: -1.0 if meta['polarity_flipped'][ant] else 1.0 for ant in g_fc}
+                meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
+                polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle,
+                                                            edge_cut=edge_cut, max_assumptions=max_assumptions)
+                meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
+                                            for ant in polarity_flips}
+                if np.all([flip is not None for flip in polarity_flips.values()]):
+                    polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
                     calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
                     g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
             
