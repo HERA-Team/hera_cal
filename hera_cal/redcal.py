@@ -423,7 +423,7 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
             If no solution is found returns a dictionary mapping antennas to None.
     '''
     polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=edge_cut, max_rel_angle=max_rel_angle)
-    ants = set([ant for grp_pair in polarity_groups.values() for grp in grp_pair for bl in grp for ant in utils.split_bl(bl)])
+    ants = set([ant for red in reds for bl in red for ant in utils.split_bl(bl)])
 
     for n_asssumptions in range(1, max_assumptions + 1):
 
@@ -447,7 +447,7 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
                 break
             except AssertionError:
                 is_flipped = {ant: None for ant in ants}  # this means it hasn't succeded.
-    return is_flipped
+    return {ant: (is_flipped[ant] if ant in is_flipped else None) for ant in ants}
 
 
 def _check_polLists_minV(polLists):
@@ -504,7 +504,7 @@ def parse_pol_mode(reds):
 
 def get_gains_and_vis_from_sol(sol):
     """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
-    and len(key)==3 entries, taken to be model visibilities."""
+    and len(key)==3 entries, taken to be model visibrilities."""
 
     g = {key: val for key, val in sol.items() if len(key) == 2}
     v = {key: val for key, val in sol.items() if len(key) == 3}
@@ -842,8 +842,7 @@ class RedundantCalibrator:
                 
                 # build metadata and apply detected polarities as a firstcal starting point
                 meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
-                polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle,
-                                                            edge_cut=edge_cut, max_assumptions=max_assumptions)
+                polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle, edge_cut=edge_cut, max_assumptions=max_assumptions)
                 meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
                                             for ant in polarity_flips}
                 if np.all([flip is not None for flip in polarity_flips.values()]):
@@ -1580,9 +1579,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
 
     # setup metadata dictionaries
-    rv['fc_meta']['dlys'] = {ant: np.full(nTimes, np.nan) for ap in antpols}
-    rv['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ap in antpols}
-    rv['omni_meta']['chisq'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
+    rv['fc_meta'] = {'dlys': {ant: np.full(nTimes, np.nan) for ant in ants}}
+    rv['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
+    rv['omni_meta'] = {'chisq': {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}}
     rv['omni_meta']['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
     rv['omni_meta']['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
 
@@ -1626,6 +1625,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                     rv['g_omnical'][ant][tinds, fSlice] = cal['g_omnical'][ant]
                     rv['gf_omnical'][ant][tinds, fSlice] = cal['gf_omnical'][ant]
                     rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
+                for ant in cal['fc_meta']['dlys'].keys():
                     rv['fc_meta']['dlys'][ant][tinds] = cal['fc_meta']['dlys'][ant]
                     rv['fc_meta']['polarity_flips'][ant][tinds] = cal['fc_meta']['polarity_flips'][ant]
                 for bl in cal['v_omnical'].keys():
