@@ -1645,6 +1645,14 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     return rv
 
 
+def save_redcal_metas(fc_metas, omni_metas):
+    pass
+
+
+def read_redcal_metas():
+    pass
+
+
 def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename, 
                               outdir, clobber=False, verbose=False, add_to_history=''):
     '''Helper function for writing the results of redcal_run.'''
