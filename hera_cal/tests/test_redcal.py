@@ -237,15 +237,15 @@ class TestMethods(object):
         meta, g_fc = rc.firstcal(data, freqs)
         for ant in antpos:
             if ant in [3, 10, 11]:
-                assert meta['polarity_flipped'][ant, 'Jee'] == True
+                assert np.all(meta['polarity_flips'][ant, 'Jee'] == True)
             else:
-                assert meta['polarity_flipped'][ant, 'Jee'] == False
+                assert np.all(meta['polarity_flips'][ant, 'Jee'] == False)
 
         # test operation where no good answer is possible, so we expect it to fail
         data[(0, 1, 'ee')] *= -1
         meta, g_fc = rc.firstcal(data, freqs)
-        for ant in meta['polarity_flipped']:
-            assert meta['polarity_flipped'][ant] is None
+        for ant in meta['polarity_flips']:
+            assert np.all([m is None for m in meta['polarity_flips'][ant]])
 
         # test errors
         with pytest.raises(AssertionError):
