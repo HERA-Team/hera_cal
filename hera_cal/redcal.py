@@ -1456,6 +1456,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
         'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jnn') to the average chisq
             for all visibilities that an antenna participates in.
+        'fc_meta' : dictionary that includes delays and identifies flipped antennas
         'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
     rv = {}  # dictionary of return values
@@ -1541,6 +1542,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
         'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jnn') to the average chisq
             for all visibilities that an antenna participates in.
+        'fc_meta' : dictionary that includes delays and identifies flipped antennas
+        'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
     if nInt_to_load is not None:
         assert hd.filetype == 'uvh5', 'Partial loading only available for uvh5 filetype.'
@@ -1575,6 +1578,13 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
     rv['vns_omnical'] = DataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
     filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
+
+    # setup metadata dictionaries
+    rv['fc_meta']['dlys'] = {ant: np.full(nTimes, np.nan) for ap in antpols}
+    rv['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ap in antpols}
+    rv['omni_meta']['chisq'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
+    rv['omni_meta']['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
+    rv['omni_meta']['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
 
     # solar flagging
     lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
@@ -1616,6 +1626,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                     rv['g_omnical'][ant][tinds, fSlice] = cal['g_omnical'][ant]
                     rv['gf_omnical'][ant][tinds, fSlice] = cal['gf_omnical'][ant]
                     rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
+                    rv['fc_meta']['dlys'][ant][tinds] = cal['fc_meta']['dlys'][ant]
+                    rv['fc_meta']['polarity_flips'][ant][tinds] = cal['fc_meta']['polarity_flips'][ant]
                 for bl in cal['v_omnical'].keys():
                     rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
                     rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
@@ -1626,6 +1638,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 else:  # duplicate chi^2 into both antenna polarizations
                     for antpol in rv['chisq'].keys():
                         rv['chisq'][antpol][tinds, fSlice] = cal['chisq']
+                rv['omni_meta']['chisq'][str(pols)][tinds, fSlice] = cal['omni_meta']['chisq']
+                rv['omni_meta']['iter'][str(pols)][tinds, fSlice] = cal['omni_meta']['iter']
+                rv['omni_meta']['conv_crit'][str(pols)][tinds, fSlice] = cal['omni_meta']['conv_crit']
 
     return rv
 
