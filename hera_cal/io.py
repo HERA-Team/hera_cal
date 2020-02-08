@@ -852,6 +852,47 @@ def partial_time_io(hd, times, **kwargs):
     return combined_hd.build_datacontainers()
 
 
+def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history):
+    '''Saves redcal metadata to a hdf5 file. See also read_redcal_meta.
+
+    Arguments:
+        meta_filename: path to hdf5 file to save
+        fc_meta: firstcal metadata dictionary, such as that produced by redcal.redcal_iteration()
+        omni_meta: omnical metadata dictionary, such as that produced by redcal.redcal_iteration()
+        freqs: 1D numpy array of frequencies in the data
+        times: 1D numpy array of times in the data
+        lsts: 1D numpy array of LSTs in the data
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}
+        history: string describing the creation of this file
+    '''
+    with h5py.File(meta_filename, "w") as outfile:
+        # save the metadata of the metadata
+        header = outfile.create_group('header')
+        header['freqs'] = freqs
+        header['times'] = times
+        header['lsts'] = lsts
+        antnums = np.array(sorted(list(hd.antpos.keys())))
+        header['antpos'] = np.array([antpos[antnum] for antnum in antnums])
+        header['antpos'].attrs['antnums'] = antnums
+        header['history'] = history.encode('utf8')
+
+        # save firstcal metadata, saving dictionary keys as attrs
+        fc_grp = outfile.create_group('fc_meta')
+        ant_keys = np.array(sorted(list(fc_meta['dlys'].keys())))
+        fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
+        fc_grp['dlys'].attrs['ants'] = ant_keys
+        fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
+        fc_grp['polarity_flips'].attrs['ants'] = ant_keys
+
+        # save the omnical metadata, saving dictionary keys as attrs
+        omni_grp = outfile.create_group('omni_meta')
+        pols_keys = np.array(sorted(list(omni_meta['chisq'].keys())))
+        fc_grp['chisq'] = np.array([omni_meta['chisq'][pols] for pols in pols_keys])
+        fc_grp['chisq'].attrs['pols'] = pols_keys
+        fc_grp['iter'] = np.array([omni_meta['iter'][pols] for pols in pols_keys])
+        fc_grp['iter'].attrs['pols'] = pols_keys
+        fc_grp['conv_crit'] = np.array([omni_meta['conv_crit'][pols] for pols in pols_keys])
+        fc_grp['conv_crit'].attrs['conv_crit'] = pols_keys
 #######################################################################
 #                             LEGACY CODE
 #######################################################################
