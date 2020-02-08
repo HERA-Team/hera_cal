@@ -14,7 +14,7 @@ from . import version
 from .noise import predict_noise_variance_from_autos
 from .datacontainer import DataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol
-from .io import HERAData, HERACal, write_cal
+from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
 
@@ -1649,12 +1649,8 @@ def save_redcal_metas(fc_metas, omni_metas):
     pass
 
 
-def read_redcal_metas():
-    pass
-
-
-def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename, 
-                              outdir, clobber=False, verbose=False, add_to_history=''):
+def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename,
+                              meta_filename, outdir, clobber=False, verbose=False, add_to_history=''):
     '''Helper function for writing the results of redcal_run.'''
     if verbose:
         print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
@@ -1676,13 +1672,18 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     hd_out.history += version.history_string(add_to_history)
     hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
+    if verbose:
+        print('Now saving redcal metadata to ', os.path.join(outdir, meta_filename))
+    save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs, 
+                     hd.times, hd.lsts, hd.antpos, hd.history + version.history_string(add_to_history))
+
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', 
-               omnivis_ext='.omni_vis.uvh5', iter0_prefix='', outdir=None, ant_metrics_file=None, clobber=False, 
-               nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, 
-               max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
-               fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, 
-               add_to_history='', verbose=False, **filter_reds_kwargs):
+               omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None, 
+               ant_metrics_file=None, clobber=False,  nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, 
+               ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, 
+               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, 
+               check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1693,6 +1694,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         firstcal_ext: string to replace file extension of input_data for saving firstcal calfits
         omnical_ext: string to replace file extension of input_data for saving omnical calfits
         omnivis_ext: string to replace file extension of input_data for saving omnical visibilities as uvh5
+        meta_ext: string to replace file extension of input_data for saving metadata as hdf5
         iter0_prefix: if not '', save the omnical results with this prefix appended to each file after the 0th
             iteration, but only if redcal has found any antennas to exclude and re-run without
         outdir: folder to save data products. If None, will be the same as the folder containing input_data
@@ -1783,12 +1785,13 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
         if run_number == 1 and len(iter0_prefix) > 0:
             _redcal_run_write_results(cal, hd, filename_no_ext + iter0_prefix + firstcal_ext, filename_no_ext + iter0_prefix + omnical_ext,
-                                      filename_no_ext + iter0_prefix + omnivis_ext, outdir, clobber=clobber, verbose=verbose,
-                                      add_to_history=add_to_history + '\n' + 'Iteration 0 Results.\n')
+                                      filename_no_ext + iter0_prefix + omnivis_ext, filename_no_ext + iter0_prefix + meta_ext, outdir, 
+                                      clobber=clobber, verbose=verbose, add_to_history=add_to_history + '\n' + 'Iteration 0 Results.\n')
 
     # output results files
-    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext, filename_no_ext + omnivis_ext,
-                              outdir, clobber=clobber, verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
+    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext, 
+                              filename_no_ext + omnivis_ext, filename_no_ext + meta_ext outdir, clobber=clobber, 
+                              verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
 
     return cal
 
@@ -1801,6 +1804,7 @@ def redcal_argparser():
     a.add_argument("--firstcal_ext", default='.first.calfits', type=str, help="string to replace file extension of input_data for saving firstcal calfits")
     a.add_argument("--omnical_ext", default='.omni.calfits', type=str, help="string to replace file extension of input_data for saving omnical calfits")
     a.add_argument("--omnivis_ext", default='.omni_vis.uvh5', type=str, help="string to replace file extension of input_data for saving omnical visibilities as uvh5")
+    a.add_argument("--meta_ext", default='.redcal_meta.hdf5', type=str, help="string to replace file extension of input_data for saving metadata as hdf5")
     a.add_argument("--outdir", default=None, type=str, help="folder to save data products. Default is the same as the folder containing input_data")
     a.add_argument("--iter0_prefix", default='', type=str, help="if not default '', save the omnical results with this prefix appended to each file after the 0th iteration, \
                    but only if redcal has found any antennas to exclude and re-run without.")
