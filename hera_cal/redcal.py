@@ -432,7 +432,7 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
         group_keys = group_keys[0:n_asssumptions]
         
         # build all permutations of 'even/odd' and 'odd/even' of length(n_asssumptions) sorted by more 'even/odd's
-        assumption_maps = set([item for combo in combinations_with_replacement(['even/odd','odd/even'], n_asssumptions) 
+        assumption_maps = set([item for combo in combinations_with_replacement(['even/odd', 'odd/even'], n_asssumptions) 
                                for item in permutations(combo)])
         assumption_maps = sorted(assumption_maps, key=lambda k: np.sum(np.array(k) == 'odd/even'))
         
@@ -844,7 +844,7 @@ class RedundantCalibrator:
                 meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
                 polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle, edge_cut=edge_cut, max_assumptions=max_assumptions)
                 meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
-                                            for ant in polarity_flips}
+                                          for ant in polarity_flips}
                 if np.all([flip is not None for flip in polarity_flips.values()]):
                     polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
                     calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
@@ -1676,7 +1676,7 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', 
                omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None, 
-               ant_metrics_file=None, clobber=False,  nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, 
+               ant_metrics_file=None, clobber=False, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, 
                ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, 
                fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, 
                check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
