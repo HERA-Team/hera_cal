@@ -1786,7 +1786,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
 
     # output results files
     _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext, 
-                              filename_no_ext + omnivis_ext, filename_no_ext + meta_ext outdir, clobber=clobber, 
+                              filename_no_ext + omnivis_ext, filename_no_ext + meta_ext, outdir, clobber=clobber, 
                               verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
 
     return cal
