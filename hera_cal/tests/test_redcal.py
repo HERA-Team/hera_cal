@@ -237,9 +237,9 @@ class TestMethods(object):
         meta, g_fc = rc.firstcal(data, freqs)
         for ant in antpos:
             if ant in [3, 10, 11]:
-                assert np.all(meta['polarity_flips'][ant, 'Jee'] == True)
+                assert np.all(meta['polarity_flips'][ant, 'Jee'])
             else:
-                assert np.all(meta['polarity_flips'][ant, 'Jee'] == False)
+                assert np.all(meta['polarity_flips'][ant, 'Jee'])
 
         # test operation where no good answer is possible, so we expect it to fail
         data[(0, 1, 'ee')] *= -1

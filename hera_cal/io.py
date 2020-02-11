@@ -916,7 +916,7 @@ def read_redcal_meta(meta_filename):
         times = infile['header']['times'][:]
         lsts = infile['header']['lsts'][:]
         antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'], 
-                                               infile['header']['antpos'][:,:])}
+                                               infile['header']['antpos'][:, :])}
         history = infile['header']['history'][()].decode('utf8')
 
         # reconstruct firstcal metadata
