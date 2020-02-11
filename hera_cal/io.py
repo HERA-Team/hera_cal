@@ -887,12 +887,12 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         # save the omnical metadata, saving dictionary keys as attrs
         omni_grp = outfile.create_group('omni_meta')
         pols_keys = sorted(list(omni_meta['chisq'].keys()))
-        fc_grp['chisq'] = np.array([omni_meta['chisq'][pols] for pols in pols_keys])
-        fc_grp['chisq'].attrs['pols'] = pols_keys
-        fc_grp['iter'] = np.array([omni_meta['iter'][pols] for pols in pols_keys])
-        fc_grp['iter'].attrs['pols'] = pols_keys
-        fc_grp['conv_crit'] = np.array([omni_meta['conv_crit'][pols] for pols in pols_keys])
-        fc_grp['conv_crit'].attrs['conv_crit'] = pols_keys
+        omni_grp['chisq'] = np.array([omni_meta['chisq'][pols] for pols in pols_keys])
+        omni_grp['chisq'].attrs['pols'] = pols_keys
+        omni_grp['iter'] = np.array([omni_meta['iter'][pols] for pols in pols_keys])
+        omni_grp['iter'].attrs['pols'] = pols_keys
+        omni_grp['conv_crit'] = np.array([omni_meta['conv_crit'][pols] for pols in pols_keys])
+        omni_grp['conv_crit'].attrs['conv_crit'] = pols_keys
 
 
 def read_redcal_meta(meta_filename):
@@ -927,7 +927,7 @@ def read_redcal_meta(meta_filename):
 
         # reconstruct omnical metadata
         omni_meta = {}
-        pols_keys = fc_grp['chisq'].attrs['pols']
+        pols_keys = infile['omni_meta']['chisq'].attrs['pols']
         omni_meta['chisq'] = {pols: chisq for pols, chisq in zip(pols_keys, infile['omni_meta']['chisq'][:, :])}
         omni_meta['iter'] = {pols: itr for pols, itr in zip(pols_keys, infile['omni_meta']['iter'][:, :])}
         omni_meta['conv_crit'] = {pols: cc for pols, cc in zip(pols_keys, infile['omni_meta']['conv_crit'][:, :])}
