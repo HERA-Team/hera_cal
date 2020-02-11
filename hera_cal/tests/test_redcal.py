@@ -239,7 +239,7 @@ class TestMethods(object):
             if ant in [3, 10, 11]:
                 assert np.all(meta['polarity_flips'][ant, 'Jee'])
             else:
-                assert np.all(meta['polarity_flips'][ant, 'Jee'])
+                assert not np.any(meta['polarity_flips'][ant, 'Jee'])
 
         # test operation where no good answer is possible, so we expect it to fail
         data[(0, 1, 'ee')] *= -1
