@@ -1538,13 +1538,34 @@ class TestRunMethods(object):
             else:
                 assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
-        
+
+            meta_file = os.path.splitext(input_data)[0] + prefix + '.redcal_meta.hdf5'
+            fc_meta, omni_meta, freqs, times, lsts, antpos, history = io.read_redcal_meta(meta_file)
+            for key1 in fc_meta:
+                for key2 in fc_meta[key1]:
+                    np.testing.assert_array_almost_equal(fc_meta[key1][key2], cal_here['fc_meta'][key1][key2])
+            for key1 in omni_meta:
+                for key2 in omni_meta[key1]:
+                    np.testing.assert_array_almost_equal(omni_meta[key1][key2], cal_here['omni_meta'][key1][key2])
+            np.testing.assert_array_almost_equal(freqs, hd.freqs)
+            np.testing.assert_array_almost_equal(times, hd.times)
+            np.testing.assert_array_almost_equal(lsts, hd.lsts)
+            for ant in antpos:
+                np.testing.assert_array_almost_equal(antpos[ant], hd.antpos[ant])
+            if prefix == '':
+                assert 'Throwingoutantenna12' in history.replace('\n', '').replace(' ', '')
+            else:
+                assert 'Iteration0Results.' in history.replace('\n', '').replace(' ', '')
+            assert 'Thisfilewasproducedbythefunction' in history.replace('\n', '').replace(' ', '')
+
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
+        os.remove(os.path.splitext(input_data)[0] + '.redcal_meta.hdf5')
         os.remove(os.path.splitext(input_data)[0] + '.iter0.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.iter0.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.iter0.omni_vis.uvh5')
+        os.remove(os.path.splitext(input_data)[0] + '.iter0.redcal_meta.hdf5')
 
         hd = io.HERAData(input_data)
         hd.read()
