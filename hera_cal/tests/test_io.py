@@ -923,7 +923,7 @@ class Test_Meta_IO(object):
 
         for key1 in omni_meta:
             for key2 in omni_meta[key1]:
-                np.testing.assert_array_equal(omni_meta[key1][key2], omni_meta[key1][key2])
+                np.testing.assert_array_equal(omni_meta[key1][key2], omni_meta2[key1][key2])
 
         np.testing.assert_array_equal(freqs, freqs2)
         np.testing.assert_array_equal(times, times2)
