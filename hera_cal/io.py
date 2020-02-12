@@ -874,13 +874,13 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         antnums = np.array(sorted(list(antpos.keys())))
         header['antpos'] = np.array([antpos[antnum] for antnum in antnums])
         header['antpos'].attrs['antnums'] = antnums
-        header['history'] = history.encode('utf8')
+        header['history'] = np.string_(history)
 
         # save firstcal metadata, saving dictionary keys as attrs
         fc_grp = outfile.create_group('fc_meta')
         ant_keys = sorted(list(fc_meta['dlys'].keys()))
         fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
-        fc_grp['dlys'].attrs['ants'] = ant_keys
+        fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
         fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
         fc_grp['polarity_flips'].attrs['ants'] = ant_keys
 
@@ -917,11 +917,12 @@ def read_redcal_meta(meta_filename):
         lsts = infile['header']['lsts'][:]
         antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'], 
                                                infile['header']['antpos'][:, :])}
-        history = infile['header']['history'][()].decode('utf8')
+        history = infile['header']['history'][()].tostring().decode('utf8')
 
         # reconstruct firstcal metadata
         fc_meta = {}
-        ants = [(int(num), pol) for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
+        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8')) 
+                for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
         fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
         fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}
 
