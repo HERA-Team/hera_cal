@@ -44,7 +44,7 @@ def query_ex_ants(JD, good_statuses):
     exants = []
     for ant in h.apriori:
         if h.apriori[ant].status not in good_statuses:
-            exants.append(int(ant[2:].split(':')[0])) # Assumes the format HH0:A or HA330:A
+            exants.append(int(ant[2:].split(':')[0]))  # Assumes the format HH0:A or HA330:A
 
     # Return sorted exants 
     exants = ','.join([str(ant) for ant in sorted(exants)])
