@@ -269,7 +269,7 @@ def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angl
     # make sure edge_cut and max_rel_angle are sensible
     assert 0 < max_rel_angle <= np.pi / 2, "max_rel_angle must be between 0 and np.pi/2."
     Nfreqs = list(dly_cal_data.values())[0].shape[1]
-    assert 2 * edge_cut < Nfreqs - 1, "edge_cut cannot be >= Nfreqs/2 - 1"
+    assert 2 * edge_cut < Nfreqs, "edge_cut cannot be >= Nfreqs/2"
     fslice = slice(edge_cut, Nfreqs - edge_cut)
 
     polarity_groups = {}
