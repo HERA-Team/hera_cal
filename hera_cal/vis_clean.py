@@ -281,6 +281,224 @@ class VisClean(object):
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
+    def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, x=None, data=None, flags=None, wgts=None,
+                       mode, filter2d, fitting_options, cache=None, axis='freq', skip_wgt=0.1, max_contiguous_edge_flags=10):
+                   """
+                    Your one-stop-shop for fourier filtering.
+                    It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
+                    rectangular windows centered at filter_centers or filter_half_widths
+                    perform filtering along any of 2 dimensions in 2d or 1d!
+                    the 'dft' and 'dayenu' modes support irregularly sampled data.
+                    -----------
+                    keys : list of bl-pol keys in data to CLEAN
+                    data : DataContainer, data to clean. Default is self.data
+                    flags : Datacontainer, flags to use. Default is self.flags
+                    wgts : DataContainer, weights to use. Default is None.
+                    ax: str, axis to filter, options=['freq', 'time', 'both']
+                        Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
+                    filter_centers: array-like
+                        if not 2dfilter: 1d np.ndarray or list or tuple of floats
+                        specifying centers of rectangular fourier regions to filter.
+                        If 2dfilter: should be a 2-list or 2-tuple. Each element
+                        should be a list or tuple or np.ndarray of floats that include
+                        centers of rectangular regions to filter.
+                    filter_half_widths: array-like
+                        if not 2dfilter: 1d np.ndarray or list of tuples of floats
+                        specifying the half-widths of rectangular fourier regions to filter.
+                        if 2dfilter: should be a 2-list or 2-tuple. Each element should
+                        be a list or tuple or np.ndarray of floats that include centers
+                        of rectangular bins.
+                    suppression_factors: array-like
+                        if not 2dfilter: 1d np.ndarray or list of tuples of floats
+                        specifying the fractional residuals of model to leave in the data.
+                        For example, 1e-6 means that the filter will leave in 1e-6 of data fitted
+                        by the model.
+                        if 2dfilter: should be a 2-list or 2-tuple. Each element should
+                        be a list or tuple or np.ndarray of floats that include centers
+                        of rectangular bins.
+                    mode: string
+                        specify filtering mode. Currently supported are
+                        'clean', iterative clean
+                        'dpss_lsq', dpss fitting using scipy.optimize.lsq_linear
+                        'dft_lsq', dft fitting using scipy.optimize.lsq_linear
+                        'dpss_matrix', dpss fitting using direct lin-lsq matrix
+                                       computation. Slower then lsq but provides linear
+                                       operator that can be used to propagate
+                                       statistics and the matrix is cached so
+                                       on average, can be faster for data with
+                                       many similar flagging patterns.
+                        'dft_matrix', dft fitting using direct lin-lsq matrix
+                                      computation. Slower then lsq but provides
+                                      linear operator that can be used to propagate
+                                      statistics and the matrix is cached so
+                                      on average, can be faster for data with
+                                      many similar flagging patterns.
+                                      !!!WARNING: In my experience,
+                                      'dft_matrix' option is numerical unstable.!!!
+                                      'dpss_matrix' works much better.
+                        'dayenu', apply dayenu filter to data. Does not
+                                 deconvolve subtracted foregrounds.
+                        'dayenu_dft_leastsq', apply dayenu filter to data
+                                 and deconvolve subtracted foregrounds using
+                                'dft_leastsq' method (see above).
+                        'dayenu_dpss_leastsq', apply dayenu filter to data
+                                 and deconvolve subtracted foregrounds using
+                                 'dpss_leastsq' method (see above)
+                        'dayenu_dft_matrix', apply dayenu filter to data
+                                 and deconvolve subtracted foregrounds using
+                                'dft_matrix' mode (see above).
+                                !!!WARNING: dft_matrix mode is often numerically
+                                unstable. I don't recommend it!
+                        'dayenu_dpss_matrix', apply dayenu filter to data
+                                 and deconvolve subtracted foregrounds using
+                                 'dpss_matrix' method (see above)
+                        'dayenu_clean', apply dayenu filter to data. Deconvolve
+                                 subtracted foregrounds with 'clean'.
+                    filter2d: bool
+                        specify whether filtering will be performed in 2d or 1d.
+                        If filter is 1d, it will be applied across the -1 axis.
+                    fitting_options: dict
+                        dictionary with options for fitting techniques.
+                        if filter2d is true, this should be a 2-tuple or 2-list
+                        of dictionaries. The dictionary for each dimension must
+                        specify the following for each fitting method.
+                            * 'dft':
+                                'fundamental_period': float or 2-tuple
+                                    the fundamental_period of dft modes to fit. The number of
+                                    modes fit within each window in 'filter_half_widths' will
+                                    equal fw / fundamental_period.
+                                    if filter2d, must provide a 2-tuple with fundamental_period
+                                    of each dimension.
+                            * 'dayenu':
+                                No parameters necessary if you are only doing 'dayenu'.
+                                For 'dayenu_dpss', 'dayenu_dft', 'dayenu_clean' see below
+                                and use the appropriate fitting options for each method.
+                            * 'dpss':
+                                'eigenval_cutoff': array-like
+                                    list of sinc_matrix eigenvalue cutoffs to use for included dpss modes.
+                                'nterms': array-like
+                                    list of integers specifying the order of the dpss sequence to use in each
+                                    filter window.
+                                'edge_supression': array-like
+                                    specifies the degree of supression that must occur to tones at the filter edges
+                                    to calculate the number of DPSS terms to fit in each sub-window.
+                                'avg_suppression': list of floats, optional
+                                    specifies the average degree of suppression of tones inside of the filter edges
+                                    to calculate the number of DPSS terms. Similar to edge_supression but instead checks
+                                    the suppression of a since vector with equal contributions from all tones inside of the
+                                    filter width instead of a single tone.
+                            *'clean':
+                                 'tol': float,
+                                    clean tolerance. 1e-9 is standard.
+                                 'maxiter' : int
+                                    maximum number of clean iterations. 100 is standard.
+                                 'pad': int or array-like
+                                    if filt2d is false, just an integer specifing the number of channels
+                                    to pad for CLEAN (sets Fourier interpolation resolution).
+                                    if filt2d is true, specify 2-tuple in both dimensions.
+                                 'filt2d_mode' : string
+                                    if 'rect', clean withing a rectangular region of Fourier space given
+                                    by the intersection of each set of windows.
+                                    if 'plus' only clean the plus-shaped shape along
+                                    zero-delay and fringe rate.
+                                'edgecut_low' : int, number of bins to consider zero-padded at low-side of the FFT axis,
+                                    such that the windowing function smoothly approaches zero. For 2D cleaning, can
+                                    be fed as a tuple specifying edgecut_low for first and second FFT axis.
+                                'edgecut_hi' : int, number of bins to consider zero-padded at high-side of the FFT axis,
+                                    such that the windowing function smoothly approaches zero. For 2D cleaning, can
+                                    be fed as a tuple specifying edgecut_hi for first and second FFT axis.
+                                'add_clean_residual' : bool, if True, adds the CLEAN residual within the CLEAN bounds
+                                    in fourier space to the CLEAN model. Note that the residual actually returned is
+                                    not the CLEAN residual, but the residual in input data space.
+                                'taper' : window function for filtering applied to the filtered axis.
+                                    See dspec.gen_window for options. If clean2D, can be fed as a list
+                                    specifying the window for each axis in data.
+                                'skip_wgt' : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+                                    Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+                                    time. Only works properly when all weights are all between 0 and 1.
+                                'gain': The fraction of a residual used in each iteration. If this is too low, clean takes
+                                    unnecessarily long. If it is too high, clean does a poor job of deconvolving.
+                                'alpha': float, if window is 'tukey', this is its alpha parameter.
+
+                    cache: dict, optional
+                        dictionary for caching fitting matrices.
+
+                    filter_dim, int optional
+                        specify dimension to filter. default 1,
+                        and if 2d filter, will use both dimensions.
+
+                    max_contiguous_edge_flags : int, optional
+                        if the number of contiguous samples at the edge is greater then this
+                        at either side, skip .
+                    """
+        if not HAVE_UVTOOLS:
+            raise ImportError("uvtools required, install hera_cal[all]")
+
+        # type checks
+        if ax not in ['freq', 'time', 'both']:
+            raise ValueError("ax must be one of ['freq', 'time', 'both']")
+
+        if ax == 'time':
+            if max_frate is None:
+                raise ValueError("if time filtering, must feed max_frate parameter")
+
+        # initialize containers
+        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data']]
+        for i, dc in enumerate(containers):
+            if not hasattr(self, dc):
+                setattr(self, dc, DataContainer({}))
+            containers[i] = getattr(self, dc)
+        clean_model, clean_resid, clean_flags, clean_data = containers
+        clean_info = "{}_{}".format(output_prefix, 'info')
+        if not hasattr(self, clean_info):
+            setattr(self, clean_info, {})
+        clean_info = getattr(self, clean_info)
+
+        # select DataContainers
+        if data is None:
+            data = self.data
+        if flags is None:
+            flags = self.flags
+
+        # get keys
+        if keys is None:
+            keys = data.keys()
+
+        # get weights
+        if wgts is None:
+            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
+
+
+
+        # iterate over keys
+        for k in keys:
+            if k in clean_model and overwrite is False:
+                echo("{} exists in clean_model and overwrite is False, skipping...".format(k), verbose=verbose)
+                continue
+            echo("Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
+            d = data[k]
+            f = flags[k]
+            fw  = (~f).astype(np.float)
+            w = fw * wgts[k]
+
+            mdl, res ,info = dspec.fourier_filter(x d, w, filter_centers, filter_half_widths, suppression_factors,
+                                                  mode, filter2d, fitting_options, cache=None, filter_dim={'freq':1, 'time':0}[ax],
+                                                  skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags)
+
+            flgs = np.zeros_like(mdl, dtype=np.bool)
+
+            clean_model[k] = mdl
+            clean_resid[k] = res
+            clean_data[k] = mdl + res * fw
+            clean_flags[k] = flgs
+            clean_info[k] = info
+
+        if hasattr(data, 'times'):
+            clean_data.times = data.times
+            clean_model.times = data.times
+            clean_resid.times = data.times
+            clean_flags.times = data.times
+
     def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
