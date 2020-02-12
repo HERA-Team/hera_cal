@@ -39,7 +39,8 @@ setup_args = {
                 'scripts/apply_cal.py', 'scripts/delay_filter_run.py',
                 'scripts/lstbin_run.py', 'scripts/extract_autos.py',
                 'scripts/smooth_cal_run.py', 'scripts/redcal_run.py',
-                'scripts/auto_reflection_run.py', 'scripts/noise_from_autos.py'],
+                'scripts/auto_reflection_run.py', 'scripts/noise_from_autos.py',
+                'scripts/query_ex_ants.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [
