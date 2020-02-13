@@ -680,7 +680,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         uvf = UVFlag(flagfile)
         assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
         assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
-                or np.issubsctype(uvf.polarization_array.dtype, np.bytes_)), \
+                or np.issubsctype(uvf.polarization_array.dtype, np.str_)), \
             "The input h5-based UVFlag object's polarization_array must be integers or byte strings."
         freqs = np.unique(uvf.freq_array)
         times = np.unique(uvf.time_array)
@@ -692,7 +692,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                     pol = polnum2str(pol, x_orientation=uvf.x_orientation)  # convert to string if possible
                 else:
-                    pol = ','.join([polnum2str(int(p), x_orientation=uvf.x_orientation) for p in pol.split(b',')])
+                    pol = ','.join([polnum2str(int(p), x_orientation=uvf.x_orientation) for p in pol.split(',')])
                 for (ant1, ant2), blt_slice in blt_slices.items():
                     flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, 0, :, ip]
             # data container only supports standard polarizations strings
@@ -705,7 +705,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                     if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                         jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
                     else:
-                        jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(b',')])
+                        jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
                     flags[(ant, jpol)] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
 
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
@@ -713,7 +713,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                     jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
                 else:
-                    jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(b',')])
+                    jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
                 flags[jpol] = uvf.flag_array[:, :, ip]
 
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
@@ -806,7 +806,7 @@ def get_file_times(filepaths, filetype='uvh5'):
             lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
             int_time_rad = np.median(np.diff(lst_array))
             int_time = np.median(np.diff(time_array))
-            
+
         dlsts.append(int_time_rad)
         dtimes.append(int_time)
         file_lst_arrays.append(lst_array)
@@ -915,13 +915,13 @@ def read_redcal_meta(meta_filename):
         freqs = infile['header']['freqs'][:]
         times = infile['header']['times'][:]
         lsts = infile['header']['lsts'][:]
-        antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'], 
+        antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'],
                                                infile['header']['antpos'][:, :])}
         history = infile['header']['history'][()].tostring().decode('utf8')
 
         # reconstruct firstcal metadata
         fc_meta = {}
-        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8')) 
+        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8'))
                 for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
         fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
         fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}
