@@ -494,7 +494,7 @@ class VisClean(object):
             f = flags[k]
             fw  = (~f).astype(np.float)
             w = fw * wgts[k]
-
+            
             mdl, res ,info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                                   suppression_factors=suppression_factors, mode=mode, filter2d=filter2d, fitting_options=fitting_options,
                                                   cache=None, filter_dim=filterdim,
