@@ -38,8 +38,8 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
             For the purposes of this function, wghts <= 0 are considered flags.
         freqs: ndarray of frequency channels in Hz
         conv_crit: convergence criterionf or relative change in the rephasor
-        maxiter: maximum number of 
-    
+        maxiter: maximum number of
+
     Returns:
         tau: float, single best fit delay in s
     '''
@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
-                maxiter=100, **win_kwargs):
+                maxiter=100, **win_kwargs, mode='clean', filter_options=None, cache=None):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -88,7 +88,7 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
         maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
-
+        mode: deconvolution method to use in filtering. Supports ['dpss_lsq', 'dft_leastsq']
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
@@ -100,13 +100,24 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
-    filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, df, tol=tol, window=window,
+    if mode == 'clean':
+        filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, df, tol=tol, window=window,
                                                                  skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
-    filtered /= rephasor
-    # put back in unfilted values if skip_wgt is triggered
-    for i, info_dict in enumerate(info):
-        if info_dict.get('skipped', False):
-            filtered[i, :] = gains[i, :]
+        filtered /= rephasor
+        # put back in unfilted values if skip_wgt is triggered
+        for i, info_dict in enumerate(info):
+            if info_dict.get('skipped', False):
+                filtered[i, :] = gains[i, :]
+
+
+    elif mode in ['dpss_leastsq', 'dft_leastsq']:
+        filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains*rephasor, wgts=wgts, filter_centers=[0.],
+                                                            filter2d=False, filter_dim=1, filter_half_widths=[filter_size],
+                                                            mode=mode, skip_wgt=skip_wgt,
+                                                            )
+
+
+
     return filtered, info
 
 
@@ -234,7 +245,7 @@ def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5,
     until no new flags are found. Then it does antenna thresholding.
 
     Arguments:
-        flags: dictionary mapping antenna keys (e.g. (0, 'Jxx')) to Ntimes x Nfreq flag waterfalls. 
+        flags: dictionary mapping antenna keys (e.g. (0, 'Jxx')) to Ntimes x Nfreq flag waterfalls.
             Modified in place.
         freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
             for all channels. If the ratio of of such times for a given channel compared to all times that are not
@@ -295,7 +306,7 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         rephasors[ant] = np.exp(-2.0j * np.pi * dly * freqs)
 
     def narrow_refant_candidates(candidates):
-        '''Helper function for comparing refant candidates to another another looking for the one with the 
+        '''Helper function for comparing refant candidates to another another looking for the one with the
         least noisy phases in other antennas when its the reference antenna (after taking out delays)'''
         median_angle_noise_as_refant = {}
         for ref in candidates:
@@ -311,7 +322,7 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
     for pol in (pols if per_pol else [pols]):
         # pick antennas with the mininum number of flags
         flags_per_ant = {ant: np.sum(f) for ant, f in flags.items() if ant[1] in pol}
-        refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items() 
+        refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items()
                                     if nflags == np.min(list(flags_per_ant.values()))])
         while len(refant_candidates) > 1:  # loop over groups of 3 (the smallest, non-trivial size)
             # compare phase noise imparted by reference antenna candidates on two other reference antenna candidates
@@ -456,7 +467,7 @@ class CalibrationSmoother():
         2) The flag times and calfits time map one-to-one to the same set of integrations
         Also contains functionality to broadcasting flags beyond certain thresholds and for automatically picking
         a reference antenna for the whole day.
-    
+
         Arguments:
             calfits_list: list of string paths to calfits files containing calibration solutions and flags
             flag_file_list: list of string paths to files containing flags as a function of baseline, times
@@ -581,7 +592,7 @@ class CalibrationSmoother():
         if pick_refant:
             utils.echo('Now picking reference antenna(s)...', verbose=self.verbose)
             self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
-            utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.' 
+            utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.'
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
             self.rephase_to_refant()
 
