@@ -607,7 +607,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
 
-    time_avg : boolean, if True, average resultant antenna delays across time
+    time_avg : boolean, if True, replace resultant antenna delay slope with the median across time
 
     return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
 
@@ -802,7 +802,7 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, r
 
     edge_cut : int, number of channels to exclude at each band edge in phase slope solver
 
-    time_avg : boolean, if True, average resultant antenna delays across time
+    time_avg : boolean, if True, replace resultant antenna phase slopes with the median across time
 
     return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
 
@@ -2090,7 +2090,7 @@ class AbsCal(object):
 
         kernel : size of median filter across (time, freq) axes, type=(int, int)
 
-        time_avg : boolean, if True, average resultant antenna delays across time
+        time_avg : boolean, if True, replace resultant antenna delays with the median across time
 
         edge_cut : int, number of channels to exclude at each band edge in FFT window
 
@@ -2159,7 +2159,7 @@ class AbsCal(object):
 
         verbose : type=boolean, if True print feedback to stdout
 
-        time_avg : boolean, if True, average resultant delay slope across time
+        time_avg : boolean, if True, replace the resultant delay slope with the median across time
 
         four_pol : boolean, if True, form a joint polarization solution
 
