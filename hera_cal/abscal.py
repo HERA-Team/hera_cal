@@ -644,16 +644,11 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     ratio_wgts = []
     for i, k in enumerate(keys):
         ratio = data[k] / model[k]
+        ratio /= np.abs(ratio)
 
-        # replace nans
-        nan_select = np.isnan(ratio)
-        ratio[nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
-
-        # replace infs
-        inf_select = np.isinf(ratio)
-        ratio[inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
+        # replace nans and infs
+        wgts[k][~np.isfinite(ratio)] = 0.0
+        ratio[~np.isfinite(ratio)] = 0.0
 
         # get delays
         dly, _ = utils.fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
