@@ -3026,7 +3026,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
 
 
 def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15),
-                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
+                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
     '''Performs Abscal for data that has already been redundantly calibrated.
 
     Arguments:
@@ -3039,7 +3039,6 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         edge_cut : integer number of channels to exclude at each band edge in delay and global phase solvers
         tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
         kernel: tuple of integers, size of medfilt kernel used in the first step of delay slope calibration.
-        gain_convention: either 'divide' if raw data is calibrated by dividing it by the gains
             otherwise, 'multiply'.
         phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
@@ -3065,7 +3064,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     # Abscal Step 1: Per-Channel Absolute Amplitude Calibration
     gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
     abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
-    apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
+    apply_cal.calibrate_in_place(data, gains_here)
 
     # Abscal Step 2: Global Delay Slope Calibration
     binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(np.float) for bl in data_wgts})
@@ -3074,20 +3073,20 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=binary_wgts, df=df, medfilt=True, kernel=kernel,
                                         time_avg=time_avg, verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
-        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
+        apply_cal.calibrate_in_place(data, gains_here)
 
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
     for time_avg in [True, False]:
         gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=binary_wgts, verbose=verbose, 
                                                tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
-        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
+        apply_cal.calibrate_in_place(data, gains_here)
     for time_avg in [True, False]:
         for i in range(phs_max_iter):
             gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=binary_wgts, verbose=verbose,
                                                    tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
             abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
-            apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
+            apply_cal.calibrate_in_place(data, gains_here)
             crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
             echo("global_phase_slope_logcal convergence criterion: " + str(crit), verbose=verbose)
             if crit < phs_conv_crit:
@@ -3100,7 +3099,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     for i in range(phs_max_iter):
         gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=angle_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
-        apply_cal.calibrate_in_place(data, gains_here, gain_convention=gain_convention)
+        apply_cal.calibrate_in_place(data, gains_here)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
         echo("TT_phs_logcal convergence criterion: " + str(crit), verbose=verbose)
         if crit < phs_conv_crit:
@@ -3171,7 +3170,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     # Load redcal calibration
     hc = io.HERACal(redcal_file)
     rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
-    hc.test_dict = {}
+    assert hc.gain_convention is 'divide', "The calibration gain convention in {} is not the HERA standard 'divide'.".format(redcal_file)
 
     # Initialize full-size, totally-flagged abscal gain/flag/etc. dictionaries
     abscal_gains = copy.deepcopy(rc_gains)
@@ -3235,8 +3234,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                         rc_gains_subset = {k: rc_gains[k][tinds, :] for k in ants}
                         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in ants}
                         if not data_is_redsol:  # data is raw, so redundantly calibrate it
-                            calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
-                                               cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+                            calibrate_in_place(data, rc_gains_subset, data_flags=flags, cal_flags=rc_flags_subset)
 
                         if not np.all(list(flags.values())):
                             # load model and rephase
@@ -3254,8 +3252,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                             # get the relative wgts for each piece of data
                             auto_bls = [join_bl(ant, ant) for ant in rc_gains if join_bl(ant, ant)[2] == pol]
                             autocorrs, auto_flags, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
-                            calibrate_in_place(autocorrs, rc_gains_subset, data_flags=auto_flags,
-                                               cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+                            calibrate_in_place(autocorrs, rc_gains_subset, data_flags=auto_flags, cal_flags=rc_flags_subset)
 
                             # use data_to_model_bl_map to rekey model. Does not copy to save memory.
                             model = DataContainer({bl: model[data_to_model_bl_map[bl]] for bl in data})
@@ -3268,11 +3265,10 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
                             # run absolute calibration to get the gain updates
                             delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
-                                                             gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
-                                                             phs_conv_crit=phs_conv_crit, verbose=verbose)
+                                                             phs_max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
 
                             # abscal autos, rebuild weights, and generate abscal Chi^2
-                            calibrate_in_place(autocorrs, delta_gains, gain_convention=hc.gain_convention)
+                            calibrate_in_place(autocorrs, delta_gains)
                             chisq_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, auto_flags,
                                                          times_by_bl=hd.times_by_bl, df=np.median(np.ediff1d(data.freqs)),
                                                          data_is_redsol=data_is_redsol, gain_flags=rc_flags_subset, antpos=hd.antpos)
