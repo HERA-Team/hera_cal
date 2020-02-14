@@ -2957,6 +2957,8 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
                     df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None):
     '''Build linear weights for data in abscal (or calculating chisq) defined as
     wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged).
+    N.B.: if there are discontinunities into the autocorrelations, the nsamples, etc., this maybe
+    introduce spectral strucutre into the calibration soltuion.
     
     Arguments:
         data_flags: DataContainer containing flags on data to be abscaled
