@@ -3030,7 +3030,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     # Abscal Step 2: Global Delay Slope Calibration
     binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(np.float) for bl in data_wgts})
     df = np.median(np.diff(data.freqs))
-    for time_avg in [True, False]:
+    for time_avg in [True, False]:  # first use the time-averaged solution to try to avoid false minima
         gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=binary_wgts, df=df, medfilt=True, kernel=kernel,
                                         time_avg=time_avg, verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
