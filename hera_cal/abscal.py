@@ -2872,27 +2872,28 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     # Either the model is just unique baselines, or both the data and the model are just unique baselines
     else:
         # build reds using both sets of antpos to find matching baselines
-        ant_offset = np.max(list(data_antpos.keys())) + 1  # increase all antenna indices by this amount
-        joint_antpos = {**data_antpos, **{ant + ant_offset: pos for ant, pos in model_antpos.items()}}
+        # increase all antenna indices in the model by model_offset to distinguish them from data antennas
+        model_offset = np.max(list(data_antpos.keys())) + 1
+        joint_antpos = {**data_antpos, **{ant + model_offset: pos for ant, pos in model_antpos.items()}}
         joint_reds = redcal.get_reds(joint_antpos, pols=pols, bl_error_tol=tol)
 
         # filter out baselines not in data or model or between data and model
-        joint_reds = [[bl for bl in red if not ((bl[0] < ant_offset) ^ (bl[1] < ant_offset))] for red in joint_reds]
+        joint_reds = [[bl for bl in red if not ((bl[0] < model_offset) ^ (bl[1] < model_offset))] for red in joint_reds]
         joint_reds = [[bl for bl in red if (bl in data_bl_to_load) or (reverse_bl(bl) in data_bl_to_load)
-                       or ((bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) in model_bl_to_load)
-                       or reverse_bl((bl[0] - ant_offset, bl[1] - ant_offset, bl[2])) in model_bl_to_load] for red in joint_reds]
+                       or ((bl[0] - model_offset, bl[1] - model_offset, bl[2]) in model_bl_to_load)
+                       or reverse_bl((bl[0] - model_offset, bl[1] - model_offset, bl[2])) in model_bl_to_load] for red in joint_reds]
         joint_reds = [red for red in joint_reds if len(red) > 0]
 
         # map baselines in data to unique baselines in model
         data_to_model_bl_map = {}
         for red in joint_reds:
-            data_bl_candidates = [bl for bl in red if bl[0] < ant_offset]
-            model_bl_candidates = [(bl[0] - ant_offset, bl[1] - ant_offset, bl[2]) for bl in red if bl[0] >= ant_offset]
+            data_bl_candidates = [bl for bl in red if bl[0] < model_offset]
+            model_bl_candidates = [(bl[0] - model_offset, bl[1] - model_offset, bl[2]) for bl in red if bl[0] >= model_offset]
             assert len(model_bl_candidates) <= 1, ('model_is_redundant is True, but the following model baselines are '
                                                    'redundant and in the model file: {}'.format(model_bl_candidates))
             if len(model_bl_candidates) == 1:
                 for bl in red:
-                    if bl[0] < ant_offset:
+                    if bl[0] < model_offset:
                         if bl in data_bl_to_load:
                             data_to_model_bl_map[bl] = model_bl_candidates[0]
                         elif reverse_bl(bl) in data_bl_to_load:
