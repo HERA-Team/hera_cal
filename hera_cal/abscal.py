@@ -2828,6 +2828,46 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
     return d2m_time_map
 
 
+def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_list, gain_flags, 
+                gain_convention='divide', max_iter=1, phs_conv_crit=1e-6, verbose=True):
+    '''Generalized function for performing an abscal step (e.g. abs_amp_logcal or TT_phs_logcal).
+
+    NOTE: This function is no longer used and will likely be removed in a future version.
+    
+    Arguments:
+        gains_to_update: the gains produced by abscal up until this step. Updated in place.
+        AC: AbsCal object containing data, model, and other metadata. AC.data is recalibrated 
+            in place using the gains solved for during this step
+        AC_func: function (usually a class method of AC) to call to instantiate the new gains 
+            which are then accessible as class properties of AC
+        AC_kwargs: dictionary of kwargs to pass into AC_func
+        gain_funcs: list of functions to call to return gains after AC_func has been called
+        gain_args_list: list of tuples of arguments to pass to the corresponding gain_funcs
+        gain_flags: per-antenna flags to apply to AC.Data when performing recalibration
+        gain_convention: either 'divide' if raw data is calibrated by dividing it by the gains
+            otherwise, 'multiply'.
+        max_iter: maximum number of times to run phase solvers iteratively to avoid the effect
+            of phase wraps in, e.g. phase_slope_cal or TT_phs_logcal
+        phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
+            the updates to all 1.0s. 
+        verbose: If True, will print the progress of iterative convergence
+    '''
+    warnings.warn('abscal_step is no longer used by post_redcal_abscal and thus subject to future removal.', DeprecationWarning)
+
+    for i in range(max_iter):
+        AC_func(**AC_kwargs)
+        gains_here = merge_gains([gf(*gargs) for gf, gargs in zip(gain_funcs, gain_args_list)])
+        apply_cal.calibrate_in_place(AC.data, gains_here, AC.wgts, gain_flags, 
+                                     gain_convention=gain_convention, flags_are_wgts=True)
+        for k in gains_to_update.keys():
+            gains_to_update[k] *= gains_here[k]
+        if max_iter > 1:
+            crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for 
+                                             k in gains_here.keys()], axis=(0, 1)))
+            echo(AC_func.__name__ + " convergence criterion: " + str(crit), verbose=verbose)
+            if crit < phs_conv_crit:
+                break
+
 def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[], data_is_redsol=False, 
                     model_is_redundant=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, verbose=False):
     '''Figure out which baselines to use in the data and the model for abscal and their correspondence.
