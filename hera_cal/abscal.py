@@ -2899,8 +2899,8 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     # Perform cut on baseline length and polarization
     if len(pols) == 0:
         pols = list(set([bl[2] for bl_list in [data_bls, model_bls] for bl in bl_list]))
-    data_bl_to_load = filter_bls(data_bls, pols=pols, antpos=data_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
-    model_bl_to_load = filter_bls(model_bls, pols=pols, antpos=model_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
+    data_bl_to_load = utils.filter_bls(data_bls, pols=pols, antpos=data_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
+    model_bl_to_load = utils.filter_bls(model_bls, pols=pols, antpos=model_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
 
     # If we're working with full data sets, only pick out matching keys (or ones that work reversably)
     if not data_is_redsol and not model_is_redundant:
@@ -3170,7 +3170,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
     # Load redcal calibration
     hc = io.HERACal(redcal_file)
     rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
-    assert hc.gain_convention is 'divide', "The calibration gain convention in {} is not the HERA standard 'divide'.".format(redcal_file)
+    assert hc.gain_convention == 'divide', "The calibration gain convention in {} is not the HERA standard 'divide'.".format(redcal_file)
 
     # Initialize full-size, totally-flagged abscal gain/flag/etc. dictionaries
     abscal_gains = copy.deepcopy(rc_gains)
