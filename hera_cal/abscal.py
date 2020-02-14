@@ -2859,19 +2859,8 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     # Perform cut on baseline length and polarization
     if len(pols) == 0:
         pols = list(set([bl[2] for bl_list in [data_bls, model_bls] for bl in bl_list]))
-    
-    def _cut_bl_and_pol(bls, antpos):
-        bls_to_load = []
-        for bl in bls:
-            if bl[2] in pols:
-                ant1, ant2 = split_bl(bl)
-                bl_length = np.linalg.norm(antpos[ant2[0]] - antpos[ant1[0]])
-                if (min_bl_cut is None) or (bl_length >= min_bl_cut):
-                    if (max_bl_cut is None) or (bl_length <= max_bl_cut):
-                        bls_to_load.append(bl)
-        return bls_to_load
-    data_bl_to_load = _cut_bl_and_pol(data_bls, data_antpos)
-    model_bl_to_load = _cut_bl_and_pol(model_bls, model_antpos)
+    data_bl_to_load = filter_bls(data_bls, pols=pols, antpos=data_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
+    model_bl_to_load = filter_bls(model_bls, pols=pols, antpos=model_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
 
     # If we're working with full data sets, only pick out matching keys (or ones that work reversably)
     if not data_is_redsol and not model_is_redundant:
