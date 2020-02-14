@@ -7,13 +7,14 @@ from copy import deepcopy
 import argparse
 import os
 import linsolve
+from itertools import permutations, combinations_with_replacement
 
 from . import utils
 from . import version
 from .noise import predict_noise_variance_from_autos
 from .datacontainer import DataContainer
 from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol
-from .io import HERAData, HERACal, write_cal
+from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
 
@@ -256,6 +257,198 @@ def reds_to_antpos(reds, tol=1e-10):
     return antpos
 
 
+def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8)):
+    '''This function looks at all redundant baselines and sees whether they mostly agree with the median
+    baseline or whether they look closer to being off by pi radians. The ones close to the median are the
+    "majority". The ones close to pi phase are the "minority." The rest are ambiguious and ignored in our
+    analysis. This function returns a dictionary that maps unique baselines to two groups of baselines,
+    both of which have the same internal polarity, through we don't know if it's "odd" (one flipped antenna)
+    or "even" (two or zero flipped antennas). See find_polarity_flipped_ants() for parameter descriptions.
+    '''
+    # make sure edge_cut and max_rel_angle are sensible
+    assert 0 < max_rel_angle <= np.pi / 2, "max_rel_angle must be between 0 and np.pi/2."
+    Nfreqs = list(dly_cal_data.values())[0].shape[1]
+    assert 2 * edge_cut < Nfreqs, "edge_cut cannot be >= Nfreqs/2"
+    fslice = slice(edge_cut, Nfreqs - edge_cut)
+
+    polarity_groups = {}
+    for red in reds:
+        grp1, grp2 = [], []
+        # find the median baseline for this redundant group
+        conj_median_bl = np.conj(np.median([dly_cal_data[bl][:, fslice] for bl in red], axis=0))
+        for bl in red:
+            # compare the median baseline to this baseline, taking the median abs of the angle over time and freq
+            median_abs_relative_angle = np.median(np.abs(np.angle(conj_median_bl * dly_cal_data[bl][:, fslice])))
+            # sort baseline ito group based on max_rel_angle, ignoring ambiguous baselines in between
+            if median_abs_relative_angle < max_rel_angle:
+                grp1.append(bl)
+            elif median_abs_relative_angle > np.pi - max_rel_angle:
+                grp2.append(bl)
+        if (len(grp1) > 0) or (len(grp2) > 0):  # if any baselines are unambiguous
+            polarity_groups[red[0]] = (grp1, grp2)
+
+    return polarity_groups
+
+
+def _determine_polarity_flips(polarity_groups, even_vs_odd_assumptions):
+    '''Take a set of polarity groups built by _build_polarity_baseline_groups() and set of a priori
+    assumptions about which ones are "even" (0 or 2 polarity flips) and which ones are "odd" (1 
+    polarity flip). Pick an antenna that participates mostly in even groups as a "not flipped"
+    reference. Use the assumptions to draw conclusions about more antennas. Use those anntennas
+    to draw conclusions about more groups being even/odd or odd/even. Keep iterating until it
+    finishes or gets stuck. If it fails to find a solution or reaches a contradiction, it raises
+    an AssertionError. Otherwise, it returns two dictionaries: is_flipped maps antennas to booleans
+    and even_vs_odd_IDs maps unique baseline keys to strings either 'even/odd' or 'odd/even'.
+    '''
+    even_vs_odd_IDs = deepcopy(even_vs_odd_assumptions)
+
+    # Find all antennas in the polarity groups
+    ants = set([ant for grp_pair in polarity_groups.values() 
+                for grp in grp_pair for bl in grp for ant in utils.split_bl(bl)])
+
+    # Count how many times each antenna is involved in an assumed even group minus odd group
+    ant_even_counts = {ant: 0 for ant in ants}
+    for key, (grp1, grp2) in polarity_groups.items():
+        if key in even_vs_odd_IDs:
+            even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
+            for grp, to_add in zip([even, odd], [1, -1]):
+                for bl in grp:
+                    ant_even_counts[utils.split_bl(bl)[0]] += to_add
+                    ant_even_counts[utils.split_bl(bl)[1]] += to_add
+    
+    # Select reference antenna based on maximizing the even - odd difference.
+    refant = sorted(ant_even_counts, key=ant_even_counts.get)[-1]
+    is_flipped = {refant: False}
+    
+    while True:
+        n_flipped, n_groups_IDed = len(is_flipped), len(even_vs_odd_IDs)
+        
+        # loop over all groupings
+        for key, (grp1, grp2) in polarity_groups.items():
+            # if we think we know whether this group is even/odd or odd/even
+            if key in even_vs_odd_IDs:
+                even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
+                
+                # use information about group and a known flip to infer other flips
+                for bl in even:
+                    ant0, ant1 = utils.split_bl(bl)
+                    if (ant0 in is_flipped) and (ant1 in is_flipped):
+                        assert is_flipped[ant0] == is_flipped[ant1], str((ant0, ant1))
+                    elif (ant0 in is_flipped):
+                        is_flipped[ant1] = is_flipped[ant0]
+                    elif (ant1 in is_flipped):
+                        is_flipped[ant0] = is_flipped[ant1]
+                for bl in odd:
+                    ant0, ant1 = utils.split_bl(bl)
+                    if (ant0 in is_flipped) and (ant1 in is_flipped):
+                        assert is_flipped[ant0] != is_flipped[ant1], str((ant0, ant1))
+                    elif (ant0 in is_flipped):
+                        is_flipped[ant1] = not is_flipped[ant0]
+                    elif (ant1 in is_flipped):
+                        is_flipped[ant0] = not is_flipped[ant1]
+            
+            # try to infer if this group is even/odd or odd/even from two known flips
+            else:
+                for labels, grp in zip([['even/odd', 'odd/even'], ['odd/even', 'even/odd']], [grp1, grp2]):
+                    for bl in grp:
+                        ant0, ant1 = utils.split_bl(bl)
+                        if (ant0 in is_flipped) and (ant1 in is_flipped):
+                            if is_flipped[ant0] == is_flipped[ant1]:
+                                even_vs_odd_IDs[key] = labels[0]
+                            else:
+                                even_vs_odd_IDs[key] = labels[1]
+
+        # if no new identifications were made this iteration, break
+        if (n_flipped == len(is_flipped)) and (n_groups_IDed == len(even_vs_odd_IDs)):
+            break
+
+    # Raise an assertion error if less than all antennas and polarity groups were properly identified.
+    err = 'Only identified {}/{} flips and {}/{} polarity_groups.'
+    err = err.format(n_flipped, len(ants), n_groups_IDed, len(polarity_groups))
+    assert (n_flipped == len(ants)) and (n_groups_IDed == len(polarity_groups)), err
+    return is_flipped, even_vs_odd_IDs
+
+
+def _check_polarity_results(polarity_groups, is_flipped, even_vs_odd_IDs):
+    '''For a set of polarity_groups (see _build_polarity_baseline_groups()) determine of the proposed solution
+    set of is_flipped dictionary and even_vs_odd_IDs built by _determine_polarity_flips() is consistent.
+    '''
+    for key, (grp1, grp2) in polarity_groups.items():
+        # parse majority and minority groups into "even/odd" or "odd/even"
+        even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
+        # assert that antennas in even baselines have the same polarity
+        for bl in even:
+            ant0, ant1 = utils.split_bl(bl)
+            assert is_flipped[ant0] == is_flipped[ant1], str((ant0, ant1))
+        # assert that antennas in oddd baselines have different polarities
+        for bl in odd:
+            ant0, ant1 = utils.split_bl(bl)
+            assert is_flipped[ant0] != is_flipped[ant1], str((ant0, ant1))
+
+
+def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8), max_assumptions=5):
+    '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
+    antennas appear to have reversed polarities (effectively a factor of -1 in the gains). 
+
+    The basic algorithm is as follows:
+        1) For each redundant baseline group, split the baselines into two classes based on phases relative
+           to the median baseline. One of these is the "even" group (0 or 2 polarity flips) and one is the
+           "odd" group (1 flip), but we don't know which is which yet. Usually the larger group is the 
+           even one, but if a redundant baseline has involves many polarity flipped antennas, the majority 
+           group might be the odd one. 
+        2) Make a set of assumptions about which group is odd and even for some of the baseline groups.
+        3) Given the set of assumptions, pick an reference antenna that's involved mostly in even groups
+           and define its polarity as "not flipped."
+        4) Use the reference antenna and the assumptions to iteratively infer which antennas have polarity
+           flips and which groups are odd/even for a redundant group (beyond the initial assumptions)
+        5) If the code reaches a conclusion, check that all results are internally consistent.
+        6) If the code gets stuck or reaches a contradiction, raise an assertion error.
+        7) Catch the error and try a new set of assumptions.
+        8) Loop over assumptions: pick the top N baseline groups ranked by the number of baselines with small
+           phases relative to the median minus the number with large phases. Try all possible combinations of
+           assumptions. If none work, increase N up to max_assumptions.
+
+    Arugments:
+        dly_cal_data: DataContainer mapping baseline tuples e.g. (0, 1, 'Jee') to delay-only calibrated visibilities
+        reds: list of list of baselines tuples considered redundant
+        edge_cut: number of channels to exclude for each edge of the band when computing median phase
+        max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
+            (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
+        max_assumptions: maximum number of assumptions to try before giving up. Warning: the complexity
+            of this scales exponentially as 2^max_assumptions.
+
+    Returns:
+        is_flipped: dictionary mapping antenna tuple e.g. (0, 'Jee') to Booleans.
+            If no solution is found returns a dictionary mapping antennas to None.
+    '''
+    polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=edge_cut, max_rel_angle=max_rel_angle)
+    ants = set([ant for red in reds for bl in red for ant in utils.split_bl(bl)])
+
+    for n_asssumptions in range(1, max_assumptions + 1):
+
+        # sort polarity_group keys by number of "group 1" baselines minus "group 2" baselines and take the top n_asssumptions
+        group_keys = sorted(polarity_groups, key=lambda k: len(polarity_groups[k][0]) - len(polarity_groups[k][1]), reverse=True)
+        group_keys = group_keys[0:n_asssumptions]
+        
+        # build all permutations of 'even/odd' and 'odd/even' of length(n_asssumptions) sorted by more 'even/odd's
+        assumption_maps = set([item for combo in combinations_with_replacement(['even/odd', 'odd/even'], n_asssumptions) 
+                               for item in permutations(combo)])
+        assumption_maps = sorted(assumption_maps, key=lambda k: np.sum(np.array(k) == 'odd/even'))
+        
+        # build an assumption dictionary mapping group_keys to assumption_maps, try to determine polarity 
+        for assumption_map in assumption_maps:
+            even_vs_odd_assumptions = {key: assumption for key, assumption in zip(group_keys, assumption_map)}
+            try:
+                # if either of these fails, it will raise an AssertionError
+                is_flipped, even_vs_odd_IDs = _determine_polarity_flips(polarity_groups, even_vs_odd_assumptions)
+                _check_polarity_results(polarity_groups, is_flipped, even_vs_odd_IDs)
+                # if it succeeds, reutrn current value of is_flipped
+                break
+            except AssertionError:
+                is_flipped = {ant: None for ant in ants}  # this means it hasn't succeded.
+    return {ant: (is_flipped[ant] if ant in is_flipped else None) for ant in ants}
+
+
 def _check_polLists_minV(polLists):
     """Given a list of unique visibility polarizations (e.g. for each red group), returns whether
     they are all either single identical polarizations (e.g. 'nn') or both cross polarizations
@@ -310,7 +503,7 @@ def parse_pol_mode(reds):
 
 def get_gains_and_vis_from_sol(sol):
     """Splits a sol dictionary into len(key)==2 entries, taken to be gains,
-    and len(key)==3 entries, taken to be model visibilities."""
+    and len(key)==3 entries, taken to be model visibrilities."""
 
     g = {key: val for key, val in sol.items() if len(key) == 2}
     v = {key: val for key, val in sol.items() if len(key) == 3}
@@ -549,7 +742,7 @@ class RedundantCalibrator:
             ubl_sols[blgrp[0]] = np.average(d_gp, axis=0)  # XXX add option for median here?
         return ubl_sols
 
-    def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False,
+    def _firstcal_iteration(self, data, df, f0, wgts={}, offsets_only=False, edge_cut=0,
                             sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
         '''Runs a single iteration of firstcal, which uses phase differences between nominally
         redundant meausrements to solve for delays and phase offsets that produce gains of the
@@ -580,7 +773,8 @@ class RedundantCalibrator:
                         ad12 = np.abs(d12)
                         d12 /= np.where(ad12 == 0, np.float32(1), ad12)
                     w12 = w1 * wgts[bl2]
-                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt, kernel=kernel)
+                    taus_offs[(bl1, bl2)] = utils.fft_dly(d12, df, f0=f0, wgts=w12, medfilt=medfilt, 
+                                                          kernel=kernel, edge_cut=edge_cut)
                     twgts[(bl1, bl2)] = np.sum(w12)
         d_ls, w_ls = {}, {}
         for (bl1, bl2), tau_off_ij in taus_offs.items():
@@ -597,7 +791,8 @@ class RedundantCalibrator:
         return dly_sol, off_sol
 
     def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
-                 sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11)):
+                 sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11),
+                 edge_cut=0, max_rel_angle=(np.pi / 8), max_assumptions=5):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redundant measurements. 
         Delays are solved in a single iteration, but phase offsets are solved for 
@@ -619,8 +814,15 @@ class RedundantCalibrator:
             medfilt : boolean, median filter data before fft.  This can work for data containing
                 unflagged RFI, but tends to be less effective in practice than 'norm'.  Default False.
             kernel : size of median filter kernel along (time, freq) axes
+            edge_cut: number of channels to exclude for each edge of the band when computing median phase
+                for find_polarity_flipped_ants or when computing delays and offsets in utils.fft_dly
+            max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
+                (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
+            max_assumptions: maximum number of assumptions to try before giving up. Warning: the complexity
+                of this scales exponentially as 2^max_assumptions.
 
         Returns:
+            meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
             g_fc: dictionary of Ntimes x Nfreqs per-antenna gains solutions in the 
                 {(index, antpol): np.exp(2j * np.pi * delay * freqs + 1j * offset)} format.
         """
@@ -629,23 +831,35 @@ class RedundantCalibrator:
         
         # iteratively solve for offsets to account for phase wrapping
         for i in range(maxiter):
-            dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, 
+            dlys, delta_off = self._firstcal_iteration(data, df=df, f0=freqs[0], wgts=wgts, edge_cut=edge_cut,
                                                        offsets_only=(i > 0), sparse=sparse, mode=mode, 
                                                        norm=norm, medfilt=medfilt, kernel=kernel)
-            if i == 0:  # only solve for delays on the first iteration
+            if i == 0:  # only solve for delays on the first iteration, also apply polarity flips
                 g_fc = {ant: np.array(np.exp(2j * np.pi * np.outer(dly, freqs)),
                                       dtype=dtype) for ant, dly in dlys.items()}
                 calibrate_in_place(data, g_fc, gain_convention='divide')  # applies calibration
+                
+                # build metadata and apply detected polarities as a firstcal starting point
+                meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
+                polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle, edge_cut=edge_cut, max_assumptions=max_assumptions)
+                meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
+                                          for ant in polarity_flips}
+                if np.all([flip is not None for flip in polarity_flips.values()]):
+                    polarities = {ant: -1.0 if polarity_flips[ant] else 1.0 for ant in g_fc}
+                    calibrate_in_place(data, polarities, gain_convention='divide')  # applies calibration
+                    g_fc = {ant: g_fc[ant] * polarities[ant] for ant in g_fc}
             
-            if np.linalg.norm(list(delta_off.values())) < conv_crit:
+            else:  # on second and subsequent iterations, do phase shifts
+                delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
+                                             dtype=dtype) for ant in g_fc.keys()}
+                calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
+                g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
+            
+            if (np.linalg.norm(list(delta_off.values())) < conv_crit) and (i > 1):
                 break
-            delta_gains = {ant: np.array(np.ones_like(g_fc[ant]) * np.exp(1.0j * delta_off[ant]),
-                                         dtype=dtype) for ant in g_fc.keys()}
-            calibrate_in_place(data, delta_gains, gain_convention='divide')  # update calibration
-            g_fc = {ant: g_fc[ant] * delta_gains[ant] for ant in g_fc}
 
         calibrate_in_place(data, g_fc, gain_convention='multiply')  # unapply calibration
-        return g_fc
+        return meta, g_fc
 
     def logcal(self, data, sol0={}, wgts={}, sparse=False, mode='default'):
         """Takes the log to linearize redcal equations and minimizes chi^2.
@@ -663,6 +877,7 @@ class RedundantCalibrator:
                 More documentation of modes in linsolve.LinearSolver.solve().
 
         Returns:
+            meta: empty dictionary (to maintain consistency with related functions)
             sol: dictionary of gain and visibility solutions in the {(index,antpol): np.array}
                 and {(ind1,ind2,pol): np.array} formats respectively
         """
@@ -674,7 +889,7 @@ class RedundantCalibrator:
         for ubl_key in [k for k in sol.keys() if len(k) == 3]:
             sol[ubl_key] = sol[ubl_key] * self.phs_avg[ubl_key].conj()
         sol_with_fc = {key: (sol[key] * sol0[key] if (key in sol0 and len(key) == 2) else sol[key]) for key in sol.keys()}
-        return sol_with_fc
+        return {}, sol_with_fc
 
     def lincal(self, data, sol0, wgts={}, sparse=False, mode='default', conv_crit=1e-10, maxiter=50, verbose=False):
         """Taylor expands to linearize redcal equations and iteratively minimizes chi^2.
@@ -1239,6 +1454,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
             Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
         'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jnn') to the average chisq
             for all visibilities that an antenna participates in.
+        'fc_meta' : dictionary that includes delays and identifies flipped antennas
         'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
     rv = {}  # dictionary of return values
@@ -1249,11 +1465,11 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         times_by_bl = data.times_by_bl
 
     # perform firstcal
-    rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit)
+    rv['fc_meta'], rv['g_firstcal'] = rc.firstcal(data, freqs, maxiter=fc_maxiter, conv_crit=fc_conv_crit)
     rv['gf_firstcal'] = {ant: np.zeros_like(g, dtype=bool) for ant, g in rv['g_firstcal'].items()}
 
     # perform logcal and omnical
-    log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
+    _, log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
     data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
                                                                      * SEC_PER_DAY))**-1 for bl in data.keys()}
@@ -1324,6 +1540,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
             Otherwise, there is a single chisq (because polarizations mix) and this is a numpy array.
         'chisq_per_ant': dictionary mapping ant-pol tuples like (1,'Jnn') to the average chisq
             for all visibilities that an antenna participates in.
+        'fc_meta' : dictionary that includes delays and identifies flipped antennas
+        'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
     if nInt_to_load is not None:
         assert hd.filetype == 'uvh5', 'Partial loading only available for uvh5 filetype.'
@@ -1358,6 +1576,13 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
     rv['vf_omnical'] = DataContainer({red[0]: np.ones((nTimes, nFreqs), dtype=bool) for red in all_reds})
     rv['vns_omnical'] = DataContainer({red[0]: np.zeros((nTimes, nFreqs), dtype=np.float32) for red in all_reds})
     filtered_reds = filter_reds(all_reds, ex_ants=ex_ants, antpos=hd.antpos, **filter_reds_kwargs)
+
+    # setup metadata dictionaries
+    rv['fc_meta'] = {'dlys': {ant: np.full(nTimes, np.nan) for ant in ants}}
+    rv['fc_meta']['polarity_flips'] = {ant: np.full(nTimes, np.nan) for ant in ants}
+    rv['omni_meta'] = {'chisq': {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}}
+    rv['omni_meta']['iter'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=int) for pols in pol_load_list}
+    rv['omni_meta']['conv_crit'] = {str(pols): np.zeros((nTimes, nFreqs), dtype=float) for pols in pol_load_list}
 
     # solar flagging
     lat, lon, alt = hd.telescope_location_lat_lon_alt_degrees
@@ -1399,6 +1624,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                     rv['g_omnical'][ant][tinds, fSlice] = cal['g_omnical'][ant]
                     rv['gf_omnical'][ant][tinds, fSlice] = cal['gf_omnical'][ant]
                     rv['chisq_per_ant'][ant][tinds, fSlice] = cal['chisq_per_ant'][ant]
+                for ant in cal['fc_meta']['dlys'].keys():
+                    rv['fc_meta']['dlys'][ant][tinds] = cal['fc_meta']['dlys'][ant]
+                    rv['fc_meta']['polarity_flips'][ant][tinds] = cal['fc_meta']['polarity_flips'][ant]
                 for bl in cal['v_omnical'].keys():
                     rv['v_omnical'][bl][tinds, fSlice] = cal['v_omnical'][bl]
                     rv['vf_omnical'][bl][tinds, fSlice] = cal['vf_omnical'][bl]
@@ -1409,12 +1637,15 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 else:  # duplicate chi^2 into both antenna polarizations
                     for antpol in rv['chisq'].keys():
                         rv['chisq'][antpol][tinds, fSlice] = cal['chisq']
+                rv['omni_meta']['chisq'][str(pols)][tinds, fSlice] = cal['omni_meta']['chisq']
+                rv['omni_meta']['iter'][str(pols)][tinds, fSlice] = cal['omni_meta']['iter']
+                rv['omni_meta']['conv_crit'][str(pols)][tinds, fSlice] = cal['omni_meta']['conv_crit']
 
     return rv
 
 
-def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename, 
-                              outdir, clobber=False, verbose=False, add_to_history=''):
+def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename,
+                              meta_filename, outdir, clobber=False, verbose=False, add_to_history=''):
     '''Helper function for writing the results of redcal_run.'''
     if verbose:
         print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
@@ -1436,13 +1667,18 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     hd_out.history += version.history_string(add_to_history)
     hd_out.write_uvh5(os.path.join(outdir, omnivis_filename), clobber=True)
 
+    if verbose:
+        print('Now saving redcal metadata to ', os.path.join(outdir, meta_filename))
+    save_redcal_meta(os.path.join(outdir, meta_filename), cal['fc_meta'], cal['omni_meta'], hd.freqs, 
+                     hd.times, hd.lsts, hd.antpos, hd.history + version.history_string(add_to_history))
+
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', 
-               omnivis_ext='.omni_vis.uvh5', iter0_prefix='', outdir=None, ant_metrics_file=None, clobber=False, 
-               nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, 
-               max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
-               fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, 
-               add_to_history='', verbose=False, **filter_reds_kwargs):
+               omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None, 
+               ant_metrics_file=None, clobber=False, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, 
+               ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, 
+               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, 
+               check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1453,6 +1689,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         firstcal_ext: string to replace file extension of input_data for saving firstcal calfits
         omnical_ext: string to replace file extension of input_data for saving omnical calfits
         omnivis_ext: string to replace file extension of input_data for saving omnical visibilities as uvh5
+        meta_ext: string to replace file extension of input_data for saving metadata as hdf5
         iter0_prefix: if not '', save the omnical results with this prefix appended to each file after the 0th
             iteration, but only if redcal has found any antennas to exclude and re-run without
         outdir: folder to save data products. If None, will be the same as the folder containing input_data
@@ -1543,12 +1780,13 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         # If there is going to be a re-run and if iter0_prefix is not the empty string, then save the iter0 results.
         if run_number == 1 and len(iter0_prefix) > 0:
             _redcal_run_write_results(cal, hd, filename_no_ext + iter0_prefix + firstcal_ext, filename_no_ext + iter0_prefix + omnical_ext,
-                                      filename_no_ext + iter0_prefix + omnivis_ext, outdir, clobber=clobber, verbose=verbose,
-                                      add_to_history=add_to_history + '\n' + 'Iteration 0 Results.\n')
+                                      filename_no_ext + iter0_prefix + omnivis_ext, filename_no_ext + iter0_prefix + meta_ext, outdir, 
+                                      clobber=clobber, verbose=verbose, add_to_history=add_to_history + '\n' + 'Iteration 0 Results.\n')
 
     # output results files
-    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext, filename_no_ext + omnivis_ext,
-                              outdir, clobber=clobber, verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
+    _redcal_run_write_results(cal, hd, filename_no_ext + firstcal_ext, filename_no_ext + omnical_ext, 
+                              filename_no_ext + omnivis_ext, filename_no_ext + meta_ext, outdir, clobber=clobber, 
+                              verbose=verbose, add_to_history=add_to_history + '\n' + high_z_ant_hist)
 
     return cal
 
@@ -1561,6 +1799,7 @@ def redcal_argparser():
     a.add_argument("--firstcal_ext", default='.first.calfits', type=str, help="string to replace file extension of input_data for saving firstcal calfits")
     a.add_argument("--omnical_ext", default='.omni.calfits', type=str, help="string to replace file extension of input_data for saving omnical calfits")
     a.add_argument("--omnivis_ext", default='.omni_vis.uvh5', type=str, help="string to replace file extension of input_data for saving omnical visibilities as uvh5")
+    a.add_argument("--meta_ext", default='.redcal_meta.hdf5', type=str, help="string to replace file extension of input_data for saving metadata as hdf5")
     a.add_argument("--outdir", default=None, type=str, help="folder to save data products. Default is the same as the folder containing input_data")
     a.add_argument("--iter0_prefix", default='', type=str, help="if not default '', save the omnical results with this prefix appended to each file after the 0th iteration, \
                    but only if redcal has found any antennas to exclude and re-run without.")

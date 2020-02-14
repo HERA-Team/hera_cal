@@ -907,6 +907,34 @@ class Test_Flags_IO(object):
             flags = io.load_flags(h5file)
 
 
+class Test_Meta_IO(object):
+    def test_read_write_redcal_meta(self):
+        # load file, write it back out, reread it, tests that it all agrees
+        meta_path = os.path.join(DATA_PATH, "test_input/zen.2458098.43124.downsample.redcal_meta.hdf5")
+        fc_meta, omni_meta, freqs, times, lsts, antpos, history = io.read_redcal_meta(meta_path)
+
+        out_path = os.path.join(DATA_PATH, "test_output/redcal_meta_io_test.hdf5")
+        io.save_redcal_meta(out_path, fc_meta, omni_meta, freqs, times, lsts, antpos, history)
+        fc_meta2, omni_meta2, freqs2, times2, lsts2, antpos2, history2 = io.read_redcal_meta(out_path)
+
+        for key1 in fc_meta:
+            for key2 in fc_meta[key1]:
+                np.testing.assert_array_equal(fc_meta[key1][key2], fc_meta2[key1][key2])
+
+        for key1 in omni_meta:
+            for key2 in omni_meta[key1]:
+                np.testing.assert_array_equal(omni_meta[key1][key2], omni_meta2[key1][key2])
+
+        np.testing.assert_array_equal(freqs, freqs2)
+        np.testing.assert_array_equal(times, times2)
+        np.testing.assert_array_equal(lsts, lsts2)
+        for ant in antpos:
+            assert np.all(antpos[ant] == antpos2[ant])
+        assert history == history2
+
+        os.remove(out_path)
+
+
 def test_get_file_times():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
     # test execution

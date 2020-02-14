@@ -852,6 +852,90 @@ def partial_time_io(hd, times, **kwargs):
     return combined_hd.build_datacontainers()
 
 
+def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history):
+    '''Saves redcal metadata to a hdf5 file. See also read_redcal_meta.
+
+    Arguments:
+        meta_filename: path to hdf5 file to save
+        fc_meta: firstcal metadata dictionary, such as that produced by redcal.redcal_iteration()
+        omni_meta: omnical metadata dictionary, such as that produced by redcal.redcal_iteration()
+        freqs: 1D numpy array of frequencies in the data
+        times: 1D numpy array of times in the data
+        lsts: 1D numpy array of LSTs in the data
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}
+        history: string describing the creation of this file
+    '''
+    with h5py.File(meta_filename, "w") as outfile:
+        # save the metadata of the metadata
+        header = outfile.create_group('header')
+        header['freqs'] = freqs
+        header['times'] = times
+        header['lsts'] = lsts
+        antnums = np.array(sorted(list(antpos.keys())))
+        header['antpos'] = np.array([antpos[antnum] for antnum in antnums])
+        header['antpos'].attrs['antnums'] = antnums
+        header['history'] = np.string_(history)
+
+        # save firstcal metadata, saving dictionary keys as attrs
+        fc_grp = outfile.create_group('fc_meta')
+        ant_keys = sorted(list(fc_meta['dlys'].keys()))
+        fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
+        fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
+        fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
+        fc_grp['polarity_flips'].attrs['ants'] = ant_keys
+
+        # save the omnical metadata, saving dictionary keys as attrs
+        omni_grp = outfile.create_group('omni_meta')
+        pols_keys = sorted(list(omni_meta['chisq'].keys()))
+        omni_grp['chisq'] = np.array([omni_meta['chisq'][pols] for pols in pols_keys])
+        omni_grp['chisq'].attrs['pols'] = pols_keys
+        omni_grp['iter'] = np.array([omni_meta['iter'][pols] for pols in pols_keys])
+        omni_grp['iter'].attrs['pols'] = pols_keys
+        omni_grp['conv_crit'] = np.array([omni_meta['conv_crit'][pols] for pols in pols_keys])
+        omni_grp['conv_crit'].attrs['conv_crit'] = pols_keys
+
+
+def read_redcal_meta(meta_filename):
+    '''Reads redcal metadata to a hdf5 file. See also save_redcal_meta.
+
+    Arguments:
+        meta_filename: path to hdf5 file to load
+
+    Returns:
+        fc_meta: firstcal metadata dictionary, such as that produced by redcal.redcal_iteration()
+        omni_meta: omnical metadata dictionary, such as that produced by redcal.redcal_iteration()
+        freqs: 1D numpy array of frequencies in the data
+        times: 1D numpy array of times in the data
+        lsts: 1D numpy array of LSTs in the data
+        antpos: dictionary of antenna positions in the form {ant_index: np.array([x,y,z])}
+        history: string describing the creation of this file
+    '''
+    with h5py.File(meta_filename, "r") as infile:
+        # decode metadata of metadata
+        freqs = infile['header']['freqs'][:]
+        times = infile['header']['times'][:]
+        lsts = infile['header']['lsts'][:]
+        antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'], 
+                                               infile['header']['antpos'][:, :])}
+        history = infile['header']['history'][()].tostring().decode('utf8')
+
+        # reconstruct firstcal metadata
+        fc_meta = {}
+        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8')) 
+                for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
+        fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
+        fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}
+
+        # reconstruct omnical metadata
+        omni_meta = {}
+        pols_keys = infile['omni_meta']['chisq'].attrs['pols']
+        omni_meta['chisq'] = {pols: chisq for pols, chisq in zip(pols_keys, infile['omni_meta']['chisq'][:, :])}
+        omni_meta['iter'] = {pols: itr for pols, itr in zip(pols_keys, infile['omni_meta']['iter'][:, :])}
+        omni_meta['conv_crit'] = {pols: cc for pols, cc in zip(pols_keys, infile['omni_meta']['conv_crit'][:, :])}
+
+    return fc_meta, omni_meta, freqs, times, lsts, antpos, history
+
+
 #######################################################################
 #                             LEGACY CODE
 #######################################################################

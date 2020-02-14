@@ -11,6 +11,7 @@ import sys
 import shutil
 from hera_sim.antpos import linear_array, hex_array
 from hera_sim.vis import sim_red_data
+from hera_sim.sigchain import gen_gains
 
 from .. import redcal as om
 from .. import io, abscal
@@ -222,6 +223,36 @@ class TestMethods(object):
             assert found_match
             found_match = False
 
+    def test_find_polarity_flipped_ants(self):
+        # test normal operation
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        reds = om.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        rc = om.RedundantCalibrator(reds)
+        freqs = np.linspace(.1, .2, 100)
+        ants = [(ant, 'Jee') for ant in antpos]
+        gains = gen_gains(freqs, ants)
+        for ant in [3, 10, 11]:
+            gains[ant, 'Jee'] *= -1
+        _, true_vis, data = sim_red_data(reds, gains=gains, shape=(2, len(freqs)))
+        meta, g_fc = rc.firstcal(data, freqs)
+        for ant in antpos:
+            if ant in [3, 10, 11]:
+                assert np.all(meta['polarity_flips'][ant, 'Jee'])
+            else:
+                assert not np.any(meta['polarity_flips'][ant, 'Jee'])
+
+        # test operation where no good answer is possible, so we expect it to fail
+        data[(0, 1, 'ee')] *= -1
+        meta, g_fc = rc.firstcal(data, freqs)
+        for ant in meta['polarity_flips']:
+            assert np.all([m is None for m in meta['polarity_flips'][ant]])
+
+        # test errors
+        with pytest.raises(AssertionError):
+            meta, g_fc = rc.firstcal(data, freqs, edge_cut=100)
+        with pytest.raises(AssertionError):
+            meta, g_fc = rc.firstcal(data, freqs, max_rel_angle=np.pi)
+
 
 class TestRedundantCalibrator(object):
 
@@ -344,7 +375,7 @@ class TestRedundantCalibrator(object):
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
             gains[ant] *= fc_gains[ant]
-        g_fc = rc.firstcal(d, freqs, conv_crit=0)
+        meta, g_fc = rc.firstcal(d, freqs, conv_crit=0)
         np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, decimal=3)
 
         # test firstcal with only phases (no delays)
@@ -358,7 +389,7 @@ class TestRedundantCalibrator(object):
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
         for ant in gains.keys():
             gains[ant] *= fc_gains[ant]
-        g_fc = rc.firstcal(d, freqs, conv_crit=0)
+        meta, g_fc = rc.firstcal(d, freqs, conv_crit=0)
         np.testing.assert_array_almost_equal(np.linalg.norm([g_fc[ant] - gains[ant] for ant in g_fc]), 0, decimal=10)  # much higher precision
 
     def test_logcal(self):
@@ -368,7 +399,7 @@ class TestRedundantCalibrator(object):
         info = om.RedundantCalibrator(reds)
         gains, true_vis, d = sim_red_data(reds, gain_scatter=.05)
         w = dict([(k, 1.) for k in d.keys()])
-        sol = info.logcal(d)
+        meta, sol = info.logcal(d)
         for i in range(NANTS):
             assert sol[(i, 'Jxx')].shape == (10, 10)
         for bls in reds:
@@ -384,7 +415,7 @@ class TestRedundantCalibrator(object):
             d[k] = np.zeros_like(d[k])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            sol = info.logcal(d)
+            meta, sol = info.logcal(d)
         om.make_sol_finite(sol)
         for red in reds:
             np.testing.assert_array_equal(sol[red[0]], 0.0)
@@ -578,7 +609,7 @@ class TestRedundantCalibrator(object):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k, 1.) for k in d.keys()])
-        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
+        meta, sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50 * np.ones_like(meta['iter']))
@@ -645,7 +676,7 @@ class TestRedundantCalibrator(object):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k, 1.) for k in d.keys()])
-        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
+        meta, sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         np.testing.assert_array_less(meta['iter'], 50 * np.ones_like(meta['iter']))
@@ -730,7 +761,7 @@ class TestRedundantCalibrator(object):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k, 1.) for k in d.keys()])
-        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
+        meta, sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         assert np.all(meta['iter'] < 50 * np.ones_like(meta['iter']))
@@ -828,7 +859,7 @@ class TestRedundantCalibrator(object):
             gains[ant] *= fc_gains[ant]
 
         w = dict([(k, 1.) for k in d.keys()])
-        sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
+        meta, sol0 = rc.logcal(d, sol0=fc_gains, wgts=w)
         meta, sol = rc.lincal(d, sol0, wgts=w)
 
         assert np.all(meta['iter'] < 50 * np.ones_like(meta['iter']))
@@ -1511,13 +1542,34 @@ class TestRunMethods(object):
             else:
                 assert 'Iteration0Results.' in hc.history.replace('\n', '').replace(' ', '')
             assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
-        
+
+            meta_file = os.path.splitext(input_data)[0] + prefix + '.redcal_meta.hdf5'
+            fc_meta, omni_meta, freqs, times, lsts, antpos, history = io.read_redcal_meta(meta_file)
+            for key1 in fc_meta:
+                for key2 in fc_meta[key1]:
+                    np.testing.assert_array_almost_equal(fc_meta[key1][key2], cal_here['fc_meta'][key1][key2])
+            for key1 in omni_meta:
+                for key2 in omni_meta[key1]:
+                    np.testing.assert_array_almost_equal(omni_meta[key1][key2], cal_here['omni_meta'][key1][key2])
+            np.testing.assert_array_almost_equal(freqs, hd.freqs)
+            np.testing.assert_array_almost_equal(times, hd.times)
+            np.testing.assert_array_almost_equal(lsts, hd.lsts)
+            for ant in antpos:
+                np.testing.assert_array_almost_equal(antpos[ant], hd.antpos[ant])
+            if prefix == '':
+                assert 'Throwingoutantenna12' in history.replace('\n', '').replace(' ', '')
+            else:
+                assert 'Iteration0Results.' in history.replace('\n', '').replace(' ', '')
+            assert 'Thisfilewasproducedbythefunction' in history.replace('\n', '').replace(' ', '')
+
         os.remove(os.path.splitext(input_data)[0] + '.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.omni_vis.uvh5')
+        os.remove(os.path.splitext(input_data)[0] + '.redcal_meta.hdf5')
         os.remove(os.path.splitext(input_data)[0] + '.iter0.first.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.iter0.omni.calfits')
         os.remove(os.path.splitext(input_data)[0] + '.iter0.omni_vis.uvh5')
+        os.remove(os.path.splitext(input_data)[0] + '.iter0.redcal_meta.hdf5')
 
         hd = io.HERAData(input_data)
         hd.read()
