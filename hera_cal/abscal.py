@@ -3216,7 +3216,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                 echo('\n\nNow calibrating ' + pol + '-polarization...', verbose=verbose)
                 ants = [ant for ant in abscal_gains if join_pol(ant[1], ant[1]) == pol]
 
-                # figure out whic 
+                # figure out which baselines to load from the data and the model and their correspondence (if one or both is redundantly averaged)
                 (data_bl_to_load,
                  model_bl_to_load,
                  data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
