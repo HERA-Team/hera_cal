@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
-                maxiter=100, **win_kwargs, mode='clean', filter_options=None, cache=None):
+                maxiter=100, mode='clean', fitting_options=None, cache=None, **win_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -100,22 +100,29 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+
     if mode == 'clean':
         filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, df, tol=tol, window=window,
-                                                                 skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
-        filtered /= rephasor
-        # put back in unfilted values if skip_wgt is triggered
-        for i, info_dict in enumerate(info):
-            if info_dict.get('skipped', False):
-                filtered[i, :] = gains[i, :]
+                                                                 skip_wgt=skip_wgt, maxiter=maxiter, fitting_options=fitting_options,
+                                                                 cache = cache)
 
 
     elif mode in ['dpss_leastsq', 'dft_leastsq']:
-        filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains*rephasor, wgts=wgts, filter_centers=[0.],
-                                                            filter2d=False, filter_dim=1, filter_half_widths=[filter_size],
-                                                            mode=mode, skip_wgt=skip_wgt,
-                                                            )
+        if cache is None:
+            cache = {}
+        if fitting_options is None:
+            raise ValueError("filter_options must be supplied for dpss or dft interpolation.")
 
+        filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains*rephasor, wgts=wgts, filter_centers=[0.],
+                                                            filter2d=False, filter_dim=1, filter_half_widths=[1. / (filter_scale * 10 ** 6)],
+                                                            mode=mode, skip_wgt=skip_wgt, fitting_options=fitting_options)
+        info = info[1]
+
+    filtered /= rephasor
+    # put back in unfilted values if skip_wgt is triggered
+    for i, info_dict in enumerate(info):
+        if info_dict.get('skipped', False):
+            filtered[i, :] = gains[i, :]
 
 
     return filtered, info
