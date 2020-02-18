@@ -281,7 +281,7 @@ class VisClean(object):
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
-    def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, mode,
+    def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, mode, zeropad=0,
                        fitting_options, x=None, data=None, flags=None, output_prefix='filtered', wgts=None,
                        cache=None, ax='freq', skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False, overwrite=False):
         """
@@ -497,10 +497,36 @@ class VisClean(object):
             fw  = (~f).astype(np.float)
             w = fw * wgts[k]
 
-            mdl, res ,info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                                  suppression_factors=suppression_factors, mode=mode, filter2d=filter2d, fitting_options=fitting_options,
-                                                  filter_dim=filterdim, cache=cache,
-                                                  skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags)
+            if ax == 'freq':
+                # zeropad the data
+                if zeropad > 0:
+                    d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
+                    w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
+
+            elif ax == 'time':
+                # zeropad the data
+                if zeropad > 0:
+                    d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
+                    w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
+
+            elif ax == 'both':
+                if not isinstance(zeropad, (list,tuple)) or not len(zeropad) == 2:
+                    raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
+                if not (isinstance(zeropad[0], (int, np.int)) and isinstance(zeropad[0], (int, np.int))):
+                    raise ValueError("zeropad values must all be integers. You provided %s"%(zeropad))
+                if zeropad[0] > 0 and zeropad[1] > 0:
+                    d, _ = zeropad_array(d, zeropad=zeropad[1], axis=1)
+                    w, _ = zeropad_array(w, zeropad=zeropad[1], axis=1)
+
+                    d, _ = zeropad_array(d, zeropad=zeropad[0], axis=0)
+                    w, _ = zeropad_array(w, zeropad=zeropad[0], axis=0)
+
+            mdl, res ,info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers,
+                                                  filter_half_widths=filter_half_widths,
+                                                  suppression_factors=suppression_factors, mode=mode,
+                                                  filter2d=filter2d, fitting_options=fitting_options,
+                                                  filter_dim=filterdim, cache=cache, skip_wgt=skip_wgt,
+                                                  max_contiguous_edge_flags=max_contiguous_edge_flags)
 
             flgs = np.zeros_like(mdl, dtype=np.bool)
 
