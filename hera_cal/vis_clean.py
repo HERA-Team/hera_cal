@@ -281,8 +281,8 @@ class VisClean(object):
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
-    def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, mode, zeropad=0,
-                       fitting_options, x=None, data=None, flags=None, output_prefix='filtered', wgts=None,
+    def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, mode,
+                       fitting_options, x=None, data=None, flags=None, output_prefix='filtered', wgts=None, zeropad=0,
                        cache=None, ax='freq', skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False, overwrite=False):
         """
         Your one-stop-shop for fourier filtering.
