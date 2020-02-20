@@ -123,7 +123,7 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
         info = info[1]
         # put back in unfilted values if skip_wgt is triggered
         for i in info:
-            if not info[i] == 'skipped':
+            if info[i] == 'skipped':
                 filtered[i, :] = gains[i, :]
 
     filtered /= rephasor
