@@ -680,7 +680,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         uvf = UVFlag(flagfile)
         assert uvf.mode == 'flag', 'The input h5-based UVFlag object must be in flag mode.'
         assert (np.issubsctype(uvf.polarization_array.dtype, np.signedinteger)
-                or np.issubsctype(uvf.polarization_array.dtype, np.bytes_)), \
+                or np.issubsctype(uvf.polarization_array.dtype, np.str_)), \
             "The input h5-based UVFlag object's polarization_array must be integers or byte strings."
         freqs = np.unique(uvf.freq_array)
         times = np.unique(uvf.time_array)
@@ -692,7 +692,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                     pol = polnum2str(pol, x_orientation=uvf.x_orientation)  # convert to string if possible
                 else:
-                    pol = ','.join([polnum2str(int(p), x_orientation=uvf.x_orientation) for p in pol.split(b',')])
+                    pol = ','.join([polnum2str(int(p), x_orientation=uvf.x_orientation) for p in pol.split(',')])
                 for (ant1, ant2), blt_slice in blt_slices.items():
                     flags[(ant1, ant2, pol)] = uvf.flag_array[blt_slice, 0, :, ip]
             # data container only supports standard polarizations strings
@@ -705,7 +705,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                     if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                         jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
                     else:
-                        jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(b',')])
+                        jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
                     flags[(ant, jpol)] = np.array(uvf.flag_array[i, 0, :, :, ip].T)
 
         elif uvf.type == 'waterfall':  # one time x freq waterfall (per visibility polarization)
@@ -713,7 +713,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 if np.issubdtype(uvf.polarization_array.dtype, np.signedinteger):
                     jpol = jnum2str(jpol, x_orientation=uvf.x_orientation)  # convert to string if possible
                 else:
-                    jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(b',')])
+                    jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
                 flags[jpol] = uvf.flag_array[:, :, ip]
 
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
