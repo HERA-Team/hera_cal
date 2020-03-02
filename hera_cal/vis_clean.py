@@ -890,7 +890,7 @@ class VisClean(object):
             self.frates *= 1e3
 
 
-    def interleave_products(self, data=None, data2=None, keys=None, assign='iproducts', overwrite=False):
+    def interleave_products(self, data=None, data2=None, keys=None, assign='interleaved_product', overwrite=False):
         """
         Take products of alternate time samples. Use to compute PS estimates without a 
         noise bias. 
@@ -917,11 +917,11 @@ class VisClean(object):
         #if data2 is None, interleave time steps
             if data2 is None:
                 if self.Ntimes % 2 == 0:
-                    self.iproducts[k] = data[k][::2] * np.conj(data[k][1::2])
+                    iproducts[k] = data[k][::2] * np.conj(data[k][1::2])
                 else:
-                    self.iproducts[k] = data[k][:-1:2] * np.conj(data[k][1:-1:2])
+                    iproducts[k] = data[k][:-1:2] * np.conj(data[k][1:-1:2])
             else:
-                self.iproducts[k] = data[k] * np.conj(data2[k])
+                iproducts[k] = data[k] * np.conj(data2[k])
 
                 
             
