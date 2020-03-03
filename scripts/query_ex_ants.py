@@ -28,7 +28,7 @@ def query_ex_ants(JD, good_statuses):
                 * 'calibration_triage'
     
     Returns:
-        ex_ants: string of comma-separated (no spaces) to antennas considered bad 
+        ex_ants: string of space-separated antennas considered bad
     '''
     # Load database
     h = cm_active.ActiveData(at_date=JD)
@@ -47,12 +47,12 @@ def query_ex_ants(JD, good_statuses):
             exants.append(int(ant[2:].split(':')[0]))  # Assumes the format HH0:A or HA330:A
 
     # Return sorted exants 
-    exants = ','.join([str(ant) for ant in sorted(exants)])
+    exants = ' '.join([str(ant) for ant in sorted(exants)])
     return exants
 
 
 # Parse arguments
-a = argparse.ArgumentParser(description='Command line function for printing out "bad" antennas on a given JD.')
+a = argparse.ArgumentParser(description='Command line function for printing out space-separated "bad" antennas on a given JD.')
 a.add_argument("JD", type=float, help="Julian data on which to query the database.")
 a.add_argument("good_statuses", type=str, help="Comma-separated list of acceptable anntenna statuses. Antennas "
                                                "with any other status will be printed out to the command line.")
