@@ -37,8 +37,9 @@ def query_ex_ants(JD, good_statuses):
     # Check that input statuses are sensible
     good_statuses = [status.strip() for status in good_statuses.split(',')]
     assert len(good_statuses) > 0, 'There must be at least one input good status.'
+    valid_statuses = list(h.apriori.values())[0].valid_statuses() + list(h.apriori.values())[0].old_statuses()
     for status in good_statuses:
-        assert status in list(h.apriori.values())[0].valid_statuses(), 'Invalid Status: {}'.format(status)
+        assert status in valid_statuses, 'Invalid Status: {}'.format(status)
     
     # Pick out antnenna names with bad statuses
     exants = []
