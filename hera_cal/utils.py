@@ -129,6 +129,58 @@ def make_bl(*args):
     return (i, j, _comply_vispol(pol))
 
 
+def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None):
+    '''Filter a list of baseline tuples on one of more of the following criteria.
+
+    Arguments:
+        bls: list of baseline tuples like (0, 1, 'ee')
+        ants: list of integer antenna indices or antenna tuples like (0, 'Jee') to keep. None means no filter.
+        ex_ants: list of integer antenna indices or antenna tuples like (0, 'Jee') to exclude. None means no filter.
+        pols: list of visibility polarizations like 'ee' to keep. None means no filter.
+        antpos: dictionary mapping antenna indicies to ENU position arrays. Required if min_bl_cut or max_bl_cut
+            is specified.
+        min_bl_cut: minimum length of baselines to keep in the same units as antenna postions. None means no filter.
+        max_bl_cut: maximum length of baselines to keep in the same units as antenna postions. None means no filter.
+
+    Returns:
+        filtered_bls: list of baseline tuples like (0, 1, 'ee'), a subset of bls
+    '''
+    filtered_bls = []
+
+    if (min_bl_cut is not None) or (max_bl_cut is not None):
+        assert antpos is not None, 'antpos must be passed in if min_bl_cut or max_bl_cut is specified.'
+
+    for bl in bls:
+        ant1, ant2 = split_bl(bl)
+        # filter on antennas to keep
+        if (ants is not None) and (ant1 not in ants) and (ant1[0] not in ants):
+            continue
+        if (ants is not None) and (ant2 not in ants) and (ant2[0] not in ants):
+            continue
+        
+        # filter on antennas to exclude
+        if (ex_ants is not None) and ((ant1 in ex_ants) or (ant1[0] in ex_ants)):
+            continue
+        if (ex_ants is not None) and ((ant2 in ex_ants) or (ant2[0] in ex_ants)):
+            continue
+        
+        # filter on polarizations
+        if (pols is not None) and (bl[2] not in pols):
+            continue
+        
+        # filter on baseline length
+        if antpos is not None:
+            bl_length = np.linalg.norm(antpos[ant2[0]] - antpos[ant1[0]])
+            if (min_bl_cut is not None) and (bl_length < min_bl_cut):
+                continue
+            if (max_bl_cut is not None) and (bl_length > max_bl_cut):
+                continue
+        
+        filtered_bls.append(bl)
+
+    return filtered_bls
+
+
 def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
     """Get delay of visibility across band using FFT and Quinn's Second Method to fit the delay and phase offset.
     Arguments:

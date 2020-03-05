@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2019 the HERA Project
+# Copyright 2020 the HERA Project
 # Licensed under the MIT License
 """
 abscal.py
@@ -45,13 +45,13 @@ from . import redcal
 from . import io
 from . import apply_cal
 from .datacontainer import DataContainer
-from .utils import echo, polnum2str, polstr2num, reverse_bl, split_pol, split_bl
+from .utils import echo, polnum2str, polstr2num, reverse_bl, split_pol, split_bl, join_bl, join_pol
 
 PHASE_SLOPE_SOLVERS = ['linfit', 'dft']  # list of valid solvers for global_phase_slope_logcal
 IDEALIZED_BL_TOL = 1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
 
 
-def abs_amp_logcal(model, data, wgts=None, verbose=True):
+def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gain_ants=[]):
     """
     calculate absolute (array-wide) gain amplitude scalar
     with a linear solver using the logarithmically linearized equation:
@@ -77,12 +77,19 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
            keys are antenna pair + pol tuples (must match model), values are real floats
            matching shape of model and data
 
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+
     verbose : print output, type=boolean, [default=False]
 
     Output:
     -------
-    fit : dictionary with 'eta_{}' key for amplitude scalar for {} polarization,
-            which has the same shape as the ndarrays in the model
+    if not return_gains:
+        fit : dictionary with 'eta_{}' key for amplitude scalar for {} polarization,
+                which has the same shape as the ndarrays in the model
+    else:
+        gains: dictionary with gain_ants as keys and gain waterfall arrays as values
     """
     echo("...configuring linsolve data for abs_amp_logcal", verbose=verbose)
 
@@ -117,11 +124,14 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True):
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    return fit
+    if not return_gains:
+        return fit
+    else:
+        return {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(np.complex) for ant in gain_ants}
 
 
 def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zero_psi=True,
-                  four_pol=False):
+                  four_pol=False, return_gains=False, gain_ants=[]):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
     with a linear solver applied to the logarithmically linearized equation:
@@ -170,11 +180,20 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
 
     verbose : print output, type=boolean, [default=False]
 
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+
     Output:
     -------
-    fit : dictionary with psi key for overall gain phase and Phi_ew and Phi_ns array containing
-            phase slopes across the EW and NS directions of the array. There is a set of each
-            of these variables per polarization.
+
+    if not return_gains:
+        fit : dictionary with psi key for overall gain phase and Phi_ew and Phi_ns array containing
+                phase slopes across the EW and NS directions of the array. There is a set of each
+                of these variables per polarization.
+    else:
+        gains: dictionary with gain_ants as keys and gain waterfall arrays as values
+
     """
     echo("...configuring linsolve data for TT_phs_logcal", verbose=verbose)
 
@@ -239,7 +258,12 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    return fit
+    if not return_gains:
+        return fit
+    else:
+        return {ant: np.exp(1.0j * (np.einsum('i,ijk->jk', antpos[ant[0]][:2], 
+                                              [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]])
+                                    + fit['psi_{}'.format(ant[1])])) for ant in gain_ants}
 
 
 def amp_logcal(model, data, wgts=None, verbose=True):
@@ -540,7 +564,8 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
 
 
 def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True,
-                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0):
+                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0, time_avg=False,
+                       return_gains=False, gain_ants=[]):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -582,9 +607,18 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     edge_cut : int, number of channels to exclude at each band edge of vis in FFT window
 
+    time_avg : boolean, if True, replace resultant antenna delay slope with the median across time
+
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+
     Output:
     -------
-    fit : dictionary containing delay slope (T_x) for each pol [seconds / meter].
+    if not return_gains:
+        fit : dictionary containing delay slope (T_x) for each pol [seconds / meter].
+    else:
+        gains: dictionary with gain_ants as keys and gain waterfall arrays as values
     """
     echo("...configuring linsolve data for delay_slope_lincal", verbose=verbose)
 
@@ -610,16 +644,11 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     ratio_wgts = []
     for i, k in enumerate(keys):
         ratio = data[k] / model[k]
+        ratio /= np.abs(ratio)
 
-        # replace nans
-        nan_select = np.isnan(ratio)
-        ratio[nan_select] = 0.0
-        wgts[k][nan_select] = 0.0
-
-        # replace infs
-        inf_select = np.isinf(ratio)
-        ratio[inf_select] = 0.0
-        wgts[k][inf_select] = 0.0
+        # replace nans and infs
+        wgts[k][~np.isfinite(ratio)] = 0.0
+        ratio[~np.isfinite(ratio)] = 0.0
 
         # get delays
         dly, _ = utils.fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
@@ -670,7 +699,19 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     fit = sol.solve()
     echo("...finished linsolve", verbose=verbose)
 
-    return fit
+    # time average
+    if time_avg:
+        Ntimes = list(fit.values())[0].shape[0]
+        for k in fit:
+            fit[k] = np.repeat(np.moveaxis(np.median(fit[k], axis=0)[np.newaxis], 0, 0), Ntimes, axis=0)
+
+    if not return_gains:
+        return fit
+    else:
+        freqs = np.arange(list(data.values())[0].shape[1]) * df
+        return {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2], 
+                                      [fit['T_ew_{}'.format(ant[1])], fit['T_ns_{}'.format(ant[1])]], 
+                                      freqs) * 2j * np.pi) for ant in gain_ants}
 
 
 def dft_phase_slope_solver(xs, ys, data, flags=None):
@@ -721,8 +762,8 @@ def dft_phase_slope_solver(xs, ys, data, flags=None):
     return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
 
 
-def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, 
-                              refant=None, verbose=True, tol=1.0, edge_cut=0):
+def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, verbose=True,
+                              tol=1.0, edge_cut=0, time_avg=False, return_gains=False, gain_ants=[]):
     """
     Solve for a frequency-independent spatial phase slope using the equation
 
@@ -761,10 +802,19 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
 
     edge_cut : int, number of channels to exclude at each band edge in phase slope solver
 
+    time_avg : boolean, if True, replace resultant antenna phase slopes with the median across time
+
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+
     Output:
     -------
-    fit : dictionary containing frequency-indpendent phase slope, e.g. Phi_ns_x
-          for each position component and polarization [radians / meter].
+    if not return_gains:
+        fit : dictionary containing frequency-indpendent phase slope, e.g. Phi_ns_x
+              for each position component and polarization [radians / meter].
+    else:
+        gains : dictionary with gain_ants as keys and gain waterfall arrays as values
     """
     # check solver and edgecut
     assert solver in PHASE_SLOPE_SOLVERS, "Unrecognized solver {}".format(solver)
@@ -849,7 +899,18 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None,
             fit['Phi_ew_{}'.format(split_pol(pol)[0])] = slope_x * 2.0 * np.pi  # 2pi matches custom_phs_slope_gain
             fit['Phi_ns_{}'.format(split_pol(pol)[0])] = slope_y * 2.0 * np.pi
 
-    return fit
+    # time average
+    if time_avg:
+        Ntimes = list(fit.values())[0].shape[0]
+        for k in fit:
+            fit[k] = np.repeat(np.moveaxis(np.median(fit[k], axis=0)[np.newaxis], 0, 0), Ntimes, axis=0)
+
+    if not return_gains:
+        return fit
+    else:
+        return {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2], 
+                                      [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]],
+                                      np.ones(list(data.values())[0].shape[1])) * 1j) for ant in gain_ants}
 
 
 def merge_gains(gains, merge_shared=True):
@@ -1865,7 +1926,7 @@ class AbsCal(object):
             gains, cal_flags, quals, totquals = uvc.read()
             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags, gain_convention=uvc.gain_convention)
 
-        # get shared keys and and pols
+        # get shared keys and pols
         self.keys = sorted(set(model.keys()) & set(data.keys()))
         assert len(self.keys) > 0, "no shared keys exist between model and data"
         if pols is None:
@@ -2029,7 +2090,7 @@ class AbsCal(object):
 
         kernel : size of median filter across (time, freq) axes, type=(int, int)
 
-        time_avg : boolean, if True, average resultant antenna delays across time
+        time_avg : boolean, if True, replace resultant antenna delays with the median across time
 
         edge_cut : int, number of channels to exclude at each band edge in FFT window
 
@@ -2098,7 +2159,7 @@ class AbsCal(object):
 
         verbose : type=boolean, if True print feedback to stdout
 
-        time_avg : boolean, if True, average resultant delay slope across time
+        time_avg : boolean, if True, replace the resultant delay slope with the median across time
 
         four_pol : boolean, if True, form a joint polarization solution
 
@@ -2128,7 +2189,7 @@ class AbsCal(object):
 
         # run delay_slope_lincal
         fit = delay_slope_lincal(model, data, antpos, wgts=wgts, refant=self.refant, medfilt=medfilt, df=df,
-                                 kernel=kernel, verbose=verbose, four_pol=four_pol, edge_cut=edge_cut)
+                                 time_avg=time_avg, kernel=kernel, verbose=verbose, four_pol=four_pol, edge_cut=edge_cut)
 
         # separate pols if four_pol
         if four_pol:
@@ -2137,18 +2198,6 @@ class AbsCal(object):
                 fit['T_ns_{}'.format(gp)] = fit["T_ns"]
                 fit.pop('T_ew')
                 fit.pop('T_ns')
-
-        # time average
-        if time_avg:
-            k = flatten(self._gain_keys)[0]
-            Ntimes = fit["T_ew_{}".format(k[1])].shape[0]
-            for i, k in enumerate(flatten(self._gain_keys)):
-                ew_key = "T_ew_{}".format(k[1])
-                ns_key = "T_ns_{}".format(k[1])
-                ew_avg = np.moveaxis(np.median(fit[ew_key], axis=0)[np.newaxis], 0, 0)
-                ns_avg = np.moveaxis(np.median(fit[ns_key], axis=0)[np.newaxis], 0, 0)
-                fit[ew_key] = np.repeat(ew_avg, Ntimes, axis=0)
-                fit[ns_key] = np.repeat(ns_avg, Ntimes, axis=0)
 
         # form result
         self._dly_slope = odict(list(map(lambda k: (k, copy.copy(np.array([fit["T_ew_{}".format(k[1])], fit["T_ns_{}".format(k[1])]]))), flatten(self._gain_keys))))
@@ -2435,7 +2484,7 @@ class AbsCal(object):
         """
         return dly_slope_gain with custom gain keys and antenna positions
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant position vectors
         """
         if hasattr(self, '_dly_slope'):
@@ -2504,7 +2553,7 @@ class AbsCal(object):
         """
         return phs_slope_gain with custom gain keys and antenna positions
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant position vectors
         """
         if hasattr(self, '_phs_slope'):
@@ -2570,7 +2619,7 @@ class AbsCal(object):
         """
         return abs_eta_gain with custom gain keys
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         """
         if hasattr(self, '_abs_eta'):
             # form dict of abs eta for each polarization in self._gain_keys
@@ -2624,7 +2673,7 @@ class AbsCal(object):
         """
         return abs_psi_gain with custom gain keys
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         """
         if hasattr(self, '_abs_psi'):
             # form dict of abs psi for each polarization in self._gain_keys
@@ -2677,7 +2726,7 @@ class AbsCal(object):
         """
         return TT_Phi_gain with custom gain keys and antenna positions
 
-        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'x'), (1, 'x'), (0, 'y'), (1, 'y')]
+        gain_keys : type=list, list of unique (ant, pol). Ex. [(0, 'Jee'), (1, 'Jee'), (0, 'Jnn'), (1, 'Jnn')]
         antpos : type=dictionary, contains antenna position vectors. keys are ant integer, values are ant positions
         """
         if hasattr(self, '_TT_Phi'):
@@ -2783,6 +2832,8 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
                 gain_convention='divide', max_iter=1, phs_conv_crit=1e-6, verbose=True):
     '''Generalized function for performing an abscal step (e.g. abs_amp_logcal or TT_phs_logcal).
 
+    NOTE: This function is no longer used and will likely be removed in a future version.
+    
     Arguments:
         gains_to_update: the gains produced by abscal up until this step. Updated in place.
         AC: AbsCal object containing data, model, and other metadata. AC.data is recalibrated 
@@ -2801,6 +2852,8 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
             the updates to all 1.0s. 
         verbose: If True, will print the progress of iterative convergence
     '''
+    warnings.warn('abscal_step is no longer used by post_redcal_abscal and thus subject to future removal.', DeprecationWarning)
+
     for i in range(max_iter):
         AC_func(**AC_kwargs)
         gains_here = merge_gains([gf(*gargs) for gf, gargs in zip(gain_funcs, gain_args_list)])
@@ -2816,89 +2869,270 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
                 break
 
 
-def post_redcal_abscal(model, data, flags, rc_flags, min_bl_cut=None, max_bl_cut=None, edge_cut=0, tol=1.0, 
-                       gain_convention='divide', phs_max_iter=100, phs_conv_crit=1e-6, refant_num=None, verbose=True):
-    '''Performs Abscal for data that has already been redundantly calibrated.
+def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[], data_is_redsol=False, 
+                    model_is_redundant=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, verbose=False):
+    '''Figure out which baselines to use in the data and the model for abscal and their correspondence.
 
     Arguments:
-        model: DataContainer containing externally calibrated visibilities, LST-matched to the data
-        data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
-        flags: DataContainer containing combined data and model flags
-        rc_flags: dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration
+        data_bls: list of baselines in data file in the form (0, 1, 'ee')
+        model_bls: list of baselines in model files in the form (0, 1, 'ee')
+        data_antpos: dictionary mapping antenna number to ENU position in meters for antennas in the data
+        model_antpos: same as data_antpos, but for the model. If None, assumed to match data_antpos
+        pols: list of polarizations to use. If empty, will use all polarizations in the data or model.
+        data_is_redsol: if True, the data file only contains one visibility per unique baseline
+        model_is_redundant: if True, the model file only contains one visibility per unique baseline
+        tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
         min_bl_cut : float, eliminate all visibilities with baseline separation lengths
             smaller than min_bl_cut. This is assumed to be in ENU coordinates with units of meters.
         max_bl_cut : float, eliminate all visibilities with baseline separation lengths
             larger than max_bl_cut. This is assumed to be in ENU coordinates with units of meters.
+
+    Returns:
+        data_bl_to_load: list of baseline tuples in the form (0, 1, 'ee') to load from the data file
+        model_bl_to_load: list of baseline tuples in the form (0, 1, 'ee') to load from the model file(s)
+        data_to_model_bl_map: dictionary mapping data baselines to the corresponding model baseline
+    '''
+    if data_is_redsol and not model_is_redundant:
+        raise NotImplementedError('If the data is just unique baselines, the model must also be just unique baselines.')
+    if model_antpos is None:
+        model_antpos = copy.deepcopy(data_antpos)
+    
+    # Perform cut on baseline length and polarization
+    if len(pols) == 0:
+        pols = list(set([bl[2] for bl_list in [data_bls, model_bls] for bl in bl_list]))
+    data_bl_to_load = utils.filter_bls(data_bls, pols=pols, antpos=data_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
+    model_bl_to_load = utils.filter_bls(model_bls, pols=pols, antpos=model_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
+
+    # If we're working with full data sets, only pick out matching keys (or ones that work reversably)
+    if not data_is_redsol and not model_is_redundant:
+        data_bl_to_load = [bl for bl in data_bl_to_load if (bl in model_bl_to_load) or (reverse_bl(bl) in model_bl_to_load)]
+        model_bl_to_load = [bl for bl in model_bl_to_load if (bl in data_bl_to_load) or (reverse_bl(bl) in data_bl_to_load)]
+        data_to_model_bl_map = {bl: bl for bl in data_bl_to_load if bl in model_bl_to_load}
+        data_to_model_bl_map.update({bl: reverse_bl(bl) for bl in data_bl_to_load if reverse_bl(bl) in model_bl_to_load})
+
+    # Either the model is just unique baselines, or both the data and the model are just unique baselines
+    else:
+        # build reds using both sets of antpos to find matching baselines
+        # increase all antenna indices in the model by model_offset to distinguish them from data antennas
+        model_offset = np.max(list(data_antpos.keys())) + 1
+        joint_antpos = {**data_antpos, **{ant + model_offset: pos for ant, pos in model_antpos.items()}}
+        joint_reds = redcal.get_reds(joint_antpos, pols=pols, bl_error_tol=tol)
+
+        # filter out baselines not in data or model or between data and model
+        joint_reds = [[bl for bl in red if not ((bl[0] < model_offset) ^ (bl[1] < model_offset))] for red in joint_reds]
+        joint_reds = [[bl for bl in red if (bl in data_bl_to_load) or (reverse_bl(bl) in data_bl_to_load)
+                       or ((bl[0] - model_offset, bl[1] - model_offset, bl[2]) in model_bl_to_load)
+                       or reverse_bl((bl[0] - model_offset, bl[1] - model_offset, bl[2])) in model_bl_to_load] for red in joint_reds]
+        joint_reds = [red for red in joint_reds if len(red) > 0]
+
+        # map baselines in data to unique baselines in model
+        data_to_model_bl_map = {}
+        for red in joint_reds:
+            data_bl_candidates = [bl for bl in red if bl[0] < model_offset]
+            model_bl_candidates = [(bl[0] - model_offset, bl[1] - model_offset, bl[2]) for bl in red if bl[0] >= model_offset]
+            assert len(model_bl_candidates) <= 1, ('model_is_redundant is True, but the following model baselines are '
+                                                   'redundant and in the model file: {}'.format(model_bl_candidates))
+            if len(model_bl_candidates) == 1:
+                for bl in red:
+                    if bl[0] < model_offset:
+                        if bl in data_bl_to_load:
+                            data_to_model_bl_map[bl] = model_bl_candidates[0]
+                        elif reverse_bl(bl) in data_bl_to_load:
+                            data_to_model_bl_map[reverse_bl(bl)] = reverse_bl(model_bl_candidates[0])
+                        else:
+                            raise ValueError("Baseline {} looks like a data baseline, but isn't in data_bl_to_load.".format(bl))
+            assert ((len(data_bl_candidates) <= 1)
+                    or (not data_is_redsol)), ('data_is_redsol is True, but the following data baselines are redundant in the ',
+                                               'data file: {}'.format(data_bl_candidates))
+        # only load baselines in map
+        data_bl_to_load = [bl for bl in data_bl_to_load if bl in data_to_model_bl_map.keys()]
+        model_bl_to_load = [bl for bl in model_bl_to_load if (bl in data_to_model_bl_map.values()) 
+                            or (reverse_bl(bl) in data_to_model_bl_map.values())]
+
+    echo("Selected {} data baselines and {} model baselines to load.".format(len(data_bl_to_load), len(model_bl_to_load)), verbose=verbose)
+    return data_bl_to_load, model_bl_to_load, data_to_model_bl_map
+
+
+def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags, times_by_bl=None,
+                    df=None, data_is_redsol=False, gain_flags=None, tol=1.0, antpos=None):
+    '''Build linear weights for data in abscal (or calculating chisq) defined as
+    wgts = (noise variance * nsamples)^-1 * (0 if data or model is flagged).
+    N.B.: if there are discontinunities into the autocorrelations, the nsamples, etc., this maybe
+    introduce spectral strucutre into the calibration soltuion.
+    
+    Arguments:
+        data_flags: DataContainer containing flags on data to be abscaled
+        data_nsamples: DataContainer containing the number of samples in each data point
+        model_flags: DataContainer with model flags. Assumed to have all the same keys as the data_flags.
+        autocorrs: DataContainer with autocorrelation visibilities
+        auto_flags: DataContainer containing flags for autocorrelation visibilities
+        times_by_bl: dictionary mapping antenna pairs like (0,1) to float Julian Date. Optional if
+            inferable from data_flags and all times have length > 1. 
+        df: If None, inferred from data_flags.freqs
+        data_is_redsol: If True, data_file only contains unique visibilities for each baseline group.
+            In this case, gain_flags and tol are required and antpos is required if not derivable 
+            from data_flags. In this case, the noise variance is inferred from autocorrelations from
+            all baselines in the represented unique baseline group.
+        gain_flags: Used to exclude ants from the noise variance calculation from the autocorrelations
+            Ignored if data_is_redsol is False.
+        tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters).
+            Ignored if data_is_redsol is False.
+        antpos: dictionary mapping antenna number to ENU position in meters for antennas in the data.
+            Ignored if data_is_redsol is False. If left as None, can be inferred from data_flags.antpos.
+    Returns:
+        wgts: Datacontainer mapping data_flags baseline to weights
+    '''
+    # infer times and df if necessary
+    if times_by_bl is None:
+        times_by_bl = data_flags.times_by_bl
+    if df is None:
+        df = np.median(np.ediff1d(data_flags.freqs))
+    
+    # if data_is_redsol, get reds, using data_flags.antpos if antpos is unspecified
+    if data_is_redsol:
+        if antpos is None:
+            antpos = data_flags.antpos
+        reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data_flags.pols())
+        ex_ants = [ant for ant, flags in gain_flags.items() if np.all(flags)]
+        reds = redcal.filter_reds(reds, ants=[split_bl(bl)[0] for bl in autocorrs])
+        reds = redcal.filter_reds(reds, ex_ants=ex_ants)
+
+    # build weights dict using (noise variance * nsamples)^-1 * (0 if data or model is flagged)
+    wgts = {}
+    for bl in data_flags:
+        dt = (np.median(np.ediff1d(times_by_bl[bl[:2]])) * 86400.)
+        wgts[bl] = (data_nsamples[bl] * (~data_flags[bl]) * (~model_flags[bl])).astype(np.float)
+
+        if not np.all(wgts[bl] == 0.0):
+            # use autocorrelations to produce weights
+            if not data_is_redsol:
+                noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=df)
+            # use autocorrelations from all unflagged antennas in unique baseline to produce weights
+            else:
+                try:  # get redundant group that includes this baseline
+                    red_here = [red for red in reds if bl in red][0]
+                except IndexError:  # this baseline has no unflagged redundancies
+                    noise_var = np.inf
+                else:
+                    noise_vars = []
+                    for rbl in red_here:
+                        noise_var_here = predict_noise_variance_from_autos(rbl, autocorrs, dt=dt, df=df)
+                        for ant in split_bl(rbl):
+                            noise_var_here[auto_flags[join_bl(ant, ant)]] = np.nan
+                        noise_vars.append(noise_var_here)
+                    # estimate noise variance per baseline, assuming inverse variance weighting, but excluding flagged autos
+                    noise_var = np.nansum(np.array(noise_vars)**-1, axis=0)**-1 * np.sum(~np.isnan(noise_vars), axis=0)
+            wgts[bl] *= noise_var**-1
+        wgts[bl][~np.isfinite(wgts[bl])] = 0.0
+
+    return DataContainer(wgts)
+
+
+def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, kernel=(1, 15),
+                       phs_max_iter=100, phs_conv_crit=1e-6, verbose=True):
+    '''Performs Abscal for data that has already been redundantly calibrated.
+
+    Arguments:
+        model: DataContainer containing externally calibrated visibilities, LST-matched to the data.
+            The model keys must match the data keys.
+        data: DataContainer containing redundantly but not absolutely calibrated visibilities. This gets modified.
+        data_wgts: DataContainer containing same keys as data, determines their relative weight in the abscal
+            linear equation solvers.
+        rc_flags: dictionary mapping keys like (1, 'Jnn') to flag waterfalls from redundant calibration. 
         edge_cut : integer number of channels to exclude at each band edge in delay and global phase solvers
         tol: float distance for baseline match tolerance in units of baseline vectors (e.g. meters)
-        gain_convention: either 'divide' if raw data is calibrated by dividing it by the gains
+        kernel: tuple of integers, size of medfilt kernel used in the first step of delay slope calibration.
             otherwise, 'multiply'.
         phs_max_iter: maximum number of iterations of phase_slope_cal or TT_phs_cal allowed
         phs_conv_crit: convergence criterion for updates to iterative phase calibration that compares
             the updates to all 1.0s.
-        refant_num: integer antenna number defined to have 0 phase. If None, refant will be automatically chosen.
 
     Returns:
         abscal_delta_gains: gain dictionary mapping keys like (1, 'Jnn') to waterfalls containing 
-            the updates to the gains between redcal and abscal
-        AC: AbsCal object containing absolutely calibrated data, model, and other useful metadata
+            the updates to the gains between redcal and abscal. Uses keys from rc_flags
     '''
-    abscal_delta_gains = {ant: np.ones_like(g, dtype=complex) for ant, g in rc_flags.items()}
 
-    # instantiate Abscal object
-    if refant_num is None:
-        refant_num = pick_reference_antenna(abscal_delta_gains, synthesize_ant_flags(flags), data.freqs, per_pol=False)[0]
-    wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
-    AC = AbsCal(model, data, wgts=wgts, antpos=data.antpos, freqs=data.freqs,
-                refant=refant_num, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
-    
-    # use idealized antpos derived from the reds that results in perfect redundancy, then use tol ~ 0 subsequently
+    # setup: initialize ants, get idealized antenna positions
+    ants = list(rc_flags.keys())
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=IDEALIZED_BL_TOL)
-    if np.max([len(pos) for pos in idealized_antpos.values()]) > 2:  # the array is not redundant (i.e. extra degeneracies)
+    
+    # If the array is not redundant (i.e. extra degeneracies), lop off extra dimensions and warn user
+    if np.max([len(pos) for pos in idealized_antpos.values()]) > 2:  
         suspected_off_grid = [ant for ant, pos in idealized_antpos.items() if np.any(np.abs(pos[2:]) > IDEALIZED_BL_TOL)]
         not_flagged = [ant for ant in suspected_off_grid if not np.all([np.all(f) for a, f in rc_flags.items() if ant in a])]
         warnings.warn(('WARNING: The following antennas appear not to be redundant with the main array:\n         {}\n'
                        '         Of them, {} is not flagged.\n').format(suspected_off_grid, not_flagged))
         idealized_antpos = {ant: pos[:2] for ant, pos in idealized_antpos.items()}
-    AC._set_antpos(idealized_antpos)
 
-    # Per-Channel Absolute Amplitude Calibration
-    abscal_step(abscal_delta_gains, AC, AC.abs_amp_logcal, {'verbose': verbose}, [AC.custom_abs_eta_gain], 
-                [(rc_flags.keys(),)], rc_flags, gain_convention=gain_convention, verbose=verbose)
+    # Abscal Step 1: Per-Channel Absolute Amplitude Calibration
+    gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+    abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
+    apply_cal.calibrate_in_place(data, gains_here)
 
-    # Global Delay Slope Calibration
+    # Abscal Step 2: Global Delay Slope Calibration
+    binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(np.float) for bl in data_wgts})
+    df = np.median(np.diff(data.freqs))
+    for time_avg in [True, False]:  # first use the time-averaged solution to try to avoid false minima
+        gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=binary_wgts, df=df, medfilt=True, kernel=kernel,
+                                        time_avg=time_avg, verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
+        abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+        apply_cal.calibrate_in_place(data, gains_here)
+
+    # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
     for time_avg in [True, False]:
-        abscal_step(abscal_delta_gains, AC, AC.delay_slope_lincal, {'time_avg': time_avg, 'edge_cut': edge_cut, 'verbose': verbose},
-                    [AC.custom_dly_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
-                    gain_convention=gain_convention, verbose=verbose)
+        gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=binary_wgts, verbose=verbose, 
+                                               tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
+        abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+        apply_cal.calibrate_in_place(data, gains_here)
+    for time_avg in [True, False]:
+        for i in range(phs_max_iter):
+            gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=binary_wgts, verbose=verbose,
+                                                   tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
+            abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+            apply_cal.calibrate_in_place(data, gains_here)
+            crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
+            echo("global_phase_slope_logcal convergence criterion: " + str(crit), verbose=verbose)
+            if crit < phs_conv_crit:
+                break
 
-    # Global Phase Slope Calibration (first using dft, then using linfit)
-    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'solver': 'dft', 'tol': IDEALIZED_BL_TOL,
-                'edge_cut': edge_cut, 'verbose': verbose}, [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], 
-                rc_flags, gain_convention=gain_convention, verbose=verbose)
-    abscal_step(abscal_delta_gains, AC, AC.global_phase_slope_logcal, {'tol': IDEALIZED_BL_TOL, 'edge_cut': edge_cut, 'verbose': verbose},
-                [AC.custom_phs_slope_gain], [(rc_flags.keys(), idealized_antpos)], rc_flags,
-                gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
+    # Abscal Step 4: Per-Channel Tip-Tilt Phase Calibration
+    angle_wgts = DataContainer({bl: 2 * np.abs(model[bl])**2 * data_wgts[bl] for bl in model})
+    # This is because, in the high SNR limit, if Var(model) = 0 and Var(data) = Var(noise),
+    # then Var(angle(data / model)) = Var(noise) / (2 |model|^2). Here data_wgts = Var(noise)^-1.
+    for i in range(phs_max_iter):
+        gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=angle_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+        abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
+        apply_cal.calibrate_in_place(data, gains_here)
+        crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
+        echo("TT_phs_logcal convergence criterion: " + str(crit), verbose=verbose)
+        if crit < phs_conv_crit:
+            break
 
-    # Per-Channel Tip-Tilt Phase Calibration
-    abscal_step(abscal_delta_gains, AC, AC.TT_phs_logcal, {'verbose': verbose}, [AC.custom_TT_Phi_gain, AC.custom_abs_psi_gain], 
-                [(rc_flags.keys(), idealized_antpos), (rc_flags.keys(),)], rc_flags,
-                gain_convention=gain_convention, max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
-
-    return abscal_delta_gains, AC
+    return abscal_delta_gains
 
 
-def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None, nInt_to_load=None,
-                           data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0, 
+def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=None, data_is_redsol=False, model_is_redundant=False, output_file=None,
+                           nInt_to_load=None, data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0,
                            tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     Does not work on data (or models) with baseline-dependant averaging.
     
     Arguments:
-        data_file: string path to raw uvh5 visibility file
-        redcal_file: string path to calfits file that redundantly calibrates the data_file
-        model_files: list of string paths to externally calibrated data. Strings must be sortable 
-            to produce a chronological list in LST (wrapping over 2*pi is OK)
+        data_file: string path to raw uvh5 visibility file or omnical_visibility solution 
+            (in the later case, one must also set data_is_redsol to True).
+        redcal_file: string path to redcal calfits file. This forms the basis of the resultant abscal calfits file.
+            If data_is_redsol is False, this will also be used to calibrate the data_file and raw_auto_file
+        model_files: list of string paths to externally calibrated data or a reference simulation. 
+            Strings must be sortable to produce a chronological list in LST (wrapping over 2*pi is OK).
+        raw_auto_file: path to data file that contains raw autocorrelations for all antennas in redcal_file. 
+            These are used for weighting and calculating chi^2. If data_is_redsol, this must be provided. 
+            If this is None and data_file will be used.
+        data_is_redsol: If True, data_file only contains unique visibilities for each baseline group. This means it has been 
+            redundantly calibrated by the gains in redcal_file already. If this is True, model_is_redundant must also be True
+            and raw_auto_file must be provided. If both this and model_is_redundant are False, then only exact baseline
+            matches are used in absolute calibration.
+        model_is_redundant: If True, then model_files only containe unique visibilities. In this case, data and model
+            antenna numbering do not need to agree, as redundant baselines will be found automatically.
         output_file: string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.')
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
         data_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.
@@ -2929,24 +3163,44 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
     if os.path.exists(output_file) and not clobber:
         raise IOError("{} exists, not overwriting.".format(output_file))
 
+    # Make raw_auto_file the data_file if None when appropriate, otherwise raise an error
+    if raw_auto_file is None:
+        if not data_is_redsol:
+            raw_auto_file = data_file
+        else:
+            raise ValueError('If the data is a redundant visibility solution, raw_auto_file must be specified.')
+
     # Load redcal calibration
     hc = io.HERACal(redcal_file)
     rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
+    assert hc.gain_convention == 'divide', "The calibration gain convention in {} is not the HERA standard 'divide'.".format(redcal_file)
 
     # Initialize full-size, totally-flagged abscal gain/flag/etc. dictionaries
     abscal_gains = copy.deepcopy(rc_gains)
     abscal_flags = {ant: np.ones_like(rf) for ant, rf in rc_flags.items()}
-    abscal_chisq_per_ant = {ant: np.zeros_like(rq) for ant, rq in rc_quals.items()}
+    abscal_chisq_per_ant = {ant: np.zeros_like(rq) for ant, rq in rc_quals.items()}  # this stays zero, as it's not particularly meaningful
     abscal_chisq = {pol: np.zeros_like(rtq) for pol, rtq in rc_tot_qual.items()}
 
     # match times to narrow down model_files
     matched_model_files = sorted(set(match_times(data_file, model_files, filetype='uvh5')))
-    if len(matched_model_files) > 0:
+    if len(matched_model_files) == 0:
+        echo("No model files overlap with data files in LST. Result will be fully flagged.", verbose=verbose)
+    else:
+        echo("The following model files overlap with data files in LST:\n" + "\n".join(matched_model_files), verbose=verbose)
         hd = io.HERAData(data_file)
         hdm = io.HERAData(matched_model_files)
+        hd_autos = io.HERAData(raw_auto_file)
         assert hdm.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match model x_orientation, {}'.format(hd.x_orientation, hdm.x_orientation)
+        assert hc.x_orientation == hd.x_orientation, 'Data x_orientation, {}, does not match redcal x_orientation, {}'.format(hd.x_orientation, hc.x_orientation)
         pol_load_list = [pol for pol in hd.pols if split_pol(pol)[0] == split_pol(pol)[1]]
-        
+
+        # get model bls and antpos to use later in baseline matching
+        model_bls = hdm.bls
+        model_antpos = hdm.antpos
+        if len(matched_model_files) > 1:  # in this case, it's a dictionary
+            model_bls = list(set([bl for bls in list(hdm.bls.values()) for bl in bls]))
+            model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
+
         # match integrations in model to integrations in data
         all_data_times, all_data_lsts = get_all_times_and_lsts(hd, solar_horizon=data_solar_horizon, unwrap=True)
         all_model_times, all_model_lsts = get_all_times_and_lsts(hdm, solar_horizon=model_solar_horizon, unwrap=True)
@@ -2962,72 +3216,82 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
             # loop over polarizations
             for pol in pol_load_list:
                 echo('\n\nNow calibrating ' + pol + '-polarization...', verbose=verbose)
-                # loop over groups of time indices
-                for tinds in tind_groups:
-                    echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
-                         + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
-                    
-                    # load data and apply calibration
-                    data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=[pol])
-                    data_ants = set([ant for bl in data.keys() for ant in split_bl(bl)])
-                    rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
-                    rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
-                    calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
-                                       cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
-                    auto_bls = [bl for bl in hd.bls if (bl[0] == bl[1]) and bl[2] == pol]
-                    autocorrs = DataContainer({bl: copy.deepcopy(data[bl]) for bl in auto_bls})
+                ants = [ant for ant in abscal_gains if join_pol(ant[1], ant[1]) == pol]
 
-                    if not np.all(list(flags.values())):
-                        # load model and rephase
-                        model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-                        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=[pol])
-                        model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
-                        utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
-                                          lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
+                # figure out which baselines to load from the data and the model and their correspondence (if one or both is redundantly averaged)
+                (data_bl_to_load,
+                 model_bl_to_load,
+                 data_to_model_bl_map) = match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=[pol],
+                                                         data_is_redsol=data_is_redsol, model_is_redundant=model_is_redundant,
+                                                         tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, verbose=verbose)
+                if (len(data_bl_to_load) == 0) or (len(model_bl_to_load) == 0):
+                    echo("No baselines in the data match baselines in the model. Results for this polarization will be fully flagged.", verbose=verbose)
+                else:
+                    # loop over groups of time indices
+                    for tinds in tind_groups:
+                        echo('\n    Now calibrating times ' + str(hd.times[tinds[0]])
+                             + ' through ' + str(hd.times[tinds[-1]]) + '...', verbose=verbose)
                         
-                        # update data flags w/ model flags. Anything flagged in the model is ignored in post_redcal_abscal,
-                        # but only times/channels that are flagged in the model for all baselines are also flagged the final calibration
-                        model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
-                        flags_for_abscal_wgts = copy.deepcopy(flags)
-                        for k in flags.keys():
-                            flags[k] += model_flag_waterfall
-                            if k in model_flags:
-                                flags_for_abscal_wgts[k] += model_flags[k]
+                        # load data and apply calibration (unless data_is_redsol, so it's already redcal'ed)
+                        data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
+                        rc_gains_subset = {k: rc_gains[k][tinds, :] for k in ants}
+                        rc_flags_subset = {k: rc_flags[k][tinds, :] for k in ants}
+                        if not data_is_redsol:  # data is raw, so redundantly calibrate it
+                            calibrate_in_place(data, rc_gains_subset, data_flags=flags, cal_flags=rc_flags_subset)
 
-                        # run absolute calibration, copying data because it gets modified internally
-                        delta_gains, AC = post_redcal_abscal(model, data, flags_for_abscal_wgts, rc_flags_subset, edge_cut=edge_cut, 
-                                                             tol=tol, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut, 
-                                                             gain_convention=hc.gain_convention, phs_max_iter=phs_max_iter, 
-                                                             phs_conv_crit=phs_conv_crit, verbose=verbose,
-                                                             refant_num=(None if refant is None else refant[0]))
+                        if not np.all(list(flags.values())):
+                            # load model and rephase
+                            model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
+                            model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
+                            model_blvecs = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
+                            utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
+                                              lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
 
-                        # calibrate autos, abscal them, and generate abscal Chi^2
-                        calibrate_in_place(autocorrs, delta_gains, data_flags=flags, 
-                                           cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
-                        chisq_wgts = {}
-                        for bl in AC.data.keys():
-                            dt = (np.median(np.ediff1d(hd.times_by_bl[bl[:2]])) * 86400.)
-                            noise_var = predict_noise_variance_from_autos(bl, autocorrs, dt=dt, df=np.median(np.ediff1d(data.freqs)))
-                            chisq_wgts[bl] = noise_var**-1 * (~flags[bl]).astype(np.float)
-                        total_qual, nObs, quals, nObs_per_ant = utils.chisq(AC.data, AC.model, chisq_wgts,
-                                                                            gain_flags=rc_flags_subset, split_by_antpol=True)
-                    
-                        # update results
-                        delta_flags = synthesize_ant_flags(flags)
-                        for ant in data_ants:
-                            abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
-                            abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + delta_flags[ant]
-                            if not np.all(abscal_flags[ant][tinds, :]):
-                                abscal_chisq_per_ant[ant][tinds, :] = quals[ant] / nObs_per_ant[ant]  # Note, not normalized for DoF
-                        for antpol in total_qual.keys():
-                            abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
+                            # Flag frequencies and times in the data that are entirely flagged in the model
+                            model_flag_waterfall = np.all([f for f in model_flags.values()], axis=0)
+                            for k in flags.keys():
+                                flags[k] += model_flag_waterfall
+
+                            # get the relative wgts for each piece of data
+                            auto_bls = [join_bl(ant, ant) for ant in rc_gains if join_bl(ant, ant)[2] == pol]
+                            autocorrs, auto_flags, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
+                            calibrate_in_place(autocorrs, rc_gains_subset, data_flags=auto_flags, cal_flags=rc_flags_subset)
+
+                            # use data_to_model_bl_map to rekey model. Does not copy to save memory.
+                            model = DataContainer({bl: model[data_to_model_bl_map[bl]] for bl in data})
+                            model_flags = DataContainer({bl: model_flags[data_to_model_bl_map[bl]] for bl in data})
+
+                            # build data weights based on inverse noise variance and nsamples and flags
+                            data_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, auto_flags,
+                                                        times_by_bl=hd.times_by_bl, df=np.median(np.ediff1d(data.freqs)), 
+                                                        data_is_redsol=data_is_redsol, gain_flags=rc_flags_subset, antpos=hd.antpos)
+
+                            # run absolute calibration to get the gain updates
+                            delta_gains = post_redcal_abscal(model, data, data_wgts, rc_flags_subset, edge_cut=edge_cut, tol=tol,
+                                                             phs_max_iter=phs_max_iter, phs_conv_crit=phs_conv_crit, verbose=verbose)
+
+                            # abscal autos, rebuild weights, and generate abscal Chi^2
+                            calibrate_in_place(autocorrs, delta_gains)
+                            chisq_wgts = build_data_wgts(flags, nsamples, model_flags, autocorrs, auto_flags,
+                                                         times_by_bl=hd.times_by_bl, df=np.median(np.ediff1d(data.freqs)),
+                                                         data_is_redsol=data_is_redsol, gain_flags=rc_flags_subset, antpos=hd.antpos)
+                            total_qual, nObs, quals, nObs_per_ant = utils.chisq(data, model, chisq_wgts,
+                                                                                gain_flags=rc_flags_subset, split_by_antpol=True)
+                        
+                            # update results
+                            for ant in ants:
+                                # new gains are the product of redcal gains and delta gains from abscal
+                                abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
+                                # new flags are the OR of redcal flags and times/freqs totally flagged in the model
+                                abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + model_flag_waterfall
+                            for antpol in total_qual.keys():
+                                abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
+                                abscal_chisq[antpol][tinds, :][~np.isfinite(abscal_chisq[antpol][tinds, :])] = 0.
                             
         # impose a single reference antenna on the final antenna solution
         if refant is None:
             refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
         rephase_to_refant(abscal_gains, refant, flags=abscal_flags, propagate_refant_flags=True)
-    else:
-        echo("No model files overlap with data files in LST. Result will be fully flagged.", verbose=verbose)
 
     # Save results to disk
     hc.update(gains=abscal_gains, flags=abscal_flags, quals=abscal_chisq_per_ant, total_qual=abscal_chisq)
@@ -3041,10 +3305,14 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, output_file=None
 def post_redcal_abscal_argparser():
     ''' Argparser for commandline operation of hera_cal.abscal.post_redcal_abscal_run() '''
     a = argparse.ArgumentParser(description="Command-line drive script for post-redcal absolute calibration using hera_cal.abscal module")
-    a.add_argument("data_file", type=str, help="string path to raw uvh5 visibility file")
-    a.add_argument("redcal_file", type=str, help="string path to calfits file that redundantly calibrates the data_file")
-    a.add_argument("model_files", type=str, nargs='+', help="list of string paths to externally calibrated data. Strings must be sortable to produce a chronological list in LST \
-                                                             (wrapping over 2*pi is OK)")
+    a.add_argument("data_file", type=str, help="string path to raw uvh5 visibility file or omnical_visibility solution")
+    a.add_argument("redcal_file", type=str, help="string path to calfits file that serves as the starting point of abscal")
+    a.add_argument("model_files", type=str, nargs='+', help="list of string paths to externally calibrated data or reference solution. Strings \
+                                                             must be sortable to produce a chronological list in LST (wrapping over 2*pi is OK)")
+    a.add_argument("--raw_auto_file", default=None, type=str, help="path to data file that contains raw autocorrelations for all antennas in redcal_file. \
+                                                                  If not provided, data_file is used instead. Required if data_is_redsol is True.")
+    a.add_argument("--data_is_redsol", default=False, action="store_true", help="If True, data_file only contains unique, redcal'ed visibilities.")
+    a.add_argument("--model_is_redundant", default=False, action="store_true", help="If True, then model_files only containe unique visibilities.")
     a.add_argument("--output_file", default=None, type=str, help="string path to output abscal calfits file. If None, will be redcal_file.replace('.omni.', '.abs.'")
     a.add_argument("--nInt_to_load", default=None, type=int, help="number of integrations to load and calibrate simultaneously. Default None loads all integrations.")
     a.add_argument("--data_solar_horizon", default=90.0, type=float, help="Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.")

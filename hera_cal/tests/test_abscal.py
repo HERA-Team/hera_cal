@@ -611,6 +611,9 @@ class Test_Post_Redcal_Abscal_Run(object):
         self.redcal_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.omni.calfits_downselected')
         self.model_files = [os.path.join(DATA_PATH, 'test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected'),
                             os.path.join(DATA_PATH, 'test_input/zen.2458042.61034.HH.uvRXLS.uvh5_downselected')]
+        self.red_data_file = os.path.join(DATA_PATH, 'test_input/zen.2458098.45361.HH.uvh5_downselected_redavg')
+        self.red_model_files = [os.path.join(DATA_PATH, 'test_input/zen.2458042.60288.HH.uvRXLS.uvh5_downselected_redavg'),
+                                os.path.join(DATA_PATH, 'test_input/zen.2458042.61034.HH.uvRXLS.uvh5_downselected_redavg')]
 
     def test_get_all_times_and_lsts(self):
         hd = io.HERAData(self.model_files)
@@ -662,19 +665,168 @@ class Test_Post_Redcal_Abscal_Run(object):
                 assert np.abs(dlst - mlst) < np.median(np.ediff1d(all_data_lsts))
                 assert np.min(np.abs(all_data_lsts - mlst)) == np.abs(dlst - mlst)
 
+    def test_match_baselines(self):
+        with pytest.raises(NotImplementedError):
+            abscal.match_baselines(None, None, None, model_is_redundant=False, data_is_redsol=True)
+
+        # try with data files:
+        hd = io.HERAData(self.data_file)
+        hdm = io.HERAData(self.model_files[0])
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(hd.bls, hdm.bls, hd.antpos)
+        for bl in data_bl_to_load:
+            assert bl in model_bl_to_load
+            assert data_to_model_bl_map[bl] == bl
+        for bl in model_bl_to_load:
+            assert bl in data_bl_to_load
+
+        # try with redundant model
+        with pytest.raises(AssertionError):
+            abscal.match_baselines(hd.bls, hdm.bls, hd.antpos, model_is_redundant=True)
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
+        model_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 3, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_is_redundant=True)
+        assert len(data_bl_to_load) == 3
+        assert len(model_bl_to_load) == 2
+        assert data_to_model_bl_map[(0, 1, 'ee')] == (0, 1, 'ee')
+        assert data_to_model_bl_map[(1, 2, 'ee')] == (0, 1, 'ee')
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
+
+        # try with cutting on baseline length
+        with pytest.raises(AssertionError):
+            abscal.match_baselines(hd.bls, hdm.bls, hd.antpos, model_is_redundant=True)
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
+        model_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 3, 'ee'), (0, 3, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_is_redundant=True, min_bl_cut=15, max_bl_cut=50)
+        assert len(data_bl_to_load) == 1
+        assert len(model_bl_to_load) == 1
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
+
+        # try with redundant model and some reversed baselines
+        with pytest.raises(AssertionError):
+            abscal.match_baselines(hd.bls, hdm.bls, hd.antpos, model_is_redundant=True)
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (2, 1, 'ee'), (0, 3, 'ee')]
+        model_bls = [(0, 1, 'ee'), (2, 0, 'ee'), (1, 3, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_is_redundant=True)
+        assert len(data_bl_to_load) == 3
+        assert len(model_bl_to_load) == 2
+        assert data_to_model_bl_map[(0, 1, 'ee')] == (0, 1, 'ee')
+        assert data_to_model_bl_map[(2, 1, 'ee')] == (1, 0, 'ee')
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (0, 2, 'ee')
+
+        # try with different antenna numbering in model
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        model_antpos = {100: np.array([0, 0, 0]), 101: np.array([10, 0, 0]), 102: np.array([20, 0, 0]), 103: np.array([100, 100, 0])}
+        data_bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
+        model_bls = [(100, 101, 'ee'), (100, 102, 'ee'), (101, 103, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos, model_is_redundant=True)
+        assert len(data_bl_to_load) == 3
+        assert len(model_bl_to_load) == 2
+        assert data_to_model_bl_map[(0, 1, 'ee')] == (100, 101, 'ee')
+        assert data_to_model_bl_map[(1, 2, 'ee')] == (100, 101, 'ee')
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (100, 102, 'ee')
+
+        # try with both redundant
+        with pytest.raises(AssertionError):
+            abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos, model_is_redundant=True, data_is_redsol=True)
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0]), 3: np.array([100, 100, 0])}
+        model_antpos = {100: np.array([0, 0, 0]), 101: np.array([10, 0, 0]), 102: np.array([20, 0, 0]), 103: np.array([100, 100, 0])}
+        data_bls = [(0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
+        model_bls = [(100, 101, 'ee'), (100, 102, 'ee'), (101, 103, 'ee')]
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos, 
+                                                                                         data_is_redsol=True, model_is_redundant=True)
+        assert len(data_bl_to_load) == 2
+        assert len(model_bl_to_load) == 2
+        assert data_to_model_bl_map[(1, 2, 'ee')] == (100, 101, 'ee')
+        assert data_to_model_bl_map[(0, 2, 'ee')] == (100, 102, 'ee')
+
+    def test_build_data_wgts(self):
+        # test non-redundant version
+        bls = [(0, 1, 'ee'), (0, 2, 'ee'), (1, 2, 'ee')]
+        auto_bls = [(0, 0, 'ee'), (1, 1, 'ee'), (2, 2, 'ee')]
+        data_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in bls})
+        data_flags[(0, 1, 'ee')][0, 0] = True
+        data_flags.times_by_bl = {bl[:2]: np.arange(3) / 86400 for bl in bls}
+        data_flags.freqs = np.arange(4)
+        data_flags.antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0])}
+        data_nsamples = DataContainer({bl: np.ones((3, 4), dtype=float) for bl in bls})
+        data_nsamples[(0, 1, 'ee')][1, 1] = 2
+        model_flags = data_flags
+        autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
+        autocorrs[(1, 1, 'ee')][2, 2] = 3
+        auto_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls})
+        
+        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags)
+        for bl in wgts:
+            for t in range(3):
+                for f in range(4):
+                    if 1 in bl and t == 2 and f == 2:
+                        assert wgts[bl][t, f] == 1 / 3
+                    elif bl == (0, 1, 'ee'):
+                        if t == 0 and f == 0:
+                            assert wgts[bl][t, f] == 0
+                        elif t == 1 and f == 1:
+                            assert wgts[bl][t, f] == 2
+                        else:
+                            assert wgts[bl][t, f] == 1
+                    else:
+                        assert wgts[bl][t, f] == 1
+
+        # test redundant verison
+        bls = [(0, 1, 'ee'), (0, 2, 'ee')]
+        data_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in bls})
+        data_flags.times_by_bl = {bl[:2]: np.arange(3) / 86400 for bl in bls}
+        data_flags.freqs = np.arange(4)
+        data_flags.antpos = {0: np.array([0, 0, 0]), 1: np.array([10, 0, 0]), 2: np.array([20, 0, 0])}
+        data_nsamples = DataContainer({bl: np.ones((3, 4), dtype=float) for bl in bls})
+        data_nsamples[(0, 1, 'ee')] *= 2
+        model_flags = data_flags
+        autocorrs = DataContainer({bl: np.ones((3, 4), dtype=complex) for bl in auto_bls})
+        autocorrs[(2, 2, 'ee')][2, 2] = 3
+        auto_flags = DataContainer({bl: np.zeros((3, 4), dtype=bool) for bl in auto_bls})
+        auto_flags[(0, 0, 'ee')][1, 1] = True
+
+        gain_flags = {ant: np.zeros((3, 4), dtype=bool) for ant in [(0, 'Jee'), (1, 'Jee'), (2, 'Jee')]}
+        wgts = abscal.build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags,
+                                      data_is_redsol=True, gain_flags=gain_flags, tol=1.0)
+        for bl in wgts:
+            for t in range(3):
+                for f in range(3):
+                    if bl == (0, 1, 'ee'):
+                        if t == 2 and f == 2:
+                            assert wgts[bl][t, f] == 2 / (((1 / 3) + (1 / 1))**-1 * 2)
+                        else:
+                            assert wgts[bl][t, f] == 2
+                    elif bl == (0, 2, 'ee'):
+                        if t == 2 and f == 2:
+                            assert wgts[bl][t, f] == 1 / (((1 / 3))**-1 * 1)
+                        elif t == 1 and f == 1:
+                            assert wgts[bl][t, f] == 0
+                        else:
+                            assert wgts[bl][t, f] == 1
+
     def test_post_redcal_abscal(self):
         # setup
         hd = io.HERAData(self.data_file)
         hdm = io.HERAData(self.model_files)
         hc = io.HERACal(self.redcal_file)
+
+        model_bls = list(set([bl for bls in list(hdm.bls.values()) for bl in bls]))
+        model_antpos = {ant: pos for antpos in hdm.antpos.values() for ant, pos in antpos.items()}
+        (data_bl_to_load,
+         model_bl_to_load,
+         data_to_model_bl_map) = abscal.match_baselines(hd.bls, model_bls, hd.antpos, model_antpos=model_antpos, pols=['ee', 'nn'], min_bl_cut=1.0)
+
         rc_gains, rc_flags, rc_quals, rc_tot_qual = hc.read()
         all_data_times, all_data_lsts = abscal.get_all_times_and_lsts(hd)
         all_model_times, all_model_lsts = abscal.get_all_times_and_lsts(hdm)
         d2m_time_map = abscal.get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)
         tinds = [0, 1, 2]
-        data, flags, nsamples = hd.read(times=hd.times[tinds], polarizations=['xx', 'yy'])
+        data, flags, nsamples = hd.read(times=hd.times[tinds], bls=data_bl_to_load)
         model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, polarizations=['xx', 'yy'])
+        model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
         model_bls = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
         utils.lst_rephase(model, model_bls, model.freqs, data.lsts - model.lsts,
                           lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
@@ -686,11 +838,12 @@ class Test_Post_Redcal_Abscal_Run(object):
         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
         calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
+        wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
 
         # run function
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            delta_gains, AC = abscal.post_redcal_abscal(model, copy.deepcopy(data), flags, rc_flags_subset, min_bl_cut=1, verbose=False)
+            delta_gains = abscal.post_redcal_abscal(model, copy.deepcopy(data), wgts, rc_flags_subset, verbose=False)
 
         # use returned gains to calibrate data
         calibrate_in_place(data, delta_gains, data_flags=flags, 
@@ -701,45 +854,39 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert k in delta_gains
             assert delta_gains[k].shape == (3, rc_gains[k].shape[1])
             assert delta_gains[k].dtype == np.complex
-        for k in AC.model.keys():
-            np.testing.assert_array_equal(model[k], AC.model[k])
-        for k in AC.data.keys():
-            np.testing.assert_array_almost_equal(data[k][~flags[k]], AC.data[k][~flags[k]], decimal=4)
-        assert AC.ant_dly is None
-        assert AC.ant_dly_arr is None
-        assert AC.ant_dly_phi is None
-        assert AC.ant_dly_phi_arr is None
-        assert AC.dly_slope is not None
-        assert AC.dly_slope_arr is not None
-        assert AC.phs_slope is not None
-        assert AC.dly_slope_arr is not None
-        assert AC.abs_eta is not None
-        assert AC.abs_eta_arr is not None
-        assert AC.abs_psi is not None
-        assert AC.abs_psi_arr is not None
-        assert AC.TT_Phi is not None
-        assert AC.TT_Phi_arr is not None
-
-        # assert custom_* funcs with multiple pols returns different results
-        # for different pols, as expected
-        gkxx, gkyy = (0, 'Jee'), (0, 'Jnn')
-        for func, args in zip([AC.custom_abs_eta_gain, AC.custom_dly_slope_gain,
-                               AC.custom_phs_slope_gain, AC.custom_TT_Phi_gain],
-                              [(), (AC.antpos,), (AC.antpos,), (AC.antpos,)]):
-            custom_gains = func([gkxx, gkyy], *args)
-            assert not np.all(np.isclose(np.abs(custom_gains[gkxx] - custom_gains[gkyy]), 0.0, atol=1e-12))
 
     def test_post_redcal_abscal_run(self):
+        # test no model overlap
+        hcr = io.HERACal(self.redcal_file)
+        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
+
+        hd = io.HERAData(self.model_files[0])
+        hd.read(return_data=False)
+        hd.lst_array += 1
+        temp_outfile = os.path.join(DATA_PATH, 'test_output/temp.uvh5')
+        hd.write_uvh5(temp_outfile, clobber=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4, 
+                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+        assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
+        np.testing.assert_array_equal(hca.total_quality_array, 0.0)
+        np.testing.assert_array_equal(hca.gain_array, hcr.gain_array)
+        np.testing.assert_array_equal(hca.flag_array, True)
+        np.testing.assert_array_equal(hca.quality_array, 0.0)
+        os.remove(self.redcal_file.replace('.omni.', '.abs.'))
+        os.remove(temp_outfile)
+
+        # test normal operation of abscal
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files, phs_conv_crit=1e-4, 
                                                 nInt_to_load=30, verbose=False, add_to_history='testing')
         pytest.raises(IOError, abscal.post_redcal_abscal_run, self.data_file, self.redcal_file, self.model_files, clobber=False)
+
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
         ac_gains, ac_flags, ac_quals, ac_total_qual = hca.build_calcontainers()
-        hcr = io.HERACal(self.redcal_file)
-        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
 
         assert hcr.history.replace('\n', '').replace(' ', '') in hca.history.replace('\n', '').replace(' ', '')
         assert 'testing' in hca.history.replace('\n', '').replace(' ', '')
@@ -747,7 +894,7 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert k in ac_gains
             assert ac_gains[k].shape == rc_gains[k].shape
             assert ac_gains[k].dtype == complex
-        
+
         hd = io.HERAData(self.data_file)
         _, data_flags, _ = hd.read()
         ac_flags_expected = synthesize_ant_flags(data_flags)
@@ -767,22 +914,99 @@ class Test_Post_Redcal_Abscal_Run(object):
             assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
             assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
 
-        hd = io.HERAData(self.model_files[0])
-        hd.read(return_data=False)
-        hd.lst_array += 1
-        temp_outfile = os.path.join(DATA_PATH, 'test_output/temp.uvh5')
-        hd.write_uvh5(temp_outfile, clobber=True)
+        # test redundant model and full data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4, 
-                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+            hca_red = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4, 
+                                                    nInt_to_load=10, verbose=False, add_to_history='testing2', model_is_redundant=True)
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
-        np.testing.assert_array_equal(hca.total_quality_array, 0.0)
-        np.testing.assert_array_equal(hca.gain_array, hcr.gain_array)
-        np.testing.assert_array_equal(hca.flag_array, True)
-        np.testing.assert_array_equal(hca.quality_array, 0.0)
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
-        os.remove(temp_outfile)
+        ac_gains, ac_flags, ac_quals, ac_total_qual = hca_red.build_calcontainers()
+        hcr = io.HERACal(self.redcal_file)
+        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
+
+        assert hcr.history.replace('\n', '').replace(' ', '') in hca_red.history.replace('\n', '').replace(' ', '')
+        assert 'testing2' in hca_red.history.replace('\n', '').replace(' ', '')
+        for k in rc_gains:
+            assert k in ac_gains
+            assert ac_gains[k].shape == rc_gains[k].shape
+            assert ac_gains[k].dtype == complex
+
+        hd = io.HERAData(self.data_file)
+        _, data_flags, _ = hd.read()
+        ac_flags_expected = synthesize_ant_flags(data_flags)
+        ac_flags_waterfall = np.all([f for f in ac_flags.values()], axis=0)
+        for ant in ac_flags_expected:
+            ac_flags_expected[ant] += rc_flags[ant]
+            ac_flags_expected[ant] += ac_flags_waterfall
+        for k in rc_flags:
+            assert k in ac_flags
+            assert ac_flags[k].shape == rc_flags[k].shape
+            assert ac_flags[k].dtype == bool
+            np.testing.assert_array_equal(ac_flags[k], ac_flags_expected[k])
+
+        assert not np.all(list(ac_flags.values()))
+        for pol in ['Jee', 'Jnn']:
+            assert pol in ac_total_qual
+            assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
+            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
+
+        # test redundant model and redundant data
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            hca_red_red = abscal.post_redcal_abscal_run(self.red_data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4, 
+                                                        nInt_to_load=10, verbose=False, add_to_history='testing3', model_is_redundant=True, 
+                                                        data_is_redsol=True, raw_auto_file=self.data_file)
+        assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
+        os.remove(self.redcal_file.replace('.omni.', '.abs.'))
+        ac_gains, ac_flags, ac_quals, ac_total_qual = hca_red_red.build_calcontainers()
+        hcr = io.HERACal(self.redcal_file)
+        rc_gains, rc_flags, rc_quals, rc_total_qual = hcr.read()
+
+        assert hcr.history.replace('\n', '').replace(' ', '') in hca_red_red.history.replace('\n', '').replace(' ', '')
+        assert 'testing3' in hca_red_red.history.replace('\n', '').replace(' ', '')
+        for k in rc_gains:
+            assert k in ac_gains
+            assert ac_gains[k].shape == rc_gains[k].shape
+            assert ac_gains[k].dtype == complex
+
+        hd = io.HERAData(self.data_file)
+        _, data_flags, _ = hd.read()
+        ac_flags_expected = synthesize_ant_flags(data_flags)
+        ac_flags_waterfall = np.all([f for f in ac_flags.values()], axis=0)
+        for ant in ac_flags_expected:
+            ac_flags_expected[ant] += rc_flags[ant]
+            ac_flags_expected[ant] += ac_flags_waterfall
+        for k in rc_flags:
+            assert k in ac_flags
+            assert ac_flags[k].shape == rc_flags[k].shape
+            assert ac_flags[k].dtype == bool
+            np.testing.assert_array_equal(ac_flags[k], ac_flags_expected[k])
+
+        assert not np.all(list(ac_flags.values()))
+        for pol in ['Jee', 'Jnn']:
+            assert pol in ac_total_qual
+            assert ac_total_qual[pol].shape == rc_total_qual[pol].shape
+            assert np.issubdtype(ac_total_qual[pol].dtype, np.floating)
+
+        # compare all 3 versions
+        g1, f1, q1, tq1 = hca.build_calcontainers()
+        g2, f2, q2, tq2 = hca_red.build_calcontainers()
+        g3, f3, q3, tq3 = hca_red_red.build_calcontainers()
+
+        for ant in f1:
+            np.testing.assert_array_equal(f1[ant], f2[ant])
+            np.testing.assert_array_equal(f1[ant], f3[ant])
+
+        for ant in g1:
+            if not np.all(f1[ant]):
+                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g2[ant][~f2[ant]])) - 1) < .1
+                assert np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g3[ant][~f3[ant]])) - 1) < .1
+
+        for ant in q1:
+            np.testing.assert_array_equal(q1[ant], 0.0)
+            np.testing.assert_array_equal(q2[ant], 0.0)
+            np.testing.assert_array_equal(q3[ant], 0.0)
 
     def test_post_redcal_abscal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--nInt_to_load', '6', '--verbose']

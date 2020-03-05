@@ -116,6 +116,26 @@ class Test_Pol_Ops(object):
         assert utils.make_bl((1, 2), 'pI') == (1, 2, 'pI')
 
 
+class TestFilterBls(object):
+
+    def test_filter_bls(self):
+        bls = [(0, 1, 'ee'), (1, 2, 'ee'), (0, 2, 'ee'), (0, 1, 'ne')]
+        antpos = {0: np.array([0, 0, 0]), 1: np.array([1, 0, 0]), 2: np.array([2, 0, 0])}
+
+        assert set(utils.filter_bls(bls, ants=[0, 1])) == set([(0, 1, 'ee'), (0, 1, 'ne')])
+        assert set(utils.filter_bls(bls, ants=[(0, 'Jee'), (1, 'Jee')])) == set([(0, 1, 'ee')])
+        
+        assert set(utils.filter_bls(bls, ex_ants=[0])) == set([(1, 2, 'ee')])
+        assert set(utils.filter_bls(bls, ex_ants=[(0, 'Jee')])) == set([(1, 2, 'ee'), (0, 1, 'ne')])
+
+        assert set(utils.filter_bls(bls, pols=['ee'])) == set([(0, 1, 'ee'), (1, 2, 'ee'), (0, 2, 'ee')])
+
+        assert set(utils.filter_bls(bls, antpos=antpos, min_bl_cut=1.5)) == set([(0, 2, 'ee')])
+        assert set(utils.filter_bls(bls, antpos=antpos, max_bl_cut=1.5)) == set([(0, 1, 'ee'), (1, 2, 'ee'), (0, 1, 'ne')])
+        with pytest.raises(AssertionError):
+            utils.filter_bls(bls, min_bl_cut=1.5)
+
+
 class TestFftDly(object):
 
     def setup_method(self):
