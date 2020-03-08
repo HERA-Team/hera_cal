@@ -440,7 +440,7 @@ class VisClean(object):
         # type checks
 
         if ax == 'both':
-            filtdim = [0, 1]
+            filterdim = [0, 1]
             filter2d = True
             if x is None:
                 x = [self.times, self.freqs]
@@ -892,19 +892,19 @@ class VisClean(object):
 
     def interleave_products(self, data=None, data2=None, keys=None, assign='interleaved_product', overwrite=False):
         """
-        Take products of alternate time samples. Use to compute PS estimates without a 
-        noise bias. 
-        Args: 
+        Take products of alternate time samples. Use to compute PS estimates without a
+        noise bias.
+        Args:
             data : DataContainer
-                   Object to get interleaves from. 
+                   Object to get interleaves from.
             data2 : DataContainer
-                   Optional second data container to compute interleaved products from 
+                   Optional second data container to compute interleaved products from
             keys : list of tuples
-                 List of keys to compute interleaved products from 
+                 List of keys to compute interleaved products from
             assign : str
                  Name of DataContainer to attach to self. Default is self.iproducts
-            overwrite : bool 
-                 If iproducts[key] already exists, overwrite its contents. 
+            overwrite : bool
+                 If iproducts[key] already exists, overwrite its contents.
         """
         if not hasattr(self, assign):
             setattr(self, assign, DataContainer({}))
@@ -923,9 +923,9 @@ class VisClean(object):
             else:
                 iproducts[k] = data[k] * np.conj(data2[k])
 
-                
-            
-            
+
+
+
     def factorize_flags(self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False):
         """
         Factorize self.flags into two 1D time and frequency masks.
