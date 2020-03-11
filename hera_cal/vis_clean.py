@@ -282,7 +282,7 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     ###
-    #TODO: zeropad here will error given its default option if 2d filtering is being used. 
+    #TODO: zeropad here will error given its default option if 2d filtering is being used.
     ###
     def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, mode,
                        fitting_options, x=None, data=None, flags=None, output_prefix='filtered', wgts=None, zeropad=0,
@@ -505,13 +505,15 @@ class VisClean(object):
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
-
+                    x = np.hstack([x.min() - (1+np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
+                                   x.max() + (1+np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'time':
                 # zeropad the data
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
-
+                    x = np.hstack([x.min() - (1+np.arange(zeropad)[::-1]) * np.mean(np.diff(x)),x,
+                                   x.max() + (1+np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'both':
                 if not isinstance(zeropad, (list,tuple)) or not len(zeropad) == 2:
                     raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
@@ -523,7 +525,7 @@ class VisClean(object):
 
                     d, _ = zeropad_array(d, zeropad=zeropad[0], axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad[0], axis=0)
-
+                    x = [np.hstack([x[m].min() - (np.arange(zeropad)[::-1]+1) * np.mean(np.diff(x[m])),x[m],x[m].max() + (1+np.arange(zeropad)) * np.mean(np.diff(x[m]))]) for m in range(2)]
             mdl, res ,info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
                                                   suppression_factors=suppression_factors, mode=mode,
