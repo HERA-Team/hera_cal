@@ -446,6 +446,9 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
                 break
             except AssertionError:
                 is_flipped = {ant: None for ant in ants}  # this means it hasn't succeded.
+        if not np.all([is_flipped[ant] is None for ant in ants]):
+            break
+
     return {ant: (is_flipped[ant] if ant in is_flipped else None) for ant in ants}
 
 
