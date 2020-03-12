@@ -505,6 +505,7 @@ class VisClean(object):
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
+                    f, _ = zeropad_array(f, zeropad=zeropad, axis=1).astype(bool)
                     x = np.hstack([x.min() - (1+np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
                                    x.max() + (1+np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'time':
@@ -512,6 +513,7 @@ class VisClean(object):
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
+                    f, _ = zeropad_array(f, zeropad=zeropad, axis=0).astype(bool)
                     x = np.hstack([x.min() - (1+np.arange(zeropad)[::-1]) * np.mean(np.diff(x)),x,
                                    x.max() + (1+np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'both':
@@ -522,9 +524,10 @@ class VisClean(object):
                 if zeropad[0] > 0 and zeropad[1] > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad[1], axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad[1], axis=1)
-
+                    f, _ = zeropad_array(f, zeropad=zeropad[1],axis=1).astype(bool)
                     d, _ = zeropad_array(d, zeropad=zeropad[0], axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad[0], axis=0)
+                    f, _ = zeropad_array(f, zeropad=zeropad[0], axis=0).astype(bool)
                     x = [np.hstack([x[m].min() - (np.arange(zeropad)[::-1]+1) * np.mean(np.diff(x[m])),x[m],x[m].max() + (1+np.arange(zeropad)) * np.mean(np.diff(x[m]))]) for m in range(2)]
             mdl, res ,info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
