@@ -505,7 +505,6 @@ class VisClean(object):
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
-                    f, _ = zeropad_array(f, zeropad=zeropad, axis=1).astype(bool)
                     x = np.hstack([x.min() - (1+np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
                                    x.max() + (1+np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'time':
@@ -513,7 +512,6 @@ class VisClean(object):
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
-                    f, _ = zeropad_array(f, zeropad=zeropad, axis=0).astype(bool)
                     x = np.hstack([x.min() - (1+np.arange(zeropad)[::-1]) * np.mean(np.diff(x)),x,
                                    x.max() + (1+np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'both':
@@ -524,10 +522,8 @@ class VisClean(object):
                 if zeropad[0] > 0 and zeropad[1] > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad[1], axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad[1], axis=1)
-                    f, _ = zeropad_array(f, zeropad=zeropad[1],axis=1).astype(bool)
                     d, _ = zeropad_array(d, zeropad=zeropad[0], axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad[0], axis=0)
-                    f, _ = zeropad_array(f, zeropad=zeropad[0], axis=0).astype(bool)
                     x = [np.hstack([x[m].min() - (np.arange(zeropad)[::-1]+1) * np.mean(np.diff(x[m])),x[m],x[m].max() + (1+np.arange(zeropad)) * np.mean(np.diff(x[m]))]) for m in range(2)]
             mdl, res ,info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
@@ -536,7 +532,52 @@ class VisClean(object):
                                                   filter_dim=filterdim, cache=cache, skip_wgt=skip_wgt,
                                                   max_contiguous_edge_flags=max_contiguous_edge_flags)
 
+            #unzeropad array and put in skip flags.
+            if ax == 'freq':
+                if mode == 'clean':
+                    info={0:{}, 1:info}
+                if zeropad > 0:
+                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
+                    res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
+            elif ax == 'time':
+                if mode == 'clean':
+                    info = {0:info, 1:{}}
+                if zeropad > 0:
+                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
+                    res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
+                elif ax == 'both':
+                    for i in range(2):
+                        if zeropad[i] > 0:
+                            mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
+                            res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
+
             flgs = np.zeros_like(mdl, dtype=np.bool)
+            if not mode == 'clean':
+                for dim in range(2):
+                    if len(info[dim]) > 0:
+                        for i in range(len(info[dim])):
+                            if info[dim][i] == 'skipped':
+                                if dim == 0:
+                                    flgs[:, i] = True
+                                elif dim == 1:
+                                    flgs[i] = True
+            else:
+                if not ax=='both':
+                    for dim in range(2):
+                        if len(info[dim])>0:
+                            for inf in info[dim]:
+                                if inf['skipped']:
+                                    if dim ==  0:
+                                        flgs[:,i] = True
+                                    elif dim == 1:
+                                        flgs[i] = True
+                else:
+                    if w.max() > 0.0:
+                        flgs = np.zeros_like(mdl, type=np.bool)
+                    else:
+                        info = {'skipped':True}
+
+
 
             filtered_model[k] = mdl
             filtered_resid[k] = res
@@ -554,8 +595,8 @@ class VisClean(object):
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
-                  verbose=True, linear=False, cache={}, deconv_dayenu_foregrounds=False,
-                  fg_deconv_method='clean', fg_restore_size=None):
+                  verbose=True, mode='clean', cache={}, deconv_dayenu_foregrounds=False,
+                  fg_deconv_method='clean', fg_restore_size=None, fg_deconv_fundamental_period=None):
         """
         Perform a CLEAN deconvolution.
 
@@ -706,7 +747,7 @@ class VisClean(object):
                                                   gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, mode=mode,
                                                   edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual,
                                                   cache=cache, deconv_dayenu_foregrounds=deconv_dayenu_foregrounds,
-                                                  fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size)
+                                                  fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size, fg_deconv_fundamental_period=None)
 
                 # un-zeropad the data
                 if zeropad > 0:
