@@ -802,7 +802,7 @@ class RedundantCalibrator:
 
     def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
                  sparse=False, mode='default', norm=True, medfilt=False, kernel=(1, 11),
-                 edge_cut=0, max_rel_angle=(np.pi / 8), max_assumptions=5):
+                 edge_cut=0, max_rel_angle=(np.pi / 8), max_recursion_depth=6):
         """Solve for a calibration solution parameterized by a single delay and phase offset
         per antenna using the phase difference between nominally redundant measurements. 
         Delays are solved in a single iteration, but phase offsets are solved for 
@@ -828,8 +828,8 @@ class RedundantCalibrator:
                 for find_polarity_flipped_ants or when computing delays and offsets in utils.fft_dly
             max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
                 (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
-            max_assumptions: maximum number of assumptions to try before giving up. Warning: the complexity
-                of this scales exponentially as 2^max_assumptions.
+            max_recursion_depth: maximum number of assumptions to try before giving up. Warning: the 
+                complexity of this scales exponentially as 2^max_recursion_depth.
 
         Returns:
             meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
@@ -851,7 +851,8 @@ class RedundantCalibrator:
                 
                 # build metadata and apply detected polarities as a firstcal starting point
                 meta = {'dlys': {ant: dly.flatten() for ant, dly in dlys.items()}}
-                polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle, edge_cut=edge_cut, max_assumptions=max_assumptions)
+                polarity_flips = find_polarity_flipped_ants(data, self.reds, max_rel_angle=max_rel_angle,
+                                                            edge_cut=edge_cut, max_recursion_depth=max_recursion_depth)
                 meta['polarity_flips'] = {ant: np.array([polarity_flips[ant] for i in range(len(dlys[ant]))])
                                           for ant in polarity_flips}
                 if np.all([flip is not None for flip in polarity_flips.values()]):
