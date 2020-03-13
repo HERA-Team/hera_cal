@@ -290,36 +290,15 @@ def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angl
     return polarity_groups
 
 
-def _determine_polarity_flips(polarity_groups, even_vs_odd_assumptions):
-    '''Take a set of polarity groups built by _build_polarity_baseline_groups() and set of a priori
-    assumptions about which ones are "even" (0 or 2 polarity flips) and which ones are "odd" (1 
-    polarity flip). Pick an antenna that participates mostly in even groups as a "not flipped"
-    reference. Use the assumptions to draw conclusions about more antennas. Use those anntennas
-    to draw conclusions about more groups being even/odd or odd/even. Keep iterating until it
-    finishes or gets stuck. If it fails to find a solution or reaches a contradiction, it raises
-    an AssertionError. Otherwise, it returns two dictionaries: is_flipped maps antennas to booleans
-    and even_vs_odd_IDs maps unique baseline keys to strings either 'even/odd' or 'odd/even'.
+def _infer_polarity_flips(polarity_groups, prior_is_flipped, prior_even_vs_odd_IDs):
+    '''Take a set of polarity groups built by _build_polarity_baseline_groups() and 
+    prior identifications of which antennas are flipped and which groups are "even" 
+    (0 or 2 polarity flips) and which ones are "odd" (1 polarity flip). Use those 
+    priors to infer as many additional flips and groups IDs as possible and return
+    the updated is_flipped and even_vs_odd_IDs dictionaries after getting stuck.
     '''
-    even_vs_odd_IDs = deepcopy(even_vs_odd_assumptions)
+    is_flipped, even_vs_odd_IDs = deepcopy(prior_is_flipped), deepcopy(prior_even_vs_odd_IDs)
 
-    # Find all antennas in the polarity groups
-    ants = set([ant for grp_pair in polarity_groups.values() 
-                for grp in grp_pair for bl in grp for ant in utils.split_bl(bl)])
-
-    # Count how many times each antenna is involved in an assumed even group minus odd group
-    ant_even_counts = {ant: 0 for ant in ants}
-    for key, (grp1, grp2) in polarity_groups.items():
-        if key in even_vs_odd_IDs:
-            even, odd = {'even/odd': (grp1, grp2), 'odd/even': (grp2, grp1)}[even_vs_odd_IDs[key]]
-            for grp, to_add in zip([even, odd], [1, -1]):
-                for bl in grp:
-                    ant_even_counts[utils.split_bl(bl)[0]] += to_add
-                    ant_even_counts[utils.split_bl(bl)[1]] += to_add
-    
-    # Select reference antenna based on maximizing the even - odd difference.
-    refant = sorted(ant_even_counts, key=ant_even_counts.get)[-1]
-    is_flipped = {refant: False}
-    
     while True:
         n_flipped, n_groups_IDed = len(is_flipped), len(even_vs_odd_IDs)
         
@@ -361,11 +340,7 @@ def _determine_polarity_flips(polarity_groups, even_vs_odd_assumptions):
         # if no new identifications were made this iteration, break
         if (n_flipped == len(is_flipped)) and (n_groups_IDed == len(even_vs_odd_IDs)):
             break
-
-    # Raise an assertion error if less than all antennas and polarity groups were properly identified.
-    err = 'Only identified {}/{} flips and {}/{} polarity_groups.'
-    err = err.format(n_flipped, len(ants), n_groups_IDed, len(polarity_groups))
-    assert (n_flipped == len(ants)) and (n_groups_IDed == len(polarity_groups)), err
+    
     return is_flipped, even_vs_odd_IDs
 
 
