@@ -379,6 +379,42 @@ def _find_starting_is_flipped(polarity_groups, ants, even_vs_odd_IDs):
     return is_flipped
 
 
+def _recursive_try_assumptions(polarity_groups, ants, prior_is_flipped, prior_even_vs_odd_IDs, depth, max_recursion_depth=5):
+    '''Given a set of polarity groups and a partial solution for which antennas are flipped and which groups are "even" 
+    (0 or 2 polarity flips) and which ones are "odd" (1 polarity flip), this function recursively tries new assumptions
+    for group IDs until a new solution is found and returned. If a contradiction or the max_recursion_depth is reached 
+    an AssertionError is raised. '''
+    # If a full solution has been found for all antennas, check that solution and return it 
+    if len(prior_is_flipped) == len(ants):
+        _check_polarity_results(polarity_groups, prior_is_flipped, prior_even_vs_odd_IDs)
+        return prior_is_flipped, prior_even_vs_odd_IDs
+    
+    # If we've gone too deep without finding a solution, stop this line of inquiry
+    assert depth <= max_recursion_depth
+    
+    # If all IDs have been made but a solution still hasn't been found, stop this line of inquiry
+    assert len(prior_even_vs_odd_IDs) < len(polarity_groups)
+    
+    # sort polarity_group keys by number of "group 1" baselines minus "group 2" baselines, pick out first one not yet solved
+    group_keys = sorted(polarity_groups, key=lambda k: len(polarity_groups[k][0]) - len(polarity_groups[k][1]), reverse=True)
+    new_assumption_key = [k for k in group_keys if k not in prior_even_vs_odd_IDs][0]
+
+    # Try assuming both that the next group is even/odd and that it's odd/even 
+    for assumed_ID in ['even/odd', 'odd/even']:
+        even_vs_odd_IDs = deepcopy(prior_even_vs_odd_IDs)
+        even_vs_odd_IDs[new_assumption_key] = assumed_ID
+        if len(prior_is_flipped) == 0:  # we need a starting antenna as a reference
+            prior_is_flipped = _find_starting_is_flipped(polarity_groups, ants, even_vs_odd_IDs)
+        try:
+            new_is_flipped, new_even_vs_odd_IDs = _infer_polarity_flips(polarity_groups, prior_is_flipped, even_vs_odd_IDs)
+            return _recursive_try_assumptions(polarity_groups, ants, new_is_flipped, new_even_vs_odd_IDs, 
+                                              depth + 1, max_recursion_depth=max_recursion_depth)
+        except AssertionError:
+            pass  # a contradiction or the max assertion depth was reached, so move on. 
+    
+    assert False  # neither solution worked, so move on to another line of inquiry
+
+
 def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np.pi / 8), max_assumptions=5):
     '''Looks at delay calibrated (but not phase calibrated or redcaled) data to determine which
     antennas appear to have reversed polarities (effectively a factor of -1 in the gains). 
