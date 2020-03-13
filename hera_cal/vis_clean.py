@@ -533,9 +533,10 @@ class VisClean(object):
                                                   max_contiguous_edge_flags=max_contiguous_edge_flags)
 
             #unzeropad array and put in skip flags.
+
             if ax == 'freq':
                 if mode == 'clean':
-                    info={0:{}, 1:info}
+                    info={0:{}, 1:{}}
                 if zeropad > 0:
                     mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
                     res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
