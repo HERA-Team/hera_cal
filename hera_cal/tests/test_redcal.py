@@ -248,10 +248,10 @@ class TestMethods(object):
             assert np.all([m is None for m in meta['polarity_flips'][ant]])
 
         # test errors
-        with pytest.raises(AssertionError):
-            meta, g_fc = rc.firstcal(data, freqs, edge_cut=100)
-        with pytest.raises(AssertionError):
-            meta, g_fc = rc.firstcal(data, freqs, max_rel_angle=np.pi)
+        with pytest.raises(ValueError):
+            om._build_polarity_baseline_groups(data, reds, edge_cut=100)
+        with pytest.raises(ValueError):
+            om._build_polarity_baseline_groups(data, reds, max_rel_angle=np.pi)
 
 
 class TestRedundantCalibrator(object):
