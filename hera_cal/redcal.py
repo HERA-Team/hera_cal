@@ -265,9 +265,11 @@ def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angl
     or "even" (two or zero flipped antennas). See find_polarity_flipped_ants() for parameter descriptions.
     '''
     # make sure edge_cut and max_rel_angle are sensible
-    assert 0 < max_rel_angle <= np.pi / 2, "max_rel_angle must be between 0 and np.pi/2."
+    if not (0 < max_rel_angle <= np.pi / 2):
+        raise ValueError("max_rel_angle must be between 0 and np.pi/2.")
     Nfreqs = list(dly_cal_data.values())[0].shape[1]
-    assert 2 * edge_cut < Nfreqs, "edge_cut cannot be >= Nfreqs/2"
+    if 2 * edge_cut >= Nfreqs:
+        raise ValueError("edge_cut cannot be >= Nfreqs/2")
     fslice = slice(edge_cut, Nfreqs - edge_cut)
 
     polarity_groups = {}
