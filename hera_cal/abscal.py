@@ -2993,9 +2993,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
         if antpos is None:
             antpos = data_flags.antpos
         reds = redcal.get_reds(antpos, bl_error_tol=tol, pols=data_flags.pols())
-        ex_ants = [ant for ant, flags in gain_flags.items() if np.all(flags)]
         reds = redcal.filter_reds(reds, ants=[split_bl(bl)[0] for bl in autocorrs])
-        reds = redcal.filter_reds(reds, ex_ants=ex_ants)
 
     # build weights dict using (noise variance * nsamples)^-1 * (0 if data or model is flagged)
     wgts = {}
@@ -3010,7 +3008,7 @@ def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flag
             # use autocorrelations from all unflagged antennas in unique baseline to produce weights
             else:
                 try:  # get redundant group that includes this baseline
-                    red_here = [red for red in reds if bl in red][0]
+                    red_here = [red for red in reds if (bl in red) or (reverse_bl(bl) in red)][0]
                 except IndexError:  # this baseline has no unflagged redundancies
                     noise_var = np.inf
                 else:
