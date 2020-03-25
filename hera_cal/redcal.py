@@ -451,7 +451,7 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
     '''
     
     ants = set([ant for red in reds for bl in red for ant in utils.split_bl(bl)])
-    polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=edge_cut, max_rel_angle=np.pi/8)
+    polarity_groups = _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=edge_cut, max_rel_angle=np.pi / 8)
     
     try:
         is_flipped, even_vs_odd_IDs = _recursive_try_assumptions(polarity_groups, ants, {}, {}, 1, max_recursion_depth=5)
