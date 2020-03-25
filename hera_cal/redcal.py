@@ -404,8 +404,8 @@ def _recursive_try_assumptions(polarity_groups, ants, prior_is_flipped, prior_ev
     for assumed_ID in ['even/odd', 'odd/even']:
         even_vs_odd_IDs = deepcopy(prior_even_vs_odd_IDs)
         even_vs_odd_IDs[new_assumption_key] = assumed_ID
-        if len(prior_is_flipped) == 0:  # we need a starting antenna as a reference
-            prior_is_flipped = _find_starting_is_flipped(polarity_groups, ants, even_vs_odd_IDs)
+        # find new starting assumption about antennas based on the current even_vs_odd_IDs
+        prior_is_flipped = _find_starting_is_flipped(polarity_groups, ants, even_vs_odd_IDs)
         try:
             new_is_flipped, new_even_vs_odd_IDs = _infer_polarity_flips(polarity_groups, prior_is_flipped, even_vs_odd_IDs)
             return _recursive_try_assumptions(polarity_groups, ants, new_is_flipped, new_even_vs_odd_IDs, 
