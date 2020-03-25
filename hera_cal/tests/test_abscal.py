@@ -809,7 +809,6 @@ class Test_Post_Redcal_Abscal_Run(object):
                         else:
                             assert wgts[bl][t, f] == 2
 
-
     def test_post_redcal_abscal(self):
         # setup
         hd = io.HERAData(self.data_file)
