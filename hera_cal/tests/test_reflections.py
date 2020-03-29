@@ -377,6 +377,10 @@ class Test_ReflectionFitter_XTalk(object):
         assert RF.pcomp_model_fft[bl].shape == (100, 128)
         assert RF.data_pcmodel_resid[bl].shape == (100, 128)
 
+        # subtract the model from the data: test with edgecut
+        RF.subtract_model(RF.data, edgecut_low=1, overwrite=True)
+        assert np.isclose(RF.pcomp_model_fft[bl][:, 0], 0).all()  # assert edgecut channels are zeroed
+
     def test_misc_svd_funcs(self):
         # setup RF object
         RF = reflections.ReflectionFitter(self.uvd)

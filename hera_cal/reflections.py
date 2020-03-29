@@ -785,10 +785,11 @@ class ReflectionFitter(FRFilter):
             else:
                 model_fft = np.fft.fft(model, axis=-1)
 
-            # divide by a window
+            # divide by a window: set zeros to inf
             win = dspec.gen_window(window, model_fft.shape[1], alpha=alpha,
                                    edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)
-            model_fft = np.true_divide(model_fft, win, where=~np.isclose(win, 0.0))
+            win[np.isclose(win, 0.0)] = np.inf
+            model_fft /= win
 
             # subtract from data
             self.pcomp_model_fft[k] = model_fft
