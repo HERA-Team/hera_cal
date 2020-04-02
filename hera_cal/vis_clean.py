@@ -370,7 +370,7 @@ class VisClean(object):
                     'fundamental_period': float or 2-tuple
                         the fundamental_period of dft modes to fit. The number of
                         modes fit within each window in 'filter_half_widths' will
-                        equal fw / fundamental_period.
+                        equal fw / fundamental_period where fw is the filter_half_width of the window.
                         if filter2d, must provide a 2-tuple with fundamental_period
                         of each dimension.
                 * 'dayenu':
