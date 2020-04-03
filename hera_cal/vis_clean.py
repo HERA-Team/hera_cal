@@ -282,7 +282,7 @@ class VisClean(object):
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
-                  verbose=True, linear=False, cache={}, deconv_linear_foregrounds=False,
+                  verbose=True, linear=False, cache={}, deconv_dayenu_foregrounds=False,
                   fg_deconv_method='clean', fg_restore_size=None):
         """
         Perform a CLEAN deconvolution.
@@ -336,7 +336,7 @@ class VisClean(object):
                  if True, perform linear delay filtering.
             cache : dict, optional dictionary for storing pre-computed filtering matrices in linear
                 cleaning.
-            deconv_linear_foregrounds : bool, if True, then apply clean to data - residual where
+            deconv_dayenu_foregrounds : bool, if True, then apply clean to data - residual where
                                               res is the data-vector after applying a linear clean filter.
                                               This allows for in-painting flagged foregrounds without introducing
                                               clean artifacts into EoR window. If False, mdl will still just be the
@@ -427,9 +427,9 @@ class VisClean(object):
 
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
-                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, linear=linear,
+                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, mode='dayenu',
                                                   edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual,
-                                                  cache=cache, deconv_linear_foregrounds=deconv_linear_foregrounds,
+                                                  cache=cache, deconv_dayenu_foregrounds=deconv_dayenu_foregrounds,
                                                   fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size)
 
                 # un-zeropad the data
@@ -457,7 +457,7 @@ class VisClean(object):
 
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
-                                                  edgecut_hi=edgecut_hi, linear=linear, cache=cache, deconv_linear_foregrounds=deconv_linear_foregrounds,
+                                                  edgecut_hi=edgecut_hi, linear=linear, cache=cache, deconv_dayenu_foregrounds=deconv_dayenu_foregrounds,
                                                   fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size)
 
                 # un-zeropad the data
