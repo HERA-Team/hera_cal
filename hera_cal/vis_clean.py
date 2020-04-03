@@ -351,6 +351,10 @@ class VisClean(object):
                              that is larger then the horizon then the foregrounds that we fit might actually include super
                              -horizon flagging side-lobes and restoring them will introduce spurious structure.
         """
+        if linear:
+            mode='dayenu'
+        else:
+            mode='clean'
         if not HAVE_UVTOOLS:
             raise ImportError("uvtools required, install hera_cal[all]")
 
@@ -427,7 +431,7 @@ class VisClean(object):
 
                 mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
                                                   min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
-                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, mode='dayenu',
+                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, mode=mode,
                                                   edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual,
                                                   cache=cache, deconv_dayenu_foregrounds=deconv_dayenu_foregrounds,
                                                   fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size)
@@ -457,7 +461,7 @@ class VisClean(object):
 
                 mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter,
                                                   window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
-                                                  edgecut_hi=edgecut_hi, linear=linear, cache=cache, deconv_dayenu_foregrounds=deconv_dayenu_foregrounds,
+                                                  edgecut_hi=edgecut_hi, mode=mode, cache=cache, deconv_dayenu_foregrounds=deconv_dayenu_foregrounds,
                                                   fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size)
 
                 # un-zeropad the data
@@ -479,7 +483,7 @@ class VisClean(object):
                         d, _ = zeropad_array(d, zeropad=zeropad, axis=(0, 1))
                         w, _ = zeropad_array(w, zeropad=zeropad, axis=(0, 1))
 
-                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime, linear=linear,
+                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime, mode=mode,
                                                       standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
                                                       alpha=alpha, gain=gain, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
                                                       filt2d_mode=filt2d_mode)
