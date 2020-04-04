@@ -352,9 +352,9 @@ class VisClean(object):
                              -horizon flagging side-lobes and restoring them will introduce spurious structure.
         """
         if linear:
-            mode='dayenu'
+            mode = 'dayenu'
         else:
-            mode='clean'
+            mode = 'clean'
         if not HAVE_UVTOOLS:
             raise ImportError("uvtools required, install hera_cal[all]")
 
