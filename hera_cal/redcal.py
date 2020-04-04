@@ -292,10 +292,10 @@ def _build_polarity_baseline_groups(dly_cal_data, reds, edge_cut=0, max_rel_angl
 
 
 def _infer_polarity_flips(polarity_groups, prior_is_flipped, prior_even_vs_odd_IDs):
-    '''Take a set of polarity groups built by _build_polarity_baseline_groups() and 
-    prior identifications of which antennas are flipped and which groups are "even" 
-    (0 or 2 polarity flips) and which ones are "odd" (1 polarity flip). Use those 
-    priors to infer as many additional flips and groups IDs as possible and return
+    '''Take a set of polarity groups built by _build_polarity_baseline_groups() and prior 
+    identifications of which antennas are flipped and which groups of baselines are "even" 
+    (0 or 2 polarity flipped antennas) and which ones are "odd" (1 polarity flipped antenna). 
+    Use those priors to infer as many additional flips and groups IDs as possible and return
     the updated is_flipped and even_vs_odd_IDs dictionaries after getting stuck.
     '''
     is_flipped, even_vs_odd_IDs = deepcopy(prior_is_flipped), deepcopy(prior_even_vs_odd_IDs)
@@ -432,9 +432,9 @@ def find_polarity_flipped_ants(dly_cal_data, reds, edge_cut=0, max_rel_angle=(np
            and define its polarity as "not flipped."
         4) Follow that chain of logic as far as possible, identifying as many groups and antennas as possible.
         5) If a full solution is found, return it.
-        5) When we get stuck, make anther assumption recursively (go to 2) about the most-lopsided un-IDed group.
+        5) When we get stuck, make another assumption recursively (go to 2) about the most-lopsided un-IDed group.
         6) Continue until a contradiction arises or the max_recursion_depth is reached. In that case, try the 
-           opposite assumption at the previous step, eventually recursivly trying all assumptions.
+           opposite assumption at the previous step, eventually recursively trying all assumptions.
 
     Arugments:
         dly_cal_data: DataContainer mapping baseline tuples e.g. (0, 1, 'Jee') to delay-only calibrated visibilities
@@ -830,8 +830,8 @@ class RedundantCalibrator:
                 for find_polarity_flipped_ants or when computing delays and offsets in utils.fft_dly
             max_rel_angle: cutoff median phase to assign baselines the "majority" polarity group.
                 (pi - max_rel_angle() is the cutoff for "minority" group. Must be between 0 and pi/2.
-            max_recursion_depth: maximum number of assumptions to try before giving up. Warning: the 
-                complexity of this scales exponentially as 2^max_recursion_depth.
+            max_recursion_depth: maximum number of assumptions to try before giving up.
+                Warning: the maximum complexity of this scales exponentially as 2^max_recursion_depth.
 
         Returns:
             meta: dictionary of metadata (including delays and suspected antenna flips for each integration)
