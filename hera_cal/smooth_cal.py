@@ -119,7 +119,8 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
 
         filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains*rephasor, wgts=wgts, filter_centers=[0.],
                                                             filter2d=False, filter_dim=1, filter_half_widths=[1. / (filter_scale * 10 ** 6)],
-                                                            mode=mode, skip_wgt=skip_wgt, fitting_options=fitting_options, suppression_factors=[tol])
+                                                            mode=mode, skip_wgt=skip_wgt, fitting_options=fitting_options,
+                                                            suppression_factors=[tol], max_contiguous_edge_flags=fitting_options['max_contiguous_edge_flags'])
         info = info[1]
         # put back in unfilted values if skip_wgt is triggered
         for i in info:
