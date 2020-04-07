@@ -86,9 +86,9 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
             filtered is left unchanged and info is {'skipped': True} for that time.
             Only works properly when all weights are all between 0 and 1.
         maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+        mode: deconvolution method to use in filtering. Supports ['dpss_lsq', 'dft_leastsq']
         win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
-        mode: deconvolution method to use in filtering. Supports ['dpss_lsq', 'dft_leastsq']
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
@@ -116,11 +116,10 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
             cache = {}
         if fitting_options is None:
             raise ValueError("fiting_options must be supplied for dpss or dft interpolation.")
-
         filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains*rephasor, wgts=wgts, filter_centers=[0.],
                                                             filter2d=False, filter_dim=1, filter_half_widths=[1. / (filter_scale * 10 ** 6)],
                                                             mode=mode, skip_wgt=skip_wgt, fitting_options=fitting_options,
-                                                            suppression_factors=[tol], max_contiguous_edge_flags=fitting_options['max_contiguous_edge_flags'])
+                                                            suppression_factors=[tol], max_contiguous_edge_flags=1000)
         info = info[1]
         # put back in unfilted values if skip_wgt is triggered
         for i in info:
