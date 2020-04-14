@@ -479,11 +479,12 @@ class ReflectionFitter(FRFilter):
         else:
             kwargs = {'x_orientation': self.hd.x_orientation}
 
+        antnums2antnames = dict(zip(self.hd.antenna_numbers, self.hd.antenna_names))
         echo("...writing {}".format(output_calfits), verbose=verbose)
         uvc = io.write_cal(output_calfits, rgains, freq_array, time_array, flags=rflags,
                            quality=quals, total_qual=tquals, zero_check=False,
                            overwrite=overwrite, history=version.history_string(add_to_history),
-                           **kwargs)
+                           antnums2antnames=antnums2antnames, **kwargs)
 
         return uvc
 
