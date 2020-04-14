@@ -1660,17 +1660,22 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
 def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omnivis_filename,
                               meta_filename, outdir, clobber=False, verbose=False, add_to_history=''):
     '''Helper function for writing the results of redcal_run.'''
+    # get antnums2antnames dictionary
+    antnums2antnames = dict(zip(hd.antenna_numbers, hd.antenna_names))
+ 
     if verbose:
         print('\nNow saving firstcal gains to', os.path.join(outdir, fistcal_filename))
     write_cal(fistcal_filename, cal['g_firstcal'], hd.freqs, hd.times,
               flags=cal['gf_firstcal'], outdir=outdir, overwrite=clobber, 
-              x_orientation=hd.x_orientation, history=version.history_string(add_to_history))
+              x_orientation=hd.x_orientation, history=version.history_string(add_to_history),
+              antnums2antnames=antnums2antnames)
 
     if verbose:
         print('Now saving omnical gains to', os.path.join(outdir, omnical_filename))
     write_cal(omnical_filename, cal['g_omnical'], hd.freqs, hd.times, flags=cal['gf_omnical'],
               quality=cal['chisq_per_ant'], total_qual=cal['chisq'], outdir=outdir, overwrite=clobber,
-              x_orientation=hd.x_orientation, history=version.history_string(add_to_history))
+              x_orientation=hd.x_orientation, history=version.history_string(add_to_history),
+              antnums2antnames=antnums2antnames)
 
     if verbose:
         print('Now saving omnical visibilities to', os.path.join(outdir, omnivis_filename))

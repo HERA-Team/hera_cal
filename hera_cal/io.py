@@ -1386,8 +1386,8 @@ def load_cal(input_cal, return_meta=False):
         return gains, flags
 
 
-def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=None, write_file=True,
-              return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
+def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=None, antnums2antnames=None,
+              write_file=True, return_uvc=True, outdir='./', overwrite=False, gain_convention='divide',
               history=' ', x_orientation="north", telescope_name='HERA', cal_style='redundant',
               zero_check=True, **kwargs):
     '''Format gain solution dictionary into pyuvdata.UVCal and write to file
@@ -1395,28 +1395,30 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     Arguments:
         fname : type=str, output file basename
         gains : type=dictionary, holds complex gain solutions. keys are antenna + pol
-                tuple pairs, e.g. (2, 'x'), and keys are 2D complex ndarrays with time
-                along [0] axis and freq along [1] axis.
+            tuple pairs, e.g. (2, 'x'), and keys are 2D complex ndarrays with time
+            along [0] axis and freq along [1] axis.
         freqs : type=ndarray, holds unique frequencies channels in Hz
         times : type=ndarray, holds unique times of integration centers in Julian Date
         flags : type=dictionary, holds boolean flags (True if flagged) for gains.
-                Must match shape of gains.
+            Must match shape of gains.
         quality : type=dictionary, holds "quality" of calibration solution. Must match
-                  shape of gains. See pyuvdata.UVCal doc for more details.
+            shape of gains. See pyuvdata.UVCal doc for more details.
         total_qual : type=dictionary, holds total_quality_array. Key(s) are polarization
             string(s) and values are 2D (Ntimes, Nfreqs) ndarrays.
+        antnums2antnames : dict, keys antenna numbers (int), values antenna names (str)
+            Default is "ant{}".format(ant_num) for antenna names.
         write_file : type=bool, if True, write UVCal to calfits file
         return_uvc : type=bool, if True, return UVCal object
         outdir : type=str, output file directory
         overwrite : type=bool, if True overwrite output files
         gain_convention : type=str, gain solutions formatted such that they 'multiply' into data
-                          to get model, or 'divide' into data to get model
-                          options=['multiply', 'divide']
+            to get model, or 'divide' into data to get model
+            options=['multiply', 'divide']
         history : type=str, history string for UVCal object.
         x_orientation : type=str, orientation of X dipole, options=['east', 'north']
         telescope_name : type=str, name of telescope
         cal_style : type=str, style of calibration solutions, options=['redundant', 'sky']. If
-                    cal_style == sky, additional params are required. See pyuvdata.UVCal doc.
+            cal_style == sky, additional params are required. See pyuvdata.UVCal doc.
         zero_check : type=bool, if True, for gain values near zero, set to one and flag them.
         kwargs : additional atrributes to set in pyuvdata.UVCal
     Returns:
@@ -1424,9 +1426,12 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
         else: returns None
     '''
     # get antenna info
-    ant_array = np.unique(list(map(lambda k: k[0], gains.keys()))).astype(np.int)
+    ant_array = np.unique([k[0] for k in gains]).astype(np.int)
     antenna_numbers = copy.copy(ant_array)
-    antenna_names = np.array(list(map(lambda a: "ant{}".format(a), antenna_numbers)))
+    if antnums2antnames is None:
+        antenna_names = np.array(["ant{}".format(ant_num) for ant_num in antenna_numbers])
+    else:
+        antenna_names = np.array([antnums2antnames[ant_num] for ant_num in antenna_numbers])
     Nants_data = len(ant_array)
     Nants_telescope = len(antenna_numbers)
 

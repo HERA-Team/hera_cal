@@ -807,6 +807,12 @@ class Test_Calibration_IO_Legacy(object):
         assert np.allclose(uvc1.gain_array[0, 0, :, :, 0], 1.0)
         assert np.allclose(uvc2.gain_array[0, 0, :, :, 0], 0.0)
 
+        # test antenna number and names ordering
+        antnums2antnames = {a: "THISANT{}".format(a+1) for a in ants}
+        uvc = io.write_cal("ex.calfits", gains, freqs, times, antnums2antnames=antnums2antnames,
+                           return_uvc=True, write_file=False)
+        assert sorted(uvc.antenna_names) == sorted(antnums2antnames.values())
+
     def test_update_cal(self):
         # load in cal
         fname = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
