@@ -48,7 +48,6 @@ from .datacontainer import DataContainer
 from .utils import echo, polnum2str, polstr2num, reverse_bl, split_pol, split_bl, join_bl, join_pol
 
 PHASE_SLOPE_SOLVERS = ['linfit', 'dft']  # list of valid solvers for global_phase_slope_logcal
-IDEALIZED_BL_TOL = 1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gain_ants=[]):
@@ -3052,11 +3051,11 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
     # setup: initialize ants, get idealized antenna positions
     ants = list(rc_flags.keys())
-    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=IDEALIZED_BL_TOL)
+    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=redcal.IDEALIZED_BL_TOL)
     
     # If the array is not redundant (i.e. extra degeneracies), lop off extra dimensions and warn user
     if np.max([len(pos) for pos in idealized_antpos.values()]) > 2:  
-        suspected_off_grid = [ant for ant, pos in idealized_antpos.items() if np.any(np.abs(pos[2:]) > IDEALIZED_BL_TOL)]
+        suspected_off_grid = [ant for ant, pos in idealized_antpos.items() if np.any(np.abs(pos[2:]) > redcal.IDEALIZED_BL_TOL)]
         not_flagged = [ant for ant in suspected_off_grid if not np.all([np.all(f) for a, f in rc_flags.items() if ant in a])]
         warnings.warn(('WARNING: The following antennas appear not to be redundant with the main array:\n         {}\n'
                        '         Of them, {} is not flagged.\n').format(suspected_off_grid, not_flagged))
@@ -3079,13 +3078,13 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
     for time_avg in [True, False]:
         gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=binary_wgts, verbose=verbose, 
-                                               tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
+                                               tol=redcal.IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here)
     for time_avg in [True, False]:
         for i in range(phs_max_iter):
             gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=binary_wgts, verbose=verbose,
-                                                   tol=IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
+                                                   tol=redcal.IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
             abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
             apply_cal.calibrate_in_place(data, gains_here)
             crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
