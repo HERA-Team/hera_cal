@@ -156,7 +156,7 @@ class TestMethods(object):
         antpos[37] = np.array([np.pi, np.pi, 0])  # add one off-grid antenna
         reds = om.get_reds(antpos)
         # remove third, fourth, fifth, and sixth rows
-        reds = om.filter_reds(reds, ex_ants=list(range(9,33)))
+        reds = om.filter_reds(reds, ex_ants=list(range(9, 33)))
 
         # Max 1 dimension means largest 1D array
         new_reds = om.filter_reds(reds, max_dims=1)
