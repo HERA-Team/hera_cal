@@ -1455,8 +1455,10 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             cal['vns_omnical'][bl] = np.zeros_like(vis, dtype=np.float32)
 
 
-def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6, fc_maxiter=50, 
-                          oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4):
+
+def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
+                          fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10,
+                          check_after=50, gain=.4, max_dims=2):
     '''Performs all three steps of redundant calibration: firstcal, logcal, and omnical.
 
     Arguments:
@@ -1478,6 +1480,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
+        max_dims: maximum allowed tip/tilt phase degeneracies of redcal. None is no limit. 2 is a classically
+            "redundantly calibratable" planar array. Antennas will be excluded from reds to satisfy this.
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
@@ -1499,7 +1503,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
     rv = {}  # dictionary of return values
-    rc = RedundantCalibrator(reds)
+    rc = RedundantCalibrator(filter_reds(reds, max_dims=max_dims))
     if freqs is None:
         freqs = data.freqs
     if times_by_bl is None:
@@ -1532,9 +1536,10 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     return rv
 
 
-def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[], solar_horizon=0.0,
-                     flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, 
-                     oc_maxiter=500, check_every=10, check_after=50, gain=.4, verbose=False, **filter_reds_kwargs):
+def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, ex_ants=[],
+                     solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, 
+                     fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, 
+                     gain=.4, max_dims=2, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an entire HERAData object, loading only
     nInt_to_load integrations at a time and skipping and flagging times when the sun is above solar_horizon.
 
@@ -1561,6 +1566,8 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
+        max_dims: maximum allowed tip/tilt phase degeneracies of redcal. None is no limit. 2 is a classically
+            "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion.
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
@@ -1654,8 +1661,9 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                 else:  # perform partial i/o
                     data, _, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
-                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, 
-                                            oc_maxiter=oc_maxiter, check_every=check_every, check_after=check_after, gain=gain)
+                                            fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, 
+                                            oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, 
+                                            check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain)
                 expand_omni_sol(cal, filter_reds(all_reds, pols=pols), data, nsamples)
                 
                 # gather results
@@ -1724,7 +1732,7 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
                ant_metrics_file=None, clobber=False, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, 
                ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, 
                fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, 
-               check_after=50, gain=.4, add_to_history='', verbose=False, **filter_reds_kwargs):
+               check_after=50, gain=.4, add_to_history='', max_dims=2, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1767,6 +1775,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
+        max_dims: maximum allowed tip/tilt phase degeneracies of redcal. None is no limit. 2 is a classically
+            "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion.
         add_to_history: string to add to history of output firstcal and omnical files
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
@@ -1807,7 +1817,8 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         cal = redcal_iteration(hd, nInt_to_load=nInt_to_load, pol_mode=pol_mode, bl_error_tol=bl_error_tol, ex_ants=ex_ants, 
                                solar_horizon=solar_horizon, flag_nchan_low=flag_nchan_low, flag_nchan_high=flag_nchan_high, 
                                fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter, oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter, 
-                               check_every=check_every, check_after=check_after, gain=gain, verbose=verbose, **filter_reds_kwargs)
+                               check_every=check_every, check_after=check_after, max_dims=max_dims, gain=gain,
+                               verbose=verbose, **filter_reds_kwargs)
 
         # Determine whether to add additional antennas to exclude
         z_scores = per_antenna_modified_z_scores({ant: np.nanmedian(cspa) for ant, cspa in cal['chisq_per_ant'].items()
@@ -1867,6 +1878,8 @@ def redcal_argparser():
     redcal_opts.add_argument("--bl_error_tol", type=float, default=1.0, help="the largest allowable difference between baselines in a redundant group")
     redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
     redcal_opts.add_argument("--max_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths longer than this length in meters")
+    redcal_opts.add_argument("--max_dims", type=float, default=2, help='maximum allowed tip/tilt phase degeneracies of redcal. None is no limit. Default 2 is a classically \
+                                                                        "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion.')
 
     omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
     omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-6, help="maximum allowed changed in firstcal phases for convergence")
