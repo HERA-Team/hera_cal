@@ -150,6 +150,29 @@ class TestMethods(object):
         assert om.filter_reds(reds, antpos=antpos, min_bl_cut=85) == reds[-3:]
         assert om.filter_reds(reds, antpos=antpos, max_bl_cut=15) == reds[:3]
 
+    def test_filter_reds_max_dim(self):
+        # build hex array with 4 on a side and 7 total rows
+        antpos = hex_array(4, split_core=False, outriggers=0)
+        antpos[37] = np.array([np.pi, np.pi, 0])  # add one off-grid antenna
+        reds = om.get_reds(antpos)
+        # remove third, fourth, fifth, and sixth rows
+        reds = om.filter_reds(reds, ex_ants=list(range(9,33)))
+
+        # Max 1 dimension means largest 1D array
+        new_reds = om.filter_reds(reds, max_dims=1)
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
+        assert ant_inds == set(range(4, 9))
+
+        # Max 2 dimensions means only rows 1 and 2
+        new_reds = om.filter_reds(reds, max_dims=2)
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
+        assert ant_inds == set(range(0, 9))
+                
+        # Max 3 dimensions means all 3 good rows, but keeps out the off-grid antenna
+        new_reds = om.filter_reds(reds, max_dims=3)
+        ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
+        assert ant_inds == (set(range(0, 9)) | set(range(33, 37)))
+
     def test_add_pol_reds(self):
         reds = [[(1, 2)]]
         polReds = om.add_pol_reds(reds, pols=['xx'], pol_mode='1pol')
