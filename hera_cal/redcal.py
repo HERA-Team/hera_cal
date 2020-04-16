@@ -131,14 +131,16 @@ def get_reds(antpos, pols=['nn'], pol_mode='1pol', bl_error_tol=1.0):
 
 
 def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None, ex_ubls=None, 
-                pols=None, ex_pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None):
+                pols=None, ex_pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None, max_dims=None):
     '''
     Filter redundancies to include/exclude the specified bls, antennas, unique bl groups and polarizations.
-    Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, ubls, ex_ubls, bls, ex_bls,
-    ants, ex_ants).
+    Also allows filtering reds by removing antennas so that the number of tip/tilt degeneracies is no more
+    than max_dims. Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, ubls, ex_ubls, 
+    bls, ex_bls, ants, ex_ants, min_bl_cut, max_bl_cut, max_dims).
 
     Args:
-        reds: list of lists of redundant (i,j,pol) baseline tuples, e.g. the output of get_reds()
+        reds: list of lists of redundant (i,j,pol) baseline tuples, e.g. the output of get_reds().
+            Not modified in place.
         bls (optional): baselines to include. Baselines of the form (i,j,pol) include that specific
             visibility.  Baselines of the form (i,j) are broadcast across all polarizations present in reds.
         ex_bls (optional): same as bls, but excludes baselines.
@@ -158,6 +160,9 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             which must be specified.
         max_bl_cut: cut redundant groups with average baselines lengths longer than this. Same units as antpos
             which must be specified.
+        max_dims: maximum number of dimensions required to specify antenna positions (up to some arbitary shear).
+            This is equivalent to the number of tip/tilt phase degeneracies of redcal. 2 is a classically 
+            "redundantly calibratable" planar array. None means no filtering.
 
     Return:
         reds: list of lists of redundant baselines in the same form as input reds.
@@ -219,6 +224,28 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
         lengths = [np.mean([np.linalg.norm(antpos[bl[1]] - antpos[bl[0]]) for bl in gp]) for gp in reds]
         reds = [gp for gp, l in zip(reds, lengths) if ((min_bl_cut is None or l > min_bl_cut)
                                                        and (max_bl_cut is None or l < max_bl_cut))]
+    
+    if max_dims is not None:
+        while True:
+        # Compute idealized antenna positions from redundancies
+            idealized_antpos = reds_to_antpos(reds, tol=IDEALIZED_BL_TOL)
+            if len(list(idealized_antpos.values())[0]) <= max_dims:
+                break
+
+            # find dimension with the most common mode idealized coordinate value
+            mode_count, mode_value, mode_dim = 0, 0, 0
+            for dim, coords in enumerate(np.array(list(idealized_antpos.values())).T):
+                unique, counts = np.unique(coords, return_counts=True)
+                if np.max(counts) > mode_count:
+                    mode_count = np.max(counts)
+                    mode_value = unique[counts == mode_count]
+                    mode_dim = dim
+                        
+            # cut all antennas not part of that mode
+            new_ex_ants = [ant for ant in idealized_antpos if 
+                           np.abs(idealized_antpos[ant][mode_dim] - mode_value) > IDEALIZED_BL_TOL]
+            reds = filter_reds(reds, ex_ants=new_ex_ants)
+
     return reds
 
 
