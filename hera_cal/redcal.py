@@ -18,6 +18,7 @@ from .apply_cal import calibrate_in_place
 
 
 SEC_PER_DAY = 86400.
+IDEALIZED_BL_TOL = 1e-8  # bl_error_tol for redcal.get_reds when using antenna positions calculated from reds
 
 
 def get_pos_reds(antpos, bl_error_tol=1.0):
