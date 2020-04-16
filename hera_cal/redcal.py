@@ -227,7 +227,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     
     if max_dims is not None:
         while True:
-        # Compute idealized antenna positions from redundancies
+            # Compute idealized antenna positions from redundancies
             idealized_antpos = reds_to_antpos(reds, tol=IDEALIZED_BL_TOL)
             if len(list(idealized_antpos.values())[0]) <= max_dims:
                 break
@@ -1453,7 +1453,6 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             # keep omnical visibility solutions flagged and nsamples at 0
             cal['vf_omnical'][bl] = np.ones_like(vis, dtype=bool)
             cal['vns_omnical'][bl] = np.zeros_like(vis, dtype=np.float32)
-
 
 
 def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit=1e-6,
