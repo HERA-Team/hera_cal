@@ -1502,7 +1502,8 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
     rv = {}  # dictionary of return values
-    rc = RedundantCalibrator(filter_reds(reds, max_dims=max_dims))
+    filtered_reds = filter_reds(reds, max_dims=max_dims)
+    rc = RedundantCalibrator(filtered_reds)
     if freqs is None:
         freqs = data.freqs
     if times_by_bl is None:
@@ -1531,7 +1532,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     rv['g_omnical'] = {ant: g * ~rv['gf_omnical'][ant] + rv['gf_omnical'][ant] for ant, g in rv['g_omnical'].items()}
 
     # compute chisqs
-    rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, data_wgts, reds, rv['v_omnical'], rv['g_omnical'])
+    rv['chisq'], rv['chisq_per_ant'] = normalized_chisq(data, data_wgts, filtered_reds, rv['v_omnical'], rv['g_omnical'])
     return rv
 
 
