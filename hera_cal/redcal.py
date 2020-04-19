@@ -134,9 +134,9 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
                 pols=None, ex_pols=None, antpos=None, min_bl_cut=None, max_bl_cut=None, max_dims=None):
     '''
     Filter redundancies to include/exclude the specified bls, antennas, unique bl groups and polarizations.
-    Also allows filtering reds by removing antennas so that the number of tip/tilt degeneracies is no more
-    than max_dims. Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, ubls, ex_ubls, 
-    bls, ex_bls, ants, ex_ants, min_bl_cut, max_bl_cut, max_dims).
+    Also allows filtering reds by removing antennas so that the number of generalized tip/tilt degeneracies
+    is no more than max_dims. Arguments are evaluated, in order of increasing precedence: (pols, ex_pols, 
+    ubls, ex_ubls, bls, ex_bls, ants, ex_ants, min_bl_cut, max_bl_cut, max_dims).
 
     Args:
         reds: list of lists of redundant (i,j,pol) baseline tuples, e.g. the output of get_reds().
@@ -161,8 +161,9 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
         max_bl_cut: cut redundant groups with average baselines lengths longer than this. Same units as antpos
             which must be specified.
         max_dims: maximum number of dimensions required to specify antenna positions (up to some arbitary shear).
-            This is equivalent to the number of tip/tilt phase degeneracies of redcal. 2 is a classically 
-            "redundantly calibratable" planar array. None means no filtering.
+            This is equivalent to the number of generalized tip/tilt phase degeneracies of redcal that are fixed
+            with remove_degen() and must be later abscaled. 2 is a classically "redundantly calibratable" planar
+            array. More than 2 usually arises with subarrays of redundant baselines. None means no filtering. 
 
     Return:
         reds: list of lists of redundant baselines in the same form as input reds.
@@ -227,12 +228,20 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
     
     if max_dims is not None:
         while True:
-            # Compute idealized antenna positions from redundancies
+            # Compute idealized antenna positions from redundancies. Given the reds (a list of list of 
+            # redundant baselines), these positions will be coordinates in a vector space that reproduce
+            # the ideal antenna positions with a set of unknown basis vectors. The dimensionality of
+            # idealized_antpos is determined in reds_to_antpos by first assigning each antenna its own
+            # dimension and then inferring how many of those are simply linear combinations of others
+            # using the redundancies. The number of dimensions is equivalent to the number of generalized
+            # tip/tilt degeneracies of redundant calibration.
             idealized_antpos = reds_to_antpos(reds, tol=IDEALIZED_BL_TOL)
             if len(list(idealized_antpos.values())[0]) <= max_dims:
                 break
 
-            # find dimension with the most common mode idealized coordinate value
+            # Find dimension with the most common mode idealized coordinate value. This is supposed to look
+            # for outlier antennas off the redundant grid small sub-arrays that cannot be redundantly
+            # calibrated without adding more degeneracies than desired.
             mode_count, mode_value, mode_dim = 0, 0, 0
             for dim, coords in enumerate(np.array(list(idealized_antpos.values())).T):
                 unique, counts = np.unique(coords, return_counts=True)
@@ -241,7 +250,7 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
                     mode_value = unique[counts == mode_count]
                     mode_dim = dim
                         
-            # cut all antennas not part of that mode
+            # Cut all antennas not part of that mode to reduce the dimensionality of idealized_antpos 
             new_ex_ants = [ant for ant in idealized_antpos if 
                            np.abs(idealized_antpos[ant][mode_dim] - mode_value) > IDEALIZED_BL_TOL]
             reds = filter_reds(reds, ex_ants=new_ex_ants)
@@ -1479,8 +1488,10 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
-        max_dims: maximum allowed tip/tilt phase degeneracies of redcal. None is no limit. 2 is a classically
-            "redundantly calibratable" planar array. Antennas will be excluded from reds to satisfy this.
+        max_dims: maximum allowed generalized tip/tilt phase degeneracies of redcal that are fixed
+            with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
+            "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
+            redundant baselines. Antennas will be excluded from reds to satisfy this.
 
     Returns a dictionary of results with the following keywords:
         'g_firstcal': firstcal gains in dictionary keyed by ant-pol tuples like (1,'Jnn').
@@ -1566,8 +1577,10 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
-        max_dims: maximum allowed tip/tilt phase degeneracies of redcal. None is no limit. 2 is a classically
-            "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion.
+        max_dims: maximum allowed generalized tip/tilt phase degeneracies of redcal that are fixed
+            with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
+            "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
+            redundant baselines. Antennas will be excluded from reds to satisfy this.
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
 
@@ -1775,8 +1788,10 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         check_after: start computing omnical convergence only after N iterations (saves computation).
         gain: The fractional step made toward the new solution each omnical iteration. Values in the
             range 0.1 to 0.5 are generally safe. Increasing values trade speed for stability.
-        max_dims: maximum allowed tip/tilt phase degeneracies of redcal. None is no limit. 2 is a classically
-            "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion.
+        max_dims: maximum allowed generalized tip/tilt phase degeneracies of redcal that are fixed
+            with remove_degen() and must be later abscaled. None is no limit. 2 is a classically
+            "redundantly calibratable" planar array.  More than 2 usually arises with subarrays of
+            redundant baselines. Antennas will be excluded from reds to satisfy this.
         add_to_history: string to add to history of output firstcal and omnical files
         verbose: print calibration progress updates
         filter_reds_kwargs: additional filters for the redundancies (see redcal.filter_reds for documentation)
@@ -1879,7 +1894,7 @@ def redcal_argparser():
     redcal_opts.add_argument("--min_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths shorter than this length in meters")
     redcal_opts.add_argument("--max_bl_cut", type=float, default=None, help="cut redundant groups with average baseline lengths longer than this length in meters")
     redcal_opts.add_argument("--max_dims", type=float, default=2, help='maximum allowed tip/tilt phase degeneracies of redcal. None is no limit. Default 2 is a classically \
-                                                                        "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion.')
+                                                                        "redundantly calibratable" planar array. Antennas may be flagged to satisfy this criterion. See redcal.filter_reds() for details.')
 
     omni_opts = a.add_argument_group(title='Firstcal and Omnical-Specific Options')
     omni_opts.add_argument("--fc_conv_crit", type=float, default=1e-6, help="maximum allowed changed in firstcal phases for convergence")
