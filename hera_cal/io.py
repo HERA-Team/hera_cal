@@ -383,7 +383,7 @@ class HERAData(UVData):
 
     def read(self, bls=None, polarizations=None, times=None, frequencies=None,
              freq_chans=None, axis=None, read_data=True, return_data=True,
-             run_check=True, check_extra=True, run_check_acceptability=True):
+             run_check=True, check_extra=True, run_check_acceptability=True, **kwargs):
         '''Reads data from file. Supports partial data loading. Default: read all data in file.
 
         Arguments:
@@ -413,6 +413,7 @@ class HERAData(UVData):
                 ones. Default is True.
             run_check_acceptability: Option to check acceptable range of the values of
                 parameters after reading in the file. Default is True.
+            kwargs: extra keyword arguments to pass to UVData.read()
 
         Returns:
             data: DataContainer mapping baseline keys to complex visibility waterfalls
@@ -434,13 +435,15 @@ class HERAData(UVData):
                 if self.filetype == 'uvh5':
                     super().read(self.filepaths, file_type='uvh5', axis=axis, bls=bls, polarizations=polarizations,
                                  times=times, frequencies=frequencies, freq_chans=freq_chans, read_data=read_data,
-                                 run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability)
+                                 run_check=run_check, check_extra=check_extra,
+                                 run_check_acceptability=run_check_acceptability, **kwargs)
                 else:
                     if not read_data:
                         raise NotImplementedError('reading only metadata is not implemented for ' + self.filetype)
                     if self.filetype == 'miriad':
                         super().read(self.filepaths, file_type='miriad', axis=axis, bls=bls, polarizations=polarizations,
-                                     run_check=run_check, check_extra=check_extra, run_check_acceptability=run_check_acceptability)
+                                     run_check=run_check, check_extra=check_extra,
+                                     run_check_acceptability=run_check_acceptability, **kwargs)
                         if any([times is not None, frequencies is not None, freq_chans is not None]):
                             warnings.warn('miriad does not support partial loading for times and frequencies. '
                                           'Loading the file first and then performing select.')
@@ -448,7 +451,7 @@ class HERAData(UVData):
                     elif self.filetype == 'uvfits':
                         super().read(self.filepaths, file_type='uvfits', axis=axis, bls=bls, polarizations=polarizations,
                                      times=times, frequencies=frequencies, freq_chans=freq_chans, run_check=run_check,
-                                     check_extra=check_extra, run_check_acceptability=run_check_acceptability)
+                                     check_extra=check_extra, run_check_acceptability=run_check_acceptability, **kwargs)
                         self.unphase_to_drift()
             finally:
                 self.read = temp_read  # reset back to this function, regardless of whether the above try excecutes successfully

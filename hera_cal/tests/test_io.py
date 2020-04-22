@@ -330,6 +330,13 @@ class Test_HERAData(object):
         o = hd[(54, 54, 'ee')]
         assert len(hd._blt_slices) == 1
 
+        # test read with extra UVData kwargs
+        hd = HERAData(self.uvh5_1)
+        d, f, n = hd.read(bls=hd.bls[:2], frequencies=hd.freqs[:100], multidim_index=True)
+        k = list(d.keys())[0]
+        assert len(d) == 2
+        assert d[k].shape == (hd.Ntimes, 100)
+
         # test read list
         hd = HERAData([self.uvh5_1, self.uvh5_2])
         d, f, n = hd.read(axis='blt')
