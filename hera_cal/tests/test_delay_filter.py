@@ -60,7 +60,8 @@ class Test_DelayFilter(object):
             dfil.write_filtered_data()
         with pytest.raises(NotImplementedError):
             dfil.write_filtered_data(res_outfilename=outfilename, partial_write=True)
-        dfil.write_filtered_data(res_outfilename=outfilename, add_to_history='Hello_world.', clobber=True, telescope_name='PAPER')
+        extra_attrs = dict(telescope_name="PAPER")
+        dfil.write_filtered_data(res_outfilename=outfilename, add_to_history='Hello_world.', clobber=True, extra_attrs=extra_attrs)
 
         uvd = UVData()
         uvd.read_uvh5(outfilename)

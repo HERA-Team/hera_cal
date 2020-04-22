@@ -91,7 +91,7 @@ class DelayFilter(VisClean):
         return filled_data, filled_flags
 
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
-                            partial_write=False, clobber=False, add_to_history='', **kwargs):
+                            partial_write=False, clobber=False, add_to_history='', extra_attrs={}, **kwargs):
         '''
         Method for writing data products.
         
@@ -107,8 +107,8 @@ class DelayFilter(VisClean):
             partial_write: use uvh5 partial writing capability (only works when going from uvh5 to uvh5)
             clobber: if True, overwrites existing file at the outfilename
             add_to_history: string appended to the history of the output file
-            kwargs: addtional UVData keyword arguments update the before saving.
-                Must be valid UVData object attributes.
+            extra_attrs : additional attributes to update to HERAData before write
+            kwargs : extra kwargs to pass to UVData.write_*() call
         '''
         if not hasattr(self, 'data'):
             raise ValueError("Cannot write data without first loading")
@@ -132,7 +132,7 @@ class DelayFilter(VisClean):
                                               add_to_history=version.history_string(add_to_history), **kwargs)
                     else:
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
-                                        add_to_history=add_to_history, **kwargs)
+                                        add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
 
 def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,

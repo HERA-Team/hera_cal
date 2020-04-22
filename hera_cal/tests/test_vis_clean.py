@@ -84,7 +84,7 @@ class Test_VisClean(object):
 
         # test read-write-read
         V.read()
-        V.write_data(V.data, "./ex.uvh5", overwrite=True, filetype='uvh5', vis_units='Jy')
+        V.write_data(V.data, "./ex.uvh5", overwrite=True, filetype='uvh5', extra_attrs=dict(vis_units='Jy'))
         V2 = VisClean("./ex.uvh5", filetype='uvh5')
         V2.read()
         assert V2.hd.vis_units == 'Jy'
