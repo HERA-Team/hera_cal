@@ -107,7 +107,7 @@ class DelayFilter(VisClean):
             partial_write: use uvh5 partial writing capability (only works when going from uvh5 to uvh5)
             clobber: if True, overwrites existing file at the outfilename
             add_to_history: string appended to the history of the output file
-            extra_attrs : additional attributes to update to HERAData before write
+            extra_attrs : additional UVData/HERAData attributes to update before writing
             kwargs : extra kwargs to pass to UVData.write_*() call
         '''
         if not hasattr(self, 'data'):

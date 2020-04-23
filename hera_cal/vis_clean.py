@@ -226,7 +226,7 @@ class VisClean(object):
             partial_write : bool, if True, begin (or continue) a partial write to
             the output filename and store file descriptor in self.hd._writers.
             add_to_history : string, string to append to hd history.
-            extra_attrs : additional attributes to update to HERAData before write
+            extra_attrs : additional UVData/HERAData attributes to update before writing
             kwargs : extra kwargs to pass to UVData.write_*() call
         """
         # get common keys
