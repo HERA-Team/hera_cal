@@ -29,7 +29,7 @@ class VisClean(object):
     VisClean object for visibility CLEANing and filtering.
     """
 
-    def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True):
+    def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True, **check_kwargs):
         """
         Initialize the object.
 
@@ -43,10 +43,12 @@ class VisClean(object):
                 as they are built.
             link_data : bool, if True, attempt to link DataContainers
                 from HERAData object, otherwise only link metadata if possible.
+            check_kwargs : dict, passes values to UVData run_check, check_extra
+                and run_check_acceptability keyword arguments.
         """
         # attach HERAData
         self.clear_containers()
-        self.hd = io.to_HERAData(input_data, filetype=filetype)
+        self.hd = io.to_HERAData(input_data, filetype=filetype, **check_kwargs)
 
         # attach calibration
         if input_cal is not None:

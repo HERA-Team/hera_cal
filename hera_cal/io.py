@@ -944,7 +944,7 @@ def read_redcal_meta(meta_filename):
 #######################################################################
 
 
-def to_HERAData(input_data, filetype='miriad'):
+def to_HERAData(input_data, filetype='miriad', **check_kwargs):
     '''Converts a string path, UVData, or HERAData object, or a list of any one of those, to a
     single HERAData object without loading any new data.
 
@@ -952,6 +952,8 @@ def to_HERAData(input_data, filetype='miriad'):
         input_data: data file path, or UVData/HERAData instance, or list of either strings of data
             file paths or list of UVData/HERAData instances to combine into a single HERAData object
         filetype: 'miriad', 'uvfits', or 'uvh5'. Ignored if input_data is UVData/HERAData objects
+        check_kwargs : run_check, check_extra and run_check_acceptability
+            See UVData.read for more details.
 
     Returns:
         hd: HERAData object. Will not have data loaded if initialized from string(s).
@@ -959,7 +961,7 @@ def to_HERAData(input_data, filetype='miriad'):
     if filetype not in ['miriad', 'uvfits', 'uvh5']:
         raise NotImplementedError("Data filetype must be 'miriad', 'uvfits', or 'uvh5'.")
     if isinstance(input_data, str):  # single visibility data path
-        return HERAData(input_data, filetype=filetype)
+        return HERAData(input_data, filetype=filetype, **check_kwargs)
     elif isinstance(input_data, HERAData):  # already a HERAData object
         return input_data
     elif isinstance(input_data, UVData):  # single UVData object
@@ -971,7 +973,7 @@ def to_HERAData(input_data, filetype='miriad'):
         return hd
     elif isinstance(input_data, collections.Iterable):  # List loading
         if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
-            return HERAData(input_data, filetype=filetype)
+            return HERAData(input_data, filetype=filetype, **check_kwargs)
         elif np.all([isinstance(i, (UVData, HERAData)) for i in input_data]):  # List of uvdata objects
             hd = reduce(operator.add, input_data)
             hd.__class__ = HERAData
