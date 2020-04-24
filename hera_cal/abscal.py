@@ -3244,7 +3244,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                             # load model and rephase
                             model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
                             model, model_flags, _ = io.partial_time_io(hdm, np.unique(model_times_to_load), bls=model_bl_to_load)
-                            if len(model_times_to_load) < len(model.times):
+                            if not np.array_equal(model_times_to_load, model.times):
                                 # if multiple data times map to a single model time, this expands the model to match the data in time
                                 model.select_or_expand_times(model_times_to_load)
                                 model_flags.select_or_expand_times(model_times_to_load)
