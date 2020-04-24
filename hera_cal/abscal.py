@@ -2802,29 +2802,35 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
 
     Returns:
         d2m_time_map: dictionary uniqely mapping times in the data to times in the model 
-            that are closest in LST. Each model time maps to at most one data time and 
-            each model time maps to at most one data time. Data times without corresponding
-            model times map to None.
+            that are closest in LST. Data times map to None when their LSTs would map to LSTs 
+            outside of the range of model_lsts (i.e. more than half a step outisde the range, 
+            assuming uniform steps in LST).
     '''
+    # check that the input is sensible
+    assert len(data_times) == len(data_lsts), 'data_times and data_lsts must have the same length.'
+    assert len(model_times) == len(model_lsts), 'model_times and model_lsts must have the same length.'
+    assert np.all(np.diff(data_times) > 0), 'data_times must be sorted.'
+    assert np.all(np.diff(model_times) > 0), 'model_times must be sorted.'
+    
     if unwrap:  # avoid phase wraps
         data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
         model_lsts[model_lsts < model_lsts[0]] += 2 * np.pi
-
-    # first produce a map of indices using the LSTs
-    m2d_ind_map = {}  
+    delta = np.median(np.diff(model_lsts))
+        
+    # find indices of nearest model lst for a given data lsts
+    d2m_ind_map = {}
     for dind, dlst in enumerate(data_lsts):
-        nearest_mind = np.argmin(np.abs(model_lsts - dlst))
-        if nearest_mind in m2d_ind_map:
-            if np.abs(model_lsts[nearest_mind] < data_lsts[m2d_ind_map[nearest_mind]]):
-                m2d_ind_map[nearest_mind] = dind
+        # check to see if the data_lst would map outside the range of the model_lsts
+        if (dlst >= np.min(model_lsts) - delta / 2) and (dlst <= np.max(model_lsts) + delta / 2):
+            d2m_ind_map[dind] = np.argmin(np.abs(model_lsts - dlst))
         else:
-            m2d_ind_map[nearest_mind] = dind
+            d2m_ind_map[dind] = None  # this data time is out of the range of the model
+    
+    # return map of data times to model times using those indices
+    return {data_times[dind]: model_times[mind] if mind is not None else None 
+            for dind, mind in d2m_ind_map.items()}
 
-    # now use those indicies to produce a map of times
-    d2m_time_map = {time: None for time in data_times}
-    for mind, dind in m2d_ind_map.items():
-        d2m_time_map[data_times[dind]] = model_times[mind]
-    return d2m_time_map
+
 
 
 def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_list, gain_flags, 
