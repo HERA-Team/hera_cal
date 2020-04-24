@@ -884,8 +884,8 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test normal operation of abscal (with one missing integration, to test assinging multiple data times to one model time and then rephasing)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files_missing_one_int, phs_conv_crit=1e-4, 
-                                                nInt_to_load=30, verbose=False, add_to_history='testing')
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files_missing_one_int, extrap_limit=1.0, 
+                                                phs_conv_crit=1e-4, nInt_to_load=30, verbose=False, add_to_history='testing')
         pytest.raises(IOError, abscal.post_redcal_abscal_run, self.data_file, self.redcal_file, self.model_files, clobber=False)
 
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
