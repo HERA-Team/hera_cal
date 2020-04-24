@@ -377,7 +377,7 @@ class HERAData(UVData):
         # store useful metadata inside the DataContainers
         for dc in [data, flags, nsamples]:
             for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
-                setattr(dc, attr, meta[attr])
+                setattr(dc, attr, copy.deepcopy(meta[attr]))
 
         return data, flags, nsamples
 
