@@ -2790,7 +2790,7 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
         return all_times, all_lsts
 
 
-def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True, extrap_limit=.5):
+def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, extrap_limit=.5):
     '''Generate a dictionary that maps data times to model times via shared LSTs.
 
     Arguments:
@@ -2798,36 +2798,35 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
         data_lsts: list of corresponding LSTs (in radians)
         model_times: list of times in the mdoel (in JD)
         model_lsts: list of corresponing LSTs (in radians)
-        unwrap: increase all LSTs smaller than the first one by 2pi to avoid phase wrapping
-        extrap_limit: when multiplied by the median Delta in the model_lsts, sets how far outside the
-            range of model_lsts a data_lst is allowed to map to a model_lst
+        extrap_limit: float that sets the maximum distance away in LST, in unit of the median Delta
+            in model_lsts, that a data time can be mapped to model time. If no model_lst is within 
+            this distance, the data_time is mapped to None. If there is only one model lst, this 
+            is ignored and the nearest time is always returned.
 
     Returns:
         d2m_time_map: dictionary uniqely mapping times in the data to times in the model 
-            that are closest in LST. Data times map to None when their LSTs would map to LSTs 
-            outside of the range of model_lsts (i.e. more than extrap_limit * the model LST step
-            outisde the range, assuming uniform steps in LST).
+            that are closest in LST. Data times map to None when the nearest model LST is too far, 
+            as defined by the extrap_limit. 
     '''
     # check that the input is sensible
     assert len(data_times) == len(data_lsts), 'data_times and data_lsts must have the same length.'
     assert len(model_times) == len(model_lsts), 'model_times and model_lsts must have the same length.'
-    assert np.all(np.diff(data_times) > 0), 'data_times must be sorted.'
-    assert np.all(np.diff(model_times) > 0), 'model_times must be sorted.'
-    
-    if unwrap:  # avoid phase wraps
-        data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
-        model_lsts[model_lsts < data_lsts[0]] += 2 * np.pi
-    delta = np.median(np.diff(model_lsts))
-        
-    # find indices of nearest model lst for a given data lsts
+
+    # compute maximum acceptable distance on the unit circle
+    max_complex_dist = 2.0
+    if len(model_lsts) > 1:
+        max_complex_dist = np.median(np.abs(np.diff(np.exp(1j * model_lsts)))) * extrap_limit    
+
+    # find indices of nearest model lst for a given data lst
     d2m_ind_map = {}
     for dind, dlst in enumerate(data_lsts):
-        # check to see if the data_lst would map outside the range of the model_lsts
-        if (dlst >= np.min(model_lsts) - delta * extrap_limit) and (dlst <= np.max(model_lsts) + delta * extrap_limit):
-            d2m_ind_map[dind] = np.argmin(np.abs(model_lsts - dlst))
+        lst_complex_distances = np.abs(np.exp(1j * model_lsts) - np.exp(1j * dlst))
+        # check to see that the nearst model_lst is close enough
+        if np.min(lst_complex_distances) <= max_complex_dist:
+            d2m_ind_map[dind] = np.argmin(lst_complex_distances)
         else:
-            d2m_ind_map[dind] = None  # this data time is out of the range of the model
-    
+            d2m_ind_map[dind] = None
+            
     # return map of data times to model times using those indices
     return {data_times[dind]: model_times[mind] if mind is not None else None 
             for dind, mind in d2m_ind_map.items()}
