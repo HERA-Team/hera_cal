@@ -3114,8 +3114,8 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
 
 def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=None, data_is_redsol=False, model_is_redundant=False, output_file=None,
-                           nInt_to_load=None, data_solar_horizon=90, model_solar_horizon=90, min_bl_cut=1.0, max_bl_cut=None, edge_cut=0,
-                           tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
+                           nInt_to_load=None, data_solar_horizon=90, model_solar_horizon=90,  extrap_limit=.5, min_bl_cut=1.0, max_bl_cut=None,
+                           edge_cut=0, tol=1.0, phs_max_iter=100, phs_conv_crit=1e-6, refant=None, clobber=True, add_to_history='', verbose=True):
     '''Perform abscal on entire data files, picking relevant model_files from a list and doing partial data loading.
     Does not work on data (or models) with baseline-dependant averaging.
     
@@ -3139,6 +3139,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
         data_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the data, flag the integration.
         model_solar_horizon: Solar altitude threshold [degrees]. When the sun is too high in the model, flag the integration.
+        extrap_limit: float maximum LST difference (in units of delta LST of the model) allowed between matching data and model times
         min_bl_cut: minimum baseline separation [meters] to keep in data when calibrating. None or 0 means no mininum,
             which will include autocorrelations in the absolute calibration. Usually this is not desired, so the default is 1.0.
         max_bl_cut: maximum baseline separation [meters] to keep in data when calibrating. None (default) means no maximum.
@@ -3206,7 +3207,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         # match integrations in model to integrations in data
         all_data_times, all_data_lsts = get_all_times_and_lsts(hd, solar_horizon=data_solar_horizon, unwrap=True)
         all_model_times, all_model_lsts = get_all_times_and_lsts(hdm, solar_horizon=model_solar_horizon, unwrap=True)
-        d2m_time_map = get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts)
+        d2m_time_map = get_d2m_time_map(all_data_times, all_data_lsts, all_model_times, all_model_lsts, extrap_limit=extrap_limit)
         
         # group matched time indices for partial I/O
         matched_tinds = [tind for tind, time in enumerate(hd.times) if time in d2m_time_map and d2m_time_map[time] is not None]
