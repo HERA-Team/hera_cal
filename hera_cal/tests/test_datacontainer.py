@@ -400,7 +400,7 @@ class TestDataContainerWithRealData(object):
             dc1.lsts_by_bl = {(0, 1): np.arange(10) * 2 * np.pi / 10}
 
             dc2 = dc1.select_or_expand_times(new_times, in_place=False)
-            dc1 = dc1.select_or_expand_times(new_times, in_place=True)
+            dc1.select_or_expand_times(new_times, in_place=True)
 
             for dc in (dc1, dc2):
                 assert np.all(dc[(0, 1, 'ee')] == np.arange(10)[new_times])
