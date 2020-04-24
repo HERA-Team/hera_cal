@@ -389,7 +389,7 @@ class TestDataContainerWithRealData(object):
         pytest.raises(ValueError, d.concatenate, d2, axis=0)
         pytest.raises(ValueError, d.concatenate, d2, axis=1)
 
-    def select_or_expand_times(self):
+    def test_select_or_expand_times(self):
         # try cases that are selections, out of order, or have duplicate entries
         for new_times in [[0], [0, 1, 2], [2, 7, 4], [2, 9, 2, 2]]:
 
