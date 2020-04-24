@@ -433,3 +433,48 @@ class DataContainer:
     def get(self, antpair, pol):
         '''Interface to DataContainer.__getitem__(bl + (pol,)).'''
         return self[make_bl(antpair, pol)]
+
+    def select_or_expand_times(self, new_times, in_place=True):
+        '''Update self.times with new times, updating data and metadata to be consistent. Data and
+        metadata will be deleted, rearranged, or duplicated as necessary using numpy's fancy indexing.
+        Assumes that the 0th data axis is time. Does not support baseline-dependent averaging.
+
+        Arguments:
+            new_times: list or numpy array of times to use to index into this object. These must all be in
+                self.times, but they can be a subset in any order with any number of duplicates.
+            in_place: if True, this DataContainer is modified. Otherwise, a modified copy is returned.
+        '''
+        if in_place:
+            dc = self
+        else:
+            dc = copy.deepcopy(self)
+
+        # make sure this is a sensible object for performing this operation
+        assert dc.times is not None
+        assert np.all([nt in dc.times for nt in new_times]), 'All new_times must be in self.times.'
+        if dc.times_by_bl is not None:
+            for tbbl in dc.times_by_bl.values():
+                assert np.all(tbbl == dc.times), 'select_or_expand_times does not support baseline dependent averaging.'
+        if dc.lsts_by_bl is not None:
+            for lbbl in dc.lsts_by_bl.values():
+                assert np.all(lbbl == dc.lsts), 'select_or_expand_times does not support baseline dependent averaging.'
+
+        # update data
+        nt_inds = np.searchsorted(np.array(dc.times), np.array(new_times))
+        for bl in dc:
+            assert dc[bl].shape[0] == len(dc.times), 'select_or_expand_times assume that time is the 0th data dimension.'
+            dc[bl] = dc[bl][nt_inds]
+
+        # update metadata
+        dc.times = new_times
+        if dc.lsts is not None:
+            dc.lsts = np.array(dc.lsts)[time_inds]
+        if dc.times_by_bl is not None:
+            for bl in dc.times_by_bl:
+                dc.times_by_bl = dc.times_by_bl[nt_inds]
+        if dc.lsts_by_bl is not None:
+            for bl in dc.lsts_by_bl:
+                dc.lsts_by_bl = dc.lsts_by_bl[nt_inds]
+
+        if not in_place:
+            return dc
