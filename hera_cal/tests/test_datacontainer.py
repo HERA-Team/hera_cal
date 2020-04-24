@@ -388,3 +388,23 @@ class TestDataContainerWithRealData(object):
         d2[list(d2.keys())[0]] = d2[list(d2.keys())[0]][:10, :10]
         pytest.raises(ValueError, d.concatenate, d2, axis=0)
         pytest.raises(ValueError, d.concatenate, d2, axis=1)
+
+    def select_or_expand_times(self):
+        # try cases that are selections, out of order, or have duplicate entries
+        for new_times in [[0], [0, 1, 2], [2, 7, 4], [2, 9, 2, 2]]:
+
+            dc1 = datacontainer.DataContainer({(0, 1, 'ee'): np.arange(10)})
+            dc1.times = np.arange(10)
+            dc1.times_by_bl = {(0, 1): np.arange(10)}
+            dc1.lsts = np.arange(10) * 2 * np.pi / 10
+            dc1.lsts_by_bl = {(0, 1): np.arange(10) * 2 * np.pi / 10}
+
+            dc2 = dc1.select_or_expand_times(new_times, in_place=False)
+            dc1 = dc1.select_or_expand_times(new_times, in_place=True)
+
+            for dc in (dc1, dc2):
+                assert np.all(dc[(0, 1, 'ee')] == np.arange(10)[new_times])
+                assert np.all(dc.times == new_times)
+                assert np.all(dc.times_by_bl[0, 1] == new_times)
+                assert np.all(dc.lsts == (np.arange(10) * 2 * np.pi / 10)[new_times])
+                assert np.all(dc.lsts_by_bl[0, 1] == (np.arange(10) * 2 * np.pi / 10)[new_times])
