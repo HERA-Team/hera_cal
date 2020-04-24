@@ -2790,7 +2790,7 @@ def get_all_times_and_lsts(hd, solar_horizon=90.0, unwrap=True):
         return all_times, all_lsts
 
 
-def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True):
+def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True, extrap_limit=.5):
     '''Generate a dictionary that maps data times to model times via shared LSTs.
 
     Arguments:
@@ -2799,12 +2799,14 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
         model_times: list of times in the mdoel (in JD)
         model_lsts: list of corresponing LSTs (in radians)
         unwrap: increase all LSTs smaller than the first one by 2pi to avoid phase wrapping
+        extrap_limit: when multiplied by the median Delta in the model_lsts, sets how far outside the
+            range of model_lsts a data_lst is allowed to map to a model_lst
 
     Returns:
         d2m_time_map: dictionary uniqely mapping times in the data to times in the model 
             that are closest in LST. Data times map to None when their LSTs would map to LSTs 
-            outside of the range of model_lsts (i.e. more than half a step outisde the range, 
-            assuming uniform steps in LST).
+            outside of the range of model_lsts (i.e. more than extrap_limit * the model LST step
+            outisde the range, assuming uniform steps in LST).
     '''
     # check that the input is sensible
     assert len(data_times) == len(data_lsts), 'data_times and data_lsts must have the same length.'
@@ -2821,7 +2823,7 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
     d2m_ind_map = {}
     for dind, dlst in enumerate(data_lsts):
         # check to see if the data_lst would map outside the range of the model_lsts
-        if (dlst >= np.min(model_lsts) - delta / 2) and (dlst <= np.max(model_lsts) + delta / 2):
+        if (dlst >= np.min(model_lsts) - delta * extrap_limit) and (dlst <= np.max(model_lsts) + delta * extrap_limit):
             d2m_ind_map[dind] = np.argmin(np.abs(model_lsts - dlst))
         else:
             d2m_ind_map[dind] = None  # this data time is out of the range of the model
