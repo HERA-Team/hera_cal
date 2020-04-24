@@ -468,13 +468,13 @@ class DataContainer:
         # update metadata
         dc.times = new_times
         if dc.lsts is not None:
-            dc.lsts = np.array(dc.lsts)[time_inds]
+            dc.lsts = np.array(dc.lsts)[nt_inds]
         if dc.times_by_bl is not None:
             for bl in dc.times_by_bl:
-                dc.times_by_bl = dc.times_by_bl[nt_inds]
+                dc.times_by_bl[bl] = dc.times_by_bl[bl][nt_inds]
         if dc.lsts_by_bl is not None:
             for bl in dc.lsts_by_bl:
-                dc.lsts_by_bl = dc.lsts_by_bl[nt_inds]
+                dc.lsts_by_bl[bl] = dc.lsts_by_bl[bl][nt_inds]
 
         if not in_place:
             return dc
