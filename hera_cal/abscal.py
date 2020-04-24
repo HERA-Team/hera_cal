@@ -2831,8 +2831,6 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
             for dind, mind in d2m_ind_map.items()}
 
 
-
-
 def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_list, gain_flags, 
                 gain_convention='divide', max_iter=1, phs_conv_crit=1e-6, verbose=True):
     '''Generalized function for performing an abscal step (e.g. abs_amp_logcal or TT_phs_logcal).
@@ -3245,7 +3243,11 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                         if not np.all(list(flags.values())):
                             # load model and rephase
                             model_times_to_load = [d2m_time_map[time] for time in hd.times[tinds]]
-                            model, model_flags, _ = io.partial_time_io(hdm, model_times_to_load, bls=model_bl_to_load)
+                            model, model_flags, _ = io.partial_time_io(hdm, np.unique(model_times_to_load), bls=model_bl_to_load)
+                            if len(model_times_to_load) < len(model.times):
+                                # if multiple data times map to a single model time, this expands the model to match the data in time
+                                model.select_or_expand_times(model_times_to_load)
+                                model_flags.select_or_expand_times(model_times_to_load)
                             model_blvecs = {bl: model.antpos[bl[0]] - model.antpos[bl[1]] for bl in model.keys()}
                             utils.lst_rephase(model, model_blvecs, model.freqs, data.lsts - model.lsts,
                                               lat=hdm.telescope_location_lat_lon_alt_degrees[0], inplace=True)
