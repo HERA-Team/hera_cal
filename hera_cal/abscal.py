@@ -2816,7 +2816,7 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, unwrap=True
     
     if unwrap:  # avoid phase wraps
         data_lsts[data_lsts < data_lsts[0]] += 2 * np.pi
-        model_lsts[model_lsts < model_lsts[0]] += 2 * np.pi
+        model_lsts[model_lsts < data_lsts[0]] += 2 * np.pi
     delta = np.median(np.diff(model_lsts))
         
     # find indices of nearest model lst for a given data lsts
