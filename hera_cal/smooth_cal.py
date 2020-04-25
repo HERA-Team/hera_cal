@@ -386,6 +386,26 @@ def _build_time_grid_blacklist(time_grid, time_blacklists=[], lst_blacklists=[],
     return time_grid_blacklist
 
 
+def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
+    '''TODO: document'''
+
+    freq_blacklist_array = np.zeros(length(freqs), dtype=bool)
+
+    # Calculate blacklisted frequencies
+    if len(freq_blacklists) > 0:
+        for bounds in freq_blacklists:
+            assert len(bounds) == 2, 'freq_blacklists must be list of pairs of bounds'
+            assert bounds[0] <= bounds[1], 'freq_blacklists bounds must be in ascending order'
+            freq_blacklist_array[(freqs >= bounds[0]) & (freqs <= bounds[1])]
+
+    # Calculate blacklisted channels
+    if len(chan_blacklists) > 0:
+        for bounds in chan_blacklists:
+            assert len(bounds) == 2, 'chan_blacklists must be list of pairs of bounds'
+            assert bounds[0] <= bounds[1], 'chan_blacklists bounds must be in ascending order'
+            freq_blacklist_array[(np.arange(len(freqs)) >= bounds[0]) & (np.arange(len(freqs)) <= bounds[1])]
+
+    return freq_blacklist_array
 
 
 class CalibrationSmoother():
