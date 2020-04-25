@@ -448,20 +448,24 @@ class CalibrationSmoother():
         '''
         self.verbose = verbose
 
-        # load calibration files
+        # load calibration files---gains, flags, freqs, times, and if desired, cspa and chisq
         utils.echo('Now loading calibration files...', verbose=self.verbose)
         self.cals = calfits_list
-        gains, cal_flags, self.cal_freqs, self.cal_times = odict(), odict(), odict(), odict()
+        gains, cal_flags, chisq, cspa, self.cal_freqs, self.cal_times = {}, {}, {}, {}, {}, {}
         for cal in self.cals:
             hc = io.HERACal(cal)
-            gains[cal], cal_flags[cal], _, _ = hc.read()
+            gains[cal], cal_flags[cal], quals, total_qual = hc.read()
+            if load_cspa:
+                cspa[cal] = quals
+            if load_chisq:
+                chisq[cal] = total_qual
             self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
 
         # load flag files
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
             utils.echo('Now loading external flag files...', verbose=self.verbose)
-            self.ext_flags, self.flag_freqs, self.flag_times = odict(), odict(), odict()
+            self.ext_flags, self.flag_freqs, self.flag_times = {}, {}, {}
             for ff in self.flag_files:
                 flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
                 self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
@@ -478,20 +482,34 @@ class CalibrationSmoother():
         if len(self.flag_files) > 0:
             self.flag_time_indices = {ff: np.searchsorted(self.time_grid, times) for ff, times in self.flag_times.items()}
 
-        # build multi-file grids for each antenna's gains and flags
+        # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa)
         self.freqs = self.cal_freqs[self.cals[0]]
         self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
         self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=np.complex) for ant in self.ants}
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
+        if load_cspa:
+            self.cspa_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for ant in self.ants}
+        
+        # Now fill those grid
         for ant in self.ants:
             for cal in self.cals:
                 if ant in gains[cal]:
                     self.gain_grids[ant][self.time_indices[cal], :] = gains[cal][ant]
                     self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
+                    if load_cspa:
+                        self.cspa_grids[ant][self.time_indices[cal], :] = cspa[cal][ant]
             if len(self.flag_files) > 0:
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
                         self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
+        
+        # Now build grid and fill it for chisq_grid, if desired
+        if load_chisq:
+            jpols = set([ant[1] for ant in self.ants])
+            self.chisq_grids = {jpol: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for jpol in jpols}
+            for jpol in jpols:
+                for cal in self.cals:
+                    self.chisq_grids[jpol][self.time_indices[cal], :] = chisq[cal][jpol]
 
         # perform data quality checks and flag thresholding
         self.check_consistency()
