@@ -23,7 +23,7 @@ except ImportError:
 
 from .datacontainer import DataContainer
 from .utils import polnum2str, polstr2num, jnum2str, jstr2num
-from .utils import split_pol, conj_pol, LST2JD
+from .utils import split_pol, conj_pol, LST2JD, HERA_TELESCOPE_LOCATION
 
 
 class HERACal(UVCal):
@@ -1048,8 +1048,7 @@ def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags
               filetype='miriad', write_file=True, outdir="./", overwrite=False, verbose=True, history=" ",
               return_uvd=False, longitude=21.42830, start_jd=None, x_orientation="north", instrument="HERA",
               telescope_name="HERA", object_name='EOR', vis_units='uncalib', dec=-30.72152,
-              telescope_location=np.array([5109325.85521063, 2005235.09142983, -3239928.42475395]),
-              integration_time=None, **kwargs):
+              telescope_location=HERA_TELESCOPE_LOCATION, integration_time=None, **kwargs):
     """
     Take DataContainer dictionary, export to UVData object and write to file. See pyuvdata.UVdata
     documentation for more info on these attributes.
