@@ -350,6 +350,44 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
                 gains[ant] = gains[ant] / refant_phasor
 
 
+def _build_time_grid_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, telescope_name='HERA'):
+    '''TODO: ducment'''
+    
+    time_grid_blacklist = np.zeros(length(time_grid), dtype=bool)
+
+    # Calculate blacklisted times
+    if len(time_blacklists) > 0:
+        for bounds in time_blacklists:
+            assert len(bounds) == 2, 'time_blacklists must be list of pairs of bounds'
+            assert bounds[0] < bounds[1], 'time_blacklist bounds must be in chronological order'
+            time_grid_blacklist[(time_grid >= bounds[0]) & (time_grid <= bounds[1])] = True
+
+    # Calculate blacklisted LSTs
+    if len(lst_blacklists) > 0:
+        # If lat_lon_alt is not specified, try to infer it from the telescope name, which calfits files generally carry around
+        if lat_lon_alt_degrees is None:
+            if telescope_name is 'HERA':
+                lat_lon_alt_degrees = np.array(pyuvdata.utils.LatLonAlt_from_XYZ(utils.HERA_TELESCOPE_LOCATION))
+                lat_lon_alt_degrees *= [180 / np.pi, 180 / np.pi, 1]
+            else:
+                raise NotImplementedError(f'No known position for telescope {telescope_name}. lat_lon_alt_degrees must be specified.')
+
+        # calculate LST grid in hours from time grid and lat_lon_alt
+        lst_grid = pyuvdata.utils.get_lst_for_time(time_grid, *lat_lon_alt_degrees) * 12 / np.pi
+
+        # add blacklisted times from lst_blacklists
+        for bounds in lst_blacklists:
+            assert len(bounds) == 2, 'lst_blacklists must be list of pairs of bounds'
+            if bounds[0] < bounds[1]:
+                time_grid_blacklist[(lst_grid >= bounds[0]) & (lst_grid <= bounds[1])] = True
+            else:  # the bounds span the 24 hours --> 0 hours branch cut
+                time_grid_blacklist[(lst_grid <= bounds[0]) | (lst_grid >= bounds[1])] = True
+
+    return time_grid_blacklist
+
+
+
+
 class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0,
