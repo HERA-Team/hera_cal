@@ -23,6 +23,11 @@ except ImportError:
     AIPY = False
 
 
+# Taken from a H1C data file and confirmed to match a H3C data file
+HERA_TELESCOPE_LOCATION = np.array([5109325.855210627429187297821044921875,
+                                    2005235.091429826803505420684814453125,
+                                    -3239928.424753960222005844116210937500])
+
 # Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
 _KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()])
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
