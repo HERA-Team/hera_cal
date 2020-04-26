@@ -4,10 +4,10 @@
 
 import numpy as np
 import scipy
-from collections import OrderedDict as odict
 from copy import deepcopy
 import warnings
 import argparse
+import pyuvdata
 
 try:
     import uvtools
@@ -410,7 +410,8 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
 
 class CalibrationSmoother():
 
-    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0,
+    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False, 
+                 time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
                  pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
@@ -515,6 +516,11 @@ class CalibrationSmoother():
         self.check_consistency()
         flag_threshold_and_broadcast(self.flag_grids, freq_threshold=freq_threshold,
                                      time_threshold=time_threshold, ant_threshold=time_threshold)
+
+        # build blacklists
+        self.time_blacklist = build_time_grid_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
+                                                        lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope_name)
+        self.freq_blacklist = build_freq_blacklist(self.freqs, freq_blacklists=freq_blacklists, chan_blacklists=chan_blacklists)
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
         if pick_refant:
