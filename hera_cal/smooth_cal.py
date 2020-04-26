@@ -432,6 +432,26 @@ class CalibrationSmoother():
                 needed to flag that antenna gain at a particular time and frequency. antflag_thresh=0.0 is
                 aggressive flag broadcasting, antflag_thresh=1.0 is conservative flag_broadcasting.
                 Only used for converting per-baseline flags to per-antenna flags if flag_file_list is specified.
+            load_cspa: if True, also save chisq_per_ant into self.cspa, analogously to self.gain_grids. Does not
+                currently affect the smoothing functions, but is useful for interactive work.
+            load_chisq: if True, also save chisq into self.chisq, analogously to self.gain_grids except that the
+                keys are jpols, e.g. 'Jee' and not antennas. Does not currently affect the smoothing functions.
+            time_blacklists: list of pairs of times in Julian Day bounding (inclusively) regions in time that are
+                to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
+                N.B. Blacklisted times are not necessarily flagged.
+            lst_blacklists:  list of pairs of LSTs in hours bounding (inclusively) regions of LST that are
+                to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate. 
+                Regions crossing the 24h brach cut are acceptable (e.g. [(23, 1)] blacklists two total hours).
+                N.B. Blacklisted LSTS are not necessarily flagged.
+            lat_lon_alt_degrees: length 3 list or array of latitude (deg), longitude (deg), and altitude (m) of 
+                the array. Only used to convert LSTs to JD times. If the telescope_name in the calfits file is 'HERA',
+                this is not required.
+            freq_blacklists: list of pairs of frequencies in Hz hours bounding (inclusively) spectral regions 
+                that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
+                N.B. Blacklisted frequencies are not necessarily flagged.
+            chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions 
+                that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
+                N.B. Blacklisted channels are not necessarily flagged.
             pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
                 fewest total flags and causes the least noisy phases on other antennas when made the phase reference.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
