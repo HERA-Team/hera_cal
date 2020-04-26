@@ -29,7 +29,7 @@ class VisClean(object):
     VisClean object for visibility CLEANing and filtering.
     """
 
-    def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True):
+    def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True, **read_kwargs):
         """
         Initialize the object.
 
@@ -43,10 +43,12 @@ class VisClean(object):
                 as they are built.
             link_data : bool, if True, attempt to link DataContainers
                 from HERAData object, otherwise only link metadata if possible.
+            read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
+                run_check_acceptability). Only used for uvh5 filetype
         """
         # attach HERAData
         self.clear_containers()
-        self.hd = io.to_HERAData(input_data, filetype=filetype)
+        self.hd = io.to_HERAData(input_data, filetype=filetype, **read_kwargs)
 
         # attach calibration
         if input_cal is not None:
@@ -205,7 +207,7 @@ class VisClean(object):
 
     def write_data(self, data, filename, overwrite=False, flags=None, nsamples=None,
                    times=None, lsts=None, filetype='uvh5', partial_write=False,
-                   add_to_history='', verbose=True, **kwargs):
+                   add_to_history='', verbose=True, extra_attrs={}, **kwargs):
         """
         Write data to file.
 
@@ -224,7 +226,8 @@ class VisClean(object):
             partial_write : bool, if True, begin (or continue) a partial write to
             the output filename and store file descriptor in self.hd._writers.
             add_to_history : string, string to append to hd history.
-            kwargs : additional attributes to update before write to disk.
+            extra_attrs : additional UVData/HERAData attributes to update before writing
+            kwargs : extra kwargs to pass to UVData.write_*() call
         """
         # get common keys
         keys = [k for k in self.hd.get_antpairpols() if data.has_key(k)]
@@ -259,21 +262,21 @@ class VisClean(object):
         # add history
         hd.history += version.history_string(add_to_history)
 
-        # update other kwargs
-        for attribute, value in kwargs.items():
+        # update other extra attrs
+        for attribute, value in extra_attrs.items():
             hd.__setattr__(attribute, value)
 
         # write to disk
         if filetype == 'miriad':
-            hd.write_miriad(filename, clobber=overwrite)
+            hd.write_miriad(filename, clobber=overwrite, **kwargs)
         elif filetype == 'uvh5':
             if partial_write:
-                hd.partial_write(filename, clobber=overwrite, inplace=True)
+                hd.partial_write(filename, clobber=overwrite, inplace=True, **kwargs)
                 self.hd._writers.update(hd._writers)
             else:
-                hd.write_uvh5(filename, clobber=overwrite)
+                hd.write_uvh5(filename, clobber=overwrite, **kwargs)
         elif filetype == 'uvfits':
-            hd.write_uvfits(filename)
+            hd.write_uvfits(filename, **kwargs)
         else:
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
