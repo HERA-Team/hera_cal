@@ -719,6 +719,11 @@ class CalibrationSmoother():
             hc.write_calfits(outfilename, clobber=clobber)
 
 
+def _pair(dash_sep_arg_pair):
+    '''Helper function for argparser to turn dash-separted numbers into tuples of floats.'''
+    return tuple([float(arg) for arg in dash_sep_arg_pair.split('-', maxsplit=1)])
+
+
 def smooth_cal_argparser():
     '''Arg parser for commandline operation of 2D calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
@@ -749,6 +754,18 @@ def smooth_cal_argparser():
     flg_opts.add_argument("--ant_threshold", default=0.5, type=float, help="If, after time and freq thesholding and broadcasting, an antenna is left \
                           unflagged for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that antenna for all \
                           times and channels. 1.0 means no additional flagging (default 0.5).")
+
+    # Options relating to blacklisting time or frequency ranges
+    bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight to times/frequencies so that smooth_cal\n"
+                                    "interpolates/extrapoaltes over them (though they aren't necessarily flagged).")
+    bkl_opts.add_argument("--time_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of times in Julian Day \
+                          bounding (inclusively) blacklisted times, e.g. '2458098.1-2458098.4'.")
+    bkl_opts.add_argument("--lst_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of LSTs in hours \
+                          bounding (inclusively) blacklisted LSTs, e.g. '3-4 10-12 23-.5'")
+    bkl_opts.add_argument("--chan_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of channel numbers \
+                          bounding (inclusively) blacklisted spectral ranges, e.g. '0-256 800-900'")
+    bkl_opts.add_argument("--freq_blacklists", type=_pair, default=[], nargs='+', help="space-separated list of dash-separted pairs of frequencies in Hz \
+                          bounding (inclusively) blacklisted spectral ranges, e.g. '88e6-110e6 136e6-138e6'")
 
     # Options relating to performing the filter in time and frequency
     flt_opts = a.add_argument_group(title='Filtering options.')
