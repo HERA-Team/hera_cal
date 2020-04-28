@@ -351,7 +351,21 @@ def rephase_to_refant(gains, refant, flags=None, propagate_refant_flags=False):
 
 
 def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, telescope_name='HERA'):
-    '''TODO: ducment'''
+    '''Converts pairs of bounds on blacklisted times/LSTs into a boolean array of blacklisted times.
+
+    Arguments:
+        time_grid: numpy array of times in Julian Day
+        time_blacklists: list of pairs of times in Julian Day bounding (inclusively) regions in time that are to be marked
+            as True in the time_blacklist_array
+        lst_blacklists:  list of pairs of LSTs in hours bounding (inclusively) regions of LST that are to be marked as True
+            in the time_blacklist_array. Regions crossing the 24h brach cut, e.g. [(23, 1)], are allowed.
+        lat_lon_alt_degrees: length 3 array of telescope location in degreees and altitude in meters. Only used to convert
+            times to LSTs if lst_blacklists is not empty
+        telescope_name: string name of telescope. Only used if lst_blacklists is not empty and lat_lon_alt_degrees 
+            is not None. Currently, only "HERA" will work since it's position is hard-coded in this module.
+
+    Returns:
+        time_blacklist_array: boolean array with the same shape as time_grid of which integrations are blacklisted'''
     
     time_blacklist_array = np.zeros(length(time_grid), dtype=bool)
 
