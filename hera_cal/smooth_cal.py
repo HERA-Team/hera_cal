@@ -432,6 +432,16 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
     return freq_blacklist_array
 
 
+def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None):
+    '''Builds a wgts_grid float array (Ntimes, Nfreqs) with 0s flagged or blacklisted data and 1s otherwise.'''
+    wgts_grid = np.logical_not(flag_grid).astype(float)
+    if time_blacklist is not None:
+        wgts_grid[time_blacklist, :] = 0.0
+    if freq_blacklist is not None:
+        wgts_grid[:, freq_blacklist] = 0.0
+    return wgts_grid
+
+
 class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False, 
@@ -624,7 +634,7 @@ class CalibrationSmoother():
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now smoothing antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in time...', verbose=self.verbose)
             if not np.all(self.flag_grids[ant]):
-                wgts_grid = np.logical_not(self.flag_grids[ant]).astype(float)
+                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
@@ -648,7 +658,7 @@ class CalibrationSmoother():
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
-            wgts_grid = np.logical_not(self.flag_grids[ant]).astype(float)
+            wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
                                                      filter_scale=filter_scale, tol=tol, window=window,
                                                      skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
@@ -683,7 +693,7 @@ class CalibrationSmoother():
         for ant, gain_grid in self.gain_grids.items():
             if not np.all(self.flag_grids[ant]):
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
-                wgts_grid = np.logical_not(self.flag_grids[ant]).astype(float)
+                wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
                                                      time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
                                                      window=window, **win_kwargs)
