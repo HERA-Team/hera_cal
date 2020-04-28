@@ -413,21 +413,21 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
     Returns:
         freq_blacklist_array: boolean array with the same shape as freqs with blacklisted frequencies set to True'''
 
-    freq_blacklist_array = np.zeros(length(freqs), dtype=bool)
+    freq_blacklist_array = np.zeros(len(freqs), dtype=bool)
 
     # Calculate blacklisted frequencies
     if len(freq_blacklists) > 0:
         for bounds in freq_blacklists:
             assert len(bounds) == 2, 'freq_blacklists must be list of pairs of bounds'
             assert bounds[0] <= bounds[1], 'freq_blacklists bounds must be in ascending order'
-            freq_blacklist_array[(freqs >= bounds[0]) & (freqs <= bounds[1])]
+            freq_blacklist_array[(freqs >= bounds[0]) & (freqs <= bounds[1])] = True
 
     # Calculate blacklisted channels
     if len(chan_blacklists) > 0:
         for bounds in chan_blacklists:
             assert len(bounds) == 2, 'chan_blacklists must be list of pairs of bounds'
             assert bounds[0] <= bounds[1], 'chan_blacklists bounds must be in ascending order'
-            freq_blacklist_array[(np.arange(len(freqs)) >= bounds[0]) & (np.arange(len(freqs)) <= bounds[1])]
+            freq_blacklist_array[(np.arange(len(freqs)) >= bounds[0]) & (np.arange(len(freqs)) <= bounds[1])] = True
 
     return freq_blacklist_array
 
@@ -645,7 +645,6 @@ class CalibrationSmoother():
             win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
                     Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
         '''
-
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
