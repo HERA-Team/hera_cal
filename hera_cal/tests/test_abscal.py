@@ -667,6 +667,12 @@ class Test_Post_Redcal_Abscal_Run(object):
                 assert np.abs(dlst - mlst) < np.median(np.ediff1d(all_data_lsts))
                 assert np.min(np.abs(all_data_lsts - mlst)) == np.abs(dlst - mlst)
 
+        # Test errors for when times/lsts don't match lengths
+        with pytest.raises(ValueError):
+            abscal.get_d2m_time_map(all_data_times[1:], all_data_lsts, all_model_times, all_model_lsts)
+        with pytest.raises(ValueError):
+            abscal.get_d2m_time_map(all_data_times, all_data_lsts, all_model_times[1:], all_model_lsts)
+
     def test_match_baselines(self):
         with pytest.raises(NotImplementedError):
             abscal.match_baselines(None, None, None, model_is_redundant=False, data_is_redsol=True)

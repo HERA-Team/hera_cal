@@ -391,7 +391,7 @@ class TestDataContainerWithRealData(object):
 
     def test_select_or_expand_times(self):
         # try cases that are selections, out of order, or have duplicate entries
-        for new_times in [[0], [0, 1, 2], [2, 7, 4], [2, 9, 2, 2]]:
+        for new_times in [[0], [0, 1, 2], [2, 7, 4], [2, 9, 2, 2], [100]]:
 
             dc1 = datacontainer.DataContainer({(0, 1, 'ee'): np.arange(10)})
             dc1.times = np.arange(10)
@@ -399,8 +399,13 @@ class TestDataContainerWithRealData(object):
             dc1.lsts = np.arange(10) * 2 * np.pi / 10
             dc1.lsts_by_bl = {(0, 1): np.arange(10) * 2 * np.pi / 10}
 
-            dc2 = dc1.select_or_expand_times(new_times, in_place=False)
-            dc1.select_or_expand_times(new_times, in_place=True)
+            if new_times == [100]:
+                with pytest.raises(ValueError):
+                    dc1.select_or_expand_times(new_times)
+                continue
+            else:
+                dc2 = dc1.select_or_expand_times(new_times, in_place=False)
+                dc1.select_or_expand_times(new_times, in_place=True)
 
             for dc in (dc1, dc2):
                 assert np.all(dc[(0, 1, 'ee')] == np.arange(10)[new_times])

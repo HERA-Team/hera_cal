@@ -2809,8 +2809,10 @@ def get_d2m_time_map(data_times, data_lsts, model_times, model_lsts, extrap_limi
             as defined by the extrap_limit. 
     '''
     # check that the input is sensible
-    assert len(data_times) == len(data_lsts), 'data_times and data_lsts must have the same length.'
-    assert len(model_times) == len(model_lsts), 'model_times and model_lsts must have the same length.'
+    if len(data_times) != len(data_lsts):
+        raise ValueError('data_times and data_lsts must have the same length.')
+    if len(model_times) != len(model_lsts):
+        raise ValueError('model_times and model_lsts must have the same length.')
 
     # compute maximum acceptable distance on the unit circle
     max_complex_dist = 2.0
