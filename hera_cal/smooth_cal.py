@@ -367,7 +367,7 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
     Returns:
         time_blacklist_array: boolean array with the same shape as time_grid in which blacklisted integrations are True'''
     
-    time_blacklist_array = np.zeros(length(time_grid), dtype=bool)
+    time_blacklist_array = np.zeros(len(time_grid), dtype=bool)
 
     # Calculate blacklisted times
     if len(time_blacklists) > 0:
@@ -562,8 +562,8 @@ class CalibrationSmoother():
                                      time_threshold=time_threshold, ant_threshold=time_threshold)
 
         # build blacklists
-        self.time_blacklist = build_time_grid_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
-                                                        lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope_name)
+        self.time_blacklist = build_time_blacklist(self.time_grid, time_blacklists=time_blacklists, lst_blacklists=lst_blacklists,
+                                                   lat_lon_alt_degrees=lat_lon_alt_degrees, telescope_name=hc.telescope_name)
         self.freq_blacklist = build_freq_blacklist(self.freqs, freq_blacklists=freq_blacklists, chan_blacklists=chan_blacklists)
 
         # pick a reference antenna that has the minimum number of flags (tie goes to lower antenna number) and then rephase
