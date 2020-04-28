@@ -365,7 +365,7 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
             is not None. Currently, only "HERA" will work since it's position is hard-coded in this module.
 
     Returns:
-        time_blacklist_array: boolean array with the same shape as time_grid of which integrations are blacklisted'''
+        time_blacklist_array: boolean array with the same shape as time_grid in which blacklisted integrations are True'''
     
     time_blacklist_array = np.zeros(length(time_grid), dtype=bool)
 
@@ -401,7 +401,17 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
 
 
 def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
-    '''TODO: document'''
+    '''Converts pairs of bounds on blacklisted frequencies/channels into a boolean array of blacklisted freqs.
+
+    Arguments:
+        freqs: numpy array of frequencies
+        freq_blacklists: list of pairs of frequencies in the same units bounding (inclusively) the spectral regions that
+            are to be marked as True in the freq_blacklist_array
+        chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions that are to be marked 
+            as True in the freq_blacklist_array.
+
+    Returns:
+        freq_blacklist_array: boolean array with the same shape as freqs with blacklisted frequencies set to True'''
 
     freq_blacklist_array = np.zeros(length(freqs), dtype=bool)
 
