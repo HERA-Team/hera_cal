@@ -451,7 +451,8 @@ class DataContainer:
 
         # make sure this is a sensible object for performing this operation
         assert dc.times is not None
-        assert np.all([nt in dc.times for nt in new_times]), 'All new_times must be in self.times.'
+        if not np.all([nt in dc.times for nt in new_times]):
+            raise ValueError('All new_times must be in self.times.')
         if dc.times_by_bl is not None:
             for tbbl in dc.times_by_bl.values():
                 assert np.all(tbbl == dc.times), 'select_or_expand_times does not support baseline dependent averaging.'
