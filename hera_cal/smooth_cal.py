@@ -396,7 +396,7 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
             if bounds[0] < bounds[1]:
                 time_blacklist_array[(lst_grid >= bounds[0]) & (lst_grid <= bounds[1])] = True
             else:  # the bounds span the 24 hours --> 0 hours branch cut
-                time_blacklist_array[(lst_grid <= bounds[0]) | (lst_grid >= bounds[1])] = True
+                time_blacklist_array[(lst_grid >= bounds[0]) | (lst_grid <= bounds[1])] = True
 
     return time_blacklist_array
 
