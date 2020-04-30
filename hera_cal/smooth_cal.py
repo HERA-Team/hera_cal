@@ -8,6 +8,7 @@ from copy import deepcopy
 import warnings
 import argparse
 import pyuvdata
+from collections import Iterable
 
 try:
     import uvtools
@@ -372,7 +373,7 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
     # Calculate blacklisted times
     if len(time_blacklists) > 0:
         for bounds in time_blacklists:
-            assert len(bounds) == 2, 'time_blacklists must be list of pairs of bounds'
+            assert isinstance(bounds, Iterable) and len(bounds) == 2, 'time_blacklists must be list of pairs of bounds'
             assert bounds[0] <= bounds[1], 'time_blacklist bounds must be in chronological order'
             time_blacklist_array[(time_grid >= bounds[0]) & (time_grid <= bounds[1])] = True
 
@@ -391,7 +392,7 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
 
         # add blacklisted times from lst_blacklists
         for bounds in lst_blacklists:
-            assert len(bounds) == 2, 'lst_blacklists must be list of pairs of bounds'
+            assert isinstance(bounds, Iterable) and len(bounds) == 2, 'lst_blacklists must be list of pairs of bounds'
             if bounds[0] < bounds[1]:
                 time_blacklist_array[(lst_grid >= bounds[0]) & (lst_grid <= bounds[1])] = True
             else:  # the bounds span the 24 hours --> 0 hours branch cut
@@ -418,14 +419,14 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
     # Calculate blacklisted frequencies
     if len(freq_blacklists) > 0:
         for bounds in freq_blacklists:
-            assert len(bounds) == 2, 'freq_blacklists must be list of pairs of bounds'
+            assert isinstance(bounds, Iterable) and len(bounds) == 2, 'freq_blacklists must be list of pairs of bounds'
             assert bounds[0] <= bounds[1], 'freq_blacklists bounds must be in ascending order'
             freq_blacklist_array[(freqs >= bounds[0]) & (freqs <= bounds[1])] = True
 
     # Calculate blacklisted channels
     if len(chan_blacklists) > 0:
         for bounds in chan_blacklists:
-            assert len(bounds) == 2, 'chan_blacklists must be list of pairs of bounds'
+            assert isinstance(bounds, Iterable) and len(bounds) == 2, 'chan_blacklists must be list of pairs of bounds'
             assert bounds[0] <= bounds[1], 'chan_blacklists bounds must be in ascending order'
             freq_blacklist_array[(np.arange(len(freqs)) >= bounds[0]) & (np.arange(len(freqs)) <= bounds[1])] = True
 
