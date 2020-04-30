@@ -220,7 +220,10 @@ class Test_Calibration_Smoother(object):
     def setup_method(self):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         flag_file_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
-        self.cs = smooth_cal.CalibrationSmoother(calfits_list, flag_file_list=flag_file_list, flag_filetype='npz')
+        self.cs = smooth_cal.CalibrationSmoother(calfits_list, flag_file_list=flag_file_list, flag_filetype='npz',
+                                                 time_blacklists=[(2458101.44795386, 2458101.44919662)], 
+                                                 lst_blacklists=[(6.17226452, 6.17824609)],
+                                                 freq_blacklists=[(136e6, 138e6), (149e6, 151e6)], chan_blacklists=[(0, 64)])
 
     @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
     @pytest.mark.filterwarnings("ignore:overflow encountered in square")
