@@ -162,6 +162,32 @@ class Test_Smooth_Cal_Helper_Functions(object):
         np.testing.assert_array_equal(flags[0, 'Jxx'], np.array([False, True]))
         np.testing.assert_array_equal(flags[1, 'Jxx'], np.array([True, True]))
 
+    def test_build_time_blacklist(self):
+        time_grid = np.array([2458838.30008962, 2458838.30020147, 2458838.30031332, 2458838.30042517, 2458838.30053701, 2458838.30064886])
+        lst_grid = np.array([2.56920604, 2.57189775, 2.57458945, 2.57728116, 2.57997286, 2.58266456])
+
+        # test time cuts
+        time_blacklist = smooth_cal.build_time_blacklist(time_grid, time_blacklists=[(2458838.3000, 2458838.3004)])
+        np.testing.assert_array_equal(time_blacklist, [True, True, True, False, False, False])
+
+        # test LST cuts
+        time_blacklist = smooth_cal.build_time_blacklist(time_grid, lst_blacklists=[(2.5692, 2.5746)])
+        np.testing.assert_array_equal(time_blacklist, [True, True, True, False, False, False])
+
+        # try shifting hera position so that the time_grd spans the branch cut in LSTs
+        hera_lat_lon_alt_degrees = (-30.721526120689507, 21.428303826863015, 1051.690000018105)
+        shifted_llad = np.array(hera_lat_lon_alt_degrees) + [0, 321.38115825, 0]
+        time_blacklist = smooth_cal.build_time_blacklist(time_grid, lst_blacklists=[(23.995, 0.005)], lat_lon_alt_degrees=shifted_llad)
+        np.testing.assert_array_equal(time_blacklist, [False, True, True, True, False, False])
+
+        # test errors
+        with pytest.raises(AssertionError):
+            time_blacklist = smooth_cal.build_time_blacklist(time_grid, time_blacklists=[(2458838.3000)])
+        with pytest.raises(AssertionError):
+            time_blacklist = smooth_cal.build_time_blacklist(time_grid, time_blacklists=[(2458838.3004, 2458838.3000)])
+        with pytest.raises(NotImplementedError):
+            time_blacklist = smooth_cal.build_time_blacklist(time_grid, lst_blacklists=[(2.5692, 2.5746)], telescope_name='NOT_A_REAL_TELESCOPE')
+
 
 class Test_Calibration_Smoother(object):
 
