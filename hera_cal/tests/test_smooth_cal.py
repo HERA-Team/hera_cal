@@ -208,6 +208,12 @@ class Test_Smooth_Cal_Helper_Functions(object):
         with pytest.raises(AssertionError):
             time_blacklist = smooth_cal.build_freq_blacklist(freqs, chan_blacklists=[(3, 1)])
 
+    def test_build_wgts_grid(self):
+        flag_grid = np.zeros((2, 3))
+        flag_grid[0, 0] = True
+        wgts_grid = smooth_cal._build_wgts_grid(flag_grid, time_blacklist=[False, True], freq_blacklist=[False, False, True])
+        np.testing.assert_array_equal(wgts_grid, [[0, 1, 0], [0, 0, 0]])
+
 
 class Test_Calibration_Smoother(object):
 
