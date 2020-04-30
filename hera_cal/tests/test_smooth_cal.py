@@ -185,8 +185,28 @@ class Test_Smooth_Cal_Helper_Functions(object):
             time_blacklist = smooth_cal.build_time_blacklist(time_grid, time_blacklists=[(2458838.3000)])
         with pytest.raises(AssertionError):
             time_blacklist = smooth_cal.build_time_blacklist(time_grid, time_blacklists=[(2458838.3004, 2458838.3000)])
+        with pytest.raises(AssertionError):
+            time_blacklist = smooth_cal.build_time_blacklist(time_grid, lst_blacklists=[(2.5692)])
         with pytest.raises(NotImplementedError):
             time_blacklist = smooth_cal.build_time_blacklist(time_grid, lst_blacklists=[(2.5692, 2.5746)], telescope_name='NOT_A_REAL_TELESCOPE')
+
+    def test_build_freq_blacklist(self):
+        freqs = np.array([100e6, 120e6, 140e6, 160e6, 180e6, 200e6])
+        freq_blacklist = smooth_cal.build_freq_blacklist(freqs, freq_blacklists=[(0e6, 137e6)])
+        np.testing.assert_array_equal(freq_blacklist, [True, True, False, False, False, False])
+        
+        freq_blacklist = smooth_cal.build_freq_blacklist(freqs, chan_blacklists=[(4, 5)])
+        np.testing.assert_array_equal(freq_blacklist, [False, False, False, False, True, True])
+
+        # test errors
+        with pytest.raises(AssertionError):
+            time_blacklist = smooth_cal.build_freq_blacklist(freqs, freq_blacklists=[(137e6)])
+        with pytest.raises(AssertionError):
+            time_blacklist = smooth_cal.build_freq_blacklist(freqs, freq_blacklists=[(137e6, 0e6)])
+        with pytest.raises(AssertionError):
+            time_blacklist = smooth_cal.build_freq_blacklist(freqs, chan_blacklists=[(1)])
+        with pytest.raises(AssertionError):
+            time_blacklist = smooth_cal.build_freq_blacklist(freqs, chan_blacklists=[(3, 1)])
 
 
 class Test_Calibration_Smoother(object):
