@@ -69,6 +69,8 @@ class DelayFilter(VisClean):
                        window=window, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                        edgecut_hi=edgecut_hi, alpha=alpha, overwrite=True, verbose=verbose)
 
+    def run_fourier_filter(self, )
+
     def get_filled_data(self):
         """Get data with flagged pixels filled with clean_model.
 
@@ -94,7 +96,7 @@ class DelayFilter(VisClean):
                             partial_write=False, clobber=False, add_to_history='', extra_attrs={}, **kwargs):
         '''
         Method for writing data products.
-        
+
         Can write filtered residuals, CLEAN models, and/or original data with flags filled
         by CLEAN models where possible. Uses input_data from DelayFilter.load_data() as a template.
 
@@ -166,7 +168,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
                                filled_outfilename=filled_outfilename, partial_write=True,
                                clobber=clobber, add_to_history=add_to_history)
         df.hd.data_array = None  # this forces a reload in the next loop
-        
+
 
 def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''

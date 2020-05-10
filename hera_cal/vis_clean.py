@@ -281,6 +281,146 @@ class VisClean(object):
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
+    def vis_fourier_filter(self,  keys=None, x=None, data=None, flags=None, wgts=None,
+                           ax='freq', mode='dayenu', horizon=1.0, standoff=0.0, min_dly=0.0, max_frate=None, min_dly,  fitting_options={} ,
+                           suppression=1e-9, output_prefix='filtered', zeropad=0,
+                           cache=None,  skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False, overwrite=False):
+        """
+        A less flexible but more streamlined wrapper for fourier_filter that filters visibilities based
+        on baseline length and standoff.
+
+        Parameters
+        -----------
+        keys : list of bl-pol keys in data to filter
+        x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
+            2-list/tuple of numpy arrays if 2d filter.
+        data : DataContainer, data to clean. Default is self.data
+        flags : Datacontainer, flags to use. Default is self.flags
+        wgts : DataContainer, weights to use. Default is None.
+        ax: str, axis to filter, options=['freq', 'time', 'both']
+            Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
+        horizon: coefficient to bl_len where 1 is the horizon [freq filtering]
+        standoff: fixed additional delay beyond the horizon (in nanosec) to CLEAN [freq filtering]
+        min_dly: max delay (in nanosec) used for freq CLEAN is never below this.
+        max_frate : max fringe rate (in milli-Hz) used for time filtering. See uvtools.dspec.vis_filter for options.
+        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+        mode: string
+            specify filtering mode. Currently supported are
+            'clean', iterative clean
+            'dpss_lsq', dpss fitting using scipy.optimize.lsq_linear
+            'dft_lsq', dft fitting using scipy.optimize.lsq_linear
+            'dpss_matrix', dpss fitting using direct lin-lsq matrix
+                           computation. Slower then lsq but provides linear
+                           operator that can be used to propagate
+                           statistics and the matrix is cached so
+                           on average, can be faster for data with
+                           many similar flagging patterns.
+            'dft_matrix', dft fitting using direct lin-lsq matrix
+                          computation. Slower then lsq but provides
+                          linear operator that can be used to propagate
+                          statistics and the matrix is cached so
+                          on average, can be faster for data with
+                          many similar flagging patterns.
+                          !!!WARNING: In my experience,
+                          'dft_matrix' option is numerical unstable.!!!
+                          'dpss_matrix' works much better.
+            'dayenu', apply dayenu filter to data. Does not
+                     deconvolve subtracted foregrounds.
+            'dayenu_dft_leastsq', apply dayenu filter to data
+                     and deconvolve subtracted foregrounds using
+                    'dft_leastsq' method (see above).
+            'dayenu_dpss_leastsq', apply dayenu filter to data
+                     and deconvolve subtracted foregrounds using
+                     'dpss_leastsq' method (see above)
+            'dayenu_dft_matrix', apply dayenu filter to data
+                     and deconvolve subtracted foregrounds using
+                    'dft_matrix' mode (see above).
+                    !!!WARNING: dft_matrix mode is often numerically
+                    unstable. I don't recommend it!
+            'dayenu_dpss_matrix', apply dayenu filter to data
+                     and deconvolve subtracted foregrounds using
+                     'dpss_matrix' method (see above)
+            'dayenu_clean', apply dayenu filter to data. Deconvolve
+                     subtracted foregrounds with 'clean'.
+        filter2d: bool
+            specify whether filtering will be performed in 2d or 1d.
+            If filter is 1d, it will be applied across the -1 axis.
+        fitting_options: dict
+            dictionary with options for fitting techniques.
+            if filter2d is true, this should be a 2-tuple or 2-list
+            of dictionaries. The dictionary for each dimension must
+            specify the following for each fitting method.
+                * 'dft':
+                    'fundamental_period': float or 2-tuple
+                        the fundamental_period of dft modes to fit. The number of
+                        modes fit within each window in 'filter_half_widths' will
+                        equal fw / fundamental_period where fw is the filter_half_width of the window.
+                        if filter2d, must provide a 2-tuple with fundamental_period
+                        of each dimension.
+                * 'dayenu':
+                    No parameters necessary if you are only doing 'dayenu'.
+                    For 'dayenu_dpss', 'dayenu_dft', 'dayenu_clean' see below
+                    and use the appropriate fitting options for each method.
+                * 'dpss':
+                    'eigenval_cutoff': array-like
+                        list of sinc_matrix eigenvalue cutoffs to use for included dpss modes.
+                    'nterms': array-like
+                        list of integers specifying the order of the dpss sequence to use in each
+                        filter window.
+                    'edge_supression': array-like
+                        specifies the degree of supression that must occur to tones at the filter edges
+                        to calculate the number of DPSS terms to fit in each sub-window.
+                    'avg_suppression': list of floats, optional
+                        specifies the average degree of suppression of tones inside of the filter edges
+                        to calculate the number of DPSS terms. Similar to edge_supression but instead checks
+                        the suppression of a since vector with equal contributions from all tones inside of the
+                        filter width instead of a single tone.
+                *'clean':
+                     'tol': float,
+                        clean tolerance. 1e-9 is standard.
+                     'maxiter' : int
+                        maximum number of clean iterations. 100 is standard.
+                     'pad': int or array-like
+                        if filt2d is false, just an integer specifing the number of channels
+                        to pad for CLEAN (sets Fourier interpolation resolution).
+                        if filt2d is true, specify 2-tuple in both dimensions.
+                     'filt2d_mode' : string
+                        if 'rect', clean withing a rectangular region of Fourier space given
+                        by the intersection of each set of windows.
+                        if 'plus' only clean the plus-shaped shape along
+                        zero-delay and fringe rate.
+                    'edgecut_low' : int, number of bins to consider zero-padded at low-side of the FFT axis,
+                        such that the windowing function smoothly approaches zero. For 2D cleaning, can
+                        be fed as a tuple specifying edgecut_low for first and second FFT axis.
+                    'edgecut_hi' : int, number of bins to consider zero-padded at high-side of the FFT axis,
+                        such that the windowing function smoothly approaches zero. For 2D cleaning, can
+                        be fed as a tuple specifying edgecut_hi for first and second FFT axis.
+                    'add_clean_residual' : bool, if True, adds the CLEAN residual within the CLEAN bounds
+                        in fourier space to the CLEAN model. Note that the residual actually returned is
+                        not the CLEAN residual, but the residual in input data space.
+                    'taper' : window function for filtering applied to the filtered axis.
+                        See dspec.gen_window for options. If clean2D, can be fed as a list
+                        specifying the window for each axis in data.
+                    'skip_wgt' : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+                        Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+                        time. Only works properly when all weights are all between 0 and 1.
+                    'gain': The fraction of a residual used in each iteration. If this is too low, clean takes
+                        unnecessarily long. If it is too high, clean does a poor job of deconvolving.
+                    'alpha': float, if window is 'tukey', this is its alpha parameter.
+
+        cache: dict, optional
+            dictionary for caching fitting matrices.
+
+        filter_dim, int optional
+            specify dimension to filter. default 1,
+            and if 2d filter, will use both dimensions.
+
+        max_contiguous_edge_flags : int, optional
+            if the number of contiguous samples at the edge is greater then this
+            at either side, skip .
+        """
+
+
     ###
     #TODO: zeropad here will error given its default option if 2d filtering is being used.
     ###
@@ -293,6 +433,8 @@ class VisClean(object):
         rectangular windows centered at filter_centers or filter_half_widths
         perform filtering along any of 2 dimensions in 2d or 1d!
         the 'dft' and 'dayenu' modes support irregularly sampled data.
+
+        Parameters
         -----------
         keys : list of bl-pol keys in data to CLEAN
         data : DataContainer, data to clean. Default is self.data
