@@ -29,7 +29,8 @@ class VisClean(object):
     VisClean object for visibility CLEANing and filtering.
     """
 
-    def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True, **read_kwargs):
+    def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True,
+                 spw_range=None, **read_kwargs):
         """
         Initialize the object.
 
@@ -43,13 +44,21 @@ class VisClean(object):
                 as they are built.
             link_data : bool, if True, attempt to link DataContainers
                 from HERAData object, otherwise only link metadata if possible.
+            spw_range : range of frequencies to delay-filter / write out.
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         """
         # attach HERAData
         self.clear_containers()
         self.hd = io.to_HERAData(input_data, filetype=filetype, **read_kwargs)
-
+        if not spw_range is None:
+            if not isinstance(spw_range, (tuple, list)) or not len(spw_range) == 2:
+                raise ValueError("spw_range must be a length-2 list or tuple")
+            if not isinstance(spw_range[0], (int, np.int)) or not isinstance(spw_range[1], (int, np.int)):
+                raise ValueError("elements of spw_range must be integers")
+            if spw_range[0] < 0 or spw_range[1] < 0 or spw_range[1] <= spw_range[0]:
+                raise ValueError("spw_range elements must be non-negative and first element must be smaller then second")
+        self.spw_range = spw_range
         # attach calibration
         if input_cal is not None:
             self.attach_calibration(input_cal)
@@ -112,6 +121,7 @@ class VisClean(object):
             self.lsts = mdict['lsts']
             self.pols = mdict['pols']
 
+
             self.Nfreqs = len(self.freqs)
             self.Ntimes = len(self.times)  # Does not support BDA for now
             self.dlst = np.median(np.diff(self.lsts))
@@ -122,9 +132,17 @@ class VisClean(object):
             self.bllens = odict([(bl, np.linalg.norm(self.blvecs[bl]) / constants.c.value) for bl in self.bls])
             self.lat = self.hd.telescope_location_lat_lon_alt[0] * 180 / np.pi  # degrees
             self.lon = self.hd.telescope_location_lat_lon_alt[1] * 180 / np.pi  # degrees
-
+            if self.spw_range is None:
+                self.spw_range = (0, self.Nfreqs)
+            if self.spw_range[1] > self.Nfreqs:
+                raise warning("spw_range[1] exceeds length of frequency dimension."
+                              "Setting spw_range to full frequency band.")
+                self.spw_range[1] == self.Nfreqs
+            self.freqs = self.freqs[spw_range[0]:spw_range[1]]
+            self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
+            self.hd.select(frequencies=self.freqs)
             data, flags, nsamples = self.hd.build_datacontainers()
             self.data = data
             self.flags = flags
@@ -175,12 +193,18 @@ class VisClean(object):
             input_cal : UVCal, HERACal or filepath to calfits file
             unapply : bool, if True, reverse gain convention to
                 unapply the gains from the data.
+            spw_range : optional spw range to use for filtering.
         """
         # ensure its a HERACal
         hc = io.to_HERACal(input_cal)
-
         # load gains
         cal_gains, cal_flags, cal_quals, cal_tquals = hc.read()
+        if not spw_range is None:
+            for ant in cal_gains:
+                cal_gains[ant] = cal_gains[ant][:, self.spw_range[0]:self.spw_range[1]]
+                cal_flags[ant] = cal_flags[ant][:, self.spw_range[0]:self.spw_range[1]]
+                cal_quals[ant] = cal_quals[ant][:, self.spw_range[0]:self.spw_range[1]]
+                cal_tquals[ant] = cal_tquals[ant][:, self.spw_range[0]:self.spw_range[1]]
 
         # apply calibration solutions to data and flags
         gain_convention = hc.gain_convention
@@ -189,7 +213,8 @@ class VisClean(object):
                 gain_convention = 'divide'
             elif gain_convention == 'divide':
                 gain_convention = 'multiply'
-        apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags, gain_convention=gain_convention)
+        apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
+                                     gain_convention=gain_convention)
 
     def read(self, **read_kwargs):
         """
@@ -244,7 +269,7 @@ class VisClean(object):
             _times = None
 
         # select out a copy of hd
-        hd = self.hd.select(bls=keys, inplace=False, times=_times)
+        hd = self.hd.select(bls=keys, inplace=False, times=_times, frequencies=self.freqs)
         hd._determine_blt_slicing()
         hd._determine_pol_indexing()
 

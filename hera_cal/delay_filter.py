@@ -202,7 +202,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
 
 
 def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_range=None, cache_dir=None,
-                                        res_outfilename=None, clobber=False, add_to_history='', update_cache_files=False,
+                                        res_outfilename=None, clobber=False, add_to_history='', update_cache=False,
                                          **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
@@ -237,21 +237,22 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
                     cache[key] = cache_t[key]
     keys_before = cache.keys()
     hd = io.HERAData(infilename, filetype='uvh5')
+    freqs = hd.get_metadata_dict()['freq']
     if calfile is not None:
         calfile = io.HERACal(calfile)
         calfile.read()
     # loop over all baselines in increments of Nbls
     for i in range(0, len(hd.bls), Nbls):
-        df = DelayFilter(hd, input_cal=calfile)
+        df = DelayFilter(hd, input_cal=calfile, spw_range=spw_range)
         #update cache
-        df.read(bls=hd.bls[i:i + Nbls])
+        df.read(bls=hd.bls[i:i + Nbls], frequencies=self.freqs)
         df.run_dayenu_foreground_filter(cache=cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename,
                                partial_write=True,
                                clobber=clobber, add_to_history=add_to_history)
         df.hd.data_array = None  # this forces a reload in the next loop
-    #Write a new cache file that only contains the newly computed matrices.
-    if update_cache_files:
+    #Write a new cache file that only contains the newly computed filter matrices.
+    if update_cache:
         keys_after = cache.keys()
         new_filters = {k: cache[k] for k in cache if not k in keys_before}
         #generate new file name
@@ -275,6 +276,9 @@ def delay_filter_argparser():
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the CLEAN model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with CLEAN models wherever possible")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    a.add_argument("--spw_range", type=int, nargs=2, help="spectral window of data to foreground filter.")
+    a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
+    a.add_argument("--update_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache." )
 
     filt_options = a.add_argument_group(title='Options for the delay filter')
     filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
@@ -290,5 +294,4 @@ def delay_filter_argparser():
     filt_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
     filt_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     filt_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
-    filt_options.add_argument("--spw_range", type=int, nargs=2, help="spectral window of data to foreground filter.")
     return a

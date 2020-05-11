@@ -327,7 +327,7 @@ class FRFilter(VisClean):
         cache : dict, optional dictionary for storing pre-computed filtering matrices in linear
             cleaning.
         """
-        self.vis_fourier_filter(keys=to_filter, x=(self.times - self.times.min() * 3600. * 24.,
+        self.vis_fourier_filter(keys=to_filter, x=(self.times - self.times.min()) * 3600. * 24.,
                                 data=self.data, flags=self.flags, wgts=wegith_dict, ax='time',
                                 max_frate=max_frate, mode='dayenu', fitting_options=None, overwrite=True,
                                 verbose=verbose, max_contiguous_edge_flags=10000, skip_wgt=skip_wgt,
