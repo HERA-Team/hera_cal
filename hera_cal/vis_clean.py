@@ -138,7 +138,7 @@ class VisClean(object):
                 raise warning("spw_range[1] exceeds length of frequency dimension."
                               "Setting spw_range to full frequency band.")
                 self.spw_range[1] == self.Nfreqs
-            self.freqs = self.freqs[spw_range[0]:spw_range[1]]
+            self.freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
@@ -199,12 +199,14 @@ class VisClean(object):
         hc = io.to_HERACal(input_cal)
         # load gains
         cal_gains, cal_flags, cal_quals, cal_tquals = hc.read()
-        if not spw_range is None:
+        if not self.spw_range is None:
             for ant in cal_gains:
                 cal_gains[ant] = cal_gains[ant][:, self.spw_range[0]:self.spw_range[1]]
                 cal_flags[ant] = cal_flags[ant][:, self.spw_range[0]:self.spw_range[1]]
                 cal_quals[ant] = cal_quals[ant][:, self.spw_range[0]:self.spw_range[1]]
-                cal_tquals[ant] = cal_tquals[ant][:, self.spw_range[0]:self.spw_range[1]]
+            if not cal_tquals is None:
+                for pol in cal_tquals:
+                    cal_tquals[pol] = cal_tquals[pol][:, self.spw_range[0]:self.spw_range[1]]
 
         # apply calibration solutions to data and flags
         gain_convention = hc.gain_convention
@@ -467,7 +469,7 @@ class VisClean(object):
         for k in keys:
             if ax == 'freq' or ax == 'both':
                 filter_centers_freq = [0.]
-                bl_dly = self.bllens[k[:2]]] * horizon + standoff/1e9
+                bl_dly = self.bllens[k[:2]] * horizon + standoff/1e9
                 min_dly /= 1e9
                 filter_half_widths_freq = [np.max([bl_dly, min_dly])]
             elif ax == 'time' or ax == 'both':
@@ -870,9 +872,7 @@ class VisClean(object):
                 Default is self.dtime.
             dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             verbose: If True print feedback to stdout
-            linear : bool,
-                 use aipy.deconv.clean if linear == False
-                 if True, perform linear delay filtering.
+            mode : str, specify whether to use 'dayenu' or 'clean'.
             cache : dict, optional dictionary for storing pre-computed filtering matrices in linear
                 cleaning.
             deconv_dayenu_foregrounds : bool, if True, then apply clean to data - residual where
@@ -890,10 +890,6 @@ class VisClean(object):
                              that is larger then the horizon then the foregrounds that we fit might actually include super
                              -horizon flagging side-lobes and restoring them will introduce spurious structure.
         """
-        if linear:
-            mode = 'dayenu'
-        else:
-            mode = 'clean'
         if not HAVE_UVTOOLS:
             raise ImportError("uvtools required, install hera_cal[all]")
 

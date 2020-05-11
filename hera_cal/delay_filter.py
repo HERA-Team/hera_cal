@@ -202,8 +202,8 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
 
 
 def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_range=None, cache_dir=None,
-                                        res_outfilename=None, clobber=False, add_to_history='', update_cache=False,
-                                         **filter_kwargs):
+                                               res_outfilename=None, clobber=False, add_to_history='', update_cache=False,
+                                               **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
