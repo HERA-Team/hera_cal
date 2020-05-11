@@ -69,7 +69,35 @@ class DelayFilter(VisClean):
                        window=window, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                        edgecut_hi=edgecut_hi, alpha=alpha, overwrite=True, verbose=verbose)
 
-    def run_fourier_filter(self, )
+    def run_dayenu_foreground_filter(self, to_filter=None, weight_dict=None, standoff=100., horizon=1., min_dly=0.0,
+                                     tol=1e-9, skip_wgt=0.1, verbose=False, cache=None):
+        """
+        Run frequency domain uvtools.dspec.dayenu_filter on data stored in the object.
+
+        Parameters
+        ----------
+        to_filter: list of visibilities to filter in the (i,j,pol) format.
+            If None (the default), all visibilities are filtered.
+        weight_dict: dictionary or DataContainer with all the same keys as self.data.
+            Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
+            of self.flags. uvtools.dspec.delay_filter will renormalize to compensate
+        standoff: fixed additional delay beyond the horizon (in ns)
+        horizon: proportionality constant for bl_len where 1 is the horizon (full light travel time)
+        min_dly: minimum delay used for cleaning [ns]: if bl_len * horizon + standoff < min_dly, use min_dly.
+        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+        window: window function for filtering applied to the filtered axis.
+            See uvtools.dspec.gen_window for options.
+        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+            time. Skipped channels are then flagged in self.flags.
+        verbose: If True print feedback to stdout
+        cache, dictionary of precomputed filtering matrices. See uvtools.dspec.dayenu_filter for key format.
+        """
+        self.vis_fourier_filter(keys=to_filter, x=self.freqs, data=self.data, flags=self.flags, wgts=weight_dict, ax='freq',
+                                horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
+                                mode='dayenu', fitting_options=None, overwrite=True, verbose=verbose,
+                                max_contiguous_edge_flags=1000, skip_wgt=skip_wgt,
+                                output_refix='foreground_filtered')
 
     def get_filled_data(self):
         """Get data with flagged pixels filled with clean_model.

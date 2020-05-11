@@ -282,9 +282,11 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_fourier_filter(self,  keys=None, x=None, data=None, flags=None, wgts=None,
-                           ax='freq', mode='dayenu', horizon=1.0, standoff=0.0, min_dly=0.0, max_frate=None, min_dly,  fitting_options={} ,
-                           suppression=1e-9, output_prefix='filtered', zeropad=0,
-                           cache=None,  skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False, overwrite=False):
+                           ax='freq', horizon=1.0, standoff=0.0,
+                           min_dly=0.0, max_frate=None, tol=1e-9,
+                           output_prefix='filtered', zeropad=0,
+                           cache=None,  skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
+                           overwrite=False, mode='dayenu', fitting_options=None,):
         """
         A less flexible but more streamlined wrapper for fourier_filter that filters visibilities based
         on baseline length and standoff.
@@ -300,11 +302,25 @@ class VisClean(object):
         ax: str, axis to filter, options=['freq', 'time', 'both']
             Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
         horizon: coefficient to bl_len where 1 is the horizon [freq filtering]
-        standoff: fixed additional delay beyond the horizon (in nanosec) to CLEAN [freq filtering]
-        min_dly: max delay (in nanosec) used for freq CLEAN is never below this.
+        standoff: fixed additional delay beyond the horizon (in nanosec) to filter [freq filtering]
+        min_dly: max delay (in nanosec) used for freq filter is never below this.
         max_frate : max fringe rate (in milli-Hz) used for time filtering. See uvtools.dspec.vis_filter for options.
-        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-        mode: string
+        tol: The fraction of visibilities within the filter region to leave in.
+        output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
+        zeropad : int, number of bins to zeropad on both sides of FFT axis. Provide 2-tuple if axis='both'
+        cache: dict, optional
+            dictionary for caching fitting matrices.
+        skip_wgt : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+            time. Skipped channels are then flagged in self.flags.
+            Only works properly when all weights are all between 0 and 1.
+        max_contiguous_edge_flags : int, optional
+            if the number of contiguous samples at the edge is greater then this
+            at either side, skip.
+        overwrite : bool, if True, overwrite output modules with the same name
+                    if they already exist.
+        verbose : Lots of outputs.
+        mode: str,
             specify filtering mode. Currently supported are
             'clean', iterative clean
             'dpss_lsq', dpss fitting using scipy.optimize.lsq_linear
@@ -342,9 +358,6 @@ class VisClean(object):
                      'dpss_matrix' method (see above)
             'dayenu_clean', apply dayenu filter to data. Deconvolve
                      subtracted foregrounds with 'clean'.
-        filter2d: bool
-            specify whether filtering will be performed in 2d or 1d.
-            If filter is 1d, it will be applied across the -1 axis.
         fitting_options: dict
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
@@ -407,26 +420,66 @@ class VisClean(object):
                     'gain': The fraction of a residual used in each iteration. If this is too low, clean takes
                         unnecessarily long. If it is too high, clean does a poor job of deconvolving.
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
-
-        cache: dict, optional
-            dictionary for caching fitting matrices.
-
-        filter_dim, int optional
-            specify dimension to filter. default 1,
-            and if 2d filter, will use both dimensions.
-
-        max_contiguous_edge_flags : int, optional
-            if the number of contiguous samples at the edge is greater then this
-            at either side, skip .
         """
+        if cache is None:
+            cache = {}
+        if data is None:
+            data = self.data
+        if flags is None:
+            flags = self.flags
+        if keys is None:
+            keys = data.keys()
+        if wgts is None:
+            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
+        suppression_factors = [tol]
+        if max_frate is not None:
+            if isinstance(max_frate, (int, np.integer, float, np.float)):
+                max_frate = DataContainer(dict([(k, max_frate) for k in data]))
+            if not isinstance(max_frate, DataContainer):
+                raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
+            # convert kwargs to proper units
+            max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
+        for k in keys:
+            if ax == 'freq' or ax == 'both':
+                filter_centers_freq = [0.]
+                bl_dly = self.bllens[k[:2]]] * horizon + standoff/1e9
+                min_dly /= 1e9
+                filter_half_widths_freq = [np.max([bl_dly, min_dly])]
+            elif ax == 'time' or ax == 'both':
+                filter_centers_time= [0.]
+                if max_frate is not None:
+                    max_frate = max_frate * 1e-3
+                    filter_centers_time = [ 0. ]
+                    filter_half_widths_time = [ max_frate ]
+            if ax == 'both':
+                filter_centers = [filter_centers_time, filter_centers_freq]
+                filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
+                filter_centers = [filter_centers_time, filter_centers_freq]
+                suppression_factors = [[tol], [tol]]
+            else:
+                suppression_factors = [tol]
+                if ax == 'freq':
+                    filter_centers = filter_centers_freq
+                    filter_half_widths = filter_half_widths_freq
+                elif ax == 'time':
+                    filter_centers = filter_centers_time
+                    filter_half_widths = filter_half_widths_time
+
+        self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                            suppression_factors=suppression_factors, mode=mode, fitting_options=fitting_options,
+                            x=x, data=data, flags=flags, output_prefix=output_prefix, wgts=wgts, zeropad=zeropad,
+                            cache=cache, ax=ax, skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
+                            verbose=verbose, overwrite=overwrite)
+
 
 
     ###
     #TODO: zeropad here will error given its default option if 2d filtering is being used.
     ###
     def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, mode,
-                       fitting_options, x=None, data=None, flags=None, output_prefix='filtered', wgts=None, zeropad=0,
-                       cache=None, ax='freq', skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False, overwrite=False):
+                       fitting_options, x=None, data=None, flags=None, output_prefix='filtered',
+                       wgts=None, zeropad=None, cache=None, ax='freq', skip_wgt=0.1,
+                       max_contiguous_edge_flags=10, verbose=False, overwrite=False):
         """
         Your one-stop-shop for fourier filtering.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
@@ -437,11 +490,6 @@ class VisClean(object):
         Parameters
         -----------
         keys : list of bl-pol keys in data to CLEAN
-        data : DataContainer, data to clean. Default is self.data
-        flags : Datacontainer, flags to use. Default is self.flags
-        wgts : DataContainer, weights to use. Default is None.
-        ax: str, axis to filter, options=['freq', 'time', 'both']
-            Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
         filter_centers: array-like
             if not 2dfilter: 1d np.ndarray or list or tuple of floats
             specifying centers of rectangular fourier regions to filter.
@@ -500,9 +548,6 @@ class VisClean(object):
                      'dpss_matrix' method (see above)
             'dayenu_clean', apply dayenu filter to data. Deconvolve
                      subtracted foregrounds with 'clean'.
-        filter2d: bool
-            specify whether filtering will be performed in 2d or 1d.
-            If filter is 1d, it will be applied across the -1 axis.
         fitting_options: dict
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
@@ -565,18 +610,26 @@ class VisClean(object):
                     'gain': The fraction of a residual used in each iteration. If this is too low, clean takes
                         unnecessarily long. If it is too high, clean does a poor job of deconvolving.
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
-
+        x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
+            2-list/tuple of numpy arrays if 2d filter.
+        data : DataContainer, data to clean. Default is self.data
+        flags : Datacontainer, flags to use. Default is self.flags
+        wgts : DataContainer, weights to use. Default is None.
+        zeropad : int, number of bins to zeropad on both sides of FFT axis. Provide 2-tuple if axis='both'
         cache: dict, optional
             dictionary for caching fitting matrices.
-
-        filter_dim, int optional
-            specify dimension to filter. default 1,
-            and if 2d filter, will use both dimensions.
-
+        ax: str, axis to filter, options=['freq', 'time', 'both']
+            Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
+        skip_wgt : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+            time. Skipped channels are then flagged in self.flags.
+            Only works properly when all weights are all between 0 and 1.
         max_contiguous_edge_flags : int, optional
             if the number of contiguous samples at the edge is greater then this
-            at either side, skip .
-        """
+            at either side, skip.
+        verbose : Lots of outputs.
+        overwrite : bool, if True, overwrite output modules with the same name
+                    if they already exist.        """
         if cache is None:
             cache = {}
         if not HAVE_UVTOOLS:
@@ -585,6 +638,8 @@ class VisClean(object):
         # type checks
 
         if ax == 'both':
+            if zeropad is None:
+                zeropad = [0, 0]
             filterdim = [0, 1]
             filter2d = True
             if x is None:
@@ -594,9 +649,13 @@ class VisClean(object):
             filter2d = False
             if x is None:
                 x = self.times
+            if zeropad is None:
+                zeropad = 0
         elif ax == 'freq':
             filterdim = 1
             filter2d = False
+            if zeropad is None:
+                zeropad = 0
             if x is None:
                 x = self.freqs
         else:
