@@ -93,11 +93,11 @@ class DelayFilter(VisClean):
         verbose: If True print feedback to stdout
         cache, dictionary of precomputed filtering matrices. See uvtools.dspec.dayenu_filter for key format.
         """
-        self.vis_fourier_filter(keys=to_filter, x=self.freqs, data=self.data, flags=self.flags, wgts=weight_dict, ax='freq',
-                                horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
+        self.vis_fourier_filter(keys=to_filter, x=self.freqs, data=self.data, flags=self.flags, wgts=weight_dict,
+                                ax='freq', horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
                                 mode='dayenu', fitting_options=None, overwrite=True, verbose=verbose,
                                 max_contiguous_edge_flags=1000, skip_wgt=skip_wgt,
-                                output_refix='foreground_filtered')
+                                output_prefix='clean')
 
     def get_filled_data(self):
         """Get data with flagged pixels filled with clean_model.
@@ -198,6 +198,44 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         df.hd.data_array = None  # this forces a reload in the next loop
 
 
+def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_range=None, cache_file=None,
+                                        res_outfilename=None, clobber=False, add_to_history='', cache_file_out=None,
+                                         **filter_kwargs):
+    '''
+    Uses partial data loading and writing to perform delay filtering.
+
+    Arguments:
+        infilename: string path to data to uvh5 file to load
+        cal: optional string path to calibration file to apply to data before delay filtering
+        Nbls: the number of baselines to load at once.
+        spw_range: spw_range of data to delay-filter.
+        cache_file: string, optional, path to cache file that contains pre-computed dayenu matrices.
+                    see uvtools.dspec.dayenu_filter for key formats.
+        res_outfilename: path for writing the filtered visibilities with flags
+        clobber: if True, overwrites existing file at the outfilename
+        add_to_history: string appended to the history of the output file
+        update_cache_file: bool. If true, update the cache file with new filters that are computed.
+        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_dayenu_foreground_filter()
+    '''
+    #Load up the cache file with the most keys (precomputed filter matrices).
+    hd = io.HERAData(infilename, filetype='uvh5')
+    if calfile is not None:
+        calfile = io.HERACal(calfile)
+        calfile.read()
+    # loop over all baselines in increments of Nbls
+    for i in range(0, len(hd.bls), Nbls):
+        df = DelayFilter(hd, input_cal=calfile)
+        #update cache
+        df.read(bls=hd.bls[i:i + Nbls])
+        df.run_dayenu_foreground_filter(**filter_kwargs)
+        df.write_filtered_data(res_outfilename=res_outfilename,
+                               partial_write=True,
+                               clobber=clobber, add_to_history=add_to_history)
+        df.hd.data_array = None  # this forces a reload in the next loop
+        #replace the previous cache file (if its not being read)
+
+
+
 def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
@@ -225,5 +263,5 @@ def delay_filter_argparser():
     filt_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
     filt_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     filt_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
-
+    filt_options.add_argument("--spw_range", type=int, nargs=2, help="spectral window of data to foreground filter.")
     return a
