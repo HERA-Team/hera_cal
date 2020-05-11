@@ -12,6 +12,9 @@ from . import io
 from . import version
 from .vis_clean import VisClean
 
+import pickle
+import random
+
 
 class DelayFilter(VisClean):
     """
@@ -198,8 +201,8 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         df.hd.data_array = None  # this forces a reload in the next loop
 
 
-def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_range=None, cache_file=None,
-                                        res_outfilename=None, clobber=False, add_to_history='', cache_file_out=None,
+def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_range=None, cache_dir=None,
+                                        res_outfilename=None, clobber=False, add_to_history='', update_cache_files=False,
                                          **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
@@ -209,7 +212,7 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         cal: optional string path to calibration file to apply to data before delay filtering
         Nbls: the number of baselines to load at once.
         spw_range: spw_range of data to delay-filter.
-        cache_file: string, optional, path to cache file that contains pre-computed dayenu matrices.
+        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
                     see uvtools.dspec.dayenu_filter for key formats.
         res_outfilename: path for writing the filtered visibilities with flags
         clobber: if True, overwrites existing file at the outfilename
@@ -218,6 +221,21 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_dayenu_foreground_filter()
     '''
     #Load up the cache file with the most keys (precomputed filter matrices).
+    cache = {}
+    if not cache_dir is None:
+        cache_files = glob.glob(cache_dir+'/*')
+        #loop through cache files, load them.
+        #If there are new keys, add them to internal cache.
+        #If not, delete the reference matrices from memory.
+        for cache_file in cache_files:
+            cfile = open(cache_file, 'rb')
+            cache_t = pickle.load(cfile)
+            for key in cache_t:
+                if key in cache:
+                    del cache_t[key]
+                else:
+                    cache[key] = cache_t[key]
+    keys_before = cache.keys()
     hd = io.HERAData(infilename, filetype='uvh5')
     if calfile is not None:
         calfile = io.HERACal(calfile)
@@ -227,12 +245,21 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         df = DelayFilter(hd, input_cal=calfile)
         #update cache
         df.read(bls=hd.bls[i:i + Nbls])
-        df.run_dayenu_foreground_filter(**filter_kwargs)
+        df.run_dayenu_foreground_filter(cache=cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename,
                                partial_write=True,
                                clobber=clobber, add_to_history=add_to_history)
         df.hd.data_array = None  # this forces a reload in the next loop
-        #replace the previous cache file (if its not being read)
+    #Write a new cache file that only contains the newly computed matrices.
+    if update_cache_files:
+        keys_after = cache.keys()
+        new_filters = {k: cache[k] for k in cache if not k in keys_before}
+        #generate new file name
+        cache_file_name = '%032x'%random.getrandbits(128) + '.dayenu_cache'
+        cfile = open(cache_file_name, 'ab')
+        pickle.dump(new_filters, cfile)
+
+
 
 
 
