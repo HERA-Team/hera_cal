@@ -103,9 +103,9 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
 
     if mode == 'clean':
         filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, df, tol=tol, window=window,
-                                                                 skip_wgt=skip_wgt, maxiter=maxiter, fitting_options=fitting_options,
-                                                                 cache = cache)
+                                                                 skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
         # put back in unfilted values if skip_wgt is triggered
+        filtered /= rephasor
         for i, info_dict in enumerate(info):
             if info_dict.get('skipped', False):
                 filtered[i, :] = gains[i, :]
@@ -122,11 +122,11 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
                                                             suppression_factors=[tol], max_contiguous_edge_flags=1000)
         info = info[1]
         # put back in unfilted values if skip_wgt is triggered
+        filtered /= rephasor
         for i in info:
             if info[i] == 'skipped':
                 filtered[i, :] = gains[i, :]
 
-    filtered /= rephasor
 
 
     return filtered, info
@@ -384,12 +384,12 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
             in the time_blacklist_array. Regions crossing the 24h brach cut, e.g. [(23, 1)], are allowed.
         lat_lon_alt_degrees: length 3 array of telescope location in degreees and altitude in meters. Only used to convert
             times to LSTs if lst_blacklists is not empty
-        telescope_name: string name of telescope. Only used if lst_blacklists is not empty and lat_lon_alt_degrees 
+        telescope_name: string name of telescope. Only used if lst_blacklists is not empty and lat_lon_alt_degrees
             is not None. Currently, only "HERA" will work since it's position is hard-coded in this module.
 
     Returns:
         time_blacklist_array: boolean array with the same shape as time_grid in which blacklisted integrations are True'''
-    
+
     time_blacklist_array = np.zeros(len(time_grid), dtype=bool)
 
     # Calculate blacklisted times
@@ -430,7 +430,7 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
         freqs: numpy array of frequencies
         freq_blacklists: list of pairs of frequencies in the same units bounding (inclusively) the spectral regions that
             are to be marked as True in the freq_blacklist_array
-        chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions that are to be marked 
+        chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions that are to be marked
             as True in the freq_blacklist_array.
 
     Returns:
@@ -467,7 +467,7 @@ def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None):
 
 class CalibrationSmoother():
 
-    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False, 
+    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
                  pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
@@ -497,16 +497,16 @@ class CalibrationSmoother():
                 to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted times are not necessarily flagged.
             lst_blacklists:  list of pairs of LSTs in hours bounding (inclusively) regions of LST that are
-                to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate. 
+                to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 Regions crossing the 24h brach cut are acceptable (e.g. [(23, 1)] blacklists two total hours).
                 N.B. Blacklisted LSTS are not necessarily flagged.
-            lat_lon_alt_degrees: length 3 list or array of latitude (deg), longitude (deg), and altitude (m) of 
+            lat_lon_alt_degrees: length 3 list or array of latitude (deg), longitude (deg), and altitude (m) of
                 the array. Only used to convert LSTs to JD times. If the telescope_name in the calfits file is 'HERA',
                 this is not required.
-            freq_blacklists: list of pairs of frequencies in Hz hours bounding (inclusively) spectral regions 
+            freq_blacklists: list of pairs of frequencies in Hz hours bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted frequencies are not necessarily flagged.
-            chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions 
+            chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted channels are not necessarily flagged.
             pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
@@ -567,7 +567,7 @@ class CalibrationSmoother():
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         if load_cspa:
             self.cspa_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for ant in self.ants}
-        
+
         # Now fill those grid
         for ant in self.ants:
             for cal in self.cals:
@@ -580,7 +580,7 @@ class CalibrationSmoother():
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
                         self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
-        
+
         # Now build grid and fill it for chisq_grid, if desired
         if load_chisq:
             jpols = set([ant[1] for ant in self.ants])
