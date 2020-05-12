@@ -22,18 +22,18 @@ if a.window == 'tukey':
 # Run Delay Filter
 if a.partial_load_Nbls is not None:  # partial loading
     delay_filter.partial_load_dayenu_delay_filter_and_write(a.infilename, calfile=a.calfile,
-                                                     Nbls=a.partial_load_Nbls, spw_range=a.spw_range,
-                                                     cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
-                                                     clobber=a.clobber, update_cache=a.update_cache,
-                                                     add_to_history=' '.join(sys.argv), **filter_kwargs)
+                                                            Nbls=a.partial_load_Nbls, spw_range=a.spw_range,
+                                                            cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
+                                                            clobber=a.clobber, update_cache=a.update_cache,
+                                                            add_to_history=' '.join(sys.argv), **filter_kwargs)
 else:
     cache_dir = a.cache_dir
     cache = {}
-    if not cache_dir is None:
-        cache_files = glob.glob(cache_dir+'/*')
-        #loop through cache files, load them.
-        #If there are new keys, add them to internal cache.
-        #If not, delete the reference matrices from memory.
+    if cache_dir is not None:
+        cache_files = glob.glob(cache_dir + '/*')
+        # loop through cache files, load them.
+        # If there are new keys, add them to internal cache.
+        # If not, delete the reference matrices from memory.
         for cache_file in cache_files:
             cfile = open(cache_file, 'rb')
             cache_t = pickle.load(cfile)
@@ -51,8 +51,8 @@ else:
                            add_to_history=' '.join(sys.argv))
     if a.update_cache:
         keys_after = cache.keys()
-        new_filters = {k: cache[k] for k in cache if not k in keys_before}
-        #generate new file name
-        cache_file_name = '%032x'%random.getrandbits(128) + '.dayenu_cache'
+        new_filters = {k: cache[k] for k in cache if k not in keys_before}
+        # generate new file name
+        cache_file_name = '%032x' % random.getrandbits(128) + '.dayenu_cache'
         cfile = open(cache_file_name, 'ab')
         pickle.dump(new_filters, cfile)
