@@ -103,31 +103,28 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
 
     if mode == 'clean':
         filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, df, tol=tol, window=window,
-                                                                 skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
+                                                                     skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
         # put back in unfilted values if skip_wgt is triggered
         filtered /= rephasor
         for i, info_dict in enumerate(info):
             if info_dict.get('skipped', False):
                 filtered[i, :] = gains[i, :]
 
-
     elif mode in ['dpss_leastsq', 'dft_leastsq']:
         if cache is None:
             cache = {}
         if fitting_options is None:
             raise ValueError("fiting_options must be supplied for dpss or dft interpolation.")
-        filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains*rephasor, wgts=wgts, filter_centers=[0.],
-                                                            filter2d=False, filter_dim=1, filter_half_widths=[1. / (filter_scale * 10 ** 6)],
-                                                            mode=mode, skip_wgt=skip_wgt, fitting_options=fitting_options,
-                                                            suppression_factors=[tol], max_contiguous_edge_flags=1000)
+        filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, filter_centers=[0.],
+                                                           filter2d=False, filter_dim=1, filter_half_widths=[1. / (filter_scale * 10 ** 6)],
+                                                           mode=mode, skip_wgt=skip_wgt, fitting_options=fitting_options,
+                                                           suppression_factors=[tol], max_contiguous_edge_flags=1000)
         info = info[1]
         # put back in unfilted values if skip_wgt is triggered
         filtered /= rephasor
         for i in info:
             if info[i] == 'skipped':
                 filtered[i, :] = gains[i, :]
-
-
 
     return filtered, info
 

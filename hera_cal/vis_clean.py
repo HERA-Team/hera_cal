@@ -51,7 +51,7 @@ class VisClean(object):
         # attach HERAData
         self.clear_containers()
         self.hd = io.to_HERAData(input_data, filetype=filetype, **read_kwargs)
-        if not spw_range is None:
+        if spw_range is not None:
             if not isinstance(spw_range, (tuple, list)) or not len(spw_range) == 2:
                 raise ValueError("spw_range must be a length-2 list or tuple")
             if not isinstance(spw_range[0], (int, np.int)) or not isinstance(spw_range[1], (int, np.int)):
@@ -120,8 +120,6 @@ class VisClean(object):
             self.times = mdict['times']
             self.lsts = mdict['lsts']
             self.pols = mdict['pols']
-
-
             self.Nfreqs = len(self.freqs)
             self.Ntimes = len(self.times)  # Does not support BDA for now
             self.dlst = np.median(np.diff(self.lsts))
@@ -199,12 +197,12 @@ class VisClean(object):
         hc = io.to_HERACal(input_cal)
         # load gains
         cal_gains, cal_flags, cal_quals, cal_tquals = hc.read()
-        if not self.spw_range is None:
+        if self.spw_range is not None:
             for ant in cal_gains:
                 cal_gains[ant] = cal_gains[ant][:, self.spw_range[0]:self.spw_range[1]]
                 cal_flags[ant] = cal_flags[ant][:, self.spw_range[0]:self.spw_range[1]]
                 cal_quals[ant] = cal_quals[ant][:, self.spw_range[0]:self.spw_range[1]]
-            if not cal_tquals is None:
+            if cal_tquals is not None:
                 for pol in cal_tquals:
                     cal_tquals[pol] = cal_tquals[pol][:, self.spw_range[0]:self.spw_range[1]]
 
@@ -308,11 +306,11 @@ class VisClean(object):
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
-    def vis_fourier_filter(self,  keys=None, x=None, data=None, flags=None, wgts=None,
+    def vis_fourier_filter(self, keys=None, x=None, data=None, flags=None, wgts=None,
                            ax='freq', horizon=1.0, standoff=0.0,
                            min_dly=0.0, max_frate=None, tol=1e-9,
                            output_prefix='filtered', zeropad=0,
-                           cache=None,  skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
+                           cache=None, skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
                            overwrite=False, mode='dayenu', fitting_options=None,):
         """
         A less flexible but more streamlined wrapper for fourier_filter that filters visibilities based
@@ -469,15 +467,15 @@ class VisClean(object):
         for k in keys:
             if ax == 'freq' or ax == 'both':
                 filter_centers_freq = [0.]
-                bl_dly = self.bllens[k[:2]] * horizon + standoff/1e9
+                bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
                 min_dly /= 1e9
                 filter_half_widths_freq = [np.max([bl_dly, min_dly])]
             elif ax == 'time' or ax == 'both':
-                filter_centers_time= [0.]
+                filter_centers_time = [0.]
                 if max_frate is not None:
                     max_frate = max_frate * 1e-3
-                    filter_centers_time = [ 0. ]
-                    filter_half_widths_time = [ max_frate ]
+                    filter_centers_time = [0.]
+                    filter_half_widths_time = [max_frate]
             if ax == 'both':
                 filter_centers = [filter_centers_time, filter_centers_freq]
                 filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
@@ -497,12 +495,10 @@ class VisClean(object):
                             x=x, data=data, flags=flags, output_prefix=output_prefix, wgts=wgts, zeropad=zeropad,
                             cache=cache, ax=ax, skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
                             verbose=verbose, overwrite=overwrite)
-
-
-
     ###
-    #TODO: zeropad here will error given its default option if 2d filtering is being used.
+    # TODO: zeropad here will error given its default option if 2d filtering is being used.
     ###
+
     def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, mode,
                        fitting_options, x=None, data=None, flags=None, output_prefix='filtered',
                        wgts=None, zeropad=None, cache=None, ax='freq', skip_wgt=0.1,
@@ -688,7 +684,6 @@ class VisClean(object):
         else:
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
 
-
         # initialize containers
         containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data']]
         for i, dc in enumerate(containers):
@@ -697,7 +692,7 @@ class VisClean(object):
             containers[i] = getattr(self, dc)
         filtered_model, filtered_resid, filtered_flags, filtered_data = containers
         filtered_info = "{}_{}".format(output_prefix, 'info')
-        if not hasattr(self,filtered_info):
+        if not hasattr(self, filtered_info):
             setattr(self, filtered_info, {})
         filtered_info = getattr(self, filtered_info)
 
@@ -715,8 +710,6 @@ class VisClean(object):
         if wgts is None:
             wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
 
-
-
         # iterate over keys
         for k in keys:
             if k in filtered_model and overwrite is False:
@@ -725,7 +718,7 @@ class VisClean(object):
             echo("Starting fourier filter of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
             d = data[k]
             f = flags[k]
-            fw  = (~f).astype(np.float)
+            fw = (~f).astype(np.float)
             w = fw * wgts[k]
 
             if ax == 'freq':
@@ -733,43 +726,43 @@ class VisClean(object):
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
-                    x = np.hstack([x.min() - (1+np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
-                                   x.max() + (1+np.arange(zeropad)) * np.mean(np.diff(x))])
+                    x = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
+                                   x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'time':
                 # zeropad the data
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
-                    x = np.hstack([x.min() - (1+np.arange(zeropad)[::-1]) * np.mean(np.diff(x)),x,
-                                   x.max() + (1+np.arange(zeropad)) * np.mean(np.diff(x))])
+                    x = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
+                                   x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'both':
-                if not isinstance(zeropad, (list,tuple)) or not len(zeropad) == 2:
+                if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
                     raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
                 if not (isinstance(zeropad[0], (int, np.int)) and isinstance(zeropad[0], (int, np.int))):
-                    raise ValueError("zeropad values must all be integers. You provided %s"%(zeropad))
+                    raise ValueError("zeropad values must all be integers. You provided %s" % (zeropad))
                 if zeropad[0] > 0 and zeropad[1] > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad[1], axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad[1], axis=1)
                     d, _ = zeropad_array(d, zeropad=zeropad[0], axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad[0], axis=0)
-                    x = [np.hstack([x[m].min() - (np.arange(zeropad)[::-1]+1) * np.mean(np.diff(x[m])),x[m],x[m].max() + (1+np.arange(zeropad)) * np.mean(np.diff(x[m]))]) for m in range(2)]
-            mdl, res ,info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers,
+                    x = [np.hstack([x[m].min() - (np.arange(zeropad)[::-1] + 1) * np.mean(np.diff(x[m])), x[m], x[m].max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x[m]))]) for m in range(2)]
+            mdl, res, info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
                                                   suppression_factors=suppression_factors, mode=mode,
                                                   filter2d=filter2d, fitting_options=fitting_options,
                                                   filter_dim=filterdim, cache=cache, skip_wgt=skip_wgt,
                                                   max_contiguous_edge_flags=max_contiguous_edge_flags)
 
-            #unzeropad array and put in skip flags.
+            # unzeropad array and put in skip flags.
             if ax == 'freq':
                 if mode == 'clean':
-                    info={0:{}, 1:info}
+                    info = {0: {}, 1: info}
                 if zeropad > 0:
                     mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
                     res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
             elif ax == 'time':
                 if mode == 'clean':
-                    info = {0:info, 1:{}}
+                    info = {0: info, 1: {}}
                 if zeropad > 0:
                     mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
                     res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
@@ -790,22 +783,20 @@ class VisClean(object):
                                 elif dim == 1:
                                     flgs[i] = True
             else:
-                if not ax=='both':
+                if not ax == 'both':
                     for dim in range(2):
-                        if len(info[dim])>0:
+                        if len(info[dim]) > 0:
                             for inf in info[dim]:
                                 if inf['skipped']:
-                                    if dim ==  0:
-                                        flgs[:,i] = True
+                                    if dim == 0:
+                                        flgs[:, i] = True
                                     elif dim == 1:
                                         flgs[i] = True
                 else:
                     if w.max() > 0.0:
                         flgs = np.zeros_like(mdl, type=np.bool)
                     else:
-                        info = {'skipped':True}
-
-
+                        info = {'skipped': True}
 
             filtered_model[k] = mdl
             filtered_resid[k] = res
@@ -1160,7 +1151,6 @@ class VisClean(object):
             self.delays *= 1e9
             self.frates *= 1e3
 
-
     def interleave_products(self, data=None, data2=None, keys=None, assign='interleaved_product', overwrite=False):
         """
         Take products of alternate time samples. Use to compute PS estimates without a
@@ -1185,7 +1175,7 @@ class VisClean(object):
             keys = data.keys()
         iproducts = getattr(self, assign)
         for k in keys:
-        #if data2 is None, interleave time steps
+            # if data2 is None, interleave time steps
             if data2 is None:
                 if self.Ntimes % 2 == 0:
                     iproducts[k] = data[k][::2] * np.conj(data[k][1::2])
@@ -1193,9 +1183,6 @@ class VisClean(object):
                     iproducts[k] = data[k][:-1:2] * np.conj(data[k][1:-1:2])
             else:
                 iproducts[k] = data[k] * np.conj(data2[k])
-
-
-
 
     def factorize_flags(self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False):
         """

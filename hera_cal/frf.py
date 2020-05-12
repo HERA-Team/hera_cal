@@ -333,7 +333,6 @@ class FRFilter(VisClean):
                                 verbose=verbose, max_contiguous_edge_flags=10000, skip_wgt=skip_wgt,
                                 cache=cache, output_prefix='fringe_rate_filtered')
 
-
     def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, wgt_by_nsample=True,
                      rephase=False, verbose=True, output_prefix='avg', keys=None, overwrite=False):
         """
