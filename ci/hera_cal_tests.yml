@@ -20,6 +20,9 @@ dependencies:
   - pyephem
   - basemap
   - future
+  - pytest-cov
+  - coveralls
+
   - pip:
     - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
     - git+https://github.com/HERA-Team/hera_qm
