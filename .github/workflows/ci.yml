@@ -1,0 +1,60 @@
+name: Run Tests
+
+on:
+  pull_request:
+    branches: [ master ]
+  push:
+    branches: [ master ]
+
+jobs:
+  tests:
+    name: Tests
+    env:
+      ENV_NAME: hera_qm_tests
+      PYTHON: ${{ matrix.python-version }}
+      OS: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: [3.6, 3.7, 3.8]
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@master
+      with:
+        fetch-depth: 1
+
+    - name: Get Miniconda (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O $HOME/miniconda.sh;
+        bash $HOME/miniconda.sh -b -p $HOME/miniconda
+
+    - name: Get Miniconda (Mac OS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O $HOME/miniconda.sh;
+        bash $HOME/miniconda.sh -b -p $HOME/miniconda
+
+    - name: Setup Environment
+      run: |
+        export PATH="$HOME/miniconda/bin:$PATH"
+        ./ci/install_conda.sh
+
+    - name: Install
+      run: |
+        export PATH="$HOME/miniconda/bin:$PATH"
+        source activate ${ENV_NAME}
+        pip install .
+
+    - name: Run Tests
+      run: |
+        export PATH="$HOME/miniconda/bin:$PATH"
+        source activate $ENV_NAME
+        pytest --cov-report xml:./coverage.xml
+
+    - name: Upload Coverage (Ubuntu)
+      if: matrix.os == 'ubuntu-latest' && success()
+      run: |
+        bash <(curl -s https://codecov.io/bash) -t ${{ secrets.CODECOV_TOKEN }}
