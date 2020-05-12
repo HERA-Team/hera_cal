@@ -1,7 +1,7 @@
 # hera_cal
+[![](https://github.com/HERA-Team/hera_cal/workflows/Run%20Tests/badge.svg?branch=master)](https://github.com/HERA-Team/hera_qm/actions)
+[![codecov](https://codecov.io/gh/HERA-Team/hera_cal/branch/master/graph/badge.svg)](https://codecov.io/gh/HERA-Team/hera_cal)
 
-[![Build Status](https://travis-ci.org/HERA-Team/hera_cal.svg?branch=master)](https://travis-ci.org/HERA-Team/hera_cal)
-[![Coverage Status](https://coveralls.io/repos/github/HERA-Team/hera_cal/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/hera_cal?branch=master)
 
 The hera_cal package includes modules and scripts for the calibration and LST-binning of [Hydrogen Epoch of Reionization Array (HERA)](http://reionization.org/) data, along with various helpful methods for filtering and smoothing of data and calibration solutions. These are meant for use interatively, as part of offline analysis (e.g. [IDR 2.2](http://reionization.org/manual_uploads/HERA069_IDR2.2_Memo_v2.html)), or as part of HERA's realtime analysis pipeline using [`hera_opm`](https://github.com/HERA-Team/hera_opm/). 
 
