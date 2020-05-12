@@ -48,15 +48,16 @@ jobs:
         source activate ${ENV_NAME}
         pip install .
 
+    - name: Python Style Checker
+      run: |
+        pycodestyle . --ignore=E501,W291,W293,W503,W601
+
     - name: Run Tests
       run: |
         export PATH="$HOME/miniconda/bin:$PATH"
         source activate $ENV_NAME
         pytest --cov-report xml:./coverage.xml
 
-    - name: Python Style Checker
-      run: |
-        pycodestyle . --ignore=E501,W291,W293,W503,W601
 
     - name: Upload Coverage (Ubuntu)
       if: matrix.os == 'ubuntu-latest' && success()
