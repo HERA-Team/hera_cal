@@ -1,9 +1,9 @@
 # hera_cal
-[![](https://github.com/HERA-Team/hera_cal/workflows/Run%20Tests/badge.svg?branch=master)](https://github.com/HERA-Team/hera_qm/actions)
+[![](https://github.com/HERA-Team/hera_cal/workflows/Run%20Tests/badge.svg?branch=master)](https://github.com/HERA-Team/hera_cal/actions)
 [![codecov](https://codecov.io/gh/HERA-Team/hera_cal/branch/master/graph/badge.svg)](https://codecov.io/gh/HERA-Team/hera_cal)
 
 
-The hera_cal package includes modules and scripts for the calibration and LST-binning of [Hydrogen Epoch of Reionization Array (HERA)](http://reionization.org/) data, along with various helpful methods for filtering and smoothing of data and calibration solutions. These are meant for use interatively, as part of offline analysis (e.g. [IDR 2.2](http://reionization.org/manual_uploads/HERA069_IDR2.2_Memo_v2.html)), or as part of HERA's realtime analysis pipeline using [`hera_opm`](https://github.com/HERA-Team/hera_opm/). 
+The hera_cal package includes modules and scripts for the calibration and LST-binning of [Hydrogen Epoch of Reionization Array (HERA)](http://reionization.org/) data, along with various helpful methods for filtering and smoothing of data and calibration solutions. These are meant for use interatively, as part of offline analysis (e.g. [IDR 2.2](http://reionization.org/manual_uploads/HERA069_IDR2.2_Memo_v2.html)), or as part of HERA's realtime analysis pipeline using [`hera_opm`](https://github.com/HERA-Team/hera_opm/).
 
 This package only officially supports python 3, though most functionality will still work in python 2.
 
@@ -22,7 +22,7 @@ This package only officially supports python 3, though most functionality will s
 
 * `hera_cal.redcal`: redundant calibration module, with `firstcal`, `logcal`, `lincal`, and `omnical` and helper functions for finding and manipulating sets of redundant baselines.
 
-* `hera_cal.abscal`: absolute calibnration module, largely used to calibrate out redcal degeneraices post-redundant calibration using an externally calibrated data set. 
+* `hera_cal.abscal`: absolute calibnration module, largely used to calibrate out redcal degeneraices post-redundant calibration using an externally calibrated data set.
 
 * `hera_cal.apply_cal`: functions to apply calibration solutions (and flags) to data in memory or on disk
 
@@ -63,7 +63,7 @@ This package only officially supports python 3, though most functionality will s
 * `apply_cal.py`: apply calibration solutions (as associated antenna-based flags) to data
 * `auto_reflection_run.py`: estimate cable reflection gains from autocorrelations
 * `delay_filter_run.py`: perform delay filtering outside the wedge
-* `extract_autos.py`: extract autocorrelation visibilities and save them 
+* `extract_autos.py`: extract autocorrelation visibilities and save them
 * `extract_hh.py`: extract data only from the core HERA Hex
 * `lstbin_run.py`: run the LST-binner
 * `noise_from_autos.py`: infer noise on visibilities and save as per-antenna noise standard deviation
@@ -73,13 +73,13 @@ This package only officially supports python 3, though most functionality will s
 
 ### Documentation
 
-The only guaranteed up-to-date documentation of individual functions and classes are their docstrings. 
+The only guaranteed up-to-date documentation of individual functions and classes are their docstrings.
 
 The [IDR2.2 Release Memo](https://github.com/HERA-Team/hera_sandbox/blob/master/jsd/IDR2_2/IDR2.2_Memo.ipynb) is a jupyter notebook that can run at NRAO and contains useful examples of data access and visualization.
 
 Many modules have [instructional notebooks avaible here](../tree/master/scripts/notebooks), though some of those are out of date.
 
-While `hera_cal` has a [Read the Docs](http://hera_cal.readthedocs.io/en/latest/), it is wildly out of date. 
+While `hera_cal` has a [Read the Docs](http://hera_cal.readthedocs.io/en/latest/), it is wildly out of date.
 
 
 ## Installation
@@ -88,7 +88,7 @@ one can use `python setup.py install`. This will attempt to install all dependen
 If you prefer to explicitly manage dependencies, see below.
 
 ### Dependencies
-Those who use `conda` (preferred) may wish to install the following manually before 
+Those who use `conda` (preferred) may wish to install the following manually before
 installing `hera_cal`:
 
 `conda install -c conda-forge "numpy>=1.10" scipy scikit-learn h5py astropy pyuvdata`
@@ -100,7 +100,7 @@ Other dependencies that will be installed from PyPI on-the-fly are:
 * [linsolve](https://github.com/HERA-Team/linsolve)
 * [hera_qm](https://github.com/HERA-Team/hera_qm)
 
-`hera_cal` also has the _optional_ dependencies of `aipy` and `uvtools`, and some 
+`hera_cal` also has the _optional_ dependencies of `aipy` and `uvtools`, and some
 functions will not work without this dependency. To install all optional dependencies, use
 `pip install .[all]` or `pip install git+git://github.com/HERA-Team/hera_cal.git[all]`.
 
@@ -111,7 +111,7 @@ a fresh `conda` environment. These steps will get you up and running::
     $ conda create -n hera_cal python=3
     $ conda activate hera_cal
     $ conda env update -n hera_cal -f environment.yml
-    $ pip install -e . 
+    $ pip install -e .
 
 This installs extra packages than those required to use `hera_cal`, including `hera_sim`
 and `pytest`.
@@ -120,6 +120,6 @@ and `pytest`.
 Tests use the `pytest` framework. To run all tests, call `pytest` or
 `python -m pytest` from the base directory of the repo.
 
-## Issues and Contribution 
+## Issues and Contribution
 
 Issues [are tracked here](https://github.com/HERA-Team/hera_cal/issues). Please submit bugs, feature requests, etc. Contributions to this repo via pull request are welcome, though they require thorough peer review before merging into the master branch. To the best of our ability, all code should be covered with tests. The primary maintainer of `hera_cal` is [@jsdillon](https://github.com/jsdillon). Other maintiners who can update the master branch include [@AaronParsons](https://github.com/AaronParsons), [@nkern](https://github.com/nkern), [@adampbeardsley](https://github.com/adampbeardsley), and [@plaplant](https://github.com/plaplant).
