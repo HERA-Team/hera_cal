@@ -50,6 +50,8 @@ jobs:
 
     - name: Python Style Checker
       run: |
+        export PATH="$HOME/miniconda/bin:$PATH"
+        source activate ${ENV_NAME}
         pycodestyle . --ignore=E501,W291,W293,W503,W601
 
     - name: Run Tests
