@@ -10,7 +10,7 @@ jobs:
   tests:
     name: Tests
     env:
-      ENV_NAME: hera_qm_tests
+      ENV_NAME: hera_cal_tests
       PYTHON: ${{ matrix.python-version }}
       OS: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
