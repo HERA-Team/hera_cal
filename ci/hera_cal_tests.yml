@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
   - pip
-  - aipy>=3.0.0rc2
+  - aipy>=3.2.3
   - astropy
   - h5py
   - numpy>=1.10
