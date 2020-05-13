@@ -246,16 +246,16 @@ class Test_VisClean(object):
 
         # basic 2d clean
         V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
-                    filt2d_mode='plus')
+                             filt2d_mode='plus')
         assert 'success' in V.clean_info[(24, 25, 'ee')]
 
         V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
-                    overwrite=True, filt2d_mode='plus')
+                             overwrite=True, filt2d_mode='plus')
         assert 'skipped' in V.clean_info[(24, 25, 'ee')]
 
         # test fft data
         V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
-                    filt2d_mode='rect')
+                             filt2d_mode='rect')
 
         # assert foreground peak is at 0 delay bin
         V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='freq', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
@@ -281,8 +281,6 @@ class Test_VisClean(object):
         flags = V.factorize_flags(inplace=False, time_thresh=0.05)
         assert np.all(flags[(24, 25, 'ee')][45, :])
         assert np.all(flags[(24, 25, 'ee')][:, 5])
-
-
 
     def test_fft_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
