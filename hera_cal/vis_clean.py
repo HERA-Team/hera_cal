@@ -1151,38 +1151,6 @@ class VisClean(object):
             self.delays *= 1e9
             self.frates *= 1e3
 
-    def interleave_products(self, data=None, data2=None, keys=None, assign='interleaved_product', overwrite=False):
-        """
-        Take products of alternate time samples. Use to compute PS estimates without a
-        noise bias.
-        Args:
-            data : DataContainer
-                   Object to get interleaves from.
-            data2 : DataContainer
-                   Optional second data container to compute interleaved products from
-            keys : list of tuples
-                 List of keys to compute interleaved products from
-            assign : str
-                 Name of DataContainer to attach to self. Default is self.iproducts
-            overwrite : bool
-                 If iproducts[key] already exists, overwrite its contents.
-        """
-        if not hasattr(self, assign):
-            setattr(self, assign, DataContainer({}))
-        if data is None:
-            data = self.data
-        if keys is None:
-            keys = data.keys()
-        iproducts = getattr(self, assign)
-        for k in keys:
-            # if data2 is None, interleave time steps
-            if data2 is None:
-                if self.Ntimes % 2 == 0:
-                    iproducts[k] = data[k][::2] * np.conj(data[k][1::2])
-                else:
-                    iproducts[k] = data[k][:-1:2] * np.conj(data[k][1:-1:2])
-            else:
-                iproducts[k] = data[k] * np.conj(data2[k])
 
     def factorize_flags(self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False):
         """
