@@ -83,7 +83,7 @@ class Test_VisClean(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             V = VisClean(fname, filetype='uvh5', spw_range=[0, 5000])
-            assert V.Nfreqs = V.spw_range[1]
+            assert V.Nfreqs == V.spw_range[1]
 
     @pytest.mark.filterwarnings("ignore:Selected polarization values are not evenly spaced")
     def test_read_write(self):

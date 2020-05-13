@@ -309,7 +309,7 @@ class VisClean(object):
     def vis_fourier_filter(self, keys=None, x=None, data=None, flags=None, wgts=None,
                            ax='freq', horizon=1.0, standoff=0.0,
                            min_dly=0.0, max_frate=None, tol=1e-9,
-                           output_prefix='filtered', zeropad=0,
+                           output_prefix='clean', zeropad=0,
                            cache=None, skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
                            overwrite=False, mode='dayenu', fitting_options=None,):
         """
