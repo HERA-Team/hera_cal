@@ -1151,7 +1151,6 @@ class VisClean(object):
             self.delays *= 1e9
             self.frates *= 1e3
 
-
     def factorize_flags(self, keys=None, spw_ranges=None, time_thresh=0.05, inplace=False):
         """
         Factorize self.flags into two 1D time and frequency masks.
