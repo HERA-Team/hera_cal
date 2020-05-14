@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
-
+import warnings
 import pytest
 import numpy as np
 from copy import deepcopy
@@ -75,6 +75,7 @@ class Test_VisClean(object):
         assert not hasattr(V2, 'hc')
 
         # add some checks for new spw argument
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         pytest.raises(ValueError, VisClean, fname, filetype='uvh5', spw_range='0,2')
         pytest.raises(ValueError, VisClean, fname, filetype='uvh5', spw_range=[0, 2.3])
         pytest.raises(ValueError, VisClean, fname, filetype='uvh5', spw_range=[-2, 3])
@@ -181,92 +182,70 @@ class Test_VisClean(object):
 
         # basic freq clean
         V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)
-        assert np.all([i['success'] for i in V.clean_info[(24, 25, 'ee')]])
+        assert np.all(['success' in V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+
+        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True, zeropad=10)
+        assert np.all(['success' in V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
         # basic time clean
         V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True)
-        assert 'skipped' in V.clean_info[(24, 25, 'ee')][0]
-        assert 'success' in V.clean_info[(24, 25, 'ee')][3]
-
-        # basic 2d clean
-        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
-                             filt2d_mode='plus')
-        assert 'success' in V.clean_info[(24, 25, 'ee')]
-
-        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
-                             overwrite=True, filt2d_mode='plus')
-        assert 'skipped' in V.clean_info[(24, 25, 'ee')]
-
-        # test fft data
-        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
-                             filt2d_mode='rect')
-
-        # assert foreground peak is at 0 delay bin
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='freq', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
-        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
-
-        # assert foreground peak is at 0 FR bin (just due to FR resolution)
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='time', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
-        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=1)) == 30
-
-        # assert foreground peak is at both 0 FR and 0 delay bin
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='both', window='tukey', alpha=0.5, edgecut_low=10, edgecut_hi=10, overwrite=True)
-        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
-        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=1)) == 30
-
-        # check various kwargs
-        V.fft_data(keys=[(24, 25, 'ee')], assign='foo', ifft=True, fftshift=True)
-        delays = V.delays
-        assert hasattr(V, 'foo')
-        V.fft_data(keys=[(24, 25, 'ee')], assign='foo', overwrite=True, ifft=False, fftshift=False)
-        np.testing.assert_array_almost_equal(delays, np.fft.fftshift(V.delays))
-
-        # test flag factorization
-        flags = V.factorize_flags(inplace=False, time_thresh=0.05)
-        assert np.all(flags[(24, 25, 'ee')][45, :])
-        assert np.all(flags[(24, 25, 'ee')][:, 5])
-
-    @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
-    def test_fourier_filter(self):
-        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
-        V = VisClean(fname, filetype='uvh5')
-        V.read()
-
-        # just need to make sure various kwargs run through
-        # actual code unit-testing coverage has been done in uvtools.dspec
-
-        # basic freq clean
-        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)
-        assert np.all([i['success'] for i in V.clean_info[(24, 25, 'ee')]])
+        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][1] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
 
         # basic time clean
-        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True)
-        assert 'skipped' in V.clean_info[(24, 25, 'ee')][0]
-        assert 'success' in V.clean_info[(24, 25, 'ee')][3]
+        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True, zeropad=10, max_contiguous_edge_flags=100)
+        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][1] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
 
         # basic 2d clean
-        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
-                             filt2d_mode='plus')
-        assert 'success' in V.clean_info[(24, 25, 'ee')]
+        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True, mode='dpss_leastsq',
+                             fitting_options=[{'eigenval_cutoff':[1e-12]},{'eigenval_cutoff':[1e-12]}])
+        assert np.all(['success' in V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
+        assert np.all(['success' in V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+
+        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True, mode='dpss_leastsq',
+                             fitting_options=[{'eigenval_cutoff':[1e-12]},{'eigenval_cutoff':[1e-12]}], zeropad=[10, 10], max_contiguous_edge_flags=100)
+        assert np.all(['success' in V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
+        assert np.all(['success' in V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
         V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
-                             overwrite=True, filt2d_mode='plus')
-        assert 'skipped' in V.clean_info[(24, 25, 'ee')]
+                             overwrite=True)
+        assert np.all(['skipped' in V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all(['skipped' in V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
 
         # test fft data
-        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
-                             filt2d_mode='rect')
+        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10.,
+                             overwrite=True, mode='dpss_leastsq',
+                             fitting_options=[{'eigenval_cutoff':[1e-12]},{'eigenval_cutoff':[1e-12]}])
 
         # assert foreground peak is at 0 delay bin
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='freq', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='freq', edgecut_low=10, edgecut_hi=10, overwrite=True)
         assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
 
         # assert foreground peak is at 0 FR bin (just due to FR resolution)
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='time', window='hann', edgecut_low=10, edgecut_hi=10, overwrite=True)
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='time', edgecut_low=10, edgecut_hi=10, overwrite=True)
         assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=1)) == 30
 
         # assert foreground peak is at both 0 FR and 0 delay bin
-        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='both', window='tukey', alpha=0.5, edgecut_low=10, edgecut_hi=10, overwrite=True)
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='both', alpha=0.5, edgecut_low=10, edgecut_hi=10, overwrite=True)
+        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
+        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=1)) == 30
+
+
+        # test fft data with clean.
+        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10.,
+                             overwrite=True, mode='clean', fitting_options={})
+
+        # assert foreground peak is at 0 delay bin
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='freq', edgecut_low=10, edgecut_hi=10, overwrite=True)
+        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
+
+        # assert foreground peak is at 0 FR bin (just due to FR resolution)
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='time', edgecut_low=10, edgecut_hi=10, overwrite=True)
+        assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=1)) == 30
+
+        # assert foreground peak is at both 0 FR and 0 delay bin
+        V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='both', alpha=0.5, edgecut_low=10, edgecut_hi=10, overwrite=True)
         assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
         assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=1)) == 30
 

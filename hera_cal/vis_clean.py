@@ -22,7 +22,7 @@ from . import version
 from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
-
+import warnings
 
 class VisClean(object):
     """
@@ -133,9 +133,9 @@ class VisClean(object):
             if self.spw_range is None:
                 self.spw_range = (0, self.Nfreqs)
             if self.spw_range[1] > self.Nfreqs:
-                raise warning("spw_range[1] exceeds length of frequency dimension."
+                warnings.warn("spw_range[1] exceeds length of frequency dimension."
                               "Setting spw_range to full frequency band.")
-                self.spw_range[1] == self.Nfreqs
+                self.spw_range[1] = self.Nfreqs
             self.freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
@@ -308,8 +308,8 @@ class VisClean(object):
 
     def vis_fourier_filter(self, keys=None, x=None, data=None, flags=None, wgts=None,
                            ax='freq', horizon=1.0, standoff=0.0,
-                           min_dly=0.0, max_frate=None, tol=1e-9,
-                           output_prefix='clean', zeropad=0,
+                           min_dly=10.0, max_frate=None, tol=1e-9,
+                           output_prefix='clean', zeropad=None,
                            cache=None, skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
                            overwrite=False, mode='dayenu', fitting_options=None,):
         """
@@ -455,7 +455,10 @@ class VisClean(object):
         if keys is None:
             keys = data.keys()
         if wgts is None:
-            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
+            wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in keys]))
+        else:
+            # make sure flagged channels have zero weight, regardless of what user supplied.
+            wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         suppression_factors = [tol]
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.float)):
@@ -464,18 +467,18 @@ class VisClean(object):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
             # convert kwargs to proper units
             max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
+
         for k in keys:
             if ax == 'freq' or ax == 'both':
                 filter_centers_freq = [0.]
                 bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
-                min_dly /= 1e9
-                filter_half_widths_freq = [np.max([bl_dly, min_dly])]
-            elif ax == 'time' or ax == 'both':
+                filter_half_widths_freq = [np.max([bl_dly, min_dly / 1e9])]
+            if ax == 'time' or ax == 'both':
                 filter_centers_time = [0.]
                 if max_frate is not None:
-                    max_frate = max_frate * 1e-3
+                    max_fr = max_frate[k] * 1e-3
                     filter_centers_time = [0.]
-                    filter_half_widths_time = [max_frate]
+                    filter_half_widths_time = [max_fr]
             if ax == 'both':
                 filter_centers = [filter_centers_time, filter_centers_freq]
                 filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
@@ -489,12 +492,11 @@ class VisClean(object):
                 elif ax == 'time':
                     filter_centers = filter_centers_time
                     filter_half_widths = filter_half_widths_time
-
-        self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                            suppression_factors=suppression_factors, mode=mode, fitting_options=fitting_options,
-                            x=x, data=data, flags=flags, output_prefix=output_prefix, wgts=wgts, zeropad=zeropad,
-                            cache=cache, ax=ax, skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
-                            verbose=verbose, overwrite=overwrite)
+            self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                                suppression_factors=suppression_factors, mode=mode, fitting_options=fitting_options,
+                                x=x, data=data, flags=flags, output_prefix=output_prefix, wgts=wgts, zeropad=zeropad,
+                                cache=cache, ax=ax, skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
+                                verbose=verbose, overwrite=overwrite)
     ###
     # TODO: zeropad here will error given its default option if 2d filtering is being used.
     ###
@@ -666,12 +668,12 @@ class VisClean(object):
             filterdim = [0, 1]
             filter2d = True
             if x is None:
-                x = [self.times, self.freqs]
+                x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
         elif ax == 'time':
             filterdim = 0
             filter2d = False
             if x is None:
-                x = self.times
+                x = (self.times - np.mean(self.times)) * 3600. * 24.
             if zeropad is None:
                 zeropad = 0
         elif ax == 'freq':
@@ -708,8 +710,10 @@ class VisClean(object):
 
         # get weights
         if wgts is None:
-            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
-
+            wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in keys]))
+        else:
+            # make sure flagged channels have zero weight, regardless of what user supplied.
+            wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         # iterate over keys
         for k in keys:
             if k in filtered_model and overwrite is False:
@@ -775,9 +779,9 @@ class VisClean(object):
             flgs = np.zeros_like(mdl, dtype=np.bool)
             if not mode == 'clean':
                 for dim in range(2):
-                    if len(info[dim]) > 0:
-                        for i in range(len(info[dim])):
-                            if info[dim][i] == 'skipped':
+                    if len(info['status']['axis_%d'%dim]) > 0:
+                        for i in range(len(info['status']['axis_%d'%dim])):
+                            if info['status']['axis_%d'%dim][i] == 'skipped':
                                 if dim == 0:
                                     flgs[:, i] = True
                                 elif dim == 1:
@@ -794,7 +798,7 @@ class VisClean(object):
                                         flgs[i] = True
                 else:
                     if w.max() > 0.0:
-                        flgs = np.zeros_like(mdl, type=np.bool)
+                        flgs = np.zeros_like(mdl, dtype=np.bool)
                     else:
                         info = {'skipped': True}
 
@@ -803,6 +807,7 @@ class VisClean(object):
             filtered_data[k] = mdl + res * fw
             filtered_flags[k] = flgs
             filtered_info[k] = info
+
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
