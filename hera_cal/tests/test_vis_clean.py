@@ -236,6 +236,10 @@ class Test_VisClean(object):
         V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10.,
                              overwrite=True, mode='clean', fitting_options={})
 
+        # test fft data with clean.
+        V.vis_fourier_filter(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10.,
+                             overwrite=True, mode='clean', fitting_options={}, zeropad=[10, 10])
+
         # assert foreground peak is at 0 delay bin
         V.fft_data(data=V.clean_model, keys=[(24, 25, 'ee')], ax='freq', edgecut_low=10, edgecut_hi=10, overwrite=True)
         assert np.argmax(np.mean(np.abs(V.dfft[(24, 25, 'ee')]), axis=0)) == 32
