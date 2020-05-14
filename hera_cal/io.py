@@ -541,7 +541,9 @@ class HERAData(UVData):
             for bl in nsamples.keys():
                 self._set_slice(self.nsample_array, bl, nsamples[bl])
 
-    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False, add_to_history='', **kwargs):
+    def partial_write(self, output_path, data=None, flags=None, nsamples=None,
+                      clobber=False, inplace=False, add_to_history='',
+                      selection_axes=None, **kwargs):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
         input_data file called on __init__. Any data/flags/nsamples left as None will be written
@@ -809,7 +811,7 @@ def get_file_times(filepaths, filetype='uvh5'):
             lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
             int_time_rad = np.median(np.diff(lst_array))
             int_time = np.median(np.diff(time_array))
-            
+
         dlsts.append(int_time_rad)
         dtimes.append(int_time)
         file_lst_arrays.append(lst_array)
@@ -918,13 +920,13 @@ def read_redcal_meta(meta_filename):
         freqs = infile['header']['freqs'][:]
         times = infile['header']['times'][:]
         lsts = infile['header']['lsts'][:]
-        antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'], 
+        antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'],
                                                infile['header']['antpos'][:, :])}
         history = infile['header']['history'][()].tostring().decode('utf8')
 
         # reconstruct firstcal metadata
         fc_meta = {}
-        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8')) 
+        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8'))
                 for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
         fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
         fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}

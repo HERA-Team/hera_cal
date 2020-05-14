@@ -61,9 +61,6 @@ class Test_DelayFilter(object):
             assert dfil.clean_model[k].shape == (60, 64)
             assert k in dfil.clean_info
 
-
-
-
     def test_write_filtered_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
@@ -122,6 +119,40 @@ class Test_DelayFilter(object):
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
+
+    def test_partial_load_dayenu_filter_and_write(self):
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+        cdir = os.getcwd()
+        cdir = os.path.join(cdir, 'cache_temp')
+        #make a cache directory
+        if os.path.isdir(cdir):
+            shutil.rmtree(cdir)
+        os.mkdir(cdir)
+        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        #run dayenu filter
+        df.partial_load_dayenu_delay_filter_and_write(uvh5, res_outfilename=outfilename,
+                                                      cache_dir=cdir,
+                                                      Nbls=1, clobber=True,
+                                                      spw_range=(0,32), update_cache=True)
+        hd = io.HERAData(outfilename)
+        assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
+        os.remove(outfilename)
+        #run again using computed cache.
+        #run on a new file with new cached keys (test updating the cache). This time also calibrate
+        calfile = os.path.join(DATA_PATH,  "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        df.partial_load_dayenu_delay_filter_and_write(uvh5, res_outfilename=outfilename,
+                                                      cache_dir=cdir, calfile=calfile,
+                                                      Nbls=1, clobber=True,
+                                                      spw_range=(0,32), update_cache=True)
+
+        hd = io.HERAData(outfilename)
+        assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
+        os.remove(outfilename)
+        os.rmdir(cdir)
 
     def test_delay_filter_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber']

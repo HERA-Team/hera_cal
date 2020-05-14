@@ -14,7 +14,8 @@ from .vis_clean import VisClean
 
 import pickle
 import random
-
+import glob
+import os
 
 class DelayFilter(VisClean):
     """
@@ -237,7 +238,7 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
                     cache[key] = cache_t[key]
     keys_before = cache.keys()
     hd = io.HERAData(infilename, filetype='uvh5')
-    freqs = hd.get_metadata_dict()['freq']
+    freqs = hd.get_metadata_dict()['freqs']
     if calfile is not None:
         calfile = io.HERACal(calfile)
         calfile.read()
@@ -245,11 +246,12 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
     for i in range(0, len(hd.bls), Nbls):
         df = DelayFilter(hd, input_cal=calfile, spw_range=spw_range)
         # update cache
-        df.read(bls=hd.bls[i:i + Nbls], frequencies=self.freqs)
+        df.read(bls=hd.bls[i:i + Nbls], frequencies=df.freqs)
         df.run_dayenu_foreground_filter(cache=cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename,
                                partial_write=True,
-                               clobber=clobber, add_to_history=add_to_history)
+                               clobber=clobber, add_to_history=add_to_history,
+                               **{'freq_array':np.asarray([df.freqs]), 'Nfreqs':df.Nfreqs})
         df.hd.data_array = None  # this forces a reload in the next loop
     # Write a new cache file that only contains the newly computed filter matrices.
     if update_cache:
@@ -257,8 +259,9 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         new_filters = {k: cache[k] for k in cache if k not in keys_before}
         # generate new file name
         cache_file_name = '%032x' % random.getrandbits(128) + '.dayenu_cache'
-        cfile = open(cache_file_name, 'ab')
+        cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
         pickle.dump(new_filters, cfile)
+
 
 
 def delay_filter_argparser():
