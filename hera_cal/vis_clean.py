@@ -306,15 +306,13 @@ class VisClean(object):
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
-    def vis_fourier_filter(self, keys=None, x=None, data=None, flags=None, wgts=None,
+    def vis_dayenu(self, keys=None, x=None, data=None, flags=None, wgts=None,
                            ax='freq', horizon=1.0, standoff=0.0,
-                           min_dly=10.0, max_frate=None, tol=1e-9,
-                           output_prefix='clean', zeropad=None,
+                           min_dly=10.0, max_frate=None, tol=1e-9, output_prefix='clean',
                            cache=None, skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
-                           overwrite=False, mode='dayenu', fitting_options=None,):
+                           overwrite=False):
         """
-        A less flexible but more streamlined wrapper for fourier_filter that filters visibilities based
-        on baseline length and standoff.
+        Run dayenu on data.
 
         Parameters
         -----------
@@ -332,7 +330,6 @@ class VisClean(object):
         max_frate : max fringe rate (in milli-Hz) used for time filtering. See uvtools.dspec.vis_filter for options.
         tol: The fraction of visibilities within the filter region to leave in.
         output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
-        zeropad : int, number of bins to zeropad on both sides of FFT axis. Provide 2-tuple if axis='both'
         cache: dict, optional
             dictionary for caching fitting matrices.
         skip_wgt : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
@@ -345,106 +342,6 @@ class VisClean(object):
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
         verbose : Lots of outputs.
-        mode: str,
-            specify filtering mode. Currently supported are
-            'clean', iterative clean
-            'dpss_lsq', dpss fitting using scipy.optimize.lsq_linear
-            'dft_lsq', dft fitting using scipy.optimize.lsq_linear
-            'dpss_matrix', dpss fitting using direct lin-lsq matrix
-                           computation. Slower then lsq but provides linear
-                           operator that can be used to propagate
-                           statistics and the matrix is cached so
-                           on average, can be faster for data with
-                           many similar flagging patterns.
-            'dft_matrix', dft fitting using direct lin-lsq matrix
-                          computation. Slower then lsq but provides
-                          linear operator that can be used to propagate
-                          statistics and the matrix is cached so
-                          on average, can be faster for data with
-                          many similar flagging patterns.
-                          !!!WARNING: In my experience,
-                          'dft_matrix' option is numerical unstable.!!!
-                          'dpss_matrix' works much better.
-            'dayenu', apply dayenu filter to data. Does not
-                     deconvolve subtracted foregrounds.
-            'dayenu_dft_leastsq', apply dayenu filter to data
-                     and deconvolve subtracted foregrounds using
-                    'dft_leastsq' method (see above).
-            'dayenu_dpss_leastsq', apply dayenu filter to data
-                     and deconvolve subtracted foregrounds using
-                     'dpss_leastsq' method (see above)
-            'dayenu_dft_matrix', apply dayenu filter to data
-                     and deconvolve subtracted foregrounds using
-                    'dft_matrix' mode (see above).
-                    !!!WARNING: dft_matrix mode is often numerically
-                    unstable. I don't recommend it!
-            'dayenu_dpss_matrix', apply dayenu filter to data
-                     and deconvolve subtracted foregrounds using
-                     'dpss_matrix' method (see above)
-            'dayenu_clean', apply dayenu filter to data. Deconvolve
-                     subtracted foregrounds with 'clean'.
-        fitting_options: dict
-            dictionary with options for fitting techniques.
-            if filter2d is true, this should be a 2-tuple or 2-list
-            of dictionaries. The dictionary for each dimension must
-            specify the following for each fitting method.
-                * 'dft':
-                    'fundamental_period': float or 2-tuple
-                        the fundamental_period of dft modes to fit. The number of
-                        modes fit within each window in 'filter_half_widths' will
-                        equal fw / fundamental_period where fw is the filter_half_width of the window.
-                        if filter2d, must provide a 2-tuple with fundamental_period
-                        of each dimension.
-                * 'dayenu':
-                    No parameters necessary if you are only doing 'dayenu'.
-                    For 'dayenu_dpss', 'dayenu_dft', 'dayenu_clean' see below
-                    and use the appropriate fitting options for each method.
-                * 'dpss':
-                    'eigenval_cutoff': array-like
-                        list of sinc_matrix eigenvalue cutoffs to use for included dpss modes.
-                    'nterms': array-like
-                        list of integers specifying the order of the dpss sequence to use in each
-                        filter window.
-                    'edge_supression': array-like
-                        specifies the degree of supression that must occur to tones at the filter edges
-                        to calculate the number of DPSS terms to fit in each sub-window.
-                    'avg_suppression': list of floats, optional
-                        specifies the average degree of suppression of tones inside of the filter edges
-                        to calculate the number of DPSS terms. Similar to edge_supression but instead checks
-                        the suppression of a since vector with equal contributions from all tones inside of the
-                        filter width instead of a single tone.
-                *'clean':
-                     'tol': float,
-                        clean tolerance. 1e-9 is standard.
-                     'maxiter' : int
-                        maximum number of clean iterations. 100 is standard.
-                     'pad': int or array-like
-                        if filt2d is false, just an integer specifing the number of channels
-                        to pad for CLEAN (sets Fourier interpolation resolution).
-                        if filt2d is true, specify 2-tuple in both dimensions.
-                     'filt2d_mode' : string
-                        if 'rect', clean withing a rectangular region of Fourier space given
-                        by the intersection of each set of windows.
-                        if 'plus' only clean the plus-shaped shape along
-                        zero-delay and fringe rate.
-                    'edgecut_low' : int, number of bins to consider zero-padded at low-side of the FFT axis,
-                        such that the windowing function smoothly approaches zero. For 2D cleaning, can
-                        be fed as a tuple specifying edgecut_low for first and second FFT axis.
-                    'edgecut_hi' : int, number of bins to consider zero-padded at high-side of the FFT axis,
-                        such that the windowing function smoothly approaches zero. For 2D cleaning, can
-                        be fed as a tuple specifying edgecut_hi for first and second FFT axis.
-                    'add_clean_residual' : bool, if True, adds the CLEAN residual within the CLEAN bounds
-                        in fourier space to the CLEAN model. Note that the residual actually returned is
-                        not the CLEAN residual, but the residual in input data space.
-                    'taper' : window function for filtering applied to the filtered axis.
-                        See dspec.gen_window for options. If clean2D, can be fed as a list
-                        specifying the window for each axis in data.
-                    'skip_wgt' : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-                        Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
-                        time. Only works properly when all weights are all between 0 and 1.
-                    'gain': The fraction of a residual used in each iteration. If this is too low, clean takes
-                        unnecessarily long. If it is too high, clean does a poor job of deconvolving.
-                    'alpha': float, if window is 'tukey', this is its alpha parameter.
         """
         if cache is None:
             cache = {}
@@ -455,10 +352,9 @@ class VisClean(object):
         if keys is None:
             keys = data.keys()
         if wgts is None:
-            wgts = DataContainer(dict([(k, (~flags[k]).astype(float)) for k in keys]))
-        else:
-            # make sure flagged channels have zero weight, regardless of what user supplied.
-            wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
+            wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
+        # make sure flagged channels have zero weight, regardless of what user supplied.
+        wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
         suppression_factors = [tol]
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.float)):
@@ -484,7 +380,9 @@ class VisClean(object):
                 filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
                 filter_centers = [filter_centers_time, filter_centers_freq]
                 suppression_factors = [[tol], [tol]]
+                fitting_options = [{'eigenval_cutoff':[1e-12]} for m in range(2)]
             else:
+                fitting_options = {'eigenval_cutoff':[1e-12]}
                 suppression_factors = [tol]
                 if ax == 'freq':
                     filter_centers = filter_centers_freq
@@ -493,8 +391,8 @@ class VisClean(object):
                     filter_centers = filter_centers_time
                     filter_half_widths = filter_half_widths_time
             self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                suppression_factors=suppression_factors, mode=mode, fitting_options=fitting_options,
-                                x=x, data=data, flags=flags, output_prefix=output_prefix, wgts=wgts, zeropad=zeropad,
+                                suppression_factors=suppression_factors, mode='dayenu_dpss_leastsq',
+                                x=x, data=data, flags=flags, output_prefix=output_prefix, wgts=wgts, fitting_options=fitting_options,
                                 cache=cache, ax=ax, skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
                                 verbose=verbose, overwrite=overwrite)
     ###
@@ -757,6 +655,7 @@ class VisClean(object):
                                                   filter_dim=filterdim, cache=cache, skip_wgt=skip_wgt,
                                                   max_contiguous_edge_flags=max_contiguous_edge_flags)
 
+
             # unzeropad array and put in skip flags.
             if ax == 'freq':
                 if mode == 'clean':
@@ -796,6 +695,10 @@ class VisClean(object):
                                         flgs[:, i] = True
                                     elif dim == 1:
                                         flgs[i] = True
+                    if ax == 'freq':
+                        info = info[1]
+                    elif ax == 'time':
+                        info = info[0]
                 else:
                     if w.max() > 0.0:
                         flgs = np.zeros_like(mdl, dtype=np.bool)
@@ -808,7 +711,6 @@ class VisClean(object):
             filtered_flags[k] = flgs
             filtered_info[k] = info
 
-
         if hasattr(data, 'times'):
             filtered_data.times = data.times
             filtered_model.times = data.times
@@ -819,8 +721,7 @@ class VisClean(object):
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
-                  verbose=True, mode='clean', cache={}, deconv_dayenu_foregrounds=False,
-                  fg_deconv_method='clean', fg_restore_size=None, fg_deconv_fundamental_period=None):
+                  verbose=True):
         """
         Perform a CLEAN deconvolution.
 
@@ -868,65 +769,18 @@ class VisClean(object):
                 Default is self.dtime.
             dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             verbose: If True print feedback to stdout
-            mode : str, specify whether to use 'dayenu' or 'clean'.
-            cache : dict, optional dictionary for storing pre-computed filtering matrices in linear
-                cleaning.
-            deconv_dayenu_foregrounds : bool, if True, then apply clean to data - residual where
-                                              res is the data-vector after applying a linear clean filter.
-                                              This allows for in-painting flagged foregrounds without introducing
-                                              clean artifacts into EoR window. If False, mdl will still just be the
-                                              difference between the original data vector and the residuals after
-                                              applying the linear filter.
-            fg_deconv_method : string, can be 'leastsq' or 'clean'. If 'leastsq', deconvolve difference between data and linear residual
-                                       by performing linear least squares fitting of data - linear resid to dft modes in filter window.
-                                       If 'clean', obtain deconv fg model using perform a hogboem clean of difference between data and linear residual.
-            fg_restore_size: float, optional, allow user to only restore foregrounds subtracted by linear filter
-                             within a region of this size. If None, set to filter_size.
-                             This allows us to avoid the problem that if we have RFI flagging and apply a linear filter
-                             that is larger then the horizon then the foregrounds that we fit might actually include super
-                             -horizon flagging side-lobes and restoring them will introduce spurious structure.
         """
-        if not HAVE_UVTOOLS:
-            raise ImportError("uvtools required, install hera_cal[all]")
-
-        # type checks
-        if ax not in ['freq', 'time', 'both']:
-            raise ValueError("ax must be one of ['freq', 'time', 'both']")
-
-        if ax == 'time':
-            if max_frate is None:
-                raise ValueError("if time cleaning, must feed max_frate parameter")
-
-        # initialize containers
-        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data']]
-        for i, dc in enumerate(containers):
-            if not hasattr(self, dc):
-                setattr(self, dc, DataContainer({}))
-            containers[i] = getattr(self, dc)
-        clean_model, clean_resid, clean_flags, clean_data = containers
-        clean_info = "{}_{}".format(output_prefix, 'info')
-        if not hasattr(self, clean_info):
-            setattr(self, clean_info, {})
-        clean_info = getattr(self, clean_info)
-
-        # select DataContainers
         if data is None:
             data = self.data
         if flags is None:
             flags = self.flags
-
-        # get keys
         if keys is None:
             keys = data.keys()
-
-        # get weights
         if wgts is None:
             wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
 
-        # get delta bin
-        dtime, dnu = self._get_delta_bin(dtime=dtime, dnu=dnu)
-
-        # parse max_frate if fed
+        wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
+        suppression_factors = [tol]
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.float)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
@@ -934,117 +788,49 @@ class VisClean(object):
                 raise ValueError("If fed, max_frate must be a float, or a DataContainer of floats")
             # convert kwargs to proper units
             max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
-
-        if max_frate is not None:
-            max_frate = max_frate * 1e-3
-        min_dly /= 1e9
-        standoff /= 1e9
-
-        # iterate over keys
         for k in keys:
-            if k in clean_model and overwrite is False:
-                echo("{} exists in clean_model and overwrite is False, skipping...".format(k), verbose=verbose)
-                continue
-            echo("Starting CLEAN of {} at {}".format(k, str(datetime.datetime.now())), verbose=verbose)
-
-            # form d and w
-            d = data[k]
-            f = flags[k]
-            fw = (~f).astype(np.float)
-            w = fw * wgts[k]
-
-            # freq clean
-            if ax == 'freq':
-                # zeropad the data
-                if zeropad > 0:
-                    d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
-                    w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
-
-                mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, standoff=standoff, horizon=horizon,
-                                                  min_dly=min_dly, tol=tol, maxiter=maxiter, window=window, alpha=alpha,
-                                                  gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low, mode=mode,
-                                                  edgecut_hi=edgecut_hi, add_clean_residual=add_clean_residual,
-                                                  cache=cache, deconv_dayenu_foregrounds=deconv_dayenu_foregrounds,
-                                                  fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size, fg_deconv_fundamental_period=None)
-
-                # un-zeropad the data
-                if zeropad > 0:
-                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=1, undo=True)
-                    res, _ = zeropad_array(res, zeropad=zeropad, axis=1, undo=True)
-
-                flgs = np.zeros_like(mdl, dtype=np.bool)
-                for i, _info in enumerate(info):
-                    if 'skipped' in _info:
-                        flgs[i] = True
-
-            # time clean
-            elif ax == 'time':
-                # make sure bad channels are flagged: this is a common failure mode where
-                # channels are bad (i.e. data is identically zero) but are not flagged
-                # and this causes filtering to hang. Particularly band edges...
-                bad_chans = (~np.min(np.isclose(d, 0.0), axis=0, keepdims=True)).astype(np.float)
-                w = w * bad_chans  # not inplace for broadcasting
-
-                # zeropad the data
-                if zeropad > 0:
-                    d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
-                    w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
-
-                mdl, res, info = dspec.vis_filter(d, w, max_frate=max_frate[k], dt=dtime, tol=tol, maxiter=maxiter,
-                                                  window=window, alpha=alpha, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
-                                                  edgecut_hi=edgecut_hi, mode=mode, cache=cache, deconv_dayenu_foregrounds=deconv_dayenu_foregrounds,
-                                                  fg_deconv_method=fg_deconv_method, fg_restore_size=fg_restore_size)
-
-                # un-zeropad the data
-                if zeropad > 0:
-                    mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
-                    res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
-
-                flgs = np.zeros_like(mdl, dtype=np.bool)
-                for i, _info in enumerate(info):
-                    if 'skipped' in _info:
-                        flgs[:, i] = True
-
-            # 2D clean
-            elif ax == 'both':
-                # check for completely flagged baseline
-                if w.max() > 0.0:
-                    # zeropad the data
-                    if zeropad > 0:
-                        d, _ = zeropad_array(d, zeropad=zeropad, axis=(0, 1))
-                        w, _ = zeropad_array(w, zeropad=zeropad, axis=(0, 1))
-
-                    mdl, res, info = dspec.vis_filter(d, w, bl_len=self.bllens[k[:2]], sdf=dnu, max_frate=max_frate[k], dt=dtime, mode=mode,
-                                                      standoff=standoff, horizon=horizon, min_dly=min_dly, tol=tol, maxiter=maxiter, window=window,
-                                                      alpha=alpha, gain=gain, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi,
-                                                      filt2d_mode=filt2d_mode)
-
-                    # un-zeropad the data
-                    if zeropad > 0:
-                        mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=(0, 1), undo=True)
-                        res, _ = zeropad_array(res, zeropad=zeropad, axis=(0, 1), undo=True)
-
-                    flgs = np.zeros_like(mdl, dtype=np.bool)
-                else:
-                    # flagged baseline
-                    mdl = np.zeros_like(d)
-                    res = d - mdl
-                    flgs = np.ones_like(mdl, dtype=np.bool)
-                    info = {'skipped': True}
-
-            # append to new Containers
-            clean_model[k] = mdl
-            clean_resid[k] = res
-            clean_data[k] = mdl + res * fw
-            clean_flags[k] = flgs
-            clean_info[k] = info
-
-        # add metadata
-        if hasattr(data, 'times'):
-            clean_data.times = data.times
-            clean_model.times = data.times
-            clean_resid.times = data.times
-            clean_flags.times = data.times
+            if ax == 'freq' or ax == 'both':
+                filter_centers_freq = [0.]
+                bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
+                filter_half_widths_freq = [np.max([bl_dly, min_dly / 1e9])]
+            if ax == 'time' or ax == 'both':
+                filter_centers_time = [0.]
+                if max_frate is not None:
+                    max_fr = max_frate[k] * 1e-3
+                    filter_centers_time = [0.]
+                    filter_half_widths_time = [max_fr]
+            if ax == 'both':
+                filter_centers = [filter_centers_time, filter_centers_freq]
+                filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
+                filter_centers = [filter_centers_time, filter_centers_freq]
+                suppression_factors = [[tol], [tol]]
+                x = [(self.times-np.mean(self.times)) * 3600 * 24., self.freqs]
+            else:
+                suppression_factors = [tol]
+                if ax == 'freq':
+                    x = self.freqs
+                    filter_centers = filter_centers_freq
+                    filter_half_widths = filter_half_widths_freq
+                elif ax == 'time':
+                    x = (self.times-np.mean(self.times)) * 3600 * 24.
+                    filter_centers = filter_centers_time
+                    filter_half_widths = filter_half_widths_time
+            if ax == 'both':
+                if isinstance(edgecut_hi, np.int):
+                    edgecut_hi = [edgecut_hi, edgecut_hi]
+                if isinstance(edgecut_low, np.int):
+                    edgecut_low = [edgecut_low, edgecut_low]
+                if isinstance(window, str):
+                    window = [window, window]
+            clean_options = {'tol':tol, 'maxiter':maxiter, 'filt2d_mode':filt2d_mode, 'edgecut_low':edgecut_low,
+                             'add_clean_residual':add_clean_residual, 'window':window, 'gain':gain,
+                             'alpha':alpha, 'edgecut_hi':edgecut_hi}
+            self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                                suppression_factors=suppression_factors, mode='clean', x=x, data=data,
+                                flags=flags, output_prefix=output_prefix, wgts=wgts,
+                                fitting_options=clean_options,
+                                ax=ax, skip_wgt=skip_wgt,
+                                verbose=verbose, overwrite=overwrite)
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
                  overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
