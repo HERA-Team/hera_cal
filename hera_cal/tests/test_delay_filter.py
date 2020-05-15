@@ -152,7 +152,7 @@ class Test_DelayFilter(object):
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
-        os.rmdir(cdir)
+        shutil.rmtree(cdir)
 
     def test_delay_filter_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber']

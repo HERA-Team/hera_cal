@@ -584,7 +584,32 @@ class HERAData(UVData):
             this = self
         else:  # make a copy of this object and then update the relevant arrays using DataContainers
             this = copy.deepcopy(self)
+        #print(this.Nfreqs)
+        #print(this.freq_array)
+        #print(flags.freqs)
         this.update(data=data, flags=flags, nsamples=nsamples)
+        '''
+        for k in flags:
+            print(k)
+            print('flags')
+            print(flags[k])
+            print(flags[k].shape)
+        d,f,n = this.build_datacontainers()
+        for k in flags:
+            print(k)
+            print('this.flags')
+            print(f[k])
+            print(f[k].shape)
+        print('flag array shape.')
+        print(this.flag_array.shape)
+        print('data array shape.')
+        print(this.data_array.shape)
+        print('nsample_array shape.')
+        print(this.nsample_array.shape)
+        print('all true?')
+        print(np.all(this.flag_array))
+        print(self.last_read_kwargs['frequencies'] - hd_writer.freq_array.squeeze())
+        '''
         hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
                                   this.nsample_array, **self.last_read_kwargs)
 

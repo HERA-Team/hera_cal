@@ -140,7 +140,7 @@ class VisClean(object):
             self.Nfreqs = len(self.freqs)
         # link the data if they exist
         if self.hd.data_array is not None and link_data:
-            self.hd = self.hd.select(frequencies=self.freqs, inplace=False)
+            self.hd.select(frequencies=self.freqs)
             data, flags, nsamples = self.hd.build_datacontainers()
             self.data = data
             self.flags = flags
