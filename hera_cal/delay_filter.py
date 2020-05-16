@@ -73,7 +73,7 @@ class DelayFilter(VisClean):
                        window=window, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                        edgecut_hi=edgecut_hi, alpha=alpha, overwrite=True, verbose=verbose)
 
-    def run_dayenu_filter(self, to_filter=None, weight_dict=None, standoff=100., horizon=1., min_dly=0.0,
+    def run_dayenu_foreground_filter(self, to_filter=None, weight_dict=None, standoff=100., horizon=1., min_dly=0.0,
                                      tol=1e-9, skip_wgt=0.1, verbose=False, cache=None):
         """
         Run frequency domain uvtools.dspec.dayenu_filter on data stored in the object.
@@ -97,7 +97,7 @@ class DelayFilter(VisClean):
         verbose: If True print feedback to stdout
         cache, dictionary of precomputed filtering matrices. See uvtools.dspec.dayenu_filter for key format.
         """
-        self.vis_dayenu_filter(keys=to_filter, x=self.freqs, data=self.data, flags=self.flags, wgts=weight_dict,
+        self.vis_dayenu(keys=to_filter, x=self.freqs, data=self.data, flags=self.flags, wgts=weight_dict,
                                 ax='freq', horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
                                 overwrite=True, verbose=verbose, skip_wgt=skip_wgt,
                                 output_prefix='clean', cache=cache)
@@ -247,7 +247,7 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         df = DelayFilter(hd, input_cal=calfile, spw_range=spw_range)
         # update cache
         df.read(bls=hd.bls[i:i + Nbls], frequencies=df.freqs)
-        df.run_dayenu_filter(cache=cache, **filter_kwargs)
+        df.run_dayenu_foreground_filter(cache=cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, filled_outfilename=filled_outfilename,
                                partial_write=True,  CLEAN_outfilename=CLEAN_outfilename,
                                clobber=clobber, add_to_history=add_to_history,
