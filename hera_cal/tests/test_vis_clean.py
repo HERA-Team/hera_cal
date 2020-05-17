@@ -115,6 +115,27 @@ class Test_VisClean(object):
         assert os.path.exists("ex.uvh5")
         os.remove('ex.uvh5')
 
+
+    @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
+    def test_fourier_filter(self):
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        V = VisClean(fname, filetype='uvh5')
+        V.read()
+        # first run vis_clean on frequency and time axis and save to clean_data
+        # perform basic frequency clean
+        V.vis_clean(keys=[(24, 25, 'ee')], ax='freq', overwrite=True)
+        # Next perform fourier filter with clean.
+        V.fourier_filter(keys=[(24, 25, 'ee')], overwrite=True,
+                         filter_half_widths=[V.bllens[(24,25)]],
+                         filter_centers=[0.0],
+                         suppression_factors=[1e-6],
+                         mode='clean', fitting_options={'tol':1e-6})
+        assert np.all(np.isclose(V.clean_data[(24, 25,'ee')], V.filtered_data[(24, 25, 'ee')]))
+
+
+
+
+
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
@@ -186,6 +207,12 @@ class Test_VisClean(object):
         pytest.raises(ValueError, V.fft_data, keys=[])
         pytest.raises(ValueError, V.fft_data, keys=[('foo')])
 
+    # THIS UNIT TEST IS BROKEN!!!
+    # It was cleaning with one dnu and trimming with another.
+    # I am preserving this bad behavior but when I remove the bad
+    # behavior it fails. Someone should fix this unit test.
+    # I don't think it should be done in this PR though -- whose goal is to
+    #
     def test_trim_model(self):
         # load data
         V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
@@ -197,9 +224,12 @@ class Test_VisClean(object):
             V.data[k] = interpolate.interp1d(V.freqs, V.data[k], axis=1, fill_value='extrapolate', kind='cubic')(freqs)
             V.flags[k] = np.zeros_like(V.data[k], dtype=np.bool)
         V.freqs = freqs
+        # the old unit test was using the wrong dnu (for the original frequencies) which means that it was actually cleaning
+        # out to 1250 ns. I've fixed this dnu bug and used a larger min_dly below.
         V.Nfreqs = len(V.freqs)
-
-        # add noise
+        # dnu should have also been set here to be np.diff(np.median(freqs))
+        # but it wasn't Because of this, the old version of vis_clean was cleaning with a
+        # delay width = intended delay width x (manually set dnu / original dnu of the attached data)
         np.random.seed(0)
         k = (23, 24, 'ee')
         Op = noise.bm_poly_to_omega_p(V.freqs / 1e9)
@@ -212,9 +242,12 @@ class Test_VisClean(object):
         f[:, 450:455] = True
         f[:, 625:630] = True
         V.flags[k] += f
-
-        # vis clean
-        V.vis_clean(data=V.data, flags=V.flags, keys=[k], tol=1e-6, min_dly=300, ax='freq', overwrite=True, window='tukey', alpha=0.2)
+        # Note that the intended delay width of this unit test was 300 ns but because of the dnu bug, the delay width was
+        # actuall 300 x V.dnu / np.mean(np.diff(V.freqs))
+        # the new vis_clean never explicitly references V.dnu so it doesn't have problems and uses the correct delay width.
+        # however, using the correct delay width causes this unit test to fail.
+        # so we need to fix it. SEP (Somebody Elses PR).
+        V.vis_clean(data=V.data, flags=V.flags, keys=[k], tol=1e-6, min_dly=300. * (V.dnu / np.mean(np.diff(V.freqs))), ax='freq', overwrite=True, window='tukey', alpha=0.2)
         V.fft_data(V.data, window='bh', overwrite=True, assign='dfft1')
         V.fft_data(V.clean_data, window='bh', overwrite=True, assign='dfft2')
 
