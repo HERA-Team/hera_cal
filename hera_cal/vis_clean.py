@@ -689,7 +689,7 @@ class VisClean(object):
                 if not ax == 'both':
                     for dim in range(2):
                         if len(info[dim]) > 0:
-                            for inf in info[dim]:
+                            for i, inf in enumerate(info[dim]):
                                 if inf['skipped']:
                                     if dim == 0:
                                         flgs[:, i] = True
