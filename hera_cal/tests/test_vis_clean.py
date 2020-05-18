@@ -115,26 +115,23 @@ class Test_VisClean(object):
         assert os.path.exists("ex.uvh5")
         os.remove('ex.uvh5')
 
-
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
-    def test_fourier_filter(self):
+    def test_vis_dayenu(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='uvh5')
         V.read()
-        # first run vis_clean on frequency and time axis and save to clean_data
-        # perform basic frequency clean
-        V.vis_clean(keys=[(24, 25, 'ee')], ax='freq', overwrite=True)
-        # Next perform fourier filter with clean.
-        V.fourier_filter(keys=[(24, 25, 'ee')], overwrite=True,
-                         filter_half_widths=[V.bllens[(24,25)]],
-                         filter_centers=[0.0],
-                         suppression_factors=[1e-6],
-                         mode='clean', fitting_options={'tol':1e-6})
-        assert np.all(np.isclose(V.clean_data[(24, 25,'ee')], V.filtered_data[(24, 25, 'ee')]))
+
+        # most coverage is in dspec. Check that args go through here.
+        # similar situation for test_vis_clean.
+        V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=True)
+        assert np.all([ V.clean_info[(24,25,'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24,25,'ee')]['status']['axis_1']])
+
+        assert pytest.raises(ValueError, V.vis_dayenu, keys=[(24, 25, 'ee')], ax='time')
 
 
-
-
+        V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0)
+        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
 
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
@@ -147,21 +144,23 @@ class Test_VisClean(object):
 
         # basic freq clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)
-        assert np.all([i['success'] for i in V.clean_info[(24, 25, 'ee')]])
+        assert np.all([V.clean_info[(24,25,'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24,25,'ee')]['status']['axis_1']])
 
         # basic time clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True)
-        assert 'skipped' in V.clean_info[(24, 25, 'ee')][0]
-        assert 'success' in V.clean_info[(24, 25, 'ee')][3]
+        assert 'skipped' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0]
+        assert 'success' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3]
 
         # basic 2d clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
                     filt2d_mode='plus')
-        assert 'success' in V.clean_info[(24, 25, 'ee')]
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
                     overwrite=True, filt2d_mode='plus')
-        assert 'skipped' in V.clean_info[(24, 25, 'ee')]
+        assert np.all([V.clean_info[(24,25,'ee')]['status']['axis_1'][i] == 'skipped' for i in V.clean_info[(24,25,'ee')]['status']['axis_1']])
+        assert np.all([V.clean_info[(24,25,'ee')]['status']['axis_0'][i] == 'skipped' for i in V.clean_info[(24,25,'ee')]['status']['axis_0']])
 
         # test fft data
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
