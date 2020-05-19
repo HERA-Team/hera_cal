@@ -306,33 +306,6 @@ class FRFilter(VisClean):
     """
     FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
-
-    def run_dayenu_fringerate_filter(self, to_filter=None, weight_dict=None, max_frate=0.1, tol=1e-9, skip_wgt=0.1,
-                                     verbose=False, cache=None):
-
-        """
-        Run time domain uvtools.dspec.dayenu_filter on data stored in the object.
-
-        Parameters
-        ----------
-        to_filter: list of visibilities to filter in the (i, j, pol) format.
-        weight_dict: dictionary of DataContainer with all the same keys as self.data.
-        max_frate : float, max fringe rate (in milli-Hz) used for time CLEANing. See uvtools.dspec.vis_filter for options.
-        tol : float, fraction of filtered signal to leave in. Default, 1e-9.
-        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
-            time. Skipped channels are then flagged in self.flags.
-            Only works properly when all weights are all between 0 and 1.
-        verbose: If True print feedback to stdout.
-        cache : dict, optional dictionary for storing pre-computed filtering matrices in linear
-            cleaning.
-        """
-        self.vis_fourier_filter(keys=to_filter, x=(self.times - self.times.min()) * 3600. * 24.,
-                                data=self.data, flags=self.flags, wgts=wegith_dict, ax='time',
-                                max_frate=max_frate, mode='dayenu', fitting_options=None, overwrite=True,
-                                verbose=verbose, max_contiguous_edge_flags=10000, skip_wgt=skip_wgt,
-                                cache=cache, output_prefix='fringe_rate_filtered')
-
     def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, wgt_by_nsample=True,
                      rephase=False, verbose=True, output_prefix='avg', keys=None, overwrite=False):
         """
