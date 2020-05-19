@@ -42,7 +42,7 @@ class Test_DelayFilter(object):
         wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
         wgts[k][0, :] = 0.0
         dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-        assert np.all([dfil.clean_info[k]['status']['axis_1'][i] == 'skipped' for i in dfil.clean_info[k]['status']['axis_1']])
+        assert dfil.clean_info[k]['status']['axis_1'][0] == 'skipped'
         np.testing.assert_array_equal(dfil.clean_flags[k][0, :], np.ones_like(dfil.flags[k][0, :]))
         np.testing.assert_array_equal(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
         np.testing.assert_array_equal(dfil.clean_resid[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
@@ -124,28 +124,28 @@ class Test_DelayFilter(object):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         cdir = os.getcwd()
         cdir = os.path.join(cdir, 'cache_temp')
-        #make a cache directory
+        # make a cache directory
         if os.path.isdir(cdir):
             shutil.rmtree(cdir)
         os.mkdir(cdir)
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
-        #run dayenu filter
+        # run dayenu filter
         df.partial_load_dayenu_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                                       cache_dir=cdir,
                                                       Nbls=1, clobber=True,
-                                                      spw_range=(0,32), update_cache=True)
+                                                      spw_range=(0, 32), update_cache=True)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
-        #run again using computed cache.
-        #run on a new file with new cached keys (test updating the cache). This time also calibrate
-        calfile = os.path.join(DATA_PATH,  "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        # run again using computed cache.
+        # run on a new file with new cached keys (test updating the cache). This time also calibrate
+        calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         df.partial_load_dayenu_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                                       cache_dir=cdir, calfile=calfile,
                                                       Nbls=1, clobber=True,
-                                                      spw_range=(0,32), update_cache=True)
+                                                      spw_range=(0, 32), update_cache=True)
 
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')

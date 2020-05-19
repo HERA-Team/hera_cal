@@ -24,6 +24,7 @@ from .utils import echo
 from .flag_utils import factorize_flags
 import warnings
 
+
 class VisClean(object):
     """
     VisClean object for visibility CLEANing and filtering.
@@ -307,10 +308,10 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_dayenu(self, keys=None, x=None, data=None, flags=None, wgts=None,
-                           ax='freq', horizon=1.0, standoff=0.0,
-                           min_dly=10.0, max_frate=None, tol=1e-9, output_prefix='clean',
-                           cache=None, skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
-                           overwrite=False):
+                   ax='freq', horizon=1.0, standoff=0.0,
+                   min_dly=10.0, max_frate=None, tol=1e-9, output_prefix='clean',
+                   cache=None, skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
+                   overwrite=False):
         """
         Run dayenu on data.
 
@@ -382,9 +383,9 @@ class VisClean(object):
                 filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
                 filter_centers = [filter_centers_time, filter_centers_freq]
                 suppression_factors = [[tol], [tol]]
-                fitting_options = [{'eigenval_cutoff':[1e-12]} for m in range(2)]
+                fitting_options = [{'eigenval_cutoff': [1e-12]} for m in range(2)]
             else:
-                fitting_options = {'eigenval_cutoff':[1e-12]}
+                fitting_options = {'eigenval_cutoff': [1e-12]}
                 suppression_factors = [tol]
                 if ax == 'freq':
                     filter_centers = filter_centers_freq
@@ -657,7 +658,6 @@ class VisClean(object):
                                                   filter_dim=filterdim, cache=cache, skip_wgt=skip_wgt,
                                                   max_contiguous_edge_flags=max_contiguous_edge_flags)
 
-
             # unzeropad array and put in skip flags.
             if ax == 'freq':
                 if zeropad > 0:
@@ -675,9 +675,9 @@ class VisClean(object):
 
             flgs = np.zeros_like(mdl, dtype=np.bool)
             for dim in range(2):
-                if len(info['status']['axis_%d'%dim]) > 0:
-                    for i in range(len(info['status']['axis_%d'%dim])):
-                        if info['status']['axis_%d'%dim][i] == 'skipped':
+                if len(info['status']['axis_%d' % dim]) > 0:
+                    for i in range(len(info['status']['axis_%d' % dim])):
+                        if info['status']['axis_%d' % dim][i] == 'skipped':
                             if dim == 0:
                                 flgs[:, i] = True
                             elif dim == 1:
@@ -779,7 +779,7 @@ class VisClean(object):
                 filter_centers = [filter_centers_time, filter_centers_freq]
                 filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
                 suppression_factors = [[tol], [tol]]
-                x = [(self.times-np.mean(self.times)) * 3600 * 24., self.freqs]
+                x = [(self.times - np.mean(self.times)) * 3600 * 24., self.freqs]
             else:
                 suppression_factors = [tol]
                 if ax == 'freq':
@@ -787,7 +787,7 @@ class VisClean(object):
                     filter_centers = filter_centers_freq
                     filter_half_widths = filter_half_widths_freq
                 elif ax == 'time':
-                    x = (self.times-np.mean(self.times)) * 3600 * 24.
+                    x = (self.times - np.mean(self.times)) * 3600 * 24.
                     filter_centers = filter_centers_time
                     filter_half_widths = filter_half_widths_time
             if ax == 'both':
@@ -797,9 +797,9 @@ class VisClean(object):
                     edgecut_low = [edgecut_low, edgecut_low]
                 if isinstance(window, str):
                     window = [window, window]
-            clean_options = {'tol':tol, 'maxiter':maxiter, 'filt2d_mode':filt2d_mode, 'edgecut_low':edgecut_low,
-                             'add_clean_residual':add_clean_residual, 'window':window, 'gain':gain,
-                             'alpha':alpha, 'edgecut_hi':edgecut_hi}
+            clean_options = {'tol': tol, 'maxiter': maxiter, 'filt2d_mode': filt2d_mode, 'edgecut_low': edgecut_low,
+                             'add_clean_residual': add_clean_residual, 'window': window, 'gain': gain,
+                             'alpha': alpha, 'edgecut_hi': edgecut_hi}
             self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                 suppression_factors=suppression_factors, mode='clean', x=x, data=data,
                                 flags=flags, output_prefix=output_prefix, wgts=wgts,

@@ -584,9 +584,6 @@ class HERAData(UVData):
             this = self
         else:  # make a copy of this object and then update the relevant arrays using DataContainers
             this = copy.deepcopy(self)
-        #print(this.Nfreqs)
-        #print(this.freq_array)
-        #print(flags.freqs)
         this.update(data=data, flags=flags, nsamples=nsamples)
         '''
         for k in flags:

@@ -17,6 +17,7 @@ import random
 import glob
 import os
 
+
 class DelayFilter(VisClean):
     """
     DelayFilter object.
@@ -98,9 +99,9 @@ class DelayFilter(VisClean):
         cache, dictionary of precomputed filtering matrices. See uvtools.dspec.dayenu_filter for key format.
         """
         self.vis_dayenu(keys=to_filter, x=self.freqs, data=self.data, flags=self.flags, wgts=weight_dict,
-                                ax='freq', horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
-                                overwrite=True, verbose=verbose, skip_wgt=skip_wgt,
-                                output_prefix='clean', cache=cache)
+                        ax='freq', horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
+                        overwrite=True, verbose=verbose, skip_wgt=skip_wgt,
+                        output_prefix='clean', cache=cache)
 
     def get_filled_data(self):
         """Get data with flagged pixels filled with clean_model.
@@ -249,7 +250,7 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         df.read(bls=hd.bls[i:i + Nbls], frequencies=df.freqs)
         df.run_dayenu_foreground_filter(cache=cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, filled_outfilename=filled_outfilename,
-                               partial_write=True,  CLEAN_outfilename=CLEAN_outfilename,
+                               partial_write=True, CLEAN_outfilename=CLEAN_outfilename,
                                clobber=clobber, add_to_history=add_to_history,
                                freq_array=np.asarray([df.freqs]), Nfreqs=df.Nfreqs)
         df.hd.data_array = None  # this forces a reload in the next loop
@@ -261,7 +262,6 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         cache_file_name = '%032x' % random.getrandbits(128) + '.dayenu_cache'
         cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
         pickle.dump(new_filters, cfile)
-
 
 
 def delay_filter_argparser():

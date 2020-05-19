@@ -124,7 +124,7 @@ class Test_VisClean(object):
         # most coverage is in dspec. Check that args go through here.
         # similar situation for test_vis_clean.
         V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=True)
-        assert np.all([ V.clean_info[(24,25,'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24,25,'ee')]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
         assert pytest.raises(ValueError, V.vis_dayenu, keys=[(24, 25, 'ee')], ax='time')
 
@@ -138,7 +138,7 @@ class Test_VisClean(object):
         assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
 
         # check whether dayenu filtering axis 1 and then axis 0 is the same as dayenu filtering axis 1 and then filtering the resid.
-        # note that filtering axis orders do not commute, we filter axis 1 (foregrounds) before filtering cross-talk. 
+        # note that filtering axis orders do not commute, we filter axis 1 (foregrounds) before filtering cross-talk.
         V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='both', overwrite=True, max_frate=1.0)
         V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=True, max_frate=1.0, output_prefix='clean1')
         V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0, data=V.clean1_resid, output_prefix='clean0')
@@ -155,7 +155,7 @@ class Test_VisClean(object):
 
         # basic freq clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)
-        assert np.all([V.clean_info[(24,25,'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24,25,'ee')]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
         # basic time clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True)
@@ -170,8 +170,8 @@ class Test_VisClean(object):
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
                     overwrite=True, filt2d_mode='plus')
-        assert np.all([V.clean_info[(24,25,'ee')]['status']['axis_1'][i] == 'skipped' for i in V.clean_info[(24,25,'ee')]['status']['axis_1']])
-        assert np.all([V.clean_info[(24,25,'ee')]['status']['axis_0'][i] == 'skipped' for i in V.clean_info[(24,25,'ee')]['status']['axis_0']])
+        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] == 'skipped' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
 
         # test fft data
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
