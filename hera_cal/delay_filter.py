@@ -204,7 +204,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
 
 def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_range=None, cache_dir=None,
                                                res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                               clobber=False, add_to_history='', update_cache=False,
+                                               clobber=False, add_to_history='', write_cache=False, read_cache=True,
                                                **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
@@ -219,12 +219,14 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         res_outfilename: path for writing the filtered visibilities with flags
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
-        update_cache_file: bool. If true, update the cache file with new filters that are computed.
+        write_cache: bool. If true, create new cache file with precomputed matrices
+                           that were not in previously loaded cache files.
+        read_cache: bool, If true, read existing cache files in cache_dir before running.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_dayenu_foreground_filter()
     '''
     # Load up the cache file with the most keys (precomputed filter matrices).
     cache = {}
-    if cache_dir is not None:
+    if cache_dir is not None and read_cache:
         cache_files = glob.glob(cache_dir + '/*')
         # loop through cache files, load them.
         # If there are new keys, add them to internal cache.
@@ -233,11 +235,10 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
             cfile = open(cache_file, 'rb')
             cache_t = pickle.load(cfile)
             for key in cache_t:
-                if key in cache:
-                    del cache_t[key]
-                else:
+                if not key in cache:
                     cache[key] = cache_t[key]
-    keys_before = cache.keys()
+    # the list here is important -- converts from a pointer to a new variable.
+    keys_before = list(cache.keys())
     hd = io.HERAData(infilename, filetype='uvh5')
     freqs = hd.get_metadata_dict()['freqs']
     if calfile is not None:
@@ -255,13 +256,18 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
                                freq_array=np.asarray([df.freqs]), Nfreqs=df.Nfreqs)
         df.hd.data_array = None  # this forces a reload in the next loop
     # Write a new cache file that only contains the newly computed filter matrices.
-    if update_cache:
-        keys_after = cache.keys()
+    if write_cache:
+        # if the keys_before instantiation wasn't a list, then
+        # keys_before would just be the current keys of cache and we
+        # wouldn't have any new keys.
         new_filters = {k: cache[k] for k in cache if k not in keys_before}
-        # generate new file name
-        cache_file_name = '%032x' % random.getrandbits(128) + '.dayenu_cache'
-        cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
-        pickle.dump(new_filters, cfile)
+        if len(new_filters) > 0:
+            # generate new file name
+            if cache_dir is None:
+                cache_dir = os.getcwd()
+            cache_file_name = '%032x' % random.getrandbits(128) + '.dayenu_cache'
+            cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
+            pickle.dump(new_filters, cfile)
 
 
 def delay_filter_argparser():
@@ -278,7 +284,7 @@ def delay_filter_argparser():
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--spw_range", type=int, nargs=2, help="spectral window of data to foreground filter.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
-    a.add_argument("--update_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
+    a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
 
     filt_options = a.add_argument_group(title='Options for the delay filter')
     filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')

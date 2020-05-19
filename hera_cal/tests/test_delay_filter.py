@@ -14,7 +14,7 @@ from pyuvdata import UVCal, UVData
 from .. import io
 from .. import delay_filter as df
 from ..data import DATA_PATH
-
+import glob
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
@@ -133,7 +133,13 @@ class Test_DelayFilter(object):
         df.partial_load_dayenu_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                                       cache_dir=cdir,
                                                       Nbls=1, clobber=True,
-                                                      spw_range=(0, 32), update_cache=True)
+                                                      spw_range=(0, 32), write_cache=True)
+        # generate duplicate cache files to test duplicate key handle for cache load.
+        df.partial_load_dayenu_delay_filter_and_write(uvh5, res_outfilename=outfilename, cache_dir=cdir,
+                                                      Nbls=1, clobber=True, read_cache=False,
+                                                      spw_range=(0, 32), write_cache=True)
+        # there should now be two cache files. 
+        assert len(glob.glob(cdir+'/*')) == 2
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -145,7 +151,8 @@ class Test_DelayFilter(object):
         df.partial_load_dayenu_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                                       cache_dir=cdir, calfile=calfile,
                                                       Nbls=1, clobber=True,
-                                                      spw_range=(0, 32), update_cache=True)
+                                                      spw_range=(0, 32), write_cache=True)
+
 
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
