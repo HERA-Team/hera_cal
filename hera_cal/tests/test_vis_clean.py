@@ -128,10 +128,21 @@ class Test_VisClean(object):
 
         assert pytest.raises(ValueError, V.vis_dayenu, keys=[(24, 25, 'ee')], ax='time')
 
-
         V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0)
         assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
         assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
+
+        V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='both', overwrite=True, max_frate=1.0)
+        assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
+        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
+        assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3] == 'success'
+
+        # check whether dayenu filtering axis 1 and then axis 0 is the same as dayenu filtering axis 1 and then filtering the resid.
+        # note that filtering axis orders do not commute, we filter axis 1 (foregrounds) before filtering cross-talk. 
+        V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='both', overwrite=True, max_frate=1.0)
+        V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=True, max_frate=1.0, output_prefix='clean1')
+        V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0, data=V.clean1_resid, output_prefix='clean0')
+        assert np.all(np.isclose(V.clean_resid[(24, 25, 'ee')], V.clean0_resid[(24, 25, 'ee')]))
 
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
