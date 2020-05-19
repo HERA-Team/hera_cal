@@ -119,11 +119,10 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
                                                            filter2d=False, filter_dim=1, filter_half_widths=[1. / (filter_scale * 10 ** 6)],
                                                            mode=mode, skip_wgt=skip_wgt, fitting_options=fitting_options,
                                                            suppression_factors=[tol], max_contiguous_edge_flags=1000)
-        info = info[1]
         # put back in unfilted values if skip_wgt is triggered
         filtered /= rephasor
-        for i in info:
-            if info[i] == 'skipped':
+        for i in info['status']['axis_1']:
+            if info['status']['axis_1'][i] == 'skipped':
                 filtered[i, :] = gains[i, :]
 
     return filtered, info

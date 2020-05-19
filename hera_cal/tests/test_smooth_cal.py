@@ -98,6 +98,40 @@ class Test_Smooth_Cal_Helper_Functions(object):
         np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
         assert np.all(info[0]['skipped'])
 
+    def test_freq_filter_dpss(self):
+        # run freq_filter tests for dpss/dft modes.
+        gains = np.ones((10, 100), dtype=complex)
+        gains[3, 5] = 10.0
+        wgts = np.ones((10, 100), dtype=float)
+        wgts[3, 5] = 0
+        freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
+        fit_options={'eigenval_cutoff':[1e-12]}
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, mode='dpss_leastsq',
+                                          fitting_options=fit_options)
+        np.testing.assert_array_almost_equal(ff, np.ones((10, 100), dtype=complex))
+
+        # test rephasing
+        gains = np.ones((2, 1000), dtype=complex)
+        wgts = np.ones((2, 1000), dtype=float)
+        freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
+        gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, mode='dpss_leastsq',
+                                          fitting_options=fit_options)
+        np.testing.assert_array_almost_equal(ff, gains)
+
+        # test skip_wgt
+        gains = np.random.randn(10, 100) + 1.0j * np.random.randn(10, 100)
+        wgts = np.ones((10, 100), dtype=float)
+        wgts[0, 0:80] = 0
+        freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5,
+                                          fitting_options=fit_options, mode='dpss_leastsq')
+        np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
+        info['status']['axis_1'][0] == 'skipped'
+
+        assert pytest.raises(ValueError, smooth_cal.freq_filter, gains=gains, wgts=wgts,
+                             freqs=freqs, fitting_options=None, mode='dpss_leastsq')
+
     def test_time_freq_2D_filter(self):
         gains = np.ones((100, 100), dtype=complex)
         gains[3, 5] = 10.0
@@ -194,7 +228,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freqs = np.array([100e6, 120e6, 140e6, 160e6, 180e6, 200e6])
         freq_blacklist = smooth_cal.build_freq_blacklist(freqs, freq_blacklists=[(0e6, 137e6)])
         np.testing.assert_array_equal(freq_blacklist, [True, True, False, False, False, False])
-        
+
         freq_blacklist = smooth_cal.build_freq_blacklist(freqs, chan_blacklists=[(4, 5)])
         np.testing.assert_array_equal(freq_blacklist, [False, False, False, False, True, True])
 
@@ -221,7 +255,7 @@ class Test_Calibration_Smoother(object):
         calfits_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.abs.calfits_54x_only')))[0::2]
         flag_file_list = sorted(glob.glob(os.path.join(DATA_PATH, 'test_input/*.uvOCR_53x_54x_only.flags.applied.npz')))[0::2]
         self.cs = smooth_cal.CalibrationSmoother(calfits_list, flag_file_list=flag_file_list, flag_filetype='npz',
-                                                 time_blacklists=[(2458101.44795386, 2458101.44919662)], 
+                                                 time_blacklists=[(2458101.44795386, 2458101.44919662)],
                                                  lst_blacklists=[(6.17226452, 6.17824609)],
                                                  freq_blacklists=[(136e6, 138e6), (149e6, 151e6)], chan_blacklists=[(0, 64)])
 
