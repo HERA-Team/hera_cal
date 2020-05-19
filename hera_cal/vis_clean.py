@@ -395,17 +395,19 @@ class VisClean(object):
                     filter_half_widths = filter_half_widths_time
             self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                 suppression_factors=suppression_factors, mode='dayenu_dpss_leastsq',
-                                x=x, data=data, flags=flags, output_prefix=output_prefix, wgts=wgts, fitting_options=fitting_options,
-                                cache=cache, ax=ax, skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
+                                x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
+                                fitting_options=fitting_options, cache=cache, ax=ax,
+                                skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
                                 verbose=verbose, overwrite=overwrite)
     ###
     # TODO: zeropad here will error given its default option if 2d filtering is being used.
     ###
 
-    def fourier_filter(self, keys, filter_centers, filter_half_widths, suppression_factors, mode,
-                       fitting_options, x=None, data=None, flags=None, output_prefix='filtered',
-                       wgts=None, zeropad=None, cache=None, ax='freq', skip_wgt=0.1,
-                       max_contiguous_edge_flags=10, verbose=False, overwrite=False):
+    def fourier_filter(self, filter_centers, filter_half_widths, suppression_factors, mode,
+                       fitting_options, x=None, keys=None, data=None, flags=None, wgts=None,
+                       output_prefix='filtered', zeropad=None, cache=None,
+                       ax='freq', skip_wgt=0.1, max_contiguous_edge_flags=10,
+                       verbose=False, overwrite=False):
         """
         Your one-stop-shop for fourier filtering.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
@@ -538,9 +540,11 @@ class VisClean(object):
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
         x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
             2-list/tuple of numpy arrays if 2d filter.
+        keys : list, optional, list of tuple ant-pol pair keys of visibilities to filter.
         data : DataContainer, data to clean. Default is self.data
         flags : Datacontainer, flags to use. Default is self.flags
         wgts : DataContainer, weights to use. Default is None.
+        output_prefix : string, prefix for attached filter data containers.
         zeropad : int, number of bins to zeropad on both sides of FFT axis. Provide 2-tuple if axis='both'
         cache: dict, optional
             dictionary for caching fitting matrices.
@@ -625,33 +629,34 @@ class VisClean(object):
             f = flags[k]
             fw = (~f).astype(np.float)
             w = fw * wgts[k]
-
+            # avoid modifying x in-place with zero-padding.
+            xp = copy.deepcopy(x)
             if ax == 'freq':
                 # zeropad the data
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=1)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=1)
-                    x = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
-                                   x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
+                    xp = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
+                                    x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'time':
                 # zeropad the data
                 if zeropad > 0:
                     d, _ = zeropad_array(d, zeropad=zeropad, axis=0)
                     w, _ = zeropad_array(w, zeropad=zeropad, axis=0)
-                    x = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
+                    xp = np.hstack([x.min() - (1 + np.arange(zeropad)[::-1]) * np.mean(np.diff(x)), x,
                                    x.max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x))])
             elif ax == 'both':
                 if not isinstance(zeropad, (list, tuple)) or not len(zeropad) == 2:
                     raise ValueError("zeropad must be a 2-tuple or 2-list of integers")
                 if not (isinstance(zeropad[0], (int, np.int)) and isinstance(zeropad[0], (int, np.int))):
                     raise ValueError("zeropad values must all be integers. You provided %s" % (zeropad))
-                if zeropad[0] > 0 and zeropad[1] > 0:
-                    d, _ = zeropad_array(d, zeropad=zeropad[1], axis=1)
-                    w, _ = zeropad_array(w, zeropad=zeropad[1], axis=1)
-                    d, _ = zeropad_array(d, zeropad=zeropad[0], axis=0)
-                    w, _ = zeropad_array(w, zeropad=zeropad[0], axis=0)
-                    x = [np.hstack([x[m].min() - (np.arange(zeropad)[::-1] + 1) * np.mean(np.diff(x[m])), x[m], x[m].max() + (1 + np.arange(zeropad)) * np.mean(np.diff(x[m]))]) for m in range(2)]
-            mdl, res, info = dspec.fourier_filter(x=x, data=d, wgts=w, filter_centers=filter_centers,
+                for m in range(2):
+                    if zeropad[m] > 0:
+                        d, _ = zeropad_array(d, zeropad=zeropad[m], axis=m)
+                        w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
+                        xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
+                                           x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
+            mdl, res, info = dspec.fourier_filter(x=xp, data=d, wgts=w, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
                                                   suppression_factors=suppression_factors, mode=mode,
                                                   filter2d=filter2d, fitting_options=fitting_options,
@@ -667,11 +672,12 @@ class VisClean(object):
                 if zeropad > 0:
                     mdl, _ = zeropad_array(mdl, zeropad=zeropad, axis=0, undo=True)
                     res, _ = zeropad_array(res, zeropad=zeropad, axis=0, undo=True)
-                elif ax == 'both':
-                    for i in range(2):
-                        if zeropad[i] > 0:
-                            mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
-                            res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
+            elif ax == 'both':
+                for i in range(2):
+                    if zeropad[i] > 0:
+                        mdl, _ = zeropad_array(mdl, zeropad=zeropad[i], axis=i, undo=True)
+                        res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
+                    _trim_status(info, i, zeropad[i - 1])
 
             flgs = np.zeros_like(mdl, dtype=np.bool)
             for dim in range(2):
@@ -1204,6 +1210,34 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
         model[k] = mdl
 
     return model, noise
+
+
+def _trim_status(info_dict, axis, zeropad):
+    '''
+    Trims the info status dictionary for a zero-padded
+    filter so that the status of integrations that were
+    in the zero-pad region are deleted
+
+    Parameters
+    ----------
+    info : dict, info dictionary
+    axis : integer, index of axis to trim
+    zeropad : integer
+
+    Returns
+    -------
+    Nothing, modifies the provided dictionary in place.
+    '''
+    # delete statuses in zero-pad region
+    statuses = info_dict['status']['axis_%d' % axis]
+    nints = len(statuses)
+    for i in range(zeropad):
+        del statuses[i]
+        del statuses[nints - i - 1]
+    # now update keys of the dict elements we wish to keep
+    nints = len(statuses)
+    for i in range(nints):
+        statuses[i] = statuses.pop(i + zeropad)
 
 
 def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):

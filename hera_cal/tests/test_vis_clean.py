@@ -116,6 +116,47 @@ class Test_VisClean(object):
         os.remove('ex.uvh5')
 
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
+    def test_fourier_filter(self):
+        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        V = VisClean(fname, filetype='uvh5')
+        V.read()
+        # test arg errors
+        k = (24, 25, 'ee')
+        fc = [0.]
+        fw = [100e-9]
+        ff = [1e-9]
+        fwt = [1e-3]
+        assert pytest.raises(ValueError, V.fourier_filter, keys=[k], overwrite=True,
+                             filter_centers=fc, filter_half_widths=fw, suppression_factors=ff,
+                             ax='height', mode='dayenu', fitting_options=None)
+        V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fw, suppression_factors=ff,
+                         ax='freq', mode='dayenu', fitting_options=None, overwrite=True)
+        # this line is repeated to cover the overwrite skip
+        V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fw, suppression_factors=ff, max_contiguous_edge_flags=20,
+                         ax='freq', mode='dayenu', fitting_options=None, zeropad=10, output_prefix='clean', overwrite=False)
+        assert np.all([V.clean_info[k]['status']['axis_1'][i] == 'success' for i in V.clean_info[k]['status']['axis_1']])
+        # now do a time filter
+        V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fwt, suppression_factors=ff, overwrite=True,
+                         ax='time', mode='dayenu', fitting_options=None, zeropad=10, max_contiguous_edge_flags=20)
+        assert V.filtered_info[k]['status']['axis_0'][0] == 'skipped'
+        assert V.filtered_info[k]['status']['axis_0'][3] == 'success'
+        # raise errors.
+        assert pytest.raises(ValueError, V.fourier_filter, filter_centers=[fc, fc], ax='both',
+                             filter_half_widths=[fwt, fw], suppression_factors=[ff, ff],
+                             fitting_options={}, mode='dayenu', zeropad=0, overwrite=True)
+        assert pytest.raises(ValueError, V.fourier_filter, filter_centers=[fc, fc], ax='both',
+                             filter_half_widths=[fwt, fw], suppression_factors=[ff, ff], overwrite=True,
+                             fitting_options={}, mode='dayenu', zeropad=['Mathematical Universe', 'Crazy Universe'])
+        # check 2d filter.
+        V.fourier_filter(filter_centers=[fc, fc],
+                         filter_half_widths=[fwt, fw],
+                         suppression_factors=[ff, ff],
+                         fitting_options={}, mode='dayenu', overwrite=True,
+                         zeropad=[20, 10], ax='both', max_contiguous_edge_flags=100)
+        assert V.filtered_info[k]['status']['axis_0'][0] == 'skipped'
+        assert V.filtered_info[k]['status']['axis_0'][3] == 'success'
+
+    @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_dayenu(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='uvh5')
@@ -127,6 +168,7 @@ class Test_VisClean(object):
         assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
         assert pytest.raises(ValueError, V.vis_dayenu, keys=[(24, 25, 'ee')], ax='time')
+        assert pytest.raises(ValueError, V.vis_dayenu, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle')
 
         V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0)
         assert V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0] == 'skipped'
