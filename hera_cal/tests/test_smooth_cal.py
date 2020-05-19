@@ -105,7 +105,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts = np.ones((10, 100), dtype=float)
         wgts[3, 5] = 0
         freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
-        fit_options={'eigenval_cutoff':[1e-12]}
+        fit_options = {'eigenval_cutoff': [1e-12]}
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs, mode='dpss_leastsq',
                                           fitting_options=fit_options)
         np.testing.assert_array_almost_equal(ff, np.ones((10, 100), dtype=complex))

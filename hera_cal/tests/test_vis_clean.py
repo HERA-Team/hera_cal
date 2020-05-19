@@ -170,7 +170,7 @@ class Test_VisClean(object):
         assert pytest.raises(ValueError, V.vis_dayenu, keys=[(24, 25, 'ee')], ax='time')
         assert pytest.raises(ValueError, V.vis_dayenu, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle')
 
-        #cover no overwrite = False skip lines.
+        # cover no overwrite = False skip lines.
         V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='freq', overwrite=False)
 
         V.vis_dayenu(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax='time', overwrite=True, max_frate=1.0)

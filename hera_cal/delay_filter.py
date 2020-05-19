@@ -235,7 +235,7 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
             cfile = open(cache_file, 'rb')
             cache_t = pickle.load(cfile)
             for key in cache_t:
-                if not key in cache:
+                if key not in cache:
                     cache[key] = cache_t[key]
     # the list here is important -- converts from a pointer to a new variable.
     keys_before = list(cache.keys())
