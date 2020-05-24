@@ -96,7 +96,12 @@ class Test_Smooth_Cal_Helper_Functions(object):
         freqs = np.linspace(100., 200., 10, endpoint=False) * 1e6
         ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5)
         np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
-        assert np.all(info[0]['skipped'])
+        assert info['status']['axis_1'][0] == 'skipped'
+
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5, filter_scale=50., mode='dpss_leastsq')
+        np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
+        assert info['status']['axis_1'][0] == 'skipped'
+        assert info['status']['axis_1'][1] == 'success'
 
     def test_freq_filter_dpss(self):
         # run freq_filter tests for dpss/dft modes.
@@ -105,9 +110,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts = np.ones((10, 100), dtype=float)
         wgts[3, 5] = 0
         freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
-        fit_options = {'eigenval_cutoff': [1e-12]}
-        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, mode='dpss_leastsq',
-                                          fitting_options=fit_options)
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, mode='dpss_leastsq')
         np.testing.assert_array_almost_equal(ff, np.ones((10, 100), dtype=complex))
 
         # test rephasing
@@ -115,8 +118,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts = np.ones((2, 1000), dtype=float)
         freqs = np.linspace(100., 200., 1000, endpoint=False) * 1e6
         gains *= np.exp(2.0j * np.pi * np.outer(150e-9 * np.ones(2), freqs))
-        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, mode='dpss_leastsq',
-                                          fitting_options=fit_options)
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, mode='dpss_leastsq')
         np.testing.assert_array_almost_equal(ff, gains)
 
         # test skip_wgt
@@ -124,8 +126,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts = np.ones((10, 100), dtype=float)
         wgts[0, 0:80] = 0
         freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
-        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5,
-                                          fitting_options=fit_options, mode='dpss_leastsq')
+        ff, info = smooth_cal.freq_filter(gains, wgts, freqs, skip_wgt=.5, mode='dpss_leastsq')
         np.testing.assert_array_almost_equal(ff[0, :], gains[0, :])
         info['status']['axis_1'][0] == 'skipped'
 

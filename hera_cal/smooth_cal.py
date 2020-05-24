@@ -67,8 +67,8 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
-def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
-                maxiter=100, mode='clean', fitting_options=None, cache=None, **win_kwargs):
+def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
+                mode='clean',  **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -79,15 +79,12 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
         filter_scale: frequency scale in MHz to use for the low-pass filter. filter_scale^-1 corresponds
             to the half-width (i.e. the width of the positive part) of the region in fourier
             space, symmetric about 0, that is filtered out.
-        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-        window: window function for filtering applied to the frequency axis.
-            See aipy.dsp.gen_window for options.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
             filtered is left unchanged and info is {'skipped': True} for that time.
             Only works properly when all weights are all between 0 and 1.
-        maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-        mode: deconvolution method to use in filtering. Supports ['dpss_lsq', 'dft_leastsq']
-        win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
+        mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
+              examples include 'dpss_leastsq', 'clean'.
+        filter_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
             Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
@@ -96,34 +93,17 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
     if not HAVE_UVTOOLS:
         raise ImportError("uvtools required, instsall hera_cal[all]")
 
-    df = np.median(np.diff(freqs))  # in Hz
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
 
-    if mode == 'clean':
-        filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, df, tol=tol, window=window,
-                                                                     skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
+    filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
+                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
         # put back in unfilted values if skip_wgt is triggered
-        filtered /= rephasor
-        for i, info_dict in enumerate(info):
-            if info_dict.get('skipped', False):
-                filtered[i, :] = gains[i, :]
-
-    elif mode in ['dpss_leastsq', 'dft_leastsq']:
-        if cache is None:
-            cache = {}
-        if fitting_options is None:
-            raise ValueError("fiting_options must be supplied for dpss or dft interpolation.")
-        filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, filter_centers=[0.],
-                                                           filter2d=False, filter_dim=1, filter_half_widths=[1. / (filter_scale * 10 ** 6)],
-                                                           mode=mode, skip_wgt=skip_wgt, fitting_options=fitting_options,
-                                                           suppression_factors=[tol], max_contiguous_edge_flags=1000)
-        # put back in unfilted values if skip_wgt is triggered
-        filtered /= rephasor
-        for i in info['status']['axis_1']:
-            if info['status']['axis_1'][i] == 'skipped':
-                filtered[i, :] = gains[i, :]
+    filtered /= rephasor
+    for i in info['status']['axis_1']:
+        if info['status']['axis_1'][i] == 'skipped':
+            filtered[i, :] = gains[i, :]
 
     return filtered, info
 
@@ -682,8 +662,8 @@ class CalibrationSmoother():
                                                      filter_scale=filter_scale, tol=tol, window=window,
                                                      skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
             # flag all channels for any time that triggers the skip_wgt
-            for i, info_dict in enumerate(info):
-                if info_dict.get('skipped', False):
+            for i in info['status']['axis_1']:
+                if info['status']['axis_1'][i] == 'skipped':
                     self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
         self.rephase_to_refant(warn=False)
 
