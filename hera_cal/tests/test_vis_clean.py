@@ -130,28 +130,28 @@ class Test_VisClean(object):
                              filter_centers=fc, filter_half_widths=fw, suppression_factors=ff,
                              ax='height', mode='dayenu', fitting_options=None)
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fw, suppression_factors=ff,
-                         ax='freq', mode='dayenu', fitting_options=None, overwrite=True)
+                         ax='freq', mode='dayenu', overwrite=True)
         # this line is repeated to cover the overwrite skip
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fw, suppression_factors=ff, max_contiguous_edge_flags=20,
-                         ax='freq', mode='dayenu', fitting_options=None, zeropad=10, output_prefix='clean', overwrite=False)
+                         ax='freq', mode='dayenu', zeropad=10, output_prefix='clean', overwrite=False)
         assert np.all([V.clean_info[k]['status']['axis_1'][i] == 'success' for i in V.clean_info[k]['status']['axis_1']])
         # now do a time filter
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fwt, suppression_factors=ff, overwrite=True,
-                         ax='time', mode='dayenu', fitting_options=None, zeropad=10, max_contiguous_edge_flags=20)
+                         ax='time', mode='dayenu', zeropad=10, max_contiguous_edge_flags=20)
         assert V.filtered_info[k]['status']['axis_0'][0] == 'skipped'
         assert V.filtered_info[k]['status']['axis_0'][3] == 'success'
         # raise errors.
         assert pytest.raises(ValueError, V.fourier_filter, filter_centers=[fc, fc], ax='both',
                              filter_half_widths=[fwt, fw], suppression_factors=[ff, ff],
-                             fitting_options={}, mode='dayenu', zeropad=0, overwrite=True)
+                             mode='dayenu', zeropad=0, overwrite=True)
         assert pytest.raises(ValueError, V.fourier_filter, filter_centers=[fc, fc], ax='both',
                              filter_half_widths=[fwt, fw], suppression_factors=[ff, ff], overwrite=True,
-                             fitting_options={}, mode='dayenu', zeropad=['Mathematical Universe', 'Crazy Universe'])
+                             mode='dayenu', zeropad=['Mathematical Universe', 'Crazy Universe'])
         # check 2d filter.
         V.fourier_filter(filter_centers=[fc, fc],
                          filter_half_widths=[fwt, fw],
                          suppression_factors=[ff, ff],
-                         fitting_options={}, mode='dayenu', overwrite=True,
+                         mode='dayenu', overwrite=True,
                          zeropad=[20, 10], ax='both', max_contiguous_edge_flags=100)
         assert V.filtered_info[k]['status']['axis_0'][0] == 'skipped'
         assert V.filtered_info[k]['status']['axis_0'][3] == 'success'

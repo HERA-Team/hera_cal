@@ -383,9 +383,7 @@ class VisClean(object):
                 filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
                 filter_centers = [filter_centers_time, filter_centers_freq]
                 suppression_factors = [[tol], [tol]]
-                fitting_options = [{'eigenval_cutoff': [1e-12]} for m in range(2)]
             else:
-                fitting_options = {'eigenval_cutoff': [1e-12]}
                 suppression_factors = [tol]
                 if ax == 'freq':
                     filter_centers = filter_centers_freq
@@ -396,20 +394,19 @@ class VisClean(object):
             self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                 suppression_factors=suppression_factors, mode='dayenu_dpss_leastsq',
                                 x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                fitting_options=fitting_options, cache=cache, ax=ax,
+                                cache=cache, ax=ax,
                                 skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
                                 verbose=verbose, overwrite=overwrite)
     ###
     # TODO: zeropad here will error given its default option if 2d filtering is being used.
     ###
 
-    def fourier_filter(self, filter_centers, filter_half_widths, suppression_factors, mode,
-                       fitting_options, x=None, keys=None, data=None, flags=None, wgts=None,
-                       output_prefix='filtered', zeropad=None, cache=None,
-                       ax='freq', skip_wgt=0.1, max_contiguous_edge_flags=10,
-                       verbose=False, overwrite=False):
+    def fourier_filter(self, filter_centers, filter_half_widths, mode,
+                       x=None, keys=None, data=None, flags=None, wgts=None,
+                       output_prefix='filtered', zeropad=None,
+                       ax='freq', skip_wgt=0.1, verbose=False, overwrite=False, **filter_kwargs):
         """
-        Your one-stop-shop for fourier filtering.
+        Generalized fourier filtering of attached data.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
         rectangular windows centered at filter_centers or filter_half_widths
         perform filtering along any of 2 dimensions in 2d or 1d!
@@ -417,7 +414,6 @@ class VisClean(object):
 
         Parameters
         -----------
-        keys : list of bl-pol keys in data to CLEAN
         filter_centers: array-like
             if not 2dfilter: 1d np.ndarray or list or tuple of floats
             specifying centers of rectangular fourier regions to filter.
@@ -427,14 +423,6 @@ class VisClean(object):
         filter_half_widths: array-like
             if not 2dfilter: 1d np.ndarray or list of tuples of floats
             specifying the half-widths of rectangular fourier regions to filter.
-            if 2dfilter: should be a 2-list or 2-tuple. Each element should
-            be a list or tuple or np.ndarray of floats that include centers
-            of rectangular bins.
-        suppression_factors: array-like
-            if not 2dfilter: 1d np.ndarray or list of tuples of floats
-            specifying the fractional residuals of model to leave in the data.
-            For example, 1e-6 means that the filter will leave in 1e-6 of data fitted
-            by the model.
             if 2dfilter: should be a 2-list or 2-tuple. Each element should
             be a list or tuple or np.ndarray of floats that include centers
             of rectangular bins.
@@ -476,7 +464,26 @@ class VisClean(object):
                      'dpss_matrix' method (see above)
             'dayenu_clean', apply dayenu filter to data. Deconvolve
                      subtracted foregrounds with 'clean'.
-        fitting_options: dict
+        x : array-like, optional, numpy ndarray
+        keys : list, optional, list of tuple ant-pol pair keys of visibilities to filter.
+        data : DataContainer, data to clean. Default is self.data
+        flags : Datacontainer, flags to use. Default is self.flags
+        wgts : DataContainer, weights to use. Default is None.
+        output_prefix : string, prefix for attached filter data containers.
+        zeropad : int, number of bins to zeropad on both sides of FFT axis. Provide 2-tuple if axis='both'
+        ax : string, optional, string specifying axis to filter.
+            Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
+        skip_wgt : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+            time. Skipped channels are then flagged in self.flags.
+            Only works properly when all weights are all between 0 and 1.
+        max_contiguous_edge_flags : int, optional
+            if the number of contiguous samples at the edge is greater then this
+            at either side, skip.
+        verbose : Lots of outputs.
+        overwrite : bool, if True, overwrite output modules with the same name
+                    if they already exist.
+        filter_kwargs: dict
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
             of dictionaries. The dictionary for each dimension must
@@ -492,6 +499,17 @@ class VisClean(object):
                     No parameters necessary if you are only doing 'dayenu'.
                     For 'dayenu_dpss', 'dayenu_dft', 'dayenu_clean' see below
                     and use the appropriate fitting options for each method.
+                    suppression_factors: array-like
+                        if not 2dfilter: 1d np.ndarray or list of tuples of floats
+                        specifying the fractional residuals of model to leave in the data.
+                        For example, 1e-6 means that the filter will leave in 1e-6 of data fitted
+                        by the model.
+                        if 2dfilter: should be a 2-list or 2-tuple. Each element should
+                        be a list or tuple or np.ndarray of floats that include centers
+                        of rectangular bins.
+                    cache: dict, optional
+                        dictionary for caching fitting matrices.
+                    ax: str, axis to filter, options=['freq', 'time', 'both']
                 * 'dpss':
                     'eigenval_cutoff': array-like
                         list of sinc_matrix eigenvalue cutoffs to use for included dpss modes.
@@ -506,6 +524,17 @@ class VisClean(object):
                         to calculate the number of DPSS terms. Similar to edge_supression but instead checks
                         the suppression of a since vector with equal contributions from all tones inside of the
                         filter width instead of a single tone.
+                    suppression_factors: array-like
+                        if not 2dfilter: 1d np.ndarray or list of tuples of floats
+                        specifying the fractional residuals of model to leave in the data.
+                        For example, 1e-6 means that the filter will leave in 1e-6 of data fitted
+                        by the model.
+                        if 2dfilter: should be a 2-list or 2-tuple. Each element should
+                        be a list or tuple or np.ndarray of floats that include centers
+                        of rectangular bins.
+                    cache: dict, optional
+                        dictionary for caching fitting matrices.
+                    ax: str, axis to filter, options=['freq', 'time', 'both']
                 *'clean':
                      'tol': float,
                         clean tolerance. 1e-9 is standard.
@@ -540,28 +569,7 @@ class VisClean(object):
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
         x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
             2-list/tuple of numpy arrays if 2d filter.
-        keys : list, optional, list of tuple ant-pol pair keys of visibilities to filter.
-        data : DataContainer, data to clean. Default is self.data
-        flags : Datacontainer, flags to use. Default is self.flags
-        wgts : DataContainer, weights to use. Default is None.
-        output_prefix : string, prefix for attached filter data containers.
-        zeropad : int, number of bins to zeropad on both sides of FFT axis. Provide 2-tuple if axis='both'
-        cache: dict, optional
-            dictionary for caching fitting matrices.
-        ax: str, axis to filter, options=['freq', 'time', 'both']
-            Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
-        skip_wgt : skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
-            time. Skipped channels are then flagged in self.flags.
-            Only works properly when all weights are all between 0 and 1.
-        max_contiguous_edge_flags : int, optional
-            if the number of contiguous samples at the edge is greater then this
-            at either side, skip.
-        verbose : Lots of outputs.
-        overwrite : bool, if True, overwrite output modules with the same name
-                    if they already exist.        """
-        if cache is None:
-            cache = {}
+     """
         if not HAVE_UVTOOLS:
             raise ImportError("uvtools required, install hera_cal[all]")
 
@@ -570,7 +578,7 @@ class VisClean(object):
         if ax == 'both':
             if zeropad is None:
                 zeropad = [0, 0]
-            filterdim = [0, 1]
+            filterdim = [1, 0]
             filter2d = True
             if x is None:
                 x = [(self.times - np.mean(self.times)) * 3600. * 24., self.freqs]
@@ -658,10 +666,8 @@ class VisClean(object):
                                            x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
             mdl, res, info = dspec.fourier_filter(x=xp, data=d, wgts=w, filter_centers=filter_centers,
                                                   filter_half_widths=filter_half_widths,
-                                                  suppression_factors=suppression_factors, mode=mode,
-                                                  filter2d=filter2d, fitting_options=fitting_options,
-                                                  filter_dim=filterdim, cache=cache, skip_wgt=skip_wgt,
-                                                  max_contiguous_edge_flags=max_contiguous_edge_flags)
+                                                  mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                  **filter_kwargs)
 
             # unzeropad array and put in skip flags.
             if ax == 'freq':
@@ -803,14 +809,12 @@ class VisClean(object):
                     edgecut_low = [edgecut_low, edgecut_low]
                 if isinstance(window, str):
                     window = [window, window]
-            clean_options = {'tol': tol, 'maxiter': maxiter, 'filt2d_mode': filt2d_mode, 'edgecut_low': edgecut_low,
-                             'add_clean_residual': add_clean_residual, 'window': window, 'gain': gain,
-                             'alpha': alpha, 'edgecut_hi': edgecut_hi}
             self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                suppression_factors=suppression_factors, mode='clean', x=x, data=data,
+                                mode='clean', x=x, data=data,
                                 flags=flags, output_prefix=output_prefix, wgts=wgts,
-                                fitting_options=clean_options,
-                                ax=ax, skip_wgt=skip_wgt,
+                                tol=tol, maxiter=maxiter, filt2d_mode=filt2d_mode, edgecut_hi=edgecut_hi,
+                                edgecut_low=edgecut_low, add_clean_residual=add_clean_residual, alpha=alpha,
+                                ax=ax, skip_wgt=skip_wgt, window=window, gain=gain,
                                 verbose=verbose, overwrite=overwrite)
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
