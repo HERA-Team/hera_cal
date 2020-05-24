@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
-                mode='clean',  **filter_kwargs):
+                mode='clean', **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -99,7 +99,7 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
 
     filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
                                                        skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
-        # put back in unfilted values if skip_wgt is triggered
+    # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
     for i in info['status']['axis_1']:
         if info['status']['axis_1'][i] == 'skipped':
