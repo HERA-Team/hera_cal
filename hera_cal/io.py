@@ -14,6 +14,9 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from astropy import units
 import h5py
+import pickle
+import random
+import glob
 
 try:
     import aipy
@@ -676,6 +679,60 @@ class HERAData(UVData):
                 times = np.unique(list(times.values()))
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
+
+def read_filter_cache(cache_dir):
+    """
+    Load files from a cache specified by cache_dir.
+
+    Parameters
+    ----------
+    cache_dir, string, path to a folder that is used for the cache
+        files in this folder with an extension .filter_cache are assumed
+        to be cache files. These files are pickled caches from previous filtering runs.
+    """
+    # Load up the cache file with the most keys (precomputed filter matrices).
+    cache = {}
+    if cache_dir is not None and read_cache:
+        cache_files = glob.glob(cache_dir + '/*.filter_cache')
+        # loop through cache files, load them.
+        # If there are new keys, add them to internal cache.
+        # If not, delete the reference matrices from memory.
+        for cache_file in cache_files:
+            cfile = open(cache_file, 'rb')
+            cache_t = pickle.load(cfile)
+            for key in cache_t:
+                if key not in cache:
+                    cache[key] = cache_t[key]
+    return cache
+
+def write_filter_cache(filter_cache, cache_dir=None,  skip_keys=None):
+    """
+    write cached cache to a new cache file.
+
+    Parameters
+    ----------
+    filter_cache, dict, dictionary of values that we wish to cache.
+    cache_dir, string, optional, path to a folder that is used for the cache
+        files in this folder with an extension .filter_cache are assumed
+        to be cache files. These files are pickled caches from previous filtering runs.
+        default, current working directory.
+    skip_keys, list, list of keys to skip in writing the filter_cache.
+    """
+    if skip_keys is None:
+        skip_keys = []
+    # if the keys_before instantiation wasn't a list, then
+    # keys_before would just be the current keys of cache and we
+    # wouldn't have any new keys.
+    new_filters = {k: cache[k] for k in cache if k not in skip_keys}
+    if len(new_filters) > 0:
+        # generate new file name
+        if cache_dir is None:
+            cache_dir = os.getcwd()
+        cache_file_name = '%032x' % random.getrandbits(128) + '.dayenu_cache'
+        cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
+        pickle.dump(new_filters, cfile)
+    else:
+        warnings.warn("No new keys provided. No cache file written.")
 
 
 def load_flags(flagfile, filetype='h5', return_meta=False):

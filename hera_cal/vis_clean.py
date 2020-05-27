@@ -286,13 +286,13 @@ class VisClean(object):
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
-    def vis_dayenu(self, keys=None, x=None, data=None, flags=None, wgts=None,
+    def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
                    ax='freq', horizon=1.0, standoff=0.0,
-                   min_dly=10.0, max_frate=None, tol=1e-9, output_prefix='clean',
-                   cache=None, skip_wgt=0.1, max_contiguous_edge_flags=10, verbose=False,
-                   overwrite=False):
+                   min_dly=10.0, max_frate=None, output_prefix='clean',
+                   skip_wgt=0.1, verbose=False, tol=1e-9,
+                   overwrite=False, **filter_kwargs):
         """
-        Run dayenu on data.
+        Filter the data
 
         Parameters
         -----------
@@ -308,7 +308,6 @@ class VisClean(object):
         standoff: fixed additional delay beyond the horizon (in nanosec) to filter [freq filtering]
         min_dly: max delay (in nanosec) used for freq filter is never below this.
         max_frate : max fringe rate (in milli-Hz) used for time filtering. See uvtools.dspec.fourier_filter for options.
-        tol: The fraction of visibilities within the filter region to leave in.
         output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
         cache: dict, optional
             dictionary for caching fitting matrices.
@@ -316,12 +315,14 @@ class VisClean(object):
             Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
             time. Skipped channels are then flagged in self.flags.
             Only works properly when all weights are all between 0 and 1.
-        max_contiguous_edge_flags : int, optional
-            if the number of contiguous samples at the edge is greater then this
-            at either side, skip.
+        verbose : Lots of outputs
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
-        verbose : Lots of outputs.
+        tol : float, optional. To what level are foregrounds subtracted.
+              if mode=='clean', passed as 'tol' paramter.
+              otherwise, passed as suppression_factors argument.
+        filter_kwargs : optional dictionary, see fourier_filter **filter_kwargs.
+                        Do not pass suppression_factors (non-clean) or tol  (clean) in **filter_kwargs.
         """
         if cache is None:
             cache = {}
@@ -361,25 +362,35 @@ class VisClean(object):
                 filter_centers = [filter_centers_time, filter_centers_freq]
                 filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
                 filter_centers = [filter_centers_time, filter_centers_freq]
-                suppression_factors = [[tol], [tol]]
+                if not mode == 'clean':
+                    suppression_factors = [[tol], [tol]]
             else:
-                suppression_factors = [tol]
+                if not mode == 'clean':
+                    suppression_factors = [tol]
                 if ax == 'freq':
                     filter_centers = filter_centers_freq
                     filter_half_widths = filter_half_widths_freq
                 elif ax == 'time':
                     filter_centers = filter_centers_time
                     filter_half_widths = filter_half_widths_time
-            self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                suppression_factors=suppression_factors, mode='dayenu_dpss_leastsq',
-                                x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                cache=cache, ax=ax,
-                                skip_wgt=skip_wgt, max_contiguous_edge_flags=max_contiguous_edge_flags,
-                                verbose=verbose, overwrite=overwrite)
+            if mode != 'clean':
+                self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                                    mode=mode, suppression_factors=suppression_factors,
+                                    x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
+                                    cache=cache, ax=ax,
+                                    skip_wgt=skip_wgt,
+                                    verbose=verbose, overwrite=overwrite)
+            else:
+                self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                                    mode=mode, tol=tol,
+                                    x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
+                                    cache=cache, ax=ax,
+                                    skip_wgt=skip_wgt,
+                                    verbose=verbose, overwrite=overwrite)
 
     def fourier_filter(self, filter_centers, filter_half_widths, mode,
                        x=None, keys=None, data=None, flags=None, wgts=None,
-                       output_prefix='filtered', zeropad=None,
+                       output_prefix='clean', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False, **filter_kwargs):
         """
         Generalized fourier filtering of attached data.
@@ -459,7 +470,7 @@ class VisClean(object):
         verbose : Lots of outputs.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
-        filter_kwargs: dict
+        filter_kwargs: dict. NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
             of dictionaries. The dictionary for each dimension must
@@ -483,8 +494,6 @@ class VisClean(object):
                         if 2dfilter: should be a 2-list or 2-tuple. Each element should
                         be a list or tuple or np.ndarray of floats that include centers
                         of rectangular bins.
-                    cache: dict, optional
-                        dictionary for caching fitting matrices.
                     ax: str, axis to filter, options=['freq', 'time', 'both']
                 * 'dpss':
                     'eigenval_cutoff': array-like
@@ -508,8 +517,6 @@ class VisClean(object):
                         if 2dfilter: should be a 2-list or 2-tuple. Each element should
                         be a list or tuple or np.ndarray of floats that include centers
                         of rectangular bins.
-                    cache: dict, optional
-                        dictionary for caching fitting matrices.
                     ax: str, axis to filter, options=['freq', 'time', 'both']
                 *'clean':
                      'tol': float,
@@ -680,7 +687,7 @@ class VisClean(object):
             filtered_resid.times = data.times
             filtered_flags.times = data.times
 
-    def vis_clean(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
+    def vis_clean_old(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
                   min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
                   gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
                   overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,

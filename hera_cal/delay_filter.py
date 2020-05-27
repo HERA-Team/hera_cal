@@ -26,9 +26,7 @@ class DelayFilter(VisClean):
     See vis_clean.VisClean for CLEAN functions.
     """
 
-    def run_filter(self, to_filter=None, weight_dict=None, standoff=15., horizon=1., min_dly=0.0,
-                   tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, verbose=False,
-                   edgecut_low=0, edgecut_hi=0, gain=0.1, alpha=0.5):
+    def run_filter(self, to_filter=None, weight_dict=None, verbose=False, skip_wgt=0.1, **filter_kwargs):
         '''
         Run uvtools.dspec.vis_filter on data.
 
@@ -41,27 +39,12 @@ class DelayFilter(VisClean):
             weight_dict: dictionary or DataContainer with all the same keys as self.data.
                 Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
                 of self.flags. uvtools.dspec.delay_filter will renormalize to compensate
-            standoff: fixed additional delay beyond the horizon (in ns)
-            horizon: proportionality constant for bl_len where 1 is the horizon (full light travel time)
-            min_dly: minimum delay used for cleaning [ns]: if bl_len * horizon + standoff < min_dly, use min_dly.
-            tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-            window: window function for filtering applied to the filtered axis.
-                See uvtools.dspec.gen_window for options.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
-            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
             verbose: If True print feedback to stdout
-            edgecut_low : int, number of bins to consider zero-padded at low-side of the FFT axis,
-                such that the windowing function smoothly approaches zero. If ax is 'both',
-                can feed as a tuple specifying for 0th and 1st FFT axis.
-            edgecut_hi : int, number of bins to consider zero-padded at high-side of the FFT axis,
-                such that the windowing function smoothly approaches zero. If ax is 'both',
-                can feed as a tuple specifying for 0th and 1st FFT axis.
-            gain: The fraction of a residual used in each iteration. If this is too low, clean takes
-                unnecessarily long. If it is too high, clean does a poor job of deconvolving.
-            alpha : float, if window is Tukey, this is its alpha parameter
+            filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
             self.clean_resid: DataContainer formatted like self.data with only high-delay components
@@ -73,35 +56,6 @@ class DelayFilter(VisClean):
                        horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol, maxiter=maxiter,
                        window=window, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
                        edgecut_hi=edgecut_hi, alpha=alpha, overwrite=True, verbose=verbose)
-
-    def run_dayenu_foreground_filter(self, to_filter=None, weight_dict=None, standoff=100., horizon=1., min_dly=0.0,
-                                     tol=1e-9, skip_wgt=0.1, verbose=False, cache=None):
-        """
-        Run frequency domain uvtools.dspec.dayenu_filter on data stored in the object.
-
-        Parameters
-        ----------
-        to_filter: list of visibilities to filter in the (i,j,pol) format.
-            If None (the default), all visibilities are filtered.
-        weight_dict: dictionary or DataContainer with all the same keys as self.data.
-            Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
-            of self.flags. uvtools.dspec.delay_filter will renormalize to compensate
-        standoff: fixed additional delay beyond the horizon (in ns)
-        horizon: proportionality constant for bl_len where 1 is the horizon (full light travel time)
-        min_dly: minimum delay used for cleaning [ns]: if bl_len * horizon + standoff < min_dly, use min_dly.
-        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-        window: window function for filtering applied to the filtered axis.
-            See uvtools.dspec.gen_window for options.
-        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-            Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
-            time. Skipped channels are then flagged in self.flags.
-        verbose: If True print feedback to stdout
-        cache, dictionary of precomputed filtering matrices. See uvtools.dspec.dayenu_filter for key format.
-        """
-        self.vis_dayenu(keys=to_filter, x=self.freqs, data=self.data, flags=self.flags, wgts=weight_dict,
-                        ax='freq', horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
-                        overwrite=True, verbose=verbose, skip_wgt=skip_wgt,
-                        output_prefix='clean', cache=cache)
 
     def get_filled_data(self):
         """Get data with flagged pixels filled with clean_model.
@@ -169,43 +123,10 @@ class DelayFilter(VisClean):
                                         add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
 
-def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1,
+def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_range=None, cache_dir=None,
+                                        read_cache=False, write_cache=False,
                                         res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                         clobber=False, add_to_history='', **filter_kwargs):
-    '''
-    Uses partial data loading and writing to perform delay filtering.
-
-    Arguments:
-        infilename: string path to data to uvh5 file to load
-        cal: optional string path to calibration file to apply to data before delay filtering
-        Nbls: the number of baselines to load at once.
-        res_outfilename: path for writing the filtered visibilities with flags
-        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
-        filled_outfilename: path for writing the original data but with flags unflagged and replaced
-            with CLEAN models wherever possible
-        clobber: if True, overwrites existing file at the outfilename
-        add_to_history: string appended to the history of the output file
-        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
-    '''
-    hd = io.HERAData(infilename, filetype='uvh5')
-    if calfile is not None:
-        calfile = io.HERACal(calfile)
-        calfile.read()
-    # loop over all baselines in increments of Nbls
-    for i in range(0, len(hd.bls), Nbls):
-        df = DelayFilter(hd, input_cal=calfile)
-        df.read(bls=hd.bls[i:i + Nbls])
-        df.run_filter(**filter_kwargs)
-        df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                               filled_outfilename=filled_outfilename, partial_write=True,
-                               clobber=clobber, add_to_history=add_to_history)
-        df.hd.data_array = None  # this forces a reload in the next loop
-
-
-def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_range=None, cache_dir=None,
-                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                               clobber=False, add_to_history='', write_cache=False, read_cache=True,
-                                               **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -216,59 +137,46 @@ def partial_load_dayenu_delay_filter_and_write(infilename, calfile=None, Nbls=1,
         spw_range: spw_range of data to delay-filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
                     see uvtools.dspec.dayenu_filter for key formats.
-        res_outfilename: path for writing the filtered visibilities with flags
-        clobber: if True, overwrites existing file at the outfilename
-        add_to_history: string appended to the history of the output file
         write_cache: bool. If true, create new cache file with precomputed matrices
                            that were not in previously loaded cache files.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
-        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_dayenu_foreground_filter()
+        res_outfilename: path for writing the filtered visibilities with flags
+        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+        filled_outfilename: path for writing the original data but with flags unflagged and replaced
+            with CLEAN models wherever possible
+        clobber: if True, overwrites existing file at the outfilename
+        add_to_history: string appended to the history of the output file
+        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
     '''
-    # Load up the cache file with the most keys (precomputed filter matrices).
-    cache = {}
-    if cache_dir is not None and read_cache:
-        cache_files = glob.glob(cache_dir + '/*')
-        # loop through cache files, load them.
-        # If there are new keys, add them to internal cache.
-        # If not, delete the reference matrices from memory.
-        for cache_file in cache_files:
-            cfile = open(cache_file, 'rb')
-            cache_t = pickle.load(cfile)
-            for key in cache_t:
-                if key not in cache:
-                    cache[key] = cache_t[key]
-    # the list here is important -- converts from a pointer to a new variable.
-    keys_before = list(cache.keys())
     hd = io.HERAData(infilename, filetype='uvh5')
-    freqs = hd.get_metadata_dict()['freqs']
+    #make sure that spw_range is within (0, Nf) if not, truncate it.
+    if spw_range[0] < 0:
+        warnings.warn("spw_range[0] cannot be less then 0. Setting to 0.")
+        spw_range[0] = 0
+    if spw_range[1] >= hd.Nfreqs:
+        warnings.warn("spw_range[1] cannot be larger then number of frequency channels. Setting to hd.Nfreqs")
+        spw_range[1] = hd.Nfreqs
     if calfile is not None:
         calfile = io.HERACal(calfile)
         calfile.read()
+    # read in cache
+    if read_cache:
+        filter_cache = io.read_filter_cache(cache_dir)
+    else:
+        filter_cache = {}
+    keys_before = list(filter_cache.keys())
     # loop over all baselines in increments of Nbls
     for i in range(0, len(hd.bls), Nbls):
         df = DelayFilter(hd, input_cal=calfile)
-        # update cache
         df.read(bls=hd.bls[i:i + Nbls], frequencies=hd.freqs[spw_range[0]:spw_range[1]])
-        df.run_dayenu_foreground_filter(cache=cache, **filter_kwargs)
-        df.write_filtered_data(res_outfilename=res_outfilename, filled_outfilename=filled_outfilename,
-                               partial_write=True, CLEAN_outfilename=CLEAN_outfilename,
-                               clobber=clobber, add_to_history=add_to_history,
-                               freq_array=np.asarray([df.freqs]), Nfreqs=df.Nfreqs)
+        df.run_filter(cache, **filter_kwargs, cache=cache)
+        df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                               filled_outfilename=filled_outfilename, partial_write=True,
+                               clobber=clobber, add_to_history=add_to_history)
         df.hd.data_array = None  # this forces a reload in the next loop
-    # Write a new cache file that only contains the newly computed filter matrices.
+    # write out cache
     if write_cache:
-        # if the keys_before instantiation wasn't a list, then
-        # keys_before would just be the current keys of cache and we
-        # wouldn't have any new keys.
-        new_filters = {k: cache[k] for k in cache if k not in keys_before}
-        if len(new_filters) > 0:
-            # generate new file name
-            if cache_dir is None:
-                cache_dir = os.getcwd()
-            cache_file_name = '%032x' % random.getrandbits(128) + '.dayenu_cache'
-            cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
-            pickle.dump(new_filters, cfile)
-
+        filter_cache = io.write_filter_cache(filter_cache, cache_dir, keys_before)
 
 def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''
