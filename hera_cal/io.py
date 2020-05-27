@@ -657,6 +657,7 @@ class HERAData(UVData):
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
 
+
 def read_filter_cache(cache_dir):
     """
     Load files from a cache specified by cache_dir.
@@ -681,7 +682,8 @@ def read_filter_cache(cache_dir):
                 cache[key] = cache_t[key]
     return cache
 
-def write_filter_cache(filter_cache, cache_dir=None,  skip_keys=None):
+
+def write_filter_cache(filter_cache, cache_dir=None, skip_keys=None):
     """
     write cached cache to a new cache file.
 

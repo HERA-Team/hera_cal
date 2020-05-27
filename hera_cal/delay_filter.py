@@ -18,6 +18,7 @@ import glob
 import os
 import warnings
 
+
 class DelayFilter(VisClean):
     """
     DelayFilter object.
@@ -26,7 +27,7 @@ class DelayFilter(VisClean):
     See vis_clean.VisClean for CLEAN functions.
     """
 
-    def run_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15,  min_dly=0.0, mode='clean',
+    def run_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
                    skip_wgt=0.1, tol=1e-9, verbose=False, cache=None, **filter_kwargs):
         '''
         Run uvtools.dspec.vis_filter on data.
@@ -158,7 +159,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_ra
     hd = io.HERAData(infilename, filetype='uvh5')
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
-    #make sure that spw_range is within (0, Nf) if not, truncate it.
+    # make sure that spw_range is within (0, Nf) if not, truncate it.
     if spw_range[0] < 0:
         warnings.warn("spw_range[0] cannot be less then 0. Setting to 0.")
         spw_range[0] = 0
@@ -187,6 +188,7 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_ra
     # write out cache
     if write_cache:
         filter_cache = io.write_filter_cache(filter_cache, cache_dir, skip_keys=keys_before)
+
 
 def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''

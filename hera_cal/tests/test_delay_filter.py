@@ -118,14 +118,14 @@ class Test_DelayFilter(object):
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         # run dayenu filter
         df.partial_load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
-                                                      cache_dir=cdir, mode='dayenu',
-                                                      Nbls=1, clobber=True,
-                                                      spw_range=(0, 32), write_cache=True)
+                                               cache_dir=cdir, mode='dayenu',
+                                               Nbls=1, clobber=True,
+                                               spw_range=(0, 32), write_cache=True)
         # generate duplicate cache files to test duplicate key handle for cache load.
         df.partial_load_delay_filter_and_write(uvh5, res_outfilename=outfilename, cache_dir=cdir,
                                                mode='dayenu',
-                                                  Nbls=1, clobber=True, read_cache=False,
-                                                  spw_range=(0, 32), write_cache=True)
+                                               Nbls=1, clobber=True, read_cache=False,
+                                               spw_range=(0, 32), write_cache=True)
         # there should now be two cache files.
         assert len(glob.glob(cdir + '/*')) == 2
         hd = io.HERAData(outfilename)
@@ -137,9 +137,9 @@ class Test_DelayFilter(object):
         # run on a new file with new cached keys (test updating the cache). This time also calibrate
         calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         df.partial_load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
-                                                      cache_dir=cdir, calfile=calfile,
-                                                      Nbls=1, clobber=True, mode='dayenu',
-                                                      spw_range=(0, 32), write_cache=True)
+                                               cache_dir=cdir, calfile=calfile,
+                                               Nbls=1, clobber=True, mode='dayenu',
+                                               spw_range=(0, 32), write_cache=True)
 
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')

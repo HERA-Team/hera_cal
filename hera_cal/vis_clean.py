@@ -287,10 +287,10 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
-                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
-                   min_dly=10.0, max_frate=None, output_prefix='clean',
-                   skip_wgt=0.1, verbose=False, tol=1e-9,
-                   overwrite=False, **filter_kwargs):
+                  ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
+                  min_dly=10.0, max_frate=None, output_prefix='clean',
+                  skip_wgt=0.1, verbose=False, tol=1e-9,
+                  overwrite=False, **filter_kwargs):
         """
         Filter the data
 
@@ -383,7 +383,7 @@ class VisClean(object):
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
                                     ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
-                                    
+
     def fourier_filter(self, filter_centers, filter_half_widths, mode,
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
@@ -684,10 +684,10 @@ class VisClean(object):
             filtered_flags.times = data.times
 
     def vis_clean_old(self, keys=None, data=None, flags=None, wgts=None, ax='freq', horizon=1.0, standoff=0.0,
-                  min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
-                  gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
-                  overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
-                  verbose=True):
+                      min_dly=0.0, max_frate=None, tol=1e-6, maxiter=100, window='none', zeropad=0,
+                      gain=1e-1, skip_wgt=0.1, filt2d_mode='rect', alpha=0.5, edgecut_low=0, edgecut_hi=0,
+                      overwrite=False, output_prefix='clean', add_clean_residual=False, dtime=None, dnu=None,
+                      verbose=True):
         """
         Perform a CLEAN deconvolution.
         Run a CLEAN on data and insert the CLEAN components
