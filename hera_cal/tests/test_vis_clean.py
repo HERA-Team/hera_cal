@@ -74,18 +74,6 @@ class Test_VisClean(object):
         V2.clear_calibration()
         assert not hasattr(V2, 'hc')
 
-        # add some checks for new spw argument
-        fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
-        pytest.raises(ValueError, VisClean, fname, filetype='uvh5', spw_range='0,2')
-        pytest.raises(ValueError, VisClean, fname, filetype='uvh5', spw_range=[0, 2.3])
-        pytest.raises(ValueError, VisClean, fname, filetype='uvh5', spw_range=[-2, 3])
-
-        # check warning if spw_range exceeds length of frequencies
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            V = VisClean(fname, filetype='uvh5', spw_range=[0, 5000])
-            assert V.Nfreqs == V.spw_range[1]
-
     @pytest.mark.filterwarnings("ignore:Selected polarization values are not evenly spaced")
     def test_read_write(self):
         # test read data can be turned off for uvh5
@@ -115,7 +103,6 @@ class Test_VisClean(object):
         assert os.path.exists("ex.uvh5")
         os.remove('ex.uvh5')
 
-    @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_fourier_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='uvh5')
@@ -251,7 +238,6 @@ class Test_VisClean(object):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='uvh5')
         V.read()
-        assert V.spw_range[1] == V.Nfreqs
 
         # fft
         V.fft_data(zeropad=30, ifft=False)
@@ -263,11 +249,7 @@ class Test_VisClean(object):
         pytest.raises(ValueError, V.fft_data, keys=[('foo')])
 
     # THIS UNIT TEST IS BROKEN!!!
-    # It was cleaning with one dnu and trimming with another.
-    # I am preserving this bad behavior but when I remove the bad
-    # behavior it fails. Someone should fix this unit test.
-    # I don't think it should be done in this PR though -- whose goal is to
-    #
+    # See https://github.com/HERA-Team/hera_cal/issues/603
     def test_trim_model(self):
         # load data
         V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))

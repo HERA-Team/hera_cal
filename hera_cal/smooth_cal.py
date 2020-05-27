@@ -84,8 +84,8 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
             Only works properly when all weights are all between 0 and 1.
         mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
               examples include 'dpss_leastsq', 'clean'.
-        filter_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
-            Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
+        filter_kwargs : any keyword arguments for the filtering mode being used.
+        See vis_clean.fourier_filter or uvtools.dspec.fourier_filter for a full description.
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
@@ -95,12 +95,12 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
 
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
-    rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+    #rephasor = np.exp(-2.0j * np.pi * dly * freqs)
 
-    filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
+    filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[dly],
                                                        skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
     # put back in unfilted values if skip_wgt is triggered
-    filtered /= rephasor
+    # filtered /= rephasor
     for i in info['status']['axis_1']:
         if info['status']['axis_1'][i] == 'skipped':
             filtered[i, :] = gains[i, :]
