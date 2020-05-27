@@ -546,7 +546,7 @@ class HERAData(UVData):
 
     def partial_write(self, output_path, data=None, flags=None, nsamples=None,
                       clobber=False, inplace=False, add_to_history='',
-                      selection_axes=None, **kwargs):
+                      **kwargs):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
         input_data file called on __init__. Any data/flags/nsamples left as None will be written
@@ -582,34 +582,11 @@ class HERAData(UVData):
                 hd_writer.__setattr__(attribute, value)
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
-
         if inplace:  # update this objects's arrays using DataContainers
             this = self
         else:  # make a copy of this object and then update the relevant arrays using DataContainers
             this = copy.deepcopy(self)
         this.update(data=data, flags=flags, nsamples=nsamples)
-        '''
-        for k in flags:
-            print(k)
-            print('flags')
-            print(flags[k])
-            print(flags[k].shape)
-        d,f,n = this.build_datacontainers()
-        for k in flags:
-            print(k)
-            print('this.flags')
-            print(f[k])
-            print(f[k].shape)
-        print('flag array shape.')
-        print(this.flag_array.shape)
-        print('data array shape.')
-        print(this.data_array.shape)
-        print('nsample_array shape.')
-        print(this.nsample_array.shape)
-        print('all true?')
-        print(np.all(this.flag_array))
-        print(self.last_read_kwargs['frequencies'] - hd_writer.freq_array.squeeze())
-        '''
         hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
                                   this.nsample_array, **self.last_read_kwargs)
 
@@ -692,17 +669,16 @@ def read_filter_cache(cache_dir):
     """
     # Load up the cache file with the most keys (precomputed filter matrices).
     cache = {}
-    if cache_dir is not None and read_cache:
-        cache_files = glob.glob(cache_dir + '/*.filter_cache')
-        # loop through cache files, load them.
-        # If there are new keys, add them to internal cache.
-        # If not, delete the reference matrices from memory.
-        for cache_file in cache_files:
-            cfile = open(cache_file, 'rb')
-            cache_t = pickle.load(cfile)
-            for key in cache_t:
-                if key not in cache:
-                    cache[key] = cache_t[key]
+    cache_files = glob.glob(cache_dir + '/*.filter_cache')
+    # loop through cache files, load them.
+    # If there are new keys, add them to internal cache.
+    # If not, delete the reference matrices from memory.
+    for cache_file in cache_files:
+        cfile = open(cache_file, 'rb')
+        cache_t = pickle.load(cfile)
+        for key in cache_t:
+            if key not in cache:
+                cache[key] = cache_t[key]
     return cache
 
 def write_filter_cache(filter_cache, cache_dir=None,  skip_keys=None):
@@ -723,12 +699,12 @@ def write_filter_cache(filter_cache, cache_dir=None,  skip_keys=None):
     # if the keys_before instantiation wasn't a list, then
     # keys_before would just be the current keys of cache and we
     # wouldn't have any new keys.
-    new_filters = {k: cache[k] for k in cache if k not in skip_keys}
+    new_filters = {k: filter_cache[k] for k in filter_cache if k not in skip_keys}
     if len(new_filters) > 0:
         # generate new file name
         if cache_dir is None:
             cache_dir = os.getcwd()
-        cache_file_name = '%032x' % random.getrandbits(128) + '.dayenu_cache'
+        cache_file_name = '%032x' % random.getrandbits(128) + '.filter_cache'
         cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
         pickle.dump(new_filters, cfile)
     else:

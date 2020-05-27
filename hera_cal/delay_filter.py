@@ -16,7 +16,7 @@ import pickle
 import random
 import glob
 import os
-
+import warnings
 
 class DelayFilter(VisClean):
     """
@@ -26,11 +26,12 @@ class DelayFilter(VisClean):
     See vis_clean.VisClean for CLEAN functions.
     """
 
-    def run_filter(self, to_filter=None, weight_dict=None, verbose=False, skip_wgt=0.1, **filter_kwargs):
+    def run_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15,  min_dly=0.0, mode='clean',
+                   skip_wgt=0.1, tol=1e-9, verbose=False, cache=None, **filter_kwargs):
         '''
         Run uvtools.dspec.vis_filter on data.
 
-        Run on (a subset of) the data stored in the object.
+        Run a delay-filter on (a subset of) the data stored in the object.
         Uses stored flags unless explicitly overridden with weight_dict.
 
         Arguments:
@@ -38,12 +39,18 @@ class DelayFilter(VisClean):
                 If None (the default), all visibilities are filtered.
             weight_dict: dictionary or DataContainer with all the same keys as self.data.
                 Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
-                of self.flags. uvtools.dspec.delay_filter will renormalize to compensate
+                of self.flags. uvtools.dspec.delay_filter will renormalize to compensate.
+            horizon: coefficient to bl_len where 1 is the horizon [freq filtering]
+            standoff: fixed additional delay beyond the horizon (in nanosec) to filter [freq filtering]
+            min_dly: max delay (in nanosec) used for freq filter is never below this.
+            mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
+            tol : float, optional. To what level are foregrounds subtracted.
             verbose: If True print feedback to stdout
+            cache: dictionary containing pre-computed filter products.
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -52,10 +59,10 @@ class DelayFilter(VisClean):
             self.clean_info: Dictionary of info from uvtools.dspec.delay_filter with the same keys as self.data
         '''
         # run delay CLEAN
-        self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict, ax='freq',
-                       horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol, maxiter=maxiter,
-                       window=window, gain=gain, skip_wgt=skip_wgt, edgecut_low=edgecut_low,
-                       edgecut_hi=edgecut_hi, alpha=alpha, overwrite=True, verbose=verbose)
+        self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
+                       ax='freq', x=self.freqs, cache=cache, mode=mode,
+                       horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
+                       skip_wgt=skip_wgt, overwrite=True, verbose=verbose, **filter_kwargs)
 
     def get_filled_data(self):
         """Get data with flagged pixels filled with clean_model.
@@ -149,11 +156,13 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_ra
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
+    if spw_range is None:
+        spw_range = [0, hd.Nfreqs]
     #make sure that spw_range is within (0, Nf) if not, truncate it.
     if spw_range[0] < 0:
         warnings.warn("spw_range[0] cannot be less then 0. Setting to 0.")
         spw_range[0] = 0
-    if spw_range[1] >= hd.Nfreqs:
+    if spw_range[1] > hd.Nfreqs:
         warnings.warn("spw_range[1] cannot be larger then number of frequency channels. Setting to hd.Nfreqs")
         spw_range[1] = hd.Nfreqs
     if calfile is not None:
@@ -166,17 +175,18 @@ def partial_load_delay_filter_and_write(infilename, calfile=None, Nbls=1, spw_ra
         filter_cache = {}
     keys_before = list(filter_cache.keys())
     # loop over all baselines in increments of Nbls
+    freqs = hd.freqs[spw_range[0]:spw_range[1]]
     for i in range(0, len(hd.bls), Nbls):
         df = DelayFilter(hd, input_cal=calfile)
-        df.read(bls=hd.bls[i:i + Nbls], frequencies=hd.freqs[spw_range[0]:spw_range[1]])
-        df.run_filter(cache, **filter_kwargs, cache=cache)
+        df.read(bls=hd.bls[i:i + Nbls], frequencies=freqs)
+        df.run_filter(cache=filter_cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=True,
-                               clobber=clobber, add_to_history=add_to_history)
+                               clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
         df.hd.data_array = None  # this forces a reload in the next loop
     # write out cache
     if write_cache:
-        filter_cache = io.write_filter_cache(filter_cache, cache_dir, keys_before)
+        filter_cache = io.write_filter_cache(filter_cache, cache_dir, skip_keys=keys_before)
 
 def delay_filter_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter.'''

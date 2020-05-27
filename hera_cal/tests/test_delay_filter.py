@@ -48,20 +48,6 @@ class Test_DelayFilter(object):
         np.testing.assert_array_equal(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
         np.testing.assert_array_equal(dfil.clean_resid[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
 
-    def test_run_dayenu_foreground_filter(self):
-        fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
-        k = (24, 25, 'ee')
-        dfil = df.DelayFilter(fname, filetype='miriad')
-        dfil.read(bls=[k])
-        bl = np.linalg.norm(dfil.antpos[24] - dfil.antpos[25]) / constants.c * 1e9
-        sdf = (dfil.freqs[1] - dfil.freqs[0]) / 1e9
-
-        dfil.run_dayenu_foreground_filter(to_filter=dfil.data.keys(), tol=1e-2)
-        for k in dfil.data.keys():
-            assert dfil.clean_resid[k].shape == (60, 64)
-            assert dfil.clean_model[k].shape == (60, 64)
-            assert k in dfil.clean_info
-
     def test_write_filtered_data(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')

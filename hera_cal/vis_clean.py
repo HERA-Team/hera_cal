@@ -321,10 +321,9 @@ class VisClean(object):
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
         tol : float, optional. To what level are foregrounds subtracted.
-              if mode=='clean', passed as 'tol' paramter.
-              otherwise, passed as suppression_factors argument.
         filter_kwargs : optional dictionary, see fourier_filter **filter_kwargs.
                         Do not pass suppression_factors (non-clean)!
+                        instead, use tol to set suppression levels in linear filtering.
         """
         if cache is None and not mode == 'clean':
             cache = {}
@@ -379,17 +378,12 @@ class VisClean(object):
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, suppression_factors=suppression_factors,
                                     x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax,
-                                    skip_wgt=skip_wgt,
-                                    verbose=verbose, overwrite=overwrite, **filter_kwargs)
+                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
             else:
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                    mode=mode, tol=tol,
-                                    x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    cache=cache, ax=ax,
-                                    skip_wgt=skip_wgt,
-                                    verbose=verbose, overwrite=overwrite, **filter_kwargs)
-
+                                    mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
+                                    ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
+                                    
     def fourier_filter(self, filter_centers, filter_half_widths, mode,
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
@@ -647,7 +641,7 @@ class VisClean(object):
                         xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
                                            x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
             mdl, res, info = dspec.fourier_filter(x=xp, data=d, wgts=w, filter_centers=filter_centers,
-                                                  filter_half_widths=filter_half_widths,
+                                                  filter_half_widths=filter_half_widths, cache=cache,
                                                   mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                                   **filter_kwargs)
 
