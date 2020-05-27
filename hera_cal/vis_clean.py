@@ -287,7 +287,7 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
-                   ax='freq', horizon=1.0, standoff=0.0,
+                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
                    min_dly=10.0, max_frate=None, output_prefix='clean',
                    skip_wgt=0.1, verbose=False, tol=1e-9,
                    overwrite=False, **filter_kwargs):
@@ -306,6 +306,8 @@ class VisClean(object):
             Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
         horizon: coefficient to bl_len where 1 is the horizon [freq filtering]
         standoff: fixed additional delay beyond the horizon (in nanosec) to filter [freq filtering]
+        cache: dictionary containing pre-computed filter products.
+        mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
         min_dly: max delay (in nanosec) used for freq filter is never below this.
         max_frate : max fringe rate (in milli-Hz) used for time filtering. See uvtools.dspec.fourier_filter for options.
         output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
@@ -322,9 +324,9 @@ class VisClean(object):
               if mode=='clean', passed as 'tol' paramter.
               otherwise, passed as suppression_factors argument.
         filter_kwargs : optional dictionary, see fourier_filter **filter_kwargs.
-                        Do not pass suppression_factors (non-clean) or tol  (clean) in **filter_kwargs.
+                        Do not pass suppression_factors (non-clean)!
         """
-        if cache is None:
+        if cache is None and not mode == 'clean':
             cache = {}
         if data is None:
             data = self.data
@@ -377,16 +379,16 @@ class VisClean(object):
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, suppression_factors=suppression_factors,
                                     x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    cache=cache, ax=ax,
+                                    ax=ax,
                                     skip_wgt=skip_wgt,
-                                    verbose=verbose, overwrite=overwrite)
+                                    verbose=verbose, overwrite=overwrite, **filter_kwargs)
             else:
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, tol=tol,
                                     x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
                                     cache=cache, ax=ax,
                                     skip_wgt=skip_wgt,
-                                    verbose=verbose, overwrite=overwrite)
+                                    verbose=verbose, overwrite=overwrite, **filter_kwargs)
 
     def fourier_filter(self, filter_centers, filter_half_widths, mode,
                        x=None, keys=None, data=None, flags=None, wgts=None,
