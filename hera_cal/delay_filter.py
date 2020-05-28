@@ -72,16 +72,15 @@ class DelayFilter(VisClean):
                 filter_cache = {}
             keys_before = list(filter_cache.keys())
         else:
-            filter_cache=None
+            filter_cache = None
         # loop over all baselines in increments of Nbls
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='freq', x=self.freqs, cache=filter_cache, mode=mode,
                        horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
                        skip_wgt=skip_wgt, overwrite=True, verbose=verbose, **filter_kwargs)
-        if not mode=='clean':
+        if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache(filter_cache, cache_dir, skip_keys=keys_before)
-
 
     def get_filled_data(self):
         """Get data with flagged pixels filled with clean_model.
@@ -148,10 +147,11 @@ class DelayFilter(VisClean):
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
                                         add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
+
 def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                           read_cache=False, write_cache=False,
-                           res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                           clobber=False, add_to_history='', **filter_kwargs):
+                                read_cache=False, write_cache=False,
+                                res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+                                clobber=False, add_to_history='', **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -179,7 +179,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         calfile = io.HERACal(calfile)
         calfile.read()
     if spw_range is None:
-        spw_range=[0, hd.Nfreqs]
+        spw_range = [0, hd.Nfreqs]
     freqs = hd.freqs[spw_range[0]:spw_range[1]]
     if Nbls_per_load is None:
         df = DelayFilter(hd, input_cal=calfile)
@@ -198,7 +198,6 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
             df.hd.data_array = None  # this forces a reload in the next loop
-
 
 
 def delay_filter_argparser():
@@ -222,6 +221,7 @@ def delay_filter_argparser():
 
     return a
 
+
 def delay_clean_argparser():
     '''Arg parser for CLEAN.'''
     a = delay_filter_argparser()
@@ -238,6 +238,7 @@ def delay_clean_argparser():
     clean_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
     return a
+
 
 def delay_linear_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.'''
