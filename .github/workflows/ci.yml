@@ -23,7 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
       with:
-        fetch-depth: 1
+        fetch-depth: 0
 
     - name: Get Miniconda (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
@@ -58,7 +58,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && success()
       run: |
         bash <(curl -s https://codecov.io/bash) -t ${{ secrets.CODECOV_TOKEN }}
-        
+
     - name: Python Style Checker
       run: |
         export PATH="$HOME/miniconda/bin:$PATH"
