@@ -117,7 +117,7 @@ class Test_VisClean(object):
                              filter_centers=fc, filter_half_widths=fw, suppression_factors=ff,
                              ax='height', mode='dayenu', fitting_options=None)
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fw, suppression_factors=ff,
-                         ax='freq', mode='dayenu', overwrite=True)
+                         ax='freq', mode='dayenu', output_prefix='clean', zeropad=10, overwrite=True, max_contiguous_edge_flags=20)
         # this line is repeated to cover the overwrite skip
         V.fourier_filter(keys=[k], filter_centers=fc, filter_half_widths=fw, suppression_factors=ff, max_contiguous_edge_flags=20,
                          ax='freq', mode='dayenu', zeropad=10, output_prefix='clean', overwrite=False)

@@ -173,10 +173,29 @@ class Test_DelayFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
         shutil.rmtree(cdir)
-
+        
     def test_delay_filter_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber']
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20']
         parser = df.delay_filter_argparser()
         a = parser.parse_args()
         assert a.infilename == 'a'
         assert a.clobber is True
+        assert a.spw_range[0] == 0
+        assert a.spw_range[1] == 20
+
+    def test_delay_clean_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--window',  'blackmanharris']
+        parser = df.delay_clean_argparser()
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.window == 'blackmanharris'
+
+    def test_delay_linear_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
+        parser = df.delay_linear_argparser()
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.write_cache is True
+        assert a.cache_dir == '/blah/'
