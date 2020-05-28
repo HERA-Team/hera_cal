@@ -603,6 +603,10 @@ class VisClean(object):
         else:
             # make sure flagged channels have zero weight, regardless of what user supplied.
             wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
+        if mode != 'clean':
+            if cache is None:
+                cache = {}
+            filter_kwargs['cache'] = cache
         # iterate over keys
         for k in keys:
             if k in filtered_model and overwrite is False:
@@ -641,7 +645,7 @@ class VisClean(object):
                         xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
                                            x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
             mdl, res, info = dspec.fourier_filter(x=xp, data=d, wgts=w, filter_centers=filter_centers,
-                                                  filter_half_widths=filter_half_widths, cache=cache,
+                                                  filter_half_widths=filter_half_widths,
                                                   mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                                   **filter_kwargs)
 
