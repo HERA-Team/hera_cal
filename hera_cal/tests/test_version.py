@@ -70,28 +70,27 @@ def test_construct_version_info():
         data = data.strip()
         return data.decode('utf8')
 
-    # try:
-    git_origin = get_git_output(['config', '--get', 'remote.origin.url'], capture_stderr=True)
-    git_hash = get_git_output(['rev-parse', 'HEAD'], capture_stderr=True)
-    git_description = get_git_output(['describe', '--dirty', '--tag', '--always'])
-    git_branch = get_git_output(['rev-parse', '--abbrev-ref', 'HEAD'], capture_stderr=True)
-    git_version = get_git_output(['describe', '--tags', '--abbrev=0'])
-    # except subprocess.CalledProcessError:
-    #    try:
+    try:
+        git_origin = get_git_output(['config', '--get', 'remote.origin.url'], capture_stderr=True)
+        git_hash = get_git_output(['rev-parse', 'HEAD'], capture_stderr=True)
+        git_description = get_git_output(['describe', '--dirty', '--tag', '--always'])
+        git_branch = get_git_output(['rev-parse', '--abbrev-ref', 'HEAD'], capture_stderr=True)
+        git_version = get_git_output(['describe', '--tags', '--abbrev=0'])
+    except subprocess.CalledProcessError:
+        try:
             # Check if a GIT_INFO file was created when installing package
-    #        git_file = os.path.join(hera_cal_dir, 'GIT_INFO')
-    #        with open(git_file) as data_file:
-    #            data = [x for x in json.loads(data_file.read().strip())]
-    #            git_origin = data[0]
-    #            git_hash = data[1]
-    #            git_description = data[2]
-    #            git_branch = data[3]
-    #    except (IOError, OSError):
-    #        git_origin = ''
-    #        git_hash = ''
-    #        git_description = ''
-    #        git_branch = ''
-            
+            git_file = os.path.join(hera_cal_dir, 'GIT_INFO')
+            with open(git_file) as data_file:
+                data = [x for x in json.loads(data_file.read().strip())]
+                git_origin = data[0]
+                git_hash = data[1]
+                git_description = data[2]
+                git_branch = data[3]
+        except (IOError, OSError):
+            git_origin = ''
+            git_hash = ''
+            git_description = ''
+            git_branch = ''
 
     test_version_info = {'version': __version__, 'git_origin': git_origin,
                          'git_hash': git_hash, 'git_description': git_description,
