@@ -687,7 +687,6 @@ class VisClean(object):
             filtered_resid.times = data.times
             filtered_flags.times = data.times
 
-
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
                  overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
                  zeropad=0, dtime=None, dnu=None, verbose=True):

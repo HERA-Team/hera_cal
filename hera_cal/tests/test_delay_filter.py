@@ -173,7 +173,7 @@ class Test_DelayFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
         shutil.rmtree(cdir)
-        
+
     def test_delay_filter_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20']
         parser = df.delay_filter_argparser()
@@ -184,7 +184,7 @@ class Test_DelayFilter(object):
         assert a.spw_range[1] == 20
 
     def test_delay_clean_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--window',  'blackmanharris']
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
         parser = df.delay_clean_argparser()
         a = parser.parse_args()
         assert a.infilename == 'a'

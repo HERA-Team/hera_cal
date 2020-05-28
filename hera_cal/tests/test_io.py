@@ -312,13 +312,13 @@ class Test_HERAData(object):
         # or filter directory.
         io.write_filter_cache(filter_cache={'crazy': 'universe'})
         # make sure file (and only one file) was written.
-        assert len(glob.glob(os.getcwd()+'/*.filter_cache')) == 1
-        # make sure read works and read cache is identical to written cache. 
+        assert len(glob.glob(os.getcwd() + '/*.filter_cache')) == 1
+        # make sure read works and read cache is identical to written cache.
         cache = io.read_filter_cache(os.getcwd())
         assert cache['crazy'] == 'universe'
         assert len(cache) == 1
         # now cleanup cache files.
-        cleanup = glob.glob(os.getcwd()+'/*.filter_cache')
+        cleanup = glob.glob(os.getcwd() + '/*.filter_cache')
         for file in cleanup:
             os.remove(file)
 
