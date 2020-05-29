@@ -304,17 +304,17 @@ class Test_HERAData(object):
                 assert np.all(dc.lsts_by_bl[k] == hd.lsts_by_bl[k])
                 assert np.all(dc.lsts_by_bl[k] == dc.lsts_by_bl[(k[1], k[0])])
 
-    def test_write_read_filter_cache(self):
-        # most of write_filter_cache and all of read_filter_cache are covered in
+    def test_write_read_filter_cache_scratch(self):
+        # most of write_filter_cache_scratch and all of read_filter_cache_scratch are covered in
         # test_delay_filter.test_load_dayenu_filter_and_write()
         # This test covers a few odds and ends that are not covered.
         # The case not covered is writing a filter cache with no skip_keys
         # or filter directory.
-        io.write_filter_cache(filter_cache={'crazy': 'universe'})
+        io.write_filter_cache_scratch(filter_cache={'crazy': 'universe'})
         # make sure file (and only one file) was written.
         assert len(glob.glob(os.getcwd() + '/*.filter_cache')) == 1
         # make sure read works and read cache is identical to written cache.
-        cache = io.read_filter_cache(os.getcwd())
+        cache = io.read_filter_cache_scratch(os.getcwd())
         assert cache['crazy'] == 'universe'
         assert len(cache) == 1
         # now cleanup cache files.

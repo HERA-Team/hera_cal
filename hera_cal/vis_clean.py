@@ -177,14 +177,14 @@ class VisClean(object):
         hc = io.to_HERACal(input_cal)
         # load gains
         cal_gains, cal_flags, cal_quals, cal_tquals = hc.read()
-        data_freqs = np.logical_and(hc.freqs >= self.data.freqs.min(), hc.freqs <= self.data.freqs.max())
+        cal_freqs_in_data = np.logical_and(hc.freqs >= self.data.freqs.min(), hc.freqs <= self.data.freqs.max())
         for ant in cal_gains:
-            cal_gains[ant] = cal_gains[ant][:, data_freqs]
-            cal_flags[ant] = cal_flags[ant][:, data_freqs]
-            cal_quals[ant] = cal_quals[ant][:, data_freqs]
+            cal_gains[ant] = cal_gains[ant][:, cal_freqs_in_data]
+            cal_flags[ant] = cal_flags[ant][:, cal_freqs_in_data]
+            cal_quals[ant] = cal_quals[ant][:, cal_freqs_in_data]
         if cal_tquals is not None:
             for pol in cal_tquals:
-                cal_tquals[pol] = cal_tquals[pol][:, data_freqs]
+                cal_tquals[pol] = cal_tquals[pol][:, cal_freqs_in_data]
 
         # apply calibration solutions to data and flags
         gain_convention = hc.gain_convention

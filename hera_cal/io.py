@@ -658,9 +658,19 @@ class HERAData(UVData):
             yield self.read(times=times[i:i + Nints])
 
 
-def read_filter_cache(cache_dir):
+def read_filter_cache_scratch(cache_dir):
     """
     Load files from a cache specified by cache_dir.
+    cache files are intended to serve as common short-term on-disk scratch for filtering matrices
+    that can be loaded by multiple compute nodes process a night and save computational time by avoiding
+    recomputing filter matrices (that often involve psuedo-inverses).
+
+    A node processing a single chunk will be able to read in any cache matrices that were already
+    computed from previous chunks.
+
+    cache files are named with randomly generated strings with the extension ".filter_cache". They
+    are not intended for long-term or cross-platform storage and are currently designed to be deleted at the end
+    of processing night.
 
     Parameters
     ----------
@@ -683,9 +693,20 @@ def read_filter_cache(cache_dir):
     return cache
 
 
-def write_filter_cache(filter_cache, cache_dir=None, skip_keys=None):
+def write_filter_cache_scratch(filter_cache, cache_dir=None, skip_keys=None):
     """
     write cached cache to a new cache file.
+
+    cache files are intended to serve as common short-term on-disk scratch for filtering matrices
+    that can be loaded by multiple compute nodes process a night and save computational time by avoiding
+    recomputing filter matrices (that often involve psuedo-inverses).
+
+    A node processing a single chunk will be able to read in any cache matrices that were already
+    computed from previous chunks.
+
+    cache files are named with randomly generated strings with the extension ".filter_cache". They
+    are not intended for long-term or cross-platform storage and are currently designed to be deleted at the end
+    of processing night.
 
     Parameters
     ----------

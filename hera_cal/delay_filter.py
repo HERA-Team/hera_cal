@@ -67,7 +67,7 @@ class DelayFilter(VisClean):
         # read in cache
         if not mode == 'clean':
             if read_cache:
-                filter_cache = io.read_filter_cache(cache_dir)
+                filter_cache = io.read_filter_cache_scratch(cache_dir)
             else:
                 filter_cache = {}
             keys_before = list(filter_cache.keys())
@@ -80,7 +80,7 @@ class DelayFilter(VisClean):
                        skip_wgt=skip_wgt, overwrite=True, verbose=verbose, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
-                filter_cache = io.write_filter_cache(filter_cache, cache_dir, skip_keys=keys_before)
+                filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
     def get_filled_data(self):
         """Get data with flagged pixels filled with clean_model.
@@ -158,7 +158,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
     Arguments:
         infilename: string path to data to uvh5 file to load
         cal: optional string path to calibration file to apply to data before delay filtering
-        Nbls_per_load: the number of baselines to load at once.
+        Nbls_per_load: int, the number of baselines to load at once.
                        If None, load all baselines at once. default : None.
         spw_range: spw_range of data to delay-filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
