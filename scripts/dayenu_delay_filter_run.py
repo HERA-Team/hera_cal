@@ -1,0 +1,26 @@
+#!/usr/bin/env python2.7
+# -*- coding: utf-8 -*-
+# Copyright 2019 the HERA Project
+# Licensed under the MIT License
+
+"""Command-line drive script for hera_cal.delay_filter"""
+"""Only performs filtering for DAYENU"""
+
+from hera_cal import delay_filter
+import sys
+import pickle
+import random
+
+parser = delay_filter.delay_linear_argparser()
+a = parser.parse_args()
+
+# set kwargs
+filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
+                 'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
+# Run Delay Filter
+delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile,
+                                         Nbls_per_load=a.partial_load_Nbls, spw_range=a.spw_range,
+                                         cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
+                                         clobber=a.clobber, write_cache=a.write_cache,
+                                         read_cache=a.read_cache, mode='dayenu',
+                                         add_to_history=' '.join(sys.argv), **filter_kwargs)

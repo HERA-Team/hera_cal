@@ -4,11 +4,12 @@
 # Licensed under the MIT License
 
 """Command-line drive script for hera_cal.delay_filter"""
+"""Only performs CLEAN Filtering"""
 
 from hera_cal import delay_filter
 import sys
 
-parser = delay_filter.delay_filter_argparser()
+parser = delay_filter.delay_clean_argparser()
 a = parser.parse_args()
 
 # set kwargs
@@ -17,17 +18,9 @@ filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol, 'wi
                  'edgecut_low': a.edgecut_low, 'min_dly': a.min_dly, 'gain': a.gain}
 if a.window == 'tukey':
     filter_kwargs['alpha'] = a.alpha
-
+spw_range = a.spw_range
 # Run Delay Filter
-if a.partial_load_Nbls is not None:  # partial loading
-    delay_filter.partial_load_delay_filter_and_write(a.infilename, calfile=a.calfile, Nbls=a.partial_load_Nbls,
-                                                     res_outfilename=a.res_outfilename, CLEAN_outfilename=a.CLEAN_outfilename,
-                                                     filled_outfilename=a.filled_outfilename, clobber=a.clobber,
-                                                     add_to_history=' '.join(sys.argv), **filter_kwargs)
-else:
-    df = delay_filter.DelayFilter()
-    df.load_data(a.infilename, filetype=a.filetype_in, input_cal=a.calfile)
-    df.run_filter(**filter_kwargs)
-    df.write_filtered_data(res_outfilename=a.res_outfilename, CLEAN_outfilename=a.CLEAN_outfilename,
-                           filled_outfilename=a.filled_outfilename, filetype=a.filetype_out,
-                           clobber=a.clobber, add_to_history=' '.join(sys.argv))
+delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, Nbls_per_load=a.partial_load_Nbls,
+                                         res_outfilename=a.res_outfilename, CLEAN_outfilename=a.CLEAN_outfilename,
+                                         filled_outfilename=a.filled_outfilename, clobber=a.clobber, spw_range=spw_range,
+                                         add_to_history=' '.join(sys.argv), **filter_kwargs)

@@ -38,8 +38,8 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
             For the purposes of this function, wghts <= 0 are considered flags.
         freqs: ndarray of frequency channels in Hz
         conv_crit: convergence criterionf or relative change in the rephasor
-        maxiter: maximum number of 
-    
+        maxiter: maximum number of
+
     Returns:
         tau: float, single best fit delay in s
     '''
@@ -67,8 +67,8 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
     return np.sum(taus)
 
 
-def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1,
-                maxiter=100, **win_kwargs):
+def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
+                mode='clean', **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -79,16 +79,13 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
         filter_scale: frequency scale in MHz to use for the low-pass filter. filter_scale^-1 corresponds
             to the half-width (i.e. the width of the positive part) of the region in fourier
             space, symmetric about 0, that is filtered out.
-        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-        window: window function for filtering applied to the frequency axis.
-            See aipy.dsp.gen_window for options.
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
             filtered is left unchanged and info is {'skipped': True} for that time.
             Only works properly when all weights are all between 0 and 1.
-        maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-        win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
-            Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
-
+        mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
+              examples include 'dpss_leastsq', 'clean'.
+        filter_kwargs : any keyword arguments for the filtering mode being used.
+        See vis_clean.fourier_filter or uvtools.dspec.fourier_filter for a full description.
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
@@ -96,17 +93,18 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, tol=1e-09, window='tukey'
     if not HAVE_UVTOOLS:
         raise ImportError("uvtools required, instsall hera_cal[all]")
 
-    df = np.median(np.diff(freqs))  # in Hz
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
-    filtered, res, info = uvtools.dspec.high_pass_fourier_filter(gains * rephasor, wgts, filter_size, df, tol=tol, window=window,
-                                                                 skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
-    filtered /= rephasor
+
+    filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
+                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
     # put back in unfilted values if skip_wgt is triggered
-    for i, info_dict in enumerate(info):
-        if info_dict.get('skipped', False):
+    filtered /= rephasor
+    for i in info['status']['axis_1']:
+        if info['status']['axis_1'][i] == 'skipped':
             filtered[i, :] = gains[i, :]
+
     return filtered, info
 
 
@@ -234,7 +232,7 @@ def flag_threshold_and_broadcast(flags, freq_threshold=0.35, time_threshold=0.5,
     until no new flags are found. Then it does antenna thresholding.
 
     Arguments:
-        flags: dictionary mapping antenna keys (e.g. (0, 'Jxx')) to Ntimes x Nfreq flag waterfalls. 
+        flags: dictionary mapping antenna keys (e.g. (0, 'Jxx')) to Ntimes x Nfreq flag waterfalls.
             Modified in place.
         freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
             for all channels. If the ratio of of such times for a given channel compared to all times that are not
@@ -295,7 +293,7 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
         rephasors[ant] = np.exp(-2.0j * np.pi * dly * freqs)
 
     def narrow_refant_candidates(candidates):
-        '''Helper function for comparing refant candidates to another another looking for the one with the 
+        '''Helper function for comparing refant candidates to another another looking for the one with the
         least noisy phases in other antennas when its the reference antenna (after taking out delays)'''
         median_angle_noise_as_refant = {}
         for ref in candidates:
@@ -311,7 +309,7 @@ def pick_reference_antenna(gains, flags, freqs, per_pol=True):
     for pol in (pols if per_pol else [pols]):
         # pick antennas with the mininum number of flags
         flags_per_ant = {ant: np.sum(f) for ant, f in flags.items() if ant[1] in pol}
-        refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items() 
+        refant_candidates = sorted([ant for ant, nflags in flags_per_ant.items()
                                     if nflags == np.min(list(flags_per_ant.values()))])
         while len(refant_candidates) > 1:  # loop over groups of 3 (the smallest, non-trivial size)
             # compare phase noise imparted by reference antenna candidates on two other reference antenna candidates
@@ -362,12 +360,12 @@ def build_time_blacklist(time_grid, time_blacklists=[], lst_blacklists=[], lat_l
             in the time_blacklist_array. Regions crossing the 24h brach cut, e.g. [(23, 1)], are allowed.
         lat_lon_alt_degrees: length 3 array of telescope location in degreees and altitude in meters. Only used to convert
             times to LSTs if lst_blacklists is not empty
-        telescope_name: string name of telescope. Only used if lst_blacklists is not empty and lat_lon_alt_degrees 
+        telescope_name: string name of telescope. Only used if lst_blacklists is not empty and lat_lon_alt_degrees
             is not None. Currently, only "HERA" will work since it's position is hard-coded in this module.
 
     Returns:
         time_blacklist_array: boolean array with the same shape as time_grid in which blacklisted integrations are True'''
-    
+
     time_blacklist_array = np.zeros(len(time_grid), dtype=bool)
 
     # Calculate blacklisted times
@@ -408,7 +406,7 @@ def build_freq_blacklist(freqs, freq_blacklists=[], chan_blacklists=[]):
         freqs: numpy array of frequencies
         freq_blacklists: list of pairs of frequencies in the same units bounding (inclusively) the spectral regions that
             are to be marked as True in the freq_blacklist_array
-        chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions that are to be marked 
+        chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions that are to be marked
             as True in the freq_blacklist_array.
 
     Returns:
@@ -445,7 +443,7 @@ def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None):
 
 class CalibrationSmoother():
 
-    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False, 
+    def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
                  pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
@@ -456,7 +454,7 @@ class CalibrationSmoother():
         2) The flag times and calfits time map one-to-one to the same set of integrations
         Also contains functionality to broadcasting flags beyond certain thresholds and for automatically picking
         a reference antenna for the whole day.
-    
+
         Arguments:
             calfits_list: list of string paths to calfits files containing calibration solutions and flags
             flag_file_list: list of string paths to files containing flags as a function of baseline, times
@@ -475,16 +473,16 @@ class CalibrationSmoother():
                 to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted times are not necessarily flagged.
             lst_blacklists:  list of pairs of LSTs in hours bounding (inclusively) regions of LST that are
-                to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate. 
+                to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 Regions crossing the 24h brach cut are acceptable (e.g. [(23, 1)] blacklists two total hours).
                 N.B. Blacklisted LSTS are not necessarily flagged.
-            lat_lon_alt_degrees: length 3 list or array of latitude (deg), longitude (deg), and altitude (m) of 
+            lat_lon_alt_degrees: length 3 list or array of latitude (deg), longitude (deg), and altitude (m) of
                 the array. Only used to convert LSTs to JD times. If the telescope_name in the calfits file is 'HERA',
                 this is not required.
-            freq_blacklists: list of pairs of frequencies in Hz hours bounding (inclusively) spectral regions 
+            freq_blacklists: list of pairs of frequencies in Hz hours bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted frequencies are not necessarily flagged.
-            chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions 
+            chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted channels are not necessarily flagged.
             pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
@@ -545,7 +543,7 @@ class CalibrationSmoother():
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         if load_cspa:
             self.cspa_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for ant in self.ants}
-        
+
         # Now fill those grid
         for ant in self.ants:
             for cal in self.cals:
@@ -558,7 +556,7 @@ class CalibrationSmoother():
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
                         self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
-        
+
         # Now build grid and fill it for chisq_grid, if desired
         if load_chisq:
             jpols = set([ant[1] for ant in self.ants])
@@ -581,7 +579,7 @@ class CalibrationSmoother():
         if pick_refant:
             utils.echo('Now picking reference antenna(s)...', verbose=self.verbose)
             self.refant = pick_reference_antenna(self.gain_grids, self.flag_grids, self.freqs, per_pol=True)
-            utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.' 
+            utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.'
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
             self.rephase_to_refant()
 
@@ -664,8 +662,8 @@ class CalibrationSmoother():
                                                      filter_scale=filter_scale, tol=tol, window=window,
                                                      skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
             # flag all channels for any time that triggers the skip_wgt
-            for i, info_dict in enumerate(info):
-                if info_dict.get('skipped', False):
+            for i in info['status']['axis_1']:
+                if info['status']['axis_1'][i] == 'skipped':
                     self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
         self.rephase_to_refant(warn=False)
 

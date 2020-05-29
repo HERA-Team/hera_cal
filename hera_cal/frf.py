@@ -82,7 +82,7 @@ def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True
     verbose : bool, optional
         If True, report feedback to standard output.
 
-    Returns 
+    Returns
     -------
     avg_data : ndarray
         2D complex array with time-average spectrum, shape=(Navg_times, Nfreqs)
@@ -306,7 +306,6 @@ class FRFilter(VisClean):
     """
     FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
-
     def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, wgt_by_nsample=True,
                      rephase=False, verbose=True, output_prefix='avg', keys=None, overwrite=False):
         """
@@ -322,7 +321,7 @@ class FRFilter(VisClean):
             One can mitigate this by factorizing the flags into time-freq separable masks,
             see self.factorize_flags.
 
-        Args : 
+        Args :
             data : DataContainer
                 data to time average, must be consistent with self.lsts and self.freqs
             times : 1D array
@@ -410,7 +409,7 @@ class FRFilter(VisClean):
         """
         Apply an FIR filter to data.
 
-        Args : 
+        Args :
             data : DataContainer
                 data to time average, must be consistent with self.lsts and self.freqs
             frps : DataContainer

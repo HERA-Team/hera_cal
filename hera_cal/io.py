@@ -14,6 +14,9 @@ from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from astropy import units
 import h5py
+import pickle
+import random
+import glob
 
 try:
     import aipy
@@ -541,7 +544,9 @@ class HERAData(UVData):
             for bl in nsamples.keys():
                 self._set_slice(self.nsample_array, bl, nsamples[bl])
 
-    def partial_write(self, output_path, data=None, flags=None, nsamples=None, clobber=False, inplace=False, add_to_history='', **kwargs):
+    def partial_write(self, output_path, data=None, flags=None, nsamples=None,
+                      clobber=False, inplace=False, add_to_history='',
+                      **kwargs):
         '''Writes part of a uvh5 file using DataContainers whose shape matches the most recent
         call to HERAData.read() in this object. The overall file written matches the shape of the
         input_data file called on __init__. Any data/flags/nsamples left as None will be written
@@ -577,7 +582,6 @@ class HERAData(UVData):
                 hd_writer.__setattr__(attribute, value)
             hd_writer.initialize_uvh5_file(output_path, clobber=clobber)  # Makes an empty file (called only once)
             self._writers[output_path] = hd_writer
-
         if inplace:  # update this objects's arrays using DataContainers
             this = self
         else:  # make a copy of this object and then update the relevant arrays using DataContainers
@@ -652,6 +656,82 @@ class HERAData(UVData):
                 times = np.unique(list(times.values()))
         for i in range(0, len(times), Nints):
             yield self.read(times=times[i:i + Nints])
+
+
+def read_filter_cache_scratch(cache_dir):
+    """
+    Load files from a cache specified by cache_dir.
+    cache files are intended to serve as common short-term on-disk scratch for filtering matrices
+    that can be loaded by multiple compute nodes process a night and save computational time by avoiding
+    recomputing filter matrices (that often involve psuedo-inverses).
+
+    A node processing a single chunk will be able to read in any cache matrices that were already
+    computed from previous chunks.
+
+    cache files are named with randomly generated strings with the extension ".filter_cache". They
+    are not intended for long-term or cross-platform storage and are currently designed to be deleted at the end
+    of processing night.
+
+    Parameters
+    ----------
+    cache_dir, string, path to a folder that is used for the cache
+        files in this folder with an extension .filter_cache are assumed
+        to be cache files. These files are pickled caches from previous filtering runs.
+    """
+    # Load up the cache file with the most keys (precomputed filter matrices).
+    cache = {}
+    cache_files = glob.glob(cache_dir + '/*.filter_cache')
+    # loop through cache files, load them.
+    # If there are new keys, add them to internal cache.
+    # If not, delete the reference matrices from memory.
+    for cache_file in cache_files:
+        cfile = open(cache_file, 'rb')
+        cache_t = pickle.load(cfile)
+        for key in cache_t:
+            if key not in cache:
+                cache[key] = cache_t[key]
+    return cache
+
+
+def write_filter_cache_scratch(filter_cache, cache_dir=None, skip_keys=None):
+    """
+    write cached cache to a new cache file.
+
+    cache files are intended to serve as common short-term on-disk scratch for filtering matrices
+    that can be loaded by multiple compute nodes process a night and save computational time by avoiding
+    recomputing filter matrices (that often involve psuedo-inverses).
+
+    A node processing a single chunk will be able to read in any cache matrices that were already
+    computed from previous chunks.
+
+    cache files are named with randomly generated strings with the extension ".filter_cache". They
+    are not intended for long-term or cross-platform storage and are currently designed to be deleted at the end
+    of processing night.
+
+    Parameters
+    ----------
+    filter_cache, dict, dictionary of values that we wish to cache.
+    cache_dir, string, optional, path to a folder that is used for the cache
+        files in this folder with an extension .filter_cache are assumed
+        to be cache files. These files are pickled caches from previous filtering runs.
+        default, current working directory.
+    skip_keys, list, list of keys to skip in writing the filter_cache.
+    """
+    if skip_keys is None:
+        skip_keys = []
+    # if the keys_before instantiation wasn't a list, then
+    # keys_before would just be the current keys of cache and we
+    # wouldn't have any new keys.
+    new_filters = {k: filter_cache[k] for k in filter_cache if k not in skip_keys}
+    if len(new_filters) > 0:
+        # generate new file name
+        if cache_dir is None:
+            cache_dir = os.getcwd()
+        cache_file_name = '%032x' % random.getrandbits(128) + '.filter_cache'
+        cfile = open(os.path.join(cache_dir, cache_file_name), 'ab')
+        pickle.dump(new_filters, cfile)
+    else:
+        warnings.warn("No new keys provided. No cache file written.")
 
 
 def load_flags(flagfile, filetype='h5', return_meta=False):
@@ -809,7 +889,7 @@ def get_file_times(filepaths, filetype='uvh5'):
             lst_array = np.unwrap(lst_array[np.sort(lst_indices)])
             int_time_rad = np.median(np.diff(lst_array))
             int_time = np.median(np.diff(time_array))
-            
+
         dlsts.append(int_time_rad)
         dtimes.append(int_time)
         file_lst_arrays.append(lst_array)
@@ -918,13 +998,13 @@ def read_redcal_meta(meta_filename):
         freqs = infile['header']['freqs'][:]
         times = infile['header']['times'][:]
         lsts = infile['header']['lsts'][:]
-        antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'], 
+        antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'],
                                                infile['header']['antpos'][:, :])}
         history = infile['header']['history'][()].tostring().decode('utf8')
 
         # reconstruct firstcal metadata
         fc_meta = {}
-        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8')) 
+        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8'))
                 for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
         fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
         fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}

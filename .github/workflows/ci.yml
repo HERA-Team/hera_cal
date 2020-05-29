@@ -23,7 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
       with:
-        fetch-depth: 1
+        fetch-depth: 0
 
     - name: Get Miniconda (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
@@ -48,20 +48,19 @@ jobs:
         source activate ${ENV_NAME}
         pip install .
 
-    - name: Python Style Checker
-      run: |
-        export PATH="$HOME/miniconda/bin:$PATH"
-        source activate ${ENV_NAME}
-        pycodestyle . --ignore=E501,W291,W293,W503,W601
-
     - name: Run Tests
       run: |
         export PATH="$HOME/miniconda/bin:$PATH"
         source activate $ENV_NAME
         pytest --cov-report xml:./coverage.xml
 
-
     - name: Upload Coverage (Ubuntu)
       if: matrix.os == 'ubuntu-latest' && success()
       run: |
         bash <(curl -s https://codecov.io/bash) -t ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Python Style Checker
+      run: |
+        export PATH="$HOME/miniconda/bin:$PATH"
+        source activate ${ENV_NAME}
+        pycodestyle . --ignore=E501,W291,W293,W503,W601
