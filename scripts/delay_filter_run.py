@@ -8,8 +8,10 @@
 
 from hera_cal import delay_filter
 import sys
+import filter_parser 
 
-parser = delay_filter.delay_clean_argparser()
+parser = filter_parser.delay_filter_argparser(mode='clean')
+
 a = parser.parse_args()
 
 # set kwargs

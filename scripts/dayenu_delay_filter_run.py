@@ -10,8 +10,9 @@ from hera_cal import delay_filter
 import sys
 import pickle
 import random
+import filter_parser
 
-parser = delay_filter.delay_linear_argparser()
+parser = filter_parser.delay_filter_argparser(mode='dayenu')
 a = parser.parse_args()
 
 # set kwargs

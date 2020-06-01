@@ -288,7 +288,7 @@ class VisClean(object):
 
     def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
-                  min_dly=10.0, max_frate=None, output_prefix='clean',
+                  min_dly=10.0, max_frate_coeffs=, output_prefix='clean', 
                   skip_wgt=0.1, verbose=False, tol=1e-9,
                   overwrite=False, **filter_kwargs):
         """
@@ -840,6 +840,74 @@ class VisClean(object):
 
         if not inplace:
             return flags
+
+    def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
+                            partial_write=False, clobber=False, add_to_history='', extra_attrs={}, prefix='clean', **kwargs):
+        '''
+        Method for writing data products.
+
+        Can write filtered residuals, CLEAN models, and/or original data with flags filled
+        by CLEAN models where possible. Uses input_data from DelayFilter.load_data() as a template.
+
+        Arguments:
+            res_outfilename: path for writing the filtered visibilities with flags
+            CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+            filled_outfilename: path for writing the original data but with flags unflagged and replaced
+                with CLEAN models wherever possible
+            filetype: file format of output result. Default 'uvh5.' Also supports 'miriad' and 'uvfits'.
+            partial_write: use uvh5 partial writing capability (only works when going from uvh5 to uvh5)
+            clobber: if True, overwrites existing file at the outfilename
+            add_to_history: string appended to the history of the output file
+            extra_attrs : additional UVData/HERAData attributes to update before writing
+            prefix : string, the prefix for the datacontainers to write.
+            kwargs : extra kwargs to pass to UVData.write_*() call
+        '''
+        if not hasattr(self, 'data'):
+            raise ValueError("Cannot write data without first loading")
+        if (res_outfilename is None) and (CLEAN_outfilename is None) and (filled_outfilename is None):
+            raise ValueError('You must specifiy at least one outfilename.')
+        else:
+            # loop over the three output modes if a corresponding outfilename is supplied
+            for mode, outfilename in zip(['residual', 'CLEAN', 'filled'],
+                                         [res_outfilename, CLEAN_outfilename, filled_outfilename]):
+                if outfilename is not None:
+                    if mode == 'residual':
+                        data_out, flags_out = getattr(self, prefix + '_resid'), self.flags
+                    elif mode == 'CLEAN':
+                        data_out, flags_out = getattr (self, prefix+'_model'), getattr(self, prefix + '_flags')
+                    elif mode == 'filled':
+                        data_out, flags_out = self.get_filled_data()
+                    if partial_write:
+                        if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
+                            raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
+                        self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber,
+                                              add_to_history=version.history_string(add_to_history), **kwargs)
+                    else:
+                        self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
+                                        add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
+
+        def get_filled_data(self, prefix='clean'):
+            """Get data with flagged pixels filled with clean_model.
+            Parameters
+                prefix : string label for data-containers of filtering outputs to get.
+            Returns
+                filled_data: DataContainer with original data and flags filled with CLEAN model
+                filled_flags: DataContainer with flags set to False unless the time is skipped in delay filter
+            """
+            assert np.all([hasattr(self, n) for n in [prefix + '_model', prefix + 'clean_flags', 'data', 'flags']]),
+                   "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data"%(prefix, prefix)
+            # construct filled data and filled flags
+            filled_data = deepcopy(getattr(self, prefix + '_model'))
+            filled_flags = deepcopy(getattr(self, prefix + '_flags'))
+
+            # iterate over filled_data keys
+            for k in filled_data.keys():
+                # get original data flags
+                f = self.flags[k]
+                # replace filled_data with original data at f == False
+                filled_data[k][~f] = self.data[k][~f]
+
+            return filled_data, filled_flags
 
     def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
         """
