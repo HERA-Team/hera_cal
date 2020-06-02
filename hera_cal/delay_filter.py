@@ -16,6 +16,7 @@ import glob
 import os
 import warnings
 
+
 class DelayFilter(VisClean):
     """
     DelayFilter object.
@@ -25,7 +26,7 @@ class DelayFilter(VisClean):
     """
 
     def run_delay_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
-                   skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
+                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
         '''
         Run uvtools.dspec.vis_filter on data.
 
@@ -78,6 +79,7 @@ class DelayFilter(VisClean):
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
+
 
 def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False,

@@ -72,10 +72,10 @@ class XTalkFilter(VisClean):
         else:
             filter_cache = None
         # compute maximum fringe rate dict based on EW baseline lengths.
-        max_frate = {k : max_frate_coeffs[0] * self.blvecs[k][0] + max_frate_coeffs[1] for k in self.bl_len}
+        max_frate = {k: max_frate_coeffs[0] * self.blvecs[k][0] + max_frate_coeffs[1] for k in self.bl_len}
         # loop over all baselines in increments of Nbls
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
-                       ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600. ,
+                       ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
                        cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
                        overwrite=True, verbose=verbose, **filter_kwargs)
         if not mode == 'clean':

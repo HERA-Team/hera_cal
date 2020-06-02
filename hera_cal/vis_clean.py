@@ -876,7 +876,7 @@ class VisClean(object):
                     if mode == 'residual':
                         data_out, flags_out = getattr(self, prefix + '_resid'), self.flags
                     elif mode == 'CLEAN':
-                        data_out, flags_out = getattr (self, prefix+'_model'), getattr(self, prefix + '_flags')
+                        data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
                     elif mode == 'filled':
                         data_out, flags_out = self.get_filled_data()
                     if partial_write:
@@ -937,7 +937,7 @@ class VisClean(object):
             filled_data: DataContainer with original data and flags filled with CLEAN model
             filled_flags: DataContainer with flags set to False unless the time is skipped in delay filter
         """
-        assert np.all([hasattr(self, n) for n in [prefix + '_model', prefix + '_flags', 'data', 'flags']]), "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data"%(prefix, prefix)
+        assert np.all([hasattr(self, n) for n in [prefix + '_model', prefix + '_flags', 'data', 'flags']]), "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data" % (prefix, prefix)
         # construct filled data and filled flags
         filled_data = deepcopy(getattr(self, prefix + '_model'))
         filled_flags = deepcopy(getattr(self, prefix + '_flags'))
@@ -950,6 +950,7 @@ class VisClean(object):
             filled_data[k][~f] = self.data[k][~f]
 
         return filled_data, filled_flags
+
 
 def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
              edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True, zeropad=0):

@@ -1,6 +1,7 @@
 from copy import deepcopy
 import argparse
 
+
 def filter_argparser():
     "Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter"
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
@@ -14,9 +15,11 @@ def filter_argparser():
     a.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
     return a
 
-#------------------------------------------
+
+# ------------------------------------------
 # Here are arg-parsers clean filtering
-#------------------------------------------
+# ------------------------------------------
+
 
 def clean_argparser():
     '''Arg parser for CLEAN.'''
@@ -34,9 +37,10 @@ def clean_argparser():
     clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
     return a
 
-#------------------------------------------
+# ------------------------------------------
 # Here are are parsers for linear filters.
-#------------------------------------------
+# ------------------------------------------
+
 
 def linear_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.'''
@@ -47,9 +51,10 @@ def linear_argparser():
     a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
     return a
 
-#----------------------------------------
+# ----------------------------------------
 # Arg-parser for delay-filtering.
-#---------------------------------------
+# ---------------------------------------
+
 
 def delay_filter_argparser(mode='clean'):
     '''Core Arg parser for commandline operation of delay filters.'''
@@ -65,9 +70,10 @@ def delay_filter_argparser(mode='clean'):
     filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for filtering.")
     return a
 
-#------------------------------------------
+# ------------------------------------------
 # Here are arg-parsers for xtalk-filtering.
-#------------------------------------------
+# ------------------------------------------
+
 
 def xtalk_filter_argparser(mode='clean'):
     '''Core Arg parser for commandline operation of delay filters.'''

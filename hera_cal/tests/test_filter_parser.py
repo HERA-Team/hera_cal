@@ -4,6 +4,7 @@
 import sys
 from .. import filter_parser as fp
 
+
 class Test_FilterParser(object):
 
     def test_filter_argparser(self):
