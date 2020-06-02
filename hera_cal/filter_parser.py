@@ -21,7 +21,6 @@ def filter_argparser():
 def clean_argparser():
     '''Arg parser for CLEAN.'''
     a = filter_argparser()
-
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     clean_options = a.add_argument_group(title='Options for CLEAN')
@@ -41,7 +40,7 @@ def clean_argparser():
 
 def linear_argparser():
     '''Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.'''
-    a = delay_filter_argparser()
+    a = filter_argparser()
     cache_options = a.add_argument_group(title='Options for caching')
     a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")

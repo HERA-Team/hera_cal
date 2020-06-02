@@ -21,7 +21,7 @@ import glob
 @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 class Test_DelayFilter(object):
-    def test_run_filter(self):
+    def test_run_delay_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         dfil = df.DelayFilter(fname, filetype='miriad')
@@ -29,7 +29,7 @@ class Test_DelayFilter(object):
         bl = np.linalg.norm(dfil.antpos[24] - dfil.antpos[25]) / constants.c * 1e9
         sdf = (dfil.freqs[1] - dfil.freqs[0]) / 1e9
 
-        dfil.run_filter(to_filter=dfil.data.keys(), tol=1e-2)
+        dfil.run_delay_filter(to_filter=dfil.data.keys(), tol=1e-2)
         for k in dfil.data.keys():
             assert dfil.clean_resid[k].shape == (60, 64)
             assert dfil.clean_model[k].shape == (60, 64)
@@ -42,7 +42,7 @@ class Test_DelayFilter(object):
         dfil.read(bls=[k])
         wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
         wgts[k][0, :] = 0.0
-        dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+        dfil.run_delay_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
         assert dfil.clean_info[k]['status']['axis_1'][0] == 'skipped'
         np.testing.assert_array_equal(dfil.clean_flags[k][0, :], np.ones_like(dfil.flags[k][0, :]))
         np.testing.assert_array_equal(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
@@ -55,7 +55,7 @@ class Test_DelayFilter(object):
         dfil.read(bls=[k])
 
         data = dfil.data
-        dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edgecut_low=0, edgecut_hi=0)
+        dfil.run_delay_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edgecut_low=0, edgecut_hi=0)
         outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5')
         with pytest.raises(ValueError):
             dfil.write_filtered_data()
@@ -94,7 +94,7 @@ class Test_DelayFilter(object):
 
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
         dfil.read(bls=[(53, 54, 'ee')])
-        dfil.run_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
 
@@ -107,7 +107,7 @@ class Test_DelayFilter(object):
 
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
         dfil.read(bls=[(53, 54, 'ee')])
-        dfil.run_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
 

@@ -2,7 +2,7 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 import sys
-import filter_parser as fp
+from .. import filter_parser as fp
 
 class Test_FilterParser(object):
 
@@ -40,7 +40,7 @@ class Test_FilterParser(object):
         assert a.clobber is True
         assert a.window == 'blackmanharris'
         assert a.max_frate_coeffs[0] == 0.024
-        assert a.max_frate_coeffs[1] = 0.229
+        assert a.max_frate_coeffs[1] == -0.229
 
     def test_xtalk_linear_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229']
@@ -51,4 +51,4 @@ class Test_FilterParser(object):
         assert a.write_cache is True
         assert a.cache_dir == '/blah/'
         assert a.max_frate_coeffs[0] == 0.024
-        assert a.max_frate_coeffs[1] == 0.229
+        assert a.max_frate_coeffs[1] == -0.229

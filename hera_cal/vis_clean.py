@@ -6,6 +6,8 @@ import numpy as np
 from collections import OrderedDict as odict
 import datetime
 from uvtools import dspec
+from copy import deepcopy
+
 
 from astropy import constants
 import copy
@@ -288,7 +290,7 @@ class VisClean(object):
 
     def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
-                  min_dly=10.0, max_frate_coeffs=, output_prefix='clean', 
+                  min_dly=10.0, max_frate=None, output_prefix='clean',
                   skip_wgt=0.1, verbose=False, tol=1e-9,
                   overwrite=False, **filter_kwargs):
         """
@@ -886,29 +888,6 @@ class VisClean(object):
                         self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
                                         add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
 
-        def get_filled_data(self, prefix='clean'):
-            """Get data with flagged pixels filled with clean_model.
-            Parameters
-                prefix : string label for data-containers of filtering outputs to get.
-            Returns
-                filled_data: DataContainer with original data and flags filled with CLEAN model
-                filled_flags: DataContainer with flags set to False unless the time is skipped in delay filter
-            """
-            assert np.all([hasattr(self, n) for n in [prefix + '_model', prefix + 'clean_flags', 'data', 'flags']]),
-                   "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data"%(prefix, prefix)
-            # construct filled data and filled flags
-            filled_data = deepcopy(getattr(self, prefix + '_model'))
-            filled_flags = deepcopy(getattr(self, prefix + '_flags'))
-
-            # iterate over filled_data keys
-            for k in filled_data.keys():
-                # get original data flags
-                f = self.flags[k]
-                # replace filled_data with original data at f == False
-                filled_data[k][~f] = self.data[k][~f]
-
-            return filled_data, filled_flags
-
     def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
         """
         Iterate through DataContainer "data" and zeropad it inplace.
@@ -950,6 +929,27 @@ class VisClean(object):
 
         return dtime, dnu
 
+    def get_filled_data(self, prefix='clean'):
+        """Get data with flagged pixels filled with clean_model.
+        Parameters
+            prefix : string label for data-containers of filtering outputs to get.
+        Returns
+            filled_data: DataContainer with original data and flags filled with CLEAN model
+            filled_flags: DataContainer with flags set to False unless the time is skipped in delay filter
+        """
+        assert np.all([hasattr(self, n) for n in [prefix + '_model', prefix + '_flags', 'data', 'flags']]), "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data"%(prefix, prefix)
+        # construct filled data and filled flags
+        filled_data = deepcopy(getattr(self, prefix + '_model'))
+        filled_flags = deepcopy(getattr(self, prefix + '_flags'))
+
+        # iterate over filled_data keys
+        for k in filled_data.keys():
+            # get original data flags
+            f = self.flags[k]
+            # replace filled_data with original data at f == False
+            filled_data[k][~f] = self.data[k][~f]
+
+        return filled_data, filled_flags
 
 def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
              edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True, zeropad=0):

@@ -5,8 +5,6 @@
 """Module for delay filtering data and related operations."""
 
 import numpy as np
-from copy import deepcopy
-import argparse
 
 from . import io
 from . import version
@@ -105,7 +103,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
-        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
+        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
     if calfile is not None:
@@ -126,7 +124,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         for i in range(0, len(hd.bls), Nbls_per_load):
             df = DelayFilter(hd, input_cal=calfile)
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-            df.run_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+            df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))

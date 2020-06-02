@@ -5,13 +5,11 @@
 """Module for delay filtering data and related operations."""
 
 import numpy as np
-from copy import deepcopy
-import argparse
 
 from . import io
 from . import version
 from .vis_clean import VisClean
-from .delay_filter import 
+from .delay_filter import
 
 import pickle
 import random
