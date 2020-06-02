@@ -15,7 +15,7 @@ parser = filter_parser.xtalk_filter_argparser(mode='clean')
 a = parser.parse_args()
 
 # set kwargs
-filter_kwargs = {'tol': a.tol, 'window': a.window,
+filter_kwargs = {'tol': a.tol, 'window': a.window, 'max_frate_coeffs': a.max_frate_coeffs, 
                  'skip_wgt': a.skip_wgt, 'maxiter': a.maxiter, 'edgecut_hi': a.edgecut_hi,
                  'edgecut_low': a.edgecut_low, 'gain': a.gain}
 if a.window == 'tukey':
