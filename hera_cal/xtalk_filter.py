@@ -9,7 +9,6 @@ import numpy as np
 from . import io
 from . import version
 from .vis_clean import VisClean
-from .delay_filter import
 
 import pickle
 import random
@@ -27,7 +26,8 @@ class XTalkFilter(VisClean):
     """
 
     def run_xtalk_filter(self, to_filter=None, weight_dict=None, max_frate_coeffs=[0.024, -0.229], mode='clean',
-                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
+                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
+                         write_cache=False, **filter_kwargs):
         '''
         Run a cross-talk filter on data where the maximum fringe rate is set by the baseline length.
 
@@ -72,7 +72,7 @@ class XTalkFilter(VisClean):
         else:
             filter_cache = None
         # compute maximum fringe rate dict based on EW baseline lengths.
-        max_frate = {k: max_frate_coeffs[0] * self.blvecs[k][0] + max_frate_coeffs[1] for k in self.bl_len}
+        max_frate = io.DataContainer({k: max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1] for k in self.data})
         # loop over all baselines in increments of Nbls
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
@@ -82,55 +82,55 @@ class XTalkFilter(VisClean):
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
-    def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                    read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
-                                    res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                    clobber=False, add_to_history='', **filter_kwargs):
-        '''
-        Uses partial data loading and writing to perform delay filtering.
+def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
+                                read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
+                                res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+                                clobber=False, add_to_history='', **filter_kwargs):
+    '''
+    Uses partial data loading and writing to perform delay filtering.
 
-        Arguments:
-            infilename: string path to data to uvh5 file to load
-            cal: optional string path to calibration file to apply to data before delay filtering
-            Nbls_per_load: int, the number of baselines to load at once.
-                           If None, load all baselines at once. default : None.
-            spw_range: spw_range of data to delay-filter.
-            cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
-                        see uvtools.dspec.dayenu_filter for key formats.
-            read_cache: bool, If true, read existing cache files in cache_dir before running.
-            write_cache: bool. If true, create new cache file with precomputed matrices
-                               that were not in previously loaded cache files.
-            max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
-                             max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
-            res_outfilename: path for writing the filtered visibilities with flags
-            CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
-            filled_outfilename: path for writing the original data but with flags unflagged and replaced
-                with CLEAN models wherever possible
-            clobber: if True, overwrites existing file at the outfilename
-            add_to_history: string appended to the history of the output file
-            filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
-        '''
-        hd = io.HERAData(infilename, filetype='uvh5')
-        if calfile is not None:
-            calfile = io.HERACal(calfile)
-            calfile.read()
-        if spw_range is None:
-            spw_range = [0, hd.Nfreqs]
-        freqs = hd.freqs[spw_range[0]:spw_range[1]]
-        if Nbls_per_load is None:
-            df = DelayFilter(hd, input_cal=calfile)
-            df.read(frequencies=freqs)
-            df.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
-            df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=False,
-                                   clobber=clobber, add_to_history=add_to_history,
-                                   extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
-        else:
-            for i in range(0, len(hd.bls), Nbls_per_load):
-                df = DelayFilter(hd, input_cal=calfile)
-                df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-                df.run_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
-                df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                       filled_outfilename=filled_outfilename, partial_write=True,
-                                       clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
-                df.hd.data_array = None  # this forces a reload in the next loop
+    Arguments:
+        infilename: string path to data to uvh5 file to load
+        cal: optional string path to calibration file to apply to data before delay filtering
+        Nbls_per_load: int, the number of baselines to load at once.
+                       If None, load all baselines at once. default : None.
+        spw_range: spw_range of data to delay-filter.
+        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
+                    see uvtools.dspec.dayenu_filter for key formats.
+        read_cache: bool, If true, read existing cache files in cache_dir before running.
+        write_cache: bool. If true, create new cache file with precomputed matrices
+                           that were not in previously loaded cache files.
+        max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
+                         max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
+        res_outfilename: path for writing the filtered visibilities with flags
+        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+        filled_outfilename: path for writing the original data but with flags unflagged and replaced
+            with CLEAN models wherever possible
+        clobber: if True, overwrites existing file at the outfilename
+        add_to_history: string appended to the history of the output file
+        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
+    '''
+    hd = io.HERAData(infilename, filetype='uvh5')
+    if calfile is not None:
+        calfile = io.HERACal(calfile)
+        calfile.read()
+    if spw_range is None:
+        spw_range = [0, hd.Nfreqs]
+    freqs = hd.freqs[spw_range[0]:spw_range[1]]
+    if Nbls_per_load is None:
+        xf = XTalkFilter(hd, input_cal=calfile)
+        xf.read(frequencies=freqs)
+        xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+        xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                               filled_outfilename=filled_outfilename, partial_write=False,
+                               clobber=clobber, add_to_history=add_to_history,
+                               extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
+    else:
+        for i in range(0, len(hd.bls), Nbls_per_load):
+            xf = XTalkFilter(hd, input_cal=calfile)
+            xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
+            xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+            xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                                   filled_outfilename=filled_outfilename, partial_write=True,
+                                   clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
+            xf.hd.data_array = None  # this forces a reload in the next loop
