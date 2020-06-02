@@ -79,3 +79,57 @@ class Test_XTalkFilter(object):
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
+
+    def test_load_dayenu_filter_and_write(self):
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+        cdir = os.getcwd()
+        cdir = os.path.join(cdir, 'cache_temp')
+        # make a cache directory
+        if os.path.isdir(cdir):
+            shutil.rmtree(cdir)
+        os.mkdir(cdir)
+        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        # run dayenu filter
+        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       cache_dir=cdir, mode='dayenu',
+                                       Nbls_per_load=1, clobber=True,
+                                       spw_range=(0, 32), write_cache=True)
+        # generate duplicate cache files to test duplicate key handle for cache load.
+        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename, cache_dir=cdir,
+                                       mode='dayenu',
+                                       Nbls_per_load=1, clobber=True, read_cache=False,
+                                       spw_range=(0, 32), write_cache=True)
+        # there should now be six cache files (one per i/o/filter). There are three baselines.
+        assert len(glob.glob(cdir + '/*')) == 6
+        hd = io.HERAData(outfilename)
+        assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
+        os.remove(outfilename)
+        shutil.rmtree(cdir)
+        os.mkdir(cdir)
+        # now do all the baselines at once.
+        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       cache_dir=cdir, mode='dayenu',
+                                       Nbls_per_load=None, clobber=True,
+                                       spw_range=(0, 32), write_cache=True)
+        assert len(glob.glob(cdir + '/*')) == 1
+        hd = io.HERAData(outfilename)
+        assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
+        os.remove(outfilename)
+        # run again using computed cache.
+        calfile = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        xf.load_xtalk_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       cache_dir=cdir, calfile=calfile, read_cache=True,
+                                       Nbls_per_load=1, clobber=True, mode='dayenu',
+                                       spw_range=(0, 32), write_cache=True)
+        # now new cache files should be generated.
+        assert len(glob.glob(cdir + '/*')) == 1
+        hd = io.HERAData(outfilename)
+        assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
+        os.remove(outfilename)
+        shutil.rmtree(cdir)
