@@ -82,6 +82,7 @@ class XTalkFilter(VisClean):
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
+
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
