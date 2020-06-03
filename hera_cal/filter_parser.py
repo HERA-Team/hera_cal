@@ -1,9 +1,21 @@
 from copy import deepcopy
 import argparse
 
+# ------------------------------------------
+# Here is an argparser with core arguments
+# needed for all types of xtalk and delay
+# filtering.
+# ------------------------------------------
 
-def filter_argparser():
-    "Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter"
+
+def _filter_argparser():
+    """
+    Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
+    Returns
+    -------
+        Argparser with core (but not complete) functionality that is called by _linear_argparser and
+        _clean_argparser.
+    """
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
     a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
@@ -13,17 +25,26 @@ def filter_argparser():
     a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
+    a.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
+
     return a
 
 
 # ------------------------------------------
 # Here are arg-parsers clean filtering
+# for both xtalk and foregrounds.
 # ------------------------------------------
 
 
-def clean_argparser():
-    '''Arg parser for CLEAN.'''
-    a = filter_argparser()
+def _clean_argparser():
+    '''
+    Arg parser for commandline operation of hera_cal.delay_filter in various clean modes.
+
+    Returns
+    -------
+        Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk).
+    '''
+    a = _filter_argparser()
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     clean_options = a.add_argument_group(title='Options for CLEAN')
@@ -39,12 +60,19 @@ def clean_argparser():
 
 # ------------------------------------------
 # Here are are parsers for linear filters.
+# for xtalk and foregrounds.
 # ------------------------------------------
 
 
-def linear_argparser():
-    '''Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.'''
-    a = filter_argparser()
+def _linear_argparser():
+    '''
+    Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.
+
+    Returns
+    -------
+        Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk)
+    '''
+    a = _filter_argparser()
     cache_options = a.add_argument_group(title='Options for caching')
     a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
@@ -53,20 +81,29 @@ def linear_argparser():
 
 # ----------------------------------------
 # Arg-parser for delay-filtering.
+# can be linear or clean.
 # ---------------------------------------
 
 
 def delay_filter_argparser(mode='clean'):
-    '''Core Arg parser for commandline operation of delay filters.'''
+    '''
+    Arg parser for commandline operation of delay filters.
+    Parameters
+    ----------
+        mode, str : optional. Determines sets of arguments to load.
+            can be 'clean', 'dayenu', or 'dpss_leastsq'.
+    Returns
+        argparser for delay-domain filtering for specified filtering mode
+    ----------
+    '''
     if mode == 'clean':
-        a = clean_argparser()
-    elif mode in ['linear', 'dayenu', 'dpss_leastsq']:
-        a = linear_argparser()
+        a = _clean_argparser()
+    elif mode in ['dayenu', 'dpss_leastsq']:
+        a = _linear_argparser()
     filt_options = a.add_argument_group(title='Options for the delay filter')
     filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
     filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
                               (full light travel time)')
-    filt_options.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground subtraction (default 1e-9)')
     filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for filtering.")
     return a
 
@@ -76,11 +113,20 @@ def delay_filter_argparser(mode='clean'):
 
 
 def xtalk_filter_argparser(mode='clean'):
-    '''Core Arg parser for commandline operation of delay filters.'''
+    '''
+    Arg parser for commandline operation of xtalk filters.
+    Parameters
+    ----------
+        mode, str : optional. Determines sets of arguments to load.
+            can be 'clean', 'dayenu', or 'dpss_leastsq'.
+    Returns
+        argparser for xtalk (time-domain) filtering for specified filtering mode
+    ----------
+    '''
     if mode == 'clean':
-        a = clean_argparser()
+        a = _clean_argparser()
     elif mode in ['linear', 'dayenu', 'dpss_leastsq']:
-        a = linear_argparser()
+        a = _linear_argparser()
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
     a.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
     return a
