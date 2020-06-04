@@ -367,3 +367,12 @@ class Test_VisClean(object):
         # exceptions
         pytest.raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'ee')], axis=(0, 1), zeropad=0)
         pytest.raises(ValueError, vis_clean.zeropad_array, V.data[(24, 25, 'ee')], axis=(0, 1), zeropad=(0,))
+
+    def test_filter_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20']
+        parser = vis_clean._filter_argparser()
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.spw_range[0] == 0
+        assert a.spw_range[1] == 20

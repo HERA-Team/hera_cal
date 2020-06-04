@@ -29,7 +29,7 @@ class Test_DelayFilter(object):
         bl = np.linalg.norm(dfil.antpos[24] - dfil.antpos[25]) / constants.c * 1e9
         sdf = (dfil.freqs[1] - dfil.freqs[0]) / 1e9
 
-        dfil.run_delay_filter(to_filter=dfil.data.keys(), tol=1e-2)
+        dfil.run_filter(to_filter=dfil.data.keys(), tol=1e-2)
         for k in dfil.data.keys():
             assert dfil.clean_resid[k].shape == (60, 64)
             assert dfil.clean_model[k].shape == (60, 64)
@@ -42,7 +42,7 @@ class Test_DelayFilter(object):
         dfil.read(bls=[k])
         wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
         wgts[k][0, :] = 0.0
-        dfil.run_delay_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+        dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
         assert dfil.clean_info[k]['status']['axis_1'][0] == 'skipped'
         np.testing.assert_array_equal(dfil.clean_flags[k][0, :], np.ones_like(dfil.flags[k][0, :]))
         np.testing.assert_array_equal(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
@@ -173,3 +173,20 @@ class Test_DelayFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
         shutil.rmtree(cdir)
+
+    def test_delay_clean_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
+        parser = df.delay_filter_argparser()
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.window == 'blackmanharris'
+
+    def test_delay_linear_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
+        parser = df.delay_filter_argparser(mode='dayenu')
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.write_cache is True
+        assert a.cache_dir == '/blah/'

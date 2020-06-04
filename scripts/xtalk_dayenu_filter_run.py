@@ -6,11 +6,10 @@
 """Command-line drive script for hera_cal.delay_filter"""
 """Only performs CLEAN Filtering"""
 
-from hera_cal import delay_filter
+from hera_cal import xtalk_filter
 import sys
-import filter_parser
 
-parser = filter_parser.xtalk_filter_argparser(mode='dayenu')
+parser = xtalk_filter.xtalk_filter_argparser(mode='dayenu')
 
 a = parser.parse_args()
 

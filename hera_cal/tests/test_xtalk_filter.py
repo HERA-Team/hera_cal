@@ -133,3 +133,24 @@ class Test_XTalkFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
         shutil.rmtree(cdir)
+
+    def test_xtalk_clean_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris', '--max_frate_coeffs', '0.024', '-0.229']
+        parser = xf.xtalk_filter_argparser()
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.window == 'blackmanharris'
+        assert a.max_frate_coeffs[0] == 0.024
+        assert a.max_frate_coeffs[1] == -0.229
+
+    def test_xtalk_linear_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs', '0.024', '-0.229']
+        parser = xf.xtalk_filter_argparser(mode='dayenu')
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.write_cache is True
+        assert a.cache_dir == '/blah/'
+        assert a.max_frate_coeffs[0] == 0.024
+        assert a.max_frate_coeffs[1] == -0.229

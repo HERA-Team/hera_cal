@@ -9,6 +9,7 @@ import numpy as np
 from . import io
 from . import version
 from .vis_clean import VisClean
+from . import vis_clean
 
 import pickle
 import random
@@ -19,7 +20,7 @@ import warnings
 
 class XTalkFilter(VisClean):
     """
-    DelayFilter object.
+    XTalkFilter object.
 
     Used for fringe-rate Xtalk CLEANing and filtering.
     See vis_clean.VisClean for CLEAN functions.
@@ -39,7 +40,7 @@ class XTalkFilter(VisClean):
                 If None (the default), all visibilities are filtered.
             weight_dict: dictionary or DataContainer with all the same keys as self.data.
                 Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
-                of self.flags. uvtools.dspec.delay_filter will renormalize to compensate.
+                of self.flags. uvtools.dspec.xtalk_filter will renormalize to compensate.
             max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
                               max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
             mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.xtalk_filter for supported modes.
@@ -60,7 +61,7 @@ class XTalkFilter(VisClean):
         Results are stored in:
             self.clean_resid: DataContainer formatted like self.data with only high-delay components
             self.clean_model: DataContainer formatted like self.data with only low-delay components
-            self.clean_info: Dictionary of info from uvtools.dspec.delay_filter with the same keys as self.data
+            self.clean_info: Dictionary of info from uvtools.dspec.xtalk_filter with the same keys as self.data
         '''
         # read in cache
         if not mode == 'clean':
@@ -135,3 +136,27 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
             xf.hd.data_array = None  # this forces a reload in the next loop
+
+# ------------------------------------------
+# Here are arg-parsers for xtalk-filtering.
+# ------------------------------------------
+
+
+def xtalk_filter_argparser(mode='clean'):
+    '''
+    Arg parser for commandline operation of xtalk filters.
+    Parameters
+    ----------
+        mode, str : optional. Determines sets of arguments to load.
+            can be 'clean', 'dayenu', or 'dpss_leastsq'.
+    Returns
+        argparser for xtalk (time-domain) filtering for specified filtering mode
+    ----------
+    '''
+    if mode == 'clean':
+        a = vis_clean._clean_argparser()
+    elif mode in ['linear', 'dayenu', 'dpss_leastsq']:
+        a = vis_clean._linear_argparser()
+    filt_options = a.add_argument_group(title='Options for the cross-talk filter')
+    a.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
+    return a

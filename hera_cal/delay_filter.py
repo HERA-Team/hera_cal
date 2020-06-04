@@ -9,7 +9,7 @@ import numpy as np
 from . import io
 from . import version
 from .vis_clean import VisClean
-
+from . import vis_clean
 import pickle
 import random
 import glob
@@ -24,6 +24,13 @@ class DelayFilter(VisClean):
     Used for delay CLEANing and filtering.
     See vis_clean.VisClean for CLEAN functions.
     """
+    def run_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
+                   skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
+        '''
+        wrapper for run_delay_filter. Backwards compatibility. See run_delay_filter for documentation.
+        '''
+        self.run_delay_filter(to_filter=to_filter, weight_dict=weight_dict, horizon=horizon, standoff=standoff, min_dly=min_dly, mode=mode,
+                              skip_wgt=skip_wgt, tol=tol, verbose=verbose, cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
 
     def run_delay_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
                          skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
@@ -131,3 +138,31 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
             df.hd.data_array = None  # this forces a reload in the next loop
+
+# ----------------------------------------
+# Arg-parser for delay-filtering.
+# can be linear or clean.
+# ---------------------------------------
+
+
+def delay_filter_argparser(mode='clean'):
+    '''
+    Arg parser for commandline operation of delay filters.
+    Parameters
+    ----------
+        mode, str : optional. Determines sets of arguments to load.
+            can be 'clean', 'dayenu', or 'dpss_leastsq'.
+    Returns
+        argparser for delay-domain filtering for specified filtering mode
+    ----------
+    '''
+    if mode == 'clean':
+        a = vis_clean._clean_argparser()
+    elif mode in ['dayenu', 'dpss_leastsq']:
+        a = vis_clean._linear_argparser()
+    filt_options = a.add_argument_group(title='Options for the delay filter')
+    filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
+    filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
+                              (full light travel time)')
+    filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for filtering.")
+    return a
