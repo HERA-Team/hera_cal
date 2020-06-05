@@ -24,13 +24,11 @@ class DelayFilter(VisClean):
     Used for delay CLEANing and filtering.
     See vis_clean.VisClean for CLEAN functions.
     """
-    def run_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
-                   skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
+    def run_filter(self, **kwargs):
         '''
         wrapper for run_delay_filter. Backwards compatibility. See run_delay_filter for documentation.
         '''
-        self.run_delay_filter(to_filter=to_filter, weight_dict=weight_dict, horizon=horizon, standoff=standoff, min_dly=min_dly, mode=mode,
-                              skip_wgt=skip_wgt, tol=tol, verbose=verbose, cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+        self.run_delay_filter(**kwargs)
 
     def run_delay_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
                          skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
