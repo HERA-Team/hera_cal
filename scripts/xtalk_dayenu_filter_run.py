@@ -3,19 +3,20 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
-"Command-line drive script for hera_cal.delay_filter. Only performs filtering for DAYENU"
+"Command-line drive script for hera_cal.xtalk_filter. Only performs DAYENU Filtering"
 
-from hera_cal import delay_filter
+from hera_cal import xtalk_filter
 import sys
 
-parser = delay_filter.delay_filter_argparser(mode='dayenu')
+parser = xtalk_filter.xtalk_filter_argparser(mode='dayenu')
+
 a = parser.parse_args()
 
 # set kwargs
-filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
-                 'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
+filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
+spw_range = a.spw_range
 # Run Delay Filter
-delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile,
+delay_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile,
                                          Nbls_per_load=a.partial_load_Nbls, spw_range=a.spw_range,
                                          cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
                                          clobber=a.clobber, write_cache=a.write_cache,

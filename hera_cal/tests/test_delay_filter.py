@@ -21,7 +21,7 @@ import glob
 @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 class Test_DelayFilter(object):
-    def test_run_filter(self):
+    def test_run_delay_filter(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         dfil = df.DelayFilter(fname, filetype='miriad')
@@ -55,7 +55,7 @@ class Test_DelayFilter(object):
         dfil.read(bls=[k])
 
         data = dfil.data
-        dfil.run_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edgecut_low=0, edgecut_hi=0)
+        dfil.run_delay_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edgecut_low=0, edgecut_hi=0)
         outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5')
         with pytest.raises(ValueError):
             dfil.write_filtered_data()
@@ -94,7 +94,7 @@ class Test_DelayFilter(object):
 
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
         dfil.read(bls=[(53, 54, 'ee')])
-        dfil.run_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
 
@@ -107,7 +107,7 @@ class Test_DelayFilter(object):
 
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
         dfil.read(bls=[(53, 54, 'ee')])
-        dfil.run_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+        dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
         np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
         np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
 
@@ -174,18 +174,9 @@ class Test_DelayFilter(object):
         os.remove(outfilename)
         shutil.rmtree(cdir)
 
-    def test_delay_filter_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20']
-        parser = df.delay_filter_argparser()
-        a = parser.parse_args()
-        assert a.infilename == 'a'
-        assert a.clobber is True
-        assert a.spw_range[0] == 0
-        assert a.spw_range[1] == 20
-
     def test_delay_clean_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
-        parser = df.delay_clean_argparser()
+        parser = df.delay_filter_argparser()
         a = parser.parse_args()
         assert a.infilename == 'a'
         assert a.clobber is True
@@ -193,7 +184,7 @@ class Test_DelayFilter(object):
 
     def test_delay_linear_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
-        parser = df.delay_linear_argparser()
+        parser = df.delay_filter_argparser(mode='dayenu')
         a = parser.parse_args()
         assert a.infilename == 'a'
         assert a.clobber is True

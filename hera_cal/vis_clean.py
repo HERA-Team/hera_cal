@@ -6,6 +6,8 @@ import numpy as np
 from collections import OrderedDict as odict
 import datetime
 from uvtools import dspec
+import argparse
+
 
 from astropy import constants
 import copy
@@ -841,6 +843,51 @@ class VisClean(object):
         if not inplace:
             return flags
 
+    def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
+                            partial_write=False, clobber=False, add_to_history='', extra_attrs={}, prefix='clean', **kwargs):
+        '''
+        Method for writing data products.
+
+        Can write filtered residuals, CLEAN models, and/or original data with flags filled
+        by CLEAN models where possible. Uses input_data from DelayFilter.load_data() as a template.
+
+        Arguments:
+            res_outfilename: path for writing the filtered visibilities with flags
+            CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+            filled_outfilename: path for writing the original data but with flags unflagged and replaced
+                with CLEAN models wherever possible
+            filetype: file format of output result. Default 'uvh5.' Also supports 'miriad' and 'uvfits'.
+            partial_write: use uvh5 partial writing capability (only works when going from uvh5 to uvh5)
+            clobber: if True, overwrites existing file at the outfilename
+            add_to_history: string appended to the history of the output file
+            extra_attrs : additional UVData/HERAData attributes to update before writing
+            prefix : string, the prefix for the datacontainers to write.
+            kwargs : extra kwargs to pass to UVData.write_*() call
+        '''
+        if not hasattr(self, 'data'):
+            raise ValueError("Cannot write data without first loading")
+        if (res_outfilename is None) and (CLEAN_outfilename is None) and (filled_outfilename is None):
+            raise ValueError('You must specifiy at least one outfilename.')
+        else:
+            # loop over the three output modes if a corresponding outfilename is supplied
+            for mode, outfilename in zip(['residual', 'CLEAN', 'filled'],
+                                         [res_outfilename, CLEAN_outfilename, filled_outfilename]):
+                if outfilename is not None:
+                    if mode == 'residual':
+                        data_out, flags_out = getattr(self, prefix + '_resid'), self.flags
+                    elif mode == 'CLEAN':
+                        data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
+                    elif mode == 'filled':
+                        data_out, flags_out = self.get_filled_data()
+                    if partial_write:
+                        if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
+                            raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
+                        self.hd.partial_write(outfilename, data=data_out, flags=flags_out, clobber=clobber,
+                                              add_to_history=version.history_string(add_to_history), **kwargs)
+                    else:
+                        self.write_data(data_out, outfilename, filetype=filetype, overwrite=clobber, flags=flags_out,
+                                        add_to_history=add_to_history, extra_attrs=extra_attrs, **kwargs)
+
     def zeropad_data(self, data, binvals=None, zeropad=0, axis=-1, undo=False):
         """
         Iterate through DataContainer "data" and zeropad it inplace.
@@ -881,6 +928,28 @@ class VisClean(object):
             dnu = self.dnu
 
         return dtime, dnu
+
+    def get_filled_data(self, prefix='clean'):
+        """Get data with flagged pixels filled with clean_model.
+        Parameters
+            prefix : string label for data-containers of filtering outputs to get.
+        Returns
+            filled_data: DataContainer with original data and flags filled with CLEAN model
+            filled_flags: DataContainer with flags set to False unless the time is skipped in delay filter
+        """
+        assert np.all([hasattr(self, n) for n in [prefix + '_model', prefix + '_flags', 'data', 'flags']]), "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data" % (prefix, prefix)
+        # construct filled data and filled flags
+        filled_data = copy.deepcopy(getattr(self, prefix + '_model'))
+        filled_flags = copy.deepcopy(getattr(self, prefix + '_flags'))
+
+        # iterate over filled_data keys
+        for k in filled_data.keys():
+            # get original data flags
+            f = self.flags[k]
+            # replace filled_data with original data at f == False
+            filled_data[k][~f] = self.data[k][~f]
+
+        return filled_data, filled_flags
 
 
 def fft_data(data, delta_bin, wgts=None, axis=-1, window='none', alpha=0.2, edgecut_low=0,
@@ -1196,3 +1265,81 @@ def noise_eq_bandwidth(window, axis=-1):
             Noise equivalent bandwidth of the window
     """
     return np.sqrt(window.shape[axis] * np.max(window, axis=axis)**2 / np.sum(window**2, dtype=np.float, axis=axis))
+
+# ------------------------------------------
+# Here is an argparser with core arguments
+# needed for all types of xtalk and delay
+# filtering.
+# ------------------------------------------
+
+
+def _filter_argparser():
+    """
+    Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
+    
+    Returns:
+        Argparser with core (but not complete) functionality that is called by _linear_argparser and
+        _clean_argparser.
+    """
+    a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
+    a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
+    a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
+    a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
+    a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
+    a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
+    a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
+    a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    a.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
+    a.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
+
+    return a
+
+
+# ------------------------------------------
+# Here are arg-parsers clean filtering
+# for both xtalk and foregrounds.
+# ------------------------------------------
+
+
+def _clean_argparser():
+    '''
+    Arg parser for commandline operation of hera_cal.delay_filter in various clean modes.
+
+    Returns
+    -------
+        Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk).
+    '''
+    a = _filter_argparser()
+    a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
+    a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
+    clean_options = a.add_argument_group(title='Options for CLEAN')
+    clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
+                              see uvtools.dspec.gen_window for options')
+    clean_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
+    clean_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    clean_options.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag on lower band edge and exclude from window function.")
+    clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
+    clean_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
+    clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
+    return a
+
+# ------------------------------------------
+# Here are are parsers for linear filters.
+# for xtalk and foregrounds.
+# ------------------------------------------
+
+
+def _linear_argparser():
+    '''
+    Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.
+
+    Returns
+    -------
+        Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk)
+    '''
+    a = _filter_argparser()
+    cache_options = a.add_argument_group(title='Options for caching')
+    a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
+    a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
+    a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
+    return a
