@@ -3,8 +3,7 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
-"""Command-line drive script for hera_cal.delay_filter"""
-"""Only performs filtering for DAYENU"""
+"Command-line drive script for hera_cal.delay_filter. Only performs filtering for DAYENU"
 
 from hera_cal import delay_filter
 import sys

@@ -3,8 +3,7 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
-"""Command-line drive script for hera_cal.delay_filter"""
-"""Only performs CLEAN Filtering"""
+"Command-line drive script for hera_cal.xtalk_filter. Only performs CLEAN Filtering"
 
 from hera_cal import xtalk_filter
 import sys

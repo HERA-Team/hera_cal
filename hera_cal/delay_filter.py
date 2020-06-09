@@ -146,13 +146,12 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 def delay_filter_argparser(mode='clean'):
     '''
     Arg parser for commandline operation of delay filters.
-    Parameters
-    ----------
+
+    Parameters:
         mode, str : optional. Determines sets of arguments to load.
             can be 'clean', 'dayenu', or 'dpss_leastsq'.
-    Returns
+    Returns:
         argparser for delay-domain filtering for specified filtering mode
-    ----------
     '''
     if mode == 'clean':
         a = vis_clean._clean_argparser()

@@ -2,7 +2,7 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
-"""Module for delay filtering data and related operations."""
+"""Module for xtalk filtering data and related operations."""
 
 import numpy as np
 
@@ -89,11 +89,11 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', **filter_kwargs):
     '''
-    Uses partial data loading and writing to perform delay filtering.
+    Uses partial data loading and writing to perform xtalk filtering.
 
     Arguments:
         infilename: string path to data to uvh5 file to load
-        cal: optional string path to calibration file to apply to data before delay filtering
+        cal: optional string path to calibration file to apply to data before xtalk filtering
         Nbls_per_load: int, the number of baselines to load at once.
                        If None, load all baselines at once. default : None.
         spw_range: spw_range of data to delay-filter.

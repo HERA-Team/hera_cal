@@ -6,7 +6,6 @@ import numpy as np
 from collections import OrderedDict as odict
 import datetime
 from uvtools import dspec
-from copy import deepcopy
 import argparse
 
 
@@ -940,8 +939,8 @@ class VisClean(object):
         """
         assert np.all([hasattr(self, n) for n in [prefix + '_model', prefix + '_flags', 'data', 'flags']]), "self.data, self.flags, self.%s_model and self.%s_flags must all exist to get filled data" % (prefix, prefix)
         # construct filled data and filled flags
-        filled_data = deepcopy(getattr(self, prefix + '_model'))
-        filled_flags = deepcopy(getattr(self, prefix + '_flags'))
+        filled_data = copy.deepcopy(getattr(self, prefix + '_model'))
+        filled_flags = copy.deepcopy(getattr(self, prefix + '_flags'))
 
         # iterate over filled_data keys
         for k in filled_data.keys():
@@ -1277,8 +1276,8 @@ def noise_eq_bandwidth(window, axis=-1):
 def _filter_argparser():
     """
     Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
-    Returns
-    -------
+    
+    Returns:
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
         _clean_argparser.
     """
