@@ -128,13 +128,21 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                clobber=clobber, add_to_history=add_to_history,
                                extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
     else:
+        nwrites = 0
         for i in range(0, len(hd.bls), Nbls_per_load):
+            # if this is the first write, update frequency arrays.
+            if nwrites == 0:
+                extra_args = {'Nfreqs':len(freqs),
+                              'freq_array':np.asarray([freqs]))}
+            else:
+                extra_args = {}
             df = DelayFilter(hd, input_cal=calfile)
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
-                                   clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
+                                   clobber=clobber, add_to_history=add_to_history, **extra_args)
+            nwrites += 1
             df.hd.data_array = None  # this forces a reload in the next loop
 
 # ----------------------------------------
