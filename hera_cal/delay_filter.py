@@ -132,8 +132,8 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         for i in range(0, len(hd.bls), Nbls_per_load):
             # if this is the first write, update frequency arrays.
             if nwrites == 0:
-                extra_args = {'Nfreqs':len(freqs),
-                              'freq_array':np.asarray([freqs]))}
+                extra_args = {'Nfreqs': len(freqs),
+                              'freq_array': np.asarray([freqs])}
             else:
                 extra_args = {}
             df = DelayFilter(hd, input_cal=calfile)

@@ -73,10 +73,12 @@ class Test_XTalkFilter(object):
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
-        xf.load_xtalk_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True)
+        os.remove(outfilename)
+        xf.load_xtalk_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename,
+                                       Nbls_per_load=2, clobber=True)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
-        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        d, f, n = hd.read()
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
 

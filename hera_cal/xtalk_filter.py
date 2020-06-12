@@ -85,7 +85,7 @@ class XTalkFilter(VisClean):
 
 
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229], bl_start=None, bl_end=None,
+                                read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', **filter_kwargs):
     '''
@@ -104,8 +104,6 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                            that were not in previously loaded cache files.
         max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
                          max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
-        bl_start: integer specifying starting index of baseline to process.
-        bl_end: integer specifying ending index of baseline to process.
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -130,37 +128,51 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                clobber=clobber, add_to_history=add_to_history,
                                extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
     else:
-        if bl_start is None:
-            bl_start = 0
-        if bl_end is None:
-            bl_end = len(hd.bls)
-        unique_baselines = np.unique(hd.baseline_array)
-        baseline_selection = hd.baseline_array[np.logical_and(hd.baseline_array >= unique_baselines[bl_start], hd.baseline_array < unique_baselines[bl_end])]
-        ant1_arr = hd.antenna_1_array[baseline_selection]
-        ant2_arr = hd.antenna_2_array[baseline_selection]
         nwrites = 0
-        for i in range(bl_start, bl_end, Nbls_per_load):
+        for i in range(0, hd.Nbls, Nbls_per_load):
             xf = XTalkFilter(hd, input_cal=calfile)
             xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-            bl_arr = hd.baseline_array[]
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             # if this is the first write, update baseline and frequency arrays.
             if nwrites == 0:
-                extra_args = {'Nbls':bl_end - bl_start,
-                              'Nblts':(bl_end-bl_start) * hd.Ntimes,
-                              'ant_1_array':ant1_arr,
-                              'ant_2_array':ant2_arr,
-                              'baseline_array':baseline_selection,
-                              'Nfreqs':len(freqs),
-                              'freq_array':np.asarray([freqs]))}
+                extra_args = {'freq_array': np.asarray([freqs]),
+                              'Nfreqs': len(freqs)}
             else:
-                nwrites = {}
+                extra_args = {}
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history, **extra_args)
             nwrites += 1
             xf.hd.data_array = None  # this forces a reload in the next loop
 
+def load_xtalk_filter_and_write_baseline_list(infilelist, calefilelist=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
+                                              read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
+                                              res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+                                              clobber=False, add_to_history='', **filter_kwargs):
+    '''
+    A xtalk filtering method that only simultaneously loads and writes user-provided
+    list of baselines. This is to support parallelization over baseline (rather then time).
+
+    Arguments:
+        infilelist: list of data files to perform cross-talk filtering on
+        baseline_list: list of baselines to filter and write out from the infilelist.
+        calfilelist: optional list of calibration files to apply to data before xtalk filtering
+        spw_range: 2-tuple or 2-list, spw_range of data to filter.
+        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
+                    see uvtools.dspec.dayenu_filter for key formats.
+        read_cache: bool, If true, read existing cache files in cache_dir before running.
+        write_cache: bool. If true, create new cache file with precomputed matrices
+                           that were not in previously loaded cache files.
+        max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
+                         max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
+        res_outfilename: path for writing the filtered visibilities with flags
+        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+        filled_outfilename: path for writing the original data but with flags unflagged and replaced
+            with CLEAN models wherever possible
+        clobber: if True, overwrites existing file at the outfilename
+        add_to_history: string appended to the history of the output file
+        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
+    '''
 
 
 
