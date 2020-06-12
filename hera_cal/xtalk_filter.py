@@ -145,7 +145,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             nwrites += 1
             xf.hd.data_array = None  # this forces a reload in the next loop
 
-def load_xtalk_filter_and_write_baseline_list(infilelist, calefilelist=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
+
+def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
                                               read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', **filter_kwargs):
@@ -154,9 +155,9 @@ def load_xtalk_filter_and_write_baseline_list(infilelist, calefilelist=None, Nbl
     list of baselines. This is to support parallelization over baseline (rather then time).
 
     Arguments:
-        infilelist: list of data files to perform cross-talk filtering on
+        datafile_list: list of data files to perform cross-talk filtering on
         baseline_list: list of baselines to filter and write out from the infilelist.
-        calfilelist: optional list of calibration files to apply to data before xtalk filtering
+        calfile_list: optional list of calibration files to apply to data before xtalk filtering
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
                     see uvtools.dspec.dayenu_filter for key formats.
@@ -173,7 +174,22 @@ def load_xtalk_filter_and_write_baseline_list(infilelist, calefilelist=None, Nbl
         add_to_history: string appended to the history of the output file
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
     '''
-
+    hd = io.HERAData(datafile_list, filetype='uvh5')
+    if calfile_list is not None:
+        cals = io.HERACal(calfile_list)
+        cals.read()
+    else:
+        cals = None
+    if spw_range is None:
+        spw_range = [0, hd.Nfreqs]
+    freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
+    xf = XTalkFilter(hd, input_cal=cals)
+    xf.read(bls=baseline_list, frequencies=freqs)
+    xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+    xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                           filled_outfilename=filled_outfilename, partial_write=False,
+                           clobber=clobber, add_to_history=add_to_history,
+                           extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
 
 
 # ------------------------------------------
@@ -181,7 +197,7 @@ def load_xtalk_filter_and_write_baseline_list(infilelist, calefilelist=None, Nbl
 # ------------------------------------------
 
 
-def xtalk_filter_argparser(mode='clean'):
+def xtalk_filter_argparser(mode='clean', parallelization_mode='file'):
     '''
     Arg parser for commandline operation of xtalk filters.
     Parameters
@@ -193,9 +209,9 @@ def xtalk_filter_argparser(mode='clean'):
     ----------
     '''
     if mode == 'clean':
-        a = vis_clean._clean_argparser()
+        a = vis_clean._clean_argparser(parallelization_mode=parallelization_mode)
     elif mode in ['linear', 'dayenu', 'dpss_leastsq']:
-        a = vis_clean._linear_argparser()
+        a = vis_clean._linear_argparser(parallelization_mode=parallelization_mode)
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
     a.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
     return a

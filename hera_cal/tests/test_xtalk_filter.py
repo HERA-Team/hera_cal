@@ -15,6 +15,7 @@ from .. import io
 from .. import xtalk_filter as xf
 from ..data import DATA_PATH
 import glob
+from .. import vis_clean
 
 
 class Test_XTalkFilter(object):
@@ -44,6 +45,28 @@ class Test_XTalkFilter(object):
         np.testing.assert_array_equal(xfil.clean_flags[k][:, 0], np.ones_like(xfil.flags[k][:, 0]))
         np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
         np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
+
+    def test_load_xtalk_filter_and_write_baseline_list(self):
+        uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
+        cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        cdir = os.getcwd()
+        cdir = os.path.join(cdir, 'cache_temp')
+        # make a cache directory
+        if os.path.isdir(cdir):
+            shutil.rmtree(cdir)
+        os.mkdir(cdir)
+        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
+                                                     calfile_list=[cal], spw_range=[100, 200], cache_dir=cdir,
+                                                     read_cache=True, write_cache=True,
+                                                     res_outfilename=outfilename, clobber=True,
+                                                     mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert len(list(d.keys())) == 1
+        assert d[(53, 54, 'ee')].shape[1] == 100
+        assert d[(53, 54, 'ee')].shape[0] == 60
 
     def test_load_xtalk_filter_and_write(self):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -156,3 +179,28 @@ class Test_XTalkFilter(object):
         assert a.cache_dir == '/blah/'
         assert a.max_frate_coeffs[0] == 0.024
         assert a.max_frate_coeffs[1] == -0.229
+
+    def test_xtalk_linear_argparser_baseline_parallelized(self):
+        sys.argv = [sys.argv[0], '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs',
+                    '0.024', '-0.229', '--datafile_list', 'firstfile.uvh5', 'secondfile.uvh5', 'thirdfile.uvh5',
+                    '--calfile_list', 'firstcal.calfits', 'secondcal.calfits', 'thirdcal.calfits', 'fourthcal.calfits',
+                    'fifthcal.calfits', '--baseline_list', '53,54;23,34; 0, 0; 1, 23']
+        parser = xf.xtalk_filter_argparser(mode='dayenu', parallelization_mode='baseline')
+        a = parser.parse_args()
+        assert a.clobber is True
+        assert a.write_cache is True
+        assert a.cache_dir == '/blah/'
+        assert a.max_frate_coeffs[0] == 0.024
+        assert a.max_frate_coeffs[1] == -0.229
+        assert len(a.datafile_list) == 3
+        assert len(a.calfile_list) == 5
+        assert a.datafile_list[0] == 'firstfile.uvh5'
+        assert a.datafile_list[-1] == 'thirdfile.uvh5'
+        assert a.calfile_list[-1] == 'fifthcal.calfits'
+        # test parsing the baseline list
+        baseline_list = vis_clean._parse_baseline_list_string(a.baseline_list)
+        assert len(baseline_list) == 4
+        assert baseline_list[0] == (53, 54)
+        assert baseline_list[1] == (23, 34)
+        assert baseline_list[2] == (0, 0)
+        assert baseline_list[3] == (1, 23)

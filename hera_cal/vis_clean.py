@@ -1273,25 +1273,36 @@ def noise_eq_bandwidth(window, axis=-1):
 # ------------------------------------------
 
 
-def _filter_argparser():
+def _filter_argparser(parallelization_mode='file'):
     """
     Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
-    
+    Parameters:
+        parallelization_mode : str, determines the arguments based on axis of parallelization.
+                               currently supports 'time' and 'baseline'.
+
     Returns:
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
         _clean_argparser.
     """
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
-    a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
     a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
-    a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
-    a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
     a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--spw_range", type=int, default=None, nargs=2, help="spectral window of data to foreground filter.")
     a.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
-
+    if parallelization_mode == 'file':
+        a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
+        a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
+        a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
+    else:
+        a.add_argument("--datafile_list", default=None, type=str, nargs='+', help="list of input data files")
+        a.add_argument("--calfile_list", default=None, type=str, nargs='+', help="list of input calibration files")
+        if parallelization_mode == 'baseline':
+            a.add_argument("--baseline_list", default=None, type=str, help="List of baselines to process."
+                                                                           "Provide this as a semi-colon"
+                                                                           "separated list of comma-separated antenna pairs."
+                                                                           "Example: '0,0;1,2;2,3'")
     return a
 
 
@@ -1301,7 +1312,7 @@ def _filter_argparser():
 # ------------------------------------------
 
 
-def _clean_argparser():
+def _clean_argparser(parallelization_mode='file'):
     '''
     Arg parser for commandline operation of hera_cal.delay_filter in various clean modes.
 
@@ -1309,7 +1320,7 @@ def _clean_argparser():
     -------
         Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk).
     '''
-    a = _filter_argparser()
+    a = _filter_argparser(parallelization_mode)
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     clean_options = a.add_argument_group(title='Options for CLEAN')
@@ -1329,7 +1340,7 @@ def _clean_argparser():
 # ------------------------------------------
 
 
-def _linear_argparser():
+def _linear_argparser(parallelization_mode='file'):
     '''
     Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.
 
@@ -1337,9 +1348,34 @@ def _linear_argparser():
     -------
         Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk)
     '''
-    a = _filter_argparser()
+    a = _filter_argparser(parallelization_mode)
     cache_options = a.add_argument_group(title='Options for caching')
     a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
     return a
+
+
+def _parse_baseline_list_string(baseline_list_string):
+    """
+    Helper method for parsing user provided lists of baselines.
+
+    Arguments
+    ---------
+        baseline_list_string: string
+            list of baselines provided as a string
+            that is a semi-colon separated list of antenna pairs.
+            e.g. 1, 2;0,0; 0, 10
+    Returns
+    -------
+        A list of baseline antenna pair tuples
+    """
+    # strip spaces
+    baseline_list_string = baseline_list_string.replace(" ", "")
+    # split on semi-colons
+    baseline_list = baseline_list_string.split(";")
+    for blnum, bl in enumerate(baseline_list):
+        antnums = bl.split(",")
+        antpair = (int(antnums[0]), int(antnums[1]))
+        baseline_list[blnum] = antpair
+    return baseline_list
