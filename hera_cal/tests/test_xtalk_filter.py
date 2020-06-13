@@ -67,6 +67,17 @@ class Test_XTalkFilter(object):
         assert len(list(d.keys())) == 1
         assert d[(53, 54, 'ee')].shape[1] == 100
         assert d[(53, 54, 'ee')].shape[0] == 60
+        # now do no spw range and no cal files just to cover those lines.
+        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
+                                                     cache_dir=cdir,
+                                                     read_cache=True, write_cache=True,
+                                                     res_outfilename=outfilename, clobber=True,
+                                                     mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert len(list(d.keys())) == 1
+        assert d[(53, 54, 'ee')].shape[1] == 1024
+        assert d[(53, 54, 'ee')].shape[0] == 60
 
     def test_load_xtalk_filter_and_write(self):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
