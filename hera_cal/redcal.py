@@ -97,9 +97,9 @@ def add_pol_reds(reds, pols=['nn'], pol_mode='1pol'):
 
     redsWithPols, didBothCrossPolsForMinV = [], False
     for pol in pols:
-        if pol_mode is not '4pol_minV' or pol[0] == pol[1]:
+        if pol_mode != '4pol_minV' or pol[0] == pol[1]:
             redsWithPols += [[bl + (pol,) for bl in bls] for bls in reds]
-        elif pol_mode is '4pol_minV' and not didBothCrossPolsForMinV:
+        elif pol_mode == '4pol_minV' and not didBothCrossPolsForMinV:
             # Combine together e.g. 'ne' and 'en' visibilities as redundant
             redsWithPols += [([bl + (pol,) for bl in bls]
                               + [bl + (conj_pol(pol),) for bl in bls]) for bls in reds]
@@ -505,10 +505,10 @@ def _check_polLists_minV(polLists):
 
     for polList in polLists:
         ps = list()
-        if len(polList) is 1:
+        if len(polList) == 1:
             if split_pol(polList[0])[0] != split_pol(polList[0])[1]:
                 return False
-        elif len(polList) is 2:
+        elif len(polList) == 2:
             if polList[0] != conj_pol(polList[1]) or split_pol(polList[0])[0] == split_pol(polList[0])[1]:
                 return False
         else:
@@ -1029,7 +1029,7 @@ class RedundantCalibrator:
         antpols = list(set(gainPols))
 
         # if mode is 2pol, run as two 1pol remove degens
-        if self.pol_mode is '2pol':
+        if self.pol_mode == '2pol':
             self.pol_mode = '1pol'
             pol0_gains = {k: v for k, v in gains.items() if k[1] == antpols[0]}
             pol1_gains = {k: v for k, v in gains.items() if k[1] == antpols[1]}
@@ -1045,7 +1045,7 @@ class RedundantCalibrator:
         # Build matrices for projecting gain degeneracies
         antpos = reds_to_antpos(self.reds)
         positions = np.array([antpos[ant[0]] for ant in gains])
-        if self.pol_mode is '1pol' or self.pol_mode is '4pol_minV':
+        if self.pol_mode == '1pol' or self.pol_mode == '4pol_minV':
             # In 1pol and 4pol_minV, the phase degeneracies are 1 overall phase and 2 tip-tilt terms
             # Rgains maps gain phases to degenerate parameters (either average phases or phase slopes)
             Rgains = np.hstack((positions, np.ones((positions.shape[0], 1))))
