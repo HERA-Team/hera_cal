@@ -3,10 +3,14 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
-"Command-line driver script for xtalk Filtering with DAYENU that allows for parallelization across baselines."
-"This script is meant to be called by OPM which is responsible for determining chunks of baselines to process in each"
-"runs of this script on different compute nodes and writing appropriate antpairpol list strings for each script call."
+"""
+Command-line driver script for xtalk Filtering with DAYENU that allows for parallelization across baselines.
+This script is meant to be called by OPM which is responsible for determining chunks of baselines to process in each
+runs of this script on different compute nodes and writing appropriate antpairpol list strings for each script call.
 
+Each run of this script writes out a pyuvdata uvh5 data file for the chunk of baselines process by each
+run on the compute node. 
+"""
 from hera_cal import xtalk_filter
 from hera_cal import vis_clean as vc
 import sys
