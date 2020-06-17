@@ -49,7 +49,8 @@ class Test_XTalkFilter(object):
     def test_load_xtalk_filter_and_write_baseline_list(self):
         uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
-        cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
+        cals = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part1"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
         cdir = os.getcwd()
         cdir = os.path.join(cdir, 'cache_temp')
@@ -57,8 +58,8 @@ class Test_XTalkFilter(object):
         if os.path.isdir(cdir):
             shutil.rmtree(cdir)
         os.mkdir(cdir)
-        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
-                                                     calfile_list=[cal], spw_range=[100, 200], cache_dir=cdir,
+        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+                                                     calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
                                                      read_cache=True, write_cache=True,
                                                      res_outfilename=outfilename, clobber=True,
                                                      mode='dayenu')
@@ -68,7 +69,7 @@ class Test_XTalkFilter(object):
         assert d[(53, 54, 'ee')].shape[1] == 100
         assert d[(53, 54, 'ee')].shape[0] == 60
         # now do no spw range and no cal files just to cover those lines.
-        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
+        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
                                                      cache_dir=cdir,
                                                      read_cache=True, write_cache=True,
                                                      res_outfilename=outfilename, clobber=True,
@@ -195,8 +196,8 @@ class Test_XTalkFilter(object):
         sys.argv = [sys.argv[0], '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs',
                     '0.024', '-0.229', '--datafile_list', 'firstfile.uvh5', 'secondfile.uvh5', 'thirdfile.uvh5',
                     '--calfile_list', 'firstcal.calfits', 'secondcal.calfits', 'thirdcal.calfits', 'fourthcal.calfits',
-                    'fifthcal.calfits', '--baseline_list', '53,54;23,34; 0, 0; 1, 23']
-        parser = xf.xtalk_filter_argparser(mode='dayenu', parallelization_mode='baseline')
+                    'fifthcal.calfits', '--antpairpol_list', '53,54,ee;23,34,nn; 0, 0, en; 1, 23,nn']
+        parser = xf.xtalk_filter_argparser(mode='dayenu', parallelization_mode='baseline-pol')
         a = parser.parse_args()
         assert a.clobber is True
         assert a.write_cache is True
@@ -209,9 +210,9 @@ class Test_XTalkFilter(object):
         assert a.datafile_list[-1] == 'thirdfile.uvh5'
         assert a.calfile_list[-1] == 'fifthcal.calfits'
         # test parsing the baseline list
-        baseline_list = vis_clean._parse_baseline_list_string(a.baseline_list)
-        assert len(baseline_list) == 4
-        assert baseline_list[0] == (53, 54)
-        assert baseline_list[1] == (23, 34)
-        assert baseline_list[2] == (0, 0)
-        assert baseline_list[3] == (1, 23)
+        antpairpol_list = vis_clean._parse_antpairpol_list_string(a.antpairpol_list)
+        assert len(antpairpol_list) == 4
+        assert antpairpol_list[0] == (53, 54, 'ee')
+        assert antpairpol_list[1] == (23, 34, 'nn')
+        assert antpairpol_list[2] == (0, 0, 'en')
+        assert antpairpol_list[3] == (1, 23, 'nn')

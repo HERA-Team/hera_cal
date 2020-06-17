@@ -1278,7 +1278,7 @@ def _filter_argparser(parallelization_mode='file'):
     Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
     Parameters:
         parallelization_mode : str, determines the arguments based on axis of parallelization.
-                               currently supports 'time' and 'baseline'.
+                               currently supports 'time' and 'baseline-pol'.
 
     Returns:
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
@@ -1298,11 +1298,11 @@ def _filter_argparser(parallelization_mode='file'):
     else:
         a.add_argument("--datafile_list", default=None, type=str, nargs='+', help="list of input data files")
         a.add_argument("--calfile_list", default=None, type=str, nargs='+', help="list of input calibration files")
-        if parallelization_mode == 'baseline':
-            a.add_argument("--baseline_list", default=None, type=str, help="List of baselines to process."
-                                                                           "Provide this as a semi-colon"
-                                                                           "separated list of comma-separated antenna pairs."
-                                                                           "Example: '0,0;1,2;2,3'")
+        if parallelization_mode == 'baseline-pol':
+            a.add_argument("--antpairpol_list", default=None, type=str, help="List of baselines to process."
+                                                                             "Provide this as a semi-colon"
+                                                                             "separated list of comma-separated antenna-pol pairs."
+                                                                             "Example: '0,0,ee;1,2,ee;2,3,ee'")
     return a
 
 
@@ -1356,7 +1356,7 @@ def _linear_argparser(parallelization_mode='file'):
     return a
 
 
-def _parse_baseline_list_string(baseline_list_string):
+def _parse_antpairpol_list_string(antpairpol_list_string):
     """
     Helper method for parsing user provided lists of baselines.
 
@@ -1364,18 +1364,19 @@ def _parse_baseline_list_string(baseline_list_string):
     ---------
         baseline_list_string: string
             list of baselines provided as a string
-            that is a semi-colon separated list of antenna pairs.
-            e.g. 1, 2;0,0; 0, 10
+            that is a semi-colon separated list of antenna-pol triplets.
+            white-space (tabs, spaces, newlines) is ignored.
+            e.g. 1, 2,ee;0,0,nn; 0, 10,en
     Returns
     -------
-        A list of baseline antenna pair tuples
+        A list of baseline antpairpol tuples
     """
     # strip spaces
-    baseline_list_string = baseline_list_string.replace(" ", "")
+    antpairpol_list_string = "".join(antpairpol_list_string.split())
     # split on semi-colons
-    baseline_list = baseline_list_string.split(";")
-    for blnum, bl in enumerate(baseline_list):
-        antnums = bl.split(",")
-        antpair = (int(antnums[0]), int(antnums[1]))
-        baseline_list[blnum] = antpair
-    return baseline_list
+    antpairpol_list = antpairpol_list_string.split(";")
+    for appnum, antpp in enumerate(antpairpol_list):
+        antpp = antpp.split(",")
+        antpairpol = (int(antpp[0]), int(antpp[1]), antpp[2])
+        antpairpol_list[appnum] = antpairpol
+    return antpairpol_list

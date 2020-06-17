@@ -16,6 +16,8 @@ import random
 import glob
 import os
 import warnings
+from copy import deepcopy
+from pyuvdata import UVCal
 
 
 class XTalkFilter(VisClean):
@@ -128,21 +130,14 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                clobber=clobber, add_to_history=add_to_history,
                                extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
     else:
-        nwrites = 0
         for i in range(0, hd.Nbls, Nbls_per_load):
             xf = XTalkFilter(hd, input_cal=calfile)
             xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
-            # if this is the first write, update baseline and frequency arrays.
-            if nwrites == 0:
-                extra_args = {'freq_array': np.asarray([freqs]),
-                              'Nfreqs': len(freqs)}
-            else:
-                extra_args = {}
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
-                                   clobber=clobber, add_to_history=add_to_history, **extra_args)
-            nwrites += 1
+                                   clobber=clobber, add_to_history=add_to_history,
+                                   freq_array=np.asarray([freqs]), Nfreqs=len(freqs))
             xf.hd.data_array = None  # this forces a reload in the next loop
 
 
@@ -156,7 +151,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
 
     Arguments:
         datafile_list: list of data files to perform cross-talk filtering on
-        baseline_list: list of baselines to filter and write out from the infilelist.
+        baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
         calfile_list: optional list of calibration files to apply to data before xtalk filtering
         spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
@@ -175,14 +170,30 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
     '''
     hd = io.HERAData(datafile_list, filetype='uvh5')
-    if calfile_list is not None:
-        cals = io.HERACal(calfile_list)
-        cals.read()
-    else:
-        cals = None
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
+    baseline_antennas = []
+    for blpolpair in baseline_list:
+        baseline_antennas += list(blpolpair[:2])
+    baseline_antennas = np.unique(baseline_antennas).astype(int)
+    if calfile_list is not None:
+        # initialize calfile by iterating through calfile_list, selecting the antennas we need,
+        # and concatenating.
+        for filenum, calfile in enumerate(calfile_list):
+            cal = UVCal()
+            cal.read_calfits(calfile)
+            # only select calibration antennas that are in the intersection of antennas in
+            # baselines to be filtered and the calibration solution.
+            ants_overlap = np.intersect1d(cal.ant_array, baseline_antennas).astype(int)
+            cal.select(antenna_nums=ants_overlap, frequencies=freqs)
+            if filenum == 0:
+                cals = deepcopy(cal)
+            else:
+                cals = cals + cal
+        cals = io.to_HERACal(cals)
+    else:
+        cals = None
     xf = XTalkFilter(hd, input_cal=cals)
     xf.read(bls=baseline_list, frequencies=freqs)
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
