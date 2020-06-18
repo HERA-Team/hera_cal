@@ -966,6 +966,25 @@ class Test_Meta_IO(object):
         os.remove(out_path)
 
 
+def test_generate_antpairpol_parallelization_files():
+    test_uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    io.generate_antpairpol_parallelization_files(test_uvh5,
+                                                 os.path.join(DATA_PATH, "test_output/"),
+                                                 bls_per_chunk=2)
+    string_files = glob.glob(os.path.join(DATA_PATH, "test_output/*antpairpol*.txt"))
+    assert len(string_files) == 2
+    expected_bllists = [[(53, 53, 'ee'), (53, 54, 'ee')], [(54, 54, 'ee')]]
+    for file, bllist in zip(string_files, expected_bllists):
+        with open(file, 'r') as f:
+            blpstr = f.readlines()
+            assert len(blpstr) == 1
+            antpolpairs = io._parse_antpairpol_list_string(blpstr[0])
+            for app, app_expected in zip(antpolpairs, bllist):
+                assert app == app_expected
+    for string_file in string_files:
+        os.remove(string_file)
+
+
 def test_get_file_times():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
     # test execution

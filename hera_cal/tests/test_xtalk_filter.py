@@ -16,6 +16,7 @@ from .. import xtalk_filter as xf
 from ..data import DATA_PATH
 import glob
 from .. import vis_clean
+from .. import utils as utils
 
 
 class Test_XTalkFilter(object):
@@ -210,7 +211,7 @@ class Test_XTalkFilter(object):
         assert a.datafile_list[-1] == 'thirdfile.uvh5'
         assert a.calfile_list[-1] == 'fifthcal.calfits'
         # test parsing the baseline list
-        antpairpol_list = vis_clean._parse_antpairpol_list_string(a.antpairpol_list)
+        antpairpol_list = utils._parse_antpairpol_list_string(a.antpairpol_list)
         assert len(antpairpol_list) == 4
         assert antpairpol_list[0] == (53, 54, 'ee')
         assert antpairpol_list[1] == (23, 34, 'nn')

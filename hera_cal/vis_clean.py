@@ -1354,29 +1354,3 @@ def _linear_argparser(parallelization_mode='file'):
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
     return a
-
-
-def _parse_antpairpol_list_string(antpairpol_list_string):
-    """
-    Helper method for parsing user provided lists of baselines.
-
-    Arguments
-    ---------
-        baseline_list_string: string
-            list of baselines provided as a string
-            that is a semi-colon separated list of antenna-pol triplets.
-            white-space (tabs, spaces, newlines) is ignored.
-            e.g. 1, 2,ee;0,0,nn; 0, 10,en
-    Returns
-    -------
-        A list of baseline antpairpol tuples
-    """
-    # strip spaces
-    antpairpol_list_string = "".join(antpairpol_list_string.split())
-    # split on semi-colons
-    antpairpol_list = antpairpol_list_string.split(";")
-    for appnum, antpp in enumerate(antpairpol_list):
-        antpp = antpp.split(",")
-        antpairpol = (int(antpp[0]), int(antpp[1]), antpp[2])
-        antpairpol_list[appnum] = antpairpol
-    return antpairpol_list

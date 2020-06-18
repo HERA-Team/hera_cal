@@ -124,7 +124,7 @@ class TestFilterBls(object):
 
         assert set(utils.filter_bls(bls, ants=[0, 1])) == set([(0, 1, 'ee'), (0, 1, 'ne')])
         assert set(utils.filter_bls(bls, ants=[(0, 'Jee'), (1, 'Jee')])) == set([(0, 1, 'ee')])
-        
+
         assert set(utils.filter_bls(bls, ex_ants=[0])) == set([(1, 2, 'ee')])
         assert set(utils.filter_bls(bls, ex_ants=[(0, 'Jee')])) == set([(1, 2, 'ee'), (0, 1, 'ne')])
 

@@ -1685,3 +1685,92 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
+
+
+def _parse_antpairpol_list_string(antpairpol_list_string):
+    """
+    Helper method for parsing user provided lists of baselines.
+
+    Arguments
+    ---------
+        baseline_list_string: string
+            list of baselines provided as a string
+            that is a semi-colon separated list of antenna-pol triplets.
+            white-space (tabs, spaces, newlines) is ignored.
+            e.g. 1, 2,ee;0,0,nn; 0, 10,en
+    Returns
+    -------
+        A list of baseline antpairpol tuples
+    """
+    # strip spaces
+    antpairpol_list_string = "".join(antpairpol_list_string.split())
+    # split on semi-colons
+    antpairpol_list = antpairpol_list_string.split(";")
+    for appnum, antpp in enumerate(antpairpol_list):
+        antpp = antpp.split(",")
+        antpairpol = (int(antpp[0]), int(antpp[1]), antpp[2])
+        antpairpol_list[appnum] = antpairpol
+    return antpairpol_list
+
+
+def generate_antpairpol_parallelization_files(filename, writedir, polarizations=None, bls_per_chunk=1):
+    """
+    Generate text files containing lists of basteline-pol-pairs
+
+    Arguments
+    ---------
+        filename: string
+            name of file whose baselines we will generate parallization files for.
+        writedir: string
+            name of directory to store parallelization file.
+        polarizations: list optional,
+            polarizations to include. default is all polarizations in the data file.
+        bls_per_chunk: integer optional,
+            number of baselines to include in each parallelized chunk.
+            default is 1.
+    Returns
+    -------
+        Nothing, just writes files with antpolpair lists for parallelization.
+    """
+    # load in data file
+    hd = HERAData(filename)
+    if polarizations is None:
+        polarizations = hd.get_pols()
+    # get list of baselines
+    # create chunks
+    bls = [bl for bl in hd.bls if bl[-1] in polarizations]
+    nchunks = int(np.ceil(len(bls) / bls_per_chunk))
+    chunks = [[] for chunk in range(nchunks)]
+    # bin up antpairpols.
+    for bln, bl in enumerate(bls):
+        chunk = bln // bls_per_chunk
+        chunks[chunk] += [bl]
+    # convert each bin to a string.
+    chunk_strs = []
+    for chunk in chunks:
+        chunk_strs.append(";".join([','.join([str(a[0]), str(a[1]), a[-1]]) for a in chunk]))
+    # for each chunk, write the baseline chunk text to a file
+    for nchunk, chunk_str in enumerate(chunk_strs):
+        outfile = writedir + filename.replace('.uvh5', '.antpairpol_list_%d.txt' % nchunk).split('/')[-1]
+        with open(outfile, 'w') as f:
+            f.write(chunk_str)
+            f.close()
+
+def antpairpol_parallization_parser():
+    """
+    An argparser for passing arguments to generate_antpairpol_parallelization_files()
+
+    Arguments:
+    ---------
+        None
+
+    Returns:
+    -------
+        An argument parser for passing command line arguments for baseline chunking.
+    """
+    a = argparse.ArgumentParser(description="Generate text files with chunks of antpairpols for parallel processing.")
+    a.add_argument("--template_file", type=str, help='data file containing baselines to chunk.')
+    a.add_argument("--polarizations", type=str, nargs='+', help='polarizations to chunk (e.g. ee ne xy)')
+    a.add_argument("--bls_per_chunk", type=int, help="number of antpair polarizations to process per chunk.")
+    a.add_argument("--directory", type=str, help="directory to write chunking lists.")
+    return a
