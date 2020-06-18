@@ -991,11 +991,19 @@ def test_generate_antpairpol_parallelization_files():
         os.remove(string_file)
 
 
+def test_int_rep_test():
+    assert not io.int_rep_test("alsdf")
+    assert io.int_rep_test("12312532651")
+
+
 def test_xtalk_linear_argparser_baseline_parallelized():
     with pytest.raises(AssertionError):
         io._parse_antpairpol_list_string("12, 47, ee; 12, 13")
+    with pytest.raises(AssertionError):
         io._parse_antpairpol_list_string("12, 47, hey!; 12, 13 ee")
+    with pytest.raises(AssertionError):
         io._parse_antpairpol_list_string("apple, 47, ee; 12, 13, nn")
+    with pytest.raises(AssertionError):
         io._parse_antpairpol_list_string("12, pear, ee; 12, 13, nn")
 
 
