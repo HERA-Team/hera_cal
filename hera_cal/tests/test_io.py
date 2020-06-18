@@ -15,6 +15,7 @@ import pyuvdata
 from pyuvdata import UVCal, UVData, UVFlag
 from pyuvdata.utils import parse_polstr, parse_jpolstr
 import glob
+import sys
 
 from .. import io
 from ..io import HERACal, HERAData
@@ -983,6 +984,19 @@ def test_generate_antpairpol_parallelization_files():
                 assert app == app_expected
     for string_file in string_files:
         os.remove(string_file)
+
+
+def test_antpairpol_parallelization_parser():
+    sys.argv = [sys.argv[0],
+                '--template_file',
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                '--polarizations', 'ee', '--bls_per_chunk', '1', '--directory', os.getcwd()]
+    parser = io.antpairpol_parallelization_parser()
+    a = parser.parse_args()
+    assert a.template_file == os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+    assert a.polarizations == ['ee']
+    assert a.bls_per_chunk == 1
+    assert a.directory == os.getcwd()
 
 
 def test_get_file_times():

@@ -17,6 +17,7 @@ import h5py
 import pickle
 import random
 import glob
+import argparse
 
 try:
     import aipy
@@ -1756,7 +1757,8 @@ def generate_antpairpol_parallelization_files(filename, writedir, polarizations=
             f.write(chunk_str)
             f.close()
 
-def antpairpol_parallization_parser():
+
+def antpairpol_parallelization_parser():
     """
     An argparser for passing arguments to generate_antpairpol_parallelization_files()
 
