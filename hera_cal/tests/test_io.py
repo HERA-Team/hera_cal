@@ -975,13 +975,18 @@ def test_generate_antpairpol_parallelization_files():
     string_files = glob.glob(os.path.join(DATA_PATH, "test_output/*antpairpol*.txt"))
     assert len(string_files) == 2
     expected_bllists = [[(53, 53, 'ee'), (53, 54, 'ee')], [(54, 54, 'ee')]]
-    for file, bllist in zip(string_files, expected_bllists):
+    for file in string_files:
         with open(file, 'r') as f:
             blpstr = f.readlines()
             assert len(blpstr) == 1
             antpolpairs = io._parse_antpairpol_list_string(blpstr[0])
             for app in antpolpairs:
-                assert app in bllist
+                # the order gets reversed for ubuntu versus mac os.
+                # so I have to put in these use cases.
+                if len(antpolpairs) == 2:
+                    assert app in expected_bllists[0]
+                else:
+                    assert app in expected_bllists[1]
     for string_file in string_files:
         os.remove(string_file)
 
