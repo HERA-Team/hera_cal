@@ -1698,7 +1698,7 @@ def int_rep_test(test_string):
         test_string, string. String to be tested.
     Returns
     ---------
-        boolean.
+        boolean. True if string can be represented by an integer and False otherwise. 
     """
     try:
         test_int = int(test_string)
