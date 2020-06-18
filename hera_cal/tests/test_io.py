@@ -980,10 +980,18 @@ def test_generate_antpairpol_parallelization_files():
             blpstr = f.readlines()
             assert len(blpstr) == 1
             antpolpairs = io._parse_antpairpol_list_string(blpstr[0])
-            for app, app_expected in zip(antpolpairs, bllist):
-                assert app == app_expected
+            for app in antpolpairs:
+                assert app in bllist
     for string_file in string_files:
         os.remove(string_file)
+
+
+def test_xtalk_linear_argparser_baseline_parallelized():
+    with pytest.raises(AssertionError):
+        io._parse_antpairpol_list_string("12, 47, ee; 12, 13")
+        io._parse_antpairpol_list_string("12, 47, hey!; 12, 13 ee")
+        io._parse_antpairpol_list_string("apple, 47, ee; 12, 13, nn")
+        io._parse_antpairpol_list_string("12, pear, ee; 12, 13, nn")
 
 
 def test_antpairpol_parallelization_parser():

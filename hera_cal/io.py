@@ -18,6 +18,7 @@ import pickle
 import random
 import glob
 import argparse
+from pyuvdata.utils import POL_STR2NUM_DICT
 
 try:
     import aipy
@@ -1728,9 +1729,15 @@ def _parse_antpairpol_list_string(antpairpol_list_string):
     antpairpol_list = antpairpol_list_string.split(";")
     for appnum, antpp in enumerate(antpairpol_list):
         antpp = antpp.split(",")
-        assert len(antpp) == 3, "Must provide semicolon separated list of comma separated antpairpols!"
-        assert int_rep_test(antpp[0]), "invalid antenna number %s in %s provided!"%(antpp[0], str(antpp))
-        assert int_rep_test(antpp[1]), "invalid antenna number %s in %s provided!"%(antpp[1], str(antpp))
+        if not len(antpp) == 3:
+            raise AssertionError("Must provide semicolon separated list of comma separated triplet antpairpols!")
+        if not int_rep_test(antpp[0]):
+            raise AssertionError("invalid antenna number %s in %s provided!"%(antpp[0], str(antpp)))
+        if not int_rep_test(antpp[1]):
+            raise AssertionError("invalid antenna number %s in %s provided!"%(antpp[1], str(antpp)))
+        # check valid baseline string
+        if not antpp[2] in POL_STR2NUM_DICT and not antpp[2] in ['ee', 'nn', 'en', 'ne']:
+            raise AssertionError("invalid polarization, %s provided!"%antpp[2])
         antpairpol = (int(antpp[0]), int(antpp[1]), antpp[2])
         antpairpol_list[appnum] = antpairpol
     return antpairpol_list
