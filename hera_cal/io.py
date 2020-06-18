@@ -1688,6 +1688,24 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     cal.write_calfits(outfilename, clobber=clobber)
 
 
+def int_rep_test(test_string):
+    """
+    Test whether a string represents an integer.
+
+    Arguments
+    ---------
+        test_string, string. String to be tested.
+    Returns
+    ---------
+        boolean.
+    """
+    try:
+        test_int = int(test_string)
+        return True
+    except:
+        return False
+
+
 def _parse_antpairpol_list_string(antpairpol_list_string):
     """
     Helper method for parsing user provided lists of baselines.
@@ -1703,12 +1721,16 @@ def _parse_antpairpol_list_string(antpairpol_list_string):
     -------
         A list of baseline antpairpol tuples
     """
+    assert isinstance(antpairpol_list_string, str), "Must provide a string to be parsed!"
     # strip spaces
     antpairpol_list_string = "".join(antpairpol_list_string.split())
     # split on semi-colons
     antpairpol_list = antpairpol_list_string.split(";")
     for appnum, antpp in enumerate(antpairpol_list):
         antpp = antpp.split(",")
+        assert len(antpp) == 3, "Must provide semicolon separated list of comma separated antpairpols!"
+        assert int_rep_test(antpp[0]), "invalid antenna number %s in %s provided!"%(antpp[0], str(antpp))
+        assert int_rep_test(antpp[1]), "invalid antenna number %s in %s provided!"%(antpp[1], str(antpp))
         antpairpol = (int(antpp[0]), int(antpp[1]), antpp[2])
         antpairpol_list[appnum] = antpairpol
     return antpairpol_list
