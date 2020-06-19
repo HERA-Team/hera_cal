@@ -15,6 +15,8 @@ from .. import io
 from .. import xtalk_filter as xf
 from ..data import DATA_PATH
 import glob
+from .. import vis_clean
+from .. import utils as utils
 
 
 class Test_XTalkFilter(object):
@@ -45,6 +47,40 @@ class Test_XTalkFilter(object):
         np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
         np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
 
+    def test_load_xtalk_filter_and_write_baseline_list(self):
+        uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
+        cals = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part1"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
+        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        cdir = os.getcwd()
+        cdir = os.path.join(cdir, 'cache_temp')
+        # make a cache directory
+        if os.path.isdir(cdir):
+            shutil.rmtree(cdir)
+        os.mkdir(cdir)
+        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+                                                     calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                                     read_cache=True, write_cache=True,
+                                                     res_outfilename=outfilename, clobber=True,
+                                                     mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert len(list(d.keys())) == 1
+        assert d[(53, 54, 'ee')].shape[1] == 100
+        assert d[(53, 54, 'ee')].shape[0] == 60
+        # now do no spw range and no cal files just to cover those lines.
+        xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+                                                     cache_dir=cdir,
+                                                     read_cache=True, write_cache=True,
+                                                     res_outfilename=outfilename, clobber=True,
+                                                     mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert len(list(d.keys())) == 1
+        assert d[(53, 54, 'ee')].shape[1] == 1024
+        assert d[(53, 54, 'ee')].shape[0] == 60
+
     def test_load_xtalk_filter_and_write(self):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
@@ -73,10 +109,12 @@ class Test_XTalkFilter(object):
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
-        xf.load_xtalk_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True)
+        os.remove(outfilename)
+        xf.load_xtalk_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename,
+                                       Nbls_per_load=2, clobber=True)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
-        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        d, f, n = hd.read()
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
 

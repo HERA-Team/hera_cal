@@ -16,6 +16,8 @@ import random
 import glob
 import os
 import warnings
+from copy import deepcopy
+from pyuvdata import UVCal
 
 
 class XTalkFilter(VisClean):
@@ -128,14 +130,78 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                clobber=clobber, add_to_history=add_to_history,
                                extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
     else:
-        for i in range(0, len(hd.bls), Nbls_per_load):
+        for i in range(0, hd.Nbls, Nbls_per_load):
             xf = XTalkFilter(hd, input_cal=calfile)
             xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
-                                   clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
+                                   clobber=clobber, add_to_history=add_to_history,
+                                   freq_array=np.asarray([freqs]), Nfreqs=len(freqs))
             xf.hd.data_array = None  # this forces a reload in the next loop
+
+
+def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
+                                              read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
+                                              res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
+                                              clobber=False, add_to_history='', **filter_kwargs):
+    '''
+    A xtalk filtering method that only simultaneously loads and writes user-provided
+    list of baselines. This is to support parallelization over baseline (rather then time).
+
+    Arguments:
+        datafile_list: list of data files to perform cross-talk filtering on
+        baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
+        calfile_list: optional list of calibration files to apply to data before xtalk filtering
+        spw_range: 2-tuple or 2-list, spw_range of data to filter.
+        cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
+                    see uvtools.dspec.dayenu_filter for key formats.
+        read_cache: bool, If true, read existing cache files in cache_dir before running.
+        write_cache: bool. If true, create new cache file with precomputed matrices
+                           that were not in previously loaded cache files.
+        max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
+                         max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
+        res_outfilename: path for writing the filtered visibilities with flags
+        CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
+        filled_outfilename: path for writing the original data but with flags unflagged and replaced
+            with CLEAN models wherever possible
+        clobber: if True, overwrites existing file at the outfilename
+        add_to_history: string appended to the history of the output file
+        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
+    '''
+    hd = io.HERAData(datafile_list, filetype='uvh5')
+    if spw_range is None:
+        spw_range = [0, hd.Nfreqs]
+    freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
+    baseline_antennas = []
+    for blpolpair in baseline_list:
+        baseline_antennas += list(blpolpair[:2])
+    baseline_antennas = np.unique(baseline_antennas).astype(int)
+    if calfile_list is not None:
+        # initialize calfile by iterating through calfile_list, selecting the antennas we need,
+        # and concatenating.
+        for filenum, calfile in enumerate(calfile_list):
+            cal = UVCal()
+            cal.read_calfits(calfile)
+            # only select calibration antennas that are in the intersection of antennas in
+            # baselines to be filtered and the calibration solution.
+            ants_overlap = np.intersect1d(cal.ant_array, baseline_antennas).astype(int)
+            cal.select(antenna_nums=ants_overlap, frequencies=freqs)
+            if filenum == 0:
+                cals = deepcopy(cal)
+            else:
+                cals = cals + cal
+        cals = io.to_HERACal(cals)
+    else:
+        cals = None
+    xf = XTalkFilter(hd, input_cal=cals)
+    xf.read(bls=baseline_list, frequencies=freqs)
+    xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+    xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
+                           filled_outfilename=filled_outfilename, partial_write=False,
+                           clobber=clobber, add_to_history=add_to_history,
+                           extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
+
 
 # ------------------------------------------
 # Here are arg-parsers for xtalk-filtering.

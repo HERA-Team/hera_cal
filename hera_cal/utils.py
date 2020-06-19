@@ -162,17 +162,17 @@ def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=
             continue
         if (ants is not None) and (ant2 not in ants) and (ant2[0] not in ants):
             continue
-        
+
         # filter on antennas to exclude
         if (ex_ants is not None) and ((ant1 in ex_ants) or (ant1[0] in ex_ants)):
             continue
         if (ex_ants is not None) and ((ant2 in ex_ants) or (ant2[0] in ex_ants)):
             continue
-        
+
         # filter on polarizations
         if (pols is not None) and (bl[2] not in pols):
             continue
-        
+
         # filter on baseline length
         if antpos is not None:
             bl_length = np.linalg.norm(antpos[ant2[0]] - antpos[ant1[0]])
@@ -180,7 +180,7 @@ def filter_bls(bls, ants=None, ex_ants=None, pols=None, antpos=None, min_bl_cut=
                 continue
             if (max_bl_cut is not None) and (bl_length > max_bl_cut):
                 continue
-        
+
         filtered_bls.append(bl)
 
     return filtered_bls

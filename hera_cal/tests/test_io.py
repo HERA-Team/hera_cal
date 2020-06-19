@@ -15,6 +15,7 @@ import pyuvdata
 from pyuvdata import UVCal, UVData, UVFlag
 from pyuvdata.utils import parse_polstr, parse_jpolstr
 import glob
+import sys
 
 from .. import io
 from ..io import HERACal, HERAData
@@ -964,7 +965,7 @@ class Test_Meta_IO(object):
         assert history == history2
 
         os.remove(out_path)
-
+        
 
 def test_get_file_times():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
