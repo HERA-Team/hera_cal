@@ -18,7 +18,6 @@ import pickle
 import random
 import glob
 import argparse
-from pyuvdata.utils import POL_STR2NUM_DICT
 
 try:
     import aipy
