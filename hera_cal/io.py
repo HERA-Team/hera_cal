@@ -17,7 +17,6 @@ import h5py
 import pickle
 import random
 import glob
-import argparse
 
 try:
     import aipy
