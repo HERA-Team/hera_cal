@@ -17,6 +17,7 @@ import h5py
 import pickle
 import random
 import glob
+from pyuvdata.utils import POL_STR2NUM_DICT
 
 try:
     import aipy
@@ -1685,3 +1686,35 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
     # Write to calfits file
     cal.write_calfits(outfilename, clobber=clobber)
+
+
+def baselines_from_filelist_position(filename, filelist, polarizations):
+    """
+    Determine indices of baselines to process from the position of a filename within
+    a list of baselines in filelist.
+
+    Arguments:
+        filename, string
+            name of the file being processed.
+        filelist, list of strings
+            name of all files over which computations are being parallelized.
+        polarizations, list of strings
+            polarizations to include in baseline parallelization.
+    Returns:
+        list of baselines to process based on the position of the filename in the list of files.
+    """
+    # sanitize polarizations
+    for pol in polarizations:
+        if pol not in POL_STR2NUM_DICT and pol not in ['ee', 'en', 'ne', 'nn']:
+            raise ValueError("invalid polarization %s provided!" % pol)
+    # The reason this function is not in utils is that it needs to use HERAData
+    hd = HERAData(filename)
+    bls = [bl for bl in hd.bls if bl[-1] in polarizations]
+    file_index = filelist.index(filename)
+    nfiles = len(filelist)
+    # Determine chunk size
+    nbls = len(bls)
+    chunk_size = nbls // nfiles + 1
+    lower_index = file_index * chunk_size
+    upper_index = np.min([(file_index + 1) * chunk_size, nbls])
+    return bls[lower_index:upper_index]

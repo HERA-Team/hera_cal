@@ -965,7 +965,7 @@ class Test_Meta_IO(object):
         assert history == history2
 
         os.remove(out_path)
-        
+
 
 def test_get_file_times():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
@@ -1003,3 +1003,26 @@ def test_get_file_times():
 
     # exceptions
     pytest.raises(ValueError, io.get_file_times, fp, filetype='foo')
+
+
+def test_baselines_from_filelist_position():
+    filelist = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
+    baselines = []
+    # below, we test whether for each file we get a chunk of baselines whose length is either greater then 0
+    # or less then then 3 (the number of total baselines in this dataset)
+    for file in filelist:
+        baseline_chunk = io.baselines_from_filelist_position(file, filelist, ['ee'])
+        assert len(baseline_chunk) > 0 and len(baseline_chunk) < 3
+        baselines += baseline_chunk
+    # Next, we check whether the total number of chunked baselines equals the original number of baselines
+    assert len(baselines) == 3
+    # sort baselines by the sum of antenna number
+    ant_sum = [bl[0] + bl[1] for bl in baselines]
+    sum_indices = np.argsort(ant_sum)
+    baselines_sorted = [baselines[m] for m in sum_indices]
+    # check that the sorted baselines are all of the original baselines.
+    assert baselines_sorted == [(53, 53, 'ee'), (53, 54, 'ee'), (54, 54, 'ee')]
+    # check that providing an invalid polarization will raise an exception.
+    with pytest.raises(ValueError):
+        io.baselines_from_filelist_position(file, filelist, 'lasdf')
