@@ -16,11 +16,14 @@ a = parser.parse_args()
 # set kwargs
 filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
 baseline_list = io.baselines_from_filelist_position(filename=a.infilename, filelist=a.datafilelist, polarizations=a.polarizations)
+fileindex = a.datafilelist.index(a.infilename)
+# modify output file name to include index.
+outfilename = a.res_outfilename + ".part.%d" % fileindex
 spw_range = a.spw_range
 # Run Delay Filter
 delay_filter.load_xtalk_filter_and_write_baseline_list(a.filelist, calfile_list=a.calfilelist,
                                          baseline_list=baseline_list, spw_range=a.spw_range,
-                                         cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
+                                         cache_dir=a.cache_dir, res_outfilename=outfilename,
                                          clobber=a.clobber, write_cache=a.write_cache,
                                          read_cache=a.read_cache, mode='dayenu',
                                          add_to_history=' '.join(sys.argv), **filter_kwargs)
