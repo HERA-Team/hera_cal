@@ -965,60 +965,7 @@ class Test_Meta_IO(object):
         assert history == history2
 
         os.remove(out_path)
-
-
-def test_generate_antpairpol_parallelization_files():
-    test_uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-    io.generate_antpairpol_parallelization_files(test_uvh5,
-                                                 os.path.join(DATA_PATH, "test_output/"),
-                                                 bls_per_chunk=2)
-    string_files = glob.glob(os.path.join(DATA_PATH, "test_output/*antpairpol*.txt"))
-    assert len(string_files) == 2
-    expected_bllists = [[(53, 53, 'ee'), (53, 54, 'ee')], [(54, 54, 'ee')]]
-    for file in string_files:
-        with open(file, 'r') as f:
-            blpstr = f.readlines()
-            assert len(blpstr) == 1
-            antpolpairs = io._parse_antpairpol_list_string(blpstr[0])
-            for app in antpolpairs:
-                # the order gets reversed for ubuntu versus mac os.
-                # so I have to put in these use cases.
-                if len(antpolpairs) == 2:
-                    assert app in expected_bllists[0]
-                else:
-                    assert app in expected_bllists[1]
-    for string_file in string_files:
-        os.remove(string_file)
-
-
-def test_int_rep_test():
-    assert not io.int_rep_test("alsdf")
-    assert io.int_rep_test("12312532651")
-
-
-def test_xtalk_linear_argparser_baseline_parallelized():
-    with pytest.raises(AssertionError):
-        io._parse_antpairpol_list_string("12, 47, ee; 12, 13")
-    with pytest.raises(AssertionError):
-        io._parse_antpairpol_list_string("12, 47, hey!; 12, 13 ee")
-    with pytest.raises(AssertionError):
-        io._parse_antpairpol_list_string("apple, 47, ee; 12, 13, nn")
-    with pytest.raises(AssertionError):
-        io._parse_antpairpol_list_string("12, pear, ee; 12, 13, nn")
-
-
-def test_antpairpol_parallelization_parser():
-    sys.argv = [sys.argv[0],
-                '--template_file',
-                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
-                '--polarizations', 'ee', '--bls_per_chunk', '1', '--directory', os.getcwd()]
-    parser = io.antpairpol_parallelization_parser()
-    a = parser.parse_args()
-    assert a.template_file == os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-    assert a.polarizations == ['ee']
-    assert a.bls_per_chunk == 1
-    assert a.directory == os.getcwd()
-
+        
 
 def test_get_file_times():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))

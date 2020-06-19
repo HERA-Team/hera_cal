@@ -192,28 +192,3 @@ class Test_XTalkFilter(object):
         assert a.cache_dir == '/blah/'
         assert a.max_frate_coeffs[0] == 0.024
         assert a.max_frate_coeffs[1] == -0.229
-
-    def test_xtalk_linear_argparser_baseline_parallelized(self):
-        sys.argv = [sys.argv[0], '--clobber', '--write_cache', '--cache_dir', '/blah/', '--max_frate_coeffs',
-                    '0.024', '-0.229', '--datafile_list', 'firstfile.uvh5', 'secondfile.uvh5', 'thirdfile.uvh5',
-                    '--calfile_list', 'firstcal.calfits', 'secondcal.calfits', 'thirdcal.calfits', 'fourthcal.calfits',
-                    'fifthcal.calfits', '--antpairpol_list', '53,54,ee;23,34,nn; 0, 0, en; 1, 23,nn']
-        parser = xf.xtalk_filter_argparser(mode='dayenu', parallelization_mode='baseline-pol')
-        a = parser.parse_args()
-        assert a.clobber is True
-        assert a.write_cache is True
-        assert a.cache_dir == '/blah/'
-        assert a.max_frate_coeffs[0] == 0.024
-        assert a.max_frate_coeffs[1] == -0.229
-        assert len(a.datafile_list) == 3
-        assert len(a.calfile_list) == 5
-        assert a.datafile_list[0] == 'firstfile.uvh5'
-        assert a.datafile_list[-1] == 'thirdfile.uvh5'
-        assert a.calfile_list[-1] == 'fifthcal.calfits'
-        # test parsing the baseline list
-        antpairpol_list = io._parse_antpairpol_list_string(a.antpairpol_list)
-        assert len(antpairpol_list) == 4
-        assert antpairpol_list[0] == (53, 54, 'ee')
-        assert antpairpol_list[1] == (23, 34, 'nn')
-        assert antpairpol_list[2] == (0, 0, 'en')
-        assert antpairpol_list[3] == (1, 23, 'nn')

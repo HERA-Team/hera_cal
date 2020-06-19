@@ -208,7 +208,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
 # ------------------------------------------
 
 
-def xtalk_filter_argparser(mode='clean', parallelization_mode='file'):
+def xtalk_filter_argparser(mode='clean'):
     '''
     Arg parser for commandline operation of xtalk filters.
     Parameters
@@ -220,9 +220,9 @@ def xtalk_filter_argparser(mode='clean', parallelization_mode='file'):
     ----------
     '''
     if mode == 'clean':
-        a = vis_clean._clean_argparser(parallelization_mode=parallelization_mode)
+        a = vis_clean._clean_argparser()
     elif mode in ['linear', 'dayenu', 'dpss_leastsq']:
-        a = vis_clean._linear_argparser(parallelization_mode=parallelization_mode)
+        a = vis_clean._linear_argparser()
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
     a.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
     return a
