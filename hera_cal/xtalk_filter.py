@@ -18,6 +18,7 @@ import os
 import warnings
 from copy import deepcopy
 from pyuvdata import UVCal
+import argparse
 
 
 class XTalkFilter(VisClean):
@@ -216,7 +217,7 @@ def reconstitute_xtalk_files(templatefile, fragments, outfilename, clobber=False
     file_fragments, list of strings
         list of file names to use reconstitute.
     clobber, bool optional.
-        If False, don't overwrite outfilename if it already exists. Default is False. 
+        If False, don't overwrite outfilename if it already exists. Default is False.
     Returns
     -------
         Nothing
@@ -275,3 +276,5 @@ def reconstitute_xtalk_files_argparser():
     a.add_argument("infilename", type=str, help="name of template file.")
     a.add_argument("--fragmentlist", type=str, nargs="+", help="list of file fragments to reconstitute")
     a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.")
+    a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
+    return a

@@ -193,6 +193,16 @@ class Test_XTalkFilter(object):
         assert a.max_frate_coeffs[0] == 0.024
         assert a.max_frate_coeffs[1] == -0.229
 
+    def test_reconstitute_xtalk_files_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--fragmentlist', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
+        parser = xf.reconstitute_xtalk_files_argparser()
+        a = parser.parse_args()
+        assert a.clobber
+        for char in ['a', 'b', 'c', 'd']:
+            assert char in a.fragmentlist
+        assert a.infilename == 'a'
+        assert a.outfilename == 'a.out'
+
     def test_reconstitute_xtalk_files(self):
         # First, construct some cross-talk baseline files.
         datafiles = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
