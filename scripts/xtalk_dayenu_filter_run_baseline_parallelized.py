@@ -20,7 +20,7 @@ fileindex = a.datafilelist.index(a.infilename)
 # modify output file name to include index.
 outfilename = a.res_outfilename + ".part.%d" % fileindex
 spw_range = a.spw_range
-# Run Delay Filter
+# Run Xtalk Filter
 xtalk_filter.load_xtalk_filter_and_write_baseline_list(a.filelist, calfile_list=a.calfilelist,
                                                        baseline_list=baseline_list, spw_range=a.spw_range,
                                                        cache_dir=a.cache_dir, res_outfilename=outfilename,

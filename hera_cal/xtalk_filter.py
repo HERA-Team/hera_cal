@@ -203,7 +203,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                            extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
 
 
-def reconstitute_xtalk_files(templatefile, fragments, outfilename):
+def reconstitute_xtalk_files(templatefile, fragments, outfilename, clobber=False):
     """
     Construct a new file based on templatefile that combines the files in file_fragments
     over the times in template file.
@@ -215,27 +215,29 @@ def reconstitute_xtalk_files(templatefile, fragments, outfilename):
         name of the output file
     file_fragments, list of strings
         list of file names to use reconstitute.
+    clobber, bool optional.
+        If False, don't overwrite outfilename if it already exists. Default is False. 
     Returns
     -------
         Nothing
     """
-    hd_template = HERAData(templatefile)
-    hd_fragment = HERAData(fragments[0])
+    hd_template = io.HERAData(templatefile)
+    hd_fragment = io.HERAData(fragments[0])
     times = hd_template.times
     freqs = hd_fragment.freqs
     polarizations = hd_fragment.pols
     # read in the template file, but only include polarizations, frequencies
     # from the fragment files.
-    hd_template.read(times=times, freqs=freqs, polarizations=polarizations)
+    hd_template.read(times=times, frequencies=freqs, polarizations=polarizations)
     # for each fragment, read in only the times relevant to the templatefile.
     # and update the data, flags, nsamples array of the template file
     # with the fragment data.
     for fragment in fragments:
-        hd_fragment = HERAData(fragment)
+        hd_fragment = io.HERAData(fragment)
         d, f, n = hd_fragment.read(times=times)
         hd_template.update(flags=f, data=d, nsamples=n)
     # now that we've updated everything, we write the output file.
-    hd_template.write_uvh5(outfilename)
+    hd_template.write_uvh5(outfilename, clobber=clobber)
 
 
 # ------------------------------------------
