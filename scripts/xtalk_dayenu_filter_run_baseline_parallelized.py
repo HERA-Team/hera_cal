@@ -21,9 +21,9 @@ fileindex = a.datafilelist.index(a.infilename)
 outfilename = a.res_outfilename + ".part.%d" % fileindex
 spw_range = a.spw_range
 # Run Delay Filter
-delay_filter.load_xtalk_filter_and_write_baseline_list(a.filelist, calfile_list=a.calfilelist,
-                                         baseline_list=baseline_list, spw_range=a.spw_range,
-                                         cache_dir=a.cache_dir, res_outfilename=outfilename,
-                                         clobber=a.clobber, write_cache=a.write_cache,
-                                         read_cache=a.read_cache, mode='dayenu',
-                                         add_to_history=' '.join(sys.argv), **filter_kwargs)
+xtalk_filter.load_xtalk_filter_and_write_baseline_list(a.filelist, calfile_list=a.calfilelist,
+                                                       baseline_list=baseline_list, spw_range=a.spw_range,
+                                                       cache_dir=a.cache_dir, res_outfilename=outfilename,
+                                                       clobber=a.clobber, write_cache=a.write_cache,
+                                                       read_cache=a.read_cache, mode='dayenu',
+                                                       add_to_history=' '.join(sys.argv), **filter_kwargs)

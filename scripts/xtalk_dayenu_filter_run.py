@@ -16,7 +16,7 @@ a = parser.parse_args()
 filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
 spw_range = a.spw_range
 # Run Delay Filter
-delay_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile,
+xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile,
                                          Nbls_per_load=a.partial_load_Nbls, spw_range=a.spw_range,
                                          cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
                                          clobber=a.clobber, write_cache=a.write_cache,

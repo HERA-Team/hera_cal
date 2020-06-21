@@ -203,6 +203,41 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                            extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
 
 
+def reconstitute_xtalk_files(templatefile, fragments, outfilename):
+    """
+    Construct a new file based on templatefile that combines the files in file_fragments
+    over the times in template file.
+    Arguments
+    ---------
+    templatefile, string
+        name of the file to use as a template. Will reconstitute the file_fragments over the times in templatefile.
+    outfilename, string
+        name of the output file
+    file_fragments, list of strings
+        list of file names to use reconstitute.
+    Returns
+    -------
+        Nothing
+    """
+    hd_template = HERAData(templatefile)
+    hd_fragment = HERAData(fragments[0])
+    times = hd_template.times
+    freqs = hd_fragment.freqs
+    polarizations = hd_fragment.pols
+    # read in the template file, but only include polarizations, frequencies
+    # from the fragment files.
+    hd_template.read(times=times, freqs=freqs, polarizations=polarizations)
+    # for each fragment, read in only the times relevant to the templatefile.
+    # and update the data, flags, nsamples array of the template file
+    # with the fragment data.
+    for fragment in fragments:
+        hd_fragment = HERAData(fragment)
+        d, f, n = hd_fragment.read(times=times)
+        hd_template.update(flags=f, data=d, nsamples=n)
+    # now that we've updated everything, we write the output file.
+    hd_template.write_uvh5(outfilename)
+
+
 # ------------------------------------------
 # Here are arg-parsers for xtalk-filtering.
 # ------------------------------------------
@@ -228,3 +263,13 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
     a.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
     return a
+
+
+def reconstitute_xtalk_files_argparser():
+    """
+    Arg parser for file reconstitution.
+    """
+    a = argparse.ArgumentParser(description="Reconstitute fragmented baseline files.")
+    a.add_argument("infilename", type=str, help="name of template file.")
+    a.add_argument("--fragmentlist", type=str, nargs="+", help="list of file fragments to reconstitute")
+    a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.")
