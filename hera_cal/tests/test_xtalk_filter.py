@@ -203,19 +203,16 @@ class Test_XTalkFilter(object):
         assert a.infilename == 'a'
         assert a.outfilename == 'a.out'
 
-    def test_reconstitute_xtalk_files(self):
+    def test_reconstitute_xtalk_files(self, tmp_path):
         # First, construct some cross-talk baseline files.
         datafiles = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
                      os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
 
         cals = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part1"),
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
-        cdir = os.getcwd()
-        cdir = os.path.join(cdir, 'cache_temp')
         # make a cache directory
-        if os.path.isdir(cdir):
-            shutil.rmtree(cdir)
-        os.mkdir(cdir)
+        cdir = tmp_path /  "cache_temp"
+        cdir.mkdir()
         # cross-talk filter chunked baselines
         for filenum, file in enumerate(datafiles):
             baselines = io.baselines_from_filelist_position(file, datafiles, polarizations=['ee'])
