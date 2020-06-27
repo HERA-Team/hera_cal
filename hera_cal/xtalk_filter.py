@@ -247,17 +247,22 @@ def reconstitute_xtalk_files(templatefile, fragments, outfilename, clobber=False
 
 
 def xtalk_filter_argparser(mode='clean', multifile=False):
-    '''
-    Arg parser for commandline operation of xtalk filters.
+    '''Arg parser for commandline operation of xtalk filters.
+
     Parameters
     ----------
-        mode, str : optional. Determines sets of arguments to load.
-            can be 'clean', 'dayenu', or 'dpss_leastsq'.
-        multifile, bool: optional. If True, add calfilelist and filelist
-                         arguments.
+    mode : string, optional.
+        Determines sets of arguments to load.
+        Can be 'clean', 'dayenu', or 'dpss_leastsq'.
+    multifile: bool, optional.
+        If True, add calfilelist and filelist
+        arguments.
+
     Returns
+    -------
+    argparser
         argparser for xtalk (time-domain) filtering for specified filtering mode
-    ----------
+
     '''
     if mode == 'clean':
         a = vis_clean._clean_argparser(multifile=multifile)

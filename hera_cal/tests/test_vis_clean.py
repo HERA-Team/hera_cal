@@ -376,7 +376,9 @@ class Test_VisClean(object):
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
-        # test multifile
+
+    def test_filter_argparser_multifile(self):
+        # test multifile functionality of _filter_argparser
         sys.argv = [sys.argv[0], 'a', '--clobber', '--spw_range', '0', '20', '--calfilelist', 'cal1', 'cal2', 'cal3',
                     '--datafilelist', 'a', 'b', 'c']
         parser = vis_clean._filter_argparser(multifile=True)

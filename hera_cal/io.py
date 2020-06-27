@@ -1689,23 +1689,30 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
 
 
 def baselines_from_filelist_position(filename, filelist, polarizations):
-    """
-    Determine indices of baselines to process from the position of a filename within
-    a list of baselines in filelist.
+    """Determine indices of baselines to process.
 
-    Arguments:
-        filename, string
-            name of the file being processed.
-        filelist, list of strings
-            name of all files over which computations are being parallelized.
-        polarizations, list of strings
-            polarizations to include in baseline parallelization.
-    Returns:
+
+    This function determines baselines to process given the position of a filename
+    in a list of files.
+
+
+    Parameters
+    ----------
+    filename : string
+        name of the file being processed.
+    filelist : list of strings
+        name of all files over which computations are being parallelized.
+    polarizations : list of strings
+        polarizations to include in baseline parallelization.
+
+    Returns
+    -------
+    list
         list of baselines to process based on the position of the filename in the list of files.
     """
     # sanitize polarizations
     for pol in polarizations:
-        if pol not in POL_STR2NUM_DICT and pol not in ['ee', 'en', 'ne', 'nn']:
+        if pol.lower() not in POL_STR2NUM_DICT and pol.lower() not in ['ee', 'en', 'ne', 'nn']:
             raise ValueError("invalid polarization %s provided!" % pol)
     # The reason this function is not in utils is that it needs to use HERAData
     hd = HERAData(filename)

@@ -1,6 +1,6 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Copyright 2019 the HERA Project
+# Copyright 2020 the HERA Project
 # Licensed under the MIT License
 
 "Command-line drive script for hera_cal.xtalk_filter. Only performs DAYENU Filtering"
