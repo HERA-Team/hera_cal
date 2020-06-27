@@ -205,19 +205,22 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
 
 
 def reconstitute_xtalk_files(templatefile, fragments, outfilename, clobber=False):
-    """
+    """Recombine xtalk products into short-time files.
+
     Construct a new file based on templatefile that combines the files in file_fragments
     over the times in template file.
+
     Arguments
     ---------
-    templatefile, string
+    templatefile : string
         name of the file to use as a template. Will reconstitute the file_fragments over the times in templatefile.
-    outfilename, string
+    outfilename : string
         name of the output file
-    file_fragments, list of strings
+    file_fragments : list of strings
         list of file names to use reconstitute.
-    clobber, bool optional.
+    clobber : bool optional.
         If False, don't overwrite outfilename if it already exists. Default is False.
+
     Returns
     -------
         Nothing

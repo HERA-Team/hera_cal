@@ -211,7 +211,7 @@ class Test_XTalkFilter(object):
         cals = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part1"),
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
         # make a cache directory
-        cdir = tmp_path /  "cache_temp"
+        cdir = tmp_path / "cache_temp"
         cdir.mkdir()
         # cross-talk filter chunked baselines
         for filenum, file in enumerate(datafiles):
