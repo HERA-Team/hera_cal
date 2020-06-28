@@ -1292,6 +1292,7 @@ def _filter_argparser(multifile=False):
     a.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
     a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
     a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
+    a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
@@ -1323,7 +1324,6 @@ def _clean_argparser(multifile=False):
     clean_options = a.add_argument_group(title='Options for CLEAN')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
                               see uvtools.dspec.gen_window for options')
-    clean_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     clean_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
     clean_options.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag on lower band edge and exclude from window function.")
     clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
