@@ -37,15 +37,17 @@ class Test_XTalkFilter(object):
         # test skip_wgt imposition of flags
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
-        xfil = xf.XTalkFilter(fname, filetype='miriad')
-        xfil.read(bls=[k])
-        wgts = {k: np.ones_like(xfil.flags[k], dtype=np.float)}
-        wgts[k][:, 0] = 0.0
-        xfil.run_xtalk_filter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-        assert xfil.clean_info[k]['status']['axis_0'][0] == 'skipped'
-        np.testing.assert_array_equal(xfil.clean_flags[k][:, 0], np.ones_like(xfil.flags[k][:, 0]))
-        np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
-        np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
+        # check successful run when round_up_bllens is True and when False. 
+        for round_up_bllens in [True, False]:
+            xfil = xf.XTalkFilter(fname, filetype='miriad', round_up_bllens=round_up_bllens)
+            xfil.read(bls=[k])
+            wgts = {k: np.ones_like(xfil.flags[k], dtype=np.float)}
+            wgts[k][:, 0] = 0.0
+            xfil.run_xtalk_filter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+            assert xfil.clean_info[k]['status']['axis_0'][0] == 'skipped'
+            np.testing.assert_array_equal(xfil.clean_flags[k][:, 0], np.ones_like(xfil.flags[k][:, 0]))
+            np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
+            np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
 
     def test_load_xtalk_filter_and_write_baseline_list(self):
         uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),

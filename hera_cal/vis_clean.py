@@ -29,6 +29,7 @@ class VisClean(object):
     """
 
     def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True,
+                 round_up_bllens=False,
                  **read_kwargs):
         """
         Initialize the object.
@@ -43,6 +44,11 @@ class VisClean(object):
                 as they are built.
             link_data : bool, if True, attempt to link DataContainers
                 from HERAData object, otherwise only link metadata if possible.
+            round_up_bllens : bool, optional
+                If True, round up baseline lengths to nearest meter for delay-filtering.
+                this allows linear filters for baselines with slightly different lengths
+                to be hashed to the same matrix. Saves lots of time by only computing
+                one unique filtering matrix per flagging pattern and baseline length group.
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         """
@@ -55,6 +61,7 @@ class VisClean(object):
 
         # attach data and/or metadata to object if exists
         self.attach_data(link_data=link_data)
+        self.round_up_bllens = round_up_bllens
 
     def soft_copy(self, references=[]):
         """
@@ -351,7 +358,10 @@ class VisClean(object):
         for k in keys:
             if ax == 'freq' or ax == 'both':
                 filter_centers_freq = [0.]
-                bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
+                if self.round_up_bllens:
+                    bl_dly = np.ceil(self.bllens[k[:2]] * constants.c.value) / constants.c.value * horizon + standoff / 1e9
+                else:
+                    bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
                 filter_half_widths_freq = [np.max([bl_dly, min_dly / 1e9])]
             if ax == 'time' or ax == 'both':
                 filter_centers_time = [0.]

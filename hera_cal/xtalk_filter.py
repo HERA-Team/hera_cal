@@ -76,7 +76,10 @@ class XTalkFilter(VisClean):
         else:
             filter_cache = None
         # compute maximum fringe rate dict based on EW baseline lengths.
-        max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
+        if self.round_up_bllens:
+            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.ceil(self.blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in self.data})
+        else:
+            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
         # loop over all baselines in increments of Nbls
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
@@ -90,7 +93,7 @@ class XTalkFilter(VisClean):
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                clobber=False, add_to_history='', **filter_kwargs):
+                                clobber=False, add_to_history='', round_up_bllens=False, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform xtalk filtering.
 
@@ -113,6 +116,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
+        round_up_bllens: bool, if True, round up baseline lengths. Default is False.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
@@ -123,7 +127,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freqs[spw_range[0]:spw_range[1]]
     if Nbls_per_load is None:
-        xf = XTalkFilter(hd, input_cal=calfile)
+        xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         xf.read(frequencies=freqs)
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
@@ -132,7 +136,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
     else:
         for i in range(0, hd.Nbls, Nbls_per_load):
-            xf = XTalkFilter(hd, input_cal=calfile)
+            xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
             xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
@@ -145,7 +149,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
                                               read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                              clobber=False, add_to_history='', **filter_kwargs):
+                                              clobber=False, add_to_history='', round_up_bllens=False, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -168,6 +172,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
+        round_up_bllens: bool, if True, round up baseline lengths. Default is False.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
     '''
     hd = io.HERAData(datafile_list, filetype='uvh5')
@@ -195,7 +200,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         cals = io.to_HERACal(cals)
     else:
         cals = None
-    xf = XTalkFilter(hd, input_cal=cals)
+    xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
     xf.read(bls=baseline_list, frequencies=freqs)
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
     xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,

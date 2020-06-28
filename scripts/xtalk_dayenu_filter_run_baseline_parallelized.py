@@ -20,7 +20,7 @@ baseline_list = io.baselines_from_filelist_position(filename=a.infilename, filel
 outfilename = a.res_outfilename
 spw_range = a.spw_range
 # Run Xtalk Filter
-xtalk_filter.load_xtalk_filter_and_write_baseline_list(a.filelist, calfile_list=a.calfilelist,
+xtalk_filter.load_xtalk_filter_and_write_baseline_list(a.filelist, calfile_list=a.calfilelist, round_up_bllens=True,
                                                        baseline_list=baseline_list, spw_range=a.spw_range,
                                                        cache_dir=a.cache_dir, res_outfilename=outfilename,
                                                        clobber=a.clobber, write_cache=a.write_cache,

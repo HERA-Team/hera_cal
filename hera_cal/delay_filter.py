@@ -87,7 +87,7 @@ class DelayFilter(VisClean):
 
 
 def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                read_cache=False, write_cache=False,
+                                read_cache=False, write_cache=False, round_up_bllens=False,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', **filter_kwargs):
     '''
@@ -104,6 +104,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
                            that were not in previously loaded cache files.
+        round_up_bllens: bool, if True, round up baseline lengths. Default is False.
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -120,7 +121,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freqs[spw_range[0]:spw_range[1]]
     if Nbls_per_load is None:
-        df = DelayFilter(hd, input_cal=calfile)
+        df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         df.read(frequencies=freqs)
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
@@ -129,7 +130,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
     else:
         for i in range(0, len(hd.bls), Nbls_per_load):
-            df = DelayFilter(hd, input_cal=calfile)
+            df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
