@@ -43,7 +43,8 @@ setup_args = {
                 'scripts/query_ex_ants.py', 'scripts/xtalk_dayenu_filter_run.py',
                 'scripts/xtalk_dayenu_filter_run_baseline_parallelized.py',
                 'scripts/xtalk_filter_run.py',
-                'scripts/dayenu_delay_filter_run.py'],
+                'scripts/dayenu_delay_filter_run.py',
+                'scripts/reconstitute_xtalk_filtered_files_run.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [
