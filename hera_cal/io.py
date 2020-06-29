@@ -1688,7 +1688,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     cal.write_calfits(outfilename, clobber=clobber)
 
 
-def baselines_from_filelist_position(filename, filelist, polarizations):
+def baselines_from_filelist_position(filename, filelist, polarizations=None):
     """Determine indices of baselines to process.
 
 
@@ -1710,6 +1710,8 @@ def baselines_from_filelist_position(filename, filelist, polarizations):
     list
         list of baselines to process based on the position of the filename in the list of files.
     """
+    if polarizations is None:
+        polarizations = ['ee', 'nn', 'en', 'ne']
     # sanitize polarizations
     for pol in polarizations:
         if pol.lower() not in POL_STR2NUM_DICT and pol.lower() not in ['ee', 'en', 'ne', 'nn']:

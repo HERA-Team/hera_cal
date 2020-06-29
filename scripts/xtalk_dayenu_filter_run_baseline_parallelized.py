@@ -15,7 +15,7 @@ a = parser.parse_args()
 
 # set kwargs
 filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
-baseline_list = io.baselines_from_filelist_position(filename=a.infilename, filelist=a.datafilelist, polarizations=a.polarizations)
+baseline_list = io.baselines_from_filelist_position(filename=a.infilename, filelist=a.datafilelist)
 # modify output file name to include index.
 outfilename = a.res_outfilename
 spw_range = a.spw_range
