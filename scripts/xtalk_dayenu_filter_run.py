@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
@@ -15,8 +15,8 @@ a = parser.parse_args()
 # set kwargs
 filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
 spw_range = a.spw_range
-# Run Delay Filter
-delay_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile,
+# Run Xtalk Filter
+xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, round_up_bllens=True,
                                          Nbls_per_load=a.partial_load_Nbls, spw_range=a.spw_range,
                                          cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
                                          clobber=a.clobber, write_cache=a.write_cache,

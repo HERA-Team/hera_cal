@@ -37,15 +37,17 @@ class Test_XTalkFilter(object):
         # test skip_wgt imposition of flags
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
-        xfil = xf.XTalkFilter(fname, filetype='miriad')
-        xfil.read(bls=[k])
-        wgts = {k: np.ones_like(xfil.flags[k], dtype=np.float)}
-        wgts[k][:, 0] = 0.0
-        xfil.run_xtalk_filter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
-        assert xfil.clean_info[k]['status']['axis_0'][0] == 'skipped'
-        np.testing.assert_array_equal(xfil.clean_flags[k][:, 0], np.ones_like(xfil.flags[k][:, 0]))
-        np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
-        np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
+        # check successful run when round_up_bllens is True and when False.
+        for round_up_bllens in [True, False]:
+            xfil = xf.XTalkFilter(fname, filetype='miriad', round_up_bllens=round_up_bllens)
+            xfil.read(bls=[k])
+            wgts = {k: np.ones_like(xfil.flags[k], dtype=np.float)}
+            wgts[k][:, 0] = 0.0
+            xfil.run_xtalk_filter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
+            assert xfil.clean_info[k]['status']['axis_0'][0] == 'skipped'
+            np.testing.assert_array_equal(xfil.clean_flags[k][:, 0], np.ones_like(xfil.flags[k][:, 0]))
+            np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
+            np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
 
     def test_load_xtalk_filter_and_write_baseline_list(self):
         uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
@@ -192,3 +194,56 @@ class Test_XTalkFilter(object):
         assert a.cache_dir == '/blah/'
         assert a.max_frate_coeffs[0] == 0.024
         assert a.max_frate_coeffs[1] == -0.229
+
+    def test_reconstitute_xtalk_files_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--fragmentlist', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
+        parser = xf.reconstitute_xtalk_files_argparser()
+        a = parser.parse_args()
+        assert a.clobber
+        for char in ['a', 'b', 'c', 'd']:
+            assert char in a.fragmentlist
+        assert a.infilename == 'a'
+        assert a.outfilename == 'a.out'
+
+    def test_reconstitute_xtalk_files(self, tmp_path):
+        # First, construct some cross-talk baseline files.
+        datafiles = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
+                     os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
+
+        cals = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part1"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
+        # make a cache directory
+        cdir = tmp_path / "cache_temp"
+        cdir.mkdir()
+        # cross-talk filter chunked baselines
+        for filenum, file in enumerate(datafiles):
+            baselines = io.baselines_from_filelist_position(file, datafiles, polarizations=['ee'])
+            fname = 'temp.fragment.part.%d.h5' % filenum
+            fragment_filename = tmp_path / fname
+            xf.load_xtalk_filter_and_write_baseline_list(datafiles, baseline_list=baselines, calfile_list=cals,
+                                                         spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
+                                                         res_outfilename=fragment_filename, clobber=True)
+            # load in fragment and make sure the number of baselines is equal to the length of the baseline list
+            hd_fragment = io.HERAData(str(fragment_filename))
+            assert len(hd_fragment.bls) == len(baselines)
+            assert hd_fragment.Ntimes == 60
+            assert hd_fragment.Nfreqs == 20
+
+        fragments = glob.glob(DATA_PATH + '/test_output/temp.fragment.h5.part*')
+        # reconstitute the filtered data
+        for filenum, file in enumerate(datafiles):
+            # reconstitute
+            fname = 'temp.reconstituted.part.%d.h5' % filenum
+            xf.reconstitute_xtalk_files(templatefile=file,
+                                        fragments=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
+                                        outfilename=str(tmp_path / fname))
+        # load in the reconstituted files.
+        hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
+        hd_reconstituted.read()
+        # compare to xtalk filtering the whole file.
+        xf.load_xtalk_filter_and_write(infilename=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                                       calfile=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+                                       res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
+        hd = io.HERAData(str(tmp_path / 'temp.h5'))
+        hd.read()
+        assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))

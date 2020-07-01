@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Copyright 2018 the HERA Project
 # Licensed under the MIT License

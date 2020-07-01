@@ -29,6 +29,7 @@ class VisClean(object):
     """
 
     def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True,
+                 round_up_bllens=False,
                  **read_kwargs):
         """
         Initialize the object.
@@ -43,6 +44,11 @@ class VisClean(object):
                 as they are built.
             link_data : bool, if True, attempt to link DataContainers
                 from HERAData object, otherwise only link metadata if possible.
+            round_up_bllens : bool, optional
+                If True, round up baseline lengths to nearest meter for delay-filtering.
+                this allows linear filters for baselines with slightly different lengths
+                to be hashed to the same matrix. Saves lots of time by only computing
+                one unique filtering matrix per flagging pattern and baseline length group.
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         """
@@ -55,6 +61,7 @@ class VisClean(object):
 
         # attach data and/or metadata to object if exists
         self.attach_data(link_data=link_data)
+        self.round_up_bllens = round_up_bllens
 
     def soft_copy(self, references=[]):
         """
@@ -351,7 +358,10 @@ class VisClean(object):
         for k in keys:
             if ax == 'freq' or ax == 'both':
                 filter_centers_freq = [0.]
-                bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
+                if self.round_up_bllens:
+                    bl_dly = np.ceil(self.bllens[k[:2]] * constants.c.value) / constants.c.value * horizon + standoff / 1e9
+                else:
+                    bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
                 filter_half_widths_freq = [np.max([bl_dly, min_dly / 1e9])]
             if ax == 'time' or ax == 'both':
                 filter_centers_time = [0.]
@@ -1273,11 +1283,12 @@ def noise_eq_bandwidth(window, axis=-1):
 # ------------------------------------------
 
 
-def _filter_argparser():
+def _filter_argparser(multifile=False):
     """
     Core Arg parser for commandline operation of hera_cal.delay_filter and hera_cal.xtalk_filter
     Parameters:
-        None
+        multifile, bool: optional. If True, add calfilelist and filelist
+                         arguments.
     Returns:
         Argparser with core (but not complete) functionality that is called by _linear_argparser and
         _clean_argparser.
@@ -1291,8 +1302,12 @@ def _filter_argparser():
     a.add_argument("--tol", type=float, default=1e-9, help='Threshold for foreground and xtalk subtraction (default 1e-9)')
     a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
     a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
-    a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
-
+    a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
+    if multifile:
+        a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
+        a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
+    else:
+        a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
     return a
 
 
@@ -1302,21 +1317,23 @@ def _filter_argparser():
 # ------------------------------------------
 
 
-def _clean_argparser():
+def _clean_argparser(multifile=False):
     '''
     Arg parser for commandline operation of hera_cal.delay_filter in various clean modes.
-
+    Arguments
+    ---------
+        multifile, bool: optional. If True, add calfilelist and filelist
+                         arguments.
     Returns
     -------
         Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk).
     '''
-    a = _filter_argparser()
+    a = _filter_argparser(multifile=multifile)
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     clean_options = a.add_argument_group(title='Options for CLEAN')
     clean_options.add_argument("--window", type=str, default='blackman-harris', help='window function for frequency filtering (default "blackman-harris",\
                               see uvtools.dspec.gen_window for options')
-    clean_options.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     clean_options.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
     clean_options.add_argument("--edgecut_low", default=0, type=int, help="Number of channels to flag on lower band edge and exclude from window function.")
     clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
@@ -1330,15 +1347,18 @@ def _clean_argparser():
 # ------------------------------------------
 
 
-def _linear_argparser():
+def _linear_argparser(multifile=False):
     '''
     Arg parser for commandline operation of hera_cal.delay_filter in various linear modes.
-
+    Arguments
+    ---------
+        multifile, bool: optional. If True, add calfilelist and filelist
+                         arguments.
     Returns
     -------
         Arg-parser for linear filtering. Still needs domain specific args (delay versus xtalk)
     '''
-    a = _filter_argparser()
+    a = _filter_argparser(multifile=multifile)
     cache_options = a.add_argument_group(title='Options for caching')
     a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
