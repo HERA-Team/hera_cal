@@ -37,7 +37,7 @@ class Test_XTalkFilter(object):
         # test skip_wgt imposition of flags
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
-        # check successful run when round_up_bllens is True and when False. 
+        # check successful run when round_up_bllens is True and when False.
         for round_up_bllens in [True, False]:
             xfil = xf.XTalkFilter(fname, filetype='miriad', round_up_bllens=round_up_bllens)
             xfil.read(bls=[k])
@@ -218,7 +218,7 @@ class Test_XTalkFilter(object):
         # cross-talk filter chunked baselines
         for filenum, file in enumerate(datafiles):
             baselines = io.baselines_from_filelist_position(file, datafiles, polarizations=['ee'])
-            fragment_filename = os.path.join(DATA_PATH, 'test_output/temp.fragment.part.%d.h5' % filenum)
+            fragment_filename = os.path.join(tmp_path, '/temp.fragment.part.%d.h5' % filenum)
             xf.load_xtalk_filter_and_write_baseline_list(datafiles, baseline_list=baselines, calfile_list=cals,
                                                          spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
                                                          res_outfilename=fragment_filename, clobber=True)
@@ -233,19 +233,19 @@ class Test_XTalkFilter(object):
         for filenum, file in enumerate(datafiles):
             # reconstitute
             xf.reconstitute_xtalk_files(templatefile=file,
-                                        fragments=glob.glob(DATA_PATH + '/test_output/temp.fragment.part.*.h5'), clobber=True,
-                                        outfilename=os.path.join(DATA_PATH, 'test_output/temp.reconstituted.part.%d.h5' % filenum))
+                                        fragments=glob.glob(tmp_path + '/temp.fragment.part.*.h5'), clobber=True,
+                                        outfilename=os.path.join(tmp_path, '/temp.reconstituted.part.%d.h5' % filenum))
         # load in the reconstituted files.
-        hd_reconstituted = io.HERAData(glob.glob(DATA_PATH + '/test_output/temp.reconstituted.part.*.h5'))
+        hd_reconstituted = io.HERAData(glob.glob(tmp_path, '/temp.reconstituted.part.*.h5'))
         hd_reconstituted.read()
         # compare to xtalk filtering the whole file.
-        output_file = os.path.join(DATA_PATH, 'test_output/temp.h5')
-        xf.load_xtalk_filter_and_write(infilename=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
-                                       calfile=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+        output_file = os.path.join(tmp_path, '/temp.h5')
+        xf.load_xtalk_filter_and_write(infilename=os.path.join(tmp_path, "/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                                       calfile=os.path.join(tmp_path, "/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
                                        res_outfilename=output_file, clobber=True, spw_range=[0, 20])
         hd = io.HERAData(output_file)
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
         # clean up.
-        for file in glob.glob(DATA_PATH + "test_output/temp."):
+        for file in glob.glob(tmp_path, "/temp."):
             os.remove(file)

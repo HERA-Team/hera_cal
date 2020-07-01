@@ -3,7 +3,7 @@
 # Copyright 2020 the HERA Project
 # Licensed under the MIT License
 
-"Command-line drive script for hera_cal.xtalk_filter. Only performs DAYENU Filtering"
+"""Command-line drive script for hera_cal.xtalk_filter. Only performs DAYENU Filtering"""
 
 from hera_cal import xtalk_filter
 import sys
