@@ -40,10 +40,9 @@ class DataContainer:
             data: dictionary of visibilities with keywords of pol/ant pair
                 in any order. Supports both three element keys, e.g. data[(i,j,pol)],
                 or nested dictions, e.g. data[(i,j)][pol] or data[pol][(i,j)].
-                If data is already DataContainer, this object is simply a reference to data.
         """
         if isinstance(data, DataContainer):
-            self = data
+            self.__dict__.update(data.__dict__)
         else:
             self._data = odict()
             if np.all([isinstance(k, (str, np.str)) for k in data.keys()]):  # Nested POL:{antpairs}
