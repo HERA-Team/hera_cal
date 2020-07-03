@@ -41,28 +41,31 @@ class DataContainer:
                 in any order. Supports both three element keys, e.g. data[(i,j,pol)],
                 or nested dictions, e.g. data[(i,j)][pol] or data[pol][(i,j)].
         """
-        self._data = odict()
-        if np.all([isinstance(k, (str, np.str)) for k in data.keys()]):  # Nested POL:{antpairs}
-            for pol in data.keys():
-                for antpair in data[pol]:
-                    self._data[make_bl(antpair, pol)] = data[pol][antpair]
-        elif np.all([len(k) == 2 for k in data.keys()]):  # Nested antpair:{POL}
-            for antpair in data.keys():
-                for pol in data[antpair]:
-                    self._data[make_bl(antpair, pol)] = data[antpair][pol]
-        elif np.all([len(k) == 3 for k in data.keys()]):
-            self._data = odict([(comply_bl(k), data[k]) for k in sorted(data.keys())])
+        if isinstance(data, DataContainer):
+            self.__dict__.update(data.__dict__)
         else:
-            raise KeyError('Unrecognized key type or mix of key types in data dictionary.')
-        self._antpairs = set([k[:2] for k in self._data.keys()])
-        self._pols = set([k[-1] for k in self._data.keys()])
-
-        # placeholders for metadata (or get them from data, if possible)
-        for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
-            if hasattr(data, attr):
-                setattr(self, attr, getattr(data, attr))
+            self._data = odict()
+            if np.all([isinstance(k, (str, np.str)) for k in data.keys()]):  # Nested POL:{antpairs}
+                for pol in data.keys():
+                    for antpair in data[pol]:
+                        self._data[make_bl(antpair, pol)] = data[pol][antpair]
+            elif np.all([len(k) == 2 for k in data.keys()]):  # Nested antpair:{POL}
+                for antpair in data.keys():
+                    for pol in data[antpair]:
+                        self._data[make_bl(antpair, pol)] = data[antpair][pol]
+            elif np.all([len(k) == 3 for k in data.keys()]):
+                self._data = odict([(comply_bl(k), data[k]) for k in sorted(data.keys())])
             else:
-                setattr(self, attr, None)
+                raise KeyError('Unrecognized key type or mix of key types in data dictionary.')
+            self._antpairs = set([k[:2] for k in self._data.keys()])
+            self._pols = set([k[-1] for k in self._data.keys()])
+
+            # placeholders for metadata (or get them from data, if possible)
+            for attr in ['antpos', 'freqs', 'times', 'lsts', 'times_by_bl', 'lsts_by_bl']:
+                if hasattr(data, attr):
+                    setattr(self, attr, getattr(data, attr))
+                else:
+                    setattr(self, attr, None)
 
     def antpairs(self, pol=None):
         '''Return a set of antenna pairs (with a specific pol or more generally).'''
@@ -104,22 +107,25 @@ class DataContainer:
         returns all polarizations for that baseline. If the key is of the form (0,1,'nn'),
         returns the associated entry. Abstracts away both baseline ordering (applying the
         complex conjugate when appropriate) and polarization capitalization.'''
-        if isinstance(key, str):  # asking for a pol
-            return dict(zip(self._antpairs, [self[make_bl(bl, key)] for bl in self._antpairs]))
-        elif len(key) == 2:  # asking for a bl
-            return dict(zip(self._pols, [self[make_bl(key, pol)] for pol in self._pols]))
-        else:
-            bl = comply_bl(key)
-            try:
-                return self._data[bl]
-            except(KeyError):
+        try:  # just see if the key works first
+            return self._data[key]
+        except(KeyError):
+            if isinstance(key, str):  # asking for a pol
+                return dict(zip(self._antpairs, [self[make_bl(bl, key)] for bl in self._antpairs]))
+            elif len(key) == 2:  # asking for a bl
+                return dict(zip(self._pols, [self[make_bl(key, pol)] for pol in self._pols]))
+            else:
+                bl = comply_bl(key)
                 try:
-                    if np.iscomplexobj(self._data[reverse_bl(bl)]):
-                        return np.conj(self._data[reverse_bl(bl)])
-                    else:
-                        return self._data[reverse_bl(bl)]
+                    return self._data[bl]
                 except(KeyError):
-                    raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
+                    try:
+                        if np.iscomplexobj(self._data[reverse_bl(bl)]):
+                            return np.conj(self._data[reverse_bl(bl)])
+                        else:
+                            return self._data[reverse_bl(bl)]
+                    except(KeyError):
+                        raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
 
     def __setitem__(self, key, value):
         '''Sets the data corresponding to the key. Only supports the form (0,1,'nn').
