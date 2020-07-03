@@ -13,7 +13,7 @@ from scipy import signal
 import pyuvdata.utils as uvutils
 from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
-from pyuvdata.utils import POL_STR2NUM_DICT, _x_orientation_rep_dict, JONES_NUM2STR_DICT
+from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
 import sklearn.gaussian_process as gp
 
 try:
@@ -29,10 +29,28 @@ HERA_TELESCOPE_LOCATION = np.array([5109325.855210627429187297821044921875,
                                     -3239928.424753960222005844116210937500])
 
 # Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
-_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()])
+_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()]) 
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
 _KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
                        if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])
+
+# Get set of standard visibility polarization strings. Nominally {'rr', 'xy', 'ne', 'nn', 'lr', 'en', 'yx', 'xx', 'ee', 'rl', 'll', 'yy'}
+_VISPOLS = set([pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0 and pol == polnum2str(polstr2num(pol))])
+# Add east/north polarizations to _VISPOLS while relying only on pyuvdata definitions
+for pol in copy.deepcopy(_VISPOLS):
+    try:
+        _VISPOLS.add(polnum2str(polstr2num(pol), x_orientation='north'))
+    except KeyError:
+        pass
+
+# Get set of standard antenna polarization strings. Nominally {'Jee', 'Jen', 'Jll', 'Jlr', 'Jne', 'Jnn', 'Jrl', 'Jrr', 'Jxx', 'Jxy', 'Jyx', 'Jyy'}
+_ANTPOLS = set([antpol for antpol in list(JONES_STR2NUM_DICT.keys()) if jstr2num(antpol) < 0 and antpol == jnum2str(jstr2num(antpol))])
+# Add east/north polarizations to _ANTPOLS while relying only on pyuvdata definitions
+for antpol in copy.deepcopy(_ANTPOLS):
+    try:
+        _ANTPOLS.add(jnum2str(jstr2num(antpol), x_orientation='north'))
+    except KeyError:
+        pass
 
 
 def _is_cardinal(polstr):
@@ -43,6 +61,8 @@ def _is_cardinal(polstr):
 def _comply_antpol(antpol):
     '''Maps an input antenna polarization string onto a string compliant with pyuvdata
     and hera_cal.'''
+    if antpol in _ANTPOLS:
+        return antpol
     if _is_cardinal(antpol):
         return jnum2str(jstr2num(antpol, x_orientation='north'), x_orientation='north')
     else:
@@ -52,27 +72,24 @@ def _comply_antpol(antpol):
 def _comply_vispol(pol):
     '''Maps an input visibility polarization string onto a string compliant with pyuvdata
     and hera_cal.'''
-    if _is_cardinal(pol):
+    if pol in _VISPOLS:
+        return pol
+    elif _is_cardinal(pol):
         return polnum2str(polstr2num(pol, x_orientation='north'), x_orientation='north')
     else:
         return polnum2str(polstr2num(pol))
 
 
-_VISPOLS = set([pol for pol in list(POL_STR2NUM_DICT.keys()) if polstr2num(pol) < 0])
-# Add east/north polarizations to _VISPOLS while relying only on pyuvdata definitions
-for pol in copy.deepcopy(_VISPOLS):
-    try:
-        _VISPOLS.add(polnum2str(polstr2num(pol), x_orientation='north'))
-    except KeyError:
-        pass
 SPLIT_POL = {pol: (_comply_antpol(pol[0]), _comply_antpol(pol[1])) for pol in _VISPOLS}
-JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
 
 def split_pol(pol):
     '''Splits visibility polarization string (pyuvdata's polstr) into
     antenna polarization strings (pyuvdata's jstr).'''
     return SPLIT_POL[_comply_vispol(pol)]
+
+
+JOIN_POL = {v: k for k, v in SPLIT_POL.items()}
 
 
 def join_pol(p1, p2):
