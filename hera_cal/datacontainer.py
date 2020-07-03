@@ -104,22 +104,25 @@ class DataContainer:
         returns all polarizations for that baseline. If the key is of the form (0,1,'nn'),
         returns the associated entry. Abstracts away both baseline ordering (applying the
         complex conjugate when appropriate) and polarization capitalization.'''
-        if isinstance(key, str):  # asking for a pol
-            return dict(zip(self._antpairs, [self[make_bl(bl, key)] for bl in self._antpairs]))
-        elif len(key) == 2:  # asking for a bl
-            return dict(zip(self._pols, [self[make_bl(key, pol)] for pol in self._pols]))
-        else:
-            bl = comply_bl(key)
-            try:
-                return self._data[bl]
-            except(KeyError):
+        try:  # just see if the key works first
+            return self._data[key]
+        except(KeyError):
+            if isinstance(key, str):  # asking for a pol
+                return dict(zip(self._antpairs, [self[make_bl(bl, key)] for bl in self._antpairs]))
+            elif len(key) == 2:  # asking for a bl
+                return dict(zip(self._pols, [self[make_bl(key, pol)] for pol in self._pols]))
+            else:
+                bl = comply_bl(key)
                 try:
-                    if np.iscomplexobj(self._data[reverse_bl(bl)]):
-                        return np.conj(self._data[reverse_bl(bl)])
-                    else:
-                        return self._data[reverse_bl(bl)]
+                    return self._data[bl]
                 except(KeyError):
-                    raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
+                    try:
+                        if np.iscomplexobj(self._data[reverse_bl(bl)]):
+                            return np.conj(self._data[reverse_bl(bl)])
+                        else:
+                            return self._data[reverse_bl(bl)]
+                    except(KeyError):
+                        raise KeyError('Cannot find either {} or {} in this DataContainer.'.format(key, reverse_bl(key)))
 
     def __setitem__(self, key, value):
         '''Sets the data corresponding to the key. Only supports the form (0,1,'nn').
