@@ -244,10 +244,11 @@ def filter_reds(reds, bls=None, ex_bls=None, ants=None, ex_ants=None, ubls=None,
             # calibrated without adding more degeneracies than desired.
             mode_count, mode_value, mode_dim = 0, 0, 0
             for dim, coords in enumerate(np.array(list(idealized_antpos.values())).T):
-                unique, counts = np.unique(coords, return_counts=True)
+                rounded_coords = coords.round(decimals=int(np.floor(-np.log10(IDEALIZED_BL_TOL))))
+                unique, counts = np.unique(rounded_coords, return_counts=True)
                 if np.max(counts) > mode_count:
                     mode_count = np.max(counts)
-                    mode_value = unique[counts == mode_count]
+                    mode_value = unique[counts == mode_count][0]
                     mode_dim = dim
                         
             # Cut all antennas not part of that mode to reduce the dimensionality of idealized_antpos 
