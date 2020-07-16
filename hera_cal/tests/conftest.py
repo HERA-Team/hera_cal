@@ -14,7 +14,6 @@ from astropy.time import Time
 
 @pytest.fixture(autouse=True, scope="session")
 def setup_and_teardown_package():
-    """Make data/test directory to put test output files in."""
     # Do a calculation that requires a current IERS table. This will trigger
     # automatic downloading of the IERS table if needed, including trying the
     # mirror site in python 3 (but won't redownload if a current one exists).
