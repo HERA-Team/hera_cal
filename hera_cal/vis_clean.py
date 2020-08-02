@@ -687,8 +687,10 @@ class VisClean(object):
                             elif dim == 1:
                                 flgs[i] = True
 
-            filtered_model[k] = mdl * ~flgs
-            filtered_resid[k] = res * (~flgs | ~f)
+            filtered_model[k] = mdl
+            filtered_model[k][flgs] = 0.
+            filtered_resid[k] = res
+            filtered_resid[k][flgs | f] = 0.
             filtered_data[k] = filtered_model[k] + filtered_resid[k]
             filtered_flags[k] = flgs
             filtered_info[k] = info

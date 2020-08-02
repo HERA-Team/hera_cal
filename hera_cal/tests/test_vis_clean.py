@@ -128,10 +128,10 @@ class Test_VisClean(object):
         assert V.clean_info[k]['status']['axis_0'][0] == 'skipped'
         assert V.clean_info[k]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
-        assert np.all(np.isclose(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24,25,'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])],0.))
-        assert np.all(np.isclose(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]], 0.))
+        assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24,25,'ee')]] == 0.)
+        assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])] != 0.)
+        assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
+        assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
 
         # raise errors.
         assert pytest.raises(ValueError, V.fourier_filter, filter_centers=[fc, fc], ax='both',
@@ -149,10 +149,10 @@ class Test_VisClean(object):
         assert V.clean_info[k]['status']['axis_0'][0] == 'skipped'
         assert V.clean_info[k]['status']['axis_0'][3] == 'success'
         # check that clean resid is equal to zero in flagged channels
-        assert np.all(np.isclose(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24,25,'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])],0.))
-        assert np.all(np.isclose(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]], 0.))
+        assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')]] == 0.)
+        assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])] != 0.)
+        assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
+        assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
 
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean_dayenu(self):
@@ -200,20 +200,20 @@ class Test_VisClean(object):
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True)
         assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
         # check that clean resid is equal to zero in flagged channels
-        assert np.all(np.isclose(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24,25,'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])],0.))
-        assert np.all(np.isclose(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]], 0.))
+        assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')]] == 0.)
+        assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])] != 0.)
+        assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
+        assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
 
         # basic time clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', max_frate=10., overwrite=True)
         assert 'skipped' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][0]
         assert 'success' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][3]
         # check that clean resid is equal to zero in flagged channels
-        assert np.all(np.isclose(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24,25,'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])],0.))
-        assert np.all(np.isclose(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]], 0.))
+        assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')]] == 0.)
+        assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])] != 0.)
+        assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
+        assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
 
         # basic 2d clean
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', max_frate=10., overwrite=True,
@@ -221,10 +221,10 @@ class Test_VisClean(object):
         assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_0'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_0']])
         assert np.all(['success' == V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
         # check that clean resid is equal to zero in flagged channels
-        assert np.all(np.isclose(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')] | V.flags[(24,25,'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])],0.))
-        assert np.all(np.isclose(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]], 0.))
-        assert np.any(~np.isclose(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]], 0.))
+        assert np.all(V.clean_resid[(24, 25, 'ee')][V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')]] == 0.)
+        assert np.any(V.clean_resid[(24, 25, 'ee')][~(V.clean_flags[(24, 25,'ee')] | V.flags[(24,25,'ee')])] != 0.)
+        assert np.all(V.clean_model[(24, 25, 'ee')][V.clean_flags[(24, 25, 'ee')]] == 0.)
+        assert np.any(V.clean_model[(24, 25, 'ee')][~V.clean_flags[(24, 25, 'ee')]] != 0.)
 
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', flags=V.flags + True, max_frate=10.,
                     overwrite=True, filt2d_mode='plus')
