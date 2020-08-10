@@ -1741,12 +1741,13 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
                      hd.times, hd.lsts, hd.antpos, hd.history + version.history_string(add_to_history))
 
 
-def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits', 
-               omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None, 
-               ant_metrics_file=None, clobber=False, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, 
-               ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0, flag_nchan_low=0, flag_nchan_high=0, 
-               fc_conv_crit=1e-6, fc_maxiter=50, oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, 
-               check_after=50, gain=.4, add_to_history='', max_dims=2, verbose=False, **filter_reds_kwargs):
+def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
+               omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None,
+               ant_metrics_file=None, a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, pol_mode='2pol',
+               bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0,
+               flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50,
+               oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, add_to_history='',
+               max_dims=2, verbose=False, **filter_reds_kwargs):
     '''Perform redundant calibration (firstcal, logcal, and omnical) an uvh5 data file, saving firstcal and omnical
     results to calfits and uvh5. Uses partial io if desired, performs solar flagging, and iteratively removes antennas
     with high chi^2, rerunning calibration as necessary.
@@ -1763,6 +1764,10 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         outdir: folder to save data products. If None, will be the same as the folder containing input_data
         ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
             Used for finding ex_ants and is combined with antennas excluded via ex_ants.
+        a_priori_ex_ants_yaml : path to YAML with antenna flagging information parsable by 
+            hera_qm.metrics_io.read_a_priori_ant_flags(). Frequency and time flags in the YAML
+            are ignored. Flags are combined with ant_metrics's xants and ex_ants. If any 
+            polarization is flagged for an antenna, all polarizations are flagged.
         clobber: if True, overwrites existing files for the firstcal and omnical results
         nInt_to_load: number of integrations to load and calibrate simultaneously. Default None loads all integrations.
             Partial io requires 'uvh5' filetype. Lower numbers save memory, but incur a CPU overhead.
@@ -1816,6 +1821,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     if ant_metrics_file is not None:
         for ant in load_metric_file(ant_metrics_file)['xants']:
             ex_ants.add(ant[0])  # Just take the antenna number, flagging both polarizations
+    if a_priori_ex_ants_yaml is not None:
+        from hera_qm.metrics_io import read_a_priori_ant_flags
+        ex_ants = ex_ants.union(set(read_a_priori_ant_flags(a_priori_ex_ants_yaml, ant_indices_only=True)))
     high_z_ant_hist = ''
 
     # setup output 
@@ -1883,6 +1891,7 @@ def redcal_argparser():
     redcal_opts.add_argument("--ant_metrics_file", type=str, default=None, help="path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file. \
                              Used for finding ex_ants and is combined with antennas excluded via ex_ants.")
     redcal_opts.add_argument("--ex_ants", type=int, nargs='*', default=[], help='space-delimited list of antennas to exclude from calibration and flag. All pols for an antenna will be excluded.')
+    redcal_opts.add_argument("--a_priori_ex_ants_yaml", type=str, default=None, help='path to YAML file containing a priori ex_ants parsable by hera_qm.metrics_io.read_a_priori_ant_flags()')
     redcal_opts.add_argument("--ant_z_thresh", type=float, default=4.0, help="Threshold of modified z-score for chi^2 per antenna above which antennas are thrown away and calibration is re-run iteratively.")
     redcal_opts.add_argument("--max_rerun", type=int, default=5, help="Maximum number of times to re-run redundant calibration.")
     redcal_opts.add_argument("--solar_horizon", type=float, default=0.0, help="When the Sun is above this altitude in degrees, calibration is skipped and the integrations are flagged.")
