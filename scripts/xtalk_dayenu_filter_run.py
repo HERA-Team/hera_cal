@@ -11,7 +11,9 @@ import sys
 parser = xtalk_filter.xtalk_filter_argparser(mode='dayenu')
 
 a = parser.parse_args()
-
+# allow none string to be passed through to a.calfile
+if a.calfile.lower() == 'none':
+    a.calfile = None
 # set kwargs
 filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
 spw_range = a.spw_range

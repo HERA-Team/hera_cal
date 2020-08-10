@@ -12,7 +12,10 @@ import hera_cal.io as io
 parser = xtalk_filter.xtalk_filter_argparser(mode='dayenu', multifile=True)
 
 a = parser.parse_args()
-
+# allow calfile_list to be given as 'none'
+# so no calibration is supplied.
+if a.calfile_list[0].lower() == 'none':
+    a.calfile_list = None
 # set kwargs
 filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
 baseline_list = io.baselines_from_filelist_position(filename=a.infilename, filelist=a.datafilelist)

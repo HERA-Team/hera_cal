@@ -11,7 +11,9 @@ import sys
 parser = delay_filter.delay_filter_argparser(mode='clean')
 
 a = parser.parse_args()
-
+# allow none string to be passed through to a.calfile
+if a.calfile.lower() == 'none':
+    a.calfile = None
 # set kwargs
 filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol, 'window': a.window,
                  'skip_wgt': a.skip_wgt, 'maxiter': a.maxiter, 'edgecut_hi': a.edgecut_hi,
