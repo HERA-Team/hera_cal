@@ -1505,18 +1505,15 @@ class TestRunMethods(object):
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
             cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
+                                a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
                                 iter0_prefix='.iter0', ant_metrics_file=ant_metrics_file, clobber=True)
 
             hd = io.HERAData(input_data)
-            ex_ants = set([])
-            from hera_qm.metrics_io import load_metric_file
-            for ant in load_metric_file(ant_metrics_file)['xants']:
-                ex_ants.add(ant[0])
-            cal0 = om.redcal_iteration(hd)
+            cal0 = om.redcal_iteration(hd, ex_ants=[11, 50])
             
             sys.stdout = sys.__stdout__
 
-        for prefix, cal_here, bad_ants in [('', cal, [50, 12]), ('.iter0', cal0, [50])]:
+        for prefix, cal_here, bad_ants in [('', cal, [11, 50, 12]), ('.iter0', cal0, [11, 50])]:
             # bad_ants is based on experiments with this particular file
             hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.first.calfits')
             gains, flags, quals, total_qual = hc.read()
