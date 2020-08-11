@@ -11,8 +11,9 @@ import sys
 parser = delay_filter.delay_filter_argparser(mode='dayenu')
 a = parser.parse_args()
 # allow none string to be passed through to a.calfile
-if a.calfile.lower() == 'none':
-    a.calfile = None
+if a.calfile is not None:
+    if a.calfile.lower() == 'none':
+        a.calfile = None
 # set kwargs
 filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
                  'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
