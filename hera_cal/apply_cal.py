@@ -89,7 +89,7 @@ def calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_red
         for n, bl in enumerate(red):
             ant1, ant2 = utils.split_bl(bl)
             gain_ratios[n][new_flags[ant1] | new_flags[ant2] | old_flags[ant1] | old_flags[ant2]] = np.nan
-            
+
         # Average gain ratios using np.nanmean
         avg_gains = np.nanmean(gain_ratios, axis=0)
         avg_flags = ~np.isfinite(avg_gains)
@@ -178,7 +178,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
-              add_to_history='', clobber=False, **kwargs):
+              add_to_history='', clobber=False, redundantly_average=False, redundant_weights=None, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -206,6 +206,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
+        redundantly_average : bool, optional
+            If True, redundantly average calibrated data and save to <data_outfilename>.red_avg.<filetype_out>
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''

@@ -591,7 +591,8 @@ class HERAData(UVData):
         hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
                                   this.nsample_array, **self.last_read_kwargs)
 
-    def iterate_over_bls(self, Nbls=1, bls=None):
+    def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
+                         ex_ants=None):
         '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by baseline or group of baselines.
 
@@ -599,7 +600,14 @@ class HERAData(UVData):
             Nbls: number of baselines to load at once.
             bls: optional user-provided list of baselines to iterate over.
                 Default: use self.bls (which only works for uvh5).
-
+            chunk_by_redundant_group: bool, optional
+                If true, retrieve bls sorted by redundant groups.
+                If Nbls is greater then the number of baselines in a redundant group
+                then return consecutive redundant groups with total baseline count
+                less then or equal to Nbls.
+                If Nbls is smaller then the number of baselines in a redundant group
+                then still return that group but raise a Warning.
+                Default is False
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
@@ -607,12 +615,49 @@ class HERAData(UVData):
             if self.filetype != 'uvh5':
                 raise NotImplementedError('Baseline iteration without explicitly setting bls for filetype ' + self.filetype
                                           + ' without setting bls has not been implemented.')
-            bls = self.bls
-            if isinstance(bls, dict):  # multiple files
-                bls = list(set([bl for bls in bls.values() for bl in bls]))
-            bls = sorted(bls)
-        for i in range(0, len(bls), Nbls):
-            yield self.read(bls=bls[i:i + Nbls])
+            if not chunk_by_redundant_group:
+                bls = self.bls
+                if isinstance(bls, dict):  # multiple files
+                    bls = list(set([bl for bls in bls.values() for bl in bls]))
+                bls = sorted(bls)
+                if ex_ants is not None:
+                    bls = filter_bls(bls, ex_ants)
+            for i in range(0, len(bls), Nbls):
+                yield self.read(bls=bls[i:i + Nbls])
+            else:
+                # trim reds to remove flagged antennas.
+                bls = filter_bls(np.hstack([reds[m] for m in range(len(reds))]), ex_ants=ex_ants)
+                # compute array of redundant group indices for each baseline that was not excluded in ex_ants.
+                red_grp_indices = np.asarray([[m for n in range(len(reds[m])) if reds[m][n] in bls] for m in range(len(reds))]).flatten()
+                grp_labels = np.unique(red_grp_indices)
+                label_index = 0
+                # now iterate over redundant groups.
+                while label_index < len(grp_labels):
+                    grp_label = grp_labels[label_index]
+                    grp_indices = np.where(red_grp_indices == grp_label)
+                    if len(grp_indices) > 0:
+                        grp_indices = grp_indices[0]
+                        if len(grp_indices) > Nbls:
+                            warnings.warn("Warning: baseline group encountered with number of baselines exceeding Nbls. Loading group anyways.")
+                            yield self.read(bls=bls[grp_indices])
+                            label_index += 1
+                        elif len(grp_indices) <= Nbls:
+                            # if the number baselines in the group is less then Nbls
+                            # add successive groups up until the total number of baselines
+                            # exceeds Nbls or label_index exceeds the number of group labels.
+                            while(len(grp_indices) <= Nbls and label_index < len(grp_labels)):
+                                label_index += 1
+                                grp_indices_t = np.where(red_grp_indices == grp_label)
+                                if len(grp_indices_t) > 0:
+                                    if len(grp_indices) + len(grp_indices_t) <= Nbls:
+                                        grp_indices = np.hstack([grp_indices, grp_indices_t])
+                                    else:
+                                        break
+                            yield self.read(bls=bls[grp_indices])
+
+                for label_index, grp_label in enumerate(grp_labels):
+
+
 
     def iterate_over_freqs(self, Nchans=1, freqs=None):
         '''Produces a generator that iteratively yields successive calls to
