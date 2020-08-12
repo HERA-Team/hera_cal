@@ -29,7 +29,7 @@ HERA_TELESCOPE_LOCATION = np.array([5109325.855210627429187297821044921875,
                                     -3239928.424753960222005844116210937500])
 
 # Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
-_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()]) 
+_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()])
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
 _KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
                        if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])

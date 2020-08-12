@@ -608,6 +608,9 @@ class HERAData(UVData):
                 If Nbls is smaller then the number of baselines in a redundant group
                 then still return that group but raise a Warning.
                 Default is False
+            reds: list, optional
+                list of lists; each containing the ant-pols in each redundant group
+                must be provided if chunk_by_redundant_group is True.
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
@@ -654,9 +657,6 @@ class HERAData(UVData):
                                     else:
                                         break
                             yield self.read(bls=bls[grp_indices])
-
-                for label_index, grp_label in enumerate(grp_labels):
-
 
 
     def iterate_over_freqs(self, Nchans=1, freqs=None):

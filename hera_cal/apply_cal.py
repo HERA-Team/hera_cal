@@ -10,6 +10,7 @@ import argparse
 from . import io
 from . import version
 from . import utils
+from .redcal import get_reds
 
 
 def _check_polarization_consistency(data, gains):
@@ -178,7 +179,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
-              add_to_history='', clobber=False, redundantly_average=False, redundant_weights=None, **kwargs):
+              add_to_history='', clobber=False, redundant_average=False, redundant_weights=None, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -206,7 +207,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
-        redundantly_average : bool, optional
+        redundant_average : bool, optional
             If True, redundantly average calibrated data and save to <data_outfilename>.red_avg.<filetype_out>
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
@@ -231,7 +232,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         old_gains, old_flags = None, None
 
     add_to_history = version.history_string(add_to_history)
-
+    hd_red = None
+    all_reds = get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol)
+    red_outfile = data_outfilename.replace('.uvh5', 'red_avg.uvh5')
     # partial loading and writing using uvh5
     if nbl_per_load is not None:
         if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
@@ -239,7 +242,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         hd = io.HERAData(data_infilename, filetype='uvh5')
         for attribute, value in kwargs.items():
             hd.__setattr__(attribute, value)
-        for data, data_flags, _ in hd.iterate_over_bls(Nbls=nbl_per_load):
+        for data, data_flags, _ in hd.iterate_over_bls(Nbls=nbl_per_load, reds=all_reds,
+                                                       chunk_by_redundant_group=redundant_average, ex_ants=ex_ants):
             for bl in data_flags.keys():
                 # apply band edge flags
                 data_flags[bl][:, 0:flag_nchan_low] = True
@@ -248,8 +252,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 if flag_file is not None:
                     data_flags[bl] = np.logical_or(data_flags[bl], ext_flags[bl])
             if redundant_solution:
-                from .redcal import get_reds
-                all_reds = get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol)
                 calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds, old_gains=old_gains,
                                              old_flags=old_flags, gain_convention=gain_convention)
             else:
@@ -257,6 +259,21 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                                    old_gains=old_gains, gain_convention=gain_convention)
             hd.partial_write(data_outfilename, data=data, flags=data_flags,
                              inplace=True, clobber=clobber, add_to_history=add_to_history)
+            if redundant_average:
+                loaded_ants = np.unique(np.flatten([bl[:2] for bl in data.keys()]))
+                loaded_antpos = {a: hd.antpos[a] for a in loaded_ants}
+                if hd_red is None:
+                    hd_red = copy.deepcopy(hd)
+                # get redundancies.
+                these_reds = get_reds(loaded_antpos, pols=hd.pols[0], bl_error_tol=bl_error_tol)
+                # eliminate ex_ants
+                these_reds = [filter_bls(red_grp, ex_ants=ex_ants) for red_grp in these_reds]
+                # remove polarization component of redundancies for redundant_average.
+                these_reds = [[bl[:2] for bl in red_grp] for red_grp in these_reds]
+                # redundantly average
+                red_avg(hd_red, reds=these_reds, inplace=True)
+                # partial write
+                hd_red.partial_write(red_outfile, inplace=True, clobber=clobber, add_to_history=add_to_history)
 
     # full data loading and writing
     else:
@@ -270,8 +287,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             if flag_file is not None:
                 data_flags[bl] = np.logical_or(data_flags[bl], ext_flags[bl])
         if redundant_solution:
-            from .redcal import get_reds
-            all_reds = get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol)
             calibrate_redundant_solution(data, data_flags, new_gains, new_flags, all_reds, old_gains=old_gains,
                                          old_flags=old_flags, gain_convention=gain_convention)
         else:
@@ -280,6 +295,18 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
 
         io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
                       data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
+
+        if redundant_average:
+            hd = HERAData(data_outfilename, filetype=filetype_out)
+            hd.read()
+            all_reds = get_reds(hd.antpos, bl_error_tol=bl_error_tol)
+            all_reds = [filter_bls(red_grp, ex_ants=ex_ants) for red_grp in these_reds]
+            all_reds = [[bl[:2] for bl in red_grp] for red_grp in all_reds]
+            red_average(hd, reds=all_reds, inplace=True)
+            if filetype_out == 'uvh5':
+                hd.write_uvh5(red_outfile, inplace=True)
+
+
 
 
 def apply_cal_argparser():
