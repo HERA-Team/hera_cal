@@ -26,7 +26,7 @@ except ImportError:
     AIPY = False
 
 from .datacontainer import DataContainer
-from .utils import polnum2str, polstr2num, jnum2str, jstr2num
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls
 from .utils import split_pol, conj_pol, LST2JD, HERA_TELESCOPE_LOCATION
 
 
@@ -618,45 +618,18 @@ class HERAData(UVData):
             if self.filetype != 'uvh5':
                 raise NotImplementedError('Baseline iteration without explicitly setting bls for filetype ' + self.filetype
                                           + ' without setting bls has not been implemented.')
-            if not chunk_by_redundant_group:
-                bls = self.bls
-                if isinstance(bls, dict):  # multiple files
-                    bls = list(set([bl for bls in bls.values() for bl in bls]))
-                bls = sorted(bls)
-                if ex_ants is not None:
-                    bls = filter_bls(bls, ex_ants)
-            for i in range(0, len(bls), Nbls):
-                yield self.read(bls=bls[i:i + Nbls])
-            else:
-                # trim reds to remove flagged antennas.
-                bls = filter_bls(np.hstack([reds[m] for m in range(len(reds))]), ex_ants=ex_ants)
-                # compute array of redundant group indices for each baseline that was not excluded in ex_ants.
-                red_grp_indices = np.asarray([[m for n in range(len(reds[m])) if reds[m][n] in bls] for m in range(len(reds))]).flatten()
-                grp_labels = np.unique(red_grp_indices)
-                label_index = 0
-                # now iterate over redundant groups.
-                while label_index < len(grp_labels):
-                    grp_label = grp_labels[label_index]
-                    grp_indices = np.where(red_grp_indices == grp_label)
-                    if len(grp_indices) > 0:
-                        grp_indices = grp_indices[0]
-                        if len(grp_indices) > Nbls:
-                            warnings.warn("Warning: baseline group encountered with number of baselines exceeding Nbls. Loading group anyways.")
-                            yield self.read(bls=bls[grp_indices])
-                            label_index += 1
-                        elif len(grp_indices) <= Nbls:
-                            # if the number baselines in the group is less then Nbls
-                            # add successive groups up until the total number of baselines
-                            # exceeds Nbls or label_index exceeds the number of group labels.
-                            while(len(grp_indices) <= Nbls and label_index < len(grp_labels)):
-                                label_index += 1
-                                grp_indices_t = np.where(red_grp_indices == grp_label)
-                                if len(grp_indices_t) > 0:
-                                    if len(grp_indices) + len(grp_indices_t) <= Nbls:
-                                        grp_indices = np.hstack([grp_indices, grp_indices_t])
-                                    else:
-                                        break
-                            yield self.read(bls=bls[grp_indices])
+            bls = self.bls
+            if isinstance(bls, dict):  # multiple files
+                bls = list(set([bl for bls in bls.values() for bl in bls]))
+            bls = sorted(bls)
+        if ex_ants is not None:
+            bls = filter_bls(bls, ex_ants)
+        if not chunk_by_redundant_group:
+            baseline_chunks = [bls[i:i + Nbls] for i in range(0, len(bls), Nbls)]
+        else:
+            baseline_chunks = utils.chunk_baselines_by_redundant_groups(bls=bls, reds=reds, max_chunk_size=Nbls)
+        for chunk in baseline_chunks:
+            yield self.read(bls=chunk)
 
 
     def iterate_over_freqs(self, Nchans=1, freqs=None):

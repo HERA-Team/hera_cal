@@ -1311,3 +1311,78 @@ def top2eq_m(ha, dec):
     if len(mat.shape) == 3:
         mat = mat.transpose([2, 0, 1])
     return mat
+
+def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
+    """Chunk list of baselines by redundant group constrained by number of baselines.
+
+    This method calculates chunks of baselines to load simultaneously constrained by the conditions that
+    all baselines simultaneously loaded completely fill out redundant groups and the number of baselines
+    loaded is less then or equal to nbls_per_load.
+    If a redundant group exceeds nbls_per_load it will be loaded in its entirety anyways
+    and warning will be raised.
+
+    If Nbls is greater then the number of baselines in a redundant group
+    then return consecutive redundant groups with total baseline count
+    less then or equal to Nbls.
+    If Nbls is smaller then the number of baselines in a redundant group
+    then still return that group but raise a Warning.
+
+    Parameters
+    ----------
+    bls : list
+        list of antpairs or antpairpols of all baselines to chunk.
+    reds : list
+        list of lists with redundant groups of antpairpols
+    nbls_per_load :
+        maximum number of baselines to group in each chunk
+                    while filling out redundant groups.
+
+    Returns
+    -------
+
+    chunked_baselines : list
+        list of lists of antpairpols where each chunk containes entire redundant groups
+        and (if possible) includes a number of baselines less then max_chunk_size.
+    """
+    # trim reds to remove flagged antennas.
+    reds_flattened = []
+    for redgrp in reds:
+        for bl in redgrp:
+            reds_flattened.append(bl)
+    # check that baselines provided fall into one of the redundant groups in reds
+    for bl in baselines:
+        if not bl in reds_flattened:
+            raise ValueError("All baselines provided in bls must also be in reds!")
+    red_grp_indices = []
+    for m in range(len(reds)):
+        for n in range(len(reds[m])):
+            if reds[m][n] in bls:
+                red_grp_indices.append(m)
+    grp_labels = np.unique(red_grp_indices)
+    label_index = 0
+    baseline_chunks = []
+    # now iterate over redundant groups.
+    while label_index < len(grp_labels):
+        grp_label = grp_labels[label_index]
+        grp_indices = np.where(red_grp_indices == grp_label)
+        if len(grp_indices) > 0:
+            grp_indices = grp_indices[0]
+            if len(grp_indices) > Nbls:
+                warnings.warn("Warning: baseline group encountered with number of baselines exceeding Nbls. Loading group anyways.")
+            baseline_chunks.append([bls[ind] for ind in grp_indices])
+            label_index += 1
+        elif len(grp_indices) <= Nbls:
+            # if the number baselines in the group is less then Nbls
+            # add successive groups up until the total number of baselines
+            # exceeds Nbls or label_index exceeds the number of group labels.
+            while(len(grp_indices) <= Nbls and label_index < len(grp_labels)):
+                label_index += 1
+                grp_indices_t = np.where(red_grp_indices == grp_label)
+                if len(grp_indices_t) > 0:
+                    if len(grp_indices) + len(grp_indices_t) <= Nbls:
+                        grp_indices = np.hstack([grp_indices, grp_indices_t])
+                    else:
+                        break
+            baseline_chunks.append([bls[ind] for ind in grp_indices])
+
+    return baseline_chunks
