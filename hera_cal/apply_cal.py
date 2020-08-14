@@ -258,15 +258,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # initialize a redunantly averaged HERAData on disk
             # first copy the original HERAData
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
-            uvd_red = UVData()
-            uvd_red.read(data_infilename, read_data=False)
-            red_data_grps = []
-            red_data_bls = []
-            red_data_uvws = []
+            hd_red = io.HERAData(data_infilename)
             # go through all redundant groups and remove the groups that do not
             # have baselines in the data. Each group is still labeled by the
             # first baseline of each group regardless if that baseline is in
             # the data file.
+            red_data_bls = []
             for grpnum, grp in enumerate(all_red_antpairs):
                 nbls = 0
                 data_grp = []
@@ -275,36 +272,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                         nbls += 1
                         data_grp.append(bl)
                 if nbls > 0:
-                    red_data_grps.append(data_grp)
                     # keep list of zeroth baselines of each group.
                     red_data_bls.append(data_grp[0])
-                    red_data_uvws.append(hd.antpos[red_data_bls[-1][1]] - hd.antpos[red_data_bls[-1][0]])
-            # now set properties of hd_red to match redundant baselines.
-            uvd_red.Nbls = len(red_data_bls) # set baseline count
-            uvd_red.Nblts = uvd_red.Ntimes * uvd_red.Nbls # set baselinetime count
-            # set time array
-            uvd_red.time_array = np.hstack([np.array([time for bl in range(uvd_red.Nbls)]) for time in np.unique(uvd_red.time_array)])
-            # set lst array
-            uvd_red.lst_array = np.hstack([np.array([lst for bl in range(uvd_red.Nbls)]) for lst in np.unique(uvd_red.lst_array)])
-            # set ant1 array
-            uvd_red.ant_1_array = np.hstack([np.array([bl[0] for bl in red_data_bls]) for t in range(uvd_red.Ntimes)])
-            # set ant2 array
-            uvd_red.ant_2_array = np.hstack([np.array([bl[1] for bl in red_data_bls]) for t in range(uvd_red.Ntimes)])
-            uvd_red.Nants_data = len(np.unique(np.hstack([uvd_red.ant_1_array, uvd_red.ant_2_array])))
-            # set baseline_array
-            uvd_red.baseline_array = uvutils.antnums_to_baseline(uvd_red.ant_1_array, uvd_red.ant_2_array, uvd_red.Nants_telescope)
-            # initialize nsamples to unity. This will get updated.
-            uvd_red.nsample_array = np.ones_like(uvd_red.baseline_array, dtype=np.int)
-            # for integration times, use the same one everywhere. We only support this right now.
-            if len(np.unique(uvd_red.integration_time)) > 1:
-                raise NotImplementedError("redundant partial i/o is not currently supported for datasets with more then one integration time.")
-            uvd_red.integration_time =uvd_red.nsample_array * np.mean(uvd_red.integration_time)
-            # set uvw array. We use the uvw of the first baseline in each group. N
-            # this could be done differently.
-            uvd_red.uvw_array = np.vstack([np.asarray(red_data_uvws) for t in range(uvd_red.Ntimes)])
-            # initialize to disk
-            uvd_red.initialize_uvh5_file(data_outfilename, clobber=clobber)
-            del uvd_red
+            # couldn't get a system working where we just read in the outputs one at a time.
+            # so unfortunately, we have to load one baseline per redundant group.
+            hd_red.read(bls=red_data_bls)
+            hd_red.select(bls=red_data_bls)
 
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
@@ -327,21 +300,16 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             #    hd.partial_write(data_outfilename, data=data, flags=data_flags,
             #                     inplace=True, clobber=clobber, add_to_history=add_to_history)
             if redundant_average:
-            # redundantly average
+                # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples, reds=all_red_antpairs, wgts=redundant_weights, inplace=True)
-                # partially write to redundant output file.
-                hd_red = io.HERAData(data_outfilename)
-                data_out, flags_out, nsamples_out = hd_red.read(bls=data.keys())
-                for key in data:
-                    data_out[key] = data[key]
-                    flags_out[key] = data_flags[key]
-                    nsamples_out[key] = data_nsamples[key]
-                hd_red.update(nsamples=nsamples_out, flags=flags_out, data=data_out)
-                hd_red.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
+                # update redundant data. Don't partial write.
+                hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
             else:
-                # partial write
+                # partial write works for no redundant averaging.
                 hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
-
+        if redundant_average:
+            # if we did redundant averaging, just write the redundant dataset out in the end at once.
+            hd_red.write_uvh5(data_outfilename, clobber=clobber)
     # full data loading and writing
     else:
         data, data_flags, _ = hd.read()
