@@ -327,14 +327,17 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             #    hd.partial_write(data_outfilename, data=data, flags=data_flags,
             #                     inplace=True, clobber=clobber, add_to_history=add_to_history)
             if redundant_average:
-                # redundantly average
+            # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples, reds=all_red_antpairs, wgts=redundant_weights, inplace=True)
                 # partially write to redundant output file.
                 hd_red = io.HERAData(data_outfilename)
-                hd_red.read(bls=data.keys())
-                hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
+                data_out, flags_out, nsamples_out = hd_red.read(bls=data.keys())
+                for key in data:
+                    data_out[key] = data[key]
+                    flags_out[key] = data_flags[key]
+                    nsamples_out[key] = data_nsamples[key]
+                hd_red.update(nsamples=nsamples_out, flags=flags_out, data=data_out)
                 hd_red.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
-
             else:
                 # partial write
                 hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
