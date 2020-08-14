@@ -15,6 +15,7 @@ from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
 import sklearn.gaussian_process as gp
+import warnings
 
 try:
     AIPY = True
@@ -1274,6 +1275,8 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
         for bl in list(data.keys()):
             if bl not in bls:
                 del data[bl]
+                del flags[bl]
+                del nsamples[bl]
     else:
         data.select(bls=bls)
 
@@ -1317,14 +1320,14 @@ def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
 
     This method calculates chunks of baselines to load simultaneously constrained by the conditions that
     all baselines simultaneously loaded completely fill out redundant groups and the number of baselines
-    loaded is less then or equal to nbls_per_load.
-    If a redundant group exceeds nbls_per_load it will be loaded in its entirety anyways
+    loaded is less then or equal to max_chunk_size.
+    If a redundant group exceeds max_chunk_size it will be loaded in its entirety anyways
     and warning will be raised.
 
-    If Nbls is greater then the number of baselines in a redundant group
+    If is greater then the number of baselines in a redundant group
     then return consecutive redundant groups with total baseline count
-    less then or equal to Nbls.
-    If Nbls is smaller then the number of baselines in a redundant group
+    less then or equal to max_chunk_size.
+    If max_chunk_size is smaller then the number of baselines in a redundant group
     then still return that group but raise a Warning.
 
     Parameters
@@ -1333,7 +1336,7 @@ def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
         list of antpairs or antpairpols of all baselines to chunk.
     reds : list
         list of lists with redundant groups of antpairpols
-    nbls_per_load :
+    max_chunk_size :
         maximum number of baselines to group in each chunk
                     while filling out redundant groups.
 
@@ -1350,7 +1353,7 @@ def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
         for bl in redgrp:
             reds_flattened.append(bl)
     # check that baselines provided fall into one of the redundant groups in reds
-    for bl in baselines:
+    for bl in bls:
         if not bl in reds_flattened:
             raise ValueError("All baselines provided in bls must also be in reds!")
     red_grp_indices = []
@@ -1367,19 +1370,19 @@ def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
         grp_indices = np.where(red_grp_indices == grp_label)
         if len(grp_indices) > 0:
             grp_indices = grp_indices[0]
-            if len(grp_indices) > Nbls:
-                warnings.warn("Warning: baseline group encountered with number of baselines exceeding Nbls. Loading group anyways.")
+            if len(grp_indices) > max_chunk_size:
+                warnings.warn("Warning: baseline group encountered with number of baselines exceeding max_chunk_size. Loading group anyways.")
             baseline_chunks.append([bls[ind] for ind in grp_indices])
             label_index += 1
-        elif len(grp_indices) <= Nbls:
-            # if the number baselines in the group is less then Nbls
+        elif len(grp_indices) <= max_chunk_size:
+            # if the number baselines in the group is less then max_chunk_size
             # add successive groups up until the total number of baselines
-            # exceeds Nbls or label_index exceeds the number of group labels.
-            while(len(grp_indices) <= Nbls and label_index < len(grp_labels)):
+            # exceeds max_chunk_size or label_index exceeds the number of group labels.
+            while(len(grp_indices) <= max_chunk_size and label_index < len(grp_labels)):
                 label_index += 1
                 grp_indices_t = np.where(red_grp_indices == grp_label)
                 if len(grp_indices_t) > 0:
-                    if len(grp_indices) + len(grp_indices_t) <= Nbls:
+                    if len(grp_indices) + len(grp_indices_t) <= max_chunk_size:
                         grp_indices = np.hstack([grp_indices, grp_indices_t])
                     else:
                         break

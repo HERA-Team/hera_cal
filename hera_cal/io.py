@@ -18,6 +18,7 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT
+import hera_cal.redcal as redcal
 
 try:
     import aipy
@@ -26,7 +27,7 @@ except ImportError:
     AIPY = False
 
 from .datacontainer import DataContainer
-from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, LST2JD, HERA_TELESCOPE_LOCATION
 
 
@@ -592,7 +593,7 @@ class HERAData(UVData):
                                   this.nsample_array, **self.last_read_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
-                         ex_ants=None):
+                         bl_error_tol=1.0):
         '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by baseline or group of baselines.
 
@@ -609,8 +610,12 @@ class HERAData(UVData):
                 then still return that group but raise a Warning.
                 Default is False
             reds: list, optional
-                list of lists; each containing the ant-pols in each redundant group
+                list of lists; each containing the antpairpols in each redundant group
                 must be provided if chunk_by_redundant_group is True.
+            bl_error_tol: float, optional
+                    the largest allowable difference between baselines in a redundant group in meters.
+                    (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+                    default is 1.0meters
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
@@ -622,12 +627,16 @@ class HERAData(UVData):
             if isinstance(bls, dict):  # multiple files
                 bls = list(set([bl for bls in bls.values() for bl in bls]))
             bls = sorted(bls)
-        if ex_ants is not None:
-            bls = filter_bls(bls, ex_ants)
         if not chunk_by_redundant_group:
             baseline_chunks = [bls[i:i + Nbls] for i in range(0, len(bls), Nbls)]
         else:
-            baseline_chunks = utils.chunk_baselines_by_redundant_groups(bls=bls, reds=reds, max_chunk_size=Nbls)
+            if reds is None:
+                if self.filetype != 'uvh5':
+                    raise NotImplementedError('Redundant group iteration without explicitly setting antpos for filetype ' + self.filetype
+                                              + ' without setting antpos has not been implemented.')
+                reds = redcal.get_reds(self.antpos, pols=self.pols, bl_error_tol=bl_error_tol,
+                                       include_autos=True)
+            baseline_chunks = chunk_baselines_by_redundant_groups(bls=bls, reds=reds, max_chunk_size=Nbls)
         for chunk in baseline_chunks:
             yield self.read(bls=chunk)
 

@@ -252,10 +252,8 @@ class Test_Update_Cal(object):
         calfile = os.path.join(DATA_PATH, 'zen.2458043.40141.xx.HH.XRAA.abs.calfits')
         calfile_unity = os.path.join(DATA_PATH, 'zen.2458043.40141.xx.HH.XRAA.unity_gains.abs.calfits')
         # redundantly average the calibrated data file.
-        reds = redcal.get_reds(hd_calibrated.antpos, bl_error_tol=1.0)
-        # remove polarizations for red_average
-        reds = [[bl[:2] for bl in redgrp] for redgrp in reds]
-        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False)
+        reds = redcal.get_reds(hd_calibrated.antpos, bl_error_tol=1.0, include_autos=True)
+
         # apply_cal without redundant averaging and check that data arrays etc... are the same
         ac.apply_cal(uncalibrated_file, calibrated_file, calfile,
                             gain_convention='divide', redundant_average=False)
@@ -269,6 +267,9 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hd_calibrated.nsample_array, hd_calibrated_with_apply_cal.nsample_array))
         assert np.all(np.isclose(hd_calibrated.flag_array, hd_calibrated_with_apply_cal.flag_array))
 
+        # remove polarizations for red_average
+        reds = [[bl[:2] for bl in redgrp] for redgrp in reds]
+        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False)
 
         ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
                             gain_convention='divide', redundant_average=True)
@@ -276,11 +277,21 @@ class Test_Update_Cal(object):
         # now load in the calibrated redundant data.
         hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
         hda_calibrated_with_apply_cal.read()
+
         # check that the data, flags, and nsamples arrays are close
-        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
         assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
         assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
+        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
 
+        # now do chunked redundant groups.
+        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
+                            gain_convention='divide', redundant_average=True, nbl_per_load=4, clobber=True)
+        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
+        hda_calibrated_with_apply_cal.read()
+        # check that the data, flags, and nsamples arrays are close
+        assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
+        assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
+        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
