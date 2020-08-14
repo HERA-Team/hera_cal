@@ -1347,45 +1347,39 @@ def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
         list of lists of antpairpols where each chunk containes entire redundant groups
         and (if possible) includes a number of baselines less then max_chunk_size.
     """
-    # trim reds to remove flagged antennas.
-    reds_flattened = []
-    for redgrp in reds:
-        for bl in redgrp:
-            reds_flattened.append(bl)
+    # trim reds to only include baselines in provided bls list (data).
+    reds_data = [[bl for bl in blg if bl in bls] for blg in reds]
+    reds_data = [blg for blg in reds_data if len(blg) > 0]
+    reds_data_flattened = []
+    # use a flattened reds_data to check whether there are any bls provided that
+    # are not accounted for in reds.
+    for grp in reds_data:
+        for bl in grp:
+            reds_data_flattened.append(bl)
     # check that baselines provided fall into one of the redundant groups in reds
     for bl in bls:
-        if not bl in reds_flattened:
+        if not bl in reds_data_flattened:
             raise ValueError("All baselines provided in bls must also be in reds!")
-    red_grp_indices = []
-    for m in range(len(reds)):
-        for n in range(len(reds[m])):
-            if reds[m][n] in bls:
-                red_grp_indices.append(m)
-    grp_labels = np.unique(red_grp_indices)
-    label_index = 0
+    # now iterate through redundancies.
     baseline_chunks = []
-    # now iterate over redundant groups.
-    while label_index < len(grp_labels):
-        grp_label = grp_labels[label_index]
-        grp_indices = np.where(red_grp_indices == grp_label)
-        if len(grp_indices) > 0:
-            grp_indices = grp_indices[0]
-            if len(grp_indices) > max_chunk_size:
-                warnings.warn("Warning: baseline group encountered with number of baselines exceeding max_chunk_size. Loading group anyways.")
-            baseline_chunks.append([bls[ind] for ind in grp_indices])
-            label_index += 1
-        elif len(grp_indices) <= max_chunk_size:
-            # if the number baselines in the group is less then max_chunk_size
-            # add successive groups up until the total number of baselines
-            # exceeds max_chunk_size or label_index exceeds the number of group labels.
-            while(len(grp_indices) <= max_chunk_size and label_index < len(grp_labels)):
-                label_index += 1
-                grp_indices_t = np.where(red_grp_indices == grp_label)
-                if len(grp_indices_t) > 0:
-                    if len(grp_indices) + len(grp_indices_t) <= max_chunk_size:
-                        grp_indices = np.hstack([grp_indices, grp_indices_t])
-                    else:
-                        break
-            baseline_chunks.append([bls[ind] for ind in grp_indices])
-
+    # now iterate through redundant groups.
+    group_index = 0
+    while group_index < len(reds_data):
+        # if red group is larger then the chunk size.
+        # then give a warning and treate the red group as a chunk anyways.
+        if len(reds_data[group_index]) > max_chunk_size:
+            warnings.warn("Warning: baseline group encountered with number"
+                          " of baselines exceeding max_chunk_size. Loading group anyways.")
+            chunk = reds_data[group_index]
+            group_index += 1
+        else:
+            # otherwise iterate forward, appending redundant groups to the chunk until
+            # the size of the next redundant group cannot be fitted in the chunk with
+            # already appended groups.
+            chunk = []
+            while group_index < len(reds_data) and len(reds_data[group_index]) + len(chunk) <= max_chunk_size:
+                chunk += reds_data[group_index]
+                group_index += 1
+        # append the chunk once it has been determined.
+        baseline_chunks.append(chunk)
     return baseline_chunks

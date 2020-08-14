@@ -663,3 +663,40 @@ def test_echo(capsys):
     assert output[0] == '\n'
     assert output[1:4] == 'hi\n'
     assert output[4:] == '-' * 40 + '\n'
+
+
+def test_chunck_baselines_by_redundant_group():
+    reds_extended = [[(24, 24), (25, 25), (37, 37), (38, 38), (39, 39), (52, 52), (53, 53), (67, 67), (68, 68), (125, 125), (146, 146)],
+                    [(24, 37), (25, 38), (38, 52), (39, 53), (39, 125), (125, 146)],
+                    [(24, 38), (25, 39), (37, 52), (38, 53), (25, 146)],
+                    [(24, 25), (37, 38), (38, 39), (52, 53), (24, 67)],
+                    [(24, 52), (25, 53), (67, 68)],
+                    [(25, 37), (39, 52), (67, 125)],
+                    [(24, 39), (37, 53)],
+                    [(37, 39)],
+                    [(25, 52)],
+                    [(24, 53)],
+                    [(24, 125), (52, 68)],
+                    [(37, 125), (39, 149)]]
+    reds = [[(24, 24), (25, 25), (37, 37), (38, 38), (39, 39), (52, 52), (53, 53)],
+                [(24, 37), (25, 38), (38, 52), (39, 53)],
+                [(24, 38), (25, 39), (37, 52), (38, 53)],
+                [(24, 25), (37, 38), (38, 39), (52, 53)],
+                [(24, 52), (25, 53)],
+                [(25, 37), (39, 52)],
+                [(24, 39), (37, 53)],
+                [(37, 39)],
+                [(25, 52)],
+                [(24, 53)]]
+    chunked_by_four_expected = [reds[0], reds[1], reds[2], reds[3],
+                                reds[4]+reds[5], reds[6] + reds[7] + reds[8], reds[9]]
+    # unwravel redundant group.
+    bls = []
+    for grp in reds:
+        for bl in grp:
+            bls.append(bl)
+    chunked_by_four_output = utils.chunk_baselines_by_redundant_groups(bls, reds=reds_extended, max_chunk_size=4)
+    for chunk1, chunk2 in zip(chunked_by_four_output, chunked_by_four_expected):
+        assert chunk1 == chunk2
+    # test ValueError when baselines are provided not in redundancies.
+    pytest.raises(ValueError, utils.chunk_baselines_by_redundant_groups, bls=bls+[(245, 33)], reds=reds_extended, max_chunk_size=4)
