@@ -18,7 +18,7 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT
-import hera_cal.redcal as redcal
+import .redcal as redcal
 
 try:
     import aipy
