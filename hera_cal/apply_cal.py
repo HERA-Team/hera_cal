@@ -275,7 +275,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                         nbls += 1
                         data_grp.append(bl)
                 if nbls > 0:
-                    print(data_grp)
                     red_data_grps.append(data_grp)
                     # keep list of zeroth baselines of each group.
                     red_data_bls.append(data_grp[0])
@@ -329,12 +328,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             #                     inplace=True, clobber=clobber, add_to_history=add_to_history)
             if redundant_average:
                 # redundantly average
-                print('keys before red average.')
-                print(data.keys())
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples, reds=all_red_antpairs, wgts=redundant_weights, inplace=True)
                 # partially write to redundant output file.
                 hd_red = io.HERAData(data_outfilename)
-                print('keys after red average.')
                 hd_red.read(bls=data.keys())
                 hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
                 hd_red.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
