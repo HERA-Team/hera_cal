@@ -15,6 +15,7 @@ from . import redcal
 import pyuvdata.utils as uvutils
 from pyuvdata import UVData
 
+
 def _check_polarization_consistency(data, gains):
     '''This fucntion raises an error if all the gain keys are cardinal but none of the data keys are cardinal
     (e/n rather than x/y), or vice versa. In the mixed case, or if one is empty, no errors are raised.'''
@@ -181,7 +182,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_ex_ants_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
-              add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,  **kwargs):
+              add_to_history='', clobber=False, redundant_average=False, redundant_weights=None, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -296,9 +297,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                                    old_gains=old_gains, gain_convention=gain_convention)
             hd.update(data=data, flags=data_flags)
-            #if not redundant_average:
-            #    hd.partial_write(data_outfilename, data=data, flags=data_flags,
-            #                     inplace=True, clobber=clobber, add_to_history=add_to_history)
+
             if redundant_average:
                 # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples, reds=all_red_antpairs, wgts=redundant_weights, inplace=True)
@@ -339,8 +338,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 hd.write_uvh5(data_outfilename, clobber=clobber)
             else:
                 raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
-
-
 
 
 def apply_cal_argparser():

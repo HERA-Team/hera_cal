@@ -640,7 +640,6 @@ class HERAData(UVData):
         for chunk in baseline_chunks:
             yield self.read(bls=chunk)
 
-
     def iterate_over_freqs(self, Nchans=1, freqs=None):
         '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by frequency channel or group of contiguous channels.

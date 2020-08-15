@@ -1315,6 +1315,7 @@ def top2eq_m(ha, dec):
         mat = mat.transpose([2, 0, 1])
     return mat
 
+
 def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
     """Chunk list of baselines by redundant group constrained by number of baselines.
 
@@ -1358,7 +1359,7 @@ def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
             reds_data_flattened.append(bl)
     # check that baselines provided fall into one of the redundant groups in reds
     for bl in bls:
-        if not bl in reds_data_flattened:
+        if bl not in reds_data_flattened:
             raise ValueError("All baselines provided in bls must also be in reds!")
     # now iterate through redundancies.
     baseline_chunks = []

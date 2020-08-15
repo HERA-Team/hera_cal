@@ -238,7 +238,7 @@ class Test_Update_Cal(object):
             ac.apply_cal(miriad, outname_uvh5, new_cal, filetype_in='miriad', nbl_per_load=1)
         shutil.rmtree(outname_miriad)
 
-    def test_apply_cal_redundant_averaging(self,tmpdir):
+    def test_apply_cal_redundant_averaging(self, tmpdir):
         tmp_path = tmpdir.strpath
         # test redundant averaging functionality in apply_cal
         # we will do this by applying a calibration to a data set and then running red_average
@@ -256,7 +256,7 @@ class Test_Update_Cal(object):
 
         # apply_cal without redundant averaging and check that data arrays etc... are the same
         ac.apply_cal(uncalibrated_file, calibrated_file, calfile,
-                            gain_convention='divide', redundant_average=False)
+                     gain_convention='divide', redundant_average=False)
         hd_calibrated_with_apply_cal = io.HERAData(calibrated_file)
         hd_calibrated_with_apply_cal.read()
         hc_unity = io.HERACal(calfile_unity)
@@ -272,7 +272,7 @@ class Test_Update_Cal(object):
         hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False)
 
         ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
-                            gain_convention='divide', redundant_average=True)
+                     gain_convention='divide', redundant_average=True)
 
         # now load in the calibrated redundant data.
         hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
@@ -285,7 +285,7 @@ class Test_Update_Cal(object):
 
         # now do chunked redundant groups.
         ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
-                            gain_convention='divide', redundant_average=True, nbl_per_load=4, clobber=True)
+                     gain_convention='divide', redundant_average=True, nbl_per_load=4, clobber=True)
         hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
         hda_calibrated_with_apply_cal.read()
         # check that the data, flags, and nsamples arrays are close
