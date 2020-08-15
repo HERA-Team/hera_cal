@@ -634,7 +634,28 @@ class HERAData(UVData):
                 if self.filetype != 'uvh5':
                     raise NotImplementedError('Redundant group iteration without explicitly setting antpos for filetype ' + self.filetype
                                               + ' without setting antpos has not been implemented.')
-                reds = redcal.get_reds(self.antpos, pols=self.pols, bl_error_tol=bl_error_tol,
+                antpos = {}
+                pols = []
+                # generate antpos dict to feed into get_reds
+                # that accounts for possibility that
+                # HERACal was initialized from multiple
+                # files in which case self.antpos is a dict of dicts.
+                for ant in self.antpos:
+                    if isinstance(self.antpos[ant], dict):
+                        for k in self.antpos[ant]:
+                            antpos[k] = self.antpos[ant][k]
+                    else:
+                        antpos[ant] = self.antpos[ant]
+                # generate pol list with same considerations.
+                if isinstance(self.pols, list):
+                    pols = self.pols
+                else:
+                    for k in self.pols:
+                        for pol in self.pols[k]:
+                            if pol not in pols:
+                                pols.append(pol)
+
+                reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol,
                                        include_autos=True)
             baseline_chunks = chunk_baselines_by_redundant_groups(bls=bls, reds=reds, max_chunk_size=Nbls)
         for chunk in baseline_chunks:
