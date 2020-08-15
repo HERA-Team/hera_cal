@@ -18,7 +18,7 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT
-import .redcal as redcal
+from . import redcal
 
 try:
     import aipy
