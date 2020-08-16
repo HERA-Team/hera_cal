@@ -865,6 +865,12 @@ class VisClean(object):
 
     def trim_edges(self):
         """Trim edge times and frequencies that are fully flagged. Always in place.
+
+        Function to remove edge times and frequencies from data that are completely flagged.
+        such flagged edges and times can cause problems for linear filtering methods.
+        since a set number of times and frequencies are assumed in vis_clean objects, this only
+        works for datasets where the flags are identical for all baselines.
+
         """
         # first check that all flags are the same or completely flagged.
         template = None
@@ -875,10 +881,8 @@ class VisClean(object):
                 else:
                     if not np.all(template == flags[k]):
                         raise ValueError("Flag Trimming only supported when flagging for all baselines is identical!")
-        trimmed = False
+
         for k in self.flags:
-            if trimmed:
-                break
             if not np.all(flags[k]):
                 unflagged_chans = np.where(~np.all(flags[k], axis=0))[0]
                 unflagged_times = np.where(~np.all(flags[k], axis=1))[0]
@@ -893,6 +897,13 @@ class VisClean(object):
                 self.flags = flags
                 self.nsamples = nsamples
                 trimmed = True
+                self.freqs = self.freqs[ind_left: ind_right + 1]
+                self.times = self.times[ind_lower: ind_upper + 1]
+                self.lsts = self.lsts[ind_lower: ind_upper + 1]
+                self.Nfreqs = len(self.freqs)
+                self.Ntimes = len(self.times)
+                break
+
         if not trimmed:
             warnings.warn("no unflagged data so no trimming performed.")
 
