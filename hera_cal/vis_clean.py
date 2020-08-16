@@ -863,6 +863,44 @@ class VisClean(object):
         if not inplace:
             return flags
 
+    def trim_edges(self):
+        """Trim edge times and frequencies that are fully flagged. Always in place.
+        """
+        # first check that all flags are the same or completely flagged.
+        template = None
+        for k in self.flags:
+            if not np.all(flags[k]):
+                if template is None:
+                    template = flags[k]
+                else:
+                    if not np.all(template == flags[k]):
+                        raise ValueError("Flag Trimming only supported when flagging for all baselines is identical!")
+        trimmed = False
+        for k in self.flags:
+            if trimmed:
+                break
+            if not np.all(flags[k]):
+                unflagged_chans = np.where(~np.all(flags[k], axis=0))[0]
+                unflagged_times = np.where(~np.all(flags[k], axis=1))[0]
+                ind_left = np.min(flagged_chans)
+                ind_right = np.max(flagged_chans)
+                ind_lower = np.min(flagged_times)
+                ind_upper = np.max(flagged_times)
+                self.hd.select(frequencies=self.freqs[ind_left: ind_right + 1])
+                self.hd.select(times=self.times[ind_lower: ind_upper + 1])
+                data, flags, nsamples = self.hd.build_datacontainers()
+                self.data = data
+                self.flags = flags
+                self.nsamples = nsamples
+                trimmed = True
+        if not trimmed:
+            warnings.warn("no unflagged data so no trimming performed.")
+
+
+
+
+
+
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
                             partial_write=False, clobber=False, add_to_history='', extra_attrs={}, prefix='clean', **kwargs):
         '''
@@ -1313,6 +1351,8 @@ def _filter_argparser(multifile=False):
     a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
     a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
+    a.add_argument("--factorize_flags", type=bool, default=False, action="store_true", help="Factorize flags.")
+    a.add_argument("--time_thresh", type=float, default=0.5, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
