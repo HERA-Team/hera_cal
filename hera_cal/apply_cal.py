@@ -248,6 +248,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         old_gains, old_flags = None, None
     hd = io.HERAData(data_infilename, filetype=filetype_in)
     add_to_history = version.history_string(add_to_history)
+    no_red_weights = redundant_weights is None
     # partial loading and writing using uvh5
     if nbl_per_load is not None:
         if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
@@ -280,7 +281,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd_red.read(bls=red_data_bls)
             hd_red.select(bls=red_data_bls)
 
-        no_red_weights = redundant_weights is None
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
         for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average, reds=all_reds):
@@ -339,7 +339,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd.update(data=data, flags=data_flags, **kwargs)
             # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
             # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
-            if redundant_weights is None:
+            if no_red_weights:
                 redundant_weights = data_nsamples
             utils.red_average(hd, reds=all_red_antpairs, inplace=True, wgts=redundant_weights)
             if filetype_out == 'uvh5':
