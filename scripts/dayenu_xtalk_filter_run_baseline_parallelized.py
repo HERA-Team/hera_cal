@@ -3,7 +3,7 @@
 # Copyright 2020 the HERA Project
 # Licensed under the MIT License
 
-"""Command-line drive script for hera_cal.xtalk_filter. Only performs DAYENU Filtering"""
+"""Command-line drive script for hera_cal.xtalk_filter with baseline parallelization. Only performs DAYENU Filtering"""
 
 from hera_cal import xtalk_filter
 import sys
@@ -25,4 +25,6 @@ xtalk_filter.load_xtalk_filter_and_write_baseline_list(a.datafilelist, calfile_l
                                                        cache_dir=a.cache_dir, res_outfilename=outfilename,
                                                        clobber=a.clobber, write_cache=a.write_cache,
                                                        read_cache=a.read_cache, mode='dayenu',
+                                                       factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
+                                                       trim_edges=a.trim_edges,
                                                        add_to_history=' '.join(sys.argv), **filter_kwargs)
