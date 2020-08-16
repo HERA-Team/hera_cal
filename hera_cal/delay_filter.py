@@ -94,7 +94,7 @@ class DelayFilter(VisClean):
 
 def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, round_up_bllens=False,
-                                factorize_flags=False, time_thresh=0.5, trim_edges=False,
+                                factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', **filter_kwargs):
     '''
@@ -165,7 +165,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 
 def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None,, cache_dir=None,
                                               read_cache=False, write_cache=False, round_up_bllens=False,
-                                              factorize_flags=False, time_thresh=0.5, trim_edges=False,
+                                              factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', **filter_kwargs):
     '''
