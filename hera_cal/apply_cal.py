@@ -280,6 +280,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd_red.read(bls=red_data_bls)
             hd_red.select(bls=red_data_bls)
 
+        no_red_weights = redundant_weights is None
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
         for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average, reds=all_reds):
@@ -301,8 +302,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             if redundant_average:
                 # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
                 # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
-                if redundant_weights is None:
-                    redundant_weights = data_nsamples
+                if no_red_weights:
+                    redundant_weights = copy.deepcopy(data_nsamples)
                 # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples, reds=all_red_antpairs, wgts=redundant_weights, inplace=True)
                 # update redundant data. Don't partial write.
@@ -315,7 +316,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd_red.write_uvh5(data_outfilename, clobber=clobber)
     # full data loading and writing
     else:
-        data, data_flags, _ = hd.read()
+        data, data_flags, data_nsamples = hd.read()
         all_reds = redcal.get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol, include_autos=True)
         for bl in data_flags.keys():
             # apply band edge flags
