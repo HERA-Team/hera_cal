@@ -19,6 +19,10 @@ baseline_list = io.baselines_from_filelist_position(filename=a.infilename, filel
 # modify output file name to include index.
 outfilename = a.res_outfilename
 spw_range = a.spw_range
+# allow none string to be passed through to a.calfile
+if a.calfile_list is not None:
+    if a.calfile_list.lower() == 'none':
+        a.calfile_list = None
 # Run Xtalk Filter
 xtalk_filter.load_xtalk_filter_and_write_baseline_list(a.datafilelist, calfile_list=a.calfilelist, round_up_bllens=True,
                                                        baseline_list=baseline_list, spw_range=a.spw_range,
