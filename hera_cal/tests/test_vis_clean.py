@@ -489,6 +489,9 @@ class Test_VisClean(object):
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
+        assert not a.trim_edges
+        assert a.time_thresh == 0.05
+        assert not a.factorize_flags
 
     def test_filter_argparser_multifile(self):
         # test multifile functionality of _filter_argparser
@@ -502,7 +505,19 @@ class Test_VisClean(object):
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
+        assert not a.trim_edges
+        assert a.time_thresh == 0.05
+        assert not a.factorize_flags
 
+    def test_reconstitute_files_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--fragmentlist', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
+        parser = xf.reconstitute_files_argparser()
+        a = parser.parse_args()
+        assert a.clobber
+        for char in ['a', 'b', 'c', 'd']:
+            assert char in a.fragmentlist
+        assert a.infilename == 'a'
+        assert a.outfilename == 'a.out'
 
     def test_reconstitute_files(self, tmp_path):
         # First, construct some cross-talk baseline files.
