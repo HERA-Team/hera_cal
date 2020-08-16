@@ -1364,6 +1364,7 @@ def _filter_argparser(multifile=False):
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     a.add_argument("--factorize_flags", type=bool, default=False, action="store_true", help="Factorize flags.")
     a.add_argument("--time_thresh", type=float, default=0.5, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
+    a.add_argument("--trim_edges", type=bool, default=False, action="store_true", help="If true, trim edge times and frequencies that are comletely flagged.")
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
