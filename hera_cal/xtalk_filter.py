@@ -92,6 +92,7 @@ class XTalkFilter(VisClean):
 
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
+                                factorize_flags=False, time_thresh=0.5, trim_edges=False,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False, **filter_kwargs):
     '''
@@ -110,6 +111,15 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                            that were not in previously loaded cache files.
         max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
                          max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
+        factorize_flags: bool, optional
+            If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
+        time_thresh : float
+            Fractional threshold of flagged pixels across time needed to flag all times
+            per freq channel. It is not recommend to set this greater than 0.5.
+            Fully flagged integrations do not count towards triggering time_thresh.
+        trim_edges : bool, optional
+            if true, trim fully flagged edge channels and times. helps to avoid edge popups.
+            default is false.
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -129,6 +139,10 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
     if Nbls_per_load is None:
         xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         xf.read(frequencies=freqs)
+        if factorize_flags:
+            xf.factorize_flags(time_thresh=time_thresh)
+        if trim_flagged_edges:
+            xf.trim_edges()
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
@@ -138,6 +152,10 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         for i in range(0, hd.Nbls, Nbls_per_load):
             xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
             xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
+            if factorize_flags:
+                xf.factorize_flags(time_thresh=time_thresh)
+            if trim_flagged_edges:
+                xf.trim_edges()
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
@@ -148,6 +166,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 
 def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
                                               read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
+                                              factorize_flags=False, time_thresh=0.5, trim_edges=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, **filter_kwargs):
     '''
@@ -166,6 +185,15 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                            that were not in previously loaded cache files.
         max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
                          max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
+        factorize_flags: bool, optional
+            If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
+        time_thresh : float, optional
+            Fractional threshold of flagged pixels across time needed to flag all times
+            per freq channel. It is not recommend to set this greater than 0.5.
+            Fully flagged integrations do not count towards triggering time_thresh.
+        trim_edges : bool, optional
+            if true, trim fully flagged edge channels and times. helps to avoid edge popups.
+            default is false.
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -202,6 +230,10 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         cals = None
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
     xf.read(bls=baseline_list, frequencies=freqs)
+    if factorize_flags:
+        xf.factorize_flags(time_thresh=time_thresh)
+    if trim_flagged_edges:
+        xf.trim_edges()
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
     xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
