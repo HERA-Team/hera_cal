@@ -17,7 +17,7 @@ from hera_cal import io, datacontainer
 from hera_cal import vis_clean
 from hera_cal.vis_clean import VisClean
 from hera_cal.data import DATA_PATH
-
+from hera_cal import xtalk_filter as xf
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
@@ -502,3 +502,47 @@ class Test_VisClean(object):
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
+
+
+    def test_reconstitute_files(self, tmp_path):
+        # First, construct some cross-talk baseline files.
+        datafiles = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
+                     os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
+
+        cals = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part1"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
+        # make a cache directory
+        cdir = tmp_path / "cache_temp"
+        cdir.mkdir()
+        # cross-talk filter chunked baselines
+        for filenum, file in enumerate(datafiles):
+            baselines = io.baselines_from_filelist_position(file, datafiles, polarizations=['ee'])
+            fname = 'temp.fragment.part.%d.h5' % filenum
+            fragment_filename = tmp_path / fname
+            xf.load_xtalk_filter_and_write_baseline_list(datafiles, baseline_list=baselines, calfile_list=cals,
+                                                         spw_range=[0, 20], cache_dir=cdir, read_cache=True, write_cache=True,
+                                                         res_outfilename=fragment_filename, clobber=True)
+            # load in fragment and make sure the number of baselines is equal to the length of the baseline list
+            hd_fragment = io.HERAData(str(fragment_filename))
+            assert len(hd_fragment.bls) == len(baselines)
+            assert hd_fragment.Ntimes == 60
+            assert hd_fragment.Nfreqs == 20
+
+        fragments = glob.glob(DATA_PATH + '/test_output/temp.fragment.h5.part*')
+        # reconstitute the filtered data
+        for filenum, file in enumerate(datafiles):
+            # reconstitute
+            fname = 'temp.reconstituted.part.%d.h5' % filenum
+            vis_clean.reconstitute_files(templatefile=file,
+                                        fragments=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
+                                        outfilename=str(tmp_path / fname))
+        # load in the reconstituted files.
+        hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
+        hd_reconstituted.read()
+        # compare to xtalk filtering the whole file.
+        xf.load_xtalk_filter_and_write(infilename=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                                       calfile=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+                                       res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
+        hd = io.HERAData(str(tmp_path / 'temp.h5'))
+        hd.read()
+        assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))

@@ -1363,7 +1363,7 @@ def _filter_argparser(multifile=False):
     a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     a.add_argument("--factorize_flags", type=bool, default=False, action="store_true", help="Factorize flags.")
-    a.add_argument("--time_thresh", type=float, default=0.5, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
+    a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
     a.add_argument("--trim_edges", type=bool, default=False, action="store_true", help="If true, trim edge times and frequencies that are comletely flagged.")
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
@@ -1425,4 +1425,55 @@ def _linear_argparser(multifile=False):
     a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
+    return a
+
+def reconstitute_files(templatefile, fragments, outfilename, clobber=False):
+    """Recombine xtalk products into short-time files.
+
+    Construct a new file based on templatefile that combines the files in file_fragments
+    over the times in template file.
+
+    Arguments
+    ---------
+    templatefile : string
+        name of the file to use as a template. Will reconstitute the file_fragments over the times in templatefile.
+    outfilename : string
+        name of the output file
+    file_fragments : list of strings
+        list of file names to use reconstitute.
+    clobber : bool optional.
+        If False, don't overwrite outfilename if it already exists. Default is False.
+
+    Returns
+    -------
+        Nothing
+    """
+    hd_template = io.HERAData(templatefile)
+    hd_fragment = io.HERAData(fragments[0])
+    times = hd_template.times
+    freqs = hd_fragment.freqs
+    polarizations = hd_fragment.pols
+    # read in the template file, but only include polarizations, frequencies
+    # from the fragment files.
+    hd_template.read(times=times, frequencies=freqs, polarizations=polarizations)
+    # for each fragment, read in only the times relevant to the templatefile.
+    # and update the data, flags, nsamples array of the template file
+    # with the fragment data.
+    for fragment in fragments:
+        hd_fragment = io.HERAData(fragment)
+        d, f, n = hd_fragment.read(times=times)
+        hd_template.update(flags=f, data=d, nsamples=n)
+    # now that we've updated everything, we write the output file.
+    hd_template.write_uvh5(outfilename, clobber=clobber)
+
+
+def reconstitute_files_argparser():
+    """
+    Arg parser for file reconstitution.
+    """
+    a = argparse.ArgumentParser(description="Reconstitute fragmented baseline files.")
+    a.add_argument("infilename", type=str, help="name of template file.")
+    a.add_argument("--fragmentlist", type=str, nargs="+", help="list of file fragments to reconstitute")
+    a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.")
+    a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
     return a
