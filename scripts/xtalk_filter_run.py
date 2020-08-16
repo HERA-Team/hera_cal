@@ -11,7 +11,10 @@ import sys
 parser = xtalk_filter.xtalk_filter_argparser(mode='clean')
 
 a = parser.parse_args()
-
+# allow none string to be passed through to a.calfile
+if a.calfile is not None:
+    if a.calfile.lower() == 'none':
+        a.calfile = None
 # set kwargs
 filter_kwargs = {'tol': a.tol, 'window': a.window, 'max_frate_coeffs': a.max_frate_coeffs,
                  'skip_wgt': a.skip_wgt, 'maxiter': a.maxiter, 'edgecut_hi': a.edgecut_hi,
