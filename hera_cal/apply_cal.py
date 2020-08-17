@@ -304,6 +304,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
                 if no_red_weights:
                     redundant_weights = copy.deepcopy(data_nsamples)
+                    for bl in data_flags:
+                        if np.all(data_flags[bl]):
+                            redundant_weights[bl][:] = 0.
                 # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples, reds=all_red_antpairs, wgts=redundant_weights, inplace=True)
                 # update redundant data. Don't partial write.
@@ -340,7 +343,11 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
             # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
             if no_red_weights:
-                redundant_weights = data_nsamples
+                redundant_weights = copy.deepcopy(data_nsamples)
+                for bl in data_flags:
+                    if np.all(data_flags[bl]):
+                        redundant_weights[bl][:] = 0.
+
             utils.red_average(hd, reds=all_red_antpairs, inplace=True, wgts=redundant_weights)
             if filetype_out == 'uvh5':
                 # overwrite original outfile with

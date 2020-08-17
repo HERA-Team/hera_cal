@@ -1134,7 +1134,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
 
 
 def red_average(data, reds=None, bl_tol=1.0, inplace=False,
-                wgts=None, flags=None, nsamples=None):
+                wgts=None, flags=None, flagmode='and', nsamples=None):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
     Average is weighted by integration_time * nsamples * ~flags unless wgts are fed.
@@ -1246,13 +1246,18 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 tint = np.asarray([data.integration_time[data.antpair2ind(bl + (pol,))] for bl in blg])[:, :, None]
                 w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
 
+            all_flags = np.asarray([np.all(flags[bl + (pol,)]) for bl in blg])
             # take the weighted average
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
             navg = np.sum(n * f, axis=0)         # this is the new total nsample (without flagged elements)
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
-            favg = np.isclose(wsum, 0.0)         # this is getting any fully flagged pixels
+            if flagmode == 'and':
+                # in and flagging mode, flags only include times / freqs where all baselines where flagged.
+                favg = np.isclose(wsum, 0.0)
+            elif flagmode == 'or':
+                favg = np.any(~(f[all_flags].astype(bool)), axis=0)
 
             # replace with new data
             if fed_container:
