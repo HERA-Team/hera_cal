@@ -269,7 +269,11 @@ class Test_Update_Cal(object):
 
         # remove polarizations for red_average
         reds = [[bl[:2] for bl in redgrp] for redgrp in reds]
-        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=n)
+        wgts = deepcopy(n)
+        for bl in wgts:
+            if np.all(f[bl]):
+                wgts[bl][:] = 0.
+        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts)
 
         ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
                      gain_convention='divide', redundant_average=True)
