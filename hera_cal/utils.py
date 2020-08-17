@@ -1253,7 +1253,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
             # average flags should be where weights x flags x nsamples sum to zero.
-            wfsum = np.sum(n * w * (~(f.astype(bool))).astype(float), axis=0).clip(1e-10, np.inf)
+            wfsum = np.sum(n * w * f, axis=0).clip(1e-10, np.inf)
             favg = np.isclose(wfsum, 0.0)
 
             # replace with new data
