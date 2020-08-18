@@ -38,7 +38,7 @@ class Test_DelayFilter(object):
         # test skip_wgt imposition of flags
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
-        # test that everything runs when baselines lengths are rounded. 
+        # test that everything runs when baselines lengths are rounded.
         for round_up_bllens in [True, False]:
             dfil = df.DelayFilter(fname, filetype='miriad')
             dfil.read(bls=[k])
@@ -121,6 +121,40 @@ class Test_DelayFilter(object):
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
+
+    def test_load_delay_filter_and_write_baseline_list(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
+        cals = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part1"),
+                os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
+        outfilename = os.path.join(tmp_path, 'temp.h5')
+        cdir = os.path.join(tmp_path, 'cache_temp')
+        # make a cache directory
+        if os.path.isdir(cdir):
+            shutil.rmtree(cdir)
+        os.mkdir(cdir)
+        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+                                                     calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                                     read_cache=True, write_cache=True,
+                                                     res_outfilename=outfilename, clobber=True,
+                                                     mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert len(list(d.keys())) == 1
+        assert d[(53, 54, 'ee')].shape[1] == 100
+        assert d[(53, 54, 'ee')].shape[0] == 60
+        # now do no spw range and no cal files just to cover those lines.
+        xf.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+                                                     cache_dir=cdir,
+                                                     read_cache=True, write_cache=True,
+                                                     res_outfilename=outfilename, clobber=True,
+                                                     mode='dayenu')
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        assert len(list(d.keys())) == 1
+        assert d[(53, 54, 'ee')].shape[1] == 1024
+        assert d[(53, 54, 'ee')].shape[0] == 60
 
     def test_load_dayenu_filter_and_write(self):
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")

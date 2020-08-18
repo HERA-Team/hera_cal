@@ -913,11 +913,6 @@ class VisClean(object):
         if not trimmed:
             warnings.warn("no unflagged data so no trimming performed.")
 
-
-
-
-
-
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
                             partial_write=False, clobber=False, add_to_history='', extra_attrs={}, prefix='clean', **kwargs):
         '''
@@ -1432,6 +1427,7 @@ def _linear_argparser(multifile=False):
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
     return a
+
 
 def reconstitute_files(templatefile, fragments, outfilename, clobber=False):
     """Recombine xtalk products into short-time files.
