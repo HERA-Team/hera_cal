@@ -276,6 +276,14 @@ class Test_ReflectionFitter_Cables(object):
         uvc = RF.write_auto_reflections("./ex.calfits", time_array=RF.avg_times, input_calfits='./ex.calfits', overwrite=True)
         assert uvc.Ntimes == 100
 
+        # test input calibration with slightly shifted frequencies
+        uvc.read_calfits("./ex.calfits")
+        uvc.freq_array += 1e-5  # assert this doesn't fail
+        T = reflections.ReflectionFitter(self.uvd, input_cal=uvc)
+        assert isinstance(T.hc, io.HERACal)
+        uvc.freq_array += 1e2  # now test it fails with a large shift
+        pytest.raises(ValueError, reflections.ReflectionFitter, self.uvd, input_cal=uvc)
+
         os.remove('./ex.calfits')
         os.remove('./ex2.calfits')
         os.remove('./ex.npz')
