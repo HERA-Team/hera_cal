@@ -435,6 +435,46 @@ class Test_VisClean(object):
                                      kernel_size=None, polyfit_deg=5)
         assert np.all(np.isclose(n2[k][-1], n1[k][-1]))  # assert non-zeroed output are same as n1 (no polyfit)
 
+    def test_trim_edges(self):
+        # load data
+        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
+
+        # set flags to be trimmed one off of the bottom, two off of the top
+        # three off of the left and four off of the right
+        nfreqs_full = V.Nfreqs
+        ntimes_full = V.Ntimes
+        for k in V.flags.keys():
+            if not np.all(V.flags[k]):
+                V.flags[k] = np.zeros_like(V.flags[k])
+                V.flags[k][-1] = True
+                V.flags[k][:2] = True
+                V.flags[k][:, :3] = True
+                V.flags[k][:, -4:] = True
+        V.trim_edges()
+
+        assert V.Ntimes == ntimes_full - 3
+        assert V.Nfreqs == nfreqs_full - 7
+        for k in V.flags:
+            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
+            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
+            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
+        # now flag all data and check warning.
+        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
+        for k in V.flags:
+            V.flags[k][:] = True
+        with pytest.warns(None):
+            V.trim_edges()
+        # now set one baseline to have a different flagging pattern then
+        # the other and catch a valueerror.
+        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
+        for k in V.flags:
+            V.flags[k] = np.zeros_like(V.flags[k])
+        V.flags[(23, 23, 'ee')][0] = True
+        pytest.raises(ValueError, V.trim_edges)
+
     def test_neb(self):
         n = vis_clean.noise_eq_bandwidth(dspec.gen_window('blackmanharris', 10000))
         assert np.isclose(n, 1.9689862471203075)
