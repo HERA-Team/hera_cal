@@ -20,6 +20,7 @@ from hera_cal.data import DATA_PATH
 from hera_cal import xtalk_filter as xf
 import glob
 
+
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
 class Test_VisClean(object):
@@ -552,7 +553,7 @@ class Test_VisClean(object):
 
     def test_reconstitute_files_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--fragmentlist', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
-        parser =vis_clean.reconstitute_files_argparser()
+        parser = vis_clean.reconstitute_files_argparser()
         a = parser.parse_args()
         assert a.clobber
         for char in ['a', 'b', 'c', 'd']:
@@ -590,8 +591,8 @@ class Test_VisClean(object):
             # reconstitute
             fname = 'temp.reconstituted.part.%d.h5' % filenum
             vis_clean.reconstitute_files(templatefile=file,
-                                        fragments=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
-                                        outfilename=str(tmp_path / fname))
+                                         fragments=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
+                                         outfilename=str(tmp_path / fname))
         # load in the reconstituted files.
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
