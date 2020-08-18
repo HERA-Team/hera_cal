@@ -141,7 +141,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         df.read(frequencies=freqs)
         if factorize_flags:
             df.factorize_flags(time_thresh=time_thresh)
-        if trim_flagged_edges:
+        if trim_edges:
             xf.trim_edges()
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
@@ -154,7 +154,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             if factorize_flags:
                 df.factorize_flags(time_thresh=time_thresh)
-            if trim_flagged_edges:
+            if trim_edges:
                 xf.trim_edges()
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
@@ -163,7 +163,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             df.hd.data_array = None  # this forces a reload in the next loop
 
 
-def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None,, cache_dir=None,
+def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
                                               read_cache=False, write_cache=False, round_up_bllens=False,
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
@@ -228,7 +228,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     df.read(frequencies=freqs)
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh)
-    if trim_flagged_edges:
+    if trim_edges:
         df.trim_edges()
     df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
     df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
