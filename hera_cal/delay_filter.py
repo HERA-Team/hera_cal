@@ -142,26 +142,26 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         df.read(frequencies=freqs)
         if factorize_flags:
-            df.factorize_flags(time_thresh=time_thresh)
+            df.factorize_flags(time_thresh=time_thresh, inplace=True)
         if trim_edges:
-            xf.trim_edges()
+            df.trim_edges()
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
                                clobber=clobber, add_to_history=add_to_history,
-                               extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
+                               extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': np.asarray([df.freqs])})
     else:
         for i in range(0, len(hd.bls), Nbls_per_load):
             df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             if factorize_flags:
-                df.factorize_flags(time_thresh=time_thresh)
+                df.factorize_flags(time_thresh=time_thresh, inplace=True)
             if trim_edges:
-                xf.trim_edges()
+                raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
-                                   clobber=clobber, add_to_history=add_to_history, Nfreqs=len(freqs), freq_array=np.asarray([freqs]))
+                                   clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
             df.hd.data_array = None  # this forces a reload in the next loop
 
 
