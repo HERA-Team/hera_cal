@@ -186,7 +186,15 @@ class VisClean(object):
         hc = io.to_HERACal(input_cal)
         # load gains
         cal_gains, cal_flags, cal_quals, cal_tquals = hc.read()
-        cal_freqs_in_data = np.logical_and(hc.freqs >= self.data.freqs.min(), hc.freqs <= self.data.freqs.max())
+        # get overlapping frequency bins
+        cal_freqs_in_data = []
+        for f in self.freqs:
+            match = np.isclose(hc.freqs, f, rtol=1e-10)
+            if True in match:
+                cal_freqs_in_data.append(np.argmax(match))
+        # assert all frequencies in data are found in uvcal
+        assert len(cal_freqs_in_data) == len(self.freqs), "Not all freqs in uvd are in uvc"
+
         for ant in cal_gains:
             cal_gains[ant] = cal_gains[ant][:, cal_freqs_in_data]
             cal_flags[ant] = cal_flags[ant][:, cal_freqs_in_data]
