@@ -91,7 +91,7 @@ class XTalkFilter(VisClean):
 
 
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
+                                read_cache=False, write_cache=False,
                                 factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False, **filter_kwargs):
@@ -109,8 +109,6 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
                            that were not in previously loaded cache files.
-        max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
-                         max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
         time_thresh : float
@@ -127,7 +125,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
         round_up_bllens: bool, if True, round up baseline lengths. Default is False.
-        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
+        filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
     if calfile is not None:
@@ -165,7 +163,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 
 
 def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
-                                              read_cache=False, write_cache=False, max_frate_coeffs=[0.024, -0.229],
+                                              read_cache=False, write_cache=False,
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, **filter_kwargs):
@@ -183,8 +181,6 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
                            that were not in previously loaded cache files.
-        max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
-                         max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
         time_thresh : float, optional
@@ -201,7 +197,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
         round_up_bllens: bool, if True, round up baseline lengths. Default is False.
-        filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_filter()
+        filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     hd = io.HERAData(datafile_list, filetype='uvh5')
     if spw_range is None:
