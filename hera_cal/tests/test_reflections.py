@@ -282,7 +282,7 @@ class Test_ReflectionFitter_Cables(object):
         T = reflections.ReflectionFitter(self.uvd, input_cal=uvc)
         assert isinstance(T.hc, io.HERACal)
         uvc.freq_array += 1e2  # now test it fails with a large shift
-        pytest.raises(ValueError, reflections.ReflectionFitter, self.uvd, input_cal=uvc)
+        pytest.raises(AssertionError, reflections.ReflectionFitter, self.uvd, input_cal=uvc)
 
         os.remove('./ex.calfits')
         os.remove('./ex2.calfits')
