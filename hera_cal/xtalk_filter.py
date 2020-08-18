@@ -227,7 +227,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
     xf.read(bls=baseline_list, frequencies=freqs)
     if factorize_flags:
-        xf.factorize_flags(time_thresh=time_thresh)
+        xf.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:
         xf.trim_edges()
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
