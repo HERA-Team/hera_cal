@@ -145,7 +145,7 @@ class Test_DelayFilter(object):
         assert d[(53, 54, 'ee')].shape[1] == 100
         assert d[(53, 54, 'ee')].shape[0] == 60
         # now do no spw range and no cal files just to cover those lines.
-        xf.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
                                                      cache_dir=cdir,
                                                      read_cache=True, write_cache=True,
                                                      res_outfilename=outfilename, clobber=True,
