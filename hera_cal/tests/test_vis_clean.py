@@ -18,6 +18,7 @@ from hera_cal import vis_clean
 from hera_cal.vis_clean import VisClean
 from hera_cal.data import DATA_PATH
 from hera_cal import xtalk_filter as xf
+import glob
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
@@ -511,7 +512,7 @@ class Test_VisClean(object):
 
     def test_reconstitute_files_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--fragmentlist', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
-        parser = xf.reconstitute_files_argparser()
+        parser =vis_clean.reconstitute_files_argparser()
         a = parser.parse_args()
         assert a.clobber
         for char in ['a', 'b', 'c', 'd']:
