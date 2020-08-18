@@ -49,14 +49,14 @@ class Test_XTalkFilter(object):
             np.testing.assert_array_equal(xfil.clean_model[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
             np.testing.assert_array_equal(xfil.clean_resid[k][:, 0], np.zeros_like(xfil.clean_resid[k][:, 0]))
 
-    def test_load_xtalk_filter_and_write_baseline_list(self):
+    def test_load_xtalk_filter_and_write_baseline_list(self, tmpdir):
+        tmp_path = tmpdir.strpath
         uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
         cals = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part1"),
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only.part2")]
-        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
-        cdir = os.getcwd()
-        cdir = os.path.join(cdir, 'cache_temp')
+        outfilename = os.path.join(tmp_path, 'temp.h5')
+        cdir = os.path.join(tmp_path, 'cache_temp')
         # make a cache directory
         if os.path.isdir(cdir):
             shutil.rmtree(cdir)
