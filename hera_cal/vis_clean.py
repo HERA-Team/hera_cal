@@ -892,22 +892,25 @@ class VisClean(object):
                 unflagged_chans = np.where(~np.all(self.flags[k], axis=0))[0]
                 unflagged_times = np.where(~np.all(self.flags[k], axis=1))[0]
                 ind_left = np.min(unflagged_chans)
-                ind_right = np.max(unflagged_chans)
+                ind_right = np.max(unflagged_chans) + 1
                 ind_lower = np.min(unflagged_times)
-                ind_upper = np.max(unflagged_times)
+                ind_upper = np.max(unflagged_times) + 1
+                # back up trimmed versions of
+                bls = list(self.data.keys())
+                # flags, data, and nsamples
+                data_bk = DataContainer({k: self.data[k][ind_lower: ind_upper][:, ind_left: ind_right] for k in self.data})
+                flags_bk = DataContainer({k: self.flags[k][ind_lower: ind_upper][:, ind_left: ind_right] for k in self.flags})
+                nsamples_bk = DataContainer({k: self.nsamples[k][ind_lower: ind_upper][:, ind_left: ind_right] for k in self.nsamples})
+                # clear datacontainers
                 self.clear_containers()
-                self.hd.select(frequencies=self.freqs[ind_left: ind_right + 1])
-                self.hd.select(times=self.times[ind_lower: ind_upper + 1])
-                data, flags, nsamples = self.hd.build_datacontainers()
-                self.data = data
-                self.flags = flags
-                self.nsamples = nsamples
+                # reread data over trimmed frequencies and times
+                self.read(times=self.times[ind_lower: ind_upper],
+                          frequencies=self.freqs[ind_left: ind_right], bls=bls)
+                # restore original data / flags/ nsamples
+                self.hd.update(data=data_bk, flags=flags_bk, nsamples=nsamples_bk)
+                self.data, self.flags, self.nsamples = self.hd.build_datacontainers()
+                # set trimmed to True
                 trimmed = True
-                self.freqs = self.freqs[ind_left: ind_right + 1]
-                self.times = self.times[ind_lower: ind_upper + 1]
-                self.lsts = self.lsts[ind_lower: ind_upper + 1]
-                self.Nfreqs = len(self.freqs)
-                self.Ntimes = len(self.times)
                 break
 
         if not trimmed:

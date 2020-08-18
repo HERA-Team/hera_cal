@@ -50,7 +50,8 @@ class Test_DelayFilter(object):
             np.testing.assert_array_equal(dfil.clean_model[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
             np.testing.assert_array_equal(dfil.clean_resid[k][0, :], np.zeros_like(dfil.clean_resid[k][0, :]))
 
-    def test_write_filtered_data(self):
+    def test_write_filtered_data(self, tmpdir):
+        tmp_path = tmpdir.strpath
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         dfil = df.DelayFilter(fname, filetype='miriad')
@@ -58,7 +59,7 @@ class Test_DelayFilter(object):
 
         data = dfil.data
         dfil.run_delay_filter(standoff=0., horizon=1., tol=1e-9, window='blackman-harris', skip_wgt=0.1, maxiter=100, edgecut_low=0, edgecut_hi=0)
-        outfilename = os.path.join(DATA_PATH, 'test_output/zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5')
+        outfilename = os.path.join(tmp_path, 'zen.2458043.12552.xx.HH.filter_test.ORAD.uvh5')
         with pytest.raises(ValueError):
             dfil.write_filtered_data()
         with pytest.raises(NotImplementedError):
@@ -87,9 +88,10 @@ class Test_DelayFilter(object):
             np.testing.assert_array_almost_equal(data[k][~flags[k]], (clean_model[k] + filtered_residuals[k])[~flags[k]], 5)
         os.remove(outfilename)
 
-    def test_load_delay_filter_and_write(self):
+    def test_load_delay_filter_and_write(self, tmpdir):
+        tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        outfilename = os.path.join(tmp_path, 'temp.h5')
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -102,7 +104,7 @@ class Test_DelayFilter(object):
 
         # test loading and writing all baselines at once.
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        outfilename = os.path.join(tmp_path, 'temp.h5')
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=None)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -114,13 +116,58 @@ class Test_DelayFilter(object):
         np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        outfilename = os.path.join(tmp_path, 'temp.h5')
         df.load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
         os.remove(outfilename)
+
+        # prepare an input file for broadcasting flags and trim_edges.
+        input_file = os.path.join(tmp_path, 'temp_special_flags.h5')
+        shutil.copy(uvh5, input_file)
+        hd = io.HERAData(input_file)
+        _, flags, _ = hd.read()
+        ntimes_before = hd.Ntimes
+        nfreqs_before = hd.Nfreqs
+        freqs_before = hd.freqs
+        times_before = hd.times
+        for bl in flags:
+            flags[bl][:] = False
+            flags[bl][0, :hd.Nfreqs // 2] = True  # first time has 50% flagged
+            flags[bl][-3:, -1] = True  # last channel has flags for three integrations
+        hd.update(flags=flags)
+        hd.write_uvh5(input_file, clobber=True)
+        # this time_threshold will result in
+        # entire first integration begin flagged
+        # and entire final channel being flagged
+        # when flags are broadcasted.
+        time_thresh = 2. / hd.Ntimes
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, trim_edges=True,
+                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+        hd = io.HERAData(outfilename)
+        assert hd.Ntimes == ntimes_before - 1
+        assert hd.Nfreqs == nfreqs_before - 1
+        assert np.all(np.isclose(hd.freqs, freqs_before[:-1]))
+        assert np.all(np.isclose(hd.times, times_before[1:]))
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for bl in f:
+            assert not np.any(f[bl])
+
+        # test delay filtering and writing with factorized flags and partial i/o
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for bl in f:
+            # check that flags were broadcasted.
+            assert np.all(f[bl][0, :])
+            assert np.all(f[bl][:, -1])
+
+        # now test partial i/o not implemented
+        pytest.raises(NotImplementedError, df.load_delay_filter_and_write, input_file,
+                      res_outfilename=outfilename, trim_edges=True, Nbls_per_load=1)
 
     def test_load_delay_filter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath
@@ -156,7 +203,8 @@ class Test_DelayFilter(object):
         assert d[(53, 54, 'ee')].shape[1] == 1024
         assert d[(53, 54, 'ee')].shape[0] == 60
 
-    def test_load_dayenu_filter_and_write(self):
+    def test_load_dayenu_filter_and_write(self, tmpdir):
+        tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         cdir = os.getcwd()
         cdir = os.path.join(cdir, 'cache_temp')
@@ -164,7 +212,7 @@ class Test_DelayFilter(object):
         if os.path.isdir(cdir):
             shutil.rmtree(cdir)
         os.mkdir(cdir)
-        outfilename = os.path.join(DATA_PATH, 'test_output/temp.h5')
+        outfilename = os.path.join(tmp_path, 'temp.h5')
         # run dayenu filter
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                        cache_dir=cdir, mode='dayenu',
