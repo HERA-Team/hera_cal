@@ -871,25 +871,31 @@ class VisClean(object):
         since a set number of times and frequencies are assumed in vis_clean objects, this only
         works for datasets where the flags are identical for all baselines.
 
+        This function clears all datacontainers that are not data, flags, and nsamples.
+
         """
         # first check that all flags are the same or completely flagged.
+        ntimes_before_trim = self.Ntimes
+        nfreqs_before_trim = self.Nfreqs
         template = None
+        trimmed = False
         for k in self.flags:
-            if not np.all(flags[k]):
+            if not np.all(self.flags[k]):
                 if template is None:
-                    template = flags[k]
+                    template = self.flags[k]
                 else:
-                    if not np.all(template == flags[k]):
+                    if not np.all(template == self.flags[k]):
                         raise ValueError("Flag Trimming only supported when flagging for all baselines is identical!")
 
         for k in self.flags:
-            if not np.all(flags[k]):
-                unflagged_chans = np.where(~np.all(flags[k], axis=0))[0]
-                unflagged_times = np.where(~np.all(flags[k], axis=1))[0]
-                ind_left = np.min(flagged_chans)
-                ind_right = np.max(flagged_chans)
-                ind_lower = np.min(flagged_times)
-                ind_upper = np.max(flagged_times)
+            if not np.all(self.flags[k]):
+                unflagged_chans = np.where(~np.all(self.flags[k], axis=0))[0]
+                unflagged_times = np.where(~np.all(self.flags[k], axis=1))[0]
+                ind_left = np.min(unflagged_chans)
+                ind_right = np.max(unflagged_chans)
+                ind_lower = np.min(unflagged_times)
+                ind_upper = np.max(unflagged_times)
+                self.clear_containers()
                 self.hd.select(frequencies=self.freqs[ind_left: ind_right + 1])
                 self.hd.select(times=self.times[ind_lower: ind_upper + 1])
                 data, flags, nsamples = self.hd.build_datacontainers()
