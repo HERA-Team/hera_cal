@@ -15,6 +15,8 @@ import random
 import glob
 import os
 import warnings
+from pyuvdata import UVCal
+from copy import deepcopy
 
 
 class DelayFilter(VisClean):
@@ -224,8 +226,8 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         cals = io.to_HERACal(cals)
     else:
         cals = None
-    df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
-    df.read(frequencies=freqs)
+    df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
+    df.read(bls=baseline_list, frequencies=freqs)
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh)
     if trim_edges:
