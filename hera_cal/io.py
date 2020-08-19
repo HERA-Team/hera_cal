@@ -657,7 +657,10 @@ class HERAData(UVData):
 
                 reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol,
                                        include_autos=True)
-            baseline_chunks = chunk_baselines_by_redundant_groups(bls=bls, reds=reds, max_chunk_size=Nbls)
+            # filter reds by baselines
+            reds = redcal.filter_reds(reds, bls=bls)
+            # make sure that every baseline is in reds
+            baseline_chunks = chunk_baselines_by_redundant_groups(reds=reds, max_chunk_size=Nbls)
         for chunk in baseline_chunks:
             yield self.read(bls=chunk)
 

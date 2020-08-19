@@ -481,7 +481,11 @@ class Test_HERAData(object):
             next(hd.iterate_over_bls())
 
         hd = HERAData(self.uvh5_1)
-        for (d, f, n) in hd.iterate_over_bls(chunk_by_redundant_group=True):
+        for (d, f, n) in hd.iterate_over_bls(chunk_by_redundant_group=True, Nbls=1):
+            # check that all baselines in chunk are redundant
+            # this will be the case when Nbls = 1
+            bl_lens = np.asarray([hd.antpos[bl[0]] - hd.antpos[bl[1]] for bl in d])
+            assert np.all(np.isclose(bl_lens - bl_lens[0], 0., atol=1.0))
             for dc in (d, f, n):
                 assert list(d.values())[0].shape == (60, 1024)
 

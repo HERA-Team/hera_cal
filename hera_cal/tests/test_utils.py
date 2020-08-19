@@ -16,6 +16,7 @@ from pyuvdata import UVData
 from pyuvdata import UVCal
 import pyuvdata.tests as uvtest
 from sklearn import gaussian_process as gp
+from ..redcal import filter_reds
 
 from hera_sim.noise import white_noise
 from .. import utils, abscal, datacontainer, io, redcal
@@ -688,15 +689,22 @@ def test_chunck_baselines_by_redundant_group():
             [(37, 39)],
             [(25, 52)],
             [(24, 53)]]
+    # add polarizations.
+    for grpnum in range(len(reds)):
+        for blnum in range(len(reds[grpnum])):
+            reds[grpnum][blnum] = reds[grpnum][blnum] + ('ee', )
+    # add polarizations.
+    for grpnum in range(len(reds_extended)):
+        for blnum in range(len(reds_extended[grpnum])):
+            reds_extended[grpnum][blnum] = reds_extended[grpnum][blnum] + ('ee', )
+
     chunked_by_four_expected = [reds[0], reds[1], reds[2], reds[3],
                                 reds[4] + reds[5], reds[6] + reds[7] + reds[8], reds[9]]
-    # unwravel redundant group.
+    # unravel redundant group.
     bls = []
     for grp in reds:
         for bl in grp:
             bls.append(bl)
-    chunked_by_four_output = utils.chunk_baselines_by_redundant_groups(bls, reds=reds_extended, max_chunk_size=4)
+    chunked_by_four_output = utils.chunk_baselines_by_redundant_groups(reds=filter_reds(reds_extended, bls=bls), max_chunk_size=4)
     for chunk1, chunk2 in zip(chunked_by_four_output, chunked_by_four_expected):
         assert chunk1 == chunk2
-    # test ValueError when baselines are provided not in redundancies.
-    pytest.raises(ValueError, utils.chunk_baselines_by_redundant_groups, bls=bls + [(245, 33)], reds=reds_extended, max_chunk_size=4)

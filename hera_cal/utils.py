@@ -1253,7 +1253,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
             # average flags should be where weights x flags x nsamples sum to zero.
-            wfsum = np.sum(n * w * f, axis=0).clip(1e-10, np.inf)
+            wfsum = np.sum(n * w * f, axis=0)
             favg = np.isclose(wfsum, 0.0)
 
             # replace with new data
@@ -1276,9 +1276,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     if fed_container:
         for bl in list(data.keys()):
             if bl not in bls:
-                del data[bl]
-                del flags[bl]
-                del nsamples[bl]
+                del data[bl], flags[bl], nsamples[bl]
     else:
         data.select(bls=bls)
 
@@ -1318,7 +1316,7 @@ def top2eq_m(ha, dec):
     return mat
 
 
-def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
+def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
     """Chunk list of baselines by redundant group constrained by number of baselines.
 
     This method calculates chunks of baselines to load simultaneously constrained by the conditions that
@@ -1327,16 +1325,8 @@ def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
     If a redundant group exceeds max_chunk_size it will be loaded in its entirety anyways
     and warning will be raised.
 
-    If is greater then the number of baselines in a redundant group
-    then return consecutive redundant groups with total baseline count
-    less then or equal to max_chunk_size.
-    If max_chunk_size is smaller then the number of baselines in a redundant group
-    then still return that group but raise a Warning.
-
     Parameters
     ----------
-    bls : list
-        list of antpairs or antpairpols of all baselines to chunk.
     reds : list
         list of lists with redundant groups of antpairpols
     max_chunk_size :
@@ -1350,38 +1340,24 @@ def chunk_baselines_by_redundant_groups(bls, reds, max_chunk_size):
         list of lists of antpairpols where each chunk containes entire redundant groups
         and (if possible) includes a number of baselines less then max_chunk_size.
     """
-    # trim reds to only include baselines in provided bls list (data).
-    reds_data = [[bl for bl in blg if bl in bls] for blg in reds]
-    reds_data = [blg for blg in reds_data if len(blg) > 0]
-    reds_data_flattened = []
-    # use a flattened reds_data to check whether there are any bls provided that
-    # are not accounted for in reds.
-    for grp in reds_data:
-        for bl in grp:
-            reds_data_flattened.append(bl)
-    # check that baselines provided fall into one of the redundant groups in reds
-    for bl in bls:
-        if bl not in reds_data_flattened:
-            raise ValueError("All baselines provided in bls must also be in reds!")
-    # now iterate through redundancies.
     baseline_chunks = []
-    # now iterate through redundant groups.
     group_index = 0
-    while group_index < len(reds_data):
+    # iterate through redundant groups
+    while group_index < len(reds):
         # if red group is larger then the chunk size.
         # then give a warning and treate the red group as a chunk anyways.
-        if len(reds_data[group_index]) > max_chunk_size:
+        if len(reds[group_index]) > max_chunk_size:
             warnings.warn("Warning: baseline group encountered with number"
                           " of baselines exceeding max_chunk_size. Loading group anyways.")
-            chunk = reds_data[group_index]
+            chunk = reds[group_index]
             group_index += 1
         else:
             # otherwise iterate forward, appending redundant groups to the chunk until
             # the size of the next redundant group cannot be fitted in the chunk with
             # already appended groups.
             chunk = []
-            while group_index < len(reds_data) and len(reds_data[group_index]) + len(chunk) <= max_chunk_size:
-                chunk += reds_data[group_index]
+            while group_index < len(reds) and len(reds[group_index]) + len(chunk) <= max_chunk_size:
+                chunk += reds[group_index]
                 group_index += 1
         # append the chunk once it has been determined.
         baseline_chunks.append(chunk)
