@@ -153,7 +153,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             if factorize_flags:
                 xf.factorize_flags(time_thresh=time_thresh)
             if trim_edges:
-                xf.trim_edges()
+                raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
