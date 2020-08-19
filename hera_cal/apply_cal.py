@@ -221,7 +221,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         redundant_weights : datacontainer, optional.
             Datacontainer containing weights to use in redundant averaging.
             only used if redundant_average is True.
-            Default is None.
+            Default is None. If None is passed, then nsamples are used as the redundant weights.
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
@@ -259,7 +259,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
         for attribute, value in kwargs.items():
             hd.__setattr__(attribute, value)
-        all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
+        if redundant_average or redundant_solution:
+            all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
         if redundant_average:
             # initialize a redunantly averaged HERAData on disk
             # first copy the original HERAData
@@ -269,17 +270,10 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # have baselines in the data. Each group is still labeled by the
             # first baseline of each group regardless if that baseline is in
             # the data file.
-            red_data_bls = []
-            for grpnum, grp in enumerate(all_red_antpairs):
-                nbls = 0
-                data_grp = []
-                for bl in grp:
-                    if bl in hd.antpairs or bl[:-1] in hd.antpairs:
-                        nbls += 1
-                        data_grp.append(bl)
-                if nbls > 0:
-                    # keep list of zeroth baselines of each group.
-                    red_data_bls.append(data_grp[0])
+            red_data_bls = redcal.filter_reds(all_reds, bls=hd.bls)
+            red_data_bls_flattened = []
+            for grp in red_data_bls:
+                red_data_bls_flattened.extend(grp)
             # couldn't get a system working where we just read in the outputs one at a time.
             # so unfortunately, we have to load one baseline per redundant group.
             hd_red.read(bls=red_data_bls)
