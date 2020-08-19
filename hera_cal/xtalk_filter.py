@@ -138,27 +138,27 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         xf.read(frequencies=freqs)
         if factorize_flags:
-            xf.factorize_flags(time_thresh=time_thresh)
+            xf.factorize_flags(time_thresh=time_thresh, inplace=True)
         if trim_edges:
             xf.trim_edges()
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
                                clobber=clobber, add_to_history=add_to_history,
-                               extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
+                               extra_attrs={'Nfreqs': xf.Nfreqs, 'freq_array': np.asarray([xf.freqs])})
     else:
         for i in range(0, hd.Nbls, Nbls_per_load):
             xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
             xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             if factorize_flags:
-                xf.factorize_flags(time_thresh=time_thresh)
+                xf.factorize_flags(time_thresh=time_thresh, inplace=True)
             if trim_edges:
                 raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history,
-                                   freq_array=np.asarray([freqs]), Nfreqs=len(freqs))
+                                   freq_array=np.asarray([xf.freqs]), Nfreqs=xf.Nfreqs)
             xf.hd.data_array = None  # this forces a reload in the next loop
 
 
@@ -234,7 +234,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history,
-                           extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
+                           extra_attrs={'Nfreqs': xf.Nfreqs, 'freq_array': np.asarray([xf.freqs])})
 
 # ------------------------------------------
 # Here are arg-parsers for xtalk-filtering.
