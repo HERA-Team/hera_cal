@@ -283,7 +283,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # couldn't get a system working where we just read in the outputs one at a time.
             # so unfortunately, we have to load one baseline per redundant group.
             hd_red.read(bls=red_data_bls)
-            hd_red.select(bls=red_data_bls)
 
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
