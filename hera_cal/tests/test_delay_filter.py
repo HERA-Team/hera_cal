@@ -202,6 +202,48 @@ class Test_DelayFilter(object):
         assert len(list(d.keys())) == 1
         assert d[(53, 54, 'ee')].shape[1] == 1024
         assert d[(53, 54, 'ee')].shape[0] == 60
+        # now test flag factorization and time thresholding.
+        # prepare an input files for broadcasting flags and trim_edges.
+        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+        input_file = os.path.join(tmp_path, 'temp_special_flags.h5')
+        shutil.copy(uvh5, input_file)
+        hd = io.HERAData(input_file)
+        _, flags, _ = hd.read()
+        ntimes_before = hd.Ntimes
+        nfreqs_before = hd.Nfreqs
+        freqs_before = hd.freqs
+        times_before = hd.times
+        for bl in flags:
+            flags[bl][:] = False
+            flags[bl][0, :hd.Nfreqs // 2] = True  # first time has 50% flagged
+            flags[bl][-3:, -1] = True  # last channel has flags for three integrations
+        hd.update(flags=flags)
+        hd.write_uvh5(input_file, clobber=True)
+        # this time_threshold will result in
+        # entire first integration begin flagged
+        # and entire final channel being flagged
+        # when flags are broadcasted.
+        time_thresh = 2. / hd.Ntimes
+        for blnum, bl in enumerate(flags.keys()):
+            outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
+            df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
+                                                         tol=1e-4, trim_edges=True, baseline_list=[bl],
+                                                         cache_dir=cdir,
+                                                         factorize_flags=True, time_thresh=time_thresh, clobber=True)
+        # now load all of the outputs in
+        output_files = glob.glob(tmp_path + '/bl_chunk_*.h5')
+        hd = io.HERAData(output_files)
+        d, f, n = hd.read()
+        hd_original = io.HERAData(uvh5)
+        for bl in hd_original.bls:
+            assert bl in d.keys()
+
+        assert hd.Ntimes == ntimes_before - 1
+        assert hd.Nfreqs == nfreqs_before - 1
+        assert np.all(np.isclose(hd.freq_array.squeeze(), freqs_before[:-1]))
+        assert np.all(np.isclose(np.unique(hd.time_array), times_before[1:]))
+        for bl in f:
+            assert not np.any(f[bl])
 
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath

@@ -229,14 +229,14 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
     df.read(bls=baseline_list, frequencies=freqs)
     if factorize_flags:
-        df.factorize_flags(time_thresh=time_thresh)
+        df.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:
         df.trim_edges()
     df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
     df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history,
-                           extra_attrs={'Nfreqs': len(freqs), 'freq_array': np.asarray([freqs])})
+                           extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': np.asarray([df.freqs])})
 
 
 # ----------------------------------------
