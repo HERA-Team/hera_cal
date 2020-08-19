@@ -1343,22 +1343,18 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
     baseline_chunks = []
     group_index = 0
     # iterate through redundant groups
-    while group_index < len(reds):
-        # if red group is larger then the chunk size.
-        # then give a warning and treate the red group as a chunk anyways.
-        if len(reds[group_index]) > max_chunk_size:
-            warnings.warn("Warning: baseline group encountered with number"
-                          " of baselines exceeding max_chunk_size. Loading group anyways.")
-            chunk = reds[group_index]
-            group_index += 1
+    for grp in reds:
+        if len(grp) > max_chunk_size:
+            # if red group is larger then the chunk size.
+            # then give a warning and treate the red group as a chunk anyways.
+            warnings.warn("Warning: baseline group of length %d encountered with number"
+                          " of baselines exceeding max_chunk_size=%d."
+                          " First baseline is %s"
+                          " Loading group anyways." % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0])))
+            baseline_chunks.append(grp)
         else:
-            # otherwise iterate forward, appending redundant groups to the chunk until
-            # the size of the next redundant group cannot be fitted in the chunk with
-            # already appended groups.
-            chunk = []
-            while group_index < len(reds) and len(reds[group_index]) + len(chunk) <= max_chunk_size:
-                chunk += reds[group_index]
-                group_index += 1
-        # append the chunk once it has been determined.
-        baseline_chunks.append(chunk)
+            if len(baseline_chunks[-1]) + len(grp) <= max_chunk_size:
+                baseline_chunks[-1].extend(grp)
+            else:
+                baseline_chunks.append(grp)
     return baseline_chunks
