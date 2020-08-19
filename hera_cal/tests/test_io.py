@@ -474,6 +474,15 @@ class Test_HERAData(object):
                 assert len(d.keys()) == 1
                 assert list(d.values())[0].shape == (120, 1024)
 
+        # try cover include_autos = False.
+        hd = HERAData([self.uvh5_1, self.uvh5_2])
+        for (d, f, n) in hd.iterate_over_bls(include_autos=False):
+            for dc in (d, f, n):
+                assert len(d.keys()) == 1
+                bl = list(d.keys())[0]
+                assert bl[0] != bl[1] # make sure not autos present.
+                assert list(d.values())[0].shape == (120, 1024)
+
         hd = HERAData(self.miriad_1, filetype='miriad')
         d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')]))
         assert list(d.keys()) == [(52, 53, parse_polstr('XX', x_orientation=hd.x_orientation))]

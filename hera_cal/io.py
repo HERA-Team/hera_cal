@@ -593,7 +593,7 @@ class HERAData(UVData):
                                   this.nsample_array, **self.last_read_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
-                         bl_error_tol=1.0):
+                         bl_error_tol=1.0, include_autos=True):
         '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by baseline or group of baselines.
 
@@ -616,6 +616,10 @@ class HERAData(UVData):
                     the largest allowable difference between baselines in a redundant group in meters.
                     (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
                     default is 1.0meters
+            include_autos: bool, optional
+                include autocorrelations in iteration if True.
+                Default is True.
+
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
         '''
@@ -628,6 +632,9 @@ class HERAData(UVData):
                 bls = list(set([bl for bls in bls.values() for bl in bls]))
             bls = sorted(bls)
         if not chunk_by_redundant_group:
+            if not include_autos:
+                # filter out autos if include_autos is False.
+                bls = [bl for bl in bls if bl[0] != bl[1]]
             baseline_chunks = [bls[i:i + Nbls] for i in range(0, len(bls), Nbls)]
         else:
             if reds is None:
@@ -656,7 +663,7 @@ class HERAData(UVData):
                                 pols.append(pol)
 
                 reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol,
-                                       include_autos=True)
+                                       include_autos=include_autos)
             # filter reds by baselines
             reds = redcal.filter_reds(reds, bls=bls)
             # make sure that every baseline is in reds
