@@ -234,6 +234,13 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     # load new calibration solution
     hc = io.HERACal(new_calibration)
     new_gains, new_flags, _, _ = hc.read()
+    if a_priori_flags_yaml is not None:
+        from hera_qm.utils import apply_yaml_flags
+        # flag hc
+        hc = qm_utils.apply_yaml_flags(hc, a_priori_flags_yaml,
+                                       ant_indices_only=True)
+        # and rebuild data containers.
+        new_gains, new_flags, _, _ = hc.build_datacontainers()
     add_to_history += '\nNEW_CALFITS_HISTORY: ' + hc.history + '\n'
 
     # load old calibration solution
@@ -244,23 +251,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     else:
         old_gains, old_flags = None, None
     hd = io.HERAData(data_infilename, filetype=filetype_in)
-    if a_priori_flags_yaml is not None:
-        from hera_qm.metrics_io import read_a_priori_int_flags, read_a_priori_ant_flags, read_a_priori_chan_flags
-        flag_ints = list(set({}).union(set(read_a_priori_int_flags(a_priori_flags_yaml, times=hd.times, lsts=hd.lsts * 12 / np.pi))))
-        flag_chans = list(set({}).union(set(read_a_priori_chan_flags(a_priori_flags_yaml, freqs=hd.freqs))))
-        ex_ants = list(set({}).union(set(read_a_priori_ant_flags(a_priori_flags_yaml, ant_indices_only=True))))
-    else:
-        ex_ants = None
-        flag_ints = []
-        flag_chans = []
-
-    # apply apriori integration, antenna, and frequency flags.
-    for ant in new_flags:
-        if ant[0] in ex_ants:
-            new_flags[ant] = True
-        new_flags[ant][flag_ints] = True
-        new_flags[ant][:, flag_chans] = True
-
     add_to_history = version.history_string(add_to_history)
     no_red_weights = redundant_weights is None
     # partial loading and writing using uvh5

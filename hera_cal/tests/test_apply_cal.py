@@ -240,7 +240,7 @@ class Test_Update_Cal(object):
         shutil.rmtree(outname_miriad)
 
         # test flagging yaml
-        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample_53_flagged.yaml')
         ac.apply_cal(uvh5, outname_uvh5, new_cal, old_calibration=calout, gain_convention='divide',
                      flags_npz=flags_npz,
                      filetype_in='uvh5', filetype_out='uvh5', clobber=True, vis_units='Jy', a_priori_flags_yaml=flag_yaml)
