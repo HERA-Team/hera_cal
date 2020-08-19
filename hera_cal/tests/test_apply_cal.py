@@ -256,7 +256,6 @@ class Test_Update_Cal(object):
             assert np.all(new_flags[bl][flagged_ints])
             assert np.all(new_flags[bl][:, flagged_chans])
 
-
     def test_apply_cal_redundant_averaging(self, tmpdir):
         tmp_path = tmpdir.strpath
         # test redundant averaging functionality in apply_cal

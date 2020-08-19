@@ -480,7 +480,8 @@ class Test_HERAData(object):
             for dc in (d, f, n):
                 assert len(d.keys()) == 1
                 bl = list(d.keys())[0]
-                assert bl[0] != bl[1] # make sure not autos present.
+                # make sure no autos present.
+                assert bl[0] != bl[1]
                 assert list(d.values())[0].shape == (120, 1024)
 
         hd = HERAData(self.miriad_1, filetype='miriad')
