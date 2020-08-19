@@ -180,7 +180,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
-              flag_filetype='h5', a_priori_ex_ants_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
+              flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
@@ -196,10 +196,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
         flag_filetype: filetype of flag_file to pass into io.load_flags. Either 'h5' (default) or legacy 'npz'.
-        a_priori_ex_ants_yaml : path to YAML with antenna flagging information parsable by
-            hera_qm.metrics_io.read_a_priori_ant_flags(). Frequency and time flags in the YAML
-            are ignored. Flags are combined with ant_metrics's xants and ex_ants. If any
+        a_priori_flags_yaml : path to YAML with antenna frequency and time flags in the YAML.
+            Flags are combined with ant_metrics's xants and ex_ants. If any
             polarization is flagged for an antenna, all polarizations are flagged.
+            see hera_qm.metrics_io.read_a_priori_chan_flags (for freq flag format),
+            hera_qm.metrics_io.read_a_priori_int_flags (for time flag format),
+            hera_qm.metrics_io.read_a_priori_ant_flags (for antenna flag format).
         flag_nchan_low: integer number of channels at the low frequency end of the band to always flag (default 0)
         flag_nchan_high: integer number of channels at the high frequency end of the band to always flag (default 0)
         filetype_in: type of data infile. Supports 'miriad', 'uvfits', and 'uvh5'.
@@ -223,11 +225,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
-    if a_priori_ex_ants_yaml is not None:
-        from hera_qm.metrics_io import read_a_priori_ant_flags
-        ex_ants = ex_ants.union(set(read_a_priori_ant_flags(a_priori_ex_ants_yaml, ant_indices_only=True)))
-    else:
-        ex_ants = None
     # UPDATE CAL FLAGS WITH EX_ANTS INSTEAD OF FILTERING BASELINES.
     # optionally load external flags
     if flag_file is not None:
@@ -247,6 +244,21 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     else:
         old_gains, old_flags = None, None
     hd = io.HERAData(data_infilename, filetype=filetype_in)
+    if a_priori_flags_yaml is not None:
+        from hera_qm.metrics_io import read_a_priori_int_flags, read_a_priori_ant_flags, read_a_priori_chan_flags
+        flag_ints = list(set({}).union(set(read_a_priori_int_flags(a_priori_flags_yaml, times=hd.times, lsts=hd.lsts * 12 / np.pi))))
+        flag_chans = list(set({}).union(set(read_a_priori_chan_flags(a_priori_flags_yaml, freqs=hd.freqs))))
+        ex_ants = list(set({}).union(set(read_a_priori_ant_flags(a_priori_flags_yaml, ant_indices_only=True))))
+    else:
+        ex_ants = None
+        flag_ints = []
+        flag_chans = []
+
+    # apply apriori integration and frequency flags.
+    for ant in  new_flags:
+        new_flags[ant][flag_ints] = True
+        new_flags[ant][:, flag_chans] = True
+
     add_to_history = version.history_string(add_to_history)
     no_red_weights = redundant_weights is None
     # partial loading and writing using uvh5

@@ -20,6 +20,7 @@ from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 from .. import utils
 from .. import redcal
+from hera_qm import metrics_io
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -237,6 +238,24 @@ class Test_Update_Cal(object):
         with pytest.raises(NotImplementedError):
             ac.apply_cal(miriad, outname_uvh5, new_cal, filetype_in='miriad', nbl_per_load=1)
         shutil.rmtree(outname_miriad)
+
+        # test flagging yaml
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        ac.apply_cal(uvh5, outname_uvh5, new_cal, old_calibration=calout, gain_convention='divide',
+                     flags_npz=flags_npz,
+                     filetype_in='uvh5', filetype_out='uvh5', clobber=True, vis_units='Jy', a_priori_flags_yaml=flag_yaml)
+        hd = io.HERAData(outname_uvh5)
+        new_data, new_flags, _ = hd.read()
+        # check that all antennas, integrations, and frequencies from this yaml are flagged.
+        flagged_ints = metrics_io.read_a_priori_int_flags(flag_yaml, times=hd.times, lsts=hd.lsts * 12 / np.pi)
+        flagged_chans = metrics_io.read_a_priori_chan_flags(flag_yaml, freqs=hd.freqs)
+        flagged_ants = metrics_io.read_a_priori_ant_flags(flag_yaml, ant_indices_only=True)
+        for bl in new_flags:
+            if bl[0] in flagged_ants or bl[1] in flagged_ants:
+                assert np.all(new_flags[bl])
+            assert np.all(new_flags[bl][flagged_ints])
+            assert np.all(new_flags[bl][:, flagged_chans])
+
 
     def test_apply_cal_redundant_averaging(self, tmpdir):
         tmp_path = tmpdir.strpath
