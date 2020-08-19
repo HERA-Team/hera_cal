@@ -237,10 +237,10 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     if a_priori_flags_yaml is not None:
         from hera_qm.utils import apply_yaml_flags
         # flag hc
-        hc = qm_utils.apply_yaml_flags(hc, a_priori_flags_yaml,
-                                       ant_indices_only=True)
+        hc = apply_yaml_flags(hc, a_priori_flags_yaml,
+                              ant_indices_only=True)
         # and rebuild data containers.
-        new_gains, new_flags, _, _ = hc.build_datacontainers()
+        new_gains, new_flags, _, _ = hc.build_calcontainers()
     add_to_history += '\nNEW_CALFITS_HISTORY: ' + hc.history + '\n'
 
     # load old calibration solution
@@ -261,6 +261,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd.__setattr__(attribute, value)
         if redundant_average or redundant_solution:
             all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
+        else:
+            all_reds = []
         if redundant_average:
             # initialize a redunantly averaged HERAData on disk
             # first copy the original HERAData
@@ -270,13 +272,13 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # have baselines in the data. Each group is still labeled by the
             # first baseline of each group regardless if that baseline is in
             # the data file.
-            red_data_bls = redcal.filter_reds(all_reds, bls=hd.bls)
-            red_data_bls_flattened = []
-            for grp in red_data_bls:
-                red_data_bls_flattened.extend(grp)
+            reds_data = redcal.filter_reds(all_reds, bls=hd.bls)
+            reds_data_bls = []
+            for grp in reds_data:
+                reds_data_bls.append(grp[0])
             # couldn't get a system working where we just read in the outputs one at a time.
             # so unfortunately, we have to load one baseline per redundant group.
-            hd_red.read(bls=red_data_bls)
+            hd_red.read(bls=reds_data_bls)
 
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
