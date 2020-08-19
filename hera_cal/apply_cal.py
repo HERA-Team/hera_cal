@@ -254,8 +254,10 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         flag_ints = []
         flag_chans = []
 
-    # apply apriori integration and frequency flags.
-    for ant in  new_flags:
+    # apply apriori integration, antenna, and frequency flags.
+    for ant in new_flags:
+        if ant[0] in ex_ants:
+            new_flags[ant] = True
         new_flags[ant][flag_ints] = True
         new_flags[ant][:, flag_chans] = True
 
