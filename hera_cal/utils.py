@@ -1133,9 +1133,9 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     return relative_diff, avg_relative_diff
 
 
-def red_average_flexible(data, reds=None, bl_tol=1.0, inplace=False,
-                         wgts=None, flags=None, nsamples=None,
-                         user_weights_determine_avg_flags=True):
+def red_average(data, reds=None, bl_tol=1.0, inplace=False,
+                wgts=None, flags=None, nsamples=None,
+                user_weights_determine_avg_flags=True):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
     Average is weighted by integration_time * nsamples * ~flags unless wgts are fed.
@@ -1258,9 +1258,9 @@ def red_average_flexible(data, reds=None, bl_tol=1.0, inplace=False,
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
             # average flags should be where weights x flags x nsamples sum to zero.
-            if user_weights_determine_flags_and_nsamples:
+            if user_weights_determine_avg_flags:
                 wfsum = np.sum(w, axis=0)
-                navg = np.sum(n * ~np.isclose(w, 0.0))
+                navg = np.sum(n * ~np.isclose(w, 0.0), axis=0)
             else:
                 wfsum = np.sum(n * ~np.isclose(w, 0.0) * f, axis=0)
                 navg = wfsum

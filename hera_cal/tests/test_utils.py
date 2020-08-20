@@ -574,6 +574,19 @@ def test_red_average():
     davg = np.sum(d * w, axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf)
     assert np.isclose(hda.get_data(blkey), davg).all()
 
+    # try where all weights are unity but user provided flags are preserved.
+    user_weights = {}
+    for bl in flags:
+        user_weights[bl] = np.ones_like(flags[bl], dtype=float)
+        if np.all(flags[bl]):
+            user_weights[bl][:] = 0.
+
+    hda = utils.red_average(hd, reds, inplace=False, user_weights_determine_avg_flags=True)
+    w = np.asarray([user_weights[(bl + ('ee',))] for bl in reds[0]])
+    f = np.asarray([(~hd.get_flags(bl + ('ee',))).astype(float) * user_weights[(bl + ('ee',))] for bl in reds[0]])
+    favg = np.isclose(np.sum(f, axis=0), 0.0)
+    assert np.isclose(hda.get_flags(blkey), favg).all()
+
     # try with DataContainer
     data_avg, flag_avg, _ = utils.red_average(data, reds, flags=flags, inplace=False)
     assert isinstance(data_avg, datacontainer.DataContainer)
