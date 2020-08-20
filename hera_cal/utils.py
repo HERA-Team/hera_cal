@@ -1133,8 +1133,9 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
     return relative_diff, avg_relative_diff
 
 
-def red_average(data, reds=None, bl_tol=1.0, inplace=False,
-                wgts=None, flags=None, nsamples=None):
+def red_average_flexible(data, reds=None, bl_tol=1.0, inplace=False,
+                         wgts=None, flags=None, nsamples=None,
+                         user_weights_determine_avg_flags=True):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
     Average is weighted by integration_time * nsamples * ~flags unless wgts are fed.
@@ -1159,7 +1160,12 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
         nsamples : DataContainer
             If data is a DataContainer, these are its nsamples. Default (None) is 1.0 for all pixels.
             Furthermore, if data is a DataContainer, integration_time is 1.0 for all pixels.
-
+        user_weights_determine_avg_flags : bool, optional
+            If this argument is True, the the flags of the redundantly averaged data
+            are where the sum of weights over baselines in a redundant group are close to zero.
+            If this argument is False, the flags of the redundantly averaged data
+            are where the sum of weights times flags times nsamples over baselines in a redundant group
+            are close to zero.
     Returns:
         if fed a DataContainer:
             DataContainer, averaged data
@@ -1249,11 +1255,15 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             # take the weighted average
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
-            navg = np.sum(n * f, axis=0)         # this is the new total nsample (without flagged elements)
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
             # average flags should be where weights x flags x nsamples sum to zero.
-            wfsum = np.sum(n * w * f, axis=0)
+            if user_weights_determine_flags_and_nsamples:
+                wfsum = np.sum(w, axis=0)
+                navg = np.sum(n * ~np.isclose(w, 0.0))
+            else:
+                wfsum = np.sum(n * ~np.isclose(w, 0.0) * f, axis=0)
+                navg = wfsum
             favg = np.isclose(wfsum, 0.0)
 
             # replace with new data
