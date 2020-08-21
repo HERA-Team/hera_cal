@@ -1266,8 +1266,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
-            binary_wgts = (~np.isclose(w, 0)).astype(np.float)  # binary weights where wgts == 0navg = np.sum(n * binary_wgts, axis=0) / np.sum(binary_wgts, axis=0).clip(1e-10, np.inf)
-            # average flags should be where weights x flags x nsamples sum to zero.
+            binary_wgts = (~np.isclose(w, 0)).astype(np.float)  # binary weights.
             if propagate_flags:
                 wfsum = np.sum(n * binary_wgts * f, axis=0)
                 navg = wfsum
