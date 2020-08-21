@@ -1166,6 +1166,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             If this argument is False, the flags of the redundantly averaged data
             are where the sum of weights times flags times nsamples over baselines in a redundant group
             are close to zero.
+            Default is True.
     Returns:
         if fed a DataContainer:
             DataContainer, averaged data
@@ -1177,7 +1178,18 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     Notes:
         1. Different polarizations are assumed to be non-redundant.
         2. Default weighting is nsamples * integration_time * ~flags.
-        3. If wgts Container is fed then they supercede flag and nsample weighting.
+        3. If wgts Container is fed then the behavior of flags and nsamples in the redundantly averaged sum will depend on wheter
+            user_weights_determine_avg_flags is True or False.
+            If True (DEFAULT BEHAVIOR):
+                the final flags are True in the channels/integrations of each redundantly averaged baseline
+                where the the sum of the weights is close to zero and False elsewhere.
+                the final nsamples are equal to the sum of nsamples over each redundant group where the weights are not
+                close to zero.
+            If False
+                the final flags are True in the channels / integrations of each redundantly averaged baseline
+                where the sum of the weights times the logical inverse of the flags times the logical inverse of nsamples
+                is close to zero. the final nsamples are equal to the sum of nsamples over each redundant group where the weights
+                times the logical inverse of the flags are not close to zero.
     """
     from hera_cal import redcal, datacontainer
 
