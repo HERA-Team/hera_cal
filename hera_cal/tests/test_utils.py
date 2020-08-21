@@ -581,7 +581,7 @@ def test_red_average():
         if np.all(flags[bl]):
             user_weights[bl][:] = 0.
 
-    hda = utils.red_average(hd, reds, inplace=False, user_weights_determine_avg_flags=True)
+    hda = utils.red_average(hd, reds, inplace=False, propagate_flags=True)
     w = np.asarray([user_weights[(bl + ('ee',))] for bl in reds[0]])
     f = np.asarray([(~hd.get_flags(bl + ('ee',))).astype(float) * user_weights[(bl + ('ee',))] for bl in reds[0]])
     favg = np.isclose(np.sum(f, axis=0), 0.0)

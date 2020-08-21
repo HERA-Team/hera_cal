@@ -309,7 +309,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
                                   reds=all_red_antpairs, wgts=redundant_weights, inplace=True,
-                                  user_weights_determine_avg_flags=False)
+                                  propagate_flags=True)
                 # update redundant data. Don't partial write.
                 hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
             else:
@@ -350,7 +350,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                         redundant_weights[bl][:] = 0.
 
             utils.red_average(hd, reds=all_red_antpairs, inplace=True, wgts=redundant_weights,
-                              user_weights_determine_avg_flags=False)
+                              propagate_flags=True)
             if filetype_out == 'uvh5':
                 # overwrite original outfile with
                 hd.write_uvh5(data_outfilename, clobber=clobber)

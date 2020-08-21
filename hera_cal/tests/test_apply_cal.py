@@ -291,7 +291,7 @@ class Test_Update_Cal(object):
         for bl in wgts:
             if np.all(f[bl]):
                 wgts[bl][:] = 0.
-        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts, user_weights_determine_avg_flags=False)
+        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts, propagate_flags=True)
 
         ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
                      gain_convention='divide', redundant_average=True)

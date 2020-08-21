@@ -1135,7 +1135,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
 
 def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 wgts=None, flags=None, nsamples=None,
-                user_weights_determine_avg_flags=True):
+                propagate_flags=False):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
     Average is weighted by integration_time * nsamples * ~flags unless wgts are fed.
@@ -1160,13 +1160,10 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
         nsamples : DataContainer
             If data is a DataContainer, these are its nsamples. Default (None) is 1.0 for all pixels.
             Furthermore, if data is a DataContainer, integration_time is 1.0 for all pixels.
-        user_weights_determine_avg_flags : bool, optional
-            If this argument is True, the the flags of the redundantly averaged data
-            are where the sum of weights over baselines in a redundant group are close to zero.
-            If this argument is False, the flags of the redundantly averaged data
-            are where the sum of weights times flags times nsamples over baselines in a redundant group
-            are close to zero.
-            Default is True.
+        propagate_flags : bool, optional
+            If True, propagate input flags to the average flag, even if wgts are provided.
+            Note, if wgts are provided, the input flags are NOT used for weighting, but
+            are propagated to the output flags. Default = False.
     Returns:
         if fed a DataContainer:
             DataContainer, averaged data
@@ -1178,14 +1175,14 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     Notes:
         1. Different polarizations are assumed to be non-redundant.
         2. Default weighting is nsamples * integration_time * ~flags.
-        3. If wgts Container is fed then the behavior of flags and nsamples in the redundantly averaged sum will depend on wheter
-            user_weights_determine_avg_flags is True or False.
-            If True (DEFAULT BEHAVIOR):
+        3. If wgts Container is fed then the behavior of flags and nsamples in the redundantly averaged sum will depend on whether
+            propagate_flags is True or False.
+            If False (DEFAULT BEHAVIOR):
                 the final flags are True in the channels/integrations of each redundantly averaged baseline
                 where the the sum of the weights is close to zero and False elsewhere.
                 the final nsamples are equal to the sum of nsamples over each redundant group where the weights are not
                 close to zero.
-            If False
+            If True
                 the final flags are True in the channels / integrations of each redundantly averaged baseline
                 where the sum of the weights times the logical inverse of the flags times the logical inverse of nsamples
                 is close to zero. the final nsamples are equal to the sum of nsamples over each redundant group where the weights
@@ -1269,13 +1266,15 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
+            binary_wgts = (~np.isclose(w, 0)).astype(np.float)  # binary weights where wgts == 0navg = np.sum(n * binary_wgts, axis=0) / np.sum(binary_wgts, axis=0).clip(1e-10, np.inf)
             # average flags should be where weights x flags x nsamples sum to zero.
-            if user_weights_determine_avg_flags:
-                wfsum = np.sum(w, axis=0)
-                navg = np.sum(n * ~np.isclose(w, 0.0), axis=0)
-            else:
-                wfsum = np.sum(n * ~np.isclose(w, 0.0) * f, axis=0)
+            if propagate_flags:
+                wfsum = np.sum(n * binary_wgts * f, axis=0)
                 navg = wfsum
+            else:
+                wfsum = np.sum(w, axis=0)
+                navg = np.sum(n * binary_wgts, axis=0)
+
             favg = np.isclose(wfsum, 0.0)
 
             # replace with new data
