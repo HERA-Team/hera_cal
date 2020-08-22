@@ -1260,7 +1260,10 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = np.asarray([data.integration_time[data.antpair2ind(bl + (pol,))] for bl in blg])[:, :, None]
                 w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
-
+            if propagate_flags:
+                # if propagate flags is True, then set all of w to zero on fully flagged baselines
+                # even if the weights were provided by the user.
+                w[np.asarray([np.all(np.isclose(fslice, 0.0)) for fslice in f])][:] = 0.0
             # take the weighted average
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
