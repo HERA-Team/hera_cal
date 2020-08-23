@@ -1131,7 +1131,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
         avg_relative_diff[pol][~np.isfinite(avg_relative_diff[pol])] = 0.0  # if completely flagged
 
     return relative_diff, avg_relative_diff
-    
+
 
 def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 wgts=None, flags=None, nsamples=None,
@@ -1255,13 +1255,11 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
             binary_wgts = (~np.isclose(w, 0)).astype(np.float)  # binary weights.
             if propagate_flags:
-                wfsum = np.sum(n * binary_wgts * f, axis=0)
-                navg = np.sum(n * binary_wgts)
+                fsum = np.sum(n * binary_wgts * f, axis=0)
             else:
-                wfsum = np.sum(w, axis=0)
-                navg = np.sum(n * binary_wgts, axis=0)
-
-            favg = np.isclose(wfsum, 0.0)
+                fsum = np.sum(w, axis=0)
+            navg = np.sum(n * binary_wgts, axis=0)
+            favg = np.isclose(fsum, 0.0)
 
             # replace with new data
             if fed_container:
