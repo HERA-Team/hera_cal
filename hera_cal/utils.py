@@ -1131,7 +1131,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
         avg_relative_diff[pol][~np.isfinite(avg_relative_diff[pol])] = 0.0  # if completely flagged
 
     return relative_diff, avg_relative_diff
-
+    
 
 def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 wgts=None, flags=None, nsamples=None,
@@ -1153,8 +1153,8 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             Perform average and downselect inplace, otherwise returns a deepcopy.
             The first baseline in each reds sublist is kept.
         wgts : DataContainer
-            Manual weights to use in redundant average. This supercedes flags and nsamples
-            If provided, and will also be used if input data is a UVData or a subclass of it.
+            Manual weights to use in redundant average. This supercedes flags and nsamples as weights
+            if provided, and will also be used if input data is a UVData or a subclass of it.
         flags : DataContainer
             If data is a DataContainer, these are its flags. Default (None) is no flags.
         nsamples : DataContainer
@@ -1175,18 +1175,6 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     Notes:
         1. Different polarizations are assumed to be non-redundant.
         2. Default weighting is nsamples * integration_time * ~flags.
-        3. If wgts Container is fed then the behavior of flags and nsamples in the redundantly averaged sum will depend on whether
-            propagate_flags is True or False.
-            If False (DEFAULT BEHAVIOR):
-                the final flags are True in the channels/integrations of each redundantly averaged baseline
-                where the the sum of the weights is close to zero and False elsewhere.
-                the final nsamples are equal to the sum of nsamples over each redundant group where the weights are not
-                close to zero.
-            If True
-                the final flags are True in the channels / integrations of each redundantly averaged baseline
-                where the sum of the weights times the logical inverse of the flags times the logical inverse of nsamples
-                is close to zero. the final nsamples are equal to the sum of nsamples over each redundant group where the weights
-                times the logical inverse of the flags are not close to zero.
     """
     from hera_cal import redcal, datacontainer
 
@@ -1260,10 +1248,6 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = np.asarray([data.integration_time[data.antpair2ind(bl + (pol,))] for bl in blg])[:, :, None]
                 w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
-            if propagate_flags:
-                # if propagate flags is True, then set all of w to zero on fully flagged baselines
-                # even if the weights were provided by the user.
-                w[np.asarray([np.all(np.isclose(fslice, 0.0)) for fslice in f])][:] = 0.0
             # take the weighted average
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
@@ -1272,7 +1256,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             binary_wgts = (~np.isclose(w, 0)).astype(np.float)  # binary weights.
             if propagate_flags:
                 wfsum = np.sum(n * binary_wgts * f, axis=0)
-                navg = wfsum
+                navg = np.sum(n * binary_wgts)
             else:
                 wfsum = np.sum(w, axis=0)
                 navg = np.sum(n * binary_wgts, axis=0)
