@@ -1254,13 +1254,12 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
             binary_wgts = (~np.isclose(w, 0)).astype(np.float)  # binary weights.
-            if propagate_flags:
-                fsum = np.sum(n * binary_wgts * f, axis=0)
-            else:
-                fsum = np.sum(w, axis=0)
             navg = np.sum(n * binary_wgts, axis=0)
-            favg = np.isclose(fsum, 0.0)
-
+            if propagate_flags:
+                favg = np.all(np.isclose(w * f, 0), axis=0)
+            else:
+                favg = np.all(np.isclose(w, 0), axis=0)
+                
             # replace with new data
             if fed_container:
                 blkey = blg[0] + (pol,)
