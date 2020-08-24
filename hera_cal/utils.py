@@ -1157,9 +1157,11 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             if provided, and will also be used if input data is a UVData or a subclass of it.
         flags : DataContainer
             If data is a DataContainer, these are its flags. Default (None) is no flags.
+            If data is a UVData, then data.flag_array is used regardless of flags input.
         nsamples : DataContainer
             If data is a DataContainer, these are its nsamples. Default (None) is 1.0 for all pixels.
             Furthermore, if data is a DataContainer, integration_time is 1.0 for all pixels.
+            If data is a UVData, then data.nsample_array is used regardless of nsamples input.
         propagate_flags : bool, optional
             If True, propagate input flags to the average flag, even if wgts are provided.
             Note, if wgts are provided, the input flags are NOT used for weighting, but
