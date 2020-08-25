@@ -18,6 +18,7 @@ import pickle
 import random
 import glob
 from pyuvdata.utils import POL_STR2NUM_DICT
+from . import redcal
 
 try:
     import aipy
@@ -26,7 +27,7 @@ except ImportError:
     AIPY = False
 
 from .datacontainer import DataContainer
-from .utils import polnum2str, polstr2num, jnum2str, jstr2num
+from .utils import polnum2str, polstr2num, jnum2str, jstr2num, filter_bls, chunk_baselines_by_redundant_groups
 from .utils import split_pol, conj_pol, LST2JD, HERA_TELESCOPE_LOCATION
 
 
@@ -591,7 +592,8 @@ class HERAData(UVData):
         hd_writer.write_uvh5_part(output_path, this.data_array, this.flag_array,
                                   this.nsample_array, **self.last_read_kwargs)
 
-    def iterate_over_bls(self, Nbls=1, bls=None):
+    def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
+                         bl_error_tol=1.0, include_autos=True):
         '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by baseline or group of baselines.
 
@@ -599,6 +601,24 @@ class HERAData(UVData):
             Nbls: number of baselines to load at once.
             bls: optional user-provided list of baselines to iterate over.
                 Default: use self.bls (which only works for uvh5).
+            chunk_by_redundant_group: bool, optional
+                If true, retrieve bls sorted by redundant groups.
+                If Nbls is greater then the number of baselines in a redundant group
+                then return consecutive redundant groups with total baseline count
+                less then or equal to Nbls.
+                If Nbls is smaller then the number of baselines in a redundant group
+                then still return that group but raise a Warning.
+                Default is False
+            reds: list, optional
+                list of lists; each containing the antpairpols in each redundant group
+                must be provided if chunk_by_redundant_group is True.
+            bl_error_tol: float, optional
+                    the largest allowable difference between baselines in a redundant group in meters.
+                    (in the same units as antpos). Normally, this is up to 4x the largest antenna position error.
+                    default is 1.0meters
+            include_autos: bool, optional
+                include autocorrelations in iteration if True.
+                Default is True.
 
         Yields:
             data, flags, nsamples: DataContainers (see HERAData.read() for more info).
@@ -611,8 +631,41 @@ class HERAData(UVData):
             if isinstance(bls, dict):  # multiple files
                 bls = list(set([bl for bls in bls.values() for bl in bls]))
             bls = sorted(bls)
-        for i in range(0, len(bls), Nbls):
-            yield self.read(bls=bls[i:i + Nbls])
+        if not chunk_by_redundant_group:
+            if not include_autos:
+                # filter out autos if include_autos is False.
+                bls = [bl for bl in bls if bl[0] != bl[1]]
+            baseline_chunks = [bls[i:i + Nbls] for i in range(0, len(bls), Nbls)]
+        else:
+            if reds is None:
+                if self.filetype != 'uvh5':
+                    raise NotImplementedError('Redundant group iteration without explicitly setting antpos for filetype ' + self.filetype
+                                              + ' without setting antpos has not been implemented.')
+
+                # generate antpos dict to feed into get_reds
+                # that accounts for possibility that
+                # HERAData was initialized from multiple
+                # files in which case self.antpos is a dict of dicts.
+                if len(self.filepaths) > 1:
+                    antpos = {}
+                    for k in self.antpos:
+                        antpos.update(self.antpos[k])
+                    pols = set({})
+                    for k in self.pols:
+                        pols.union(set(self.pols[k]))
+                    pols = list(pols)
+                else:
+                    antpos = self.antpos
+                    pols = self.pols
+
+                reds = redcal.get_reds(antpos, pols=pols, bl_error_tol=bl_error_tol,
+                                       include_autos=include_autos)
+            # filter reds by baselines
+            reds = redcal.filter_reds(reds, bls=bls)
+            # make sure that every baseline is in reds
+            baseline_chunks = chunk_baselines_by_redundant_groups(reds=reds, max_chunk_size=Nbls)
+        for chunk in baseline_chunks:
+            yield self.read(bls=chunk)
 
     def iterate_over_freqs(self, Nchans=1, freqs=None):
         '''Produces a generator that iteratively yields successive calls to

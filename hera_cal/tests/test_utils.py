@@ -16,6 +16,7 @@ from pyuvdata import UVData
 from pyuvdata import UVCal
 import pyuvdata.tests as uvtest
 from sklearn import gaussian_process as gp
+from ..redcal import filter_reds
 
 from hera_sim.noise import white_noise
 from .. import utils, abscal, datacontainer, io, redcal
@@ -573,6 +574,19 @@ def test_red_average():
     davg = np.sum(d * w, axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf)
     assert np.isclose(hda.get_data(blkey), davg).all()
 
+    # try where all weights are unity but user provided flags are preserved.
+    user_weights = {}
+    for bl in flags:
+        user_weights[bl] = np.ones_like(flags[bl], dtype=float)
+        if np.all(flags[bl]):
+            user_weights[bl][:] = 0.
+
+    hda = utils.red_average(hd, reds, inplace=False, propagate_flags=True)
+    w = np.asarray([user_weights[(bl + ('ee',))] for bl in reds[0]])
+    f = np.asarray([(~hd.get_flags(bl + ('ee',))).astype(float) * user_weights[(bl + ('ee',))] for bl in reds[0]])
+    favg = np.isclose(np.sum(f, axis=0), 0.0)
+    assert np.isclose(hda.get_flags(blkey), favg).all()
+
     # try with DataContainer
     data_avg, flag_avg, _ = utils.red_average(data, reds, flags=flags, inplace=False)
     assert isinstance(data_avg, datacontainer.DataContainer)
@@ -663,3 +677,47 @@ def test_echo(capsys):
     assert output[0] == '\n'
     assert output[1:4] == 'hi\n'
     assert output[4:] == '-' * 40 + '\n'
+
+
+def test_chunck_baselines_by_redundant_group():
+    reds_extended = [[(24, 24), (25, 25), (37, 37), (38, 38), (39, 39), (52, 52), (53, 53), (67, 67), (68, 68), (125, 125), (146, 146)],
+                     [(24, 37), (25, 38), (38, 52), (39, 53), (39, 125), (125, 146)],
+                     [(24, 38), (25, 39), (37, 52), (38, 53), (25, 146)],
+                     [(24, 25), (37, 38), (38, 39), (52, 53), (24, 67)],
+                     [(24, 52), (25, 53), (67, 68)],
+                     [(25, 37), (39, 52), (67, 125)],
+                     [(24, 39), (37, 53)],
+                     [(37, 39)],
+                     [(25, 52)],
+                     [(24, 53)],
+                     [(24, 125), (52, 68)],
+                     [(37, 125), (39, 149)]]
+    reds = [[(24, 24), (25, 25), (37, 37), (38, 38), (39, 39), (52, 52), (53, 53)],
+            [(24, 37), (25, 38), (38, 52), (39, 53)],
+            [(24, 38), (25, 39), (37, 52), (38, 53)],
+            [(24, 25), (37, 38), (38, 39), (52, 53)],
+            [(24, 52), (25, 53)],
+            [(25, 37), (39, 52)],
+            [(24, 39), (37, 53)],
+            [(37, 39)],
+            [(25, 52)],
+            [(24, 53)]]
+    # add polarizations.
+    for grpnum in range(len(reds)):
+        for blnum in range(len(reds[grpnum])):
+            reds[grpnum][blnum] = reds[grpnum][blnum] + ('ee', )
+    # add polarizations.
+    for grpnum in range(len(reds_extended)):
+        for blnum in range(len(reds_extended[grpnum])):
+            reds_extended[grpnum][blnum] = reds_extended[grpnum][blnum] + ('ee', )
+
+    chunked_by_four_expected = [reds[0], reds[1], reds[2], reds[3],
+                                reds[4] + reds[5], reds[6] + reds[7] + reds[8], reds[9]]
+    # unravel redundant group.
+    bls = []
+    for grp in reds:
+        for bl in grp:
+            bls.append(bl)
+    chunked_by_four_output = utils.chunk_baselines_by_redundant_groups(reds=filter_reds(reds_extended, bls=bls), max_chunk_size=4)
+    for chunk1, chunk2 in zip(chunked_by_four_output, chunked_by_four_expected):
+        assert chunk1 == chunk2

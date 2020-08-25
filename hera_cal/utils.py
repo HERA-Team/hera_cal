@@ -15,6 +15,7 @@ from pyuvdata import UVCal, UVData
 from pyuvdata.utils import polnum2str, polstr2num, jnum2str, jstr2num, conj_pol
 from pyuvdata.utils import POL_STR2NUM_DICT, JONES_STR2NUM_DICT, JONES_NUM2STR_DICT, _x_orientation_rep_dict
 import sklearn.gaussian_process as gp
+import warnings
 
 try:
     AIPY = True
@@ -29,7 +30,7 @@ HERA_TELESCOPE_LOCATION = np.array([5109325.855210627429187297821044921875,
                                     -3239928.424753960222005844116210937500])
 
 # Defines characters to look for to see if the polarization string is in east/north format. Nominally {'e', 'n'}.
-_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()]) 
+_KEY_CARDINAL_CHARS = set([c.lower() for c in _x_orientation_rep_dict('north').values()])
 # Define characters that appear in all Jones polarization strings. Nominally {'j'}.
 _KEY_JONES_CHARS = set([c.lower() for val in JONES_NUM2STR_DICT.values() for c in val
                        if np.all([c in v for v in JONES_NUM2STR_DICT.values()])])
@@ -1133,7 +1134,8 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
 
 
 def red_average(data, reds=None, bl_tol=1.0, inplace=False,
-                wgts=None, flags=None, nsamples=None):
+                wgts=None, flags=None, nsamples=None,
+                propagate_flags=False):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
     Average is weighted by integration_time * nsamples * ~flags unless wgts are fed.
@@ -1151,14 +1153,19 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             Perform average and downselect inplace, otherwise returns a deepcopy.
             The first baseline in each reds sublist is kept.
         wgts : DataContainer
-            Manual weights to use in redundant average. This supercedes flags and nsamples
-            If provided, and will also be used if input data is a UVData or a subclass of it.
+            Manual weights to use in redundant average. This supercedes flags and nsamples as weights
+            if provided, and will also be used if input data is a UVData or a subclass of it.
         flags : DataContainer
             If data is a DataContainer, these are its flags. Default (None) is no flags.
+            If data is a UVData, then data.flag_array is used regardless of flags input.
         nsamples : DataContainer
             If data is a DataContainer, these are its nsamples. Default (None) is 1.0 for all pixels.
             Furthermore, if data is a DataContainer, integration_time is 1.0 for all pixels.
-
+            If data is a UVData, then data.nsample_array is used regardless of nsamples input.
+        propagate_flags : bool, optional
+            If True, propagate input flags to the average flag, even if wgts are provided.
+            Note, if wgts are provided, the input flags are NOT used for weighting, but
+            are propagated to the output flags. Default = False.
     Returns:
         if fed a DataContainer:
             DataContainer, averaged data
@@ -1170,7 +1177,6 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     Notes:
         1. Different polarizations are assumed to be non-redundant.
         2. Default weighting is nsamples * integration_time * ~flags.
-        3. If wgts Container is fed then they supercede flag and nsample weighting.
     """
     from hera_cal import redcal, datacontainer
 
@@ -1244,15 +1250,18 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 n = np.asarray([data.get_nsamples(bl + (pol,)) for bl in blg])
                 tint = np.asarray([data.integration_time[data.antpair2ind(bl + (pol,))] for bl in blg])[:, :, None]
                 w = np.asarray([wgts[bl + (pol,)] for bl in blg]) * tint
-
             # take the weighted average
             wsum = np.sum(w, axis=0).clip(1e-10, np.inf)  # this is the normalization
             davg = np.sum(d * w, axis=0) / wsum  # weighted average
-            navg = np.sum(n * f, axis=0)         # this is the new total nsample (without flagged elements)
             fmax = np.max(f, axis=2)             # collapse along freq: marks any fully flagged integrations
             iavg = np.sum(tint.squeeze() * fmax, axis=0) / np.sum(fmax, axis=0).clip(1e-10, np.inf)
-            favg = np.isclose(wsum, 0.0)         # this is getting any fully flagged pixels
-
+            binary_wgts = (~np.isclose(w, 0)).astype(np.float)  # binary weights.
+            navg = np.sum(n * binary_wgts, axis=0)
+            if propagate_flags:
+                favg = np.all(np.isclose(w * f, 0), axis=0)
+            else:
+                favg = np.all(np.isclose(w, 0), axis=0)
+                
             # replace with new data
             if fed_container:
                 blkey = blg[0] + (pol,)
@@ -1273,7 +1282,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     if fed_container:
         for bl in list(data.keys()):
             if bl not in bls:
-                del data[bl]
+                del data[bl], flags[bl], nsamples[bl]
     else:
         data.select(bls=bls)
 
@@ -1311,3 +1320,47 @@ def top2eq_m(ha, dec):
     if len(mat.shape) == 3:
         mat = mat.transpose([2, 0, 1])
     return mat
+
+
+def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
+    """Chunk list of baselines by redundant group constrained by number of baselines.
+
+    This method calculates chunks of baselines to load simultaneously constrained by the conditions that
+    all baselines simultaneously loaded completely fill out redundant groups and the number of baselines
+    loaded is less then or equal to max_chunk_size.
+    If a redundant group exceeds max_chunk_size it will be loaded in its entirety anyways
+    and warning will be raised.
+
+    Parameters
+    ----------
+    reds : list
+        list of lists with redundant groups of antpairpols
+    max_chunk_size :
+        maximum number of baselines to group in each chunk
+                    while filling out redundant groups.
+
+    Returns
+    -------
+
+    chunked_baselines : list
+        list of lists of antpairpols where each chunk containes entire redundant groups
+        and (if possible) includes a number of baselines less then max_chunk_size.
+    """
+    baseline_chunks = []
+    group_index = 0
+    # iterate through redundant groups
+    for grp in reds:
+        if len(grp) > max_chunk_size:
+            # if red group is larger then the chunk size.
+            # then give a warning and treate the red group as a chunk anyways.
+            warnings.warn("Warning: baseline group of length %d encountered with number"
+                          " of baselines exceeding max_chunk_size=%d."
+                          " First baseline is %s"
+                          " Loading group anyways." % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0])))
+            baseline_chunks.append(grp)
+        else:
+            if len(baseline_chunks[-1]) + len(grp) <= max_chunk_size:
+                baseline_chunks[-1].extend(grp)
+            else:
+                baseline_chunks.append(grp)
+    return baseline_chunks

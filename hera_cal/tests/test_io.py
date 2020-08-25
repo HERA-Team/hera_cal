@@ -474,11 +474,39 @@ class Test_HERAData(object):
                 assert len(d.keys()) == 1
                 assert list(d.values())[0].shape == (120, 1024)
 
+        # try cover include_autos = False.
+        hd = HERAData([self.uvh5_1, self.uvh5_2])
+        for (d, f, n) in hd.iterate_over_bls(include_autos=False):
+            for dc in (d, f, n):
+                assert len(d.keys()) == 1
+                bl = list(d.keys())[0]
+                # make sure no autos present.
+                assert bl[0] != bl[1]
+                assert list(d.values())[0].shape == (120, 1024)
+
         hd = HERAData(self.miriad_1, filetype='miriad')
         d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')]))
         assert list(d.keys()) == [(52, 53, parse_polstr('XX', x_orientation=hd.x_orientation))]
         with pytest.raises(NotImplementedError):
             next(hd.iterate_over_bls())
+
+        hd = HERAData(self.uvh5_1)
+        for (d, f, n) in hd.iterate_over_bls(chunk_by_redundant_group=True, Nbls=1):
+            # check that all baselines in chunk are redundant
+            # this will be the case when Nbls = 1
+            bl_lens = np.asarray([hd.antpos[bl[0]] - hd.antpos[bl[1]] for bl in d])
+            assert np.all(np.isclose(bl_lens - bl_lens[0], 0., atol=1.0))
+            for dc in (d, f, n):
+                assert list(d.values())[0].shape == (60, 1024)
+
+        hd = HERAData([self.uvh5_1, self.uvh5_2])
+        for (d, f, n) in hd.iterate_over_bls(chunk_by_redundant_group=True):
+            for dc in (d, f, n):
+                assert list(d.values())[0].shape == (120, 1024)
+
+        with pytest.raises(NotImplementedError):
+            hd = HERAData(self.miriad_1, filetype='miriad')
+            d, f, n = next(hd.iterate_over_bls(bls=[(52, 53, 'xx')], chunk_by_redundant_group=True))
 
     def test_iterate_over_freqs(self):
         hd = HERAData(self.uvh5_1)

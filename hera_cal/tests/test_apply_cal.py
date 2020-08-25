@@ -19,6 +19,8 @@ from .. import apply_cal as ac
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 from .. import utils
+from .. import redcal
+from hera_qm import metrics_io
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
@@ -72,12 +74,13 @@ class Test_Update_Cal(object):
                 if not np.isfinite(dc[(0, 1, 'xx')][i, j]):
                     assert np.allclose(dc[(0, 1, 'xx')][i, j], vis[i, j] * avg_gains[i, j])
 
-    def test_apply_redundant_solutions(self):
+    def test_apply_redundant_solutions(self, tmpdir):
+        tmp_path = tmpdir.strpath
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
-        outname_uvh5 = os.path.join(DATA_PATH, "test_output/red_out.uvh5")
+        outname_uvh5 = os.path.join(tmp_path, "red_out.uvh5")
         old_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
-        ac.apply_cal(miriad, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='miriad', filetype_out='uvh5', 
+        ac.apply_cal(miriad, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='miriad', filetype_out='uvh5',
                      gain_convention='divide', redundant_solution=True, add_to_history='', clobber=True)
         # checking if file is created
         assert os.path.exists(outname_uvh5)
@@ -93,9 +96,9 @@ class Test_Update_Cal(object):
         # Now test with partial I/O
         uv = UVData()
         uv.read_miriad(miriad)
-        inname_uvh5 = os.path.join(DATA_PATH, "test_output/red_in.uvh5")
+        inname_uvh5 = os.path.join(tmp_path, "red_in.uvh5")
         uv.write_uvh5(inname_uvh5)
-        ac.apply_cal(inname_uvh5, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='uvh5', filetype_out='uvh5', 
+        ac.apply_cal(inname_uvh5, outname_uvh5, new_cal, old_calibration=old_cal, filetype_in='uvh5', filetype_out='uvh5',
                      gain_convention='divide', redundant_solution=True, nbl_per_load=1, add_to_history='', clobber=True)
         os.remove(inname_uvh5)
         # checking if file is created
@@ -172,12 +175,13 @@ class Test_Update_Cal(object):
         ac.calibrate_in_place(dc, g_new, wgts, cal_flags, gain_convention='divide', flags_are_wgts=True)
         assert np.allclose(wgts[(0, 1, 'xx')].max(), 0.0)
 
-    def test_apply_cal(self):
+    def test_apply_cal(self, tmpdir):
+        tmp_path = tmpdir.strpath
         miriad = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only")
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-        outname_miriad = os.path.join(DATA_PATH, "test_output/out.uv")
-        outname_uvh5 = os.path.join(DATA_PATH, "test_output/out.h5")
-        calout = os.path.join(DATA_PATH, "test_output/out.cal")
+        outname_miriad = os.path.join(tmp_path, "out.uv")
+        outname_uvh5 = os.path.join(tmp_path, "out.h5")
+        calout = os.path.join(tmp_path, "out.cal")
         old_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         new_cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         flags_npz = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uvOCR_53x_54x_only.flags.applied.npz")
@@ -234,6 +238,82 @@ class Test_Update_Cal(object):
         with pytest.raises(NotImplementedError):
             ac.apply_cal(miriad, outname_uvh5, new_cal, filetype_in='miriad', nbl_per_load=1)
         shutil.rmtree(outname_miriad)
+
+        # test flagging yaml
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample_53_flagged.yaml')
+        ac.apply_cal(uvh5, outname_uvh5, new_cal, old_calibration=calout, gain_convention='divide',
+                     flags_npz=flags_npz,
+                     filetype_in='uvh5', filetype_out='uvh5', clobber=True, vis_units='Jy', a_priori_flags_yaml=flag_yaml)
+        hd = io.HERAData(outname_uvh5)
+        new_data, new_flags, _ = hd.read()
+        # check that all antennas, integrations, and frequencies from this yaml are flagged.
+        flagged_ints = metrics_io.read_a_priori_int_flags(flag_yaml, times=hd.times, lsts=hd.lsts * 12 / np.pi)
+        flagged_chans = metrics_io.read_a_priori_chan_flags(flag_yaml, freqs=hd.freqs)
+        flagged_ants = metrics_io.read_a_priori_ant_flags(flag_yaml, ant_indices_only=True)
+        for bl in new_flags:
+            if bl[0] in flagged_ants or bl[1] in flagged_ants:
+                assert np.all(new_flags[bl])
+            assert np.all(new_flags[bl][flagged_ints])
+            assert np.all(new_flags[bl][:, flagged_chans])
+
+    def test_apply_cal_redundant_averaging(self, tmpdir):
+        tmp_path = tmpdir.strpath
+        # test redundant averaging functionality in apply_cal
+        # we will do this by applying a calibration to a data set and then running red_average
+        # on its output. We will then check that this gives the same results as activating the
+        # red_average option in apply_cal.
+        hd_calibrated = io.HERAData(os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5"))
+        d, f, n = hd_calibrated.read()
+        uncalibrated_file = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uncalibrated.uvh5")
+        calibrated_redundant_averaged_file = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.redundantly_averaged.uvh5")
+        calibrated_file = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.calibrated.uvh5")
+        calfile = os.path.join(DATA_PATH, 'zen.2458043.40141.xx.HH.XRAA.abs.calfits')
+        calfile_unity = os.path.join(DATA_PATH, 'zen.2458043.40141.xx.HH.XRAA.unity_gains.abs.calfits')
+        # redundantly average the calibrated data file.
+        reds = redcal.get_reds(hd_calibrated.antpos, bl_error_tol=1.0, include_autos=True)
+
+        # apply_cal without redundant averaging and check that data arrays etc... are the same
+        ac.apply_cal(uncalibrated_file, calibrated_file, calfile,
+                     gain_convention='divide', redundant_average=False)
+        hd_calibrated_with_apply_cal = io.HERAData(calibrated_file)
+        hd_calibrated_with_apply_cal.read()
+        hc_unity = io.HERACal(calfile_unity)
+        g, gf, _, _ = hc_unity.read()
+        ac.calibrate_in_place(data=d, new_gains=g, cal_flags=gf, data_flags=f)
+        hd_calibrated.update(flags=f, data=d)
+        assert np.all(np.isclose(hd_calibrated.data_array, hd_calibrated_with_apply_cal.data_array))
+        assert np.all(np.isclose(hd_calibrated.nsample_array, hd_calibrated_with_apply_cal.nsample_array))
+        assert np.all(np.isclose(hd_calibrated.flag_array, hd_calibrated_with_apply_cal.flag_array))
+
+        # remove polarizations for red_average
+        reds = [[bl[:2] for bl in redgrp] for redgrp in reds]
+        wgts = deepcopy(n)
+        for bl in wgts:
+            if np.all(f[bl]):
+                wgts[bl][:] = 0.
+        hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts, propagate_flags=True)
+
+        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
+                     gain_convention='divide', redundant_average=True)
+
+        # now load in the calibrated redundant data.
+        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
+        hda_calibrated_with_apply_cal.read()
+
+        # check that the data, flags, and nsamples arrays are close
+        assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
+        assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
+        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
+
+        # now do chunked redundant groups.
+        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
+                     gain_convention='divide', redundant_average=True, nbl_per_load=4, clobber=True)
+        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
+        hda_calibrated_with_apply_cal.read()
+        # check that the data, flags, and nsamples arrays are close
+        assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
+        assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
+        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
