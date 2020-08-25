@@ -511,7 +511,9 @@ class CalibrationSmoother():
         gains, cal_flags, chisq, cspa, self.cal_freqs, self.cal_times = {}, {}, {}, {}, {}, {}
         for cal in self.cals:
             hc = io.HERACal(cal)
-            gains[cal], cal_flags[cal], quals, total_qual = hc.read()
+            if spw_range is None:
+                spw_range = (0, hc.Nfreqs)
+            gains[cal], cal_flags[cal], quals, total_qual = hc.read(frequencies=hc.freqs[spw_range[0]:spw_range[1]])
             if load_cspa:
                 cspa[cal] = quals
             if load_chisq:
@@ -523,10 +525,26 @@ class CalibrationSmoother():
         if len(self.flag_files) > 0:
             utils.echo('Now loading external flag files...', verbose=self.verbose)
             self.ext_flags, self.flag_freqs, self.flag_times = {}, {}, {}
+            cal_freqs = self.cal_freqs[self.cals[0]]
             for ff in self.flag_files:
                 flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
+                cal_freqs_in_ff = []
+                for freqnum, freq in enumerate(meta['freqs']):
+                     match = np.isclose(cal_freqs, f, rtol=1e-10)
+                    if True in match:
+                        cal_freqs_in_ff.append(freqnum)
+                for key in flags:
+                    if ff.type == 'baseline':
+                        # truncate to smaller frequency range
+                        flags[key] = flags[key][:, 0, cal_freqs_in_ff, :]
+                    elif ff.type == 'antenna':
+                        flags[key] = flags[key][:, 0, cal_freqs_in_ff, :, :]
+                    elif ff.type == 'waterfall':
+                        flags[key] = flags[key][:, cal_freqs_in_ff]
+                # only include flags over spw_range.
+
                 self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
-                self.flag_freqs[ff] = meta['freqs']
+                self.flag_freqs[ff] = meta['freqs'][cal_freqs_in_ff]
                 self.flag_times[ff] = meta['times']
 
         # set up time grid (note that it is offset by .5 dt so that times always map to the same
@@ -640,7 +658,7 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, **win_kwargs):
+    def freq_filter(self, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, mode='clean', **filter_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
@@ -654,8 +672,7 @@ class CalibrationSmoother():
                 gains are left unchanged and self.wgts and self.flag_grids are set to 0 and True,
                 respectively. Only works properly when all weights are all between 0 and 1.
             maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-            win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
-                    Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
+            filter_kwargs : any keyword arguments for the frequency domain fourier filtering in vis_clean.fourier_filter.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.gain_grids.items():
@@ -663,7 +680,7 @@ class CalibrationSmoother():
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
                                                      filter_scale=filter_scale, tol=tol, window=window,
-                                                     skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
+                                                     mode=mode, skip_wgt=skip_wgt, maxiter=maxiter, **filter_kwargs)
             # flag all channels for any time that triggers the skip_wgt
             for i in info['status']['axis_1']:
                 if info['status']['axis_1'][i] == 'skipped':
