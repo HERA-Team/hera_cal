@@ -30,5 +30,5 @@ xtalk_filter.load_xtalk_filter_and_write_baseline_list(a.datafilelist, calfile_l
                                                        clobber=a.clobber, write_cache=a.write_cache,
                                                        read_cache=a.read_cache, mode='dayenu',
                                                        factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
-                                                       trim_edges=a.trim_edges,
+                                                       trim_edges=a.trim_edges, max_contiguous_edge_flags=a.max_contiguous_edge_flags,
                                                        add_to_history=' '.join(sys.argv), **filter_kwargs)
