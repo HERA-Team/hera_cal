@@ -1429,6 +1429,7 @@ def _linear_argparser(multifile=False):
     a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
+    a.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
     return a
 
 
