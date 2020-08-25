@@ -85,7 +85,7 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
         mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
               examples include 'dpss_leastsq', 'clean'.
         filter_kwargs : any keyword arguments for the filtering mode being used.
-        See vis_clean.fourier_filter or uvtools.dspec.fourier_filter for a full description.
+        See dspec.fourier_filter or uvtools.dspec.fourier_filter for a full description.
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
@@ -172,31 +172,21 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
         freq_scale: frequency scale in MHz to use for the low-pass filter. freq_scale^-1 corresponds
             to the half-width (i.e. the width of the positive part) of the region in fourier
-            space, symmetric about 0, that is retained after filtering.
-            Note that freq_scale is in MHz while freqs is in Hz.
+            space, symmetric about 0, that is filtered out.
         time_scale: time scale in seconds. Defined analogously to freq_scale.
-            Note that time_scale is in seconds, times is in days.
-        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-        filter_mode: either 'rect' or 'plus':
-            'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0
-                    and fringe rate = 0
-            'plus': produce a separable calibration solution by only keeping modes with 0 delay,
-                    0 fringe rate, or both
-        window: window function for filtering applied to the filtered axis.
-            See aipy.dsp.gen_window for options.
-        maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-        win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
-            Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
+        mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
+              examples include 'dpss_leastsq', 'clean'.
+        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+            filtered is left unchanged and info is {'skipped': True} for that time.
+            Only works properly when all weights are all between 0 and 1.
+        filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
 
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: dictionary of metadata from aipy.deconv.clean
     '''
-    assert AIPY, "You need aipy to use this function"
-    df = np.median(np.diff(freqs))
     dt = np.median(np.diff(times)) * 24.0 * 3600.0  # in seconds
-    delays = np.fft.fftfreq(freqs.size, df)
-    fringes = np.fft.fftfreq(times.size, dt)
+    tsecs = (np.arange(len(times)) - len(times) / 2.) * dt
     delay_scale = (freq_scale * 1e6)**-1  # Puts it in seconds
     fringe_scale = (time_scale)**-1  # in Hz
 
@@ -204,26 +194,9 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
 
-    # Build fourier space image and kernel for deconvolution
-    window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
-    image = np.fft.ifft2(gains * rephasor * wgts * window)
-    kernel = np.fft.ifft2(wgts * window)
-
-    # set up "area", the set of Fourier modes that are allowed to be non-zero in the CLEAN
-    if filter_mode == 'rect':
-        area = np.outer(np.where(np.abs(fringes) < fringe_scale, 1, 0),
-                        np.where(np.abs(delays) < delay_scale, 1, 0))
-    elif filter_mode == 'plus':
-        area = np.zeros(image.shape, dtype=int)
-        area[0] = np.where(np.abs(delays) < delay_scale, 1, 0)
-        area[:, 0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
-    else:
-        raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
-
-    # perform deconvolution
-    CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, maxiter=maxiter)
-    filtered = np.fft.fft2(CLEAN + info['res'] * area)
-    del info['res']  # this matches the convention in uvtools.dspec.high_pass_fourier_filter
+    filtered, _, _ = uvtools.dspec.fourier_filter(x=[tsecs, freqs], data=gains, wgts=wgts, mode=mode, filter_dims=[1, 0],
+                                                  filter_half_widths=[[fringe_scale], [delay_scale]], filter_centers=[[0.],[0.]],
+                                                  **filter_kwargs)
     return filtered / rephasor, info
 
 
@@ -658,37 +631,35 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, mode='clean', **filter_kwargs):
+    def freq_filter(self, filter_scale=10.0, skip_wgt=0.1, mode='clean', **filter_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
             filter_scale: frequency scale in MHz to use for the low-pass filter. filter_scale^-1 corresponds
                 to the half-width (i.e. the width of the positive part) of the region in fourier
                 space, symmetric about 0, that is filtered out.
-            tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-            window: window function for filtering applied to the filtered axis. Default tukey has alpha=0.5.
-                See aipy.dsp.gen_window for options.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 gains are left unchanged and self.wgts and self.flag_grids are set to 0 and True,
                 respectively. Only works properly when all weights are all between 0 and 1.
-            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-            filter_kwargs : any keyword arguments for the frequency domain fourier filtering in vis_clean.fourier_filter.
+            mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
+                  examples include 'dpss_leastsq', 'clean'.
+            filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
-                                                     filter_scale=filter_scale, tol=tol, window=window,
-                                                     mode=mode, skip_wgt=skip_wgt, maxiter=maxiter, **filter_kwargs)
+                                                     filter_scale=filter_scale,
+                                                     mode=mode, skip_wgt=skip_wgt, **filter_kwargs)
             # flag all channels for any time that triggers the skip_wgt
             for i in info['status']['axis_1']:
                 if info['status']['axis_1'][i] == 'skipped':
                     self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
         self.rephase_to_refant(warn=False)
 
-    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09,
-                            filter_mode='rect', window='tukey', maxiter=100, **win_kwargs):
+    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
+                            skip_wgt=0.1, **filter_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -696,17 +667,12 @@ class CalibrationSmoother():
                 to the half-width (i.e. the width of the positive part) of the region in fourier
                 space, symmetric about 0, that is filtered out.
             time_scale: time scale in seconds. Defined analogously to freq_scale.
-            tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
-            filter_mode: either 'rect' or 'plus':
-                'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0
-                        and fringe rate = 0
-                'plus': produce a separable calibration solution by only keeping modes with 0 delay,
-                        0 fringe rate, or both
-            window: window function for filtering applied to the frequency axis.
-                See aipy.dsp.gen_window for options.
-            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
-            win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
-                Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
+            mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
+                  examples include 'dpss_leastsq', 'clean'.
+            skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+                filtered is left unchanged and info is {'skipped': True} for that time.
+                Only works properly when all weights are all between 0 and 1.
+            filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
         '''
         # loop over all antennas that are not completely flagged and filter
         for ant, gain_grid in self.gain_grids.items():
@@ -714,8 +680,7 @@ class CalibrationSmoother():
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
-                                                     time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
-                                                     window=window, **win_kwargs)
+                                                     time_scale=time_scale, **filter_kwargs)
                 self.gain_grids[ant] = filtered
         self.rephase_to_refant(warn=False)
 
