@@ -1410,7 +1410,6 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             cal['vf_omnical'][ubl] = ~np.isfinite(vis)
     make_sol_finite(cal['v_omnical'])
 
-
     # Update chisq and chisq per ant to include all baselines between working antennas
     rekey_vis_sols(cal, good_ants_reds)
     dts_by_bl = {bl: np.median(np.ediff1d(data.times_by_bl[bl[:2]])) * SEC_PER_DAY for bl in good_ants_bls}
