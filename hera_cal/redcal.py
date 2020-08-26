@@ -1436,8 +1436,13 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
             break  # iterate to also solve for ants only found in bls with other ex_ants
 
         # solve for new gains and update cal
-        new_gains = linear_cal_update(bls_to_use, cal, data, all_reds,
-                                      weight_by_nsamples=True, weight_by_flags=(i == 0))
+        new_gains = {}
+        new_gain_ants = set([ant for bl in bls_to_use for ant in split_bl(bl) 
+                             if ant not in cal['g_omnical']])
+        for ant in new_gain_ants:
+            new_gains.update(linear_cal_update([bl for bl in bls_to_use if ant in split_bl(bl)], 
+                                               cal, data, all_reds, 
+                                               weight_by_nsamples=True, weight_by_flags=(i == 0)))
         make_sol_finite(new_gains)
         for ant, g in new_gains.items():
             cal['g_omnical'][ant] = g
