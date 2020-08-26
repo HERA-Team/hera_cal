@@ -1465,12 +1465,18 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
                 cal['chisq_per_ant'][ant][~np.isfinite(cspa)] = np.zeros_like(cspa[~np.isfinite(cspa)])
 
     # Solve for unsolved-for unique baselines visbility solutions
-    bls_to_use = [bl for red in all_reds for bl in red
-                  if ((red[0] not in cal['v_omnical'])
-                      and ((split_bl(bl)[0] in cal['g_omnical'])
-                      and (split_bl(bl)[1] in cal['g_omnical'])))]
-    if len(bls_to_use) > 0:
-        new_vis = linear_cal_update(bls_to_use, cal, data, all_reds)
+    reds_to_solve_for = []
+    for red in all_reds:
+        if red[0] in cal['v_omnical']:
+            continue
+        red_to_solve_for = []
+        for bl in red:
+            if (split_bl(bl)[0] in cal['g_omnical']) and (split_bl(bl)[1] in cal['g_omnical']):
+                red_to_solve_for.append(bl)
+        if len(red_to_solve_for) > 0:
+            reds_to_solve_for.append(red_to_solve_for)
+    for red in reds_to_solve_for:
+        new_vis = linear_cal_update(red, cal, data, all_reds)
         make_sol_finite(new_vis)
         for bl, vis in new_vis.items():
             cal['v_omnical'][bl] = vis
