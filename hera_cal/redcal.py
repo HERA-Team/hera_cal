@@ -1400,13 +1400,14 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
     # Solve for unsolved-for unique baselines whose antennas are both in cal['g_omnical']
     good_ants_reds = filter_reds(all_reds, ants=list(cal['g_omnical'].keys()))
     good_ants_bls = [bl for red in good_ants_reds for bl in red]
-    bls_to_use = [bl for red in good_ants_reds for bl in red if not np.any([bl in cal['v_omnical'] for bl in red])]
-    if len(bls_to_use) > 0:
-        new_vis = linear_cal_update(bls_to_use, cal, data, good_ants_reds, weight_by_flags=True)
+    reds_to_solve_for = [red for red in good_ants_reds if not np.any([bl in cal['v_omnical'] for bl in red])]
+    for red in reds_to_solve_for:
+        new_vis = linear_cal_update(red, cal, data, [red], weight_by_flags=True)
         for ubl, vis in new_vis.items():
             cal['v_omnical'][ubl] = vis
             cal['vf_omnical'][ubl] = ~np.isfinite(vis)
-        make_sol_finite(cal['v_omnical'])
+    make_sol_finite(cal['v_omnical'])
+
 
     # Update chisq and chisq per ant to include all baselines between working antennas
     rekey_vis_sols(cal, good_ants_reds)
