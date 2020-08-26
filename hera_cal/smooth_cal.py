@@ -160,7 +160,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
-                        tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', **win_kwargs):
+                        mode='clean', **filter_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -185,6 +185,12 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: dictionary of metadata from aipy.deconv.clean
     '''
+    # make some adjustments to filter_kwarg names and format to preserver api.
+    if 'window' in filter_kwargs:
+        filter_kwargs['window'] = [filter_kwargs['window'], filter_kwargs['window']]
+    if 'filter_mode' in filter_kwargs:
+        filter_kwargs['filt2d_mode'] = filter_kwargs['filter_mode']
+        del filter_kwargs['filter_mode']
     dt = np.median(np.diff(times)) * 24.0 * 3600.0  # in seconds
     tsecs = (np.arange(len(times)) - len(times) / 2.) * dt
     delay_scale = (freq_scale * 1e6)**-1  # Puts it in seconds
@@ -194,7 +200,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
 
-    filtered, _, _ = uvtools.dspec.fourier_filter(x=[tsecs, freqs], data=gains, wgts=wgts, mode=mode, filter_dims=[1, 0],
+    filtered, _, info = uvtools.dspec.fourier_filter(x=[tsecs, freqs], data=gains * rephasor, wgts=wgts, mode=mode, filter_dims=[1, 0],
                                                   filter_half_widths=[[fringe_scale], [delay_scale]], filter_centers=[[0.],[0.]],
                                                   **filter_kwargs)
     return filtered / rephasor, info
@@ -486,12 +492,19 @@ class CalibrationSmoother():
             hc = io.HERACal(cal)
             if spw_range is None:
                 spw_range = (0, hc.Nfreqs)
-            gains[cal], cal_flags[cal], quals, total_qual = hc.read(frequencies=hc.freqs[spw_range[0]:spw_range[1]])
+            gains[cal], cal_flags[cal], quals, total_qual = hc.read()
+            for key in gains[cal]:
+                gains[cal][key] = gains[cal][key][:, spw_range[0]:spw_range[1]]
+                cal_flags[cal][key] = cal_flags[cal][key][:, spw_range[0]:spw_range[1]]
+                quals[key] = quals[key][:, spw_range[0]:spw_range[1]]
+            if total_qual is not None:
+                for key in total_qual:
+                    total_qual[key] = total_qual[key][:, spw_range[0]:spw_range[1]]
             if load_cspa:
                 cspa[cal] = quals
             if load_chisq:
                 chisq[cal] = total_qual
-            self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
+            self.cal_freqs[cal], self.cal_times[cal] = hc.freqs[spw_range[0]:spw_range[1]], hc.times
 
         # load flag files
         self.flag_files = flag_file_list
@@ -503,18 +516,12 @@ class CalibrationSmoother():
                 flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
                 cal_freqs_in_ff = []
                 for freqnum, freq in enumerate(meta['freqs']):
-                     match = np.isclose(cal_freqs, f, rtol=1e-10)
-                    if True in match:
+                     match = np.isclose(cal_freqs, freq, rtol=1e-10)
+                     if True in match:
                         cal_freqs_in_ff.append(freqnum)
+                # select spw_range.
                 for key in flags:
-                    if ff.type == 'baseline':
-                        # truncate to smaller frequency range
-                        flags[key] = flags[key][:, 0, cal_freqs_in_ff, :]
-                    elif ff.type == 'antenna':
-                        flags[key] = flags[key][:, 0, cal_freqs_in_ff, :, :]
-                    elif ff.type == 'waterfall':
-                        flags[key] = flags[key][:, cal_freqs_in_ff]
-                # only include flags over spw_range.
+                    flags[key] = flags[key][:, cal_freqs_in_ff]
 
                 self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
                 self.flag_freqs[ff] = meta['freqs'][cal_freqs_in_ff]
