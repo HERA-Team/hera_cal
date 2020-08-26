@@ -1315,8 +1315,10 @@ def linear_cal_update(bls, cal, data, all_reds, weight_by_nsamples=False, weight
     # use RedundantCalibrator to build up constants and equations
     rc_all = RedundantCalibrator(all_reds)
     consts = {rc_all.pack_sol_key(ant): cal['g_omnical'][ant] for ant in cal['g_omnical']}
-    consts.update({rc_all.pack_sol_key([red[0] for red in all_reds if bl in red][0]):
-                   cal['v_omnical'][bl] for bl in cal['v_omnical']})
+    for bl in cal['v_omnical']:
+        matched_reds = [red[0] for red in all_reds if bl in red]
+        if len(matched_reds) > 0:
+            consts.update({rc_all.pack_sol_key(matched_reds[0]): cal['v_omnical'][bl]})
     eqs = {eq_str: bl for eq_str, bl in rc_all.build_eqs().items() if bl in bls}
 
     # map baselines to ubls
