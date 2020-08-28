@@ -874,8 +874,9 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             for n, (i, j) in enumerate(npz['antpairs']):
                 flags[i, j, pol] = flag_array[:, n, :]
         flags = DataContainer(flags)
+        type = 'baseline'
     if return_meta:
-        return flags, {'freqs': freqs, 'times': times, 'history': history}
+        return flags, {'freqs': freqs, 'times': times, 'history': history, 'type':type}
     else:
         return flags
 
