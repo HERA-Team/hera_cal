@@ -160,7 +160,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
-                        mode='clean', remove_zero_edge_flags_from_filtering=False, **filter_kwargs):
+                        mode='clean', remove_edge_flags_from_filtering=False, **filter_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -179,7 +179,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
             filtered is left unchanged and info is {'skipped': True} for that time.
             Only works properly when all weights are all between 0 and 1.
-        remove_zero_edges_from_filtering: bool, optional
+        remove_edge_flags_from_filtering: bool, optional
             If True, perform filtering only on the rectangular sub-array that is left if we remove edge channels
             and times that are fully flagged.
         filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
@@ -202,7 +202,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     # Build rephasor to take out average delay
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
-    if remove_zero_edges_from_filtering:
+    if remove_edge_flags_from_filtering:
         unflagged_chans = np.where(~np.all(np.isclose(wgts, 0.0), axis=0))
         unflagged_times = np.where(~np.all(np.isclose(wgts, 0.0), axis=1))
         ind_left = np.min(unflagged_chans)
@@ -216,7 +216,7 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         ind_upper = gains.shape[0]
     data_in = (gains * rephasor)[ind_lower:ind_upper][:, ind_left:ind_right]
     wgts_in = wgts[ind_lower:ind_upper][:, ind_left:ind_right]
-    filtered = np.zeros_like(data)
+    filtered = np.zeros_like(gains)
     filtered[ind_lower:ind_upper][:, ind_left:ind_right], _, info = uvtools.dspec.fourier_filter(x=[tsecs[ind_lower:ind_upper], freqs[ind_left:ind_right]],
                                                                                                  data=data_in, wgts=wgts_in, mode=mode, filter_dims=[1, 0],
                                                                                                  filter_half_widths=[[fringe_scale], [delay_scale]], filter_centers=[[0.],[0.]],
@@ -443,7 +443,7 @@ class CalibrationSmoother():
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[], spw_range=None,
                  pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0,
-                 use_cal_flags=True, time_threshold=0.05, verbose=False):
+                 use_cal_flags=True, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -527,6 +527,8 @@ class CalibrationSmoother():
                 chisq[cal] = total_qual
             self.cal_freqs[cal], self.cal_times[cal] = hc.freqs[spw_range[0]:spw_range[1]], hc.times
 
+        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
+
         # load flag files
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
@@ -543,8 +545,17 @@ class CalibrationSmoother():
                 # select spw_range.
                 for key in flags:
                     flags[key] = flags[key][:, cal_freqs_in_ff]
-
-                self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
+                if meta['type'] == 'baseline':
+                    self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
+                # if waterfall flags were provided, then set all antenna keys to single waterfall.
+                elif meta['type'] == 'waterfall':
+                    self.ext_flags[ff] = {}
+                    for ant in self.ants:
+                        # if waterfall flags are provided, then find first key that contains
+                        # jpol and use that
+                        jpol_key = [key for key in flags.keys() if ant[-1] in key][0]
+                        self.ext_flags[ff][ant] = flags[jpol_key]
+                    
                 self.flag_freqs[ff] = meta['freqs'][cal_freqs_in_ff]
                 self.flag_times[ff] = meta['times']
 
@@ -560,7 +571,6 @@ class CalibrationSmoother():
 
         # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa)
         self.freqs = self.cal_freqs[self.cals[0]]
-        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
         self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=np.complex) for ant in self.ants}
         # Initialize all flags to False.
         self.flag_grids = {ant: np.zeros((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
@@ -606,11 +616,6 @@ class CalibrationSmoother():
             utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.'
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
             self.rephase_to_refant()
-
-        if factorize_flags:
-            # factorize flag grid.
-            for ant in self.flag_grids:
-                self.flag_grids[ant] = factorize_flags(self.flag_grids[ant], time_thresh=time_thresh, inplace=False)
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
@@ -694,7 +699,7 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
-                            skip_wgt=0.1,  remove_zero_edge_flags_from_filtering=False,  **filter_kwargs):
+                            skip_wgt=0.1,  remove_edge_flags_from_filtering=False,  **filter_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -707,7 +712,7 @@ class CalibrationSmoother():
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 filtered is left unchanged and info is {'skipped': True} for that time.
                 Only works properly when all weights are all between 0 and 1.
-            remove_zero_edges_from_filtering: bool, optional
+            remove_edge_flags_from_filtering: bool, optional
                 If True, perform filtering only on the rectangular sub-array that is left if we remove edge channels
                 and times that are fully flagged.
             filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
@@ -718,7 +723,7 @@ class CalibrationSmoother():
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
                 filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
-                                                     time_scale=time_scale, remove_zero_edge_flags_from_filtering=remove_zero_edges_from_filtering, **filter_kwargs)
+                                                     time_scale=time_scale, remove_edge_flags_from_filtering=remove_edge_flags_from_filtering, **filter_kwargs)
                 self.gain_grids[ant] = filtered
         self.rephase_to_refant(warn=False)
 
