@@ -443,7 +443,7 @@ class CalibrationSmoother():
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[], spw_range=None,
                  pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0,
-                 use_cal_flags=True, verbose=False):
+                 use_cal_flags=True, factorize_flags=False, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -501,6 +501,8 @@ class CalibrationSmoother():
                 antenna for all times and channels. Default 1.0 means no additional flagging.
             use_cal_flags: bool, if True, use flags from calibration files.
                 Default is True.
+            factorize_flags: bool, optional
+                If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
             verbose: print status updates
         '''
         self.verbose = verbose
@@ -555,7 +557,7 @@ class CalibrationSmoother():
                         # jpol and use that
                         jpol_key = [key for key in flags.keys() if ant[-1] in key][0]
                         self.ext_flags[ff][ant] = flags[jpol_key]
-                    
+
                 self.flag_freqs[ff] = meta['freqs'][cal_freqs_in_ff]
                 self.flag_times[ff] = meta['times']
 
@@ -616,6 +618,10 @@ class CalibrationSmoother():
             utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.'
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
             self.rephase_to_refant()
+
+        if factorize_flags:
+            for ant in self.flag_grids:
+                flag_utils.factorize_flags(self.flag_grids[ant], inplace=True, time_thresh=time_thresh)
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
@@ -790,7 +796,7 @@ def smooth_cal_argparser():
     flg_opts.add_argument("--ant_threshold", default=0.5, type=float, help="If, after time and freq thesholding and broadcasting, an antenna is left \
                           unflagged for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that antenna for all \
                           times and channels. 1.0 means no additional flagging (default 0.5).")
-
+    flg_opts.add_argument("--factorize_flags", default=False, action="store_true", help="If True, factorize flags into separable flags.")
     # Options relating to blacklisting time or frequency ranges
     bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight to times/frequencies so that smooth_cal\n"
                                     "interpolates/extrapoaltes over them (though they aren't necessarily flagged).")
