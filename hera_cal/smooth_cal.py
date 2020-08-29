@@ -621,7 +621,7 @@ class CalibrationSmoother():
 
         if factorize_flags:
             for ant in self.flag_grids:
-                flag_utils.factorize_flags(self.flag_grids[ant], inplace=True, time_thresh=time_thresh)
+                flag_utils.factorize_flags(self.flag_grids[ant], inplace=True, time_thresh=time_threshold)
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
