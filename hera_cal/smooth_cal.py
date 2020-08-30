@@ -758,7 +758,7 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = filtered
         self.rephase_to_refant(warn=False)
 
-    def write_smoothed_cal(self, output_replace=[('.flagged_abs.', '.smooth_abs.')], add_to_history='', clobber=False, output_dir=None, **kwargs):
+    def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False, output_dir=None, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
         Also compares the input and output calibration and saves that result in the quals/total_quals fields.
 
@@ -784,11 +784,15 @@ class CalibrationSmoother():
             for attribute, value in kwargs.items():
                 hc.__setattr__(attribute, value)
             hc.check()
-            for replacement_number, replacement in enumerate(output_replace):
-                if replacement_number == 0:
-                    outfilename = cal.replace(replacement[0], replacement[1])
-                else:
-                    outfilename = outfilename.replace(replacement[0], replacement[1])
+            # check if output_replace is a list of lists.
+            if isinstance(output_replace[0], (list, tuple)):
+                for replacement_number, replacement in enumerate(output_replace):
+                    if replacement_number == 0:
+                        outfilename = cal.replace(replacement[0], replacement[1])
+                    else:
+                        outfilename = outfilename.replace(replacement[0], replacement[1])
+            else:
+                outfilename = cal.replace(output_replace[0], output_replace[1])
             hc.write_calfits(outfilename, clobber=clobber)
 
 
@@ -797,7 +801,7 @@ def _pair(dash_sep_arg_pair):
     return tuple([float(arg) for arg in dash_sep_arg_pair.split('-', maxsplit=1)])
 
 
-def smooth_cal_argparser():
+def smooth_cal_argparser(mode='clean2D'):
     '''Arg parser for commandline operation of 2D calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
     a.add_argument("calfits_list", type=str, nargs='+', help="list of paths to chronologically sortable calfits files (usually a full day)")
@@ -809,7 +813,7 @@ def smooth_cal_argparser():
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
     a.add_argument("--verbose", default=False, action="store_true", help="Print status updates while smoothing.")
-
+    a.add_argument("--spw_range", default=None, type=int, nargs=2, help="Minimum and maximum channels to include in fitted cal solution. Default is all Channels.")
     # Options relating to optional external flags and flag thresholding and broadcasting
     flg_opts = a.add_argument_group(title='Flagging options.')
     flg_opts.add_argument("--flag_file_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
@@ -844,14 +848,15 @@ def smooth_cal_argparser():
     flt_opts = a.add_argument_group(title='Filtering options.')
     flt_opts.add_argument("--freq_scale", type=float, default=10.0, help="frequency scale in MHz for the low-pass filter\
                           (default 10.0 MHz, i.e. a 100 ns delay filter)")
-    flt_opts.add_argument("--time_scale", type=float, default=1800.0, help="time scale in seconds, defined analogously to freq_scale (default 1800 s).")
-    flt_opts.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
-    flt_opts.add_argument("--filter_mode", type=str, default="rect", help='Mode for CLEAN algorithm that defines the shape of the area that can have\
+    if mode == 'clean2D':
+        flt_opts.add_argument("--time_scale", type=float, default=1800.0, help="time scale in seconds, defined analogously to freq_scale (default 1800 s).")
+        flt_opts.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
+        flt_opts.add_argument("--filter_mode", type=str, default="rect", help='Mode for CLEAN algorithm that defines the shape of the area that can have\
                           non-zero CLEAN components. Default "rect". "plus" creates calibration solutions that are separable in time and frequency.')
-    flt_opts.add_argument("--window", type=str, default="tukey", help='window function for frequency filtering (default "tukey",\
+        flt_opts.add_argument("--window", type=str, default="tukey", help='window function for frequency filtering (default "tukey",\
                           see aipy.dsp.gen_window for options')
-    flt_opts.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
-    flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
-    flt_opts.aadd_argument("--broadcast_time_average", default=False, action="store_true", help="If true, broadcast average of smoothed calibration solution to all times.")
+        flt_opts.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+        flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
+
     args = a.parse_args()
     return args
