@@ -549,6 +549,7 @@ class CalibrationSmoother():
         self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
 
         # load flag files
+        self.spw_range = spw_range
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
             utils.echo('Now loading external flag files...', verbose=self.verbose)
@@ -773,12 +774,14 @@ class CalibrationSmoother():
         utils.echo('Now writing results to disk...', verbose=self.verbose)
         for cal in self.cals:
             hc = io.HERACal(cal)
-            gains, flags, _, _ = hc.read()
+            gains, _, _, _ = hc.read()
+            for ant in gains:
+                gains[ant] = gains[ant][:, self.spw_range[0]:self.spw_range[1]]
+                
             out_gains = {ant: self.gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
             hc.update(gains=out_gains, flags=out_flags, quals=rel_diff, total_qual=avg_rel_diff)
-
             hc.history += version.history_string(add_to_history)
             for attribute, value in kwargs.items():
                 hc.__setattr__(attribute, value)
