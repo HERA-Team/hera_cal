@@ -758,12 +758,13 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = filtered
         self.rephase_to_refant(warn=False)
 
-    def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
+    def write_smoothed_cal(self, output_replace=[('.flagged_abs.', '.smooth_abs.')], add_to_history='', clobber=False, output_dir=None, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
         Also compares the input and output calibration and saves that result in the quals/total_quals fields.
 
         Arguments:
             output_replace: tuple of input calfile substrings: ("to_replace", "to_replace_with")
+                            or a list of tuples to replace multiple substrings.
             add_to_history: appends a string to the history of the output file (in addition to the )
             clobber: if True, overwrites existing file at outfilename
             kwargs: dictionary mapping updated attributes to their new values.
@@ -784,7 +785,11 @@ class CalibrationSmoother():
             for attribute, value in kwargs.items():
                 hc.__setattr__(attribute, value)
             hc.check()
-            outfilename = cal.replace(output_replace[0], output_replace[1])
+            for replacement_number, replacement in enumerate(output_replace):
+                if replacement_number == 0:
+                    outfilename = cal.replace(replacement[0], replacement[1])
+                else:
+                    outfilename = outfilename.replace(replacement[0], replacement[1])
             hc.write_calfits(outfilename, clobber=clobber)
 
 
