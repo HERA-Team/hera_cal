@@ -718,9 +718,10 @@ class CalibrationSmoother():
                                                      mode=mode, skip_wgt=skip_wgt,
                                                      broadcast_time_average=broadcast_time_average, **filter_kwargs)
             # flag all channels for any time that triggers the skip_wgt
-            for i in info['status']['axis_1']:
-                if info['status']['axis_1'][i] == 'skipped':
-                    self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
+            if not broadcast_time_average:
+                for i in info['status']['axis_1']:
+                    if info['status']['axis_1'][i] == 'skipped':
+                        self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
