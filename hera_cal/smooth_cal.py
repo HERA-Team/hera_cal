@@ -549,6 +549,7 @@ class CalibrationSmoother():
         self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
 
         # load flag files
+        self.spw_range = spw_range
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
             utils.echo('Now loading external flag files...', verbose=self.verbose)
@@ -780,7 +781,6 @@ class CalibrationSmoother():
             out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
             hc.update(gains=out_gains, flags=out_flags, quals=rel_diff, total_qual=avg_rel_diff)
-
             hc.history += version.history_string(add_to_history)
             for attribute, value in kwargs.items():
                 hc.__setattr__(attribute, value)
