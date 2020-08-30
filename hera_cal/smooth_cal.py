@@ -516,7 +516,6 @@ class CalibrationSmoother():
             self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
 
         # load flag files
-        self.spw_range = spw_range
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
             utils.echo('Now loading external flag files...', verbose=self.verbose)
