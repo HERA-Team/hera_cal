@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
-                mode='clean', **filter_kwargs):
+                mode='clean', broadcast_time_average=False, **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -84,6 +84,8 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
             Only works properly when all weights are all between 0 and 1.
         mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
               examples include 'dpss_leastsq', 'clean'.
+        broadcast_time_average: bool, optional
+            If True, set filtered waterfall to be equal to the average in time
         filter_kwargs : any keyword arguments for the filtering mode being used.
         See dspec.fourier_filter or uvtools.dspec.fourier_filter for a full description.
     Returns:
@@ -99,12 +101,18 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
 
     filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
                                                        skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
-    # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
-    for i in info['status']['axis_1']:
-        if info['status']['axis_1'][i] == 'skipped':
-            filtered[i, :] = gains[i, :]
-
+    # if broadcast_time_average is true, then set all times to
+    # the average of the solutions.
+    if broadcast_time_average:
+        time_average = np.mean(filtered, axis=0)
+        for m in range(filtered.shape[0]):
+            filtered[m] = time_average
+    else:
+        # put back in unfilted values if skip_wgt is triggered
+        for i in info['status']['axis_1']:
+            if info['status']['axis_1'][i] == 'skipped':
+                filtered[i, :] = gains[i, :]
     return filtered, info
 
 
@@ -160,7 +168,8 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
-                        mode='clean', remove_edge_flags_from_filtering=False, **filter_kwargs):
+                        mode='clean', remove_edge_flags_from_filtering=False,
+                        broadcast_time_average=False, **filter_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -183,7 +192,8 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
             If True, perform filtering only on the rectangular sub-array that is left if we remove edge channels
             and times that are fully flagged.
         filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
-
+        broadcast_average : bool, default
+            if true, set the waterfall to be constant in time and equal to the average of the smoothed solution in time.
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: dictionary of metadata from aipy.deconv.clean
@@ -221,6 +231,12 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
                                                                                                  data=data_in, wgts=wgts_in, mode=mode, filter_dims=[1, 0],
                                                                                                  filter_half_widths=[[fringe_scale], [delay_scale]], filter_centers=[[0.],[0.]],
                                                                                                  **filter_kwargs)
+    if broadcast_time_average:
+        time_average = np.mean(filtered, axis=0)
+        for m in range(filtered.shape[0]):
+            filtered[m] = time_average
+
+
     return filtered / rephasor, info
 
 
@@ -677,7 +693,7 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, skip_wgt=0.1, mode='clean', **filter_kwargs):
+    def freq_filter(self, filter_scale=10.0, skip_wgt=0.1, mode='clean', broadcast_time_average=False, **filter_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
@@ -689,6 +705,8 @@ class CalibrationSmoother():
                 respectively. Only works properly when all weights are all between 0 and 1.
             mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
                   examples include 'dpss_leastsq', 'clean'.
+            broadcast_time_average: bool, optional
+                If True, set filtered waterfall to be equal to the average in time
             filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
@@ -697,7 +715,8 @@ class CalibrationSmoother():
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
                                                      filter_scale=filter_scale,
-                                                     mode=mode, skip_wgt=skip_wgt, **filter_kwargs)
+                                                     mode=mode, skip_wgt=skip_wgt,
+                                                     broadcast_time_average=broadcast_time_average, **filter_kwargs)
             # flag all channels for any time that triggers the skip_wgt
             for i in info['status']['axis_1']:
                 if info['status']['axis_1'][i] == 'skipped':
@@ -705,7 +724,9 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
-                            skip_wgt=0.1,  remove_edge_flags_from_filtering=False,  **filter_kwargs):
+                            skip_wgt=0.1,  remove_edge_flags_from_filtering=False,
+                            broadcast_time_average=False,
+                            **filter_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -721,6 +742,8 @@ class CalibrationSmoother():
             remove_edge_flags_from_filtering: bool, optional
                 If True, perform filtering only on the rectangular sub-array that is left if we remove edge channels
                 and times that are fully flagged.
+            broadcast_time_average: bool, optional
+                If True, set filtered waterfall to be equal to the average in time
             filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
         '''
         # loop over all antennas that are not completely flagged and filter
@@ -728,7 +751,7 @@ class CalibrationSmoother():
             if not np.all(self.flag_grids[ant]):
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
-                filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
+                filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale, broadcast_time_average=broadcast_time_average,
                                                      time_scale=time_scale, remove_edge_flags_from_filtering=remove_edge_flags_from_filtering, **filter_kwargs)
                 self.gain_grids[ant] = filtered
         self.rephase_to_refant(warn=False)
@@ -823,6 +846,6 @@ def smooth_cal_argparser():
                           see aipy.dsp.gen_window for options')
     flt_opts.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
     flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
-
+    flt_opts.aadd_argument("--broadcast_time_average", default=False, action="store_true", help="If true, broadcast average of smoothed calibration solution to all times.")
     args = a.parse_args()
     return args
