@@ -727,7 +727,7 @@ class CalibrationSmoother():
             else:
                 if np.all(skip_array):
                     self.flag_grids[ant][:, :] = True
-                    self.ggain_grids[ant][:, :] = 1.
+                    self.gain_grids[ant][:, :] = 1.
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
