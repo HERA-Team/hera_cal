@@ -723,6 +723,10 @@ class CalibrationSmoother():
                 for i in info['status']['axis_1']:
                     if info['status']['axis_1'][i] == 'skipped':
                         self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
+            # if all times were skipped, then set all the gains to unity.
+            else:
+                if np.all([info['status']['axis_1'][i] == 'skipped' for i in info['status']['axis_1']]):
+                    self.flag_grids[ant][:] = 1.
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
