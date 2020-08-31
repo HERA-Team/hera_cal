@@ -232,13 +232,12 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
     filtered = np.zeros_like(gains)
     filtered[ind_lower:ind_upper][:, ind_left:ind_right], _, info = uvtools.dspec.fourier_filter(x=[tsecs[ind_lower:ind_upper], freqs[ind_left:ind_right]],
                                                                                                  data=data_in, wgts=wgts_in, mode=mode, filter_dims=[1, 0],
-                                                                                                 filter_half_widths=[[fringe_scale], [delay_scale]], filter_centers=[[0.],[0.]],
+                                                                                                 filter_half_widths=[[fringe_scale], [delay_scale]], filter_centers=[[0.], [0.]],
                                                                                                  **filter_kwargs)
     if broadcast_time_average:
         time_average = np.mean(filtered, axis=0)
         for m in range(filtered.shape[0]):
             filtered[m] = time_average
-
 
     return filtered / rephasor, info
 
@@ -560,8 +559,8 @@ class CalibrationSmoother():
                 flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
                 cal_freqs_in_ff = []
                 for freqnum, freq in enumerate(meta['freqs']):
-                     match = np.isclose(cal_freqs, freq, rtol=1e-10)
-                     if True in match:
+                    match = np.isclose(cal_freqs, freq, rtol=1e-10)
+                    if True in match:
                         cal_freqs_in_ff.append(freqnum)
                 # select spw_range.
                 for key in flags:
@@ -721,7 +720,7 @@ class CalibrationSmoother():
         # retain tukey window default
         if mode == 'clean':
             if filter_kwargs is None:
-                filter_kwargs = {'window':'tukey'}
+                filter_kwargs = {'window': 'tukey'}
             if 'window' not in filter_kwargs:
                 filter_kwargs['window'] = 'tukey'
         for ant, gain_grid in self.gain_grids.items():
@@ -742,7 +741,7 @@ class CalibrationSmoother():
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
-                            skip_wgt=0.1,  remove_edge_flags_from_filtering=False,
+                            skip_wgt=0.1, remove_edge_flags_from_filtering=False,
                             broadcast_time_average=False,
                             **filter_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
