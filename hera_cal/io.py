@@ -876,7 +876,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
         flags = DataContainer(flags)
         type = 'baseline'
     if return_meta:
-        return flags, {'freqs': freqs, 'times': times, 'history': history, 'type':type}
+        return flags, {'freqs': freqs, 'times': times, 'history': history, 'type': type}
     else:
         return flags
 
