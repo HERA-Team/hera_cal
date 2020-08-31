@@ -258,6 +258,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     else:
         old_gains, old_flags = None, None
     hd = io.HERAData(data_infilename, filetype=filetype_in)
+    freqs_to_load = []
     for f in hd.freqs:
         if np.any(np.isclose(hc.freqs, f)):
             freqs_to_load.append(f)
