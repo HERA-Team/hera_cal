@@ -94,11 +94,9 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
     '''
     if not HAVE_UVTOOLS:
         raise ImportError("uvtools required, instsall hera_cal[all]")
-
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
-
     filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
                                                        skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
     filtered /= rephasor
@@ -106,9 +104,13 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
     # the average of the solutions.
     if broadcast_time_average:
         skipwgts = np.asarray([info['status']['axis_1'][i] != 'skipped' for i in info['status']['axis_1']]).astype(float)
-        time_average = np.sum(filtered * skipwgts[:, None], axis=0) / np.sum(skipwgts)
-        for m in range(filtered.shape[0]):
-            filtered[m] = time_average
+        if np.all(skipwgts):
+            # retain original gains if all times were skipped.
+            filtered = gains
+        else:
+            time_average = np.sum(filtered * skipwgts[:, None], axis=0) / np.sum(skipwgts)
+            for m in range(filtered.shape[0]):
+                filtered[m] = time_average
     else:
         # put back in unfilted values if skip_wgt is triggered
         for i in info['status']['axis_1']:
@@ -591,8 +593,8 @@ class CalibrationSmoother():
         # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa)
         self.freqs = self.cal_freqs[self.cals[0]]
         self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=np.complex) for ant in self.ants}
-        # Initialize all flags to False.
-        self.flag_grids = {ant: np.zeros((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
+        # Initialize all flags to True.
+        self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         if load_cspa:
             self.cspa_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for ant in self.ants}
 
@@ -608,7 +610,12 @@ class CalibrationSmoother():
             if len(self.flag_files) > 0:
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
-                        self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
+                        if use_cal_files:
+                            self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
+                        else:
+                            # if we are not using calibration files, then we need to initialize the flags
+                            # equal to ext_flags. Otherwise, they will all be True.
+                            self.flag_grids[ant][self.flag_time_indices[ff], :] = self.ext_flags[ff][ant]
 
         # Now build grid and fill it for chisq_grid, if desired
         if load_chisq:
@@ -711,6 +718,12 @@ class CalibrationSmoother():
             filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
+        # retain tukey window default
+        if mode == 'clean':
+            if filter_kwargs is None:
+                filter_kwargs = {'window':'tukey'}
+            if 'window' not in filter_kwargs:
+                filter_kwargs['window'] = 'tukey'
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
@@ -722,12 +735,10 @@ class CalibrationSmoother():
             # flag all channels for any time that triggers the skip_wgt
             if not broadcast_time_average:
                 self.flag_grids[ant][skip_array, :] = True
-                self.gain_grids[ant][skip_array, :] = 1.
             # if all times were skipped, then set all the gains to unity.
             else:
                 if np.all(skip_array):
                     self.flag_grids[ant][:, :] = True
-                    self.gain_grids[ant][:, :] = 1.
         self.rephase_to_refant(warn=False)
 
     def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
