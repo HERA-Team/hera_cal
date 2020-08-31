@@ -609,7 +609,7 @@ class CalibrationSmoother():
             if len(self.flag_files) > 0:
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
-                        if use_cal_files:
+                        if use_cal_flags:
                             self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
                         else:
                             # if we are not using calibration files, then we need to initialize the flags
