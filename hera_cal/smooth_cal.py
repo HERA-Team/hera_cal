@@ -104,7 +104,7 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
     # the average of the solutions.
     if broadcast_time_average:
         skipwgts = np.asarray([info['status']['axis_1'][i] != 'skipped' for i in info['status']['axis_1']]).astype(float)
-        if np.all(skipwgts):
+        if np.all(np.isclose(skipwgts, 0.0)):
             # set to unity if all times were skipped.
             filtered = np.ones_like(gains)
         else:
