@@ -17,7 +17,8 @@ from hera_cal.smooth_cal import CalibrationSmoother, smooth_cal_argparser
 import sys
 
 a = smooth_cal_argparser(mode='dpss_freqfilter_timeaverage')
-
+if a.flag_file_list == ['none']:
+    a.flag_file_list = None
 if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
     cs = CalibrationSmoother(a.calfits_list, flag_file_list=a.flag_file_list, flag_filetype=a.flag_filetype,
                              antflag_thresh=a.antflag_thresh, time_blacklists=a.time_blacklists,
