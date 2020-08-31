@@ -246,11 +246,21 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     # load old calibration solution
     if old_calibration is not None:
         old_hc = io.HERACal(old_calibration)
-        old_gains, old_flags, _, _ = old_hc.read()
+        old_hc.read()
+        # determine frequencies to load in old_hc that are close to hc
+        freqs_to_load = []
+        for f in old_hc.freqs:
+            if np.any(np.isclose(hc.freqs, f)):
+                freqs_to_load.append(f)
+        old_hc.select(frequencies=np.asarray(freqs_to_load)) # match up frequencies with hc.freqs
+        old_gains, old_flags, _, _ = old_hc.build_calcontainers()
         add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
     else:
         old_gains, old_flags = None, None
     hd = io.HERAData(data_infilename, filetype=filetype_in)
+    for f in hd.freqs:
+        if np.any(np.isclose(hc.freqs, f)):
+            freqs_to_load.append(f)
     add_to_history = version.history_string(add_to_history)
     no_red_weights = redundant_weights is None
     # partial loading and writing using uvh5
@@ -278,11 +288,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 reds_data_bls.append(grp[0])
             # couldn't get a system working where we just read in the outputs one at a time.
             # so unfortunately, we have to load one baseline per redundant group.
-            hd_red.read(bls=reds_data_bls)
+            hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
 
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
-        for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average, reds=all_reds):
+        for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average,
+                                                                   reds=all_reds, freqs_to_load=freqs_to_load):
             for bl in data_flags.keys():
                 # apply band edge flags
                 data_flags[bl][:, 0:flag_nchan_low] = True
@@ -320,7 +331,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd_red.write_uvh5(data_outfilename, clobber=clobber)
     # full data loading and writing
     else:
-        data, data_flags, data_nsamples = hd.read()
+        data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
         all_reds = redcal.get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol, include_autos=True)
         for bl in data_flags.keys():
             # apply band edge flags
