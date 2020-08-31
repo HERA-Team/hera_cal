@@ -383,7 +383,8 @@ def apply_cal_argparser():
     a.add_argument("--flag_nchan_high", type=int, default=0, help="integer number of channels at the high frequency end of the band to always flag (default 0)")
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files')
     a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype of output data files')
-    a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only. Default loads the whole file.")
+    a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only."
+                                                                  "Default loads the whole file. If 0 is provided, also loads whole file.")
     a.add_argument("--gain_convention", type=str, default='divide',
                    help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
     a.add_argument("--redundant_solution", default=False, action="store_true",
