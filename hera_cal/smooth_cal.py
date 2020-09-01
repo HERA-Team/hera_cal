@@ -813,6 +813,7 @@ class CalibrationSmoother():
                         outfilename = outfilename.replace(replacement[0], replacement[1])
             else:
                 outfilename = cal.replace(output_replace[0], output_replace[1])
+            utils.echo('->%s'%outfilename)
             hc.write_calfits(outfilename, clobber=clobber)
 
 
