@@ -14,9 +14,6 @@ a = ac.apply_cal_argparser()
 args = a.parse_args()
 
 kwargs = {}
-if args.vis_units is not None:
-    kwargs['vis_units'] = args.vis_units
-
 if args.nbl_per_load == 0:
     args.nbl_per_load = None
 
