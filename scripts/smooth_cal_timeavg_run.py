@@ -25,7 +25,7 @@ if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
                              lst_blacklists=a.lst_blacklists, freq_blacklists=a.freq_blacklists,
                              chan_blacklists=a.chan_blacklists, pick_refant=a.pick_refant, freq_threshold=a.freq_threshold,
                              time_threshold=a.time_threshold, ant_threshold=a.ant_threshold, verbose=a.verbose,
-                             factorize_flags=a.factorize_flags, a_priori_flags_yaml=a.a_priori_flags_yaml)
+                             factorize_flags=a.factorize_flags, a_priori_flags_yaml=a.a_priori_flags_yaml, spw_range=a.spw_range)
     cs.freq_filter(filter_scale=a.freq_scale, mode='dpss_leastsq',
                    broadcast_time_average=True)
     cs.write_smoothed_cal(output_replace=(a.infile_replace, a.outfile_replace),
