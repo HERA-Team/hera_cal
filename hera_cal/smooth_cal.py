@@ -462,7 +462,7 @@ class CalibrationSmoother():
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
                  time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[], spw_range=None,
                  pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0,
-                 use_cal_flags=True, factorize_flags=False, verbose=False):
+                 use_cal_flags=True, factorize_flags=False, a_priori_flags_yaml=None, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -518,14 +518,15 @@ class CalibrationSmoother():
             ant_threshold: float. If, after time and freq thesholding and broadcasting, an antenna is left unflagged
                 for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that
                 antenna for all times and channels. Default 1.0 means no additional flagging.
-            use_cal_flags: bool, if True, use flags from calibration files.
-                Default is True.
             factorize_flags: bool, optional
                 If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
+            a_priori_flags_yaml: str, optional
+                filepath to flagging yaml
             verbose: print status updates
         '''
         self.verbose = verbose
-
+        if a_priori_flags_yaml is not None:
+            from hera_qm.utils import apply_yaml_flags
         # load calibration files---gains, flags, freqs, times, and if desired, cspa and chisq
         utils.echo('Now loading calibration files...', verbose=self.verbose)
         self.cals = calfits_list
@@ -534,7 +535,11 @@ class CalibrationSmoother():
             hc = io.HERACal(cal)
             if spw_range is None:
                 spw_range = (0, hc.Nfreqs)
-            gains[cal], cal_flags[cal], quals, total_qual = hc.read()
+            hc.read()
+            # apply apriori flags.
+            if a_priori_flags_yaml is not None:
+                hc=apply_yaml_flags(hc, a_priori_flags_yaml)
+            gains[cal], cal_flags[cal], quals, total_qual = hc.build_calcontainers()
             for key in gains[cal]:
                 gains[cal][key] = gains[cal][key][:, spw_range[0]:spw_range[1]]
                 cal_flags[cal][key] = cal_flags[cal][key][:, spw_range[0]:spw_range[1]]
@@ -603,14 +608,12 @@ class CalibrationSmoother():
             for cal in self.cals:
                 if ant in gains[cal]:
                     self.gain_grids[ant][self.time_indices[cal], :] = gains[cal][ant]
-                    if use_cal_flags:
-                        self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
+                    self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
                     if load_cspa:
                         self.cspa_grids[ant][self.time_indices[cal], :] = cspa[cal][ant]
             if len(self.flag_files) > 0:
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
-                        if use_cal_flags:
                             self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
                         else:
                             # if we are not using calibration files, then we need to initialize the flags
@@ -624,7 +627,6 @@ class CalibrationSmoother():
             for jpol in jpols:
                 for cal in self.cals:
                     self.chisq_grids[jpol][self.time_indices[cal], :] = chisq[cal][jpol]
-
         # perform data quality checks and flag thresholding
         self.check_consistency()
         flag_threshold_and_broadcast(self.flag_grids, freq_threshold=freq_threshold,
@@ -848,6 +850,7 @@ def smooth_cal_argparser(mode='clean2D'):
                           unflagged for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that antenna for all \
                           times and channels. 1.0 means no additional flagging (default 0.5).")
     flg_opts.add_argument("--factorize_flags", default=False, action="store_true", help="If True, factorize flags into separable flags.")
+    flg_opts.add_arguments("--a_priori_flags_yaml", default=None, type=str, help="path to yaml flagging file.")
     # Options relating to blacklisting time or frequency ranges
     bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight to times/frequencies so that smooth_cal\n"
                                     "interpolates/extrapoaltes over them (though they aren't necessarily flagged).")
