@@ -685,20 +685,22 @@ class VisClean(object):
                         res, _ = zeropad_array(res, zeropad=zeropad[i], axis=i, undo=True)
                     _trim_status(info, i, zeropad[i - 1])
 
-            flgs = np.zeros_like(mdl, dtype=np.bool)
+            skipped = np.zeros_like(mdl, dtype=np.bool)
             for dim in range(2):
                 if len(info['status']['axis_%d' % dim]) > 0:
                     for i in range(len(info['status']['axis_%d' % dim])):
                         if info['status']['axis_%d' % dim][i] == 'skipped':
                             if dim == 0:
-                                flgs[:, i] = True
+                                skipped[:, i] = True
                             elif dim == 1:
-                                flgs[i] = True
+                                skipped[i] = True
 
             filtered_model[k] = mdl
-            filtered_resid[k] = res
-            filtered_data[k] = mdl + res * fw
-            filtered_flags[k] = flgs
+            filtered_model[k][skipped] = 0.
+            filtered_resid[k] = res * fw
+            filtered_resid[k][skipped] = 0.
+            filtered_data[k] = filtered_model[k] + filtered_resid[k]
+            filtered_flags[k] = skipped
             filtered_info[k] = info
 
         if hasattr(data, 'times'):
