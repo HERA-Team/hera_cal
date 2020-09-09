@@ -863,7 +863,7 @@ class VisClean(object):
         if not inplace:
             return flags
 
-    def trim_edges(self):
+    def trim_edges(self, ax='freq'):
         """Trim edge times and frequencies that are fully flagged. Always in place.
 
         Function to remove edge times and frequencies from data that are completely flagged.
