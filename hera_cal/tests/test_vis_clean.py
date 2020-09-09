@@ -452,7 +452,7 @@ class Test_VisClean(object):
                 V.flags[k][:2] = True
                 V.flags[k][:, :3] = True
                 V.flags[k][:, -4:] = True
-        V.trim_edges()
+        V.trim_edges(ax='both')
 
         assert V.Ntimes == ntimes_full - 3
         assert V.Nfreqs == nfreqs_full - 7
@@ -460,6 +460,25 @@ class Test_VisClean(object):
             assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
             assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
             assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
+
+        V.trim_edges(ax='freq')
+
+        assert V.Ntimes == ntimes_full
+        assert V.Nfreqs == nfreqs_full - 7
+        for k in V.flags:
+            assert V.data[k].shape == (ntimes_full, nfreqs_full - 7)
+            assert V.data[k].shape == (ntimes_full, nfreqs_full - 7)
+            assert V.data[k].shape == (ntimes_full, nfreqs_full - 7)
+
+        V.trim_edges(ax='time')
+
+        assert V.Ntimes == ntimes_full - 3
+        assert V.Nfreqs == nfreqs_full
+        for k in V.flags:
+            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full)
+            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full)
+            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full)
+
         # now flag all data and check warning.
         V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
         V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
@@ -475,6 +494,10 @@ class Test_VisClean(object):
             V.flags[k] = np.zeros_like(V.flags[k])
         V.flags[(23, 23, 'ee')][0] = True
         pytest.raises(ValueError, V.trim_edges)
+
+        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
+        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
+        pytest.raises(ValueError, V.trim_edges, ax='blah')
 
     def test_neb(self):
         n = vis_clean.noise_eq_bandwidth(dspec.gen_window('blackmanharris', 10000))
