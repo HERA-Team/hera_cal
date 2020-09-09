@@ -538,7 +538,7 @@ class CalibrationSmoother():
             hc.read()
             # apply apriori flags.
             if a_priori_flags_yaml is not None:
-                hc=apply_yaml_flags(hc, a_priori_flags_yaml)
+                hc = apply_yaml_flags(hc, a_priori_flags_yaml)
             gains[cal], cal_flags[cal], quals, total_qual = hc.build_calcontainers()
             for key in gains[cal]:
                 gains[cal][key] = gains[cal][key][:, spw_range[0]:spw_range[1]]
@@ -608,12 +608,14 @@ class CalibrationSmoother():
             for cal in self.cals:
                 if ant in gains[cal]:
                     self.gain_grids[ant][self.time_indices[cal], :] = gains[cal][ant]
-                    self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
+                    if use_cal_flags:
+                        self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
                     if load_cspa:
                         self.cspa_grids[ant][self.time_indices[cal], :] = cspa[cal][ant]
             if len(self.flag_files) > 0:
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
+                        if use_cal_flags:
                             self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
                         else:
                             # if we are not using calibration files, then we need to initialize the flags
@@ -850,7 +852,7 @@ def smooth_cal_argparser(mode='clean2D'):
                           unflagged for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that antenna for all \
                           times and channels. 1.0 means no additional flagging (default 0.5).")
     flg_opts.add_argument("--factorize_flags", default=False, action="store_true", help="If True, factorize flags into separable flags.")
-    flg_opts.add_arguments("--a_priori_flags_yaml", default=None, type=str, help="path to yaml flagging file.")
+    flg_opts.add_argument("--a_priori_flags_yaml", default=None, type=str, help="path to yaml flagging file.")
     # Options relating to blacklisting time or frequency ranges
     bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight to times/frequencies so that smooth_cal\n"
                                     "interpolates/extrapoaltes over them (though they aren't necessarily flagged).")
