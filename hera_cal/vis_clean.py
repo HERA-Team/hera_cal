@@ -896,13 +896,15 @@ class VisClean(object):
                 ind_lower = np.min(unflagged_times)
                 ind_upper = np.max(unflagged_times) + 1
                 # if we are only trimming freq axis, restore ind_upper/lower
-                if ax == 'freq':
+                if ax.lower() == 'freq':
                     ind_upper = self.Ntimes
                     ind_lower = 0
                 # if we are only trimming time axis, restore ind_left/right
-                elif ax == 'time':
+                elif ax.lower() == 'time':
                     ind_left = 0
                     ind_right = self.Nfreqs
+                elif ax.lower() != 'both':
+                    raise ValueError("Invalid ax=%s provided! Must be either ['freq', 'time', 'both']"%ax)
                 # back up trimmed versions of
                 bls = list(self.data.keys())
                 # flags, data, and nsamples
