@@ -915,7 +915,7 @@ class VisClean(object):
                 self.clear_containers()
                 # reread data over trimmed frequencies and times
                 dt = np.mean(np.diff(self.times))
-                self.read(time_range=self.times[ind_lower]-dt/10, self.times[ind_upper]+dt/10],
+                self.read(time_range=[self.times[ind_lower]-dt/10, self.times[ind_upper-1]+dt/10],
                           freq_chans=np.arange(ind_left, ind_right).astype(int), bls=bls)
                 # restore original data / flags/ nsamples
                 self.hd.update(data=data_bk, flags=flags_bk, nsamples=nsamples_bk)
