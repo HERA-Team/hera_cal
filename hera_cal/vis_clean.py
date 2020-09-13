@@ -307,7 +307,10 @@ class VisClean(object):
                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
                   min_dly=10.0, max_frate=None, output_prefix='clean',
                   skip_wgt=0.1, verbose=False, tol=1e-9,
-                  overwrite=False, **filter_kwargs):
+                  overwrite=False,
+                  skip_flagged_edge_freqs=False,
+                  skip_flagged_edge_times=False,
+                   **filter_kwargs):
         """
         Filter the data
 
@@ -337,6 +340,12 @@ class VisClean(object):
         verbose : Lots of outputs
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
+        skip_flagged_edge_freqs : bool, optional
+            if true, do not filter over flagged edge frequencies (filter over sub-region)
+            defualt is False
+        skip_flagged_edge_times : bool, optional
+            if true, do not filter over flagged edge times (filter over sub-region)
+            defualt is False
         tol : float, optional. To what level are foregrounds subtracted.
         filter_kwargs : optional dictionary, see fourier_filter **filter_kwargs.
                         Do not pass suppression_factors (non-clean)!
@@ -398,16 +407,23 @@ class VisClean(object):
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, suppression_factors=suppression_factors,
                                     x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
+                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite,
+                                    skip_flagged_edge_freqs=skip_flagged_edge_freqs,
+                                    skip_flagged_edge_times=skip_flagged_edge_times, **filter_kwargs)
             else:
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
+                                    ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite,
+                                    skip_flagged_edge_freqs=skip_flagged_edge_freqs,
+                                    skip_flagged_edge_times=skip_flagged_edge_times,
+                                    **filter_kwargs)
 
     def fourier_filter(self, filter_centers, filter_half_widths, mode,
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
-                       ax='freq', skip_wgt=0.1, verbose=False, overwrite=False, **filter_kwargs):
+                       ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
+                       skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
+                       **filter_kwargs):
         """
         Generalized fourier filtering of attached data.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
@@ -486,6 +502,12 @@ class VisClean(object):
         verbose : Lots of outputs.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
+        skip_flagged_edge_freqs : bool, optional
+            if true, do not filter over flagged edge frequencies (filter over sub-region)
+            defualt is False
+        skip_flagged_edge_times : bool, optional
+            if true, do not filter over flagged edge times (filter over sub-region)
+            defualt is False
         filter_kwargs: dict. NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
@@ -664,10 +686,36 @@ class VisClean(object):
                         w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
                         xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
                                            x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
-            mdl, res, info = dspec.fourier_filter(x=xp, data=d, wgts=w, filter_centers=filter_centers,
-                                                  filter_half_widths=filter_half_widths,
-                                                  mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                  **filter_kwargs)
+            mdl, res = np.zeros_like(d), np.zeros_like(d)
+            if skip_flagged_edge_freqs:
+                unflagged_chans = np.where(~np.all(np.isclose(w, 0.0), axis=0))[0]
+                ind_left = np.min(unflagged_chans)
+                ind_right = np.max(unflagged_chans) + 1
+            else:
+                ind_left = 0
+                ind_right = d.shape[1]
+            if skip_flagged_edge_times:
+                unflagged_times = np.where(~np.all(np.isclose(w, 0.0), axis=1))[0]
+                ind_lower = np.min(unflagged_times)
+                ind_upper = np.max(unflagged_times) + 1
+            else:
+                ind_lower = 0
+                ind_upper = d.shape[0]
+            din = d[ind_lower: ind_upper][:, ind_left: ind_right]
+            win = w[ind_lower: ind_upper][:, ind_left: ind_right]
+            if ax == 'both':
+                xp[0] = xp[0][ind_lower: ind_upper]
+                xp[1] = xp[1][ind_left: ind_right]
+            elif ax == 'time':
+                xp = xp[ind_lower: ind_upper]
+            elif ax === 'freq':
+                xp = xp[ind_left: ind_right]
+
+            mdl[ind_lower: ind_upper][:, ind_left: ind_right], res[ind_lower: ind_upper][:, ind_left: ind_right], info \
+            = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                   filter_half_widths=filter_half_widths,
+                                   mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                   **filter_kwargs)
 
             # unzeropad array and put in skip flags.
             if ax == 'freq':
@@ -1315,6 +1363,7 @@ def _filter_argparser(multifile=False):
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
     a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
+    a.add_argument("--skip_flagged_edges", default=False, action="store_true", help="if True, do not filter over flagged edge integrations or channels (depending on filter axis).")
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")

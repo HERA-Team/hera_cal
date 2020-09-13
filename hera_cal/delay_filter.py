@@ -33,7 +33,8 @@ class DelayFilter(VisClean):
         self.run_delay_filter(**kwargs)
 
     def run_delay_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
-                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
+                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False,
+                         skip_flagged_edges=False, **filter_kwargs):
         '''
         Run uvtools.dspec.vis_filter on data.
 
@@ -68,6 +69,7 @@ class DelayFilter(VisClean):
             write_cache: bool. If true, create new cache file with precomputed matrices
                                that were not in previously loaded cache files.
             cache: dictionary containing pre-computed filter products.
+            skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -88,7 +90,8 @@ class DelayFilter(VisClean):
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='freq', x=self.freqs, cache=filter_cache, mode=mode,
                        horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
-                       skip_wgt=skip_wgt, overwrite=True, verbose=verbose, **filter_kwargs)
+                       skip_wgt=skip_wgt, overwrite=True, verbose=verbose,
+                       skip_flagged_edge_freqs=skip_flagged_edges, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
@@ -98,7 +101,8 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 read_cache=False, write_cache=False, round_up_bllens=False,
                                 factorize_flags=False, time_thresh=0.05,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                clobber=False, add_to_history='', **filter_kwargs):
+                                clobber=False, add_to_history='',
+                                skip_flagged_edges=False, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -126,6 +130,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
+        skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
@@ -140,7 +145,8 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         df.read(frequencies=freqs)
         if factorize_flags:
             df.factorize_flags(time_thresh=time_thresh, inplace=True)
-        df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+        df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                            skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
                                clobber=clobber, add_to_history=add_to_history,
@@ -151,7 +157,8 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             if factorize_flags:
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
-            df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+            df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
@@ -162,7 +169,8 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               read_cache=False, write_cache=False, round_up_bllens=False,
                                               factorize_flags=False, time_thresh=0.05,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                              clobber=False, add_to_history='', **filter_kwargs):
+                                              clobber=False, add_to_history='',
+                                              skip_flagged_edges=False, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -220,7 +228,8 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     df.read(bls=baseline_list, frequencies=freqs)
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
-    df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+    df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                        skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
     df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history,
