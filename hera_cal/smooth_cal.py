@@ -100,8 +100,12 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
     if skip_flagged_edge_freqs:
         unflagged_chans = np.where(~np.all(np.isclose(wgts, 0.0), axis=0))[0]
-        ind_left = np.min(unflagged_chans)
-        ind_right = np.max(unflagged_chans) + 1
+        if len(unflagged_chans) > 0:
+            ind_left = np.min(unflagged_chans)
+            ind_right = np.max(unflagged_chans) + 1
+        else:
+            ind_left = 0
+            ind_right = gains.shape[1]
     else:
         ind_left = 0
         ind_right = gains.shape[1]
