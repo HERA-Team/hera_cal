@@ -19,7 +19,7 @@ from hera_cal.vis_clean import VisClean
 from hera_cal.data import DATA_PATH
 from hera_cal import xtalk_filter as xf
 import glob
-
+import copy
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:It seems that the latitude and longitude are in radians")
@@ -452,32 +452,35 @@ class Test_VisClean(object):
                 V.flags[k][:2] = True
                 V.flags[k][:, :3] = True
                 V.flags[k][:, -4:] = True
-        V.trim_edges(ax='both')
+        Vcopy = copy.deepcopy(V)
+        Vcopy.trim_edges(ax='both')
 
-        assert V.Ntimes == ntimes_full - 3
-        assert V.Nfreqs == nfreqs_full - 7
+        assert Vcopy.Ntimes == ntimes_full - 3
+        assert Vcopy.Nfreqs == nfreqs_full - 7
         for k in V.flags:
-            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
-            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
-            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
+            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
+            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
+            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
 
-        V.trim_edges(ax='freq')
+        Vcopy = copy.deepcopy(V)
+        Vcopy.trim_edges(ax='freq')
 
-        assert V.Ntimes == ntimes_full
-        assert V.Nfreqs == nfreqs_full - 7
-        for k in V.flags:
-            assert V.data[k].shape == (ntimes_full, nfreqs_full - 7)
-            assert V.data[k].shape == (ntimes_full, nfreqs_full - 7)
-            assert V.data[k].shape == (ntimes_full, nfreqs_full - 7)
+        assert Vcopy.Ntimes == ntimes_full
+        assert Vcopy.Nfreqs == nfreqs_full - 7
+        for k in Vcopy.flags:
+            assert Vcopy.data[k].shape == (ntimes_full, nfreqs_full - 7)
+            assert Vcopy.data[k].shape == (ntimes_full, nfreqs_full - 7)
+            assert Vcopy.data[k].shape == (ntimes_full, nfreqs_full - 7)
 
-        V.trim_edges(ax='time')
+        Vcopy = copy.deepcopy(V)
+        Vcopy.trim_edges(ax='time')
 
-        assert V.Ntimes == ntimes_full - 3
-        assert V.Nfreqs == nfreqs_full
-        for k in V.flags:
-            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full)
-            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full)
-            assert V.data[k].shape == (ntimes_full - 3, nfreqs_full)
+        assert Vcopy.Ntimes == ntimes_full - 3
+        assert Vcopy.Nfreqs == nfreqs_full
+        for k in Vcopy.flags:
+            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full)
+            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full)
+            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full)
 
         # now flag all data and check warning.
         V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
