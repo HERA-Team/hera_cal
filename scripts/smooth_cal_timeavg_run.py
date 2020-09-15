@@ -27,7 +27,7 @@ if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
                              time_threshold=a.time_threshold, ant_threshold=a.ant_threshold, verbose=a.verbose,
                              factorize_flags=a.factorize_flags, a_priori_flags_yaml=a.a_priori_flags_yaml, spw_range=a.spw_range)
     cs.freq_filter(filter_scale=a.freq_scale, mode='dpss_leastsq',
-                   broadcast_time_average=True)
+                   broadcast_time_average=True, skip_flagged_edge_freqs=True)
     cs.write_smoothed_cal(output_replace=(a.infile_replace, a.outfile_replace),
                           add_to_history=' '.join(sys.argv), clobber=a.clobber)
 else:
