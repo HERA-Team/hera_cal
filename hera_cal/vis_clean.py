@@ -689,15 +689,23 @@ class VisClean(object):
             mdl, res = np.zeros_like(d), np.zeros_like(d)
             if skip_flagged_edge_freqs:
                 unflagged_chans = np.where(~np.all(np.isclose(w, 0.0), axis=0))[0]
-                ind_left = np.min(unflagged_chans)
-                ind_right = np.max(unflagged_chans) + 1
+                if len(unflagged_chans) > 0:
+                    ind_left = np.min(unflagged_chans)
+                    ind_right = np.max(unflagged_chans) + 1
+                else:
+                    ind_left = 0
+                    ind_right = d.shape[1]
             else:
                 ind_left = 0
                 ind_right = d.shape[1]
             if skip_flagged_edge_times:
                 unflagged_times = np.where(~np.all(np.isclose(w, 0.0), axis=1))[0]
-                ind_lower = np.min(unflagged_times)
-                ind_upper = np.max(unflagged_times) + 1
+                if len(unflagged_times) > 0:
+                    ind_lower = np.min(unflagged_times)
+                    ind_upper = np.max(unflagged_times) + 1
+                else:
+                    ind_lower = 0
+                    ind_upper = d.shape[0]
             else:
                 ind_lower = 0
                 ind_upper = d.shape[0]
