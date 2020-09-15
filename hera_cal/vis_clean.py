@@ -708,7 +708,7 @@ class VisClean(object):
                 xp[1] = xp[1][ind_left: ind_right]
             elif ax == 'time':
                 xp = xp[ind_lower: ind_upper]
-            elif ax === 'freq':
+            elif ax == 'freq':
                 xp = xp[ind_left: ind_right]
 
             mdl[ind_lower: ind_upper][:, ind_left: ind_right], res[ind_lower: ind_upper][:, ind_left: ind_right], info \

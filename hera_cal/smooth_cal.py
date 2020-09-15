@@ -68,6 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
+                skip_flagged_edge_freqs=False,
                 mode='clean', broadcast_time_average=False, **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
@@ -97,8 +98,20 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
-    filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
-                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
+    if skip_flagged_edge_freqs:
+        unflagged_chans = np.where(~np.all(np.isclose(wgts, 0.0), axis=0))[0]
+        ind_left = np.min(unflagged_chans)
+        ind_right = np.max(unflagged_chans) + 1
+    else:
+        ind_left = 0
+        ind_right = gains.shape[1]
+    filtered = np.ones_like(gains)
+    res = np.ones_like(gains)
+    din = (gains * rephasor)[:, ind_left: ind_right]
+    win = wgts[:, ind_left: ind_right]
+    xin = freqs[ind_left: ind_right]
+    filtered[:, ind_left: ind_right], res[:, ind_left: ind_right], info = uvtools.dspec.fourier_filter(x=xin, data=din, wgts=win, mode=mode, filter_centers=[0.],
+                                                                                                       skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
     filtered /= rephasor
     # if broadcast_time_average is true, then set all times to
     # the average of the solutions.
@@ -705,7 +718,8 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, skip_wgt=0.1, mode='clean', broadcast_time_average=False, **filter_kwargs):
+    def freq_filter(self, filter_scale=10.0, skip_wgt=0.1, mode='clean', broadcast_time_average=False,
+                    skip_flagged_edge_freqs=False, **filter_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
@@ -733,7 +747,7 @@ class CalibrationSmoother():
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
                                                      filter_scale=filter_scale,
-                                                     mode=mode, skip_wgt=skip_wgt,
+                                                     mode=mode, skip_wgt=skip_wgt, skip_flagged_edge_freqs=skip_flagged_edge_freqs,
                                                      broadcast_time_average=broadcast_time_average, **filter_kwargs)
             skip_array = np.asarray([info['status']['axis_1'][i] == 'skipped' for i in info['status']['axis_1']])
             # flag all channels for any time that triggers the skip_wgt
