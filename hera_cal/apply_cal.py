@@ -421,6 +421,14 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             else:
                 raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
 
+def sum_diff_2_even_odd_argparser():
+    '''Arg parser for even/odd to sum/diff function.'''
+    a = argparse.ArgumentParser(description="Convert a sum and a diff file to an even and an odd file.")
+    a.add_argument("--sumfilename", type=str, help="name of sum file.")
+    a.add_argument("--oddfilename", type=str, help="name of diff file.")
+    a.add_argument("--evenfilename", type=str, help="name of even file.")
+    a.add_argument("--oddfilename", type=str, help="name of odd file.")
+    return a
 
 def apply_cal_argparser():
     '''Arg parser for commandline operation of apply_cal.'''
