@@ -431,7 +431,7 @@ def sum_diff_2_even_odd_argparser():
     a.add_argument("difffilename", type=str, help="name of diff file.")
     a.add_argument("evenfilename", type=str, help="name of even file.")
     a.add_argument("oddfilename", type=str, help="name of odd file.")
-    a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only."
+    a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only.")
     return a
 
 def apply_cal_argparser():
