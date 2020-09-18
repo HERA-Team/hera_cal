@@ -8,7 +8,7 @@ from hera_cal import apply_cal
 a = apply_cal.sum_diff_2_even_odd_argparser()
 args = a.parse_args()
 
-if args.nbl_per_load == "none":
+if args.nbl_per_load == "none" or args.nbl_per_load == 0:
     args.nbl_per_load = None
 
 apply_cal.sum_diff_2_even_odd(args.sumfilename, args.difffilename,
