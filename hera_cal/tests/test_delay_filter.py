@@ -147,13 +147,13 @@ class Test_DelayFilter(object):
         df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, trim_edges=True,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
-        assert hd.Ntimes == ntimes_before - 1
+        assert hd.Ntimes == ntimes_before
         assert hd.Nfreqs == nfreqs_before - 1
         assert np.all(np.isclose(hd.freqs, freqs_before[:-1]))
-        assert np.all(np.isclose(hd.times, times_before[1:]))
+        assert np.all(np.isclose(hd.times, times_before[:]))
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
-            assert not np.any(f[bl])
+            assert not np.any(f[bl][1:])
 
         # test delay filtering and writing with factorized flags and partial i/o
         df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
@@ -238,12 +238,12 @@ class Test_DelayFilter(object):
         for bl in hd_original.bls:
             assert bl in d.keys()
 
-        assert hd.Ntimes == ntimes_before - 1
+        assert hd.Ntimes == ntimes_before
         assert hd.Nfreqs == nfreqs_before - 1
         assert np.all(np.isclose(hd.freq_array.squeeze(), freqs_before[:-1]))
-        assert np.all(np.isclose(np.unique(hd.time_array), times_before[1:]))
+        assert np.all(np.isclose(np.unique(hd.time_array), times_before[:]))
         for bl in f:
-            assert not np.any(f[bl])
+            assert not np.any(f[bl][1:])
 
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
