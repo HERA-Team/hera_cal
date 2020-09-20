@@ -1261,7 +1261,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 favg = np.all(np.isclose(w * f, 0), axis=0)
             else:
                 favg = np.all(np.isclose(w, 0), axis=0)
-                
+
             # replace with new data
             if fed_container:
                 blkey = blg[0] + (pol,)
@@ -1359,6 +1359,9 @@ def chunk_baselines_by_redundant_groups(reds, max_chunk_size):
                           " Loading group anyways." % (len(reds[group_index]), max_chunk_size, str(reds[group_index][0])))
             baseline_chunks.append(grp)
         else:
+            # if baseline_chunks is empty, initialize the first chunk.
+            if len(baseline_chunks) == 0:
+                baseline_chunks.append([])
             if len(baseline_chunks[-1]) + len(grp) <= max_chunk_size:
                 baseline_chunks[-1].extend(grp)
             else:
