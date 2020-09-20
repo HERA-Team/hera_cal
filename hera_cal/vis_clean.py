@@ -1504,6 +1504,21 @@ def _linear_argparser(multifile=False):
     a.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
     return a
 
+def _dpss_argparser(multifile=False):
+    '''
+    Arg parser for commandline operation of hera_cal.delay_filter in dpss mode.
+    Arguments
+    ---------
+        multifile, bool: optional. If True, add calfilelist and filelist
+                         arguments.
+    Returns
+    -------
+        Arg-parser for dpss filtering.
+    '''
+    a = _linear_argparser(multifile=multifile)
+    a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
+    a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
+
 
 def reconstitute_files(templatefile, fragments, outfilename, clobber=False):
     """Recombine xtalk products into short-time files.
