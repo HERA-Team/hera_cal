@@ -225,8 +225,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             sum_nsamples[k] = diff_nsamples[k]
         hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
         hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
-        hd_sum.write_uvh5(even_outfilename, inplace=True, clobber=clobber)
-        hd_diff.write_uvh5(odd_outfilename, inplace=True, clobber=clobber)
+        hd_sum.write_uvh5(even_outfilename, clobber=clobber)
+        hd_diff.write_uvh5(odd_outfilename, clobber=clobber)
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
