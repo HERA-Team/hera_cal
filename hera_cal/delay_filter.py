@@ -254,20 +254,25 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
 # ---------------------------------------
 
 
-def delay_filter_argparser(mode='clean'):
+def delay_filter_argparser(mode='clean', multifile=False):
     '''
     Arg parser for commandline operation of delay filters.
 
     Parameters:
         mode, str : optional. Determines sets of arguments to load.
             can be 'clean', 'dayenu', or 'dpss_leastsq'.
+        multifile: bool, optional.
+            If True, add calfilelist and filelist
+            arguments.
     Returns:
         argparser for delay-domain filtering for specified filtering mode
     '''
     if mode == 'clean':
-        a = vis_clean._clean_argparser()
-    elif mode in ['dayenu', 'dpss_leastsq']:
-        a = vis_clean._linear_argparser()
+        a = vis_clean._clean_argparser(multifile=multifile)
+    elif mode == 'dayenu':
+        a = vis_clean._linear_argparser(multifile=multifile)
+    elif mode == 'dpss_leastsq':
+        a = vis_clean._dpss_argparser(multifile=multifile)
     filt_options = a.add_argument_group(title='Options for the delay filter')
     filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
     filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
