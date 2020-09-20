@@ -119,11 +119,11 @@ class Test_XTalkFilter(object):
             assert bl in d.keys()
 
         assert hd.Ntimes == ntimes_before - 1
-        assert hd.Nfreqs == nfreqs_before - 1
-        assert np.all(np.isclose(hd.freq_array.squeeze(), freqs_before[:-1]))
+        assert hd.Nfreqs == nfreqs_before
+        assert np.all(np.isclose(hd.freq_array.squeeze(), freqs_before[:]))
         assert np.all(np.isclose(np.unique(hd.time_array), times_before[1:]))
         for bl in f:
-            assert not np.any(f[bl])
+            assert not np.any(f[bl][:, :-1])
             assert not np.all(np.isclose(d[bl], 0.))
 
     def test_load_xtalk_filter_and_write(self, tmpdir):
@@ -195,12 +195,12 @@ class Test_XTalkFilter(object):
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         assert hd.Ntimes == ntimes_before - 1
-        assert hd.Nfreqs == nfreqs_before - 1
-        assert np.all(np.isclose(hd.freqs, freqs_before[:-1]))
+        assert hd.Nfreqs == nfreqs_before
+        assert np.all(np.isclose(hd.freqs, freqs_before[:]))
         assert np.all(np.isclose(hd.times, times_before[1:]))
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for bl in f:
-            assert not np.any(f[bl])
+            assert not np.any(f[bl][:, :-1])
             assert not np.all(np.isclose(d[bl], 0.))
 
         # test delay filtering and writing with factorized flags and partial i/o
