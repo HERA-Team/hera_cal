@@ -13,4 +13,4 @@ if args.nbl_per_load == "none" or args.nbl_per_load == 0:
 
 apply_cal.sum_diff_2_even_odd(args.sumfilename, args.difffilename,
                               args.evenfilename, args.oddfilename,
-                              nbl_per_load=args.nbl_per_load)
+                              nbl_per_load=args.nbl_per_load, clobber=args.clobber)

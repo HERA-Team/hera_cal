@@ -179,7 +179,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
 def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_outfilename,
-                        nbl_per_load=None, filetype_in='uvh5'):
+                        nbl_per_load=None, filetype_in='uvh5', clobber=False):
     """Generate even and odd data sets from sum and diff
 
     Arguments:
@@ -200,7 +200,7 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
     if nbl_per_load is not None:
         if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
-        for sum, sum_flags, sum_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load):
+        for sum, sum_flags, sum_nsamples in hd_sum.iterate_over_bls(Nbls=nbl_per_load):
             diff, diff_flags, diff_nsamples = hd_diff.load(bls=list(sum.keys()))
             sum = (sum + diff) / 2.
             diff = sum - diff
@@ -209,13 +209,13 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
                 diff_flags[k] = sum_flags[k]
                 diff_nsamples[k] = (sum_nsamples[k] + diff_nsamples[k]) / 2.
                 sum_nsamples[k] = diff_nsamples[k]
-            sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
-            diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
-            sum.partial_write(even_outfilename, inplace=True, clobber=clobber)
-            diff.partial_write(odd_outfilename, inplace=True, clobber=clobber)
+            hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
+            hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
+            hd_sum.partial_write(even_outfilename, inplace=True, clobber=clobber)
+            hd_diff.partial_write(odd_outfilename, inplace=True, clobber=clobber)
     else:
-        sum, sum_flags, sum_nsamples = hd.read()
-        diff, diff_flags, diff_nsamples = hd.read()
+        sum, sum_flags, sum_nsamples = hd_sum.read()
+        diff, diff_flags, diff_nsamples = hd_diff.read()
         sum = (sum + diff) / 2.
         diff = sum - diff
         for k in sum_flags:
@@ -223,10 +223,10 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             diff_flags[k] = sum_flags[k]
             diff_nsamples[k] = (sum_nsamples[k] + diff_nsamples[k]) / 2.
             sum_nsamples[k] = diff_nsamples[k]
-        sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
-        diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
-        sum.write_uvh5(even_outfilename, inplace=True, clobber=clobber)
-        diff.write_uvh5(odd_outfilename, inplace=True, clobber=clobber)
+        hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
+        hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
+        hd_sum.write_uvh5(even_outfilename, inplace=True, clobber=clobber)
+        hd_diff.write_uvh5(odd_outfilename, inplace=True, clobber=clobber)
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
@@ -429,6 +429,7 @@ def sum_diff_2_even_odd_argparser():
     a.add_argument("evenfilename", type=str, help="name of even file.")
     a.add_argument("oddfilename", type=str, help="name of odd file.")
     a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only.")
+    a.add_argument("--clobber", default=False, action="store_true")
     return a
 
 def apply_cal_argparser():
