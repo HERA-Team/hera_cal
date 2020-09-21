@@ -315,6 +315,16 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
         assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
 
+        # now do chunked redundant groups with a large group size to catch a bug.
+        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
+                     gain_convention='divide', redundant_average=True, nbl_per_load=1000000, clobber=True)
+        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
+        hda_calibrated_with_apply_cal.read()
+        # check that the data, flags, and nsamples arrays are close
+        assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
+        assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
+        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
+
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
         a = ac.apply_cal_argparser()
