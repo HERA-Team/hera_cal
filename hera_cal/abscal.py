@@ -2906,8 +2906,8 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
     # Perform cut on baseline length and polarization
     if len(pols) == 0:
         pols = list(set([bl[2] for bl_list in [data_bls, model_bls] for bl in bl_list]))
-    data_bl_to_load = utils.filter_bls(data_bls, pols=pols, antpos=data_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
-    model_bl_to_load = utils.filter_bls(model_bls, pols=pols, antpos=model_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut)
+    data_bl_to_load = set(utils.filter_bls(data_bls, pols=pols, antpos=data_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut))
+    model_bl_to_load = set(utils.filter_bls(model_bls, pols=pols, antpos=model_antpos, min_bl_cut=min_bl_cut, max_bl_cut=max_bl_cut))
 
     # If we're working with full data sets, only pick out matching keys (or ones that work reversably)
     if not data_is_redsol and not model_is_redundant:
@@ -2956,7 +2956,7 @@ def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[]
                             or (reverse_bl(bl) in data_to_model_bl_map.values())]
 
     echo("Selected {} data baselines and {} model baselines to load.".format(len(data_bl_to_load), len(model_bl_to_load)), verbose=verbose)
-    return data_bl_to_load, model_bl_to_load, data_to_model_bl_map
+    return list(data_bl_to_load), list(model_bl_to_load), data_to_model_bl_map
 
 
 def build_data_wgts(data_flags, data_nsamples, model_flags, autocorrs, auto_flags, times_by_bl=None,
