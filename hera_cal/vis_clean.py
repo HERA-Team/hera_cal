@@ -1518,7 +1518,7 @@ def _dpss_argparser(multifile=False):
     a = _linear_argparser(multifile=multifile)
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
-
+    return a
 
 def reconstitute_files(templatefile, fragments, outfilename, clobber=False):
     """Recombine xtalk products into short-time files.
