@@ -1539,7 +1539,14 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     '''
     rv = {}  # dictionary of return values
     filtered_reds = filter_reds(reds, max_dims=max_dims)
-    rc = RedundantCalibrator(filtered_reds)
+    # try to use the GPU version if available
+    try:  # noqa
+        from hera_gpu.redcal import RedundantCalibratorGPU
+        rc = RedundantCalibratorGPU(filtered_reds)
+        have_gpu = True
+    except ImportError:
+        rc = RedundantCalibrator(filtered_reds)
+        have_gpu = False
     if freqs is None:
         freqs = data.freqs
     if times_by_bl is None:
@@ -1554,8 +1561,28 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     make_sol_finite(log_sol)
     data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
                                                                      * SEC_PER_DAY))**-1 for bl in data.keys()}
-    rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
-                                           check_every=check_every, check_after=check_after, gain=gain)
+    if have_gpu:
+        rv['omni_meta'], omni_sol = rc.omnical_gpu(
+            data,
+            log_sol,
+            wgts=data_wgts,
+            conv_crit=oc_conv_crit,
+            maxiter=oc_maxiter,
+            check_every=check_every,
+            check_after=check_after,
+            gain=gain,
+        )
+    else:
+        rv['omni_meta'], omni_sol = rc.omnical(
+            data,
+            log_sol,
+            wgts=data_wgts,
+            conv_crit=oc_conv_crit,
+            maxiter=oc_maxiter,
+            check_every=check_every,
+            check_after=check_after,
+            gain=gain,
+        )
 
     # update omnical flags and then remove degeneracies
     rv['g_omnical'], rv['v_omnical'] = get_gains_and_vis_from_sol(omni_sol)
