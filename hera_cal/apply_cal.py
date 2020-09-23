@@ -207,7 +207,7 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             for k in sum_flags:
                 sum_flags[k] = sum_flags[k]
                 diff_flags[k] = sum_flags[k]
-                diff_nsamples[k] = (sum_nsamples[k] + diff_nsamples[k]) / 2.
+                diff_nsamples[k] = sum_nsamples[k]
                 sum_nsamples[k] = diff_nsamples[k]
             hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
             hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
@@ -221,7 +221,7 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
         for k in sum_flags:
             sum_flags[k] = sum_flags[k]
             diff_flags[k] = sum_flags[k]
-            diff_nsamples[k] = (sum_nsamples[k] + diff_nsamples[k]) / 2.
+            diff_nsamples[k] = sum_nsamples[k]
             sum_nsamples[k] = diff_nsamples[k]
         hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
         hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
