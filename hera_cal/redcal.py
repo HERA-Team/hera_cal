@@ -1540,13 +1540,22 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     rv = {}  # dictionary of return values
     filtered_reds = filter_reds(reds, max_dims=max_dims)
     # try to use the GPU version if available
+    have_gpu = True
     try:  # noqa
-        from hera_gpu.redcal import RedundantCalibratorGPU
-        rc = RedundantCalibratorGPU(filtered_reds)
-        have_gpu = True
+        import pycuda
     except ImportError:
-        rc = RedundantCalibrator(filtered_reds)
         have_gpu = False
+    if have_gpu:  # noqa
+        try:
+            from hera_gpu.redcal import RedundantCalibratorGPU
+        except (ImportError, pycuda._driver.RuntimeError):
+            have_gpu = False
+
+    if have_gpu:
+        rc = RedundantCalibratorGPU(filtered_reds)
+    else:
+        rc = RedundantCalibrator(filtered_reds)
+
     if freqs is None:
         freqs = data.freqs
     if times_by_bl is None:
