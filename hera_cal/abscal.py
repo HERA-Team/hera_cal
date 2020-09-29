@@ -3199,7 +3199,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
                        '         Of them, {} is not flagged.\n').format(suspected_off_grid, not_flagged))
         idealized_antpos = {ant: pos[:2] for ant, pos in idealized_antpos.items()}
 
-    # Abscal Step 1: Per-Channel Absolute Amplitude Calibration
+    # Abscal Step 1: Per-Channel Logarithmic Absolute Amplitude Calibration
     gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
     abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
     apply_cal.calibrate_in_place(data, gains_here)
@@ -3242,6 +3242,10 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
         echo("TT_phs_logcal convergence criterion: " + str(crit), verbose=verbose)
         if crit < phs_conv_crit:
             break
+
+    # Abscal Step 5: Per-Channel Linear Absolute Amplitude Calibration
+    gains_here = abs_amp_lincal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+    abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
 
     return abscal_delta_gains
 
