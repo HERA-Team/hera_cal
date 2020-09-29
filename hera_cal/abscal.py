@@ -129,6 +129,137 @@ def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gai
         return {ant: np.exp(fit['eta_{}'.format(ant[1])]).astype(np.complex) for ant in gain_ants}
 
 
+def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gain_ants=[],
+                   conv_crit=None, maxiter=100):
+    """
+    calculate absolute (array-wide) gain amplitude scalar
+    with a linear (or linearized) solver using the equation:
+
+    V_ij,xy^data = A_x A_y * V_ij,xy^model
+
+    where {i,j} index antenna numbers and {x,y} index polarizations
+    of the i-th and j-th antennas respectively. When no cross-polarized
+    visibilities are involved, A^2 is solved for linearly for both real
+    and imaginary parts simultaneously as separate equations. Otherwise,
+    we have to use a linear-product solving algorithm, using abs_amp_logcal
+    as a starting point.
+
+    Parameters:
+    -----------
+    model : visibility data of refence model, type=DataContainer
+            keys are antenna-pair + polarization tuples, Ex. (1, 2, 'nn').
+            values are complex ndarray visibilities.
+            these must be 2D arrays, with [0] axis indexing time
+            and [1] axis indexing frequency.
+
+    data : visibility data of measurements, type=DataContainer
+           keys are antenna pair + pol tuples (must match model), values are
+           complex ndarray visibilities matching shape of model
+
+    wgts : weights of data, type=DataContainer, [default=None]
+           keys are antenna pair + pol tuples (must match model), values are real floats
+           matching shape of model and data
+
+    return_gains : boolean. If True, convert result into a dictionary of gain waterfalls.
+
+    gain_ants : list of ant-pol tuples for return_gains dictionary
+    
+    conv_crit : A convergence criterion below which to stop iterating LinProductSolver. 
+                Converegence is measured L2-norm of the change in the solution of the 
+                variables divided by the L2-norm of the solution itself.
+                Default: None (resolves to machine precision for inferred dtype).
+                N.B. Only used when data and model include cross-polarized visibilities.
+    
+    maxiter : Integer maximum number of iterations to perform LinProductSolver.
+              N.B. Only used when data and model include cross-polarized visibilities.    
+
+    verbose : print output, type=boolean, [default=False]
+
+    Output:
+    -------
+    if not return_gains:
+        fit : dictionary with 'A_{}' key for amplitude scalar for {} polarization,
+              which has the same shape as the ndarrays in the model
+    else:
+        gains: dictionary with gain_ants as keys and gain waterfall arrays as values
+    """
+    echo("...configuring linsolve data for abs_amp_lincal", verbose=verbose)
+
+    # get keys from model and data dictionary
+    keys = sorted(set(model.keys()) & set(data.keys()))
+
+    # check to see whether any cross-polarizations are being used (this will require a different solver)
+    cross_pols_used = False
+    for k in keys:
+        ant0, ant1 = split_bl(k)
+        if ant0[1] != ant1[1]:
+            cross_pols_used = True
+            break
+       
+    # make weights if None
+    if wgts is None:
+        wgts = odict()
+        for i, k in enumerate(keys):
+            wgts[k] = np.ones_like(data[k], dtype=np.float)
+
+    # fill nans and infs, minimally duplicating data to save memory
+    data_here = {}
+    model_here = {}
+    for k in keys:
+        if np.any(~np.isfinite(data[k])):
+            data_here[k] = deepcopy(data[k])
+            fill_dict_nans(data_here[k], wgts=wgts, nan_fill=0.0, inf_fill=0.0, array=True)
+        else:
+            data_here[k] = data[k]
+        if np.any(~np.isfinite(model[k])):
+            model_here[k] = deepcopy(model[k])
+            fill_dict_nans(model_here[k], wgts=wgts, nan_fill=0.0, inf_fill=0.0, array=True)
+        else:
+            model_here[k] = model[k]
+
+    # setup linsolve equations, either for A (if cross_pols_used) or A^2
+    ls_data = {}
+    ls_wgts = {}
+    ls_consts = {}
+    for i, k in enumerate(keys):
+        pol0, pol1 = split_pol(k[-1])
+        if cross_pols_used:
+            re_eq_str = f'model_re_{i}*A_{pol0}*A_{pol1}'
+            im_eq_str = f'model_im_{i}*A_{pol0}*A_{pol1}'   
+        else:
+            re_eq_str = f'model_re_{i}*Asq_{pol0}'
+            im_eq_str = f'model_im_{i}*Asq_{pol0}'
+            
+        ls_data[re_eq_str] = np.real(data_here[k])
+        ls_wgts[re_eq_str] = wgts[k]
+        ls_consts[f'model_re_{i}'] = np.real(model_here[k])
+
+        ls_data[im_eq_str] = np.imag(data_here[k])
+        ls_wgts[im_eq_str] = wgts[k]
+        ls_consts[f'model_im_{i}'] = np.imag(model_here[k])
+    
+    # setup linsolve and run
+    echo("...running linsolve", verbose=verbose)
+    if cross_pols_used:
+        # use abs_amp_logcal to get a starting point solution
+        sol0 = abs_amp_logcal(model, data, wgts=wgts)
+        sol0 = {k.replace('eta_', 'A_'): np.exp(sol) for k, sol in sol0.items()}
+        # now solve by linearizing 
+        solver = linsolve.LinProductSolver(ls_data, sol0, wgts=ls_wgts, constants=ls_consts)
+        meta, fit = solver.solve_iteratively(conv_crit=conv_crit, maxiter=maxiter)
+    else: 
+        # in this case, the equations are already linear in A^2
+        solver = linsolve.LinearSolver(ls_data, wgts=ls_wgts, constants=ls_consts)
+        fit = solver.solve()
+        fit = {k.replace('Asq', 'A'): np.sqrt(np.abs(sol)) for k, sol in fit.items()}
+    echo("...finished linsolve", verbose=verbose)
+
+    if not return_gains:
+        return fit
+    else:
+        return {ant: np.abs(fit[f'A_{ant[1]}']).astype(np.complex) for ant in gain_ants}
+
+
 def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zero_psi=True,
                   four_pol=False, return_gains=False, gain_ants=[]):
     """
