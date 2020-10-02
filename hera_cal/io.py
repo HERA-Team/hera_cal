@@ -146,11 +146,14 @@ class HERACal(UVCal):
                 self.total_quality_array[0, :, :, ip] = total_qual[pol].T
 
 
-def get_blt_slices(uvo):
+def get_blt_slices(uvo, tried_to_reorder=False):
     '''For a pyuvdata-style UV object, get the mapping from antenna pair to blt slice.
+    If the UV object does not have regular spacing of baselines in its baseline-times,
+    this function will try to reorder it using UVData.reorder_blts() to see if that helps.
 
     Arguments:
-        uvo: a "UV-Object" like UVData or baseline-type UVFlag
+        uvo: a "UV-Object" like UVData or baseline-type UVFlag. Blts may get re-ordered internally.
+        tried_to_reorder: used internally to prevent infinite recursion
 
     Returns:
         blt_slices: dictionary mapping anntenna pair tuples to baseline-time slice objects
@@ -161,8 +164,12 @@ def get_blt_slices(uvo):
         if len(indices) == 1:  # only one blt matches
             blt_slices[(ant1, ant2)] = slice(indices[0], indices[0] + 1, uvo.Nblts)
         elif not (len(set(np.ediff1d(indices))) == 1):  # checks if the consecutive differences are all the same
-            raise NotImplementedError('UVData objects with non-regular spacing of '
-                                      'baselines in its baseline-times are not supported.')
+            if not tried_to_reorder:
+                uvo.reorder_blts(order='time')
+                return get_blt_slices(uvo, tried_to_reorder=True)
+            else:
+                raise NotImplementedError('UVData objects with non-regular spacing of '
+                                          'baselines in its baseline-times are not supported.')
         else:
             blt_slices[(ant1, ant2)] = slice(indices[0], indices[-1] + 1, indices[1] - indices[0])
     return blt_slices
