@@ -352,6 +352,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             if overwrite_data_flags:
                 for bl in data_flags:
                     data_flags[bl][:] = False
+                    data_nsamples[bl][:] = 1.
             for bl in data_flags.keys():
                 # apply band edge flags
                 data_flags[bl][:, 0:flag_nchan_low] = True
@@ -394,6 +395,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         if overwrite_data_flags:
             for bl in data_flags:
                 data_flags[bl][:] = False
+                data_nsamples[bl][:] = 1.
         for bl in data_flags.keys():
             # apply band edge flags
             data_flags[bl][:, 0:flag_nchan_low] = True
