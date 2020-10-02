@@ -202,8 +202,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
         for sum, sum_flags, sum_nsamples in hd_sum.iterate_over_bls(Nbls=nbl_per_load):
             diff, diff_flags, diff_nsamples = hd_diff.load(bls=list(sum.keys()))
-            sum = (sum + diff) / 2.
-            diff = sum - diff
+            sum = (sum + diff)
+            diff = sum - 2 * diff
             for k in sum_flags:
                 sum_flags[k] = sum_flags[k]
                 diff_flags[k] = sum_flags[k]
@@ -216,8 +216,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
     else:
         sum, sum_flags, sum_nsamples = hd_sum.read()
         diff, diff_flags, diff_nsamples = hd_diff.read()
-        sum = (sum + diff) / 2.
-        diff = sum - diff
+        sum = (sum + diff)
+        diff = sum - 2 * diff
         for k in sum_flags:
             sum_flags[k] = sum_flags[k]
             diff_flags[k] = sum_flags[k]
