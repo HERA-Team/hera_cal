@@ -262,6 +262,8 @@ class Test_Abscal_Solvers(object):
         data = {bl: 4.0 * np.ones((10, 5)) for red in reds for bl in red}
         data[0, 1, 'ee'][0, 0] = np.nan
         data[0, 1, 'ee'][0, 1] = np.inf
+        model[0, 1, 'ee'][0, 0] = np.nan
+        model[0, 1, 'ee'][0, 1] = np.inf
         fit = abscal.abs_amp_lincal(model, data)
         np.testing.assert_array_equal(fit['A_Jee'], 2.0)
         ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
@@ -276,6 +278,8 @@ class Test_Abscal_Solvers(object):
         data = {bl: gain_products[bl[2]] * np.ones((10, 5)) for red in reds for bl in red}
         data[0, 1, 'ee'][0, 0] = np.nan
         data[0, 1, 'ee'][0, 1] = np.inf
+        model[0, 1, 'ee'][0, 0] = np.nan
+        model[0, 1, 'ee'][0, 1] = np.inf
         fit = abscal.abs_amp_lincal(model, data)
         np.testing.assert_array_equal(fit['A_Jee'], 2.0)
         np.testing.assert_array_equal(fit['A_Jnn'], 3.0)
