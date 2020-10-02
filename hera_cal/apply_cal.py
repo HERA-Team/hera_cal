@@ -369,7 +369,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             else:
                 calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                                    old_gains=old_gains, gain_convention=gain_convention)
-            hd.update(data=data, flags=data_flags)
+            hd.update(data=data, flags=data_flags, nsamples=data_nsamples)
 
             if redundant_average:
                 # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
@@ -417,7 +417,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                           data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
         else:
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
-            hd.update(data=data, flags=data_flags, **kwargs)
+            hd.update(data=data, flags=data_flags, nsamples=data_nsamples, **kwargs)
             # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
             # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
             if no_red_weights:
