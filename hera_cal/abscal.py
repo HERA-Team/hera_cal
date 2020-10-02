@@ -212,7 +212,7 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gai
         else:
             data_here[k] = data[k]
         if np.any(~np.isfinite(model[k])):
-            model_here[k] =copy.deepcopy(model[k])
+            model_here[k] = copy.deepcopy(model[k])
             fill_dict_nans(model_here[k], wgts=wgts[k], nan_fill=0.0, inf_fill=0.0, array=True)
         else:
             model_here[k] = model[k]
