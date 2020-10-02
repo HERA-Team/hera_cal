@@ -230,7 +230,7 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
-              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
+              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
@@ -265,6 +265,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
+        overwrite_data_flags bool, optional
+            If True, overwrite data flags with calibration flags.
         redundant_average : bool, optional
             If True, redundantly average calibrated data and save to <data_outfilename>.red_avg.<filetype_out>
         redundant_weights : datacontainer, optional.
@@ -350,6 +352,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # I'll look into generators and whether the reds calc is being repeated.
         for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average,
                                                                    reds=all_reds, freqs_to_load=freqs_to_load):
+            if overwrite_data_flags:
+                for bl in data_flags:
+                    data_flags[bl][:] = False
             for bl in data_flags.keys():
                 # apply band edge flags
                 data_flags[bl][:, 0:flag_nchan_low] = True
@@ -389,6 +394,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     else:
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
         all_reds = redcal.get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol, include_autos=True)
+        if overwrite_data_flags:
+            for bl in data_flags:
+                data_flags[bl][:] = False
         for bl in data_flags.keys():
             # apply band edge flags
             data_flags[bl][:, 0:flag_nchan_low] = True
@@ -456,4 +464,5 @@ def apply_cal_argparser():
                    help="If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
+    a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Completely overwrite data flags with calibration flags.")
     return a
