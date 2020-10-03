@@ -226,8 +226,8 @@ class Test_HERAData(object):
             np.testing.assert_array_equal(np.arange(180)[np.logical_and(hd.ant_1_array == bl[0],
                                                                         hd.ant_2_array == bl[1])], np.arange(180)[s])
         # test check for non-regular spacing
-        hd.ant_1_array = hd.ant_2_array
         with pytest.raises(NotImplementedError):
+            hd.select(blt_inds=[0, 1, 3, 5, 23, 48])
             hd._determine_blt_slicing()
 
     def test_determine_pol_indexing(self):
