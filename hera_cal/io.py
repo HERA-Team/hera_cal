@@ -1754,7 +1754,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     cal.write_calfits(outfilename, clobber=clobber)
 
 
-def baselines_from_filelist_position(filename, filelist, polarizations=None):
+def baselines_from_filelist_position(filename, filelist, polarizations=None, chunk_pols=True):
     """Determine indices of baselines to process.
 
 
@@ -1770,7 +1770,9 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None):
         name of all files over which computations are being parallelized.
     polarizations : list of strings
         polarizations to include in baseline parallelization.
-
+    chunk_pols : bool, optional
+        if True, don't split blpols with same baseline across multiple files.
+        Default is True.
     Returns
     -------
     list
@@ -1785,6 +1787,8 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None):
     # The reason this function is not in utils is that it needs to use HERAData
     hd = HERAData(filename)
     bls = [bl for bl in hd.bls if bl[-1] in polarizations]
+    if chunk_pols:
+        bls = list(set([bl[:2] for bl bls]))
     file_index = filelist.index(filename)
     nfiles = len(filelist)
     # Determine chunk size
@@ -1792,4 +1796,15 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None):
     chunk_size = nbls // nfiles + 1
     lower_index = file_index * chunk_size
     upper_index = np.min([(file_index + 1) * chunk_size, nbls])
-    return bls[lower_index:upper_index]
+    # only return baselines if lower and upper indices are within number of bls
+    if upper_index <= len(bls):
+        if not chunk_bls:
+            output = bls[lower_index:upper_index]
+        else:
+            bls_output = bls[lower_index:upper_index]
+            # expand list out to include all polarizations
+            output = []
+            for antpair in bls_output:
+                for pol in polarizations:
+                    output.append(antpair + (pol,))
+    return output
