@@ -1807,4 +1807,6 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None, chu
             for antpair in bls_output:
                 for pol in polarizations:
                     output.append(antpair + (pol,))
+    else:
+        output = []
     return output
