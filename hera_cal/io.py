@@ -1788,7 +1788,7 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None, chu
     hd = HERAData(filename)
     bls = [bl for bl in hd.bls if bl[-1] in polarizations]
     if chunk_pols:
-        bls = list(set([bl[:2] for bl bls]))
+        bls = list(set([bl[:2] for bl in bls]))
     file_index = filelist.index(filename)
     nfiles = len(filelist)
     # Determine chunk size
