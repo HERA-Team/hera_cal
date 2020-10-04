@@ -1041,7 +1041,7 @@ def test_baselines_from_filelist_position():
     for pollist in [['ee'], None]:
         baselines = []
         for file in filelist:
-            baseline_chunk = io.baselines_from_filelist_position(file, filelist, pollist)
+            baseline_chunk = io.baselines_from_filelist_position(file, filelist, pollist, chunk_pols=False)
             assert len(baseline_chunk) > 0 and len(baseline_chunk) < 3
             baselines += baseline_chunk
         # Next, we check whether the total number of chunked baselines equals the original number of baselines
