@@ -750,7 +750,11 @@ class VisClean(object):
                                 skipped[:, i] = True
                             elif dim == 1:
                                 skipped[i] = True
-
+            # also flag skipped edge channels and integrations.
+            skipped[:, :ind_left] = True
+            skipped[:, ind_right:] = True
+            skipped[:ind_lower, :] = True
+            skipped[ind_upper:, :] = True
             filtered_model[k] = mdl
             filtered_model[k][skipped] = 0.
             filtered_resid[k] = res * fw
