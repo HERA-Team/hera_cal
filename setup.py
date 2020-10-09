@@ -49,7 +49,7 @@ setup_args = {
                 'scripts/smooth_cal_timeavg_run.py',
                 'scripts/sum_diff_2_even_odd.py',
                 'scripts/dpss_xtalk_filter_run_baseline_parallelized.py',
-                'scripts/dpss_delay_filter_run.py'],
+                'scripts/dpss_delay_filter_run.py','scripts/apply_waterfall_flags.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [
