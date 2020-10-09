@@ -228,9 +228,9 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
         hd_sum.write_uvh5(even_outfilename, clobber=clobber)
         hd_diff.write_uvh5(odd_outfilename, clobber=clobber)
 
-def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrite_data_flags=False,
+def apply_waterfall_flags(data_infilename, data_outfilename, flag_files, overwrite_data_flags=False,
                           nbl_per_load=None, add_to_history='', clobber=False, spw=None,
-                          a_priori_flags_yaml=None,
+                          a_priori_flags_yaml=None, pols=None,
                           filetype='uvh5', flag_filetype='h5', **kwargs):
     '''
     Apply new set of waterfall flags to a data file.
@@ -241,8 +241,8 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrit
         Name of the data file to apply waterfall flags too.
     data_outfilename: str
         Name of output data file with flags.
-    flag_file: str
-        Name of flag file.
+    flag_files: str or list of strs
+        Name of flag file(s) to load.
     overwrite_data_flags : bool, optional
         If True, overwrite all flags in the data file.
         Default is False.
@@ -258,6 +258,8 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrit
     a_priori_flags_yaml: str, optional
         path to apriori flagging file to combine
         with external flag file.
+    pols: list of str, optional
+        list of polarizations to load and write. If none provided, will use all pols in data files.
     filetype: str, optional
         type of file you are loading.
         default is uvh5.
@@ -275,6 +277,8 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrit
     # get time and frequency metadata
     hd = io.HERAData(data_infilename)
     hd.read(read_data=False)
+    if pols is None:
+        pols = hd.pols
     freqs_to_load = []
     if spw_range is None:
         spw_range = (0, len(hd.freqs))
@@ -299,7 +303,8 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrit
     if nbl_per_load is not None:
         if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
-        for _, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, freqs_to_load=freqs_to_load, times=times_to_load):
+        for _, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, freqs_to_load=freqs_to_load,
+                                                                times_to_load=times_to_load, pols_to_load=pols):
             # overwrite data flags.
             if overwrite_data_flags:
                 for bl in data_flags:
@@ -317,7 +322,7 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrit
             hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
 
     else:
-        data, data_flags, data_nsamples = hd.read(times=times_to_load, freqs=freqs_to_load)
+        data, data_flags, data_nsamples = hd.read(times=times_to_load, freqs=freqs_to_load, polarizations=pols)
         if overwrite_data_flags:
             for bl in data_flags:
                 data_flags[bl][:] = False
@@ -573,7 +578,7 @@ def apply_waterfall_flags_argparser():
     a = argparse.ArgumentParser(description="Apply waterfall flags file to visibility file.")
     a.add_argument("data_infilename", type=str, help="Path to visibility data input file to apply flags too.")
     a.add_argument("data_outfilename", type=str, help="Path to visibility data output file.")
-    a.add_argument("flag_file", type=str, help="Path to flag file to apply to data_infilename.")
+    a.add_argument("flag_files", type=str, nargs="+", help="Path to flag file(s) to apply to data_infilename.")
     a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Overwrite all data flags.")
     a.add_argument("--nbl_per_load", default=None, type=int, help="Number of baselines to load from data simultaneously.")
     a.add_argument("--spw", default=None, type=int, nargs=2, help="Two integer channel numbers bounding the range of frequencies that will be loaded, flagged, and written.")
@@ -581,4 +586,5 @@ def apply_waterfall_flags_argparser():
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data file')
     a.add_argument("--flag_filetype", type=str, default='h5', help='filetype of input flag file')
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    a.add_argument("--polarizations", default=None, type=str, nargs="+", help="polarizations to load and write")
     return a
