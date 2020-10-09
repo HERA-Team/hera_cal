@@ -228,6 +228,101 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
         hd_sum.write_uvh5(even_outfilename, clobber=clobber)
         hd_diff.write_uvh5(odd_outfilename, clobber=clobber)
 
+def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrite_data_flags=False,
+                          nbl_per_load=None, add_to_history='', clobber=False, spw=None,
+                          a_priori_flags_yaml=None,
+                          filetype='uvh5', flag_filetype='h5', **kwargs):
+    '''
+    Apply new set of waterfall flags to a data file.
+
+    Parameters
+    ----------
+    data_infilename: str
+        Name of the data file to apply waterfall flags too.
+    data_outfilename: str
+        Name of output data file with flags.
+    flag_file: str
+        Name of flag file.
+    overwrite_data_flags : bool, optional
+        If True, overwrite all flags in the data file.
+        Default is False.
+    nbl_per_load: int, optional
+        Number of baselines to load simultaneously.
+    add_to_history: str, optional
+        string to add to history
+    clobber: bool, optional
+        If True, ovewrite output file if it exists.
+        Default is False.
+    spw: 2-list or 2-tuple, optional
+        integer of upper and lower frequencies to truncate.
+    a_priori_flags_yaml: str, optional
+        path to apriori flagging file to combine
+        with external flag file.
+    filetype: str, optional
+        type of file you are loading.
+        default is uvh5.
+
+    Returns
+    -------
+    new flagged file. Also writes flagged file.
+
+    '''
+    # load external flags.
+    ext_flags, flag_meta = io.load_flags(flag_file, filetype=flag_filetype, return_meta=True)
+    if not len(ext_flags) == 1:
+        raise ValueError("Only a single waterfall is supported at this time!")
+    add_to_history += '\nFLAGS_HISTORY: ' + str(flag_meta['history']) + '\n'
+    # get time and frequency metadata
+    hd = io.HERAData(data_infilename)
+    hd.read(read_data=False)
+    freqs_to_load = []
+    if spw_range is None:
+        spw_range = (0, len(hd.freqs))
+    for f in hd.freqs[spw_range[0]:spw_range[1]]:
+        if np.any(np.isclose(ext_flags.freqs, f)):
+            freqs_to_load.append(f)
+    for t in hd.times:
+        if np.any(np.isclose(ext_flags.times, t)):
+            times_to_load.append(t)
+    # now identify frequency channels in flag waterfall that should be
+    # ord with data flags
+    fmask = np.ones(ext_flags.Nfreqs, dtype=bool)
+    for fnum,f in enumerate(ext_flags.freqs):
+        if np.any(np.isclose(f, freqs_to_load)):
+            fmask[fnum] = False
+    tmask = np.ones(ext_flags.Ntimes, dtype=bool)
+    for tnum, t in enumerate(ext_flags.times):
+        if np.any(np.isclose(t, times_to_load)):
+            tmask[fnum] = False
+
+
+    if nbl_per_load is not None:
+        if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
+            raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
+        for _, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, freqs_to_load=freqs_to_load, times=times_to_load):
+            # overwrite data flags.
+            if overwrite_data_flags:
+                for bl in data_flags:
+                    data_flags[bl][:] = False
+                    data_nsamples[bl][:] = 1.
+            # or flags
+            for bl in data_flags:
+                data_flags[bl][:] = data_flags[bl][:] | ext_flags[list(ext_flags.keys())[0]][~tmask, :][:, ~fmask]
+            hd.update(flags=data_flags, nsamples=data_nsamples)
+            hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
+
+    else:
+        data, data_flags, data_nsamples = hd.read(times=times_to_load, freqs=freqs_to_load)
+        if overwrite_data_flags:
+            for bl in data_flags:
+                data_flags[bl][:] = False
+                data_nsamples[bl][:] = 1.
+        # or flags
+        for bl in data_flags:
+            data_flags[bl][:] = data_flags[bl][:] | ext_flags[list(ext_flags.keys())[0]][~tmask, :][:, ~fmask]
+        hd.update(flags=data_flags, nsamples=data_nsamples)
+        hd.write_uvh5()
+
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
