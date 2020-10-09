@@ -1554,7 +1554,7 @@ def reconstitute_files(templatefile, fragments, outfilename, clobber=False):
     # with the fragment data.
     for fragment in fragments:
         hd_fragment = io.HERAData(fragment)
-        d, f, n = hd_fragment.read(times=times)
+        d, f, n = hd_fragment.read(times=times, axis='blts')
         hd_template.update(flags=f, data=d, nsamples=n)
     # now that we've updated everything, we write the output file.
     hd_template.write_uvh5(outfilename, clobber=clobber)
