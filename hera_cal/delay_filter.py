@@ -235,7 +235,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     else:
         cals = None
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
-    df.read(bls=baseline_list, frequencies=freqs)
+    df.read(bls=baseline_list, frequencies=freqs, axis='blt')
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:
