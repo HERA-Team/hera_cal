@@ -309,6 +309,11 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrit
             for bl in data_flags:
                 data_flags[bl][:] = data_flags[bl][:] | ext_flags[list(ext_flags.keys())[0]][~tmask, :][:, ~fmask]
             hd.update(flags=data_flags, nsamples=data_nsamples)
+            # apply apriori yaml. Warning: This may mess up redundantly averaged data if ant flags are included.
+            if a_priori_flags_yaml is not None:
+                from hera_qm.utils import apply_yaml_flags
+                hd = apply_yaml_flags(hd, a_priori_flags_yaml,
+                                      ant_indices_only=True)
             hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
 
     else:
@@ -321,7 +326,12 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_file, overwrit
         for bl in data_flags:
             data_flags[bl][:] = data_flags[bl][:] | ext_flags[list(ext_flags.keys())[0]][~tmask, :][:, ~fmask]
         hd.update(flags=data_flags, nsamples=data_nsamples)
-        hd.write_uvh5()
+        # apply apriori yaml. Warning: This may mess up redundantly averaged data if ant flags are included.
+        if a_priori_flags_yaml is not None:
+            from hera_qm.utils import apply_yaml_flags
+            hd = apply_yaml_flags(hd, a_priori_flags_yaml,
+                                  ant_indices_only=True)
+        hd.write_uvh5(data_outfilename, clobber=clobber)
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
@@ -556,4 +566,19 @@ def apply_cal_argparser():
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
     a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Completely overwrite data flags with calibration flags.")
+    return a
+
+def apply_waterfall_flags_argparser():
+    '''Arg parser for commandline operation of apply_waterfall_flags'''
+    a = argparse.ArgumentParser(description="Apply waterfall flags file to visibility file.")
+    a.add_argument("data_infilename", type=str, help="Path to visibility data input file to apply flags too.")
+    a.add_argument("data_outfilename", type=str, help="Path to visibility data output file.")
+    a.add_argument("flag_file", type=str, help="Path to flag file to apply to data_infilename.")
+    a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Overwrite all data flags.")
+    a.add_argument("--nbl_per_load", default=None, type=int, help="Number of baselines to load from data simultaneously.")
+    a.add_argument("--spw", default=None, type=int, nargs=2, help="Two integer channel numbers bounding the range of frequencies that will be loaded, flagged, and written.")
+    a.add_argument("--a_priori_flags_yaml", type=str, default=None, help="Path to apriori flagging yaml file to apply.")
+    a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data file')
+    a.add_argument("--flag_filetype", type=str, default='h5', help='filetype of input flag file')
+    a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     return a
