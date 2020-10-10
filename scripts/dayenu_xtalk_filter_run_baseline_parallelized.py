@@ -29,8 +29,8 @@ if len(baseline_list) > 0:
                                                            baseline_list=baseline_list, spw_range=a.spw_range,
                                                            cache_dir=a.cache_dir, res_outfilename=outfilename,
                                                            clobber=a.clobber, write_cache=a.write_cache, polarizations=a.polarizations,
-                                                           read_cache=a.read_cache, mode='dayenu', overwrite_data_flag=a.overwrite_data_flags,
+                                                           read_cache=a.read_cache, mode='dayenu', overwrite_data_flags=a.overwrite_data_flags,
                                                            factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
                                                            trim_edges=a.trim_edges, max_contiguous_edge_flags=a.max_contiguous_edge_flags,
-                                                           add_to_history=' '.join(sys.argv), external_flag=a.external_flags,
+                                                           add_to_history=' '.join(sys.argv), external_flags=a.external_flags,
                                                            skip_flagged_edges=a.skip_flagged_edges, **filter_kwargs)
