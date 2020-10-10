@@ -167,11 +167,11 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 
 
 def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
-                                              read_cache=False, write_cache=False,
+                                              read_cache=False, write_cache=False, external_flags=None,
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                              clobber=False, add_to_history='', round_up_bllens=False,
-                                              skip_flagged_edges=False, **filter_kwargs):
+                                              clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
+                                              skip_flagged_edges=False, ovewrite_data_flags=False, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -230,8 +230,19 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         cals = io.to_HERACal(cals)
     else:
         cals = None
+    if polarizations is None:
+        polarizations=list(set(hd.polarizations.values()))
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
+    if external_flags is not None:
+        flag_ext = io.load_flags(external_flags)
+    # apply external flags
+    if overwrite_data_flags:
+        for bl in xf.flags:
+            if not np.all(df.flags[bl]):
+                xf.flags[bl][:] = False
+            xf.nsamples[bl][:] = 1.
+
     if factorize_flags:
         xf.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:

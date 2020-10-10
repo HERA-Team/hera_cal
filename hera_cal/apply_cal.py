@@ -270,9 +270,9 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_files, overwri
 
     '''
     # load external flags.
+    if not ext_flags.type == 'waterfall':
+        raise NotImplementedError("Only supporting waterfall flags at this time.")
     ext_flags, flag_meta = io.load_flags(flag_file, filetype=flag_filetype, return_meta=True)
-    if not len(ext_flags) == 1:
-        raise ValueError("Only a single waterfall is supported at this time!")
     add_to_history += '\nFLAGS_HISTORY: ' + str(flag_meta['history']) + '\n'
     # get time and frequency metadata
     hd = io.HERAData(data_infilename)
@@ -283,19 +283,19 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_files, overwri
     if spw_range is None:
         spw_range = (0, len(hd.freqs))
     for f in hd.freqs[spw_range[0]:spw_range[1]]:
-        if np.any(np.isclose(ext_flags.freqs, f)):
+        if np.any(np.isclose(flag_meta['freqs'], f)):
             freqs_to_load.append(f)
     for t in hd.times:
-        if np.any(np.isclose(ext_flags.times, t)):
+        if np.any(np.isclose(flag_meta['times'], t)):
             times_to_load.append(t)
     # now identify frequency channels in flag waterfall that should be
     # ord with data flags
-    fmask = np.ones(ext_flags.Nfreqs, dtype=bool)
-    for fnum,f in enumerate(ext_flags.freqs):
+    fmask = np.ones(len(flag_meta['freqs']), dtype=bool)
+    for fnum,f in enumerate(flag_meta['freqs']):
         if np.any(np.isclose(f, freqs_to_load)):
             fmask[fnum] = False
-    tmask = np.ones(ext_flags.Ntimes, dtype=bool)
-    for tnum, t in enumerate(ext_flags.times):
+    tmask = np.ones(len(flag_meta['times']), dtype=bool)
+    for tnum, t in enumerate(flag_meta['times']):
         if np.any(np.isclose(t, times_to_load)):
             tmask[fnum] = False
 
@@ -308,11 +308,13 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_files, overwri
             # overwrite data flags.
             if overwrite_data_flags:
                 for bl in data_flags:
-                    data_flags[bl][:] = False
-                    data_nsamples[bl][:] = 1.
+                    if not np.all(data_flags[bl]):
+                        data_flags[bl][:] = False
+                        data_nsamples[bl][:] = 1.
             # or flags
             for bl in data_flags:
-                data_flags[bl][:] = data_flags[bl][:] | ext_flags[list(ext_flags.keys())[0]][~tmask, :][:, ~fmask]
+                for k in ext_flags:
+                    data_flags[bl][:] = data_flags[bl][:] | ext_flags[k][~tmask, :][:, ~fmask]
             hd.update(flags=data_flags, nsamples=data_nsamples)
             # apply apriori yaml. Warning: This may mess up redundantly averaged data if ant flags are included.
             if a_priori_flags_yaml is not None:
@@ -325,11 +327,13 @@ def apply_waterfall_flags(data_infilename, data_outfilename, flag_files, overwri
         data, data_flags, data_nsamples = hd.read(times=times_to_load, freqs=freqs_to_load, polarizations=pols)
         if overwrite_data_flags:
             for bl in data_flags:
-                data_flags[bl][:] = False
-                data_nsamples[bl][:] = 1.
+                if not np.all(data_flags[bl]):
+                    data_flags[bl][:] = False
+                    data_nsamples[bl][:] = 1.
         # or flags
         for bl in data_flags:
-            data_flags[bl][:] = data_flags[bl][:] | ext_flags[list(ext_flags.keys())[0]][~tmask, :][:, ~fmask]
+            for k in ext_flags:
+                data_flags[bl][:] = data_flags[bl][:] | ext_flags[k][~tmask, :][:, ~fmask]
         hd.update(flags=data_flags, nsamples=data_nsamples)
         # apply apriori yaml. Warning: This may mess up redundantly averaged data if ant flags are included.
         if a_priori_flags_yaml is not None:
