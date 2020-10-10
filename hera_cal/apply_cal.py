@@ -180,7 +180,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
 def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_outfilename,
                         nbl_per_load=None, filetype_in='uvh5', external_flags=None,
-                        overwrite_data_flags=False, clobber=False):
+                        overwrite_data_flags=False, clobber=False, polarizations=None):
     """Generate even and odd data sets from sum and diff
 
     Arguments:
@@ -201,16 +201,25 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             Name of external flags to apply.
         overwrite_data_flags: bool, optional
             if true, ovewrite flags of non-fully flagged baselines with external flags.
+        clobber: bool, optional
+            clobber output files if they already exist.
+        polarizations: list of strs, optional
+            list of string pols to include in output. If no provided
 
     """
     if external_flags is not None:
         external_flags = UVFlag(external_flags)
     hd_sum = io.HERAData(sum_infilename, filetype=filetype_in)
     hd_diff = io.HERAData(diff_infilname, filetype=filetype_in)
+    if polarizations is None:
+        if filetype_in == 'uvh5':
+            polarizations = hd_sum.pols
+        else:
+            raise NotImplementedError("Must specify pols if operating on non uvh5 data.")
     if nbl_per_load is not None:
         if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
-        for sum, sum_flags, sum_nsamples in hd_sum.iterate_over_bls(Nbls=nbl_per_load):
+        for sum, sum_flags, sum_nsamples in hd_sum.iterate_over_bls(Nbls=nbl_per_load, pols_to_load=polarizations):
             diff, diff_flags, diff_nsamples = hd_diff.load(bls=list(sum.keys()))
             sum = (sum + diff)
             diff = sum - diff - diff
@@ -231,8 +240,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             hd_sum.partial_write(even_outfilename, inplace=True, clobber=clobber)
             hd_diff.partial_write(odd_outfilename, inplace=True, clobber=clobber)
     else:
-        sum, sum_flags, sum_nsamples = hd_sum.read()
-        diff, diff_flags, diff_nsamples = hd_diff.read()
+        sum, sum_flags, sum_nsamples = hd_sum.read(polarizations=polarizations)
+        diff, diff_flags, diff_nsamples = hd_diff.read(polarizations=polarizations)
         sum = (sum + diff)
         diff = sum - diff - diff
         for k in sum_flags:
