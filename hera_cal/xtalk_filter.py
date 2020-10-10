@@ -235,13 +235,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
     if external_flags is not None:
-        flag_ext = io.load_flags(external_flags)
-    # apply external flags
-    if overwrite_data_flags:
-        for bl in xf.flags:
-            if not np.all(df.flags[bl]):
-                xf.flags[bl][:] = False
-
+        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)
     if factorize_flags:
         xf.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:

@@ -21,6 +21,7 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 import warnings
+from pyuvdata import UVFlag
 
 
 class VisClean(object):
@@ -212,6 +213,30 @@ class VisClean(object):
                 gain_convention = 'multiply'
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
+
+    def apply_flags(external_flags, overwrite_data_flags=False):
+        """
+        apply external flags.
+        Parameters
+        ----------
+        external_flags: str, optional.
+            Str or list of strings pointing to flag files to apply.
+
+        overwrite_data_flags: bool, optional
+            If true, overwrite all data flags for bls that are not entirely flagge.d
+        """
+        external_flags = UVFlag(external_flags)
+        from hera_qm.xrfi import flag_apply
+        # set all flags to False on waterfalls taht are not fully flagged
+        # if overwrite_data_flags is True.
+        if ovewrite_data_flags:
+            for bl in self.flags:
+                if not np.all(self.flags[bl]):
+                    self.flags[bl][:] = False
+            self.hd.update(flags=self.flags)
+        flag_apply(external_flags, self.hd, force_pol=True)
+        _, self.flags, _ = hd.build_datacontainers()
+
 
     def read(self, **read_kwargs):
         """
