@@ -241,17 +241,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
     if external_flags is not None:
-        flag_ext = io.load_flags(external_flags)
-    # apply external flags
-    if ovewrite_data_flags:
-        for bl in df.flags:
-            if not np.all(df.flags[bl]):
-                df.flags[bl][:] = False
-
-    for bl in df.flags:
-        for k in flag_ext:
-            df.flags[bl] = df.flags[bl] | flag_ext[k]
-
+        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:
