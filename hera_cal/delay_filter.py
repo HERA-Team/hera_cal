@@ -174,10 +174,10 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 
 def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
                                               read_cache=False, write_cache=False, round_up_bllens=False,
-                                              factorize_flags=False, time_thresh=0.05, trim_edges=False,
+                                              factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                              clobber=False, add_to_history='',
-                                              skip_flagged_edges=False, **filter_kwargs):
+                                              clobber=False, add_to_history='', polarizations=None,
+                                              skip_flagged_edges=False, ovewrite_data_flags=False, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -207,6 +207,8 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
+        polarizations: list of polarizations to include and write.
+        skip_flagged_edges: if true, skip flagged edges in filtering.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     hd = io.HERAData(datafile_list, filetype='uvh5')
@@ -234,8 +236,23 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         cals = io.to_HERACal(cals)
     else:
         cals = None
+    if polarizations is None:
+        polarizations=list(set(hd.polarizations.values()))
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
-    df.read(bls=baseline_list, frequencies=freqs, axis='blt')
+    df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
+    if external_flags is not None:
+        flag_ext = io.load_flags(external_flags)
+    # apply external flags
+    if ovewrite_data_flags:
+        for bl in df.flags:
+            if not np.all(df.flags[bl]):
+                df.flags[bl][:] = False
+            df.nsamples[bl][:] = 1.
+
+    for bl in df.flags:
+        for k in flag_ext:
+            df.flags[bl] = df.flags[bl] | flag_ext[k]
+
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:

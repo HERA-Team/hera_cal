@@ -1444,6 +1444,9 @@ def _filter_argparser(multifile=False):
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
+        a.add_argument("--external_flags", default=None, type=str, nargs="+", help="list of external flags to apply before filtering.")
+        a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="overwrite data and calibration flags with external flags.")
+        a.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter and write out.")
     else:
         a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
     return a
