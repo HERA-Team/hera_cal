@@ -681,10 +681,6 @@ class HERAData(UVData):
                 read_args = {'bls':chunk}
                 if freqs_to_load is not None:
                     read_args['frequencies'] = freqs_to_load
-                if times_to_load is not None:
-                    read_args['times'] = times_to_load
-                if pols_to_load is not None:
-                    read_args['polarizations'] = pols_to_load
                 yield self.read(**read_args)
 
     def iterate_over_freqs(self, Nchans=1, freqs=None):
