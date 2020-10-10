@@ -604,19 +604,3 @@ def apply_cal_argparser():
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
     a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Completely overwrite data flags with calibration flags.")
     return a
-
-def apply_waterfall_flags_argparser():
-    '''Arg parser for commandline operation of apply_waterfall_flags'''
-    a = argparse.ArgumentParser(description="Apply waterfall flags file to visibility file.")
-    a.add_argument("data_infilename", type=str, help="Path to visibility data input file to apply flags too.")
-    a.add_argument("data_outfilename", type=str, help="Path to visibility data output file.")
-    a.add_argument("flag_files", type=str, nargs="+", help="Path to flag file(s) to apply to data_infilename.")
-    a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Overwrite all data flags.")
-    a.add_argument("--nbl_per_load", default=None, type=int, help="Number of baselines to load from data simultaneously.")
-    a.add_argument("--spw", default=None, type=int, nargs=2, help="Two integer channel numbers bounding the range of frequencies that will be loaded, flagged, and written.")
-    a.add_argument("--a_priori_flags_yaml", type=str, default=None, help="Path to apriori flagging yaml file to apply.")
-    a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data file')
-    a.add_argument("--flag_filetype", type=str, default='h5', help='filetype of input flag file')
-    a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
-    a.add_argument("--polarizations", default=None, type=str, nargs="+", help="polarizations to load and write")
-    return a
