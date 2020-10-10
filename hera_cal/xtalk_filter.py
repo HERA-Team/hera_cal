@@ -241,7 +241,6 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         for bl in xf.flags:
             if not np.all(df.flags[bl]):
                 xf.flags[bl][:] = False
-            xf.nsamples[bl][:] = 1.
 
     if factorize_flags:
         xf.factorize_flags(time_thresh=time_thresh, inplace=True)

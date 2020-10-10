@@ -13,7 +13,7 @@ from . import version
 from . import utils
 from . import redcal
 import pyuvdata.utils as uvutils
-from pyuvdata import UVData
+from pyuvdata import UVData, UVFlag
 
 
 def _check_polarization_consistency(data, gains):
@@ -179,7 +179,8 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
 def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_outfilename,
-                        nbl_per_load=None, filetype_in='uvh5', clobber=False):
+                        nbl_per_load=None, filetype_in='uvh5', external_flags=None,
+                        overwrite_data_flags=False, clobber=False):
     """Generate even and odd data sets from sum and diff
 
     Arguments:
@@ -194,7 +195,16 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
         nbl_per_load: int, optional
             number of baselines to load simultaneously
             default, None results in all baselines loaded.
+        filetype_in: str, optional
+            file_type
+        external_flags: str, optional
+            Name of external flags to apply.
+        overwrite_data_flags: bool, optional
+            if true, ovewrite flags of non-fully flagged baselines with external flags.
+
     """
+    if external_flags is not None:
+        external_flags = UVFlag(external_flags)
     hd_sum = io.HERAData(sum_infilename, filetype=filetype_in)
     hd_diff = io.HERAData(diff_infilname, filetype=filetype_in)
     if nbl_per_load is not None:
@@ -209,8 +219,15 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
                 diff_flags[k] = sum_flags[k]
                 diff_nsamples[k] = sum_nsamples[k]
                 sum_nsamples[k] = diff_nsamples[k]
+                if overwrite_data_flags and not np.all(sum_flags[k]) and external_flags is not None:
+                    sum_flags[k][:] = False
+                    diff_flags[k][:] = False
             hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
             hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
+            if external_flags is not None:
+                from hera_qm.xrfi import flag_apply
+                flag_apply(external_flags, hd_sum, force_pol=True)
+                flag_apply(external_flags, hd_diff, force_pol=True)
             hd_sum.partial_write(even_outfilename, inplace=True, clobber=clobber)
             hd_diff.partial_write(odd_outfilename, inplace=True, clobber=clobber)
     else:
@@ -223,8 +240,15 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             diff_flags[k] = sum_flags[k]
             diff_nsamples[k] = sum_nsamples[k]
             sum_nsamples[k] = diff_nsamples[k]
+            if overwrite_data_flags and not np.all(sum_flags[k]) and external_flags is not None:
+                sum_flags[k][:] = False
+                diff_flags[k][:] = False
         hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
         hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
+        if external_flags is not None:
+            from hera_qm.xrfi import flag_apply
+            flag_apply(external_flags, hd_sum, force_pol=True)
+            flag_apply(external_flags, hd_diff, force_pol=True)
         hd_sum.write_uvh5(even_outfilename, clobber=clobber)
         hd_diff.write_uvh5(odd_outfilename, clobber=clobber)
 
@@ -551,6 +575,10 @@ def sum_diff_2_even_odd_argparser():
     a.add_argument("oddfilename", type=str, help="name of odd file.")
     a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only.")
     a.add_argument("--clobber", default=False, action="store_true")
+    a.add_argument("--external_flags", default=None, type=str, help="name of external flag file(s) to apply.")
+    a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Overwrite existing data flags with external flags\
+                                                                                       for antennas that are not entirely flagged.")
+    a.add_argument("--polarizations", default=None, type="str", nargs="+", help="polarizations to include in output.")
     return a
 
 def apply_cal_argparser():

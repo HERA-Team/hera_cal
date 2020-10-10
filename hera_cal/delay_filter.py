@@ -247,7 +247,6 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         for bl in df.flags:
             if not np.all(df.flags[bl]):
                 df.flags[bl][:] = False
-            df.nsamples[bl][:] = 1.
 
     for bl in df.flags:
         for k in flag_ext:
