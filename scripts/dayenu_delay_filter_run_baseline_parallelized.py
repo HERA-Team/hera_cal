@@ -7,6 +7,7 @@
 
 from hera_cal import delay_filter
 import sys
+import hera_cal.io as io
 
 parser = delay_filter.delay_filter_argparser(mode='dayenu', multifile=True)
 a = parser.parse_args()
@@ -17,14 +18,15 @@ filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
 baseline_list = io.baselines_from_filelist_position(filename=a.infilename,
                                                     filelist=a.datafilelist, polarizations=a.polarizations)
 if len(baseline_list) > 0:
+    # modify output file name to include index.
     outfilename = a.res_outfilename
     spw_range = a.spw_range
     # allow none string to be passed through to a.calfile
-    if a.calfile_list is not None:
-        if a.calfile_list.lower() == 'none':
-            a.calfile_list = None
+    if a.calfilelist is not None:
+        if a.calfilelist.lower() == 'none':
+            a.calfilelist = None
     # Run Delay Filter
-    delay_filter.load_delay_filter_and_write_baseline_list(a.datafilelist, calfile_list=a.calfile_list, round_up_bllens=True,
+    delay_filter.load_delay_filter_and_write_baseline_list(a.datafilelist, calfile_list=a.calfilelist, round_up_bllens=True,
                                                              baseline_list=baseline_list, spw_range=a.spw_range,
                                                              cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
                                                              clobber=a.clobber, write_cache=a.write_cache, external_flags=a.external_flags,
