@@ -1761,7 +1761,7 @@ def update_cal(infilename, outfilename, gains=None, flags=None, quals=None, add_
     cal.write_calfits(outfilename, clobber=clobber)
 
 
-def baselines_from_filelist_position(filename, filelist, polarizations=None, chunk_pols=True):
+def baselines_from_filelist_position(filename, filelist):
     """Determine indices of baselines to process.
 
 
@@ -1775,27 +1775,17 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None, chu
         name of the file being processed.
     filelist : list of strings
         name of all files over which computations are being parallelized.
-    polarizations : list of strings
-        polarizations to include in baseline parallelization.
     chunk_pols : bool, optional
         if True, don't split blpols with same baseline across multiple files.
         Default is True.
     Returns
     -------
     list
-        list of baselines to process based on the position of the filename in the list of files.
+        list of antpairs to process based on the position of the filename in the list of files.
     """
-    if polarizations is None:
-        polarizations = ['ee', 'nn', 'en', 'ne']
-    # sanitize polarizations
-    for pol in polarizations:
-        if pol.lower() not in POL_STR2NUM_DICT and pol.lower() not in ['ee', 'en', 'ne', 'nn']:
-            raise ValueError("invalid polarization %s provided!" % pol)
     # The reason this function is not in utils is that it needs to use HERAData
     hd = HERAData(filename)
-    bls = [bl for bl in hd.bls if bl[-1] in polarizations]
-    if chunk_pols:
-        bls = list(set([bl[:2] for bl in bls]))
+    bls = list(set([bl[:2] for bl in hd.bls]))
     file_index = filelist.index(filename)
     nfiles = len(filelist)
     # Determine chunk size
@@ -1805,15 +1795,7 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None, chu
     upper_index = np.min([(file_index + 1) * chunk_size, nbls])
     # only return baselines if lower and upper indices are within number of bls
     if lower_index < len(bls):
-        if not chunk_pols:
             output = bls[lower_index:upper_index]
-        else:
-            bls_output = bls[lower_index:upper_index]
-            # expand list out to include all polarizations
-            output = []
-            for antpair in bls_output:
-                for pol in polarizations:
-                    output.append(antpair + (pol,))
     else:
         output = []
     return output

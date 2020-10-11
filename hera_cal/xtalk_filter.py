@@ -171,7 +171,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
-                                              skip_flagged_edges=False, ovewrite_data_flags=False, **filter_kwargs):
+                                              skip_flagged_edges=False, overwrite_data_flags=False, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -231,7 +231,10 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     else:
         cals = None
     if polarizations is None:
-        polarizations=list(set(hd.polarizations.values()))
+        if len(datafile_list) > 1:
+            polarizations=list(hd.pols.values())[0]
+        else:
+            polarizations=hd.pols
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
     if external_flags is not None:
