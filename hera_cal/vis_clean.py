@@ -214,7 +214,7 @@ class VisClean(object):
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
 
-    def apply_flags(external_flags, overwrite_data_flags=False):
+    def apply_flags(self, external_flags, overwrite_data_flags=False):
         """
         apply external flags.
         Parameters
@@ -226,16 +226,29 @@ class VisClean(object):
             If true, overwrite all data flags for bls that are not entirely flagge.d
         """
         external_flags = UVFlag(external_flags)
+        # select frequencies and times that match data.
+        flag_times = np.unique(external_flags.time_array)
+        flag_freqs = np.unique(external_flags.freq_array)
+        times_overlapping = []
+        freqs_overlapping = []
+        for t in flag_times:
+            if np.any(np.isclose(self.times, t)):
+                times_overlapping.append(t)
+        for f in flag_freqs:
+            if np.any(np.isclose(self.freqs, f)):
+                freqs_overlapping.append(f)
+        # select frequencies and times that overlap with data.
+        external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
         from hera_qm.xrfi import flag_apply
         # set all flags to False on waterfalls taht are not fully flagged
         # if overwrite_data_flags is True.
-        if ovewrite_data_flags:
+        if overwrite_data_flags:
             for bl in self.flags:
                 if not np.all(self.flags[bl]):
                     self.flags[bl][:] = False
             self.hd.update(flags=self.flags)
         flag_apply(external_flags, self.hd, force_pol=True)
-        _, self.flags, _ = hd.build_datacontainers()
+        _, self.flags, _ = self.hd.build_datacontainers()
 
 
     def read(self, **read_kwargs):

@@ -15,7 +15,7 @@ a = parser.parse_args()
 
 # set kwargs
 filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
-baseline_list = io.baselines_from_filelist_position(filename=a.infilename, filelist=a.datafilelist)
+baseline_list = io.baselines_from_filelist_position(filename=a.infilename)
 if len(baseline_list) > 0:
     # modify output file name to include index.
     outfilename = a.res_outfilename

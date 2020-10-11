@@ -16,7 +16,7 @@ a = parser.parse_args()
 filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
                  'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
 baseline_list = io.baselines_from_filelist_position(filename=a.infilename,
-                                                    filelist=a.datafilelist, polarizations=a.polarizations)
+                                                    filelist=a.datafilelist)
 if len(baseline_list) > 0:
     # modify output file name to include index.
     outfilename = a.res_outfilename
