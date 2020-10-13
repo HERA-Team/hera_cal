@@ -534,6 +534,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd_red.write_uvh5(data_outfilename, clobber=clobber)
     # full data loading and writing
     else:
+        print(f'freqs_to_load between {np.min(freqs_to_load)/1e6}, {np.max(freqs_to_load)/1e6} ')
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
         all_reds = redcal.get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol, include_autos=True)
         if overwrite_data_flags:
@@ -553,7 +554,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         else:
             calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                                old_gains=old_gains, gain_convention=gain_convention)
-        if not redundant_average:
+        if filetype_out != 'uvh5' and not redundant_average:
             io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
                           data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
         else:
@@ -566,12 +567,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 for bl in data_flags:
                     if np.all(data_flags[bl]):
                         redundant_weights[bl][:] = 0.
-
-            utils.red_average(hd, reds=all_red_antpairs, inplace=True, wgts=redundant_weights,
-                              propagate_flags=True)
+            if redundant_average:
+                utils.red_average(hd, reds=all_red_antpairs, inplace=True, wgts=redundant_weights,
+                                  propagate_flags=True)
             if filetype_out == 'uvh5':
                 # overwrite original outfile with
-                hd.write_uvh5(data_outfilename, clobber=clobber)
+                hd.write_uvh5(data_outfilename, clobber=clobber)# fir some reason add to history fials., add_to_history=add_to_history)
             else:
                 raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
 
@@ -587,7 +588,7 @@ def sum_diff_2_even_odd_argparser():
     a.add_argument("--external_flags", default=None, type=str, help="name of external flag file(s) to apply.")
     a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Overwrite existing data flags with external flags\
                                                                                        for antennas that are not entirely flagged.")
-    a.add_argument("--polarizations", default=None, type="str", nargs="+", help="polarizations to include in output.")
+    a.add_argument("--polarizations", default=None, type=str, nargs="+", help="polarizations to include in output.")
     return a
 
 def apply_cal_argparser():
