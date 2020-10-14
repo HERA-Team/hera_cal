@@ -18,7 +18,7 @@ import os
 import warnings
 from pyuvdata import UVCal
 from copy import deepcopy
-
+from datetime import datetime
 
 class DelayFilter(VisClean):
     """
@@ -213,7 +213,9 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         skip_flagged_edges: if true, skip flagged edges in filtering.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
-    echo("...initializing metadata", verbose=verbose)
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    echo(f"{current_time}...initializing metadata", verbose=verbose)
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
@@ -245,23 +247,37 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             polarizations=list(hd.pols.values())[0]
         else:
             polarizations=hd.pols
-    echo("...initializing delay-filter", verbose=verbose)
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    echo(f"{current_time}...initializing delay-filter", verbose=verbose)
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
-    echo("...reading data", verbose=verbose)
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    echo(f"{current_time}...reading data", verbose=verbose)
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
     if external_flags is not None:
-        echo("...applying flags", verbose=verbose)
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        echo(f"{current_time}...applying flags", verbose=verbose)
         df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)
     if factorize_flags:
-        echo("...factorizing flags", verbose=verbose)
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        echo(f"{current_time}...factorizing flags", verbose=verbose)
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:
-        echo("...trimming edges", verbose=verbose)
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        echo(f"{current_time}...trimming edges", verbose=verbose)
         df.trim_edges(ax='freq')
-    echo("...running delay filter", verbose=verbose)
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    echo(f"{current_time}...running delay filter", verbose=verbose)
     df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                        skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
-    echo("...writing output", verbose=verbose)
+                        skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    echo(f"{current_time}...writing output", verbose=verbose)
     df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history, verbose=verbose,
