@@ -32,7 +32,7 @@ class XTalkFilter(VisClean):
 
     def run_xtalk_filter(self, to_filter=None, weight_dict=None, max_frate_coeffs=[0.024, -0.229], mode='clean',
                          skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
-                         write_cache=False, skip_flagged_edges=False,  **filter_kwargs):
+                         write_cache=False, skip_flagged_edges=False, verbose=False, **filter_kwargs):
         '''
         Run a cross-talk filter on data where the maximum fringe rate is set by the baseline length.
 
@@ -61,6 +61,7 @@ class XTalkFilter(VisClean):
                                that were not in previously loaded cache files.
             cache: dictionary containing pre-computed filter products.
             skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
+            verbose: bool, optional, lots of outputs!
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -93,7 +94,7 @@ class XTalkFilter(VisClean):
 
 
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                read_cache=False, write_cache=False,
+                                read_cache=False, write_cache=False, verbose=False,
                                 factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False,
@@ -112,6 +113,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
                            that were not in previously loaded cache files.
+        verbose: bool, optiona. Lots of output. Default is False.
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
         time_thresh : float
@@ -145,10 +147,10 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         if trim_edges:
             xf.trim_edges(ax='time')
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                            skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+                            skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
-                               clobber=clobber, add_to_history=add_to_history,
+                               clobber=clobber, add_to_history=add_to_history, verbose=verbose,
                                extra_attrs={'Nfreqs': xf.Nfreqs, 'freq_array': np.asarray([xf.freqs])})
     else:
         for i in range(0, hd.Nbls, Nbls_per_load):

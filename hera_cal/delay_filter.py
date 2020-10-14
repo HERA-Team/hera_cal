@@ -137,38 +137,52 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
+    echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
     hd = io.HERAData(infilename, filetype='uvh5')
     if calfile is not None:
+        echo(f"{str(datetime.now())}...reading calfile: {calfile}", verbose=verbose)
         calfile = io.HERACal(calfile)
         calfile.read()
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freqs[spw_range[0]:spw_range[1]]
     if Nbls_per_load is None:
+        echo(f"{str(datetime.now())}...initializing delay filter.", verbose=verbose)
         df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
+        echo(f"{str(datetime.now())}...reading data.", verbose=verbose)
         df.read(frequencies=freqs)
         if factorize_flags:
+            echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
             df.factorize_flags(time_thresh=time_thresh, inplace=True)
         if trim_edges:
+            echo(f"{str(datetime.now())}...trimming edges.", verbose=verbose)
             df.trim_edges(ax='freq')
+        echo(f"{str(datetime.now())}...running delay filter.", verbose=verbose)
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                            verbose=verbose,
                             skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+        echo(f"{str(datetime.now())}...writing output.", verbose=verbose)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
                                clobber=clobber, add_to_history=add_to_history,
                                extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': np.asarray([df.freqs])})
     else:
         for i in range(0, len(hd.bls), Nbls_per_load):
+            echo(f"{str(datetime.now())}...initializing delay filter for baseline chunk.", verbose=verbose)
             df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
+            echo(f"{str(datetime.now())}...reading data for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             if factorize_flags:
+                echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
             if trim_edges:
                 raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
+            echo(f"{str(datetime.now())}...running delay filter for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+                                skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
+            echo(f"{str(datetime.now())}...writing filtered data for {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=True,
+                                   filled_outfilename=filled_outfilename, partial_write=True, verbose=verbose,
                                    clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
             df.hd.data_array = None  # this forces a reload in the next loop
 
@@ -213,9 +227,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         skip_flagged_edges: if true, skip flagged edges in filtering.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    echo(f"{current_time}...initializing metadata", verbose=verbose)
+    echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
@@ -247,37 +259,23 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             polarizations=list(hd.pols.values())[0]
         else:
             polarizations=hd.pols
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    echo(f"{current_time}...initializing delay-filter", verbose=verbose)
+    echo(f"{str(datetime.now())}...initializing delay-filter", verbose=verbose)
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    echo(f"{current_time}...reading data", verbose=verbose)
+    echo(f"{str(datetime.now())}...reading data", verbose=verbose)
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
     if external_flags is not None:
-        now = datetime.now()
-        current_time = now.strftime("%H:%M:%S")
-        echo(f"{current_time}...applying flags", verbose=verbose)
+        echo(f"{str(datetime.now())}...applying flags", verbose=verbose)
         df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)
     if factorize_flags:
-        now = datetime.now()
-        current_time = now.strftime("%H:%M:%S")
-        echo(f"{current_time}...factorizing flags", verbose=verbose)
+        echo(f"{str(datetime.now())}...factorizing flags", verbose=verbose)
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:
-        now = datetime.now()
-        current_time = now.strftime("%H:%M:%S")
-        echo(f"{current_time}...trimming edges", verbose=verbose)
+        echo(f"{str(datetime.now())}...trimming edges", verbose=verbose)
         df.trim_edges(ax='freq')
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    echo(f"{current_time}...running delay filter", verbose=verbose)
+    echo(f"{str(datetime.now())}...running delay filter", verbose=verbose)
     df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                         skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    echo(f"{current_time}...writing output", verbose=verbose)
+    echo(f"{str(datetime.now())}...writing output", verbose=verbose)
     df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history, verbose=verbose,

@@ -31,5 +31,5 @@ if len(baseline_list) > 0:
                                                            read_cache=a.read_cache, mode='dpss_leastsq', res_outfilename=a.res_outfilename,
                                                            factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
                                                            trim_edges=a.trim_edges, max_contiguous_edge_flags=a.max_contiguous_edge_flags,
-                                                           add_to_history=' '.join(sys.argv),
+                                                           add_to_history=' '.join(sys.argv), verbose=a.verbose,
                                                            skip_flagged_edges=a.skip_flagged_edges, **filter_kwargs)

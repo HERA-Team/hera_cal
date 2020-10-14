@@ -20,7 +20,7 @@ if a.window == 'tukey':
     filter_kwargs['alpha'] = a.alpha
 spw_range = a.spw_range
 # Run Delay Filter
-delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, Nbls_per_load=a.partial_load_Nbls,
+delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, Nbls_per_load=a.partial_load_Nbls, verbose=a.verbose,
                                          res_outfilename=a.res_outfilename, CLEAN_outfilename=a.CLEAN_outfilename,
                                          filled_outfilename=a.filled_outfilename, clobber=a.clobber, spw_range=spw_range,
                                          add_to_history=' '.join(sys.argv), **filter_kwargs)
