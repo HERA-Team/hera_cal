@@ -80,7 +80,7 @@ def chunk_data_parser():
     a.add_argument("inputfile", type=str, help="name of input file to start chunk at.")
     a.add_argument("outputfile", type='str', help="Name of output file.")
     a.add_argument("chunk_size", type=int, help="Number of files after filenames to chunk.")
-    a.add_argument("--filetype", type=str, help="Type of output file. Default is uvh5" default="uvh5")
+    a.add_argument("--filetype", type=str, help="Type of output file. Default is uvh5", default="uvh5")
     a.add_argument("--polarizations", type=str, nargs="+", default=None, help="optional list of polarizations to select.")
     a.add_argument("--spw_range", type=str, nargs=2, defaults=None, help="optional 2-tuple of frequency channels to select.")
     a.add_argument("--throw_away_flagged_bls", default=False, action="store_true", help="Throw away baselines that are fully flagged.")
