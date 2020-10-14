@@ -176,7 +176,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               read_cache=False, write_cache=False, round_up_bllens=False,
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                              clobber=False, add_to_history='', polarizations=None,
+                                              clobber=False, add_to_history='', polarizations=None, verbose=False,
                                               skip_flagged_edges=False, overwrite_data_flags=False, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
@@ -208,10 +208,12 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
         polarizations: list of polarizations to include and write.
+        verboase: lots of output.
         skip_flagged_edges: if true, skip flagged edges in filtering.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
-    hd = io.HERAData(datafile_list, filetype='uvh5')
+    echo("...initializing metadata", verbose=verbose)
+    hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
@@ -220,6 +222,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         baseline_antennas += list(blpolpair[:2])
     baseline_antennas = np.unique(baseline_antennas).astype(int)
     if calfile_list is not None:
+        echo("...loading calibrations", verbose=verbose)
         # initialize calfile by iterating through calfile_list, selecting the antennas we need,
         # and concatenating.
         for filenum, calfile in enumerate(calfile_list):
@@ -241,19 +244,26 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             polarizations=list(hd.pols.values())[0]
         else:
             polarizations=hd.pols
-    df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
+    echo("...initializing delay-filter", verbose=verbose)
+    df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
+    echo("...reading data", verbose=verbose)
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
     if external_flags is not None:
+        echo("...applying flags", verbose=verbose)
         df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)
     if factorize_flags:
+        echo("...factorizing flags", verbose=verbose)
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:
+        echo("...trimming edges", verbose=verbose)
         df.trim_edges(ax='freq')
+    echo("...running delay filter", verbose=verbose)
     df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                         skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+    echo("...writing output", verbose=verbose)
     df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
-                           clobber=clobber, add_to_history=add_to_history,
+                           clobber=clobber, add_to_history=add_to_history, verbose=verbose,
                            extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': np.asarray([df.freqs])})
 
 

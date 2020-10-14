@@ -34,4 +34,4 @@ if len(baseline_list) > 0:
                                                              factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
                                                              trim_edges=a.trim_edges, max_contiguous_edge_flags=a.max_contiguous_edge_flags,
                                                              add_to_history=' '.join(sys.argv), polarizations=a.polarizations,
-                                                             skip_flagged_edges=a.skip_flagged_edges, **filter_kwargs)
+                                                             skip_flagged_edges=a.skip_flagged_edges, verbose=a.verbose, **filter_kwargs)

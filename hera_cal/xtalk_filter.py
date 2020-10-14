@@ -205,7 +205,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
-    hd = io.HERAData(datafile_list, filetype='uvh5')
+    hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
@@ -235,7 +235,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             polarizations=list(hd.pols.values())[0]
         else:
             polarizations=hd.pols
-    xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
+    xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
     if external_flags is not None:
         df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)

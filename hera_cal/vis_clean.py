@@ -1479,6 +1479,7 @@ def _filter_argparser(multifile=False):
     a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
     a.add_argument("--trim_edges", default=False, action="store_true", help="If true, trim edge times and frequencies that are comletely flagged.")
     a.add_argument("--skip_flagged_edges", default=False, action="store_true", help="if True, do not filter over flagged edge integrations or channels (depending on filter axis).")
+    a.add_argument("--verbose", default=False, action="store_true", help="lots of output.")
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")

@@ -26,7 +26,7 @@ if len(baseline_list) > 0:
             a.calfilelist = None
     # Run Xtalk Filter
     xtalk_filter.load_xtalk_filter_and_write_baseline_list(a.datafilelist, calfile_list=a.calfilelist, round_up_bllens=True,
-                                                           baseline_list=baseline_list, spw_range=a.spw_range,
+                                                           baseline_list=baseline_list, spw_range=a.spw_range, verbose=a.verbose,
                                                            cache_dir=a.cache_dir, res_outfilename=outfilename,
                                                            clobber=a.clobber, write_cache=a.write_cache, polarizations=a.polarizations,
                                                            read_cache=a.read_cache, mode='dayenu', overwrite_data_flags=a.overwrite_data_flags,
