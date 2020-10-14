@@ -10,6 +10,7 @@ from . import io
 from . import version
 from .vis_clean import VisClean
 from . import vis_clean
+from .utils import echo
 import pickle
 import random
 import glob
