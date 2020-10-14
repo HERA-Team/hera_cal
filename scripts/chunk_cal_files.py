@@ -12,4 +12,4 @@ a = chunker.chunk_cal_parser()
 args = a.parse_args()
 
 chunker.chunk_cal_files(filenames=a.filenames, outputfile=a.outputfile,
-                        inputfile=a.inputfile, spw=a.spw)
+                        inputfile=a.inputfile, spw_range=a.spw_range)

@@ -13,4 +13,4 @@ args = a.parse_args()
 
 chunker.chunk_data_files(filenames=a.filenames, outputfile=a.outputfile,
                          inputfile=a.inputfile, filetype=a.filetype, polarizations=a.polarizations,
-                         spw=a.spw, throw_away_flagged_bls=a.throw_away_flagged_bls)
+                         spw_range=a.spw_range, throw_away_flagged_bls=a.throw_away_flagged_bls)

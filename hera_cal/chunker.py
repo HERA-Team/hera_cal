@@ -10,7 +10,7 @@ import argparse
 
 
 def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh5',
-                     polarizations=None, spw=None, throw_away_flagged_bls=False):
+                     polarizations=None, spw_range=None, throw_away_flagged_bls=False):
     """A data file chunker
 
     Parameters
@@ -25,7 +25,7 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
     polarizations: list of strs, optional
         Limit output to polarizations listed.
         Default None selects all polarizations.
-    spw: 2-list or 2-tuple
+    spw_range: 2-list or 2-tuple
         optional lower and upper channel range to select
     throw_away_flagged_bls: bool, optional
         if true, throw away baselines that are fully flagged.
@@ -41,8 +41,8 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
     read_args = {}
     if polarizations is not None:
         read_args['polarizations'] = polarizations
-    if spw is not None:
-        read_args['channels'] = np.arange(spw[0], spw[1]).astype(int)
+    if spw_range is not None:
+        read_args['channels'] = np.arange(spw_range[0], spw_range[1]).astype(int)
     data, flags, nsamples = hd.read(axis='blt', **read_args)
     # throw away fully flagged baselines.
     if throw_away_flagged_bls:
@@ -82,7 +82,7 @@ def chunk_data_parser():
     a.add_argument("chunk_size", type=int, help="Number of files after filenames to chunk.")
     a.add_argument("--filetype", type=str, help="Type of output file. Default is uvh5" default="uvh5")
     a.add_argument("--polarizations", type=str, nargs="+", default=None, help="optional list of polarizations to select.")
-    a.add_argument("--spw", type=str, nargs=2, defaults=None, help="optional 2-tuple of frequency channels to select.")
+    a.add_argument("--spw_range", type=str, nargs=2, defaults=None, help="optional 2-tuple of frequency channels to select.")
     a.add_argument("--throw_away_flagged_bls", default=False, action="store_true", help="Throw away baselines that are fully flagged.")
     return a
 
@@ -113,8 +113,8 @@ def chunk_cal_files(filenames, inputfile, outputfile, chunk_size, spw=None):
     hc = io.HERACal(filenames[start:end])
     hc.read()
     # throw away fully flagged baselines.
-    if spw is not None:
-        hc.select(channels=np.arange(spw[0], spw[1]).astype(int))
+    if spw_range is not None:
+        hc.select(channels=np.arange(spw_range[0], spw_range[1]).astype(int))
     hc.write_calfits(outputfile)
     return hc
 
@@ -135,7 +135,7 @@ def chunk_cal_parser():
     a.add_argument("outputfile", type='str', help="Name of output file.")
     a.add_argument("inputfile", type='str', help='name of input file to start chunk at')
     a.add_argument("chunk_size", type=int, help="number of files after inputfile to include in chunk")
-    a.add_argument("--spw", type=int, nargs=2, help="min and max channel index to save in chunk.", default=None)
+    a.add_argument("--spw_range", type=int, nargs=2, help="min and max channel index to save in chunk.", default=None)
     return a
 
 def chunk_data_parser():
@@ -157,6 +157,6 @@ def chunk_data_parser():
     a.add_argument("chunk_size", type=int, help="Number of files after filenames to chunk.")
     a.add_argument("--filetype", type=str, help="Type of output file. Default is uvh5" default="uvh5")
     a.add_argument("--polarizations", type=str, nargs="+", default=None, help="optional list of polarizations to select.")
-    a.add_argument("--spw", type=int, nargs=2, defaults=None, help="optional 2-tuple of frequency channels to select.")
+    a.add_argument("--spw_range", type=int, nargs=2, defaults=None, help="optional 2-tuple of frequency channels to select.")
     a.add_argument("--throw_away_flagged_bls", default=False, action="store_true", help="Throw away baselines that are fully flagged.")
     return a
