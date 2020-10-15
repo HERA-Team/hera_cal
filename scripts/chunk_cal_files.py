@@ -11,5 +11,6 @@ from hera_cal import chunker
 a = chunker.chunk_cal_parser()
 args = a.parse_args()
 
-chunker.chunk_cal_files(filenames=a.filenames, outputfile=a.outputfile,
-                        inputfile=a.inputfile, spw_range=a.spw_range)
+chunker.chunk_cal_files(filenames=args.filenames, outputfile=args.outputfile,
+                        inputfile=args.inputfile, chunk_size=args.chunk_size,
+                        spw_range=args.spw_range, clobber=args.clobber)

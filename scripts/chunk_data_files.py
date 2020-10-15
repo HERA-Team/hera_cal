@@ -11,6 +11,7 @@ from hera_cal import chunker
 a = chunker.chunk_data_parser()
 args = a.parse_args()
 
-chunker.chunk_data_files(filenames=a.filenames, outputfile=a.outputfile,
-                         inputfile=a.inputfile, filetype=a.filetype, polarizations=a.polarizations,
-                         spw_range=a.spw_range, throw_away_flagged_bls=a.throw_away_flagged_bls)
+chunker.chunk_data_files(filenames=args.filenames, outputfile=args.outputfile,
+                         chunk_size=args.chunk_size, clobber=args.clobber,
+                         inputfile=args.inputfile, filetype=args.filetype, polarizations=args.polarizations,
+                         spw_range=args.spw_range, throw_away_flagged_bls=args.throw_away_flagged_bls)
