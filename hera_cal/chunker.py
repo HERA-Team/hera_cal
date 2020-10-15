@@ -43,22 +43,6 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
     start = filenames.index(inputfile)
     end = start + chunk_size
     hd = io.HERAData(filenames[start:end])
-    identical_bls = []
-    print('number of baselines:')
-    for file in filenames[start:end]:
-        hdt = io.HERAData(file)
-        print(hdt.Nbls)
-        if file == filenames[start]:
-            bl_array = hdt.baseline_array
-        else:
-            x=np.all(hdt.baseline_array == bl_array)
-            identical_bls.append(x)
-    print(f'all bls identical?: {np.all(identical_bls)}')
-    times = []
-    for file in filenames[start:end]:
-        times.append(hd.times[file])
-    times = np.unique(np.array(times).flatten())
-    print(np.diff(times))
     read_args = {}
     if polarizations is not None:
         read_args['polarizations'] = polarizations
