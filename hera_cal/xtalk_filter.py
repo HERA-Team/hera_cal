@@ -20,7 +20,7 @@ import warnings
 from copy import deepcopy
 from pyuvdata import UVCal
 import argparse
-
+from datetime import datetime
 
 class XTalkFilter(VisClean):
     """
@@ -32,7 +32,7 @@ class XTalkFilter(VisClean):
 
     def run_xtalk_filter(self, to_filter=None, weight_dict=None, max_frate_coeffs=[0.024, -0.229], mode='clean',
                          skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
-                         write_cache=False, skip_flagged_edges=False, verbose=False, **filter_kwargs):
+                         write_cache=False, skip_flagged_edges=False, **filter_kwargs):
         '''
         Run a cross-talk filter on data where the maximum fringe rate is set by the baseline length.
 
@@ -132,36 +132,49 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         round_up_bllens: bool, if True, round up baseline lengths. Default is False.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
+    echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
     hd = io.HERAData(infilename, filetype='uvh5')
     if calfile is not None:
+        echo(f"{str(datetime.now())}...reading calfile: {calfile}", verbose=verbose)
         calfile = io.HERACal(calfile)
         calfile.read()
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freqs[spw_range[0]:spw_range[1]]
     if Nbls_per_load is None:
+        echo(f"{str(datetime.now())}...initializing xtalk filter.", verbose=verbose)
         xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
+        echo(f"{str(datetime.now())}...reading data.", verbose=verbose)
         xf.read(frequencies=freqs)
         if factorize_flags:
+            echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
             xf.factorize_flags(time_thresh=time_thresh, inplace=True)
         if trim_edges:
+            echo(f"{str(datetime.now())}...trimming edges.", verbose=verbose)
             xf.trim_edges(ax='time')
+        echo(f"{str(datetime.now())}...running xtalk filter.", verbose=verbose)
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                             skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
+        echo(f"{str(datetime.now())}...writing output.", verbose=verbose)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
                                clobber=clobber, add_to_history=add_to_history, verbose=verbose,
                                extra_attrs={'Nfreqs': xf.Nfreqs, 'freq_array': np.asarray([xf.freqs])})
     else:
         for i in range(0, hd.Nbls, Nbls_per_load):
+            echo(f"{str(datetime.now())}...initializing xtalk filter for baseline chunk.", verbose=verbose)
             xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
+            echo(f"{str(datetime.now())}...reading data for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             xf.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             if factorize_flags:
+                echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
                 xf.factorize_flags(time_thresh=time_thresh, inplace=True)
             if trim_edges:
                 raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
+            echo(f"{str(datetime.now())}...running xtalk filter for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                                 skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+            echo(f"{str(datetime.now())}...writing filtered data for {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history,
@@ -208,6 +221,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
+    echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
@@ -217,6 +231,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         baseline_antennas += list(blpolpair[:2])
     baseline_antennas = np.unique(baseline_antennas).astype(int)
     if calfile_list is not None:
+        echo("...loading calibrations", verbose=verbose)
         # initialize calfile by iterating through calfile_list, selecting the antennas we need,
         # and concatenating.
         for filenum, calfile in enumerate(calfile_list):
@@ -238,16 +253,23 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             polarizations=list(hd.pols.values())[0]
         else:
             polarizations=hd.pols
+    echo(f"{str(datetime.now())}...initializing xtalk-filter", verbose=verbose)
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
+    echo(f"{str(datetime.now())}...reading data", verbose=verbose)
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
     if external_flags is not None:
+        echo(f"{str(datetime.now())}...applying flags", verbose=verbose)
         df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)
     if factorize_flags:
+        echo(f"{str(datetime.now())}...factorizing flags", verbose=verbose)
         xf.factorize_flags(time_thresh=time_thresh, inplace=True)
     if trim_edges:
+        echo(f"{str(datetime.now())}...trimming edges", verbose=verbose)
         xf.trim_edges(ax='time')
+    echo(f"{str(datetime.now())}...running xtalk filter", verbose=verbose)
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                         skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+    echo(f"{str(datetime.now())}...writing output", verbose=verbose)
     xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history,
