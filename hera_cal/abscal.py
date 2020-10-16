@@ -260,15 +260,15 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gai
         return {ant: np.abs(fit[f'A_{ant[1]}']).astype(np.complex) for ant in gain_ants}
 
 
-def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zero_psi=True,
-                  four_pol=False, return_gains=False, gain_ants=[]):
+def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True, 
+                  zero_psi=True, four_pol=False, verbose=True, return_gains=False, gain_ants=[]):
     """
     calculate overall gain phase and gain phase Tip-Tilt slopes (East-West and North-South)
     with a linear solver applied to the logarithmically linearized equation:
 
     angle(V_ij,xy^data / V_ij,xy^model) = angle(g_i_x * conj(g_j_y))
-                                        = psi_x - psi_y + PHI^ew_x*r_i^ew + PHI^ns_x*r_i^ns
-                                          - PHI^ew_y*r_j^ew - PHI^ns_y*r_j^ns
+                                        = psi_x - psi_y + Phi^ew_x*r_i^ew + Phi^ns_x*r_i^ns
+                                          - Phi^ew_y*r_j^ew - Phi^ns_y*r_j^ns
 
     where psi is the overall gain phase across the array [radians] for x and y polarizations,
     and PHI^ew, PHI^ns are the gain phase slopes across the east-west and north-south axes
@@ -276,6 +276,11 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     antenna respectively. The phase slopes are polarization independent by default (1pol & 2pol cal),
     but can be merged with the four_pol parameter (4pol cal). r_i is the antenna position vector
     of the i^th antenna.
+    
+    If assume_2D is not true, this solves for the tip-tilt degeneracies of antenna positions in an 
+    arbitary number of dimensions, the output of redcal.reds_to_antpos() for an array with extra 
+    tip-tilt degeneracies. In that case, the fit parameters are  Phi_0, Phi_1, Phi_2, etc.,
+    generalizing the equation above to use the n-dimensional dot product Phi . r.
 
     Parameters:
     -----------
@@ -298,9 +303,14 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
         is identically zero across all frequencies. If None, use the first key in data as refant.
 
     antpos : antenna position vectors, type=dictionary
-          keys are antenna integers, values are 2D
-          antenna vectors in meters (preferably centered at center of array),
-          with [0] index containing east-west separation and [1] index north-south separation
+          keys are antenna integers, values are antenna positions vectors
+          (preferably centered at center of array). If assume_2D is True, it is assumed that the 
+          [0] index contains the east-west separation and [1] index the north-south separation
+          
+    assume_2D : type=boolean, [default=False]
+                If this is true, all dimensions of antpos beyond the first two will be ignored.
+                If return_gains is False and assume_2D is True, then the returned variables will
+                look like Phi_0, Phi_1, Phi_2, etc. corresponding to the dimensions in antpos.
 
     zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
 
@@ -320,7 +330,8 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     if not return_gains:
         fit : dictionary with psi key for overall gain phase and Phi_ew and Phi_ns array containing
                 phase slopes across the EW and NS directions of the array. There is a set of each
-                of these variables per polarization.
+                of these variables per polarization. If assume_2D is False, then these will be the
+                more general Phi_0, Phi_1, Phi_2, etc. corresponding to the dimensions in antpos.
     else:
         gains: dictionary with gain_ants as keys and gain waterfall arrays as values
 
@@ -347,25 +358,30 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
         refant = keys[0][0]
     assert refant in antnums, "reference antenna {} not found in antenna list".format(refant)
     antpos = {k: antpos[k] - antpos[refant] for k in antpos.keys()}
-
-    # setup antenna position terms
-    r_ew = {ant: f'r_ew_{ant}' for ant in antnums}
-    r_ns = {ant: f'r_ns_{ant}' for ant in antnums}
+    
+    # count dimensions of antenna positions, figure out how many to solve for
+    nDims = len(list(antpos.values())[0])
+    for k in antpos.keys():
+        assert len(antpos[k]) == nDims, 'Not all antenna positions have the same dimensionality.'
+        if assume_2D:
+            assert len(antpos[k]) >= 2, 'Since assume_2D is True, all antenna positions must 2D or higher.'
 
     # setup linsolve equations
     eqns = {}
     for k in keys:
         ap0, ap1 = split_pol(k[2])
-        eqns[k] = f'psi_{ap0}*a1 - psi_{ap1}*a2 + '
-        if four_pol:
-            eqns[k] += f'Phi_ew*r_ew_{k[0]} + Phi_ns*r_ns_{k[0]} - Phi_ew*r_ew_{k[1]} - Phi_ns*r_ns_{k[1]}'
-        else:
-            eqns[k] += f'Phi_ew_{ap0}*r_ew_{k[0]} + Phi_ns_{ap0}*r_ns_{k[0]} - Phi_ew_{ap1}*r_ew_{k[1]} - Phi_ns_{ap1}*r_ns_{k[1]}'
+        eqns[k] = f'psi_{ap0}*a1 - psi_{ap1}*a2'
+        for d in range((nDims, 2)[assume_2D]):
+            if four_pol:
+                eqns[k] += f' + Phi_{d}*r_{d}_{k[0]} - Phi_{d}*r_{d}_{k[1]}'
+            else:
+                eqns[k] += f' + Phi_{d}_{ap0}*r_{d}_{k[0]} - Phi_{d}_{ap1}*r_{d}_{k[1]}'
 
     # set design matrix entries
-    ls_design_matrix = {f'r_ew_{a}': antpos[a][0] for a in antnums}
-    ls_design_matrix.update({f'r_ns_{a}': antpos[a][1] for a in antnums})
-
+    ls_design_matrix = {}
+    for a in antnums:
+        for d in range((nDims, 2)[assume_2D]):
+            ls_design_matrix[f'r_{d}_{a}'] = antpos[a][d]
     if zero_psi:
         ls_design_matrix.update({"a1": 0.0, "a2": 0.0})
     else:
@@ -382,11 +398,28 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     echo("...finished linsolve", verbose=verbose)
 
     if not return_gains:
+        # rename variables ew/ns instead of 0/1 to maintain backwards compatability
+        if assume_2D:
+            params = list(fit.keys())
+            for p in params:
+                if 'Phi_0' in p:
+                    fit[p.replace('Phi_0', 'Phi_ew')] = fit[p]
+                    del fit[p]
+                if 'Phi_1' in p:
+                    fit[p.replace('Phi_1', 'Phi_ns')] = fit[p]
+                    del fit[p]                    
         return fit
     else:
-        return {ant: np.exp(1.0j * (np.einsum('i,ijk->jk', antpos[ant[0]][:2],
-                                              [fit['Phi_ew_{}'.format(ant[1])], fit['Phi_ns_{}'.format(ant[1])]])
-                                    + fit['psi_{}'.format(ant[1])])) for ant in gain_ants}
+        # compute gains, dotting each parameter into the corresponding coordinate in that dimension
+        gains = {}
+        for ant in gain_ants:
+            gains[ant] = np.exp(1.0j * fit['psi_{}'.format(ant[1])])
+            if four_pol:
+                Phis = [fit[f'Phi_{d}'] for d in range((nDims, 2)[assume_2D])]
+            else:
+                Phis = [fit[f'Phi_{d}_{ant[1]}'] for d in range((nDims, 2)[assume_2D])]
+            gains[ant] *= np.exp(1.0j * (np.einsum('i,ijk->jk', antpos[ant[0]], Phis)))
+        return gains
 
 
 def amp_logcal(model, data, wgts=None, verbose=True):
