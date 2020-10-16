@@ -329,17 +329,15 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
 
     # get keys from model dictionary
     keys = sorted(set(model.keys()) & set(data.keys()))
-    ants = np.unique(list(antpos.keys()))
+    antnums = np.unique(list(antpos.keys()))
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
-    ydata = odict([(k, np.angle(data[k] / model[k])) for k in keys])
+    ydata = {k : np.angle(data[k] / model[k]) for k in keys}
 
-    # make weights if None
+    # make unit weights if None
     if wgts is None:
-        wgts = odict()
-        for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(ydata[k], dtype=np.float)
+        wgts = {k: np.ones_like(ydata[k], dtype=np.float) for k in keys}
 
     # fill nans and infs
     fill_dict_nans(ydata, wgts=wgts, nan_fill=0.0, inf_fill=0.0)
@@ -347,31 +345,26 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
     # center antenna positions about the reference antenna
     if refant is None:
         refant = keys[0][0]
-    assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
-    antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
+    assert refant in antnums, "reference antenna {} not found in antenna list".format(refant)
+    antpos = {k: antpos[k] - antpos[refant] for k in antpos.keys()}
 
     # setup antenna position terms
-    r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
-    r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
+    r_ew = {ant: f'r_ew_{ant}' for ant in antnums}
+    r_ns = {ant: f'r_ns_{ant}' for ant in antnums}
 
     # setup linsolve equations
-    if four_pol:
-        eqns = odict([((ant1, ant2, pol),
-                       "psi_{}*a1 - psi_{}*a2 + Phi_ew*{} + Phi_ns*{} - Phi_ew*{} - Phi_ns*{}"
-                       "".format(split_pol(pol)[0], split_pol(pol)[1], r_ew[ant1],
-                                 r_ns[ant1], r_ew[ant2], r_ns[ant2]))
-                      for i, (ant1, ant2, pol) in enumerate(keys)])
-    else:
-        eqns = odict([((ant1, ant2, pol),
-                       "psi_{}*a1 - psi_{}*a2 + Phi_ew_{}*{} + Phi_ns_{}*{} - Phi_ew_{}*{} - Phi_ns_{}*{}"
-                       "".format(split_pol(pol)[0], split_pol(pol)[1], split_pol(pol)[0],
-                                 r_ew[ant1], split_pol(pol)[0], r_ns[ant1], split_pol(pol)[1],
-                                 r_ew[ant2], split_pol(pol)[1], r_ns[ant2]))
-                      for i, (ant1, ant2, pol) in enumerate(keys)])
+    eqns = {}
+    for k in keys:
+        ap0, ap1 = split_pol(k[2])
+        eqns[k] = f'psi_{ap0}*a1 - psi_{ap1}*a2 + '
+        if four_pol:
+            eqns[k] += f'Phi_ew*r_ew_{k[0]} + Phi_ns*r_ns_{k[0]} - Phi_ew*r_ew_{k[1]} - Phi_ns*r_ns_{k[1]}'
+        else:
+            eqns[k] += f'Phi_ew_{ap0}*r_ew_{k[0]} + Phi_ns_{ap0}*r_ns_{k[0]} - Phi_ew_{ap1}*r_ew_{k[1]} - Phi_ns_{ap1}*r_ns_{k[1]}'
 
     # set design matrix entries
-    ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
-    ls_design_matrix.update(odict(list(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants))))
+    ls_design_matrix = {f'r_ew_{a}': antpos[a][0] for a in antnums}
+    ls_design_matrix.update({f'r_ns_{a}': antpos[a][1] for a in antnums})
 
     if zero_psi:
         ls_design_matrix.update({"a1": 0.0, "a2": 0.0})
@@ -379,8 +372,8 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, verbose=True, zer
         ls_design_matrix.update({"a1": 1.0, "a2": 1.0})
 
     # setup linsolve dictionaries
-    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
-    ls_wgts = odict([(eqns[k], wgts[k]) for i, k in enumerate(keys)])
+    ls_data = {eqns[k]: ydata[k] for k in keys}
+    ls_wgts = {eqns[k]: wgts[k] for k in keys}
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
