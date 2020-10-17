@@ -534,7 +534,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd_red.write_uvh5(data_outfilename, clobber=clobber)
     # full data loading and writing
     else:
-        print(f'freqs_to_load between {np.min(freqs_to_load)/1e6}, {np.max(freqs_to_load)/1e6} ')
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
         all_reds = redcal.get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol, include_autos=True)
         if overwrite_data_flags:
