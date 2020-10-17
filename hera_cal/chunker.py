@@ -7,7 +7,8 @@
 from . import io
 import argparse
 import numpy as np
-
+import sys
+import warnings
 
 def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh5',
                      polarizations=None, spw_range=None, throw_away_flagged_bls=False,
@@ -56,7 +57,11 @@ def chunk_data_files(filenames, inputfile, outputfile, chunk_size, filetype='uvh
             if not np.all(flags[bl]):
                 bls2keep.append(bl)
         # Throw away unflagged antennas.
-        hd.select(bls=bls2keep)
+        if len(bls2keep) > 0:
+            hd.select(bls=bls2keep)
+        else:
+            warnings.warn("No unflagged baselines present. Exiting.")
+            sys.exit(0)
     if filetype == 'uvh5':
         hd.write_uvh5(outputfile, clobber=clobber)
     elif file_type == 'miriad':

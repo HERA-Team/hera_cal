@@ -102,7 +102,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 read_cache=False, write_cache=False, round_up_bllens=False,
                                 factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                clobber=False, add_to_history='',
+                                clobber=False, add_to_history='', verbose=False,
                                 skip_flagged_edges=False, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
@@ -134,6 +134,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
+        verbose: bool, if True, lots of outputs. Default = False.
         skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
