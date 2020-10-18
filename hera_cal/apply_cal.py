@@ -235,8 +235,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
             if external_flags is not None:
                 from hera_qm.xrfi import flag_apply
-                flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=!overwrite_data_flags)
-                flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=!overwrite_data_flags)
+                flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=not(overwrite_data_flags))
+                flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=not(overwrite_data_flags))
             hd_sum.partial_write(even_outfilename, inplace=True, clobber=clobber)
             hd_diff.partial_write(odd_outfilename, inplace=True, clobber=clobber)
     else:
@@ -256,8 +256,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
         hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
         if external_flags is not None:
             from hera_qm.xrfi import flag_apply
-            flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=!overwrite_data_flags)
-            flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=!overwrite_data_flags)
+            flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=not(overwrite_data_flags))
+            flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=not(overwrite_data_flags))
         hd_sum.write_uvh5(even_outfilename, clobber=clobber)
         hd_diff.write_uvh5(odd_outfilename, clobber=clobber)
 
