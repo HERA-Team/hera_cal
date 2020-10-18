@@ -178,13 +178,13 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                 else:
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
-def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_outfilename,
+def sum_diff_2_even_odd(sum_infilename, diff_infilename, even_outfilename, odd_outfilename,
                         nbl_per_load=None, filetype_in='uvh5', external_flags=None,
                         overwrite_data_flags=False, clobber=False, polarizations=None):
     """Generate even and odd data sets from sum and diff
 
     Arguments:
-        sum_infilname: str
+        sum_infilename: str
             filename for sum file.
         diff_infilename: str
             filename for diff file.
@@ -213,7 +213,7 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
     if external_flags is not None:
         external_flags = UVFlag(external_flags)
     hd_sum = io.HERAData(sum_infilename, filetype=filetype_in)
-    hd_diff = io.HERAData(diff_infilname, filetype=filetype_in)
+    hd_diff = io.HERAData(diff_infilename, filetype=filetype_in)
     if polarizations is None:
         if filetype_in == 'uvh5':
             polarizations = hd_sum.pols

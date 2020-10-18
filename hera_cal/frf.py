@@ -14,6 +14,7 @@ from . import utils
 from .datacontainer import DataContainer
 from .vis_clean import VisClean
 import argparse
+import copy
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
                       lsts=None, freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
@@ -480,40 +481,41 @@ class FRFilter(VisClean):
             filt_flags[k] = f
             filt_nsamples[k] = eff_nsamples
 
-        def _write_time_averaged_data(self, output_file, output_prefix='avg'):
-            """Internal method for writing time-averaged data to pyuvdata objects.
+    def _write_time_averaged_data(self, output_file, output_prefix='avg', clobber=False):
+        """Internal method for writing time-averaged data to pyuvdata objects.
 
-            Parameters
-            ----------
-            output_file: str, optional
-                Name of outputfile to write. uvh5 only :)
-            output_prefix: str, optional
-                Output prefix for time-averaged arrays to write out.
-
-            Returns
-            -------
-                Nothing!
-            """
-            avg_data = getattr(self, f"{output_prefix}_data")
-            avg_flags = getattr(self, f"{output_prefix}_flags")
-            avg_nsamples = getattr(self, f"{output_prefix}_nsamples")
-            avg_times = getattr(self, f"{output_prefix}_times")
-            avg_lsts = getattr(self, f"{output_prefix}_lsts")
-            # copy the attached data
-            hd_output = copy.deepcopy(self.hd)
-            nt_avg = len(avg_times)
-            # select arbitrary times to line up with average number of times
-            hd_output.select(times=self.times[:nt_avg])
-            hd_output.times = avg_times
-            hd_output.lsts = avg_lsts
-            # set data to averaged data
-            hd_output.update(data=avg_data, flags=avg_flags, nsamples=avg_nsamples)
-            # change values of time and lst arrays.
-            nbls = hd_output.Nbls
-            for tind in range(nt_avg):
-                hd_output.time_array[nbls * tind: nbls * (tind + 1)] = avg_times[tind]
-                hd_output.lst_array[nbls * tind: nbls * (tind + 1)] = avg_lsts[tind]
-            hd_output.write_uvh5(output_file)
+        Parameters
+        ----------
+        output_file: str, optional
+            Name of outputfile to write. uvh5 only :)
+        output_prefix: str, optional
+            Output prefix for time-averaged arrays to write out.
+        clobber: bool, optional
+            overwrite output if it exists already. default is False.
+        Returns
+        -------
+            Nothing!
+        """
+        avg_data = getattr(self, f"{output_prefix}_data")
+        avg_flags = getattr(self, f"{output_prefix}_flags")
+        avg_nsamples = getattr(self, f"{output_prefix}_nsamples")
+        avg_times = getattr(self, f"{output_prefix}_times")
+        avg_lsts = getattr(self, f"{output_prefix}_lsts")
+        # copy the attached data
+        hd_output = copy.deepcopy(self.hd)
+        nt_avg = len(avg_times)
+        # select arbitrary times to line up with average number of times
+        hd_output.select(times=self.times[:nt_avg])
+        hd_output.times = avg_times
+        hd_output.lsts = avg_lsts
+        # set data to averaged data
+        hd_output.update(data=avg_data, flags=avg_flags, nsamples=avg_nsamples)
+        # change values of time and lst arrays.
+        nbls = hd_output.Nbls
+        for tind in range(nt_avg):
+            hd_output.time_array[nbls * tind: nbls * (tind + 1)] = avg_times[tind]
+            hd_output.lst_array[nbls * tind: nbls * (tind + 1)] = avg_lsts[tind]
+        hd_output.write_uvh5(output_file, clobber=clobber)
 
 
 def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True, rephase=False,
@@ -546,7 +548,7 @@ def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True,
     fr.read()
     fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg,
                     wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-    fr._write_time_averaged_data(output_data)
+    fr._write_time_averaged_data(output_data, clobber=clobber)
 
 
 def time_average_argparser():
@@ -556,3 +558,6 @@ def time_average_argparser():
     a.add_argument("input_data", type=str, help="name of data file to time-average.")
     a.add_argument("output_data", type=str, help="name of data file to write out time-average.")
     a.add_argument("t_avg", type=float, help="number of seconds to average over.")
+    a.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
+    a.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample.")
+    a.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
