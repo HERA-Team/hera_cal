@@ -206,6 +206,9 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
         polarizations: list of strs, optional
             list of string pols to include in output. If no provided
 
+    Returns
+    -------
+    sum and diff files.
     """
     if external_flags is not None:
         external_flags = UVFlag(external_flags)
@@ -260,6 +263,7 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilname, even_outfilename, odd_ou
             flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=not(overwrite_data_flags))
         hd_sum.write_uvh5(even_outfilename, clobber=clobber)
         hd_diff.write_uvh5(odd_outfilename, clobber=clobber)
+    return hd_sum, hd_diff
 
 def apply_waterfall_flags(data_infilename, data_outfilename, flag_files, overwrite_data_flags=False,
                           nbl_per_load=None, add_to_history='', clobber=False, spw=None,
