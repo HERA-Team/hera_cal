@@ -252,6 +252,9 @@ class Test_AbsCal_Funcs(object):
         np.testing.assert_array_almost_equal(phase_slopes_y - y_slope_est, 0, decimal=7)
 
 
+@pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
+@pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
+@pytest.mark.filterwarnings("ignore:divide by zero encountered in log")
 class Test_Abscal_Solvers(object):
     def test_abs_amp_lincal(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
@@ -291,6 +294,23 @@ class Test_Abscal_Solvers(object):
             elif ant[1] == 'Jnn':
                 np.testing.assert_array_equal(gains[ant], 3.0)
 
+    def test_TT_phs_logcal(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        
+        # test 1 pol, assume_2D
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        bl_vecs = {bl: antpos[bl[0]] - antpos[bl[1]] for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [.01, .02, 0]))
+        data[0, 1, 'ee'][0, 0] = np.nan
+        data[0, 1, 'ee'][0, 1] = np.inf
+        model[0, 1, 'ee'][0, 0] = np.nan
+        model[0, 1, 'ee'][0, 1] = np.inf
+        fit = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True)
+        np.testing.assert_array_almost_equal(fit['Phi_ew_Jee'], .01)
+        np.testing.assert_array_almost_equal(fit['Phi_ns_Jee'], .02)
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
