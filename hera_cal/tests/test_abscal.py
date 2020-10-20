@@ -312,6 +312,14 @@ class Test_Abscal_Solvers(object):
         np.testing.assert_array_almost_equal(fit['Phi_ew_Jee'], .01)
         np.testing.assert_array_almost_equal(fit['Phi_ns_Jee'], .02)
 
+        ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
+        gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
+        rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_equal(rephased_gains[ant], rephased_true_gains[ant])
+
         # test 4 pol, assume_2D
         reds = redcal.get_reds(antpos, pols=['ee', 'en', 'ne', 'nn'], pol_mode='4pol')
         model = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
@@ -326,6 +334,14 @@ class Test_Abscal_Solvers(object):
         fit = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True, four_pol=True)
         np.testing.assert_array_almost_equal(fit['Phi_ew'], .01)
         np.testing.assert_array_almost_equal(fit['Phi_ns'], .02)
+
+        ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
+        gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True, four_pol=True, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
+        rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_equal(rephased_gains[ant], rephased_true_gains[ant])
 
         # test assume_2D=False by introducing another 6 element hex 100 m away
         antpos2 = hex_array(2, split_core=False, outriggers=0)
@@ -347,6 +363,14 @@ class Test_Abscal_Solvers(object):
         np.testing.assert_array_almost_equal(fit['Phi_0_Jee'], .01)
         np.testing.assert_array_almost_equal(fit['Phi_1_Jee'], .02)
         np.testing.assert_array_almost_equal(fit['Phi_2_Jee'], .03)
+
+        ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
+        gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=False, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
+        rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_equal(rephased_gains[ant], rephased_true_gains[ant])
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
