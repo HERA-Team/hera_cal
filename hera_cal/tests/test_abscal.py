@@ -327,6 +327,28 @@ class Test_Abscal_Solvers(object):
         np.testing.assert_array_almost_equal(fit['Phi_ew'], .01)
         np.testing.assert_array_almost_equal(fit['Phi_ns'], .02)
 
+        # test assume_2D=False by introducing another 6 element hex 100 m away
+        antpos2 = hex_array(2, split_core=False, outriggers=0)
+        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([100, 0, 0]) for ant in antpos2})
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        antpos = redcal.reds_to_antpos(reds)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol', bl_error_tol=1e-10)
+        model = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        bl_vecs = {bl: antpos[bl[0]] - antpos[bl[1]] for bl in data}
+
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [.01, .02, .03]))
+        data[0, 1, 'ee'][0, 0] = np.nan
+        data[0, 1, 'ee'][0, 1] = np.inf
+        model[0, 1, 'ee'][0, 0] = np.nan
+        model[0, 1, 'ee'][0, 1] = np.inf
+        fit = abscal.TT_phs_logcal(model, data, antpos, assume_2D=False)
+        np.testing.assert_array_almost_equal(fit['Phi_0_Jee'], .01)
+        np.testing.assert_array_almost_equal(fit['Phi_1_Jee'], .02)
+        np.testing.assert_array_almost_equal(fit['Phi_2_Jee'], .03)
+
+
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
