@@ -318,7 +318,7 @@ class Test_Abscal_Solvers(object):
         true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
         rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
         for ant in ants:
-            np.testing.assert_array_equal(rephased_gains[ant], rephased_true_gains[ant])
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
         # test 4 pol, assume_2D
         reds = redcal.get_reds(antpos, pols=['ee', 'en', 'ne', 'nn'], pol_mode='4pol')
@@ -341,7 +341,7 @@ class Test_Abscal_Solvers(object):
         true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
         rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
         for ant in ants:
-            np.testing.assert_array_equal(rephased_gains[ant], rephased_true_gains[ant])
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
         # test assume_2D=False by introducing another 6 element hex 100 m away
         antpos2 = hex_array(2, split_core=False, outriggers=0)
@@ -370,7 +370,7 @@ class Test_Abscal_Solvers(object):
         true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
         rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
         for ant in ants:
-            np.testing.assert_array_equal(rephased_gains[ant], rephased_true_gains[ant])
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
