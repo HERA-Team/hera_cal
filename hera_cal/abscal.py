@@ -299,13 +299,13 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
            matching shape of model and data
 
     refant : antenna number integer to use as a reference,
-        The antenna position coordaintes are centered at the reference, such that its phase
-        is identically zero across all frequencies. If None, use the first key in data as refant.
+             The antenna position coordaintes are centered at the reference, such that its phase
+             is identically zero across all frequencies. If None, use the first key in data as refant.
 
     antpos : antenna position vectors, type=dictionary
-          keys are antenna integers, values are antenna positions vectors
-          (preferably centered at center of array). If assume_2D is True, it is assumed that the 
-          [0] index contains the east-west separation and [1] index the north-south separation
+             keys are antenna integers, values are antenna positions vectors
+             (preferably centered at center of array). If assume_2D is True, it is assumed that the 
+             [0] index contains the east-west separation and [1] index the north-south separation
           
     assume_2D : type=boolean, [default=False]
                 If this is true, all dimensions of antpos beyond the first two will be ignored.
@@ -315,8 +315,8 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
     zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
 
     four_pol : type=boolean, even if multiple polarizations are present in data, make free
-                variables polarization un-aware: i.e. one solution across all polarizations.
-                This is the same assumption as 4-polarization calibration in omnical.
+               variables polarization un-aware: i.e. one solution across all polarizations.
+               This is the same assumption as 4-polarization calibration in omnical.
 
     verbose : print output, type=boolean, [default=False]
 
