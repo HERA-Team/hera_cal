@@ -309,7 +309,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
           
     assume_2D : type=boolean, [default=False]
                 If this is true, all dimensions of antpos beyond the first two will be ignored.
-                If return_gains is False and assume_2D is True, then the returned variables will
+                If return_gains is False and assume_2D is False, then the returned variables will
                 look like Phi_0, Phi_1, Phi_2, etc. corresponding to the dimensions in antpos.
 
     zero_psi : set psi to be identically zero in linsolve eqns, type=boolean, [default=False]
