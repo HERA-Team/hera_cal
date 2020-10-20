@@ -418,7 +418,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
                 Phis = [fit[f'Phi_{d}'] for d in range((nDims, 2)[assume_2D])]
             else:
                 Phis = [fit[f'Phi_{d}_{ant[1]}'] for d in range((nDims, 2)[assume_2D])]
-            gains[ant] *= np.exp(1.0j * (np.einsum('i,ijk->jk', antpos[ant[0]], Phis)))
+            gains[ant] *= np.exp(1.0j * (np.einsum('i,ijk->jk', antpos[ant[0]][0:len(Phis)], Phis)))
         return gains
 
 
