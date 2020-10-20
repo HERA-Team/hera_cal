@@ -344,7 +344,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
 
     # angle of phs ratio is ydata independent variable
     # angle after divide
-    ydata = {k : np.angle(data[k] / model[k]) for k in keys}
+    ydata = {k: np.angle(data[k] / model[k]) for k in keys}
 
     # make unit weights if None
     if wgts is None:
