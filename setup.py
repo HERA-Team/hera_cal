@@ -50,7 +50,8 @@ setup_args = {
                 'scripts/sum_diff_2_even_odd.py',
                 'scripts/dpss_xtalk_filter_run_baseline_parallelized.py',
                 'scripts/dpss_delay_filter_run.py', 'scripts/chunk_cal_files.py',
-                'scripts/chunk_data_files.py', 'scripts/time_average.py'],
+                'scripts/chunk_data_files.py', 'scripts/time_average.py',
+                'scripts/time_average_baseline_parallelized.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [

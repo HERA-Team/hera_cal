@@ -15,6 +15,7 @@ from .datacontainer import DataContainer
 from .vis_clean import VisClean
 import argparse
 import copy
+from pyuvdata import UVFlag
 
 def timeavg_waterfall(data, Navg, flags=None, nsamples=None, wgt_by_nsample=True, rephase=False,
                       lsts=None, freqs=None, bl_vec=None, lat=-30.72152, extra_arrays={}, verbose=True):
@@ -516,10 +517,11 @@ class FRFilter(VisClean):
             hd_output.time_array[nbls * tind: nbls * (tind + 1)] = avg_times[tind]
             hd_output.lst_array[nbls * tind: nbls * (tind + 1)] = avg_lsts[tind]
         hd_output.write_uvh5(output_file, clobber=clobber)
+        return hd_output
 
 
 def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True, rephase=False,
-                            verbose=False, clobber=False):
+                            verbose=False, clobber=False, flag_output=None):
     """Driver method for averaging and writing out data.
 
     Parameters
@@ -539,6 +541,9 @@ def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True,
     clobber: bool, optional
         if true, overwrite output ata if it already exists.
         default is False
+    flag_output: str, optional
+        optional string path to output UVFlag storing time-averaged flags
+        separately.
 
     Returns
     -------
@@ -548,16 +553,65 @@ def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True,
     fr.read()
     fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg,
                     wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-    fr._write_time_averaged_data(output_data, clobber=clobber)
+    hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
+    if flag_output is not None:
+        uvf=UVFlag(hdo, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.write(flag_output)
+
+def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output_data, t_avg, wgt_by_nsample=True, rephase=False,
+                                          verbose=False, clobber=False, flag_output=None):
+    """Time-averaging with a baseline cornerturn
 
 
-def time_average_argparser():
+    Parameters
+    ----------
+    intput_data_list: list of strings.
+        list of names of input data file to read baselines across.
+    baseline_list: list
+        list of antpolpairs or antpairs
+
+    output_data: str
+        name of output data file.
+    t_avg: float
+        width of time-averaging interval in seconds.
+    wgt_by_nsample: bool, optional
+        weight by nsamples in time average
+        default is True
+    verbose: bool, optional
+        if true, more outputs.
+        default is False
+    clobber: bool, optional
+        if true, overwrite output ata if it already exists.
+        default is False
+    flag_output: str, optional
+        string to write flag output. Optional.
+    Returns
+    -------
+    frf object with time averaged data attached.
+    """
+    fr = FRFilter(input_data_list)
+    fr.read(bls=baseline_list, axis='blt')
+    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg,
+                    wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+    hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
+    if flag_output is not None:
+        uvf=UVFlag(hdo, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.write(flag_output)
+
+def time_average_argparser(multifile=False):
     """argparser for time averaging data.
     """
     a = argparse.ArgumentParser(description="Time-average data.")
-    a.add_argument("input_data", type=str, help="name of data file to time-average.")
+    a.add_argument("input_data", type=str, help="name of data file to determine baselines based on posotion in input_data_list.")
     a.add_argument("output_data", type=str, help="name of data file to write out time-average.")
+    if multifile:
+        a.add_argument("input_data_list", type=str, nargs="+", help="list of data files to read baselines across.")
     a.add_argument("t_avg", type=float, help="number of seconds to average over.")
     a.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
     a.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample.")
     a.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
+    a.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
+    a.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
+    return a
