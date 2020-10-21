@@ -256,10 +256,8 @@ class Test_AbsCal_Funcs(object):
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
 @pytest.mark.filterwarnings("ignore:divide by zero encountered in log")
 class Test_Abscal_Solvers(object):
-    def test_abs_amp_lincal(self):
+    def test_abs_amp_lincal_1pol(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
-        
-        # test 1 pol
         reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
         model = {bl: np.ones((10, 5)) for red in reds for bl in red}
         data = {bl: 4.0 * np.ones((10, 5)) for red in reds for bl in red}
@@ -274,7 +272,8 @@ class Test_Abscal_Solvers(object):
         for ant in ants:
             np.testing.assert_array_equal(gains[ant], 2.0) 
 
-        # test 4 pol
+    def test_abs_amp_lincal_4pol(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
         reds = redcal.get_reds(antpos, pols=['ee', 'en', 'ne', 'nn'], pol_mode='4pol')
         model = {bl: np.ones((10, 5)) for red in reds for bl in red}
         gain_products = {'ee': 4.0, 'en': 6.0, 'ne': 6.0, 'nn': 9.0}
@@ -294,10 +293,8 @@ class Test_Abscal_Solvers(object):
             elif ant[1] == 'Jnn':
                 np.testing.assert_array_equal(gains[ant], 3.0)
 
-    def test_TT_phs_logcal(self):
+    def test_TT_phs_logcal_1pol_assume_2D(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
-        
-        # test 1 pol, assume_2D
         reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
         model = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
         data = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
@@ -320,7 +317,8 @@ class Test_Abscal_Solvers(object):
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
-        # test 4 pol, assume_2D
+    def test_TT_phs_logcal_4pol_assume_2D(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
         reds = redcal.get_reds(antpos, pols=['ee', 'en', 'ne', 'nn'], pol_mode='4pol')
         model = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
         data = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
@@ -343,7 +341,9 @@ class Test_Abscal_Solvers(object):
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
+    def test_TT_phs_logcal_1pol_nDim(self):
         # test assume_2D=False by introducing another 6 element hex 100 m away
+        antpos = hex_array(2, split_core=False, outriggers=0)
         antpos2 = hex_array(2, split_core=False, outriggers=0)
         antpos.update({len(antpos) + ant: antpos2[ant] + np.array([100, 0, 0]) for ant in antpos2})
         reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
