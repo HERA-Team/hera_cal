@@ -780,24 +780,21 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
 
     # get shared keys
     keys = sorted(set(model.keys()) & set(data.keys()))
-    ants = np.unique(list(antpos.keys()))
+    antnums = np.unique(list(antpos.keys()))
 
     # make wgts
     if wgts is None:
-        wgts = odict()
-        for i, k in enumerate(keys):
-            wgts[k] = np.ones_like(data[k], dtype=np.float)
+        wgts = {k: np.ones_like(data[k], dtype=np.float) for k in keys}
 
     # center antenna positions about the reference antenna
     if refant is None:
         refant = keys[0][0]
-    assert refant in ants, "reference antenna {} not found in antenna list".format(refant)
-    antpos = odict(list(map(lambda k: (k, antpos[k] - antpos[refant]), antpos.keys())))
+    assert refant in antnums, "reference antenna {} not found in antenna list".format(refant)
+    antpos = {k: antpos[k] - antpos[refant] for k in antpos.keys()}
 
     # median filter and FFT to get delays
-    ratio_delays = []
-    ratio_offsets = []
-    ratio_wgts = []
+    ydata = {}
+    ywgts = {}
     for i, k in enumerate(keys):
         ratio = data[k] / model[k]
         ratio /= np.abs(ratio)
@@ -807,47 +804,33 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
         ratio[~np.isfinite(ratio)] = 0.0
 
         # get delays
-        dly, _ = utils.fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
+        ydata[k], _ = utils.fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
 
         # set nans to zero
-        rwgts = np.nanmean(wgts[k], axis=1, keepdims=True)
-        isnan = np.isnan(dly)
-        dly[isnan] = 0.0
-        rwgts[isnan] = 0.0
-
-        ratio_delays.append(dly)
-        ratio_wgts.append(rwgts)
-
-    ratio_delays = np.array(ratio_delays)
-    ratio_wgts = np.array(ratio_wgts)
-
-    # form ydata
-    ydata = odict(zip(keys, ratio_delays))
-
-    # form wgts
-    ywgts = odict(zip(keys, ratio_wgts))
+        ywgts[k] = np.nanmean(wgts[k], axis=1, keepdims=True)
+        isnan = np.isnan(ydata[k])
+        ydata[k][isnan] = 0.0
+        ywgts[k][isnan] = 0.0
 
     # setup antenna position terms
-    r_ew = odict(list(map(lambda a: (a, "r_ew_{}".format(a)), ants)))
-    r_ns = odict(list(map(lambda a: (a, "r_ns_{}".format(a)), ants)))
+    r_ew = {a: f"r_ew_{a}" for a in antnums}
+    r_ns = {a: f"r_ns_{a}" for a in antnums}
 
     # setup linsolve equations
-    if four_pol:
-        eqns = odict([(k, "T_ew*{} + T_ns*{} - T_ew*{} - T_ns*{}"
-                       "".format(r_ew[k[0]], r_ns[k[0]], r_ew[k[1]], r_ns[k[1]])) for i, k in enumerate(keys)])
-    else:
-        eqns = odict([(k, "T_ew_{}*{} + T_ns_{}*{} - T_ew_{}*{} - T_ns_{}*{}"
-                       "".format(split_pol(k[2])[0], r_ew[k[0]], split_pol(k[2])[0], r_ns[k[0]],
-                                 split_pol(k[2])[1], r_ew[k[1]], split_pol(k[2])[1], r_ns[k[1]]))
-                      for i, k in enumerate(keys)])
-
+    eqns = {}
+    for k in keys:
+        if four_pol:
+            eqns[k] = f"T_ew*{r_ew[k[0]]} + T_ns*{r_ns[k[0]]} - T_ew*{r_ew[k[1]]} - T_ns*{r_ns[k[1]]}"
+        else:
+            eqns[k] = f"T_ew_{split_pol(k[2])[0]}*{r_ew[k[0]]} + T_ns_{split_pol(k[2])[0]}*{r_ns[k[0]]} - T_ew_{split_pol(k[2])[1]}*{r_ew[k[1]]} - T_ns_{split_pol(k[2])[1]}*{r_ns[k[1]]}"
+ 
     # set design matrix entries
-    ls_design_matrix = odict(list(map(lambda a: ("r_ew_{}".format(a), antpos[a][0]), ants)))
-    ls_design_matrix.update(odict(list(map(lambda a: ("r_ns_{}".format(a), antpos[a][1]), ants))))
+    ls_design_matrix = {f"r_ew_{a}": antpos[a][0] for a in antnums}
+    ls_design_matrix.update({f"r_ns_{a}": antpos[a][1] for a in antnums})
 
     # setup linsolve data dictionary
-    ls_data = odict([(eqns[k], ydata[k]) for i, k in enumerate(keys)])
-    ls_wgts = odict([(eqns[k], ywgts[k]) for i, k in enumerate(keys)])
+    ls_data = {eqns[k]: ydata[k] for k in keys}
+    ls_wgts = {eqns[k]: ywgts[k] for k in keys}
 
     # setup linsolve and run
     sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts, **ls_design_matrix)
@@ -866,7 +849,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     else:
         freqs = np.arange(list(data.values())[0].shape[1]) * df
         return {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2],
-                                      [fit['T_ew_{}'.format(ant[1])], fit['T_ns_{}'.format(ant[1])]],
+                                      [fit[f'T_ew_{ant[1]}'], fit[f'T_ns_{ant[1]}']],
                                       freqs) * 2j * np.pi) for ant in gain_ants}
 
 
