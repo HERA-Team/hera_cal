@@ -372,6 +372,32 @@ class Test_Abscal_Solvers(object):
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
+    def test_delay_slope_lincal_1pol_assume_2D(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {bl: np.ones((2, 1024), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((2, 1024), dtype=complex) for red in reds for bl in red}
+        freqs = np.linspace(100e6, 200e6, 1024)
+        df = np.median(np.diff(freqs))
+
+        ants = sorted(list(set([ant for bl in data for ant in utils.split_bl(bl)])))
+        true_dlys = {ant: np.dot([1e-9, 2e-9, 0], antpos[ant[0]]) for ant in ants}
+        true_gains = {ant: np.outer(np.ones(2), np.exp(2.0j * np.pi * true_dlys[ant] * (freqs))) for ant in ants}
+
+        for bl in data:
+            ant0, ant1 = utils.split_bl(bl)
+            data[bl] *= true_gains[ant0] * np.conj(true_gains[ant1])
+
+        fit = abscal.delay_slope_lincal(model, data, antpos, df=df, assume_2D=True, time_avg=True)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_ew_Jee'], 1.0, decimal=3)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_ns_Jee'], 2.0, decimal=3)
+
+        gains = abscal.delay_slope_lincal(model, data, antpos, df=df, f0=freqs[0], assume_2D=True, time_avg=True, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant], decimal=3)
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
