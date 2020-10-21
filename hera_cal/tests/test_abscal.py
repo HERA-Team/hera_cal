@@ -316,7 +316,7 @@ class Test_Abscal_Solvers(object):
         gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True, return_gains=True, gain_ants=ants)
         rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
         true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
-        rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
@@ -339,7 +339,7 @@ class Test_Abscal_Solvers(object):
         gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True, four_pol=True, return_gains=True, gain_ants=ants)
         rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
         true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
-        rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
@@ -367,8 +367,8 @@ class Test_Abscal_Solvers(object):
         ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
         gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=False, return_gains=True, gain_ants=ants)
         rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
-        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
-        rephased_true_gains = {ant: rephased_gains[ant] / rephased_gains[ants[0]] * np.abs(rephased_gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, .03])) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
 
