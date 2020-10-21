@@ -260,6 +260,16 @@ def abs_amp_lincal(model, data, wgts=None, verbose=True, return_gains=False, gai
         return {ant: np.abs(fit[f'A_{ant[1]}']).astype(np.complex) for ant in gain_ants}
 
 
+def _count_nDims(antpos, assume_2D=True):
+    '''Antenna position dimension counter helper function used in solvers that support higher-dim abscal.'''
+    nDims = len(list(antpos.values())[0])
+    for k in antpos.keys():
+        assert len(antpos[k]) == nDims, 'Not all antenna positions have the same dimensionality.'
+        if assume_2D:
+            assert len(antpos[k]) >= 2, 'Since assume_2D is True, all antenna positions must 2D or higher.'
+    return nDims
+
+
 def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True, 
                   zero_psi=True, four_pol=False, verbose=True, return_gains=False, gain_ants=[]):
     """
@@ -360,11 +370,7 @@ def TT_phs_logcal(model, data, antpos, wgts=None, refant=None, assume_2D=True,
     antpos = {k: antpos[k] - antpos[refant] for k in antpos.keys()}
     
     # count dimensions of antenna positions, figure out how many to solve for
-    nDims = len(list(antpos.values())[0])
-    for k in antpos.keys():
-        assert len(antpos[k]) == nDims, 'Not all antenna positions have the same dimensionality.'
-        if assume_2D:
-            assert len(antpos[k]) >= 2, 'Since assume_2D is True, all antenna positions must 2D or higher.'
+    nDims = _count_nDims(antpos, assume_2D=assume_2D)
 
     # setup linsolve equations
     eqns = {}
