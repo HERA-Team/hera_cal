@@ -725,9 +725,9 @@ def delay_lincal(model, data, wgts=None, refant=None, df=9.765625e4, f0=0., solv
     return fit
 
 
-def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, medfilt=True,
-                       kernel=(1, 5), verbose=True, four_pol=False, edge_cut=0, time_avg=False,
-                       return_gains=False, gain_ants=[]):
+def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e4, f0=0.0, medfilt=True,
+                       kernel=(1, 5), assume_2D=True, four_pol=False, edge_cut=0, time_avg=False,
+                       return_gains=False, gain_ants=[], verbose=True):
     """
     Solve for an array-wide delay slope according to the equation
 
@@ -756,14 +756,22 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
            the delays are assumed to have equal weight, otherwise the delays take zero weight.
 
     refant : antenna number integer to use as a reference,
-        The antenna position coordaintes are centered at the reference, such that its phase
-        is identically zero across all frequencies. If None, use the first key in data as refant.
+             The antenna position coordaintes are centered at the reference, such that its phase
+             is identically zero across all frequencies. If None, use the first key in data as refant.
 
     df : type=float, frequency spacing between channels in Hz
+    
+    f0 : type=float, frequency of 0th channel in Hz. 
+         Optional, but used to get gains without a delay offset.
 
     medfilt : type=boolean, median filter visiblity ratio before taking fft
 
     kernel : type=tuple, dtype=int, kernel for multi-dimensional median filter
+
+    assume_2D : type=boolean, [default=False]
+                If this is true, all dimensions of antpos beyond the first two will be ignored.
+                If return_gains is False and assume_2D is False, then the returned variables will
+                look like T_0, T_1, T_2, etc. corresponding to the dimensions in antpos.
 
     four_pol : type=boolean, if True, fit multiple polarizations together
 
@@ -779,6 +787,8 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     -------
     if not return_gains:
         fit : dictionary containing delay slope (T_x) for each pol [seconds / meter].
+              If assume_2D is False, then these will be the more general T_0, T_1, T_2, etc. 
+              corresponding to the dimensions in antpos, instead of T_ew or T_ns.
     else:
         gains: dictionary with gain_ants as keys and gain waterfall arrays as values
     """
@@ -788,7 +798,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     keys = sorted(set(model.keys()) & set(data.keys()))
     antnums = np.unique(list(antpos.keys()))
 
-    # make wgts
+    # make unit wgts if None
     if wgts is None:
         wgts = {k: np.ones_like(data[k], dtype=np.float) for k in keys}
 
@@ -798,6 +808,9 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     assert refant in antnums, "reference antenna {} not found in antenna list".format(refant)
     antpos = {k: antpos[k] - antpos[refant] for k in antpos.keys()}
 
+    # count dimensions of antenna positions, figure out how many to solve for
+    nDims = _count_nDims(antpos, assume_2D=assume_2D)
+    
     # median filter and FFT to get delays
     ydata = {}
     ywgts = {}
@@ -810,7 +823,7 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
         ratio[~np.isfinite(ratio)] = 0.0
 
         # get delays
-        ydata[k], _ = utils.fft_dly(ratio, df, wgts=wgts[k], medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
+        ydata[k], _ = utils.fft_dly(ratio, df, wgts=wgts[k], f0=f0, medfilt=medfilt, kernel=kernel, edge_cut=edge_cut)
 
         # set nans to zero
         ywgts[k] = np.nanmean(wgts[k], axis=1, keepdims=True)
@@ -823,16 +836,22 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
     r_ns = {a: f"r_ns_{a}" for a in antnums}
 
     # setup linsolve equations
-    eqns = {}
+    eqns = {k: '' for k in keys}
     for k in keys:
-        if four_pol:
-            eqns[k] = f"T_ew*{r_ew[k[0]]} + T_ns*{r_ns[k[0]]} - T_ew*{r_ew[k[1]]} - T_ns*{r_ns[k[1]]}"
-        else:
-            eqns[k] = f"T_ew_{split_pol(k[2])[0]}*{r_ew[k[0]]} + T_ns_{split_pol(k[2])[0]}*{r_ns[k[0]]} - T_ew_{split_pol(k[2])[1]}*{r_ew[k[1]]} - T_ns_{split_pol(k[2])[1]}*{r_ns[k[1]]}"
+        ap0, ap1 = split_pol(k[2])
+        for d in range((nDims, 2)[assume_2D]):
+            if len(eqns[k]) > 0:
+                eqns[k] += ' + '
+            if four_pol:
+                eqns[k] += f'T_{d}*r_{d}_{k[0]} - T_{d}*r_{d}_{k[1]}'
+            else:
+                eqns[k] += f'T_{d}_{ap0}*r_{d}_{k[0]} - T_{d}_{ap1}*r_{d}_{k[1]}'
  
     # set design matrix entries
-    ls_design_matrix = {f"r_ew_{a}": antpos[a][0] for a in antnums}
-    ls_design_matrix.update({f"r_ns_{a}": antpos[a][1] for a in antnums})
+    ls_design_matrix = {}    
+    for a in antnums:
+        for d in range((nDims, 2)[assume_2D]):
+            ls_design_matrix[f'r_{d}_{a}'] = antpos[a][d]
 
     # setup linsolve data dictionary
     ls_data = {eqns[k]: ydata[k] for k in keys}
@@ -851,12 +870,31 @@ def delay_slope_lincal(model, data, antpos, wgts=None, refant=None, df=9.765625e
             fit[k] = np.repeat(np.moveaxis(np.median(fit[k], axis=0)[np.newaxis], 0, 0), Ntimes, axis=0)
 
     if not return_gains:
+        # rename variables ew/ns instead of 0/1 to maintain backwards compatability
+        if assume_2D:
+            params = list(fit.keys())
+            for p in params:
+                if 'T_0' in p:
+                    fit[p.replace('T_0', 'T_ew')] = fit[p]
+                    del fit[p]
+                if 'T_1' in p:
+                    fit[p.replace('T_1', 'T_ns')] = fit[p]
+                    del fit[p]                    
         return fit
     else:
-        freqs = np.arange(list(data.values())[0].shape[1]) * df
-        return {ant: np.exp(np.einsum('i,ijk,k->jk', antpos[ant[0]][:2],
-                                      [fit[f'T_ew_{ant[1]}'], fit[f'T_ns_{ant[1]}']],
-                                      freqs) * 2j * np.pi) for ant in gain_ants}
+        gains = {}
+        for ant in gain_ants:
+            # construct delays from delay slopes
+            if four_pol:
+                Taus = [fit[f'T_{d}'] for d in range((nDims, 2)[assume_2D])]
+            else:
+                Taus = [fit[f'T_{d}_{ant[1]}'] for d in range((nDims, 2)[assume_2D])]
+            delays = np.einsum('ijk,i->j', Taus, antpos[ant[0]][0:len(Taus)])
+            
+            # construct gains from freqs and delays
+            freqs = f0 + np.arange(list(data.values())[0].shape[1]) * df
+            gains[ant] = np.exp(2.0j * np.pi * np.outer(delays, freqs))
+        return gains
 
 
 def dft_phase_slope_solver(xs, ys, data, flags=None):
@@ -3223,7 +3261,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     binary_wgts = DataContainer({bl: (data_wgts[bl] > 0).astype(np.float) for bl in data_wgts})
     df = np.median(np.diff(data.freqs))
     for time_avg in [True, False]:  # first use the time-averaged solution to try to avoid false minima
-        gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=binary_wgts, df=df, medfilt=True, kernel=kernel,
+        gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=binary_wgts, df=df, f0=data.freqs[0], medfilt=True, kernel=kernel,
                                         time_avg=time_avg, verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here)
