@@ -557,7 +557,7 @@ def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True,
     if flag_output is not None:
         uvf=UVFlag(hdo, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
-        uvf.write(flag_output)
+        uvf.write(flag_output, clobber=clobber)
 
 def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output_data, t_avg, wgt_by_nsample=True, rephase=False,
                                           verbose=False, clobber=False, flag_output=None):
@@ -598,7 +598,7 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
     if flag_output is not None:
         uvf=UVFlag(hdo, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
-        uvf.write(flag_output)
+        uvf.write(flag_output, clobber=clobber)
 
 def time_average_argparser(multifile=False):
     """argparser for time averaging data.
