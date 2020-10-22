@@ -17,4 +17,6 @@ apply_cal.sum_diff_2_even_odd(sum_infilename=args.sumfilename,
                               odd_outfilename=args.oddfilename,
                               overwrite_data_flags=args.overwrite_data_flags,
                               polarizations=args.polarizations,
-                              nbl_per_load=args.nbl_per_load, clobber=args.clobber)
+                              nbl_per_load=args.nbl_per_load,
+                              external_flags=args.external_flags,
+                              clobber=args.clobber)
