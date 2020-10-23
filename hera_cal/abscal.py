@@ -3438,7 +3438,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         rephase_to_refant(abscal_gains, refant, flags=abscal_flags, propagate_refant_flags=True)
 
     # flag any nans, infs, etc.
-    for ant in ants:
+    for ant in abscal_gains:
         abscal_flags[ant][~np.isfinite(abscal_gains[ant])] = True
         abscal_gains[ant][~np.isfinite(abscal_gains[ant])] = 1.0 + 0.0j
 
