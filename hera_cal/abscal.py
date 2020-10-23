@@ -3428,9 +3428,6 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                                 abscal_gains[ant][tinds, :] = rc_gains_subset[ant] * delta_gains[ant]
                                 # new flags are the OR of redcal flags and times/freqs totally flagged in the model
                                 abscal_flags[ant][tinds, :] = rc_flags_subset[ant] + model_flag_waterfall
-                                # flag any nans, infs, etc.
-                                abscal_flags[ant][~np.isfinite(abscal_gains[ant])] = True
-                                abscal_gains[ant][~np.isfinite(abscal_gains[ant])] = 1.0 + 0.0j
                             for antpol in total_qual.keys():
                                 abscal_chisq[antpol][tinds, :] = total_qual[antpol] / nObs[antpol]  # Note, not normalized for DoF
                                 abscal_chisq[antpol][tinds, :][~np.isfinite(abscal_chisq[antpol][tinds, :])] = 0.
@@ -3439,6 +3436,11 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
         if refant is None:
             refant = pick_reference_antenna(abscal_gains, abscal_flags, hc.freqs, per_pol=True)
         rephase_to_refant(abscal_gains, refant, flags=abscal_flags, propagate_refant_flags=True)
+
+    # flag any nans, infs, etc.
+    for ant in ants:
+        abscal_flags[ant][~np.isfinite(abscal_gains[ant])] = True
+        abscal_gains[ant][~np.isfinite(abscal_gains[ant])] = 1.0 + 0.0j
 
     # Save results to disk
     hc.update(gains=abscal_gains, flags=abscal_flags, quals=abscal_chisq_per_ant, total_qual=abscal_chisq)
