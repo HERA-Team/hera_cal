@@ -210,14 +210,14 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilename, even_outfilename, odd_o
     -------
     sum and diff files.
     """
-    if external_flags is not None:
-        external_flags = UVFlag(external_flags)
     hd_sum = io.HERAData(sum_infilename, filetype=filetype_in)
     hd_diff = io.HERAData(diff_infilename, filetype=filetype_in)
+    if external_flags is not None:
+        external_flags = UVFlag(external_flags)
+        times_select = np.unique([t for t in external_flags.time_array if np.any(np.isclose(t, hd_sum.times))])
+        freqs_select = np.unique([f for f in external_flags.freq_array if np.any(np.isclose(f, hd_sum.freqs))])
+        external_flags.select(times=times_select, frequencies=freqs_select)
     # select external flags by time and frequency
-    times_select = np.unique([t for t in external_flags.time_array[0] if np.any(np.isclose(t, hd_sum.times))])
-    freqs_select = np.unique([f for f in external_flags.freq_array if np.any(np.isclose(f, hd_sum.freqs))])
-    external_flags.select(times=times_select, frequencies=freqs_select)
     if polarizations is None:
         if filetype_in == 'uvh5':
             polarizations = hd_sum.pols
