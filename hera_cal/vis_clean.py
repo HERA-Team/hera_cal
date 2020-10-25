@@ -252,7 +252,7 @@ class VisClean(object):
                     if not flag_zero_times:
                         self.flags[bl][:] = False
                     else:
-                        self.flags[bl][~np.all(self.flags[bl], axis=1)] = False
+                        self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
             self.hd.update(flags=self.flags)
         # explicitly don't keep_existing since we already reset flags.
         flag_apply(external_flags, self.hd, force_pol=True, keep_existing=False)
