@@ -193,7 +193,8 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', polarizations=None, verbose=False,
-                                              skip_flagged_edges=False, overwrite_data_flags=False, **filter_kwargs):
+                                              skip_flagged_edges=False, overwrite_data_flags=False,
+                                              flag_zero_times=True, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -226,6 +227,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         polarizations: list of polarizations to include and write.
         verboase: lots of output.
         skip_flagged_edges: if true, skip flagged edges in filtering.
+        flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
@@ -266,7 +268,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
     if external_flags is not None:
         echo(f"{str(datetime.now())}...applying flags", verbose=verbose)
-        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)
+        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, flag_zero_times=flag_zero_times)
     if factorize_flags:
         echo(f"{str(datetime.now())}...factorizing flags", verbose=verbose)
         df.factorize_flags(time_thresh=time_thresh, inplace=True)

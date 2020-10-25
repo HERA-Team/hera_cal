@@ -214,7 +214,8 @@ class VisClean(object):
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
 
-    def apply_flags(self, external_flags, overwrite_data_flags=False):
+    def apply_flags(self, external_flags, overwrite_data_flags=False,
+                    flag_zero_times=True):
         """
         apply external flags.
         Parameters
@@ -224,6 +225,9 @@ class VisClean(object):
 
         overwrite_data_flags: bool, optional
             If true, overwrite all data flags for bls that are not entirely flagge.d
+
+        flag_zero_times: bool, optional
+            if true, don't overwrite flags where the entire time is flagged.
         """
         external_flags = UVFlag(external_flags)
         # select frequencies and times that match data.
@@ -245,9 +249,13 @@ class VisClean(object):
         if overwrite_data_flags:
             for bl in self.flags:
                 if not np.all(self.flags[bl]):
-                    self.flags[bl][:] = False
+                    if not flag_zero_times:
+                        self.flags[bl][:] = False
+                    else:
+                        self.flags[bl][~np.all(self.flags[bl], axis=1)] = False
             self.hd.update(flags=self.flags)
-        flag_apply(external_flags, self.hd, force_pol=True)
+        # explicitly don't keep_existing since we already reset flags.
+        flag_apply(external_flags, self.hd, force_pol=True, keep_existing=False)
         _, self.flags, _ = self.hd.build_datacontainers()
 
 
