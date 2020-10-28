@@ -1612,7 +1612,7 @@ def reconstitute_files(templatefile, fragments, outfilename, clobber=False, mode
         tmin = hd_template.times.min()
         hd_combined = io.HERAData(fragments)
         t_select = (hd_fragment.times >= tmin) & (hd_fragment.times <= tmax)
-        hd_combined.read(times=hd_fragment.times[t_select], axis='blt')
+        hd_combined.read(times=hd_combined.times[t_select], axis='blt')
         hd_combined.write_uvh5(outfilename)
 
 
