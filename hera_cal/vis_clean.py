@@ -1570,7 +1570,7 @@ def _dpss_argparser(multifile=False):
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     return a
 
-def reconstitute_files(templatefile, fragments, outfilename, clobber=False, mode='exact_times'):
+def reconstitute_files(templatefile, fragments, outfilename, clobber=False, time_bounds=False):
     """Recombine xtalk products into short-time files.
 
     Construct a new file based on templatefile that combines the files in file_fragments
@@ -1586,10 +1586,9 @@ def reconstitute_files(templatefile, fragments, outfilename, clobber=False, mode
         list of file names to use reconstitute.
     clobber : bool optional.
         If False, don't overwrite outfilename if it already exists. Default is False.
-    mode: str, optional.
-        Two options; 'exact_times' or 'time_bounds'.
-        If 'exact_times', then generate new file with exact times from template.
-        If 'time_bounds', generate a new file from the file list that keeps times between min/max of
+    time_bounds: bool, optional
+        If False, then generate new file with exact times from template.
+        If True, generate a new file from the file list that keeps times between min/max of
             the times in the template_file. This is helpful if the times dont match in the reconstituted
             data but we want to use the template files to determine time ranges.
 
@@ -1604,7 +1603,7 @@ def reconstitute_files(templatefile, fragments, outfilename, clobber=False, mode
     polarizations = hd_fragment.pols
     # read in the template file, but only include polarizations, frequencies
     # from the fragment files.
-    if mode == 'exact_times':
+    if not time_bounds:
         hd_template.read(times=times, frequencies=freqs, polarizations=polarizations)
         # for each fragment, read in only the times relevant to the templatefile.
         # and update the data, flags, nsamples array of the template file
@@ -1615,13 +1614,13 @@ def reconstitute_files(templatefile, fragments, outfilename, clobber=False, mode
             hd_template.update(flags=f, data=d, nsamples=n)
         # now that we've updated everything, we write the output file.
         hd_template.write_uvh5(outfilename, clobber=clobber)
-    elif mode == 'time_bounds':
+    else:
         tmax = hd_template.times.max()
         tmin = hd_template.times.min()
         hd_combined = io.HERAData(fragments)
         t_select = (hd_fragment.times >= tmin) & (hd_fragment.times <= tmax)
-        hd_combined.read(times=hd_combined.times[t_select], axis='blt')
-        hd_combined.write_uvh5(outfilename)
+        hd_combined.read(times=hd_fragment.times[t_select], axis='blt')
+        hd_combined.write_uvh5(outfilename, clobber=clobber)
 
 
 def reconstitute_files_argparser():

@@ -13,6 +13,5 @@ a = parser.parse_args()
 
 # Run Xtalk Filter
 vis_clean.reconstitute_files(templatefile=a.infilename,
-                             fragments=a.fragmentlist,
-                             outfilename=a.outfilename,
-                             clobber=a.clobber)
+                             fragments=a.fragmentlist, clobber=a.clobber,
+                             outfilename=a.outfilename, time_bounds=a.time_bounds)
