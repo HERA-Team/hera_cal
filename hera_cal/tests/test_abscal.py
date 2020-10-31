@@ -244,8 +244,8 @@ class Test_AbsCal_Funcs(object):
 
         phase_slopes_x = (.2 * np.random.rand(5, 2) - .1)  # not too many phase wraps over the array
         phase_slopes_y = (.2 * np.random.rand(5, 2) - .1)  # (i.e. avoid undersampling of very fast slopes)
-        data = np.array([np.exp(2.0j * np.pi * x * phase_slopes_x
-                                + 2.0j * np.pi * y * phase_slopes_y) for x, y in zip(xs, ys)])
+        data = np.array([np.exp(1.0j * x * phase_slopes_x
+                                + 1.0j * y * phase_slopes_y) for x, y in zip(xs, ys)])
 
         x_slope_est, y_slope_est = abscal.dft_phase_slope_solver(xs, ys, data)
         np.testing.assert_array_almost_equal(phase_slopes_x - x_slope_est, 0, decimal=7)

@@ -911,7 +911,7 @@ def dft_phase_slope_solver(xs, ys, data, flags=None):
         flags: optional array of flags of data not to include in the phase slope solver.
 
     Returns:
-        slope_x, slope_y: phase slopes in units of 1/[xs] where the best fit phase slope plane
+        slope_x, slope_y: phase slopes in units of radians/[xs] where the best fit phase slope plane
             is np.exp(2.0j * np.pi * (xs * slope_x + ys * slope_y)). Both have the same shape
             the data after collapsing along the first dimension.
     '''
@@ -942,7 +942,7 @@ def dft_phase_slope_solver(xs, ys, data, flags=None):
                               dflat[:, i][~fflat[:, i]]), finish=minimize)
             slope_x[i] = dft_peak[0]
             slope_y[i] = dft_peak[1]
-    return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
+    return 2 * np.pi * slope_x.reshape(data.shape[1:]), 2 * np.pi * slope_y.reshape(data.shape[1:])
 
 
 def ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=True, zero_pad=2, bl_error_tol=1.0):
