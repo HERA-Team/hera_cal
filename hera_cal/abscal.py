@@ -3176,7 +3176,7 @@ def abscal_step(gains_to_update, AC, AC_func, AC_kwargs, gain_funcs, gain_args_l
 
 
 def match_baselines(data_bls, model_bls, data_antpos, model_antpos=None, pols=[], data_is_redsol=False,
-                    model_is_redundant=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, verbose=False):
+                    model_is_redundant=False, tol=1.0, min_bl_cut=None, max_bl_cut=None, max_dims=2, verbose=False):
     '''Figure out which baselines to use in the data and the model for abscal and their correspondence.
 
     Arguments:
@@ -3378,19 +3378,19 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     df = np.median(np.diff(data.freqs))
     for time_avg in [True, False]:  # first use the time-averaged solution to try to avoid false minima
         gains_here = delay_slope_lincal(model, data, idealized_antpos, wgts=binary_wgts, df=df, f0=data.freqs[0], medfilt=True, kernel=kernel,
-                                        time_avg=time_avg, verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
+                                        assume_2D=False, time_avg=time_avg, verbose=verbose, edge_cut=edge_cut, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here)
 
-    # Abscal Step 3: Global Phase Slope Calibration (first using dft, then using linfit)
+    # Abscal Step 3: Global Phase Slope Calibration (first using ndim_fft, then using linfit)
     for time_avg in [True, False]:
-        gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='dft', wgts=binary_wgts, verbose=verbose,
+        gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='ndim_fft', wgts=binary_wgts, verbose=verbose, assume_2D=False,
                                                tol=redcal.IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here)
     for time_avg in [True, False]:
         for i in range(phs_max_iter):
-            gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=binary_wgts, verbose=verbose,
+            gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=binary_wgts, verbose=verbose, assume_2D=False,
                                                    tol=redcal.IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
             abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
             apply_cal.calibrate_in_place(data, gains_here)
@@ -3404,7 +3404,7 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     # This is because, in the high SNR limit, if Var(model) = 0 and Var(data) = Var(noise),
     # then Var(angle(data / model)) = Var(noise) / (2 |model|^2). Here data_wgts = Var(noise)^-1.
     for i in range(phs_max_iter):
-        gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=angle_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
+        gains_here = TT_phs_logcal(model, data, idealized_antpos, wgts=angle_wgts, verbose=verbose, assume_2D=False, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here)
         crit = np.median(np.linalg.norm([gains_here[k] - 1.0 for k in gains_here.keys()], axis=(0, 1)))
