@@ -47,7 +47,7 @@ from . import apply_cal
 from .datacontainer import DataContainer
 from .utils import echo, polnum2str, polstr2num, reverse_bl, split_pol, split_bl, join_bl, join_pol
 
-PHASE_SLOPE_SOLVERS = ['linfit', 'dft']  # list of valid solvers for global_phase_slope_logcal
+PHASE_SLOPE_SOLVERS = ['linfit', 'dft', 'ndim_fft']  # list of valid solvers for global_phase_slope_logcal
 
 
 def abs_amp_logcal(model, data, wgts=None, verbose=True, return_gains=False, gain_ants=[]):
