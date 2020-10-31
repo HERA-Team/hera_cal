@@ -470,7 +470,6 @@ class Test_Abscal_Solvers(object):
             assert ps.shape == (2, 3)
             np.testing.assert_array_less(np.abs(ps - answer), .1)
 
-
     def test_ndim_fft_phase_slope_solver_2D_ideal_antpos(self):
         antpos = hex_array(6, split_core=False, outriggers=0)
         reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
@@ -517,8 +516,6 @@ class Test_Abscal_Solvers(object):
         for ps, answer in zip(phase_slopes, [-.02, .03]):
             assert ps.shape == (2, 3)
             np.testing.assert_array_less(np.abs(ps - answer), .003)
-
-
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
