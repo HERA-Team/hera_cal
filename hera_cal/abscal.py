@@ -3360,14 +3360,6 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
     ants = list(rc_flags.keys())
     idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=redcal.IDEALIZED_BL_TOL)
 
-    # If the array is not redundant (i.e. extra degeneracies), lop off extra dimensions and warn user
-    if np.max([len(pos) for pos in idealized_antpos.values()]) > 2:
-        suspected_off_grid = [ant for ant, pos in idealized_antpos.items() if np.any(np.abs(pos[2:]) > redcal.IDEALIZED_BL_TOL)]
-        not_flagged = [ant for ant in suspected_off_grid if not np.all([np.all(f) for a, f in rc_flags.items() if ant in a])]
-        warnings.warn(('WARNING: The following antennas appear not to be redundant with the main array:\n         {}\n'
-                       '         Of them, {} is not flagged.\n').format(suspected_off_grid, not_flagged))
-        idealized_antpos = {ant: pos[:2] for ant, pos in idealized_antpos.items()}
-
     # Abscal Step 1: Per-Channel Logarithmic Absolute Amplitude Calibration
     gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
     abscal_delta_gains = {ant: gains_here[ant] for ant in ants}
