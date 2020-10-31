@@ -160,6 +160,14 @@ class TestDataContainer(object):
         assert 'xx' in dc.pols()
         assert (2, 3) in dc.antpairs()
 
+        dc = datacontainer.DataContainer(self.blpol)
+        del dc[[(1, 2, 'xx'), (1, 2, 'yy')]]
+        assert (1, 2, 'xx') not in dc
+        assert (1, 2, 'yy') not in dc
+        assert (1, 2) not in dc.antpairs()
+        assert 'xx' in dc.pols()
+        assert 'yy' in dc.pols()
+
     def test_getitem(self):
         dc = datacontainer.DataContainer(self.blpol)
         assert dc[(1, 2, 'xx')] == 1j
