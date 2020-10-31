@@ -11,7 +11,7 @@ import copy
 import glob
 from pyuvdata import UVCal, UVData
 import warnings
-from hera_sim.antpos import hex_array
+from hera_sim.antpos import hex_array, linear_array
 
 from .. import io, abscal, redcal, utils
 from ..data import DATA_PATH
@@ -455,19 +455,68 @@ class Test_Abscal_Solvers(object):
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant], decimal=3)
 
-    def test_ndim_fft_phase_slope_solver_1D(self):
-        pass
+    def test_ndim_fft_phase_slope_solver_1D_ideal_antpos(self):
+        antpos = linear_array(50)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        data = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-1.2]))
+
+        phase_slopes = abscal.ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=False, zero_pad=3, bl_error_tol=1e-8)
+        for ps, answer in zip(phase_slopes, [-1.2]):
+            assert ps.shape == (2, 3)
+            np.testing.assert_array_less(np.abs(ps - answer), .1)
 
 
-    def test_ndim_fft_phase_slope_solver_2D(self):
-        pass
+    def test_ndim_fft_phase_slope_solver_2D_ideal_antpos(self):
+        antpos = hex_array(6, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        data = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-1, .1]))
 
-    def test_ndim_fft_phase_slope_solver_3D(self):
+        phase_slopes = abscal.ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=False, zero_pad=3, bl_error_tol=1e-8)
+        for ps, answer in zip(phase_slopes, [-1, .1]):
+            assert ps.shape == (2, 3)
+            np.testing.assert_array_less(np.abs(ps - answer), .2)
+
+    def test_ndim_fft_phase_slope_solver_3D_ideal_antpos(self):
         antpos = hex_array(4, split_core=False, outriggers=0)
         antpos2 = hex_array(4, split_core=False, outriggers=0)
-        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([100.0, 0, 0]) for ant in antpos2})
-        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([200.0, 0, 0]) for ant in antpos2})
-        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([300.0, 0, 0]) for ant in antpos2})
+        for d in [100.0, 200.0, 300.0, 400.0]:
+            antpos.update({len(antpos) + ant: antpos2[ant] + np.array([d, 0, 0]) for ant in antpos2})
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        data = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-1, -.1, 2.5]))
+
+        phase_slopes = abscal.ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=False, zero_pad=3, bl_error_tol=1e-8)
+        for ps, answer in zip(phase_slopes, [-1, -.1, 2.5]):
+            assert ps.shape == (2, 3)
+            np.testing.assert_array_less(np.abs(ps - answer), .2)
+
+    def test_ndim_fft_phase_slope_solver_assume_2D_real_antpos(self):
+        antpos = hex_array(8, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        data = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-.02, .03, 0]))
+
+        phase_slopes = abscal.ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=True, zero_pad=3, bl_error_tol=1)
+        for ps, answer in zip(phase_slopes, [-.02, .03]):
+            assert ps.shape == (2, 3)
+            np.testing.assert_array_less(np.abs(ps - answer), .003)
 
 
 
