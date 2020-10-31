@@ -455,6 +455,22 @@ class Test_Abscal_Solvers(object):
         for ant in ants:
             np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant], decimal=3)
 
+    def test_ndim_fft_phase_slope_solver_1D(self):
+        pass
+
+
+    def test_ndim_fft_phase_slope_solver_2D(self):
+        pass
+
+    def test_ndim_fft_phase_slope_solver_3D(self):
+        antpos = hex_array(4, split_core=False, outriggers=0)
+        antpos2 = hex_array(4, split_core=False, outriggers=0)
+        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([100.0, 0, 0]) for ant in antpos2})
+        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([200.0, 0, 0]) for ant in antpos2})
+        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([300.0, 0, 0]) for ant in antpos2})
+
+
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")

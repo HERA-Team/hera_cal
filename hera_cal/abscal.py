@@ -945,7 +945,7 @@ def dft_phase_slope_solver(xs, ys, data, flags=None):
     return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
 
 
-def ndim_fft_phase_slope_solver(data, bl_vecs, zero_pad=2, bl_error_tol=1.0):
+def ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=True, zero_pad=2, bl_error_tol=1.0):
     '''Find phase slopes across the array in the data. Similar to utils.fft_dly,
     but can grid arbitarary bl_vecs in N dimensions (for example, when using
     generealized antenna positions from redcal.reds_to_antpos in arrays with 
@@ -957,6 +957,8 @@ def ndim_fft_phase_slope_solver(data, bl_vecs, zero_pad=2, bl_error_tol=1.0):
            All polarizations are treated equally and solved for together.
 
     bl_vecs : dictionary mapping keys in data to vectors in N dimensions
+
+    assume_2D : if True, assume N == 2 and only use the first two dimensions of bl_vecs.
     
     zero_pad : float factor by which to expand the grid onto which the data is binned. 
                Increases resolution in Fourier space at the cost of runtime/memory.
