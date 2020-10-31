@@ -949,21 +949,22 @@ def ndim_fft_phase_slope_solver(data, bl_vecs, zero_pad=2, bl_error_tol=1.0):
     '''Find phase slopes across the array in the data. Similar to utils.fft_dly,
     but can grid arbitarary bl_vecs in N dimensions (for example, when using
     generealized antenna positions from redcal.reds_to_antpos in arrays with 
-    extra degeneracies).
+    extra degeneracies). 
     
     Parameters:
     -----------
-    data : dictionary or DataContainer mapping keys to (complex) ndarrays
-    
+    data : dictionary or DataContainer mapping keys to (complex) ndarrays.
+           All polarizations are treated equally and solved for together.
+
     bl_vecs : dictionary mapping keys in data to vectors in N dimensions
     
     zero_pad : float factor by which to expand the grid onto which the data is binned. 
                Increases resolution in Fourier space at the cost of runtime/memory.
                Must be >= 1.
-    
+
     bl_error_tol : float used to define non-zero elements of baseline vectors.
                    This helps set the fundamental resolution of the grid.
-                   
+
     Output:
     -------
     phase_slopes : list of length N dimensions. Each element is the same shape
