@@ -945,6 +945,74 @@ def dft_phase_slope_solver(xs, ys, data, flags=None):
     return slope_x.reshape(data.shape[1:]), slope_y.reshape(data.shape[1:])
 
 
+def ndim_fft_phase_slope_solver(data, bl_vecs, zero_pad=2, bl_error_tol=1.0):
+    '''Find phase slopes across the array in the data. Similar to utils.fft_dly,
+    but can grid arbitarary bl_vecs in N dimensions (for example, when using
+    generealized antenna positions from redcal.reds_to_antpos in arrays with 
+    extra degeneracies).
+    
+    Parameters:
+    -----------
+    data : dictionary or DataContainer mapping keys to (complex) ndarrays
+    
+    bl_vecs : dictionary mapping keys in data to vectors in N dimensions
+    
+    zero_pad : float factor by which to expand the grid onto which the data is binned. 
+               Increases resolution in Fourier space at the cost of runtime/memory.
+               Must be >= 1.
+    
+    bl_error_tol : float used to define non-zero elements of baseline vectors.
+                   This helps set the fundamental resolution of the grid.
+                   
+    Output:
+    -------
+    phase_slopes : list of length N dimensions. Each element is the same shape
+                   as each entry in data. Contains the phase gradients in units
+                   of 1 / [bl_vecs]. 
+    '''
+    nDim = _count_nDims(bl_vecs, assume_2D=assume_2D)
+    if assume_2D:
+        nDim = 2
+    keys = sorted(list(bl_vecs.keys()))
+
+    # Figure out a grid for baselines and 
+    coords = []
+    all_bins = []
+    bl_vecs_array = np.array([bl_vecs[k] for k in keys])
+    assert zero_pad >= 1, f'zero_pad={zero_pad}, but it must be greater than or equal to 1.'
+    for d in range(nDim):
+        min_comp = np.min(bl_vecs_array[:, d])
+        max_comp = np.max(bl_vecs_array[:, d])
+        # pick minimum delta in this dimension inconsistent with 0 using bl_error_tol
+        dbl = np.min(np.abs(bl_vecs_array[:, d])[np.abs(bl_vecs_array[:, d]) >= bl_error_tol])
+        comp_range = max_comp - min_comp
+        bins = np.arange(min_comp - dbl - comp_range * (zero_pad - 1) / 2, 
+                         max_comp + 2 * dbl + comp_range * (zero_pad - 1) / 2, dbl)
+        all_bins.append(bins)
+        coords.append(np.digitize(bl_vecs_array[:, d], bins))
+    coords = np.array(coords).T
+
+    # create and fill grid with complex data
+    digitized = np.zeros(tuple([len(b) for b in all_bins]) + data[keys[0]].shape, dtype=complex)
+    for i, k in enumerate(keys):
+        digitized[tuple(coords[i])] = data[k]
+
+    # FFT along first nDim dimensions 
+    digitized_fft = np.fft.fftn(digitized, axes=tuple(range(nDim)))
+    # Condense the FFTed dimensions and find the max along them 
+    new_shape = (np.prod(digitized_fft.shape[0:nDim]),) + data[keys[0]].shape
+    arg_maxes = digitized_fft.reshape(new_shape).argmax(0)
+    # Find the coordinates of the peaks in the FFT dimensions
+    peak_coords = np.unravel_index(arg_maxes, digitized_fft.shape[0:nDim])
+
+    # Convert coordinates to phase slopes using fft_freq
+    phase_slopes = []
+    for d in range(nDim):
+        fourier_modes = np.fft.fftfreq(len(all_bins[d]), np.median(np.diff(all_bins[d])))
+        phase_slopes.append(fourier_modes[peak_coords[d]] * 2 * np.pi)
+    return phase_slopes
+
+
 def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, verbose=True,
                               tol=1.0, edge_cut=0, time_avg=False, return_gains=False, gain_ants=[]):
     """
