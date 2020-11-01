@@ -550,6 +550,31 @@ class Test_Abscal_Solvers(object):
                 calibrate_in_place(data, gains)
             np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0)
 
+    def test_global_phase_slope_logcal_3D(self):
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        antpos2 = hex_array(3, split_core=False, outriggers=0)
+        for d in [100.0, 200.0, 300.0]:
+            antpos.update({len(antpos) + ant: antpos2[ant] + np.array([d, 0, 0]) for ant in antpos2})
+
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        data = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-.8, -.1, .5]))
+
+        ants = sorted(list(set([ant for bl in data for ant in utils.split_bl(bl)])))
+        for i in range(10):
+            if i == 0:
+                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='ndim_fft', assume_2D=False, 
+                                                         time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
+            else:
+                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False, 
+                                                         time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
+            calibrate_in_place(data, gains)
+        np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0, 5)
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
