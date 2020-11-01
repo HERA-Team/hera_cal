@@ -517,6 +517,39 @@ class Test_Abscal_Solvers(object):
             assert ps.shape == (2, 3)
             np.testing.assert_array_less(np.abs(ps - answer), .003)
 
+    def test_global_phase_slope_logcal_2D(self):
+        antpos = hex_array(5, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        uncal_data = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in uncal_data}
+        for bl in uncal_data:
+            uncal_data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-.2, 1]))
+
+        # test results when fit is returned
+        fit = abscal.global_phase_slope_logcal(model, uncal_data, antpos, solver='ndim_fft', assume_2D=False, verbose=False)
+        fit2 = abscal.global_phase_slope_logcal(model, uncal_data, antpos, solver='ndim_fft', assume_2D=True, verbose=False)
+        np.testing.assert_array_equal(fit['Phi_0_Jee'], fit2['Phi_ew_Jee'])
+        np.testing.assert_array_equal(fit['Phi_1_Jee'], fit2['Phi_ns_Jee'])
+        for f, answer in zip(fit.values(), [-.2, 1]):
+            assert f.shape == (2, 1)
+            np.testing.assert_array_less(np.abs(f - answer), .2)
+
+        ants = sorted(list(set([ant for bl in uncal_data for ant in utils.split_bl(bl)])))
+        # try doing the first iteration with either dft or ndim_fft
+        for solver in ['dft', 'ndim_fft']:
+            data = copy.deepcopy(uncal_data)
+            for i in range(8):
+                if i == 0:
+                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver=solver, assume_2D=True, 
+                                                             time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
+                else:
+                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False, 
+                                                             time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
+                calibrate_in_place(data, gains)
+            np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0)
+
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
 @pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
