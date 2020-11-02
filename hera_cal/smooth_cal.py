@@ -714,6 +714,8 @@ class CalibrationSmoother():
         for cal in self.cals:
             hc = io.HERACal(cal)
             gains, flags, _, _ = hc.read()
+            if hasattr(self, 'refant'):
+                rephase_to_refant(gains, self.refant)
             out_gains = {ant: self.gain_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
