@@ -140,9 +140,9 @@ class Test_Smooth_Cal_Helper_Functions(object):
         wgts[3, 5] = 0
         freqs = np.linspace(100., 200., 100, endpoint=False) * 1e6
         times = np.linspace(0, 10 * 10 / 60. / 60. / 24., 100, endpoint=False)
-        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filt2d_mode='rect')
+        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='rect')
         np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
-        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filt2d_mode='plus')
+        ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='plus')
         np.testing.assert_array_almost_equal(ff, np.ones((100, 100), dtype=complex))
 
         # test rephasing
@@ -154,7 +154,7 @@ class Test_Smooth_Cal_Helper_Functions(object):
 
         # test errors
         with pytest.raises(ValueError):
-            ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filt2d_mode='blah')
+            ff, info = smooth_cal.time_freq_2D_filter(gains, wgts, freqs, times, filter_mode='blah')
 
     def flag_threshold_and_broadcast(self):
         flags = {(i, 'Jxx'): np.zeros((10, 10), dtype=bool) for i in range(3)}
