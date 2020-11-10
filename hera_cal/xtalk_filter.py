@@ -95,10 +95,11 @@ class XTalkFilter(VisClean):
 
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, verbose=False,
-                                factorize_flags=False, time_thresh=0.05, trim_edges=False,
+                                factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False,
-                                skip_flagged_edges=False, **filter_kwargs):
+                                skip_flagged_edges=False, flag_zero_times=True,
+                                a_priori_flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform xtalk filtering.
 
@@ -123,6 +124,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         trim_edges : bool, optional
             if true, trim fully flagged edge channels and times. helps to avoid edge popups.
             default is false.
+        external_flags : str, optional, path to external flag files to apply
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -146,6 +148,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         echo(f"{str(datetime.now())}...reading data.", verbose=verbose)
         xf.read(frequencies=freqs)
+        echo(f"{str(datetime.now())}...applying external flags", verbose=verbose)
+        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
         if factorize_flags:
             echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
             xf.factorize_flags(time_thresh=time_thresh, inplace=True)
@@ -187,7 +191,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False, verbose=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
-                                              skip_flagged_edges=False, overwrite_data_flags=False, **filter_kwargs):
+                                              skip_flagged_edges=False, overwrite_data_flags=False,
+                                               **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -258,9 +263,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
     echo(f"{str(datetime.now())}...reading data", verbose=verbose)
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
-    if external_flags is not None:
-        echo(f"{str(datetime.now())}...applying flags", verbose=verbose)
-        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags)
+    echo(f"{str(datetime.now())}...applying external flags", verbose=verbose)
+    df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
     if factorize_flags:
         echo(f"{str(datetime.now())}...factorizing flags", verbose=verbose)
         xf.factorize_flags(time_thresh=time_thresh, inplace=True)

@@ -214,8 +214,8 @@ class VisClean(object):
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
 
-    def apply_flags(self, external_flags, overwrite_data_flags=False,
-                    flag_zero_times=True):
+    def apply_flags(self, external_flags=None, overwrite_data_flags=False,
+                    flag_zero_times=True, a_priori_flag_yaml=None):
         """
         apply external flags.
         Parameters
@@ -228,23 +228,27 @@ class VisClean(object):
 
         flag_zero_times: bool, optional
             if true, don't overwrite flags where the entire time is flagged.
+
+        a_priori_flag_yaml: str, optional
+            path to a yaml file containing manual flags.
         """
-        external_flags = UVFlag(external_flags)
-        # select frequencies and times that match data.
-        flag_times = np.unique(external_flags.time_array)
-        flag_freqs = np.unique(external_flags.freq_array)
-        times_overlapping = []
-        freqs_overlapping = []
-        for t in flag_times:
-            if np.any(np.isclose(self.times, t)):
-                times_overlapping.append(t)
-        for f in flag_freqs:
-            if np.any(np.isclose(self.freqs, f)):
-                freqs_overlapping.append(f)
-        # select frequencies and times that overlap with data.
-        external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
+        if external_flags is not None:
+            external_flags = UVFlag(external_flags)
+            # select frequencies and times that match data.
+            flag_times = np.unique(external_flags.time_array)
+            flag_freqs = np.unique(external_flags.freq_array)
+            times_overlapping = []
+            freqs_overlapping = []
+            for t in flag_times:
+                if np.any(np.isclose(self.times, t)):
+                    times_overlapping.append(t)
+            for f in flag_freqs:
+                if np.any(np.isclose(self.freqs, f)):
+                    freqs_overlapping.append(f)
+            # select frequencies and times that overlap with data.
+            external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
         from hera_qm.xrfi import flag_apply
-        # set all flags to False on waterfalls taht are not fully flagged
+        # set all flags to False on waterfalls that are not fully flagged
         # if overwrite_data_flags is True.
         if overwrite_data_flags:
             for bl in self.flags:
@@ -254,8 +258,14 @@ class VisClean(object):
                     else:
                         self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
             self.hd.update(flags=self.flags)
-        # explicitly don't keep_existing since we already reset flags.
-        flag_apply(external_flags, self.hd, force_pol=True, keep_existing=False)
+        # explicitly keep_existing since we already reset flags.
+        if external_flags is not None:
+            flag_apply(external_flags, self.hd, force_pol=True, keep_existing=True)
+        # apply apriori flag yaml too.
+        if a_priori_flag_yaml is not None:
+            import hera_qm.utils as qm_utils
+            self.hd = qm_utils.apply_yaml_flags(self.hd, a_priori_flag_yaml)
+            
         _, self.flags, _ = self.hd.build_datacontainers()
 
 
@@ -1488,6 +1498,10 @@ def _filter_argparser(multifile=False):
     a.add_argument("--trim_edges", default=False, action="store_true", help="If true, trim edge times and frequencies that are comletely flagged.")
     a.add_argument("--skip_flagged_edges", default=False, action="store_true", help="if True, do not filter over flagged edge integrations or channels (depending on filter axis).")
     a.add_argument("--verbose", default=False, action="store_true", help="lots of output.")
+    a.add_argument('--a_priori_flag_yaml', default=None, type=str,
+                    help=('Path to a priori flagging YAML with frequency, time, and/or '
+                          'antenna flagsfor parsable by hera_qm.metrics_io.read_a_priori_*_flags()'))
+
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")

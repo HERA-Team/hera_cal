@@ -100,10 +100,11 @@ class DelayFilter(VisClean):
 
 def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, round_up_bllens=False,
-                                factorize_flags=False, time_thresh=0.05, trim_edges=False,
+                                factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', verbose=False,
-                                skip_flagged_edges=False, **filter_kwargs):
+                                skip_flagged_edges=False,  flag_zero_times=True,
+                                a_priori_flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -128,6 +129,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         trim_edges : bool, optional
             if true, trim fully flagged edge channels and times. helps to avoid edge popups.
             default is false.
+        external_flags : str, optional, path to external flag files to apply
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -136,6 +138,8 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         add_to_history: string appended to the history of the output file
         verbose: bool, if True, lots of outputs. Default = False.
         skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
+        flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
+        a_priori_flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
@@ -152,6 +156,8 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         echo(f"{str(datetime.now())}...reading data.", verbose=verbose)
         df.read(frequencies=freqs)
+        echo(f"{str(datetime.now())}...applying external flags", verbose=verbose)
+        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, flag_zero_times=flag_zero_times)
         if factorize_flags:
             echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
             df.factorize_flags(time_thresh=time_thresh, inplace=True)
@@ -194,7 +200,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', polarizations=None, verbose=False,
                                               skip_flagged_edges=False, overwrite_data_flags=False,
-                                              flag_zero_times=True, **filter_kwargs):
+                                              flag_zero_times=True, a_priori_flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -218,6 +224,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         trim_edges : bool, optional
             if true, trim fully flagged edge channels and times. helps to avoid edge popups.
             default is false.
+        external_flags : str, optional, path to external flag files to apply
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
@@ -228,6 +235,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         verboase: lots of output.
         skip_flagged_edges: if true, skip flagged edges in filtering.
         flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
+        a_priori_flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
@@ -266,9 +274,8 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
     echo(f"{str(datetime.now())}...reading data", verbose=verbose)
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
-    if external_flags is not None:
-        echo(f"{str(datetime.now())}...applying flags", verbose=verbose)
-        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, flag_zero_times=flag_zero_times)
+    echo(f"{str(datetime.now())}...applying external flags", verbose=verbose)
+    df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, flag_zero_times=flag_zero_times)
     if factorize_flags:
         echo(f"{str(datetime.now())}...factorizing flags", verbose=verbose)
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
