@@ -104,6 +104,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', verbose=False,
                                 skip_flagged_edges=False,  flag_zero_times=True,
+                                overwrite_data_flags=False,
                                 a_priori_flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
@@ -139,6 +140,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         verbose: bool, if True, lots of outputs. Default = False.
         skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
         flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
+        overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
         a_priori_flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''

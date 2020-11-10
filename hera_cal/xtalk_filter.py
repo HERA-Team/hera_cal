@@ -98,7 +98,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False,
-                                skip_flagged_edges=False, flag_zero_times=True,
+                                skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
                                 a_priori_flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform xtalk filtering.
@@ -132,6 +132,10 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
         round_up_bllens: bool, if True, round up baseline lengths. Default is False.
+        skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
+        flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
+        overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
+        a_priori_flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
@@ -191,8 +195,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False, verbose=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
-                                              skip_flagged_edges=False, overwrite_data_flags=False,
-                                               **filter_kwargs):
+                                              skip_flagged_edges=False,flag_zero_times=True, overwrite_data_flags=False,
+                                              a_priori_flag_yaml=None, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -225,6 +229,9 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         add_to_history: string appended to the history of the output file
         round_up_bllens: bool, if True, round up baseline lengths. Default is False.
         skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
+        flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
+        overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
+        a_priori_flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
