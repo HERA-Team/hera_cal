@@ -26,4 +26,5 @@ delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, round_
                                          factorize_flags=a.factorize_flags, time_thresh=a.time_thresh,
                                          trim_edges=a.trim_edges, max_contiguous_edge_flags=a.max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), verbose=a.verbose,
-                                         skip_flagged_edges=a.skip_flagged_edges, **filter_kwargs)
+                                         skip_flagged_edges=a.skip_flagged_edges,
+                                         **filter_kwargs)
