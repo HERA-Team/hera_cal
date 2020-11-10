@@ -68,7 +68,7 @@ def single_iterative_fft_dly(gains, wgts, freqs, conv_crit=1e-5, maxiter=100):
 
 
 def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
-                mode='clean', broadcast_time_average=False, **filter_kwargs):
+                mode='clean', **filter_kwargs):
     '''Frequency-filter calibration solutions on a given scale in MHz using uvtools.dspec.high_pass_fourier_filter.
     Before filtering, removes a single average delay, then puts it back in after filtering.
 
@@ -84,39 +84,27 @@ def freq_filter(gains, wgts, freqs, filter_scale=10.0, skip_wgt=0.1,
             Only works properly when all weights are all between 0 and 1.
         mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
               examples include 'dpss_leastsq', 'clean'.
-        broadcast_time_average: bool, optional
-            If True, set filtered waterfall to be equal to the average in time
         filter_kwargs : any keyword arguments for the filtering mode being used.
-        See dspec.fourier_filter or uvtools.dspec.fourier_filter for a full description.
+        See vis_clean.fourier_filter or uvtools.dspec.fourier_filter for a full description.
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: info object from uvtools.dspec.high_pass_fourier_filter
     '''
     if not HAVE_UVTOOLS:
         raise ImportError("uvtools required, instsall hera_cal[all]")
+
     filter_size = (filter_scale * 1e6)**-1  # Puts it in s
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in s
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
+
     filtered, res, info = uvtools.dspec.fourier_filter(x=freqs, data=gains * rephasor, wgts=wgts, mode=mode, filter_centers=[0.],
                                                        skip_wgt=skip_wgt, filter_half_widths=[filter_size], **filter_kwargs)
+    # put back in unfilted values if skip_wgt is triggered
     filtered /= rephasor
-    # if broadcast_time_average is true, then set all times to
-    # the average of the solutions.
-    if broadcast_time_average:
-        skipwgts = np.asarray([info['status']['axis_1'][i] != 'skipped' for i in info['status']['axis_1']]).astype(float)
-        if np.all(np.isclose(skipwgts, 0.0)):
-            # set to unity if all times were skipped.
-            filtered = np.ones_like(gains)
-        else:
-            time_average = np.sum(filtered * skipwgts[:, None], axis=0) / np.sum(skipwgts)
-            for m in range(filtered.shape[0]):
-                filtered[m] = time_average
-    else:
-        # if we are not time averagine then
-        # put back in unfilted values if skip_wgt is triggered
-        for i in info['status']['axis_1']:
-            if info['status']['axis_1'][i] == 'skipped':
-                filtered[i, :] = gains[i, :]
+    for i in info['status']['axis_1']:
+        if info['status']['axis_1'][i] == 'skipped':
+            filtered[i, :] = gains[i, :]
+
     return filtered, info
 
 
@@ -172,8 +160,7 @@ def time_filter(gains, wgts, times, filter_scale=1800.0, nMirrors=0):
 
 
 def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1800.0,
-                        mode='clean', remove_edge_flags_from_filtering=False,
-                        broadcast_time_average=False, **filter_kwargs):
+                        tol=1e-09, filter_mode='rect', maxiter=100, window='tukey', **win_kwargs):
     '''Filter calibration solutions in both time and frequency simultaneously. First rephases to remove
     a time-average delay from the gains, then performs the low-pass 2D filter in time and frequency,
     then puts back in the delay rephasor. Uses aipy.deconv.clean to account for weights/flags.
@@ -185,61 +172,58 @@ def time_freq_2D_filter(gains, wgts, freqs, times, freq_scale=10.0, time_scale=1
         times: ndarray of shape=(Ntimes) of Julian dates as floats in units of days
         freq_scale: frequency scale in MHz to use for the low-pass filter. freq_scale^-1 corresponds
             to the half-width (i.e. the width of the positive part) of the region in fourier
-            space, symmetric about 0, that is filtered out.
+            space, symmetric about 0, that is retained after filtering.
+            Note that freq_scale is in MHz while freqs is in Hz.
         time_scale: time scale in seconds. Defined analogously to freq_scale.
-        mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
-              examples include 'dpss_leastsq', 'clean'.
-        skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-            filtered is left unchanged and info is {'skipped': True} for that time.
-            Only works properly when all weights are all between 0 and 1.
-        remove_edge_flags_from_filtering: bool, optional
-            If True, perform filtering only on the rectangular sub-array that is left if we remove edge channels
-            and times that are fully flagged.
-        filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
-        broadcast_average : bool, default
-            if true, set the waterfall to be constant in time and equal to the average of the smoothed solution in time.
+            Note that time_scale is in seconds, times is in days.
+        tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+        filter_mode: either 'rect' or 'plus':
+            'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0
+                    and fringe rate = 0
+            'plus': produce a separable calibration solution by only keeping modes with 0 delay,
+                    0 fringe rate, or both
+        window: window function for filtering applied to the filtered axis.
+            See aipy.dsp.gen_window for options.
+        maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+        win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
+            Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
+
     Returns:
         filtered: filtered gains, ndarray of shape=(Ntimes,Nfreqs)
         info: dictionary of metadata from aipy.deconv.clean
     '''
-    # make some adjustments to filter_kwarg names and format to preserver api.
-    if 'window' in filter_kwargs:
-        filter_kwargs['window'] = [filter_kwargs['window'], filter_kwargs['window']]
-    if 'filter_mode' in filter_kwargs:
-        filter_kwargs['filt2d_mode'] = filter_kwargs['filter_mode']
-        del filter_kwargs['filter_mode']
+    assert AIPY, "You need aipy to use this function"
+    df = np.median(np.diff(freqs))
     dt = np.median(np.diff(times)) * 24.0 * 3600.0  # in seconds
-    tsecs = (np.arange(len(times)) - len(times) / 2.) * dt
+    delays = np.fft.fftfreq(freqs.size, df)
+    fringes = np.fft.fftfreq(times.size, dt)
     delay_scale = (freq_scale * 1e6)**-1  # Puts it in seconds
     fringe_scale = (time_scale)**-1  # in Hz
 
     # Build rephasor to take out average delay
     dly = single_iterative_fft_dly(gains, wgts, freqs)  # dly in seconds
     rephasor = np.exp(-2.0j * np.pi * dly * freqs)
-    if remove_edge_flags_from_filtering:
-        unflagged_chans = np.where(~np.all(np.isclose(wgts, 0.0), axis=0))
-        unflagged_times = np.where(~np.all(np.isclose(wgts, 0.0), axis=1))
-        ind_left = np.min(unflagged_chans)
-        ind_right = np.max(unflagged_chans) + 1
-        ind_lower = np.min(unflagged_times)
-        ind_upper = np.max(unflagged_times) + 1
-    else:
-        ind_left = 0
-        ind_right = gains.shape[1]
-        ind_lower = 0
-        ind_upper = gains.shape[0]
-    data_in = (gains * rephasor)[ind_lower:ind_upper][:, ind_left:ind_right]
-    wgts_in = wgts[ind_lower:ind_upper][:, ind_left:ind_right]
-    filtered = np.zeros_like(gains)
-    filtered[ind_lower:ind_upper][:, ind_left:ind_right], _, info = uvtools.dspec.fourier_filter(x=[tsecs[ind_lower:ind_upper], freqs[ind_left:ind_right]],
-                                                                                                 data=data_in, wgts=wgts_in, mode=mode, filter_dims=[1, 0],
-                                                                                                 filter_half_widths=[[fringe_scale], [delay_scale]], filter_centers=[[0.], [0.]],
-                                                                                                 **filter_kwargs)
-    if broadcast_time_average:
-        time_average = np.mean(filtered, axis=0)
-        for m in range(filtered.shape[0]):
-            filtered[m] = time_average
 
+    # Build fourier space image and kernel for deconvolution
+    window = aipy.dsp.gen_window(len(freqs), window=window, **win_kwargs)
+    image = np.fft.ifft2(gains * rephasor * wgts * window)
+    kernel = np.fft.ifft2(wgts * window)
+
+    # set up "area", the set of Fourier modes that are allowed to be non-zero in the CLEAN
+    if filter_mode == 'rect':
+        area = np.outer(np.where(np.abs(fringes) < fringe_scale, 1, 0),
+                        np.where(np.abs(delays) < delay_scale, 1, 0))
+    elif filter_mode == 'plus':
+        area = np.zeros(image.shape, dtype=int)
+        area[0] = np.where(np.abs(delays) < delay_scale, 1, 0)
+        area[:, 0] = np.where(np.abs(fringes) < fringe_scale, 1, 0)
+    else:
+        raise ValueError("CLEAN mode {} not recognized. Must be 'rect' or 'plus'.".format(filter_mode))
+
+    # perform deconvolution
+    CLEAN, info = aipy.deconv.clean(image, kernel, tol=tol, area=area, stop_if_div=False, maxiter=maxiter)
+    filtered = np.fft.fft2(CLEAN + info['res'] * area)
+    del info['res']  # this matches the convention in uvtools.dspec.high_pass_fourier_filter
     return filtered / rephasor, info
 
 
@@ -460,9 +444,8 @@ def _build_wgts_grid(flag_grid, time_blacklist=None, freq_blacklist=None):
 class CalibrationSmoother():
 
     def __init__(self, calfits_list, flag_file_list=[], flag_filetype='h5', antflag_thresh=0.0, load_cspa=False, load_chisq=False,
-                 time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[], spw_range=None,
-                 pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0,
-                 use_cal_flags=True, factorize_flags=False, a_priori_flags_yaml=None, verbose=False):
+                 time_blacklists=[], lst_blacklists=[], lat_lon_alt_degrees=None, freq_blacklists=[], chan_blacklists=[],
+                 pick_refant=False, freq_threshold=1.0, time_threshold=1.0, ant_threshold=1.0, verbose=False):
         '''Class for smoothing calibration solutions in time and frequency for a whole day. Initialized with a list of
         calfits files and, optionally, a corresponding list of flag files, which must match the calfits files
         one-to-one in time. This function sets up a time grid that spans the whole day with dt = integration time.
@@ -502,9 +485,6 @@ class CalibrationSmoother():
             chan_blacklists: list of pairs of channel numbers bounding (inclusively) spectral regions
                 that are to receive 0 weight during smoothing, forcing the smoother to interpolate/extrapolate.
                 N.B. Blacklisted channels are not necessarily flagged.
-            spw_range: 2-list of ints, optional.
-                Range of frequency channels over which to generate calibration solutions.
-                Default is None (cal solutions will span all frequencie).
             pick_refant: if True, automatically picks one reference anteanna per polarization. The refants chosen have the
                 fewest total flags and causes the least noisy phases on other antennas when made the phase reference.
             freq_threshold: float. Finds the times that flagged for all antennas at a single channel but not flagged
@@ -518,71 +498,32 @@ class CalibrationSmoother():
             ant_threshold: float. If, after time and freq thesholding and broadcasting, an antenna is left unflagged
                 for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that
                 antenna for all times and channels. Default 1.0 means no additional flagging.
-            factorize_flags: bool, optional
-                If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
-            a_priori_flags_yaml: str, optional
-                filepath to flagging yaml
             verbose: print status updates
         '''
         self.verbose = verbose
-        if a_priori_flags_yaml is not None:
-            from hera_qm.utils import apply_yaml_flags
+
         # load calibration files---gains, flags, freqs, times, and if desired, cspa and chisq
         utils.echo('Now loading calibration files...', verbose=self.verbose)
         self.cals = calfits_list
         gains, cal_flags, chisq, cspa, self.cal_freqs, self.cal_times = {}, {}, {}, {}, {}, {}
         for cal in self.cals:
             hc = io.HERACal(cal)
-            if spw_range is None:
-                spw_range = (0, hc.Nfreqs)
-            hc.read()
-            # apply apriori flags.
-            if a_priori_flags_yaml is not None:
-                hc = apply_yaml_flags(hc, a_priori_flags_yaml)
-            gains[cal], cal_flags[cal], quals, total_qual = hc.build_calcontainers()
-            for key in gains[cal]:
-                gains[cal][key] = gains[cal][key][:, spw_range[0]:spw_range[1]]
-                cal_flags[cal][key] = cal_flags[cal][key][:, spw_range[0]:spw_range[1]]
-                quals[key] = quals[key][:, spw_range[0]:spw_range[1]]
-            if total_qual is not None:
-                for key in total_qual:
-                    total_qual[key] = total_qual[key][:, spw_range[0]:spw_range[1]]
+            gains[cal], cal_flags[cal], quals, total_qual = hc.read()
             if load_cspa:
                 cspa[cal] = quals
             if load_chisq:
                 chisq[cal] = total_qual
-            self.cal_freqs[cal], self.cal_times[cal] = hc.freqs[spw_range[0]:spw_range[1]], hc.times
-
-        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
+            self.cal_freqs[cal], self.cal_times[cal] = hc.freqs, hc.times
 
         # load flag files
         self.flag_files = flag_file_list
         if len(self.flag_files) > 0:
             utils.echo('Now loading external flag files...', verbose=self.verbose)
             self.ext_flags, self.flag_freqs, self.flag_times = {}, {}, {}
-            cal_freqs = self.cal_freqs[self.cals[0]]
             for ff in self.flag_files:
                 flags, meta = io.load_flags(ff, filetype=flag_filetype, return_meta=True)
-                cal_freqs_in_ff = []
-                for freqnum, freq in enumerate(meta['freqs']):
-                    match = np.isclose(cal_freqs, freq, rtol=1e-10)
-                    if True in match:
-                        cal_freqs_in_ff.append(freqnum)
-                # select spw_range.
-                for key in flags:
-                    flags[key] = flags[key][:, cal_freqs_in_ff]
-                if meta['type'] == 'baseline':
-                    self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
-                # if waterfall flags were provided, then set all antenna keys to single waterfall.
-                elif meta['type'] == 'waterfall':
-                    self.ext_flags[ff] = {}
-                    for ant in self.ants:
-                        # if waterfall flags are provided, then find first key that contains
-                        # jpol and use that
-                        jpol_key = [key for key in flags.keys() if ant[-1] in key][0]
-                        self.ext_flags[ff][ant] = flags[jpol_key]
-
-                self.flag_freqs[ff] = meta['freqs'][cal_freqs_in_ff]
+                self.ext_flags[ff] = flag_utils.synthesize_ant_flags(flags, threshold=antflag_thresh)
+                self.flag_freqs[ff] = meta['freqs']
                 self.flag_times[ff] = meta['times']
 
         # set up time grid (note that it is offset by .5 dt so that times always map to the same
@@ -597,8 +538,8 @@ class CalibrationSmoother():
 
         # build empty multi-file grids for each antenna's gains and flags (and optionally for cspa)
         self.freqs = self.cal_freqs[self.cals[0]]
+        self.ants = sorted(list(set([k for gain in gains.values() for k in gain.keys()])))
         self.gain_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=np.complex) for ant in self.ants}
-        # Initialize all flags to True.
         self.flag_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=bool) for ant in self.ants}
         if load_cspa:
             self.cspa_grids = {ant: np.ones((len(self.time_grid), len(self.freqs)), dtype=float) for ant in self.ants}
@@ -608,19 +549,13 @@ class CalibrationSmoother():
             for cal in self.cals:
                 if ant in gains[cal]:
                     self.gain_grids[ant][self.time_indices[cal], :] = gains[cal][ant]
-                    if use_cal_flags:
-                        self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
+                    self.flag_grids[ant][self.time_indices[cal], :] = cal_flags[cal][ant]
                     if load_cspa:
                         self.cspa_grids[ant][self.time_indices[cal], :] = cspa[cal][ant]
             if len(self.flag_files) > 0:
                 for ff in self.flag_files:
                     if ant in self.ext_flags[ff]:
-                        if use_cal_flags:
-                            self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
-                        else:
-                            # if we are not using calibration files, then we need to initialize the flags
-                            # equal to ext_flags. Otherwise, they will all be True.
-                            self.flag_grids[ant][self.flag_time_indices[ff], :] = self.ext_flags[ff][ant]
+                        self.flag_grids[ant][self.flag_time_indices[ff], :] += self.ext_flags[ff][ant]
 
         # Now build grid and fill it for chisq_grid, if desired
         if load_chisq:
@@ -629,6 +564,7 @@ class CalibrationSmoother():
             for jpol in jpols:
                 for cal in self.cals:
                     self.chisq_grids[jpol][self.time_indices[cal], :] = chisq[cal][jpol]
+
         # perform data quality checks and flag thresholding
         self.check_consistency()
         flag_threshold_and_broadcast(self.flag_grids, freq_threshold=freq_threshold,
@@ -646,10 +582,6 @@ class CalibrationSmoother():
             utils.echo('\n'.join(['Reference Antenna ' + str(self.refant[pol][0]) + ' selected for ' + pol + '.'
                                   for pol in sorted(list(self.refant.keys()))]), verbose=self.verbose)
             self.rephase_to_refant()
-
-        if factorize_flags:
-            for ant in self.flag_grids:
-                flag_utils.factorize_flags(self.flag_grids[ant], inplace=True, time_thresh=time_threshold)
 
     def check_consistency(self):
         '''Checks the consistency of the input calibration files (and, if loaded, flag files).
@@ -705,50 +637,38 @@ class CalibrationSmoother():
                 self.gain_grids[ant] = time_filter(gain_grid, wgts_grid, self.time_grid,
                                                    filter_scale=filter_scale, nMirrors=nMirrors)
 
-    def freq_filter(self, filter_scale=10.0, skip_wgt=0.1, mode='clean', broadcast_time_average=False, **filter_kwargs):
+    def freq_filter(self, filter_scale=10.0, tol=1e-09, window='tukey', skip_wgt=0.1, maxiter=100, **win_kwargs):
         '''Frequency-filter stored calibration solutions on a given scale in MHz.
 
         Arguments:
             filter_scale: frequency scale in MHz to use for the low-pass filter. filter_scale^-1 corresponds
                 to the half-width (i.e. the width of the positive part) of the region in fourier
                 space, symmetric about 0, that is filtered out.
+            tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+            window: window function for filtering applied to the filtered axis. Default tukey has alpha=0.5.
+                See aipy.dsp.gen_window for options.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 gains are left unchanged and self.wgts and self.flag_grids are set to 0 and True,
                 respectively. Only works properly when all weights are all between 0 and 1.
-            mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
-                  examples include 'dpss_leastsq', 'clean'.
-            broadcast_time_average: bool, optional
-                If True, set filtered waterfall to be equal to the average in time
-            filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
+            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+            win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
+                    Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default.
         '''
         # Loop over all antennas and perform a low-pass delay filter on gains
-        # retain tukey window default
-        if mode == 'clean':
-            if filter_kwargs is None:
-                filter_kwargs = {'window': 'tukey'}
-            if 'window' not in filter_kwargs:
-                filter_kwargs['window'] = 'tukey'
         for ant, gain_grid in self.gain_grids.items():
             utils.echo('    Now filtering antenna' + str(ant[0]) + ' ' + str(ant[1]) + ' in frequency...', verbose=self.verbose)
             wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
             self.gain_grids[ant], info = freq_filter(gain_grid, wgts_grid, self.freqs,
-                                                     filter_scale=filter_scale,
-                                                     mode=mode, skip_wgt=skip_wgt,
-                                                     broadcast_time_average=broadcast_time_average, **filter_kwargs)
-            skip_array = np.asarray([info['status']['axis_1'][i] == 'skipped' for i in info['status']['axis_1']])
+                                                     filter_scale=filter_scale, tol=tol, window=window,
+                                                     skip_wgt=skip_wgt, maxiter=maxiter, **win_kwargs)
             # flag all channels for any time that triggers the skip_wgt
-            if not broadcast_time_average:
-                self.flag_grids[ant][skip_array, :] = True
-            # if all times were skipped, then set all the gains to unity.
-            else:
-                if np.all(skip_array):
-                    self.flag_grids[ant][:, :] = True
+            for i in info['status']['axis_1']:
+                if info['status']['axis_1'][i] == 'skipped':
+                    self.flag_grids[ant][i, :] = np.ones_like(self.flag_grids[ant][i, :])
         self.rephase_to_refant(warn=False)
 
-    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, mode='clean',
-                            skip_wgt=0.1, remove_edge_flags_from_filtering=False,
-                            broadcast_time_average=False,
-                            **filter_kwargs):
+    def time_freq_2D_filter(self, freq_scale=10.0, time_scale=1800.0, tol=1e-09,
+                            filter_mode='rect', window='tukey', maxiter=100, **win_kwargs):
         '''2D time and frequency filter stored calibration solutions on a given scale in seconds and MHz respectively.
 
         Arguments:
@@ -756,35 +676,35 @@ class CalibrationSmoother():
                 to the half-width (i.e. the width of the positive part) of the region in fourier
                 space, symmetric about 0, that is filtered out.
             time_scale: time scale in seconds. Defined analogously to freq_scale.
-            mode: deconvolution method to use. See uvtools.dspec.fourier_filter for full list of supported modes.
-                  examples include 'dpss_leastsq', 'clean'.
-            skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
-                filtered is left unchanged and info is {'skipped': True} for that time.
-                Only works properly when all weights are all between 0 and 1.
-            remove_edge_flags_from_filtering: bool, optional
-                If True, perform filtering only on the rectangular sub-array that is left if we remove edge channels
-                and times that are fully flagged.
-            broadcast_time_average: bool, optional
-                If True, set filtered waterfall to be equal to the average in time
-            filter_kwargs : any keyword arguments for the frequency domain fourier filtering in dspec.fourier_filter.
+            tol: CLEAN algorithm convergence tolerance (see aipy.deconv.clean)
+            filter_mode: either 'rect' or 'plus':
+                'rect': perform 2D low-pass filter, keeping modes in a small rectangle around delay = 0
+                        and fringe rate = 0
+                'plus': produce a separable calibration solution by only keeping modes with 0 delay,
+                        0 fringe rate, or both
+            window: window function for filtering applied to the frequency axis.
+                See aipy.dsp.gen_window for options.
+            maxiter: Maximum number of iterations for aipy.deconv.clean to converge.
+            win_kwargs : any keyword arguments for the window function selection in aipy.dsp.gen_window.
+                Currently, the only window that takes a kwarg is the tukey window with a alpha=0.5 default
         '''
         # loop over all antennas that are not completely flagged and filter
         for ant, gain_grid in self.gain_grids.items():
             if not np.all(self.flag_grids[ant]):
                 utils.echo('    Now filtering antenna ' + str(ant[0]) + ' ' + str(ant[1]) + ' in time and frequency...', verbose=self.verbose)
                 wgts_grid = _build_wgts_grid(self.flag_grids[ant], self.time_blacklist, self.freq_blacklist)
-                filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale, broadcast_time_average=broadcast_time_average,
-                                                     time_scale=time_scale, remove_edge_flags_from_filtering=remove_edge_flags_from_filtering, **filter_kwargs)
+                filtered, info = time_freq_2D_filter(gain_grid, wgts_grid, self.freqs, self.time_grid, freq_scale=freq_scale,
+                                                     time_scale=time_scale, tol=tol, filter_mode=filter_mode, maxiter=maxiter,
+                                                     window=window, **win_kwargs)
                 self.gain_grids[ant] = filtered
         self.rephase_to_refant(warn=False)
 
-    def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False, output_dir=None, **kwargs):
+    def write_smoothed_cal(self, output_replace=('.flagged_abs.', '.smooth_abs.'), add_to_history='', clobber=False, **kwargs):
         '''Writes time and/or frequency smoothed calibration solutions to calfits, updating input calibration.
         Also compares the input and output calibration and saves that result in the quals/total_quals fields.
 
         Arguments:
             output_replace: tuple of input calfile substrings: ("to_replace", "to_replace_with")
-                            or a list of tuples to replace multiple substrings.
             add_to_history: appends a string to the history of the output file (in addition to the )
             clobber: if True, overwrites existing file at outfilename
             kwargs: dictionary mapping updated attributes to their new values.
@@ -800,19 +720,12 @@ class CalibrationSmoother():
             out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
             hc.update(gains=out_gains, flags=out_flags, quals=rel_diff, total_qual=avg_rel_diff)
+
             hc.history += version.history_string(add_to_history)
             for attribute, value in kwargs.items():
                 hc.__setattr__(attribute, value)
             hc.check()
-            # check if output_replace is a list of lists.
-            if isinstance(output_replace[0], (list, tuple)):
-                for replacement_number, replacement in enumerate(output_replace):
-                    if replacement_number == 0:
-                        outfilename = cal.replace(replacement[0], replacement[1])
-                    else:
-                        outfilename = outfilename.replace(replacement[0], replacement[1])
-            else:
-                outfilename = cal.replace(output_replace[0], output_replace[1])
+            outfilename = cal.replace(output_replace[0], output_replace[1])
             hc.write_calfits(outfilename, clobber=clobber)
 
 
@@ -821,7 +734,7 @@ def _pair(dash_sep_arg_pair):
     return tuple([float(arg) for arg in dash_sep_arg_pair.split('-', maxsplit=1)])
 
 
-def smooth_cal_argparser(mode='clean2D'):
+def smooth_cal_argparser():
     '''Arg parser for commandline operation of 2D calibration smoothing.'''
     a = argparse.ArgumentParser(description="Smooth calibration solutions in time and frequency using the hera_cal.smooth_cal module.")
     a.add_argument("calfits_list", type=str, nargs='+', help="list of paths to chronologically sortable calfits files (usually a full day)")
@@ -833,7 +746,7 @@ def smooth_cal_argparser(mode='clean2D'):
     a.add_argument("--run_if_first", default=None, type=str, help='only run smooth_cal if the first item in the sorted calfits_list\
                    matches run_if_first (default None means always run)')
     a.add_argument("--verbose", default=False, action="store_true", help="Print status updates while smoothing.")
-    a.add_argument("--spw_range", default=None, type=int, nargs=2, help="Minimum and maximum channels to include in fitted cal solution. Default is all Channels.")
+
     # Options relating to optional external flags and flag thresholding and broadcasting
     flg_opts = a.add_argument_group(title='Flagging options.')
     flg_opts.add_argument("--flag_file_list", type=str, nargs='+', default=[], help="optional list of paths to chronologically\
@@ -851,8 +764,7 @@ def smooth_cal_argparser(mode='clean2D'):
     flg_opts.add_argument("--ant_threshold", default=0.5, type=float, help="If, after time and freq thesholding and broadcasting, an antenna is left \
                           unflagged for a number of visibilities less than ant_threshold times the maximum among all antennas, flag that antenna for all \
                           times and channels. 1.0 means no additional flagging (default 0.5).")
-    flg_opts.add_argument("--factorize_flags", default=False, action="store_true", help="If True, factorize flags into separable flags.")
-    flg_opts.add_argument("--a_priori_flags_yaml", default=None, type=str, help="path to yaml flagging file.")
+
     # Options relating to blacklisting time or frequency ranges
     bkl_opts = a.add_argument_group(title="Blacklisting options used for assigning 0 weight to times/frequencies so that smooth_cal\n"
                                     "interpolates/extrapoaltes over them (though they aren't necessarily flagged).")
@@ -869,15 +781,14 @@ def smooth_cal_argparser(mode='clean2D'):
     flt_opts = a.add_argument_group(title='Filtering options.')
     flt_opts.add_argument("--freq_scale", type=float, default=10.0, help="frequency scale in MHz for the low-pass filter\
                           (default 10.0 MHz, i.e. a 100 ns delay filter)")
-    if mode == 'clean2D':
-        flt_opts.add_argument("--time_scale", type=float, default=1800.0, help="time scale in seconds, defined analogously to freq_scale (default 1800 s).")
-        flt_opts.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
-        flt_opts.add_argument("--filter_mode", type=str, default="rect", help='Mode for CLEAN algorithm that defines the shape of the area that can have\
+    flt_opts.add_argument("--time_scale", type=float, default=1800.0, help="time scale in seconds, defined analogously to freq_scale (default 1800 s).")
+    flt_opts.add_argument("--tol", type=float, default=1e-9, help='CLEAN algorithm convergence tolerance (default 1e-9)')
+    flt_opts.add_argument("--filter_mode", type=str, default="rect", help='Mode for CLEAN algorithm that defines the shape of the area that can have\
                           non-zero CLEAN components. Default "rect". "plus" creates calibration solutions that are separable in time and frequency.')
-        flt_opts.add_argument("--window", type=str, default="tukey", help='window function for frequency filtering (default "tukey",\
+    flt_opts.add_argument("--window", type=str, default="tukey", help='window function for frequency filtering (default "tukey",\
                           see aipy.dsp.gen_window for options')
-        flt_opts.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
-        flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
+    flt_opts.add_argument("--maxiter", type=int, default=100, help='maximum iterations for aipy.deconv.clean to converge (default 100)')
+    flt_opts.add_argument("--alpha", type=float, default=.3, help='alpha parameter to use for Tukey window (ignored if window is not Tukey)')
 
     args = a.parse_args()
     return args
