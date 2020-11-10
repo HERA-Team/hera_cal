@@ -149,7 +149,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         echo(f"{str(datetime.now())}...reading data.", verbose=verbose)
         xf.read(frequencies=freqs)
         echo(f"{str(datetime.now())}...applying external flags", verbose=verbose)
-        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
+        xf.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
         if factorize_flags:
             echo(f"{str(datetime.now())}...factorizing flags.", verbose=verbose)
             xf.factorize_flags(time_thresh=time_thresh, inplace=True)
@@ -264,7 +264,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     echo(f"{str(datetime.now())}...reading data", verbose=verbose)
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
     echo(f"{str(datetime.now())}...applying external flags", verbose=verbose)
-    df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
+    xf.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
     if factorize_flags:
         echo(f"{str(datetime.now())}...factorizing flags", verbose=verbose)
         xf.factorize_flags(time_thresh=time_thresh, inplace=True)
