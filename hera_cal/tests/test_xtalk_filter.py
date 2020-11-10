@@ -119,7 +119,7 @@ class Test_XTalkFilter(object):
             assert bl in d.keys()
 
         for bl in f:
-            assert np.all(f[bl][:, :-1])
+            assert np.all(f[bl][:, -1])
             assert np.all(f[bl][0, :])
 
     def test_load_xtalk_filter_and_write(self, tmpdir):
