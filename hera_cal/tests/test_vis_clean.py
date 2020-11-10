@@ -437,75 +437,10 @@ class Test_VisClean(object):
                                      kernel_size=None, polyfit_deg=5)
         assert np.all(np.isclose(n2[k][-1], n1[k][-1]))  # assert non-zeroed output are same as n1 (no polyfit)
 
-    def test_trim_edges(self):
-        # load data
-        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
-        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
-
-        # set flags to be trimmed one off of the bottom, two off of the top
-        # three off of the left and four off of the right
-        nfreqs_full = V.Nfreqs
-        ntimes_full = V.Ntimes
-        for k in V.flags.keys():
-            if not np.all(V.flags[k]):
-                V.flags[k] = np.zeros_like(V.flags[k])
-                V.flags[k][-1] = True
-                V.flags[k][:2] = True
-                V.flags[k][:, :3] = True
-                V.flags[k][:, -4:] = True
-        Vcopy = copy.deepcopy(V)
-        Vcopy.trim_edges(ax='both')
-
-        assert Vcopy.Ntimes == ntimes_full - 3
-        assert Vcopy.Nfreqs == nfreqs_full - 7
-        for k in V.flags:
-            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
-            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
-            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full - 7)
-
-        Vcopy = copy.deepcopy(V)
-        Vcopy.trim_edges(ax='freq')
-
-        assert Vcopy.Ntimes == ntimes_full
-        assert Vcopy.Nfreqs == nfreqs_full - 7
-        for k in Vcopy.flags:
-            assert Vcopy.data[k].shape == (ntimes_full, nfreqs_full - 7)
-            assert Vcopy.data[k].shape == (ntimes_full, nfreqs_full - 7)
-            assert Vcopy.data[k].shape == (ntimes_full, nfreqs_full - 7)
-
-        Vcopy = copy.deepcopy(V)
-        Vcopy.trim_edges(ax='time')
-
-        assert Vcopy.Ntimes == ntimes_full - 3
-        assert Vcopy.Nfreqs == nfreqs_full
-        for k in Vcopy.flags:
-            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full)
-            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full)
-            assert Vcopy.data[k].shape == (ntimes_full - 3, nfreqs_full)
-
-        # now flag all data and check warning.
-        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
-        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
-        for k in V.flags:
-            V.flags[k][:] = True
-        with pytest.warns(None):
-            V.trim_edges()
-        # now set one baseline to have a different flagging pattern then
-        # the other and catch a valueerror.
-        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
-        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
-        for k in V.flags:
-            V.flags[k] = np.zeros_like(V.flags[k])
-        V.flags[(23, 23, 'ee')][0] = True
-        pytest.raises(ValueError, V.trim_edges)
-
-        V = VisClean(os.path.join(DATA_PATH, "PyGSM_Jy_downselect.uvh5"))
-        V.read(bls=[(23, 23, 'ee'), (23, 24, 'ee')])
-        pytest.raises(ValueError, V.trim_edges, ax='blah')
-
     def test_neb(self):
         n = vis_clean.noise_eq_bandwidth(dspec.gen_window('blackmanharris', 10000))
         assert np.isclose(n, 1.9689862471203075)
+
 
     def test_zeropad(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
@@ -558,7 +493,6 @@ class Test_VisClean(object):
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
-        assert not a.trim_edges
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
 
@@ -574,7 +508,6 @@ class Test_VisClean(object):
         assert a.clobber is True
         assert a.spw_range[0] == 0
         assert a.spw_range[1] == 20
-        assert not a.trim_edges
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
 
