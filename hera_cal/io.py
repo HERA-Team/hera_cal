@@ -859,7 +859,7 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
                 else:
                     jpol = ','.join([jnum2str(int(p), x_orientation=uvf.x_orientation) for p in jpol.split(',')])
                 flags[jpol] = uvf.flag_array[:, :, ip]
-        type = uvf.type
+
     elif filetype == 'npz':  # legacy support for IDR 2.1 npz format
         npz = np.load(flagfile)
         pols = [polnum2str(p) for p in npz['polarization_array']]
@@ -874,9 +874,9 @@ def load_flags(flagfile, filetype='h5', return_meta=False):
             for n, (i, j) in enumerate(npz['antpairs']):
                 flags[i, j, pol] = flag_array[:, n, :]
         flags = DataContainer(flags)
-        type = 'baseline'
+
     if return_meta:
-        return flags, {'freqs': freqs, 'times': times, 'history': history, 'type': type}
+        return flags, {'freqs': freqs, 'times': times, 'history': history}
     else:
         return flags
 
