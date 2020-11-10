@@ -863,68 +863,6 @@ class VisClean(object):
         if not inplace:
             return flags
 
-    def trim_edges(self, ax='freq'):
-        """Trim edge times and frequencies that are fully flagged. Always in place.
-
-        Function to remove edge times and frequencies from data that are completely flagged.
-        such flagged edges and times can cause problems for linear filtering methods.
-        since a set number of times and frequencies are assumed in vis_clean objects, this only
-        works for datasets where the flags are identical for all baselines.
-
-        This function clears all datacontainers that are not data, flags, and nsamples.
-
-        """
-        # first check that all flags are the same or completely flagged.
-        ntimes_before_trim = self.Ntimes
-        nfreqs_before_trim = self.Nfreqs
-        template = None
-        trimmed = False
-        for k in self.flags:
-            if not np.all(self.flags[k]):
-                if template is None:
-                    template = self.flags[k]
-                else:
-                    if not np.all(template == self.flags[k]):
-                        raise ValueError("Flag Trimming only supported when flagging for all baselines is identical!")
-
-        for k in self.flags:
-            if not np.all(self.flags[k]):
-                unflagged_chans = np.where(~np.all(self.flags[k], axis=0))[0]
-                unflagged_times = np.where(~np.all(self.flags[k], axis=1))[0]
-                ind_left = np.min(unflagged_chans)
-                ind_right = np.max(unflagged_chans) + 1
-                ind_lower = np.min(unflagged_times)
-                ind_upper = np.max(unflagged_times) + 1
-                # if we are only trimming freq axis, restore ind_upper/lower
-                if ax.lower() == 'freq':
-                    ind_upper = self.Ntimes
-                    ind_lower = 0
-                # if we are only trimming time axis, restore ind_left/right
-                elif ax.lower() == 'time':
-                    ind_left = 0
-                    ind_right = self.Nfreqs
-                elif ax.lower() != 'both':
-                    raise ValueError("Invalid ax=%s provided! Must be either ['freq', 'time', 'both']"%ax)
-                # back up trimmed versions of
-                bls = list(self.data.keys())
-                # flags, data, and nsamples
-                data_bk = DataContainer({k: self.data[k][ind_lower: ind_upper][:, ind_left: ind_right] for k in self.data})
-                flags_bk = DataContainer({k: self.flags[k][ind_lower: ind_upper][:, ind_left: ind_right] for k in self.flags})
-                nsamples_bk = DataContainer({k: self.nsamples[k][ind_lower: ind_upper][:, ind_left: ind_right] for k in self.nsamples})
-                # clear datacontainers
-                self.clear_containers()
-                # reread data over trimmed frequencies and times
-                self.read(times=self.times[ind_lower: ind_upper],
-                          frequencies=self.freqs[ind_left: ind_right], bls=bls)
-                # restore original data / flags/ nsamples
-                self.hd.update(data=data_bk, flags=flags_bk, nsamples=nsamples_bk)
-                self.data, self.flags, self.nsamples = self.hd.build_datacontainers()
-                # set trimmed to True
-                trimmed = True
-                break
-
-        if not trimmed:
-            warnings.warn("no unflagged data so no trimming performed.")
 
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
                             partial_write=False, clobber=False, add_to_history='', extra_attrs={}, prefix='clean', **kwargs):
@@ -1378,7 +1316,6 @@ def _filter_argparser(multifile=False):
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
     a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
     a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
-    a.add_argument("--trim_edges", default=False, action="store_true", help="If true, trim edge times and frequencies that are comletely flagged.")
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
