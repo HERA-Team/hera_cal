@@ -1026,7 +1026,7 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         fc_grp['dlys'] = np.array([fc_meta['dlys'][ant] for ant in ant_keys])
         fc_grp['dlys'].attrs['ants'] = np.string_(ant_keys)
         fc_grp['polarity_flips'] = np.array([fc_meta['polarity_flips'][ant] for ant in ant_keys])
-        fc_grp['polarity_flips'].attrs['ants'] = ant_keys
+        fc_grp['polarity_flips'].attrs['ants'] = np.string_(ant_keys)
 
         # save the omnical metadata, saving dictionary keys as attrs
         omni_grp = outfile.create_group('omni_meta')
@@ -1036,7 +1036,7 @@ def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antp
         omni_grp['iter'] = np.array([omni_meta['iter'][pols] for pols in pols_keys])
         omni_grp['iter'].attrs['pols'] = pols_keys
         omni_grp['conv_crit'] = np.array([omni_meta['conv_crit'][pols] for pols in pols_keys])
-        omni_grp['conv_crit'].attrs['conv_crit'] = pols_keys
+        omni_grp['conv_crit'].attrs['conv_crit'] = np.string_(pols_keys)
 
 
 def read_redcal_meta(meta_filename):
