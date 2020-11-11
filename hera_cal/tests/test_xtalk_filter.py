@@ -206,7 +206,6 @@ class Test_XTalkFilter(object):
             assert np.all(f[bl][:, -1])
             assert not np.all(np.isclose(d[bl], 0.))
 
-
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
