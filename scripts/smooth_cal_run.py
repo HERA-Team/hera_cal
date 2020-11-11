@@ -23,8 +23,7 @@ if a.run_if_first is None or sorted(a.calfits_list)[0] == a.run_if_first:
                              antflag_thresh=a.antflag_thresh, time_blacklists=a.time_blacklists,
                              lst_blacklists=a.lst_blacklists, freq_blacklists=a.freq_blacklists,
                              chan_blacklists=a.chan_blacklists, pick_refant=a.pick_refant, freq_threshold=a.freq_threshold,
-                             time_threshold=a.time_threshold, ant_threshold=a.ant_threshold, verbose=a.verbose,
-                             a_priori_flags_yaml=a.a_priori_flags_yaml, spw_range=a.spw_range)
+                             time_threshold=a.time_threshold, ant_threshold=a.ant_threshold, verbose=a.verbose)
     cs.time_freq_2D_filter(freq_scale=a.freq_scale, time_scale=a.time_scale, tol=a.tol,
                            filter_mode=a.filter_mode, window=a.window, maxiter=a.maxiter, **win_kwargs)
     cs.write_smoothed_cal(output_replace=(a.infile_replace, a.outfile_replace),
