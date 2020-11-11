@@ -1498,17 +1498,17 @@ def _filter_argparser(multifile=False):
     a.add_argument("--trim_edges", default=False, action="store_true", help="If true, trim edge times and frequencies that are comletely flagged.")
     a.add_argument("--skip_flagged_edges", default=False, action="store_true", help="if True, do not filter over flagged edge integrations or channels (depending on filter axis).")
     a.add_argument("--verbose", default=False, action="store_true", help="lots of output.")
-
+    a.add_argument('--a_priori_flag_yaml', default=None, type=str,
+                    help=('Path to a priori flagging YAML with frequency, time, and/or '
+                          'antenna flagsfor parsable by hera_qm.metrics_io.read_a_priori_*_flags()'))
+    a.add_argument("--external_flags", default=None, type=str, nargs="+", help="list of external flags to apply before filtering.")
+    a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="overwrite data and calibration flags with external flags.")
 
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
-        a.add_argument("--external_flags", default=None, type=str, nargs="+", help="list of external flags to apply before filtering.")
-        a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="overwrite data and calibration flags with external flags.")
         a.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter and write out.")
-        a.add_argument('--a_priori_flag_yaml', default=None, type=str,
-                        help=('Path to a priori flagging YAML with frequency, time, and/or '
-                              'antenna flagsfor parsable by hera_qm.metrics_io.read_a_priori_*_flags()'))
+
     else:
         a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
     return a

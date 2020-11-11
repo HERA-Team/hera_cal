@@ -23,4 +23,8 @@ spw_range = a.spw_range
 delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, Nbls_per_load=a.partial_load_Nbls, verbose=a.verbose,
                                          res_outfilename=a.res_outfilename, CLEAN_outfilename=a.CLEAN_outfilename,
                                          filled_outfilename=a.filled_outfilename, clobber=a.clobber, spw_range=spw_range,
-                                         add_to_history=' '.join(sys.argv), **filter_kwargs)
+                                         add_to_history=' '.join(sys.argv),
+                                         a_priori_flag_yaml=a.a_priori_flag_yaml,
+                                         external_flags=a.external_flags,
+                                         overwrite_data_flags=a.overwrite_data_flags,
+                                         **filter_kwargs)

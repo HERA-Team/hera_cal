@@ -25,4 +25,7 @@ xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, round_
                                          trim_edges=a.trim_edges, max_contiguous_edge_flags=a.max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), verbose=a.verbose,
                                          skip_flagged_edges=a.skip_flagged_edges,
+                                         a_priori_flag_yaml=a.a_priori_flag_yaml,
+                                         external_flags=a.external_flags,
+                                         overwrite_data_flags=a.overwrite_data_flags,
                                          **filter_kwargs)
