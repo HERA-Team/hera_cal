@@ -551,7 +551,7 @@ def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True,
     """
     fr = FRFilter(input_data)
     fr.read()
-    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg,
+    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                     wgt_by_nsample=wgt_by_nsample, rephase=rephase)
     hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
     if flag_output is not None:
@@ -592,7 +592,7 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
     """
     fr = FRFilter(input_data_list)
     fr.read(bls=baseline_list, axis='blt')
-    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg,
+    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                     wgt_by_nsample=wgt_by_nsample, rephase=rephase)
     hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
     if flag_output is not None:
