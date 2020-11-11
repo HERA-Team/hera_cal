@@ -441,7 +441,6 @@ class Test_VisClean(object):
         n = vis_clean.noise_eq_bandwidth(dspec.gen_window('blackmanharris', 10000))
         assert np.isclose(n, 1.9689862471203075)
 
-
     def test_zeropad(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
         V = VisClean(fname, filetype='uvh5')

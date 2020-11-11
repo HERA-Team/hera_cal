@@ -863,7 +863,6 @@ class VisClean(object):
         if not inplace:
             return flags
 
-
     def write_filtered_data(self, res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None, filetype='uvh5',
                             partial_write=False, clobber=False, add_to_history='', extra_attrs={}, prefix='clean', **kwargs):
         '''

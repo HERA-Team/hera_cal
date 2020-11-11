@@ -162,7 +162,6 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][0, :])
             assert np.all(f[bl][:, -1])
 
-
     def test_load_delay_filter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
