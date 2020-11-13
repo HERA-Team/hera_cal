@@ -162,6 +162,15 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][0, :])
             assert np.all(f[bl][:, -1])
 
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1,
+                                       factorize_flags=True, time_thresh=time_thresh, clobber=True)
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for bl in f:
+            # check that flags were broadcasted.
+            assert np.all(f[bl][0, :])
+            assert np.all(f[bl][:, -1])
+
     def test_load_delay_filter_and_write_baseline_list(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
