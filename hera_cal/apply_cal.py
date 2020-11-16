@@ -258,10 +258,13 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     else:
         old_gains, old_flags = None, None
     hd = io.HERAData(data_infilename, filetype=filetype_in)
-    freqs_to_load = []
-    for f in hd.freqs:
-        if np.any(np.isclose(hc.freqs, f)):
-            freqs_to_load.append(f)
+    if filetype_in == 'uvh5':
+        freqs_to_load = []
+        for f in hd.freq_array[0]:
+            if np.any(np.isclose(hc.freq_array[0], f)):
+                freqs_to_load.append(f)
+    else:
+        freqs_to_load = None
     add_to_history = version.history_string(add_to_history)
     no_red_weights = redundant_weights is None
     # partial loading and writing using uvh5
