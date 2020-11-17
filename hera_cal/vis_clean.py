@@ -479,6 +479,7 @@ class VisClean(object):
                        output_prefix='clean', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
                        skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
+                       flag_filled=False,
                        **filter_kwargs):
         """
         Generalized fourier filtering of attached data.
@@ -564,6 +565,12 @@ class VisClean(object):
         skip_flagged_edge_times : bool, optional
             if true, do not filter over flagged edge times (filter over sub-region)
             defualt is False
+        flag_filled : bool, optional
+            if true, set filter flags equal to the original flags (do not unflag interpolated channels)
+            This is useful for cross-talk filtering where the cross-talk modes will not completely interpolate
+            over the channel gaps since there are substantial contributions to the foreground power from fringe-rates
+            that are not being modeled as cross-talk. In this case, we may want a file with the modelled cross-talk included but
+            not used to in-paint flagged integrations.
         filter_kwargs: dict. NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
@@ -816,7 +823,10 @@ class VisClean(object):
             filtered_resid[k] = res * fw
             filtered_resid[k][skipped] = 0.
             filtered_data[k] = filtered_model[k] + filtered_resid[k]
-            filtered_flags[k] = skipped
+            if not flag_filled:
+                filtered_flags[k] = skipped
+            else:
+                filtered_flags[k] = copy.deepcopy(flags[k])
             filtered_info[k] = info
 
         if hasattr(data, 'times'):
@@ -1503,7 +1513,6 @@ def _filter_argparser(multifile=False):
                           'antenna flagsfor parsable by hera_qm.metrics_io.read_a_priori_*_flags()'))
     a.add_argument("--external_flags", default=None, type=str, nargs="+", help="list of external flags to apply before filtering.")
     a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="overwrite data and calibration flags with external flags.")
-
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
