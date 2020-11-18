@@ -250,7 +250,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # determine frequencies to load in old_hc that are close to hc
         freqs_to_load = []
         for f in old_hc.freqs:
-            if np.any(np.isclose(hc.freqs, f)):
+            atol = np.mean(np.diff(hc.freqs)) / 10.
+            # set atol to be 1/10th of a channel
+            if np.any(np.isclose(hc.freqs, f, rtol=0., atol=atol)):
                 freqs_to_load.append(f)
         old_hc.select(frequencies=np.asarray(freqs_to_load)) # match up frequencies with hc.freqs
         old_gains, old_flags, _, _ = old_hc.build_calcontainers()
@@ -260,8 +262,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     hd = io.HERAData(data_infilename, filetype=filetype_in)
     if filetype_in == 'uvh5':
         freqs_to_load = []
+        atol = np.mean(np.diff(hc.freqs)) / 10.
         for f in hd.freq_array[0]:
-            if np.any(np.isclose(hc.freq_array[0], f)):
+            if np.any(np.isclose(hc.freq_array[0], f, rtol=0., atol=atol)):
                 freqs_to_load.append(f)
     else:
         freqs_to_load = None
