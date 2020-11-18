@@ -11,7 +11,7 @@ import copy
 import glob
 from pyuvdata import UVCal, UVData
 import warnings
-from hera_sim.antpos import hex_array
+from hera_sim.antpos import hex_array, linear_array
 
 from .. import io, abscal, redcal, utils
 from ..data import DATA_PATH
@@ -244,19 +244,20 @@ class Test_AbsCal_Funcs(object):
 
         phase_slopes_x = (.2 * np.random.rand(5, 2) - .1)  # not too many phase wraps over the array
         phase_slopes_y = (.2 * np.random.rand(5, 2) - .1)  # (i.e. avoid undersampling of very fast slopes)
-        data = np.array([np.exp(2.0j * np.pi * x * phase_slopes_x
-                                + 2.0j * np.pi * y * phase_slopes_y) for x, y in zip(xs, ys)])
+        data = np.array([np.exp(1.0j * x * phase_slopes_x
+                                + 1.0j * y * phase_slopes_y) for x, y in zip(xs, ys)])
 
         x_slope_est, y_slope_est = abscal.dft_phase_slope_solver(xs, ys, data)
         np.testing.assert_array_almost_equal(phase_slopes_x - x_slope_est, 0, decimal=7)
         np.testing.assert_array_almost_equal(phase_slopes_y - y_slope_est, 0, decimal=7)
 
 
+@pytest.mark.filterwarnings("ignore:invalid value encountered in true_divide")
+@pytest.mark.filterwarnings("ignore:divide by zero encountered in true_divide")
+@pytest.mark.filterwarnings("ignore:divide by zero encountered in log")
 class Test_Abscal_Solvers(object):
-    def test_abs_amp_lincal(self):
+    def test_abs_amp_lincal_1pol(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
-        
-        # test 1 pol
         reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
         model = {bl: np.ones((10, 5)) for red in reds for bl in red}
         data = {bl: 4.0 * np.ones((10, 5)) for red in reds for bl in red}
@@ -271,7 +272,8 @@ class Test_Abscal_Solvers(object):
         for ant in ants:
             np.testing.assert_array_equal(gains[ant], 2.0) 
 
-        # test 4 pol
+    def test_abs_amp_lincal_4pol(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
         reds = redcal.get_reds(antpos, pols=['ee', 'en', 'ne', 'nn'], pol_mode='4pol')
         model = {bl: np.ones((10, 5)) for red in reds for bl in red}
         gain_products = {'ee': 4.0, 'en': 6.0, 'ne': 6.0, 'nn': 9.0}
@@ -290,6 +292,288 @@ class Test_Abscal_Solvers(object):
                 np.testing.assert_array_equal(gains[ant], 2.0)
             elif ant[1] == 'Jnn':
                 np.testing.assert_array_equal(gains[ant], 3.0)
+
+    def test_TT_phs_logcal_1pol_assume_2D(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        bl_vecs = {bl: antpos[bl[0]] - antpos[bl[1]] for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [.01, .02, 0]))
+        data[0, 1, 'ee'][0, 0] = np.nan
+        data[0, 1, 'ee'][0, 1] = np.inf
+        model[0, 1, 'ee'][0, 0] = np.nan
+        model[0, 1, 'ee'][0, 1] = np.inf
+        fit = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True)
+        np.testing.assert_array_almost_equal(fit['Phi_ew_Jee'], .01)
+        np.testing.assert_array_almost_equal(fit['Phi_ns_Jee'], .02)
+
+        ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
+        gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
+
+    def test_TT_phs_logcal_4pol_assume_2D(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee', 'en', 'ne', 'nn'], pol_mode='4pol')
+        model = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        bl_vecs = {bl: antpos[bl[0]] - antpos[bl[1]] for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [.01, .02, 0]))
+        data[0, 1, 'ee'][0, 0] = np.nan
+        data[0, 1, 'ee'][0, 1] = np.inf
+        model[0, 1, 'ee'][0, 0] = np.nan
+        model[0, 1, 'ee'][0, 1] = np.inf
+        fit = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True, four_pol=True)
+        np.testing.assert_array_almost_equal(fit['Phi_ew'], .01)
+        np.testing.assert_array_almost_equal(fit['Phi_ns'], .02)
+
+        ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
+        gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=True, four_pol=True, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, 0])) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
+
+    def test_TT_phs_logcal_1pol_nDim(self):
+        # test assume_2D=False by introducing another 6 element hex 100 m away
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        antpos2 = hex_array(2, split_core=False, outriggers=0)
+        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([100, 0, 0]) for ant in antpos2})
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        antpos = redcal.reds_to_antpos(reds)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol', bl_error_tol=1e-10)
+        model = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((10, 5), dtype=complex) for red in reds for bl in red}
+        bl_vecs = {bl: antpos[bl[0]] - antpos[bl[1]] for bl in data}
+
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [.01, .02, .03]))
+        data[0, 1, 'ee'][0, 0] = np.nan
+        data[0, 1, 'ee'][0, 1] = np.inf
+        model[0, 1, 'ee'][0, 0] = np.nan
+        model[0, 1, 'ee'][0, 1] = np.inf
+        fit = abscal.TT_phs_logcal(model, data, antpos, assume_2D=False)
+        np.testing.assert_array_almost_equal(fit['Phi_0_Jee'], .01)
+        np.testing.assert_array_almost_equal(fit['Phi_1_Jee'], .02)
+        np.testing.assert_array_almost_equal(fit['Phi_2_Jee'], .03)
+
+        ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
+        gains = abscal.TT_phs_logcal(model, data, antpos, assume_2D=False, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        true_gains = {ant: np.exp(1.0j * np.dot(antpos[ant[0]], [.01, .02, .03])) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant])
+
+    def test_delay_slope_lincal_1pol_assume_2D(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {bl: np.ones((2, 1024), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((2, 1024), dtype=complex) for red in reds for bl in red}
+        freqs = np.linspace(100e6, 200e6, 1024)
+        df = np.median(np.diff(freqs))
+
+        ants = sorted(list(set([ant for bl in data for ant in utils.split_bl(bl)])))
+        true_dlys = {ant: np.dot([1e-9, 2e-9, 0], antpos[ant[0]]) for ant in ants}
+        true_gains = {ant: np.outer(np.ones(2), np.exp(2.0j * np.pi * true_dlys[ant] * (freqs))) for ant in ants}
+
+        for bl in data:
+            ant0, ant1 = utils.split_bl(bl)
+            data[bl] *= true_gains[ant0] * np.conj(true_gains[ant1])
+
+        fit = abscal.delay_slope_lincal(model, data, antpos, df=df, assume_2D=True, time_avg=True)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_ew_Jee'], 1.0, decimal=3)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_ns_Jee'], 2.0, decimal=3)
+
+        gains = abscal.delay_slope_lincal(model, data, antpos, df=df, f0=freqs[0], assume_2D=True, time_avg=True, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant], decimal=3)
+
+    def test_delay_slope_lincal_4pol_assume_2D(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee', 'en', 'ne', 'nn'], pol_mode='4pol')
+        model = {bl: np.ones((2, 1024), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((2, 1024), dtype=complex) for red in reds for bl in red}
+        freqs = np.linspace(100e6, 200e6, 1024)
+        df = np.median(np.diff(freqs))
+
+        ants = sorted(list(set([ant for bl in data for ant in utils.split_bl(bl)])))
+        true_dlys = {ant: np.dot([1e-9, 2e-9, 0], antpos[ant[0]]) for ant in ants}
+        true_gains = {ant: np.outer(np.ones(2), np.exp(2.0j * np.pi * true_dlys[ant] * (freqs))) for ant in ants}
+
+        for bl in data:
+            ant0, ant1 = utils.split_bl(bl)
+            data[bl] *= true_gains[ant0] * np.conj(true_gains[ant1])
+
+        fit = abscal.delay_slope_lincal(model, data, antpos, df=df, assume_2D=True, four_pol=True)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_ew'], 1.0, decimal=3)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_ns'], 2.0, decimal=3)
+
+        gains = abscal.delay_slope_lincal(model, data, antpos, df=df, f0=freqs[0], assume_2D=True, four_pol=True, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant], decimal=3)
+
+    def test_delay_slope_lincal_1pol_nDim(self):
+        antpos = hex_array(2, split_core=False, outriggers=0)
+        antpos2 = hex_array(2, split_core=False, outriggers=0)
+        antpos.update({len(antpos) + ant: antpos2[ant] + np.array([100, 0, 0]) for ant in antpos2})
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        antpos = redcal.reds_to_antpos(reds)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol', bl_error_tol=1e-10)
+        model = {bl: np.ones((2, 1024), dtype=complex) for red in reds for bl in red}
+        data = {bl: np.ones((2, 1024), dtype=complex) for red in reds for bl in red}
+        freqs = np.linspace(100e6, 200e6, 1024)
+        df = np.median(np.diff(freqs))
+
+        ants = sorted(list(set([ant for bl in data for ant in utils.split_bl(bl)])))
+        true_dlys = {ant: np.dot([1e-9, 2e-9, 3e-9], antpos[ant[0]]) for ant in ants}
+        true_gains = {ant: np.outer(np.ones(2), np.exp(2.0j * np.pi * true_dlys[ant] * (freqs))) for ant in ants}
+
+        for bl in data:
+            ant0, ant1 = utils.split_bl(bl)
+            data[bl] *= true_gains[ant0] * np.conj(true_gains[ant1])
+
+        fit = abscal.delay_slope_lincal(model, data, antpos, df=df, assume_2D=False)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_0_Jee'], 1.0, decimal=3)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_1_Jee'], 2.0, decimal=3)
+        np.testing.assert_array_almost_equal(1e9 * fit['T_2_Jee'], 3.0, decimal=3)
+
+        gains = abscal.delay_slope_lincal(model, data, antpos, df=df, f0=freqs[0], assume_2D=False, return_gains=True, gain_ants=ants)
+        rephased_gains = {ant: gains[ant] / gains[ants[0]] * np.abs(gains[ants[0]]) for ant in ants}
+        rephased_true_gains = {ant: true_gains[ant] / true_gains[ants[0]] * np.abs(true_gains[ants[0]]) for ant in ants}
+        for ant in ants:
+            np.testing.assert_array_almost_equal(rephased_gains[ant], rephased_true_gains[ant], decimal=3)
+
+    def test_ndim_fft_phase_slope_solver_1D_ideal_antpos(self):
+        antpos = linear_array(50)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        data = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-1.2]))
+
+        phase_slopes = abscal.ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=False, zero_pad=3, bl_error_tol=1e-8)
+        for ps, answer in zip(phase_slopes, [-1.2]):
+            assert ps.shape == (2, 3)
+            np.testing.assert_array_less(np.abs(ps - answer), .1)
+
+    def test_ndim_fft_phase_slope_solver_2D_ideal_antpos(self):
+        antpos = hex_array(6, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        data = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-1, .1]))
+
+        phase_slopes = abscal.ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=False, zero_pad=3, bl_error_tol=1e-8)
+        for ps, answer in zip(phase_slopes, [-1, .1]):
+            assert ps.shape == (2, 3)
+            np.testing.assert_array_less(np.abs(ps - answer), .2)
+
+    def test_ndim_fft_phase_slope_solver_3D_ideal_antpos(self):
+        antpos = hex_array(4, split_core=False, outriggers=0)
+        antpos2 = hex_array(4, split_core=False, outriggers=0)
+        for d in [100.0, 200.0, 300.0, 400.0]:
+            antpos.update({len(antpos) + ant: antpos2[ant] + np.array([d, 0, 0]) for ant in antpos2})
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        data = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-1, -.1, 2.5]))
+
+        phase_slopes = abscal.ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=False, zero_pad=3, bl_error_tol=1e-8)
+        for ps, answer in zip(phase_slopes, [-1, -.1, 2.5]):
+            assert ps.shape == (2, 3)
+            np.testing.assert_array_less(np.abs(ps - answer), .2)
+
+    def test_ndim_fft_phase_slope_solver_assume_2D_real_antpos(self):
+        antpos = hex_array(8, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        data = {red[0]: np.ones((2, 3), dtype=complex) for red in reds}
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-.02, .03, 0]))
+
+        phase_slopes = abscal.ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=True, zero_pad=3, bl_error_tol=1)
+        for ps, answer in zip(phase_slopes, [-.02, .03]):
+            assert ps.shape == (2, 3)
+            np.testing.assert_array_less(np.abs(ps - answer), .003)
+
+    def test_global_phase_slope_logcal_2D(self):
+        antpos = hex_array(5, split_core=False, outriggers=0)
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        uncal_data = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in uncal_data}
+        for bl in uncal_data:
+            uncal_data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-.2, 1]))
+
+        # test results when fit is returned
+        fit = abscal.global_phase_slope_logcal(model, uncal_data, antpos, solver='ndim_fft', assume_2D=False, verbose=False)
+        fit2 = abscal.global_phase_slope_logcal(model, uncal_data, antpos, solver='ndim_fft', assume_2D=True, verbose=False)
+        np.testing.assert_array_equal(fit['Phi_0_Jee'], fit2['Phi_ew_Jee'])
+        np.testing.assert_array_equal(fit['Phi_1_Jee'], fit2['Phi_ns_Jee'])
+        for f, answer in zip(fit.values(), [-.2, 1]):
+            assert f.shape == (2, 1)
+            np.testing.assert_array_less(np.abs(f - answer), .2)
+
+        ants = sorted(list(set([ant for bl in uncal_data for ant in utils.split_bl(bl)])))
+        # try doing the first iteration with either dft or ndim_fft
+        for solver in ['dft', 'ndim_fft']:
+            data = copy.deepcopy(uncal_data)
+            for i in range(8):
+                if i == 0:
+                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver=solver, assume_2D=True, 
+                                                             time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
+                else:
+                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False, 
+                                                             time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
+                calibrate_in_place(data, gains)
+            np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0)
+
+    def test_global_phase_slope_logcal_3D(self):
+        antpos = hex_array(3, split_core=False, outriggers=0)
+        antpos2 = hex_array(3, split_core=False, outriggers=0)
+        for d in [100.0, 200.0, 300.0]:
+            antpos.update({len(antpos) + ant: antpos2[ant] + np.array([d, 0, 0]) for ant in antpos2})
+
+        reds = redcal.get_reds(antpos, pols=['ee'], pol_mode='1pol')
+        model = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        data = DataContainer({bl: np.ones((2, 3), dtype=complex) for red in reds for bl in red})
+        antpos = redcal.reds_to_antpos(reds)
+        bl_vecs = {bl: (antpos[bl[0]] - antpos[bl[1]]) for bl in data}
+        for bl in data:
+            data[bl] *= np.exp(1.0j * np.dot(bl_vecs[bl], [-.8, -.1, .5]))
+
+        ants = sorted(list(set([ant for bl in data for ant in utils.split_bl(bl)])))
+        for i in range(10):
+            if i == 0:
+                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='ndim_fft', assume_2D=False, 
+                                                         time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
+            else:
+                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False, 
+                                                         time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
+            calibrate_in_place(data, gains)
+        np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0, 5)
 
 
 @pytest.mark.filterwarnings("ignore:The default for the `center` keyword has changed")
