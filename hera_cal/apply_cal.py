@@ -254,7 +254,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # set atol to be 1/10th of a channel
             if np.any(np.isclose(hc.freqs, f, rtol=0., atol=atol)):
                 freqs_to_load.append(f)
-        old_hc.select(frequencies=np.asarray(freqs_to_load)) # match up frequencies with hc.freqs
+        old_hc.select(frequencies=np.asarray(freqs_to_load))  # match up frequencies with hc.freqs
         old_gains, old_flags, _, _ = old_hc.build_calcontainers()
         add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
     else:
