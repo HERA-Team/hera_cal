@@ -244,8 +244,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilename, even_outfilename, odd_o
             hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
             hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
             # set time array to avoid floating point mismatches.
-            external_flags.time_array = np.unique(hd_sum.time_array)
             if external_flags is not None:
+                external_flags.time_array = np.unique(hd_sum.time_array)
                 from hera_qm.xrfi import flag_apply
                 flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=True)
                 flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=True)
@@ -267,8 +267,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilename, even_outfilename, odd_o
         hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
         hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
         # set time array to avoid floating point mismatches.
-        external_flags.time_array = np.unique(hd_sum.time_array)
         if external_flags is not None:
+            external_flags.time_array = np.unique(hd_sum.time_array)
             from hera_qm.xrfi import flag_apply
             flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=True)
             flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=True)
