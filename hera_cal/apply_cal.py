@@ -217,6 +217,7 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilename, even_outfilename, odd_o
         external_flags = UVFlag(external_flags)
         atol = np.mean(np.diff(external_flags.time_array)) / 10.
         times_select = np.unique([t for t in external_flags.time_array if np.any(np.isclose(t, hd_sum.times, rtol=0, atol=atol))])
+        atol = np.mean(np.diff(external_flags.freq_array.squeeze())) / 10.
         freqs_select = np.unique([f for f in external_flags.freq_array if np.any(np.isclose(f, hd_sum.freqs,rtol=0, atol=atol))])
         external_flags.select(times=times_select, frequencies=freqs_select)
     # select external flags by time and frequency
@@ -242,6 +243,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilename, even_outfilename, odd_o
                     diff_flags[k][:] = False
             hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
             hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
+            # set time array to avoid floating point mismatches.
+            external_flags.time_array = np.unique(hd_sum.time_array)
             if external_flags is not None:
                 from hera_qm.xrfi import flag_apply
                 flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=True)
@@ -263,6 +266,8 @@ def sum_diff_2_even_odd(sum_infilename, diff_infilename, even_outfilename, odd_o
                 diff_flags[k][:] = False
         hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
         hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
+        # set time array to avoid floating point mismatches.
+        external_flags.time_array = np.unique(hd_sum.time_array)
         if external_flags is not None:
             from hera_qm.xrfi import flag_apply
             flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=True)
