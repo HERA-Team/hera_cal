@@ -3,15 +3,15 @@
 # Copyright 2019 the HERA Project
 # Licensed under the MIT License
 
-from hera_cal import apply_cal
+from hera_cal import arithmetic
 
-a = apply_cal.sum_diff_2_even_odd_argparser()
+a = arithmetic.sum_diff_2_even_odd_argparser()
 args = a.parse_args()
 
 if args.nbl_per_load == "none" or args.nbl_per_load == 0:
     args.nbl_per_load = None
 
-apply_cal.sum_diff_2_even_odd(sum_infilename=args.sumfilename,
+arithmetic.sum_diff_2_even_odd(sum_infilename=args.sumfilename,
                               diff_infilename=args.difffilename,
                               even_outfilename=args.evenfilename,
                               odd_outfilename=args.oddfilename,

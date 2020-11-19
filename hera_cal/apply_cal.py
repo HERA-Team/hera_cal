@@ -178,103 +178,6 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                 else:
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
-def sum_diff_2_even_odd(sum_infilename, diff_infilename, even_outfilename, odd_outfilename,
-                        nbl_per_load=None, filetype_in='uvh5', external_flags=None,
-                        overwrite_data_flags=False, clobber=False, polarizations=None):
-    """Generate even and odd data sets from sum and diff
-
-    Arguments:
-        sum_infilename: str
-            filename for sum file.
-        diff_infilename: str
-            filename for diff file.
-        even_outfilename: str
-            filename to write even.
-        odd_outfilename: str
-            filename to write odd.
-        nbl_per_load: int, optional
-            number of baselines to load simultaneously
-            default, None results in all baselines loaded.
-        filetype_in: str, optional
-            file_type
-        external_flags: str, optional
-            Name of external flags to apply.
-        overwrite_data_flags: bool, optional
-            if true, ovewrite flags of non-fully flagged baselines with external flags.
-        clobber: bool, optional
-            clobber output files if they already exist.
-        polarizations: list of strs, optional
-            list of string pols to include in output. If no provided
-
-    Returns
-    -------
-    sum and diff files.
-    """
-    hd_sum = io.HERAData(sum_infilename, filetype=filetype_in)
-    hd_diff = io.HERAData(diff_infilename, filetype=filetype_in)
-    # set tolerance to one tenth of an integration time.
-    if external_flags is not None:
-        external_flags = UVFlag(external_flags)
-        atol = np.mean(np.diff(external_flags.time_array)) / 10.
-        times_select = np.unique([t for t in external_flags.time_array if np.any(np.isclose(t, hd_sum.times, rtol=0, atol=atol))])
-        atol = np.mean(np.diff(external_flags.freq_array.squeeze())) / 10.
-        freqs_select = np.unique([f for f in external_flags.freq_array if np.any(np.isclose(f, hd_sum.freqs,rtol=0, atol=atol))])
-        external_flags.select(times=times_select, frequencies=freqs_select)
-    # select external flags by time and frequency
-    if polarizations is None:
-        if filetype_in == 'uvh5':
-            polarizations = hd_sum.pols
-        else:
-            raise NotImplementedError("Must specify pols if operating on non uvh5 data.")
-    if nbl_per_load is not None:
-        if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
-            raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
-        for sum, sum_flags, sum_nsamples in hd_sum.iterate_over_bls(Nbls=nbl_per_load, pols_to_load=polarizations):
-            diff, diff_flags, diff_nsamples = hd_diff.load(bls=list(sum.keys()))
-            sum = (sum + diff)
-            diff = sum - diff - diff
-            for k in sum_flags:
-                sum_flags[k] = sum_flags[k]
-                diff_flags[k] = sum_flags[k]
-                diff_nsamples[k] = sum_nsamples[k]
-                sum_nsamples[k] = diff_nsamples[k]
-                if overwrite_data_flags and not np.all(sum_flags[k]) and external_flags is not None:
-                    sum_flags[k][:] = False
-                    diff_flags[k][:] = False
-            hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
-            hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
-            # set time array to avoid floating point mismatches.
-            if external_flags is not None:
-                external_flags.time_array = np.unique(hd_sum.time_array)
-                from hera_qm.xrfi import flag_apply
-                flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=True)
-                flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=True)
-            hd_sum.partial_write(even_outfilename, inplace=True, clobber=clobber)
-            hd_diff.partial_write(odd_outfilename, inplace=True, clobber=clobber)
-    else:
-        sum, sum_flags, sum_nsamples = hd_sum.read(polarizations=polarizations)
-        diff, diff_flags, diff_nsamples = hd_diff.read(polarizations=polarizations)
-        sum = (sum + diff)
-        diff = sum - diff - diff
-        for k in sum_flags:
-            sum_flags[k] = sum_flags[k]
-            diff_flags[k] = sum_flags[k]
-            diff_nsamples[k] = sum_nsamples[k]
-            sum_nsamples[k] = diff_nsamples[k]
-            if overwrite_data_flags and not np.all(sum_flags[k]) and external_flags is not None:
-                sum_flags[k][:] = False
-                diff_flags[k][:] = False
-        hd_sum.update(data=sum, flags=sum_flags, nsamples=sum_nsamples)
-        hd_diff.update(data=diff, flags=diff_flags, nsamples=diff_nsamples)
-        # set time array to avoid floating point mismatches.
-        if external_flags is not None:
-            external_flags.time_array = np.unique(hd_sum.time_array)
-            from hera_qm.xrfi import flag_apply
-            flag_apply(external_flags, hd_sum, force_pol=True, keep_existing=True)
-            flag_apply(external_flags, hd_diff, force_pol=True, keep_existing=True)
-        hd_sum.write_uvh5(even_outfilename, clobber=clobber)
-        hd_diff.write_uvh5(odd_outfilename, clobber=clobber)
-    return hd_sum, hd_diff
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
@@ -476,20 +379,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             else:
                 raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
 
-def sum_diff_2_even_odd_argparser():
-    '''Arg parser for even/odd to sum/diff function.'''
-    a = argparse.ArgumentParser(description="Convert a sum and a diff file to an even and an odd file.")
-    a.add_argument("sumfilename", type=str, help="name of sum file.")
-    a.add_argument("difffilename", type=str, help="name of diff file.")
-    a.add_argument("evenfilename", type=str, help="name of even file.")
-    a.add_argument("oddfilename", type=str, help="name of odd file.")
-    a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only.")
-    a.add_argument("--clobber", default=False, action="store_true")
-    a.add_argument("--external_flags", default=None, type=str, help="name of external flag file(s) to apply.")
-    a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Overwrite existing data flags with external flags\
-                                                                                       for antennas that are not entirely flagged.")
-    a.add_argument("--polarizations", default=None, type=str, nargs="+", help="polarizations to include in output.")
-    return a
 
 def apply_cal_argparser():
     '''Arg parser for commandline operation of apply_cal.'''
