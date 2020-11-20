@@ -510,9 +510,9 @@ class Test_VisClean(object):
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
 
-    def test_reconstitute_files_argparser(self):
+    def time_chunk_from_baseline_chunks_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--fragmentlist', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
-        parser = vis_clean.reconstitute_files_argparser()
+        parser = vis_clean.time_chunk_from_baseline_chunks_argparser()
         a = parser.parse_args()
         assert a.clobber
         for char in ['a', 'b', 'c', 'd']:
@@ -549,9 +549,9 @@ class Test_VisClean(object):
         for filenum, file in enumerate(datafiles):
             # reconstitute
             fname = 'temp.reconstituted.part.%d.h5' % filenum
-            vis_clean.reconstitute_files(templatefile=file,
-                                         fragments=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
-                                         outfilename=str(tmp_path / fname))
+            vis_clean.time_chunk_from_baseline_chunks(time_chunk_template=file,
+                                                      baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
+                                                      outfilename=str(tmp_path / fname))
         # load in the reconstituted files.
         hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
         hd_reconstituted.read()
