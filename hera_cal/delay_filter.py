@@ -54,8 +54,6 @@ class DelayFilter(VisClean):
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
-            factorize_flags: bool, optional
-                If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
             time_thresh : float
                 Fractional threshold of flagged pixels across time needed to flag all times
                 per freq channel. It is not recommend to set this greater than 0.5.
@@ -143,8 +141,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
-                               clobber=clobber, add_to_history=add_to_history,
-                               extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': np.asarray([df.freqs])})
+                               clobber=clobber, add_to_history=add_to_history)
     else:
         for i in range(0, len(hd.bls), Nbls_per_load):
             df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
@@ -169,8 +166,10 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     Arguments:
         datafile_list: list of data files to perform cross-talk filtering on
         baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
-        calfile_list: optional list of calibration files to apply to data before xtalk filtering
-        spw_range: 2-tuple or 2-list, spw_range of data to filter.
+        calfile_list: optional list of calibration files to apply to data before delay filtering
+        spw_range: 2-tuple or 2-list, channel index spw_range of data to filter
+                   uses python format where bottom index is included and upper index is excluded.
+                   default, None, uses full spw range (0,Nfreqs)
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
                     see uvtools.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.

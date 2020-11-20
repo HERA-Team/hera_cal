@@ -139,8 +139,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
-                               clobber=clobber, add_to_history=add_to_history,
-                               extra_attrs={'Nfreqs': xf.Nfreqs, 'freq_array': np.asarray([xf.freqs])})
+                               clobber=clobber, add_to_history=add_to_history)
     else:
         for i in range(0, hd.Nbls, Nbls_per_load):
             xf = XTalkFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
