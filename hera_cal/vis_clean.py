@@ -681,12 +681,12 @@ class VisClean(object):
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
 
         # initialize containers
-        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data']]
+        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
         for i, dc in enumerate(containers):
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
             containers[i] = getattr(self, dc)
-        filtered_model, filtered_resid, filtered_flags, filtered_data = containers
+        filtered_model, filtered_resid, filtered_flags, filtered_data, resid_flags = containers
         filtered_info = "{}_{}".format(output_prefix, 'info')
         if not hasattr(self, filtered_info):
             setattr(self, filtered_info, {})
@@ -826,8 +826,9 @@ class VisClean(object):
             if not flag_filled:
                 filtered_flags[k] = skipped
             else:
-                filtered_flags[k] = copy.deepcopy(flags[k])
+                filtered_flags[k] = copy.deepcopy(flags[k]) | skipped
             filtered_info[k] = info
+            resid_flags[k] = copy.deepcopy(flags[k]) | skipped
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
@@ -1084,7 +1085,7 @@ class VisClean(object):
                                          [res_outfilename, CLEAN_outfilename, filled_outfilename]):
                 if outfilename is not None:
                     if mode == 'residual':
-                        data_out, flags_out = getattr(self, prefix + '_resid'), self.flags
+                        data_out, flags_out = getattr(self, prefix + '_resid'), getattr(self, prefix + '_resid_flags')
                     elif mode == 'CLEAN':
                         data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
                     elif mode == 'filled':
@@ -1634,7 +1635,14 @@ def reconstitute_files(templatefile, fragments, outfilename, clobber=False, time
         # with the fragment data.
         for fragment in fragments:
             hd_fragment = io.HERAData(fragment)
-            d, f, n = hd_fragment.read(times=times, axis='blt')
+            # find times that are close.
+            tload = []
+            atol = np.mean(np.diff(hd_fragment.times)) / 10.
+            all_times = np.unique(hd_fragment.times)
+            for t in all_times:
+                if np.any(np.isclose(t, hd_template.times, atol=atol, rtol=0)):
+                    tload.append(t)
+            d, f, n = hd_fragment.read(times=tload, axis='blt')
             hd_template.update(flags=f, data=d, nsamples=n)
         # now that we've updated everything, we write the output file.
         hd_template.write_uvh5(outfilename, clobber=clobber)

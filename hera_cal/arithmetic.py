@@ -8,9 +8,10 @@ import argparse
 import numpy as np
 import sys
 import warnings
+from pyuvdata import UVFlag
 
 
-def sum_files(file_list, outfilename, flag_mode="and", nsamples_mode="average", clobber=False):
+def sum_files(file_list, outfilename, flag_mode="and", nsample_mode="average", clobber=False):
     """Add the contents of different pyuvdata files together.
 
     Arguments:
@@ -21,7 +22,7 @@ def sum_files(file_list, outfilename, flag_mode="and", nsamples_mode="average", 
         flag_mode: str, optional
             string specifying out how to combine flags. Options are "and" and "or".
             default is "and".
-        nsamples_mode: str, optional
+        nsample_mode: str, optional
             specify how to combine nsamples. Options are "sum": add together or
             "average", average them.
         clobber: bool, optional
@@ -36,11 +37,11 @@ def sum_files(file_list, outfilename, flag_mode="and", nsamples_mode="average", 
     d, f, n = hd.read()
     if nsample_mode == "average":
         n /= len(file_list)
-    for dfile in file_list:
+    for dfile in file_list[1:]:
         hdt = io.HERAData(dfile)
         dt, ft, nt = hdt.read()
-        d = d + dt
         for k in f:
+            d[k] = d[k] + dt[k]
             if flag_mode == "and":
                 f[k] = f[k] & ft[k]
             elif flag_mode  == "or":
@@ -54,7 +55,7 @@ def sum_files(file_list, outfilename, flag_mode="and", nsamples_mode="average", 
             else:
                 raise ValueError(f"{nsample_mode} is an invalid nsample_mode. valid modes are ('sum', 'average')")
     hd.update(data=d, nsamples=n, flags=f)
-    hd.write_uvh5(outfilename)
+    hd.write_uvh5(outfilename, clobber=clobber)
     return hd
 
 
