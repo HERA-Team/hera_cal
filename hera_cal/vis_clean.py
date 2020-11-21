@@ -1666,20 +1666,25 @@ def _dpss_argparser(multifile=False):
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     return a
 
-def reconstitute_files(templatefile, fragments, outfilename, clobber=False, time_bounds=False):
-    """Recombine xtalk products into short-time files.
+def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, outfilename, clobber=False, time_bounds=False):
+    """Combine multiple waterfall files (with disjoint baseline sets) into time-limited file with all baselines.
 
-    Construct a new file based on templatefile that combines the files in file_fragments
-    over the times in template file.
+    The methods delay_filter.load_delay_filter_and_write_baseline_list and
+    xtalk_filter.load_xtalk_filter_and_write_baseline_list convert time-chunk files with all baselines into
+    baseline-chunk files with all times. This function takes in a list of baseline-chunk files (baseline_chunk_files)
+    and outputs a time-chunk file with all baselines with the same times as templatefile.
 
     Arguments
     ---------
-    templatefile : string
-        name of the file to use as a template. Will reconstitute the file_fragments over the times in templatefile.
+    time_chunk_template : string
+        path to file to use as a template for the time-chunk. Function selects times from time-chunk
+        that exist in baseline_chunks for all baseline chunks and combines them into a single file.
+        If the frequenies of the baseline_chunk files are a subset of the frequencies in the time_chunk, then
+        output will trim the extra frequencies in the time_chunk and write out trimmed freqs.
+    baseline_chunk_files : list of strings
+        list of paths to baseline-chunk files to select time-chunk file from.
     outfilename : string
-        name of the output file
-    file_fragments : list of strings
-        list of file names to use reconstitute.
+        name of the output file to write.
     clobber : bool optional.
         If False, don't overwrite outfilename if it already exists. Default is False.
     time_bounds: bool, optional
@@ -1687,53 +1692,56 @@ def reconstitute_files(templatefile, fragments, outfilename, clobber=False, time
         If True, generate a new file from the file list that keeps times between min/max of
             the times in the template_file. This is helpful if the times dont match in the reconstituted
             data but we want to use the template files to determine time ranges.
+            Main application: reconstituting coherently averaged waterfalls into time-chunks that map to
+            the original data files.
 
     Returns
     -------
         Nothing
     """
-    hd_template = io.HERAData(templatefile)
-    hd_fragment = io.HERAData(fragments[0])
-    times = hd_template.times
-    freqs = hd_fragment.freqs
-    polarizations = hd_fragment.pols
+    hd_time_chunk = io.HERAData(time_chunk_template)
+    hd_baseline_chunk = io.HERAData(baseline_chunk_files[0])
+    times = hd_time_chunk.times
+    freqs = hd_baseline_chunk.freqs
+    polarizations = hd_baseline_chunk.pols
     # read in the template file, but only include polarizations, frequencies
-    # from the fragment files.
+    # from the baseline_chunk_file files.
     if not time_bounds:
-        hd_template.read(times=times, frequencies=freqs, polarizations=polarizations)
-        # for each fragment, read in only the times relevant to the templatefile.
+        hd_time_chunk.read(times=times, frequencies=freqs, polarizations=polarizations)
+        # for each baseline_chunk_file, read in only the times relevant to the templatefile.
         # and update the data, flags, nsamples array of the template file
-        # with the fragment data.
-        for fragment in fragments:
-            hd_fragment = io.HERAData(fragment)
+        # with the baseline_chunk_file data.
+        for baseline_chunk_file in baseline_chunk_files:
+            hd_baseline_chunk = io.HERAData(baseline_chunk_file)
             # find times that are close.
             tload = []
-            atol = np.mean(np.diff(hd_fragment.times)) / 10.
-            all_times = np.unique(hd_fragment.times)
+            # use tolerance in times that is set by the time resolution of the dataset.
+            atol = np.mean(np.diff(hd_baseline_chunk.times)) / 10.
+            all_times = np.unique(hd_baseline_chunk.times)
             for t in all_times:
-                if np.any(np.isclose(t, hd_template.times, atol=atol, rtol=0)):
+                if np.any(np.isclose(t, hd_time_chunk.times, atol=atol, rtol=0)):
                     tload.append(t)
-            d, f, n = hd_fragment.read(times=tload, axis='blt')
-            hd_template.update(flags=f, data=d, nsamples=n)
+            d, f, n = hd_baseline_chunk.read(times=tload, axis='blt')
+            hd_time_chunk.update(flags=f, data=d, nsamples=n)
         # now that we've updated everything, we write the output file.
-        hd_template.write_uvh5(outfilename, clobber=clobber)
+        hd_time_chunk.write_uvh5(outfilename, clobber=clobber)
     else:
-        tmax = hd_template.times.max()
-        tmin = hd_template.times.min()
-        hd_combined = io.HERAData(fragments)
-        t_select = (hd_fragment.times >= tmin) & (hd_fragment.times <= tmax)
-        hd_combined.read(times=hd_fragment.times[t_select], axis='blt')
+        tmax = hd_time_chunk.times.max()
+        tmin = hd_time_chunk.times.min()
+        hd_combined = io.HERAData(baseline_chunk_files)
+        t_select = (hd_baseline_chunk.times >= tmin) & (hd_baseline_chunk.times <= tmax)
+        hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
         hd_combined.write_uvh5(outfilename, clobber=clobber)
 
 
-def reconstitute_files_argparser():
+def time_chunk_from_baseline_chunks_argparser():
     """
     Arg parser for file reconstitution.
     """
-    a = argparse.ArgumentParser(description="Reconstitute fragmented baseline files.")
-    a.add_argument("infilename", type=str, help="name of template file.")
-    a.add_argument("--fragmentlist", type=str, nargs="+", help="list of file fragments to reconstitute")
+    a = argparse.ArgumentParser(description="Construct time-chunk file from baseline-chunk files.")
+    a.add_argument("time_chunk_template", type=str, help="name of template file.")
+    a.add_argument("--baseline_chunk_files", type=str, nargs="+", help="list of file baseline-chunk files to select time-chunk from")
     a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.")
-    a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.", default=False)
+    a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
     a.add_argument("--time_bounds", action="store_true", default=False, help="read times between min and max times of template, regardless of whether they match.")
     return a

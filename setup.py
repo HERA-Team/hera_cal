@@ -45,7 +45,7 @@ setup_args = {
                 'scripts/xtalk_filter_run.py',
                 'scripts/dayenu_delay_filter_run.py',
                 'scripts/dayenu_delay_filter_run_baseline_parallelized.py',
-                'scripts/reconstitute_filtered_files_run.py',
+                'scripts/time_chunk_from_baseline_chunks_run.py',
                 'scripts/smooth_cal_timeavg_run.py',
                 'scripts/sum_diff_2_even_odd.py',
                 'scripts/dpss_xtalk_filter_run_baseline_parallelized.py',
