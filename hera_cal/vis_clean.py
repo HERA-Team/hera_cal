@@ -1447,13 +1447,13 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         hd_combined.write_uvh5(outfilename, clobber=clobber)
 
 
-def reconstitute_files_argparser():
+def time_chunk_from_baseline_chunks_argparser():
     """
     Arg parser for file reconstitution.
     """
-    a = argparse.ArgumentParser(description="Reconstitute fragmented baseline files.")
-    a.add_argument("infilename", type=str, help="name of template file.")
-    a.add_argument("--fragmentlist", type=str, nargs="+", help="list of file fragments to reconstitute")
+    a = argparse.ArgumentParser(description="Construct time-chunk file from baseline-chunk files.")
+    a.add_argument("time_chunk_template", type=str, help="name of template file.")
+    a.add_argument("--baseline_chunk_files", type=str, nargs="+", help="list of file baseline-chunk files to select time-chunk from")
     a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.")
     a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
     return a

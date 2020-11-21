@@ -511,7 +511,7 @@ class Test_VisClean(object):
         assert not a.factorize_flags
 
     def time_chunk_from_baseline_chunks_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--fragmentlist', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--baseline_chunk_files', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
         parser = vis_clean.time_chunk_from_baseline_chunks_argparser()
         a = parser.parse_args()
         assert a.clobber
