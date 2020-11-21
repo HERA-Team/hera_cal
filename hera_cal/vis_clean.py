@@ -1565,7 +1565,6 @@ def _filter_argparser(multifile=False):
         _clean_argparser.
     """
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
-    a.add_argument("--skip_gaps_larger_then_filter_period", default=False, action="store_true", help="skip time/frequency integrations where contiguous flags are greather then half period of shortest delay.")
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
     a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
     a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")

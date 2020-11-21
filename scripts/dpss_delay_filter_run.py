@@ -31,5 +31,5 @@ delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, round_
                                          skip_flagged_edges=a.skip_flagged_edges,
                                          a_priori_flag_yaml=a.a_priori_flag_yaml,
                                          external_flags=a.external_flags,
-                                         skip_gaps_larger_then_filter_period=a.skip_gaps_larger_then_filter_period,
+                                         skip_gaps_larger_then_filter_period=True,
                                          overwrite_data_flags=a.overwrite_data_flags, **filter_kwargs)

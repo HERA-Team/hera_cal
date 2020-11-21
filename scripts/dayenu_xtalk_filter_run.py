@@ -28,5 +28,4 @@ xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, round_
                                          a_priori_flag_yaml=a.a_priori_flag_yaml,
                                          external_flags=a.external_flags,
                                          overwrite_data_flags=a.overwrite_data_flags,
-                                         skip_gaps_larger_then_filter_period=a.skip_gaps_larger_then_filter_period,
                                          **filter_kwargs)
