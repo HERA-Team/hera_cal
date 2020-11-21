@@ -1456,4 +1456,5 @@ def time_chunk_from_baseline_chunks_argparser():
     a.add_argument("--baseline_chunk_files", type=str, nargs="+", help="list of file baseline-chunk files to select time-chunk from")
     a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.")
     a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
+    a.add_argument("--time_bounds", action="store_true", default=False, help="read times between min and max times of template, regardless of whether they match.")
     return a
