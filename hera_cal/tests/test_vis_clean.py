@@ -562,3 +562,22 @@ class Test_VisClean(object):
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
+        assert np.all(np.isclose(hd.flag_array, hd_reconstituted.flag_array))
+        assert np.all(np.isclose(hd.nsamples_array, hd_reconstituted.nsamples_array))
+        # Do the same thing with time-bounds mode.
+        for filenum, file in enumerate(datafiles):
+            # reconstitute
+            fname = 'temp.reconstituted.part.%d.h5' % filenum
+            vis_clean.time_chunk_from_baseline_chunks(time_chunk_template=file,
+                                                      baseline_chunk_files=glob.glob(str(tmp_path / 'temp.fragment.part.*.h5')), clobber=True,
+                                                      outfilename=str(tmp_path / fname), time_bounds=True)
+        # load in the reconstituted files.
+        hd_reconstituted = io.HERAData(glob.glob(str(tmp_path / 'temp.reconstituted.part.*.h5')))
+        hd_reconstituted.read()
+        # compare to xtalk filtering the whole file.
+        xf.load_xtalk_filter_and_write(infilename=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5"),
+                                       calfile=os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only"),
+                                       res_outfilename=str(tmp_path / 'temp.h5'), clobber=True, spw_range=[0, 20])
+        hd = io.HERAData(str(tmp_path / 'temp.h5'))
+        hd.read()
+        assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
