@@ -35,4 +35,5 @@ if len(baseline_list) > 0:
                                                            trim_edges=a.trim_edges, max_contiguous_edge_flags=a.max_contiguous_edge_flags,
                                                            add_to_history=' '.join(sys.argv), external_flags=a.external_flags,
                                                            skip_flagged_edges=a.skip_flagged_edges,
+                                                           skip_gaps_larger_then_filter_period=a.skip_gaps_larger_then_filter_period,
                                                            a_priori_flag_yaml=a.a_priori_flag_yaml, **filter_kwargs)
