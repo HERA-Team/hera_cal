@@ -520,7 +520,7 @@ class Test_VisClean(object):
         assert a.infilename == 'a'
         assert a.outfilename == 'a.out'
 
-    def test_reconstitute_files(self, tmp_path):
+    def test_time_chunk_from_baseline_chunks(self, tmp_path):
         # First, construct some cross-talk baseline files.
         datafiles = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
                      os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
