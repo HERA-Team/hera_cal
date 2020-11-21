@@ -563,7 +563,7 @@ class Test_VisClean(object):
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
         assert np.all(np.isclose(hd.flag_array, hd_reconstituted.flag_array))
-        assert np.all(np.isclose(hd.nsamples_array, hd_reconstituted.nsamples_array))
+        assert np.all(np.isclose(hd.nsample_array, hd_reconstituted.nsample_array))
         # Do the same thing with time-bounds mode.
         for filenum, file in enumerate(datafiles):
             # reconstitute
