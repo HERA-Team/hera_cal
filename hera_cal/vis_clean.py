@@ -366,6 +366,8 @@ class VisClean(object):
                   overwrite=False,
                   skip_flagged_edge_freqs=False,
                   skip_flagged_edge_times=False,
+                  skip_gaps_larger_then_filter_period=False,
+                  flag_filled=False,
                    **filter_kwargs):
         """
         Filter the data
@@ -394,6 +396,7 @@ class VisClean(object):
             time. Skipped channels are then flagged in self.flags.
             Only works properly when all weights are all between 0 and 1.
         verbose : Lots of outputs
+        tol : float, optional. To what level are foregrounds subtracted.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
         skip_flagged_edge_freqs : bool, optional
@@ -402,7 +405,17 @@ class VisClean(object):
         skip_flagged_edge_times : bool, optional
             if true, do not filter over flagged edge times (filter over sub-region)
             defualt is False
-        tol : float, optional. To what level are foregrounds subtracted.
+        skip_gaps_larger_then_filter_period : bool, optional
+            if true, skip integrations or channels with gaps that are larger then the period of
+            of the finest scale mode used for interpolation.
+            default is False.
+        flag_filled : bool, optional
+            if true, set filter flags equal to the original flags (do not unflag interpolated channels)
+            This is useful for cross-talk filtering where the cross-talk modes will not completely interpolate
+            over the channel gaps since there are substantial contributions to the foreground power from fringe-rates
+            that are not being modeled as cross-talk. In this case, we may want a file with the modelled cross-talk included but
+            not used to in-paint flagged integrations.
+            default is False.
         filter_kwargs : optional dictionary, see fourier_filter **filter_kwargs.
                         Do not pass suppression_factors (non-clean)!
                         instead, use tol to set suppression levels in linear filtering.
@@ -465,13 +478,18 @@ class VisClean(object):
                                     x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
                                     ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite,
                                     skip_flagged_edge_freqs=skip_flagged_edge_freqs,
-                                    skip_flagged_edge_times=skip_flagged_edge_times, **filter_kwargs)
+                                    skip_flagged_edge_times=skip_flagged_edge_times,
+                                    skip_gaps_larger_then_filter_period=skip_gaps_larger_then_filter_period,
+                                    flag_filled=flag_filled,
+                                    **filter_kwargs)
             else:
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
                                     ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite,
                                     skip_flagged_edge_freqs=skip_flagged_edge_freqs,
                                     skip_flagged_edge_times=skip_flagged_edge_times,
+                                    skip_gaps_larger_then_filter_period=skip_gaps_larger_then_filter_period,
+                                    flag_filled=flag_filled,
                                     **filter_kwargs)
 
     def fourier_filter(self, filter_centers, filter_half_widths, mode,
@@ -479,6 +497,7 @@ class VisClean(object):
                        output_prefix='clean', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
                        skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
+                       skip_gaps_larger_then_filter_period=False,
                        flag_filled=False,
                        **filter_kwargs):
         """
@@ -565,6 +584,9 @@ class VisClean(object):
         skip_flagged_edge_times : bool, optional
             if true, do not filter over flagged edge times (filter over sub-region)
             defualt is False
+        skip_gaps_larger_then_filter_period : bool, optional
+            if true, skip integrations or channels with gaps that are larger then the period of
+            of the finest scale mode used for interpolation.
         flag_filled : bool, optional
             if true, set filter flags equal to the original flags (do not unflag interpolated channels)
             This is useful for cross-talk filtering where the cross-talk modes will not completely interpolate
@@ -781,6 +803,54 @@ class VisClean(object):
                 xp = xp[ind_lower: ind_upper]
             elif ax == 'freq':
                 xp = xp[ind_left: ind_right]
+
+            # skip half period gaps
+            if skip_gaps_larger_then_filter_period:
+                if ax == 'freq':
+                    for rownum,wrow in enumerate(win):
+                        max_contiguous = 0
+                        current_flag_length = 0
+                        on_flag = False
+                        for w in wrow:
+                            on_flag = (w == 0)
+                            if on_flag:
+                                current_flag_length += 1
+                            else:
+                                if current_flag_length >= max_contiguous:
+                                    max_contiguous = current_flag_length
+                                current_flag_length = 0
+                        if ax=='both':
+                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[1], filter_half_width[1])])
+                            dvoxel = np.mean(np.diff(x[1]))
+                        else:
+                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_width)])
+                            dvoxel = np.mean(np.diff(x))
+                # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
+                        if max_contiguous * dvoxel >= 1 / max_filter_delay:
+                            win[rownum] = 0.
+                if ax == 'time' or ax == 'both':
+                    for rownum,wrow in enumerate(win.T):
+                        max_contiguous = 0
+                        current_flag_length = 0
+                        on_flag = False
+                        for w in wrow:
+                            on_flag = (w == 0)
+                            if on_flag:
+                                current_flag_length += 1
+                            else:
+                                if current_flag_length >= max_contiguous:
+                                    max_contiguous = current_flag_length
+                                current_flag_length = 0
+                        if ax=='both':
+                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_width[0])])
+                            dvoxel = np.mean(np.diff(x[0]))
+                        else:
+                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_width)])
+                            np.mean(np.diff(x))
+                    # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
+                        if max_contiguous * dvoxel >= 1 / max_filter_delay:
+                            win[:, rownum] = 0.
+
 
             mdl[ind_lower: ind_upper][:, ind_left: ind_right], res[ind_lower: ind_upper][:, ind_left: ind_right], info \
             = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
@@ -1495,6 +1565,7 @@ def _filter_argparser(multifile=False):
         _clean_argparser.
     """
     a = argparse.ArgumentParser(description="Perform delay filter of visibility data.")
+    a.add_argument("--skip_gaps_larger_then_filter_period", default=False, action="store_true", help="skip time/frequency integrations where contiguous flags are greather then half period of shortest delay.")
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files (default "uvh5")')
     a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype for output data files (default "uvh5")')
     a.add_argument("--res_outfilename", default=None, type=str, help="path for writing the filtered visibilities with flags")
