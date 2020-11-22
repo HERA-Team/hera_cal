@@ -1421,6 +1421,10 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
     # from the baseline_chunk_file files.
     if not time_bounds:
         hd_time_chunk.read(times=times, frequencies=freqs, polarizations=polarizations)
+        # set the all data to zero, flags to True, and nsamples to zero.
+        hd_time_chunk.nsample_array[:] = 0.0
+        hd_time_chunk.data_array[:] = 0.0 + 0j
+        hd_time_chunk.flag_array[:] = True
         # for each baseline_chunk_file, read in only the times relevant to the templatefile.
         # and update the data, flags, nsamples array of the template file
         # with the baseline_chunk_file data.
@@ -1453,8 +1457,8 @@ def time_chunk_from_baseline_chunks_argparser():
     """
     a = argparse.ArgumentParser(description="Construct time-chunk file from baseline-chunk files.")
     a.add_argument("time_chunk_template", type=str, help="name of template file.")
-    a.add_argument("--baseline_chunk_files", type=str, nargs="+", help="list of file baseline-chunk files to select time-chunk from")
-    a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.")
+    a.add_argument("--baseline_chunk_files", type=str, nargs="+", help="list of file baseline-chunk files to select time-chunk from", required=True)
+    a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.", required=True)
     a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
     a.add_argument("--time_bounds", action="store_true", default=False, help="read times between min and max times of template, regardless of whether they match.")
     return a

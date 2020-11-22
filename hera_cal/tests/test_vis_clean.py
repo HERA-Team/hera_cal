@@ -581,3 +581,5 @@ class Test_VisClean(object):
         hd = io.HERAData(str(tmp_path / 'temp.h5'))
         hd.read()
         assert np.all(np.isclose(hd.data_array, hd_reconstituted.data_array))
+        assert np.all(np.isclose(hd.flag_array, hd_reconstituted.flag_array))
+        assert np.all(np.isclose(hd.nsample_array, hd_reconstituted.nsample_array))
