@@ -516,8 +516,8 @@ class Test_VisClean(object):
         a = parser.parse_args()
         assert a.clobber
         for char in ['a', 'b', 'c', 'd']:
-            assert char in a.fragmentlist
-        assert a.infilename == 'a'
+            assert char in a.baseline_chunk_files
+        assert a.time_chunk_template == 'a'
         assert a.outfilename == 'a.out'
 
     def test_time_chunk_from_baseline_chunks(self, tmp_path):
