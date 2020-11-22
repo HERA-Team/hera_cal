@@ -578,15 +578,16 @@ class Test_VisClean(object):
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
 
-    def test_reconstitute_files_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--clobber', '--fragmentlist', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
-        parser = vis_clean.reconstitute_files_argparser()
+    def test_time_chunk_from_baseline_chunks_argparser(self):
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--baseline_chunk_files', 'a', 'b', 'c', 'd', '--outfilename', 'a.out']
+        parser = vis_clean.time_chunk_from_baseline_chunks_argparser()
         a = parser.parse_args()
         assert a.clobber
         for char in ['a', 'b', 'c', 'd']:
-            assert char in a.fragmentlist
-        assert a.infilename == 'a'
+            assert char in a.baseline_chunk_files
+        assert a.time_chunk_template == 'a'
         assert a.outfilename == 'a.out'
+
 
     def test_time_chunk_from_baseline_chunks(self, tmp_path):
         # First, construct some cross-talk baseline files.
