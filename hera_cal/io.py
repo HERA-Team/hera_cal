@@ -1822,3 +1822,39 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None):
     lower_index = file_index * chunk_size
     upper_index = np.min([(file_index + 1) * chunk_size, nbls])
     return bls[lower_index:upper_index]
+
+
+def initialize_calfits_from_list(calfile_list, baseline_antennas, freqs):
+    """initialize calfile by iterating through calfile_list, selecting the antennas we need,
+        and concatenating.
+
+    Parameters
+    ----------
+    calfile_list : list of strings
+        list of paths to calibration files to concatenate together.
+
+    baseline_antennas : list of ints
+        list of integer antenna numbers that are present in the visibility dataset.
+
+    freqs : array-like
+        list or array of floats giving the frequencies to select.
+
+    Returns:
+    --------
+    HERACal object containing freqs and the antennas specified by baseline antennas
+    across the calibration times in covered by calfile_list.
+
+    """
+    for filenum, calfile in enumerate(calfile_list):
+        cal = UVCal()
+        cal.read_calfits(calfile)
+        # only select calibration antennas that are in the intersection of antennas in
+        # baselines to be filtered and the calibration solution.
+        ants_overlap = np.intersect1d(cal.ant_array, baseline_antennas).astype(int)
+        cal.select(antenna_nums=ants_overlap, frequencies=freqs)
+        if filenum == 0:
+            cals = deepcopy(cal)
+        else:
+            cals = cals + cal
+    cals = io.to_HERACal(cals)
+    return cals

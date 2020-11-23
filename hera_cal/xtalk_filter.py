@@ -197,20 +197,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         baseline_antennas += list(blpolpair[:2])
     baseline_antennas = np.unique(baseline_antennas).astype(int)
     if calfile_list is not None:
-        # initialize calfile by iterating through calfile_list, selecting the antennas we need,
-        # and concatenating.
-        for filenum, calfile in enumerate(calfile_list):
-            cal = UVCal()
-            cal.read_calfits(calfile)
-            # only select calibration antennas that are in the intersection of antennas in
-            # baselines to be filtered and the calibration solution.
-            ants_overlap = np.intersect1d(cal.ant_array, baseline_antennas).astype(int)
-            cal.select(antenna_nums=ants_overlap, frequencies=freqs)
-            if filenum == 0:
-                cals = deepcopy(cal)
-            else:
-                cals = cals + cal
-        cals = io.to_HERACal(cals)
+        cals = io.initialize_calfits_from_list(calfile_list, baseline_antennas, freqs=freqs)
     else:
         cals = None
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
