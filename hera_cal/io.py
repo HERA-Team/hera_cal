@@ -1853,7 +1853,7 @@ def initialize_calfits_from_list(calfile_list, baseline_antennas, freqs):
         ants_overlap = np.intersect1d(cal.ant_array, baseline_antennas).astype(int)
         cal.select(antenna_nums=ants_overlap, frequencies=freqs)
         if filenum == 0:
-            cals = deepcopy(cal)
+            cals = copy.deepcopy(cal)
         else:
             cals = cals + cal
     cals = io.to_HERACal(cals)
