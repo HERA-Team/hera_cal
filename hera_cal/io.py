@@ -1856,5 +1856,5 @@ def initialize_calfits_from_list(calfile_list, baseline_antennas, freqs):
             cals = copy.deepcopy(cal)
         else:
             cals = cals + cal
-    cals = io.to_HERACal(cals)
+    cals = to_HERACal(cals)
     return cals
