@@ -134,12 +134,11 @@ class HERACal(UVCal):
             # load data
             self.read_calfits(self.filepaths[0])
 
-
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
 
             select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies, 
-                           'freq_chans':freq_chans, 'jones': pols}
+                           'freq_chans': freq_chans, 'jones': pols}
             if np.any([s is not None for s in select_dict.values()]):
                 self.select(inplace=True, **select_dict)
             
