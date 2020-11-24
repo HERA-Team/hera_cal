@@ -30,6 +30,9 @@ class Test_HERACal(object):
         self.fname_xx = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.xx.HH.uvc.omni.calfits")
         self.fname_yy = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.yy.HH.uvc.omni.calfits")
         self.fname_both = os.path.join(DATA_PATH, "test_input/zen.2457698.40355.HH.uvcA.omni.calfits")
+        self.fname_t0 = os.path.join(DATA_PATH, 'test_input/zen.2458101.44615.xx.HH.uv.abs.calfits_54x_only')
+        self.fname_t1 = os.path.join(DATA_PATH, 'test_input/zen.2458101.45361.xx.HH.uv.abs.calfits_54x_only')
+        self.fname_t2 = os.path.join(DATA_PATH, 'test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only')
 
     def test_init(self):
         hc = HERACal(self.fname_xx)
@@ -67,6 +70,38 @@ class Test_HERACal(object):
         assert hc.freqs.shape == (1024,)
         assert hc.times.shape == (3,)
         assert sorted(hc.pols) == [parse_jpolstr('jxx', x_orientation=hc.x_orientation), parse_jpolstr('jyy', x_orientation=hc.x_orientation)]
+
+    def test_read_select(self):
+        # test read multiple files and select times
+        hc = io.HERACal([self.fname_t0, self.fname_t1, self.fname_t2])
+        g, _, _, _ = hc.read()
+        g2, _, _, _ = hc.read(times=hc.times[30:90])
+        np.testing.assert_array_equal(g2[54,'Jee'], g[54,'Jee'][30:90, :])
+
+        # test read multiple files and select freqs/chans
+        hc = io.HERACal([self.fname_t0, self.fname_t1, self.fname_t2])
+        g, _, _, _ = hc.read()
+        g2, _, _, _ = hc.read(frequencies=hc.freqs[0:100])
+        g3, _, _, _ = hc.read(freq_chans=np.arange(100))
+        np.testing.assert_array_equal(g2[54,'Jee'], g[54,'Jee'][:, 0:100])
+        np.testing.assert_array_equal(g3[54,'Jee'], g[54,'Jee'][:, 0:100])
+
+        # test select on antenna numbers
+        hc = io.HERACal([self.fname_xx, self.fname_yy])
+        g, _, _, _ = hc.read(antenna_nums=[9, 10])
+        hc2 = io.HERACal(self.fname_both)
+        g2, _, _, _ = hc.read(antenna_nums=[9, 10])
+        for k in g2:
+            assert k[0] in [9, 10]
+            np.testing.assert_array_equal(g[k], g2[k])
+
+        # test select on pols
+        hc = io.HERACal(self.fname_xx)
+        g, _, _, _ = hc.read()
+        hc2 = io.HERACal(self.fname_both)
+        g2, _, _, _ = hc.read(pols=['Jee'])
+        for k in g2:
+            np.testing.assert_array_equal(g[k], g2[k])
 
     def test_write(self):
         hc = HERACal(self.fname_both)
