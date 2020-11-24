@@ -1393,7 +1393,8 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         path to file to use as a template for the time-chunk. Function selects times from time-chunk
         that exist in baseline_chunks for all baseline chunks and combines them into a single file.
         If the frequenies of the baseline_chunk files are a subset of the frequencies in the time_chunk, then
-        output will trim the extra frequencies in the time_chunk and write out trimmed freqs.
+        output will trim the extra frequencies in the time_chunk and write out trimmed freqs. The same is true
+        for polarizations.
     baseline_chunk_files : list of strings
         list of paths to baseline-chunk files to select time-chunk file from.
     outfilename : string
