@@ -106,10 +106,10 @@ class HERACal(UVCal):
     def read(self, antenna_nums=None, frequencies=None, freq_chans=None, times=None, pols=None):
         '''Reads calibration information from file, computes useful metadata and returns
         dictionaries that map antenna-pol tuples to calibration waterfalls. Currently, select options
-        only perform selection after reading, so they are not true partial I/O. However, when 
+        only perform selection after reading, so they are not true partial I/O. However, when
         initialized with a list of calibration files, non-time selection is done before concantenation,
         potentially saving memory.
-        
+
         Arguments:
             antenna_nums : array_like of int, optional. Antenna numbers The antennas numbers to keep
                 in the object (antenna positions and names for the removed antennas will be retained).
@@ -137,11 +137,11 @@ class HERACal(UVCal):
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
 
-            select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies, 
+            select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies,
                            'freq_chans': freq_chans, 'jones': pols}
             if np.any([s is not None for s in select_dict.values()]):
                 self.select(inplace=True, **select_dict)
-            
+
             # If there's more than one file, loop over all files, downselecting and cont
             if len(self.filepaths) > 1:
                 for fp in self.filepaths[1:]:
@@ -150,7 +150,7 @@ class HERACal(UVCal):
                     if np.any([s is not None for s in select_dict.values()]):
                         uvc.select(inplace=True, **select_dict)
                     self += uvc
-        
+
         # downselect times at the very end, since this might exclude some files in the original list
         if times is not None:
             self.select(times=times)
@@ -1822,39 +1822,3 @@ def baselines_from_filelist_position(filename, filelist, polarizations=None):
     lower_index = file_index * chunk_size
     upper_index = np.min([(file_index + 1) * chunk_size, nbls])
     return bls[lower_index:upper_index]
-
-
-def initialize_calfits_from_list(calfile_list, baseline_antennas, freqs):
-    """initialize calfile by iterating through calfile_list, selecting the antennas we need,
-        and concatenating.
-
-    Parameters
-    ----------
-    calfile_list : list of strings
-        list of paths to calibration files to concatenate together.
-
-    baseline_antennas : list of ints
-        list of integer antenna numbers that are present in the visibility dataset.
-
-    freqs : array-like
-        list or array of floats giving the frequencies to select.
-
-    Returns:
-    --------
-    HERACal object containing freqs and the antennas specified by baseline antennas
-    across the calibration times in covered by calfile_list.
-
-    """
-    for filenum, calfile in enumerate(calfile_list):
-        cal = UVCal()
-        cal.read_calfits(calfile)
-        # only select calibration antennas that are in the intersection of antennas in
-        # baselines to be filtered and the calibration solution.
-        ants_overlap = np.intersect1d(cal.ant_array, baseline_antennas).astype(int)
-        cal.select(antenna_nums=ants_overlap, frequencies=freqs)
-        if filenum == 0:
-            cals = copy.deepcopy(cal)
-        else:
-            cals = cals + cal
-    cals = to_HERACal(cals)
-    return cals

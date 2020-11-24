@@ -197,7 +197,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         baseline_antennas += list(blpolpair[:2])
     baseline_antennas = np.unique(baseline_antennas).astype(int)
     if calfile_list is not None:
-        cals = io.initialize_calfits_from_list(calfile_list, baseline_antennas, freqs=freqs)
+        cals = io.HERACal(calfile_list)
+        cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
     else:
         cals = None
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
