@@ -54,10 +54,6 @@ class DelayFilter(VisClean):
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
-            time_thresh : float
-                Fractional threshold of flagged pixels across time needed to flag all times
-                per freq channel. It is not recommend to set this greater than 0.5.
-                Fully flagged integrations do not count towards triggering time_thresh.
             tol : float, optional. To what level are foregrounds subtracted.
             verbose: If True print feedback to stdout
             cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
