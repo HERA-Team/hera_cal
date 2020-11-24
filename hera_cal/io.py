@@ -103,9 +103,23 @@ class HERACal(UVCal):
 
         return gains, flags, quals, total_qual
 
-    def read(self):
+    def read(self, antenna_nums=None, frequencies=None, freq_chans=None, times=None, pols=None):
         '''Reads calibration information from file, computes useful metadata and returns
-        dictionaries that map antenna-pol tuples to calibration waterfalls.
+        dictionaries that map antenna-pol tuples to calibration waterfalls. Currently, select options
+        only perform selection after reading, so they are not true partial I/O. However, when 
+        initialized with a list of calibration files, non-time selection is done before concantenation,
+        potentially saving memory.
+        
+        Arguments:
+            antenna_nums : array_like of int, optional. Antenna numbers The antennas numbers to keep
+                in the object (antenna positions and names for the removed antennas will be retained).
+            frequencies : array_like of float, optional. The frequencies to keep in the object, each
+                value passed here should exist in the freq_array.
+            freq_chans : array_like of int, optional. The frequency channel numbers to keep in the object.
+            times : array_like of float, optional. The times to keep in the object, each value passed
+                here should exist in the time_array of one of the files in input_cal.
+            pols : array_like of str, optional. These strings should be convertable to polarization
+                numbers via pyuvdata's jstr2num e.g. ['Jee'].
 
         Returns:
             gains: dict mapping antenna-pol keys to (Nint, Nfreq) complex gains arrays
@@ -115,10 +129,32 @@ class HERACal(UVCal):
         '''
         # if filepaths is None, this was converted to HERAData
         # from a different pre-loaded object with no history of filepath
+
         if self.filepaths is not None:
             # load data
-            self.read_calfits(self.filepaths)
+            self.read_calfits(self.filepaths[0])
 
+
+            if pols is not None:
+                pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
+
+            select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies, 
+                           'freq_chans':freq_chans, 'jones': pols}
+            if np.any([s is not None for s in select_dict.values()]):
+                self.select(inplace=True, **select_dict)
+            
+            # If there's more than one file, loop over all files, downselecting and cont
+            if len(self.filepaths) > 1:
+                for fp in self.filepaths[1:]:
+                    uvc = UVCal()
+                    uvc.read_calfits(fp)
+                    if np.any([s is not None for s in select_dict.values()]):
+                        uvc.select(inplace=True, **select_dict)
+                    self += uvc
+        
+        # downselect times at the very end, since this might exclude some files in the original list
+        if times is not None:
+            self.select(times=times)
         return self.build_calcontainers()
 
     def update(self, gains=None, flags=None, quals=None, total_qual=None):
