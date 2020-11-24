@@ -76,15 +76,15 @@ class Test_HERACal(object):
         hc = io.HERACal([self.fname_t0, self.fname_t1, self.fname_t2])
         g, _, _, _ = hc.read()
         g2, _, _, _ = hc.read(times=hc.times[30:90])
-        np.testing.assert_array_equal(g2[54,'Jee'], g[54,'Jee'][30:90, :])
+        np.testing.assert_array_equal(g2[54, 'Jee'], g[54, 'Jee'][30:90, :])
 
         # test read multiple files and select freqs/chans
         hc = io.HERACal([self.fname_t0, self.fname_t1, self.fname_t2])
         g, _, _, _ = hc.read()
         g2, _, _, _ = hc.read(frequencies=hc.freqs[0:100])
         g3, _, _, _ = hc.read(freq_chans=np.arange(100))
-        np.testing.assert_array_equal(g2[54,'Jee'], g[54,'Jee'][:, 0:100])
-        np.testing.assert_array_equal(g3[54,'Jee'], g[54,'Jee'][:, 0:100])
+        np.testing.assert_array_equal(g2[54, 'Jee'], g[54, 'Jee'][:, 0:100])
+        np.testing.assert_array_equal(g3[54, 'Jee'], g[54, 'Jee'][:, 0:100])
 
         # test select on antenna numbers
         hc = io.HERACal([self.fname_xx, self.fname_yy])
