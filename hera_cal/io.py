@@ -136,8 +136,12 @@ class HERACal(UVCal):
 
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
-
-            select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies,
+            # only read antennas present in the data and raise a warning.
+            antenna_nums_in_cal = np.intersect1d(self.antenna_nums, antenna_nums)
+            for ant in antenna_nums:
+                if not ant in self.antenna_nums:
+                    warnings.warn(f"Warning, antenna {ant} not present in calibration solution. Skipping!")
+            select_dict = {'antenna_nums': antenna_nums_in_cal, 'frequencies': frequencies,
                            'freq_chans': freq_chans, 'jones': pols}
             if np.any([s is not None for s in select_dict.values()]):
                 self.select(inplace=True, **select_dict)
