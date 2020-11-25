@@ -1449,8 +1449,7 @@ def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, o
         tmax = hd_time_chunk.times.max() + dt_time_chunk
         tmin = hd_time_chunk.times.min() - dt_time_chunk
         hd_combined = io.HERAData(baseline_chunk_files)
-        t_select = (hd_baseline_chunk.times - dt_baseline_chunk / 2. >= tmin)\
-         & (hd_baseline_chunk.times + dt_baseline_chunk / 2. <= tmax)
+        t_select = (hd_baseline_chunk.times - dt_baseline_chunk / 2. >= tmin) & (hd_baseline_chunk.times + dt_baseline_chunk / 2. <= tmax)
         hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
         hd_combined.write_uvh5(outfilename, clobber=clobber)
 
