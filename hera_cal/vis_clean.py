@@ -1313,6 +1313,8 @@ def _filter_argparser(multifile=False):
     a.add_argument("infilename", type=str, help="path to visibility data file to delay filter")
     a.add_argument("--partial_load_Nbls", default=None, type=int, help="the number of baselines to load at once (default None means load full data")
     a.add_argument("--skip_wgt", type=float, default=0.1, help='skips filtering and flags times with unflagged fraction ~< skip_wgt (default 0.1)')
+    a.add_argument("--factorize_flags", default=False, action="store_true", help="Factorize flags.")
+    a.add_argument("--time_thresh", type=float, default=0.05, help="time threshold above which to completely flag channels and below which to flag times with flagged channel.")
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
@@ -1373,4 +1375,93 @@ def _linear_argparser(multifile=False):
     a.add_argument("--write_cache", default=False, action="store_true", help="if True, writes newly computed filter matrices to cache.")
     a.add_argument("--cache_dir", type=str, default=None, help="directory to store cached filtering matrices in.")
     a.add_argument("--read_cache", default=False, action="store_true", help="If true, read in cache files in directory specified by cache_dir.")
+    a.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
+    return a
+
+
+def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, outfilename, clobber=False, time_bounds=False):
+    """Combine multiple waterfall files (with disjoint baseline sets) into time-limited file with all baselines.
+
+    The methods delay_filter.load_delay_filter_and_write_baseline_list and
+    xtalk_filter.load_xtalk_filter_and_write_baseline_list convert time-chunk files with all baselines into
+    baseline-chunk files with all times. This function takes in a list of baseline-chunk files (baseline_chunk_files)
+    and outputs a time-chunk file with all baselines with the same times as templatefile.
+
+    Arguments
+    ---------
+    time_chunk_template : string
+        path to file to use as a template for the time-chunk. Function selects times from time-chunk
+        that exist in baseline_chunks for all baseline chunks and combines them into a single file.
+        If the frequenies of the baseline_chunk files are a subset of the frequencies in the time_chunk, then
+        output will trim the extra frequencies in the time_chunk and write out trimmed freqs. The same is true
+        for polarizations.
+    baseline_chunk_files : list of strings
+        list of paths to baseline-chunk files to select time-chunk file from.
+    outfilename : string
+        name of the output file to write.
+    clobber : bool optional.
+        If False, don't overwrite outfilename if it already exists. Default is False.
+    time_bounds: bool, optional
+        If False, then generate new file with exact times from template.
+        If True, generate a new file from the file list that keeps times between min/max of
+            the times in the template_file. This is helpful if the times dont match in the reconstituted
+            data but we want to use the template files to determine time ranges.
+            Main application: reconstituting coherently averaged waterfalls into time-chunks that map to
+            the original data files.
+
+    Returns
+    -------
+        Nothing
+    """
+    hd_time_chunk = io.HERAData(time_chunk_template)
+    hd_baseline_chunk = io.HERAData(baseline_chunk_files[0])
+    times = hd_time_chunk.times
+    freqs = hd_baseline_chunk.freqs
+    polarizations = hd_baseline_chunk.pols
+    # read in the template file, but only include polarizations, frequencies
+    # from the baseline_chunk_file files.
+    if not time_bounds:
+        hd_time_chunk.read(times=times, frequencies=freqs, polarizations=polarizations)
+        # set the all data to zero, flags to True, and nsamples to zero.
+        hd_time_chunk.nsample_array[:] = 0.0
+        hd_time_chunk.data_array[:] = 0.0 + 0j
+        hd_time_chunk.flag_array[:] = True
+        # for each baseline_chunk_file, read in only the times relevant to the templatefile.
+        # and update the data, flags, nsamples array of the template file
+        # with the baseline_chunk_file data.
+        for baseline_chunk_file in baseline_chunk_files:
+            hd_baseline_chunk = io.HERAData(baseline_chunk_file)
+            # find times that are close.
+            tload = []
+            # use tolerance in times that is set by the time resolution of the dataset.
+            atol = np.mean(np.diff(hd_baseline_chunk.times)) / 10.
+            all_times = np.unique(hd_baseline_chunk.times)
+            for t in all_times:
+                if np.any(np.isclose(t, hd_time_chunk.times, atol=atol, rtol=0)):
+                    tload.append(t)
+            d, f, n = hd_baseline_chunk.read(times=tload, axis='blt')
+            hd_time_chunk.update(flags=f, data=d, nsamples=n)
+        # now that we've updated everything, we write the output file.
+        hd_time_chunk.write_uvh5(outfilename, clobber=clobber)
+    else:
+        dt_time_chunk = np.mean(np.diff(hd_time_chunk.times)) / 2.
+        dt_baseline_chunk = np.mean(np.diff(hd_baseline_chunk.times)) / 2.
+        tmax = hd_time_chunk.times.max() + dt_time_chunk
+        tmin = hd_time_chunk.times.min() - dt_time_chunk
+        hd_combined = io.HERAData(baseline_chunk_files)
+        t_select = (hd_baseline_chunk.times - dt_baseline_chunk / 2. >= tmin) & (hd_baseline_chunk.times + dt_baseline_chunk / 2. <= tmax)
+        hd_combined.read(times=hd_baseline_chunk.times[t_select], axis='blt')
+        hd_combined.write_uvh5(outfilename, clobber=clobber)
+
+
+def time_chunk_from_baseline_chunks_argparser():
+    """
+    Arg parser for file reconstitution.
+    """
+    a = argparse.ArgumentParser(description="Construct time-chunk file from baseline-chunk files.")
+    a.add_argument("time_chunk_template", type=str, help="name of template file.")
+    a.add_argument("--baseline_chunk_files", type=str, nargs="+", help="list of file baseline-chunk files to select time-chunk from", required=True)
+    a.add_argument("--outfilename", type=str, help="Name of output file. Provide the full path string.", required=True)
+    a.add_argument("--clobber", action="store_true", help="Include to overwrite old files.")
+    a.add_argument("--time_bounds", action="store_true", default=False, help="read times between min and max times of template, regardless of whether they match.")
     return a

@@ -106,10 +106,10 @@ class HERACal(UVCal):
     def read(self, antenna_nums=None, frequencies=None, freq_chans=None, times=None, pols=None):
         '''Reads calibration information from file, computes useful metadata and returns
         dictionaries that map antenna-pol tuples to calibration waterfalls. Currently, select options
-        only perform selection after reading, so they are not true partial I/O. However, when 
+        only perform selection after reading, so they are not true partial I/O. However, when
         initialized with a list of calibration files, non-time selection is done before concantenation,
         potentially saving memory.
-        
+
         Arguments:
             antenna_nums : array_like of int, optional. Antenna numbers The antennas numbers to keep
                 in the object (antenna positions and names for the removed antennas will be retained).
@@ -136,12 +136,18 @@ class HERACal(UVCal):
 
             if pols is not None:
                 pols = [jstr2num(ap, x_orientation=self.x_orientation) for ap in pols]
-
-            select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies, 
+            # only read antennas present in the data and raise a warning.
+            my_ants = np.unique(self.ant_array)
+            if antenna_nums is not None:
+                for ant in antenna_nums:
+                    if ant not in my_ants:
+                        warnings.warn(f"Warning, antenna {ant} not present in calibration solution. Skipping!")
+                antenna_nums = np.intersect1d(my_ants, antenna_nums)
+            select_dict = {'antenna_nums': antenna_nums, 'frequencies': frequencies,
                            'freq_chans': freq_chans, 'jones': pols}
             if np.any([s is not None for s in select_dict.values()]):
                 self.select(inplace=True, **select_dict)
-            
+
             # If there's more than one file, loop over all files, downselecting and cont
             if len(self.filepaths) > 1:
                 for fp in self.filepaths[1:]:
@@ -150,7 +156,7 @@ class HERACal(UVCal):
                     if np.any([s is not None for s in select_dict.values()]):
                         uvc.select(inplace=True, **select_dict)
                     self += uvc
-        
+
         # downselect times at the very end, since this might exclude some files in the original list
         if times is not None:
             self.select(times=times)
