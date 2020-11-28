@@ -520,7 +520,7 @@ class FRFilter(VisClean):
         return hd_output
 
 
-def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True, rephase=False,
+def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_data=None, interleaved_output=None, wgt_by_nsample=True, rephase=False,
                             verbose=False, clobber=False, flag_output=None):
     """Driver method for averaging and writing out data.
 
@@ -532,6 +532,10 @@ def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True,
         name of output data file.
     t_avg: float
         width of time-averaging interval in seconds.
+    interleaved_data: str, optional
+        data to interleave before averaging.
+    interleave_output: str, optional
+        output file to write interleave data set.
     wgt_by_nsample: bool, optional
         weight by nsamples in time average
         default is True
@@ -551,15 +555,51 @@ def time_avg_data_and_write(input_data, output_data, t_avg, wgt_by_nsample=True,
     """
     fr = FRFilter(input_data)
     fr.read()
-    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
-                    wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-    hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
+    if interleaved_data is not None:
+        fr1 = FRFilter(interleaved_data)
+        fr1.read()
+        fr2 = copy.deepcopy(fr)
+        fr3 = copy.deepcopy(fr1)
+        frout_even = copy.deepcopy(fr)
+        frout_odd = copy.deepcopy(fr1)
+        fr = FRFilter(fr.hd.select(times=fr.hd.times[::2]))
+        fr1 = FRFilter(fr1.hd.select(times=fr1.hd.times[::2]))
+        fr2 = FRFilter(fr.hd.select(times=fr.hd.times[1::2]))
+        fr3 = FRFilter(fr1.hd.select(times=fr1.hd.times[1::2]))
+        # now interleave the data
+        for frt in [fr, fr1, fr2, fr3, frout_even, frout_odd]:
+            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg, flags=frt.flags, nsamples=frt.nsamples,
+                            wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+        # now populate frout_even and fr_out_odd with interleaved averages.
+        for k in frout_even.avg_data:
+            frout_even.avg_data[k][::2] = fr.avg_data[k]
+            frout_even.avg_flags[k][::2] = fr.avg_flags[k]
+            frout_even.avg_nsamples[k][::2] = fr.avg_nsamples[k]
+            frout_even.avg_data[k][1::2] = fr2.avg_data[k]
+            frout_even.avg_flags[k][1::2] = fr2.avg_flags[k]
+            frout_even.avg_nsamples[k][1::2] = fr2.avg_nsamples[k]
+
+            frout_odd.avg_data[k][::2] = fr1.avg_data[k]
+            frout_odd.avg_flags[k][::2] = fr1.avg_flags[k]
+            frout_odd.avg_nsamples[k][::2] = fr1.avg_nsamples[k]
+            frout_odd.avg_data[k][1::2] = fr3.avg_data[k]
+            frout_odd.avg_flags[k][1::2] = fr3.avg_flags[k]
+            frout_odd.avg_nsamples[k][1::2] = fr3.avg_nsamples[k]
+
+        hde = frout_even._write_time_averaged_data(output_data, clobber=clobber)
+        hdo = frout_even._write_time_averaged_data(interleaved_output, clobber=clobber)
+    else:
+        fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
+                        wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+        hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
     if flag_output is not None:
         uvf=UVFlag(hdo, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
         uvf.write(flag_output, clobber=clobber)
 
-def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output_data, t_avg, wgt_by_nsample=True, rephase=False,
+def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output_data, t_avg,
+                                          interleaved_data=None, interleaved_output=None, 
+                                          wgt_by_nsample=True, rephase=False,
                                           verbose=False, clobber=False, flag_output=None):
     """Time-averaging with a baseline cornerturn
 
@@ -614,4 +654,6 @@ def time_average_argparser(multifile=False):
     a.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
     a.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     a.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
+    a.add_argument("--interleaved_input_data", default=None, type=str, help="Optional second data file for performing interleaving before time averaging.")
+    a.add_argument("--interleaved_output_data", default=None, type=str, help='Optional second data file for outputing interleaving bevore averaging.')
     return a
