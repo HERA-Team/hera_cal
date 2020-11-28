@@ -1017,7 +1017,7 @@ def ndim_fft_phase_slope_solver(data, bl_vecs, assume_2D=True, zero_pad=2, bl_er
     return phase_slopes
 
 
-def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, refant=None, 
+def global_phase_slope_logcal(model, data, antpos, reds=None, solver='linfit', wgts=None, refant=None, 
                               assume_2D=True, verbose=True, tol=1.0, edge_cut=0, time_avg=False, 
                               zero_pad=2, return_gains=False, gain_ants=[]):
     """
@@ -1038,6 +1038,9 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, r
            complex ndarray visibilities matching shape of model
 
     antpos : type=dictionary, antpos dictionary. antenna num as key, position vector as value.
+
+    reds : list of list of redundant baselines. If left as None (default), will try to infer
+           reds from antpos, though if the antenna position dimensionaility is > 3, this will fail.
 
     solver : 'linfit' uses linsolve to fit phase slope across the array.
              'dft' uses a spatial Fourier transform to find a phase slope, only works in 2D.
@@ -1109,17 +1112,18 @@ def global_phase_slope_logcal(model, data, antpos, solver='linfit', wgts=None, r
     nDims = _count_nDims(antpos, assume_2D=assume_2D)    
     
     # average data over baselines
-    _reds = redcal.get_pos_reds(antpos, bl_error_tol=tol)
+    if reds is None:
+        reds = redcal.get_pos_reds(antpos, bl_error_tol=tol)
     ap = data.antpairs()
-    reds = []
-    for _red in _reds:
-        red = [bl for bl in _red if bl in ap]
-        if len(red) > 0:
-            reds.append(red)
-    avg_data, avg_flags, _ = utils.red_average(data, reds=reds, flags=flags, inplace=False)
+    reds_here = []
+    for red in reds:
+        red_here = [bl[0:2] for bl in red if bl[0:2] in ap]  # if the reds have polarizations, ignore them
+        if len(red_here) > 0:
+            reds_here.append(red_here)
+    avg_data, avg_flags, _ = utils.red_average(data, reds=reds_here, flags=flags, inplace=False)
     red_keys = list(avg_data.keys())
     avg_wgts = DataContainer({k: (~avg_flags[k]).astype(np.float) for k in avg_flags})
-    avg_model, _, _ = utils.red_average(model, reds=reds, flags=flags, inplace=False)
+    avg_model, _, _ = utils.red_average(model, reds=reds_here, flags=flags, inplace=False)
 
     ls_data, ls_wgts, bl_vecs, pols = {}, {}, {}, {}
     for rk in red_keys:
@@ -3358,7 +3362,8 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
     # setup: initialize ants, get idealized antenna positions
     ants = list(rc_flags.keys())
-    idealized_antpos = redcal.reds_to_antpos(redcal.get_reds(data.antpos, bl_error_tol=tol), tol=redcal.IDEALIZED_BL_TOL)
+    reds = redcal.get_reds(data.antpos, bl_error_tol=tol)
+    idealized_antpos = redcal.reds_to_antpos(reds, tol=redcal.IDEALIZED_BL_TOL)
 
     # Abscal Step 1: Per-Channel Logarithmic Absolute Amplitude Calibration
     gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)
@@ -3376,13 +3381,13 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
 
     # Abscal Step 3: Global Phase Slope Calibration (first using ndim_fft, then using linfit)
     for time_avg in [True, False]:
-        gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='ndim_fft', wgts=binary_wgts, verbose=verbose, assume_2D=False,
+        gains_here = global_phase_slope_logcal(model, data, idealized_antpos, reds=reds, solver='ndim_fft', wgts=binary_wgts, verbose=verbose, assume_2D=False,
                                                tol=redcal.IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
         abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
         apply_cal.calibrate_in_place(data, gains_here)
     for time_avg in [True, False]:
         for i in range(phs_max_iter):
-            gains_here = global_phase_slope_logcal(model, data, idealized_antpos, solver='linfit', wgts=binary_wgts, verbose=verbose, assume_2D=False,
+            gains_here = global_phase_slope_logcal(model, data, idealized_antpos, reds=reds, solver='linfit', wgts=binary_wgts, verbose=verbose, assume_2D=False,
                                                    tol=redcal.IDEALIZED_BL_TOL, edge_cut=edge_cut, time_avg=time_avg, return_gains=True, gain_ants=ants)
             abscal_delta_gains = {ant: abscal_delta_gains[ant] * gains_here[ant] for ant in ants}
             apply_cal.calibrate_in_place(data, gains_here)
