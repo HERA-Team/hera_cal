@@ -127,7 +127,11 @@ def reverse_bl(bl):
     if len(bl) == 2:
         return (j, i)
     else:
-        return (j, i, conj_pol(_comply_vispol(bl[2])))
+        if i != j:
+            return (j, i, conj_pol(_comply_vispol(bl[2])))
+        else:
+            return (j, i, _comply_vispol(bl[2]))
+
 
 
 def comply_bl(bl):
