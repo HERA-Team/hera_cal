@@ -520,7 +520,7 @@ class FRFilter(VisClean):
         return hd_output
 
 
-def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_data=None, interleaved_output=None, wgt_by_nsample=True, rephase=False,
+def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_data=None, interleaved_output_data=None, wgt_by_nsample=True, rephase=False,
                             verbose=False, clobber=False, flag_output=None):
     """Driver method for averaging and writing out data.
 
@@ -532,7 +532,7 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_data=Non
         name of output data file.
     t_avg: float
         width of time-averaging interval in seconds.
-    interleaved_data: str, optional
+    interleaved_input_data: str, optional
         data to interleave before averaging.
     interleave_output: str, optional
         output file to write interleave data set.
@@ -555,8 +555,8 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_data=Non
     """
     fr = FRFilter(input_data)
     fr.read()
-    if interleaved_data is not None:
-        fr1 = FRFilter(interleaved_data)
+    if interleaved_input_data is not None:
+        fr1 = FRFilter(interleaved_input_data)
         fr1.read()
         fr2 = copy.deepcopy(fr)
         fr3 = copy.deepcopy(fr1)
@@ -587,7 +587,7 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_data=Non
             frout_odd.avg_nsamples[k][1::2] = fr3.avg_nsamples[k]
 
         hde = frout_even._write_time_averaged_data(output_data, clobber=clobber)
-        hdo = frout_even._write_time_averaged_data(interleaved_output, clobber=clobber)
+        hdo = frout_even._write_time_averaged_data(interleaved_output_data, clobber=clobber)
     else:
         fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                         wgt_by_nsample=wgt_by_nsample, rephase=rephase)
@@ -598,7 +598,7 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_data=Non
         uvf.write(flag_output, clobber=clobber)
 
 def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output_data, t_avg,
-                                          interleaved_data=None, interleaved_output=None, 
+                                          interleaved_input_data=None, interleaved_output_data=None,
                                           wgt_by_nsample=True, rephase=False,
                                           verbose=False, clobber=False, flag_output=None):
     """Time-averaging with a baseline cornerturn
