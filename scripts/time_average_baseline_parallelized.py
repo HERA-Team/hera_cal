@@ -15,6 +15,8 @@ if len(baseline_list) > 0:
     frf.time_avg_data_and_write_baseline_list(
                                 flag_output=args.flag_output,
                                 input_data_list=args.input_data_list,
+                                interleaved_input_data_list=args.interleaved_input_data_list,
+                                interleaved_output_data=args.interleaved_output_data,
                                 baseline_list=baseline_list,
                                 output_data=args.output_data,
                                 t_avg=args.t_avg, rephase=args.rephase,

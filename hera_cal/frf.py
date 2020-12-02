@@ -357,11 +357,9 @@ class FRFilter(VisClean):
             Navg = Ntimes
         old_t_avg = t_avg
         t_avg = Navg * dtime
-
         if verbose:
             print("The t_avg provided of {:.3f} has been shifted to {:.3f} to make Navg = {:d}".format(
                 old_t_avg, t_avg, Navg))
-
         # setup containers
         for n in ['data', 'flags', 'nsamples']:
             name = "{}_{}".format(output_prefix, n)
@@ -558,36 +556,43 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_da
     if interleaved_input_data is not None:
         fr1 = FRFilter(interleaved_input_data)
         fr1.read()
-        fr2 = copy.deepcopy(fr)
-        fr3 = copy.deepcopy(fr1)
+        hd0 = copy.deepcopy(fr.hd)
+        hd1 = copy.deepcopy(fr1.hd)
+        hd2 = copy.deepcopy(fr.hd)
+        hd3 = copy.deepcopy(fr1.hd)
         frout_even = copy.deepcopy(fr)
         frout_odd = copy.deepcopy(fr1)
-        fr = FRFilter(fr.hd.select(times=fr.hd.times[::2]))
-        fr1 = FRFilter(fr1.hd.select(times=fr1.hd.times[::2]))
-        fr2 = FRFilter(fr.hd.select(times=fr.hd.times[1::2]))
-        fr3 = FRFilter(fr1.hd.select(times=fr1.hd.times[1::2]))
+        fr = FRFilter(hd0)
+        fr.read(times=hd0.times[::2])
+        fr1 = FRFilter(hd1)
+        fr1.read(times=hd1.times[::2])
+        fr2 = FRFilter(hd2)
+        fr2.read(times=hd2.times[1::2])
+        fr3 = FRFilter(hd3)
+        fr3.read(times=hd3.times[1::2])
         # now interleave the data
-        for frt in [fr, fr1, fr2, fr3, frout_even, frout_odd]:
+        for frt in [fr, fr1, fr2, fr3]:
             frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg, flags=frt.flags, nsamples=frt.nsamples,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-        # now populate frout_even and fr_out_odd with interleaved averages.
-        for k in frout_even.avg_data:
-            frout_even.avg_data[k][::2] = fr.avg_data[k]
-            frout_even.avg_flags[k][::2] = fr.avg_flags[k]
-            frout_even.avg_nsamples[k][::2] = fr.avg_nsamples[k]
-            frout_even.avg_data[k][1::2] = fr2.avg_data[k]
-            frout_even.avg_flags[k][1::2] = fr2.avg_flags[k]
-            frout_even.avg_nsamples[k][1::2] = fr2.avg_nsamples[k]
+        # time average ouputs to match inputs
+        for frt in [frout_even, frout_odd]:
+            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, flags=frt.flags, nsamples=frt.nsamples,
+                            wgt_by_nsample=wgt_by_nsample, rephase=rephase)
 
-            frout_odd.avg_data[k][::2] = fr1.avg_data[k]
-            frout_odd.avg_flags[k][::2] = fr1.avg_flags[k]
-            frout_odd.avg_nsamples[k][::2] = fr1.avg_nsamples[k]
-            frout_odd.avg_data[k][1::2] = fr3.avg_data[k]
-            frout_odd.avg_flags[k][1::2] = fr3.avg_flags[k]
-            frout_odd.avg_nsamples[k][1::2] = fr3.avg_nsamples[k]
+        # now populate frout_even and fr_out_odd with interleaved averages.
+        # we assume that even and odd have the same flags and nsamples.
+        for k in frout_even.avg_data:
+            frout_even.avg_data[k][:] = (fr.avg_data[k] + fr1.avg_data[k])[:] / 2. # avg integrations 0, 2, 4, 6, ... even and odd.
+            frout_even.avg_flags[k][:] = fr.avg_flags[k] & fr1.avg_flags[k]
+            frout_even.avg_nsamples[k][:] = (fr.avg_nsamples[k] + fr1.avg_nsamples[k]) / 2.
+
+            frout_odd.avg_data[k][:] = (fr2.avg_data[k] + fr3.avg_data[k])[:] / 2. # avg integrations 1, 3, 5, 7, ... even and odd.
+            frout_odd.avg_flags[k][:] = fr2.avg_flags[k] & fr3.avg_flags[k]
+            frout_odd.avg_nsamples[k][:] = (fr2.avg_nsamples[k] + fr3.avg_nsamples[k])[:] / 2.
+
 
         hde = frout_even._write_time_averaged_data(output_data, clobber=clobber)
-        hdo = frout_even._write_time_averaged_data(interleaved_output_data, clobber=clobber)
+        hdo = frout_odd._write_time_averaged_data(interleaved_output_data, clobber=clobber)
     else:
         fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
                         wgt_by_nsample=wgt_by_nsample, rephase=rephase)
@@ -598,7 +603,7 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_da
         uvf.write(flag_output, clobber=clobber)
 
 def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output_data, t_avg,
-                                          interleaved_input_data=None, interleaved_output_data=None,
+                                          interleaved_input_data_list=None, interleaved_output_data=None,
                                           wgt_by_nsample=True, rephase=False,
                                           verbose=False, clobber=False, flag_output=None):
     """Time-averaging with a baseline cornerturn
@@ -632,9 +637,65 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
     """
     fr = FRFilter(input_data_list)
     fr.read(bls=baseline_list, axis='blt')
-    fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
-                    wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-    hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
+    if interleaved_input_data_list is not None:
+        fr1 = FRFilter(interleaved_input_data_list)
+        fr1.read(bls=baseline_list, axis='blt')
+        hd0 = copy.deepcopy(fr.hd)
+        hd1 = copy.deepcopy(fr1.hd)
+        hd2 = copy.deepcopy(fr.hd)
+        hd3 = copy.deepcopy(fr1.hd)
+        frout_even = copy.deepcopy(fr)
+        frout_odd = copy.deepcopy(fr1)
+        fr = FRFilter(hd0)
+        fr.read(bls=baseline_list, axis='blt')
+        fr1 = FRFilter(hd1)
+        fr2 = FRFilter(hd2)
+        fr3 = FRFilter(hd3)
+        # now interleave the data
+        for frt, start in zip([fr, fr1, fr2, fr3], [0, 0, 1, 1]):
+            data_in = copy.deepcopy(frt.data)
+            nsamples_in = copy.deepcopy(frt.nsamples)
+            flags_in = copy.deepcopy(frt.flags)
+            for k in data_in:
+                data_in[k] = data_in[k][start::2]
+                flags_in[k] = flags_in[k][start::2]
+                nsamples_in[k] = nsamples_in[k][start::2]
+
+            data_in.times = data_in.times[start::2]
+            flags_in.times = flags_in.times[start::2]
+            nsamples_in.times = nsamples_in.times[start::2]
+            data_in.lsts = data_in.lsts[start::2]
+            flags_in.lsts = flags_in.lsts[start::2]
+            nsamples_in.lsts = nsamples_in.lsts[start::2]
+            nsamples_in.Ntimes = len(nsamples_in.times)
+            flags_in.Ntimes = len(flags_in.times)
+            data_in.Ntimes = len(data_in.times)
+
+            frt.timeavg_data(data_in, data_in.times, data_in.lsts, t_avg, flags=flags_in, nsamples=nsamples_in,
+                            wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+        # time average ouputs to match inputs
+        for frt in [frout_even, frout_odd]:
+            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, flags=frt.flags, nsamples=frt.nsamples,
+                            wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+
+        # now populate frout_even and fr_out_odd with interleaved averages.
+        # we assume that even and odd have the same flags and nsamples.
+        for k in frout_even.avg_data:
+            frout_even.avg_data[k][:] = (fr.avg_data[k] + fr1.avg_data[k])[:] / 2. # avg integrations 0, 2, 4, 6, ... even and odd.
+            frout_even.avg_flags[k][:] = fr.avg_flags[k] & fr1.avg_flags[k]
+            frout_even.avg_nsamples[k][:] = (fr.avg_nsamples[k] + fr1.avg_nsamples[k]) / 2.
+
+            frout_odd.avg_data[k][:] = (fr2.avg_data[k] + fr3.avg_data[k])[:] / 2. # avg integrations 1, 3, 5, 7, ... even and odd.
+            frout_odd.avg_flags[k][:] = fr2.avg_flags[k] & fr3.avg_flags[k]
+            frout_odd.avg_nsamples[k][:] = (fr2.avg_nsamples[k] + fr3.avg_nsamples[k])[:] / 2.
+
+
+        hde = frout_even._write_time_averaged_data(output_data, clobber=clobber)
+        hdo = frout_odd._write_time_averaged_data(interleaved_output_data, clobber=clobber)
+    else:
+        fr.timeavg_data(fr.data, fr.times, fr.lsts, t_avg, flags=fr.flags, nsamples=fr.nsamples,
+                        wgt_by_nsample=wgt_by_nsample, rephase=rephase)
+        hdo = fr._write_time_averaged_data(output_data, clobber=clobber)
     if flag_output is not None:
         uvf=UVFlag(hdo, mode='flag', copy_flags=True)
         uvf.to_waterfall(keep_pol=False, method='and')
@@ -648,12 +709,14 @@ def time_average_argparser(multifile=False):
     a.add_argument("output_data", type=str, help="name of data file to write out time-average.")
     if multifile:
         a.add_argument("input_data_list", type=str, nargs="+", help="list of data files to read baselines across.")
+        a.add_argument("--interleaved_input_data_list", nargs="+", default=None, type=str, help="Optional second list of data-files for performing interleaving before time averaging.")
+    else:
+        a.add_argument("--interleaved_input_data", default=None, type=str, help="Optional second data file for performing interleaving before time averaging.")
     a.add_argument("t_avg", type=float, help="number of seconds to average over.")
     a.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
     a.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample.")
     a.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
     a.add_argument("--verbose", default=False, action="store_true", help="verbose output.")
     a.add_argument("--flag_output", default=None, type=str, help="optional filename to save a separate copy of the time-averaged flags as a uvflag object.")
-    a.add_argument("--interleaved_input_data", default=None, type=str, help="Optional second data file for performing interleaving before time averaging.")
     a.add_argument("--interleaved_output_data", default=None, type=str, help='Optional second data file for outputing interleaving bevore averaging.')
     return a
