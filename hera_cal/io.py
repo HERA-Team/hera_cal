@@ -716,7 +716,7 @@ class HERAData(UVData):
             # make sure that every baseline is in reds
             baseline_chunks = chunk_baselines_by_redundant_groups(reds=reds, max_chunk_size=Nbls)
         for chunk in baseline_chunks:
-                yield self.read(bls=chunk, frequencies=frequencies)
+            yield self.read(bls=chunk, frequencies=frequencies)
 
     def iterate_over_freqs(self, Nchans=1, freqs=None):
         '''Produces a generator that iteratively yields successive calls to
