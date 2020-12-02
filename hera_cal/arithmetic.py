@@ -11,7 +11,8 @@ import warnings
 from pyuvdata import UVFlag
 
 
-def sum_files(file_list, outfilename, flag_mode="and", nsample_mode="average", clobber=False):
+def sum_files(file_list, outfilename, flag_mode="and", nsample_mode="average",
+              clobber=False, coefficients=None):
     """Add the contents of different pyuvdata files together.
 
     Arguments:
@@ -28,20 +29,23 @@ def sum_files(file_list, outfilename, flag_mode="and", nsample_mode="average", c
         clobber: bool, optional
             If true, ovewrite output if it exists.
             Default is False.
-
+        coefficients: list, optional
+            optional list of floats to multiply each data set by when adding together.
     Returns
     -------
     summed HERAData.
     """
     hd = io.HERAData(file_list[0])
+    if coefficients is None:
+        coefficients = [1. for m f in file_list]
     d, f, n = hd.read()
     if nsample_mode == "average":
         n /= len(file_list)
-    for dfile in file_list[1:]:
+    for dfile, coeff in zip(file_list[1:], coefficients[1:]):
         hdt = io.HERAData(dfile)
         dt, ft, nt = hdt.read()
         for k in f:
-            d[k] = d[k] + dt[k]
+            d[k] = d[k] + coeff * dt[k]
             if flag_mode == "and":
                 f[k] = f[k] & ft[k]
             elif flag_mode  == "or":

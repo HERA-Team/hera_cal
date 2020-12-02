@@ -52,7 +52,7 @@ setup_args = {
                 'scripts/dpss_delay_filter_run.py', 'scripts/chunk_cal_files.py',
                 'scripts/chunk_data_files.py', 'scripts/time_average.py',
                 'scripts/time_average_baseline_parallelized.py',
-                'scripts/sum_files.py'],
+                'scripts/sum_files.py', 'scripts/diff_files.py'],
     'version': version.version,
     'package_data': {'hera_cal': data_files},
     'install_requires': [
