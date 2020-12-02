@@ -641,7 +641,7 @@ class HERAData(UVData):
                                   this.nsample_array, **self.last_read_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
-                         bl_error_tol=1.0, include_autos=True, freqs_to_load=None):
+                         bl_error_tol=1.0, include_autos=True, frequencies=None):
         '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by baseline or group of baselines.
 
@@ -667,7 +667,7 @@ class HERAData(UVData):
             include_autos: bool, optional
                 include autocorrelations in iteration if True.
                 Default is True.
-            freqs_to_load: array-like, optional
+            freqsuencies: array-like, optional
                 optional list of float frequencies to load.
                 Default (None) loads all frequencies in data.
 
@@ -716,10 +716,7 @@ class HERAData(UVData):
             # make sure that every baseline is in reds
             baseline_chunks = chunk_baselines_by_redundant_groups(reds=reds, max_chunk_size=Nbls)
         for chunk in baseline_chunks:
-            if freqs_to_load is None:
-                yield self.read(bls=chunk)
-            else:
-                yield self.read(bls=chunk, frequencies=freqs_to_load)
+                yield self.read(bls=chunk, frequencies=frequencies)
 
     def iterate_over_freqs(self, Nchans=1, freqs=None):
         '''Produces a generator that iteratively yields successive calls to

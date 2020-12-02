@@ -182,7 +182,8 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
-              add_to_history='', clobber=False, redundant_average=False, redundant_weights=None, **kwargs):
+              add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
+              tol_factor=10., **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -222,6 +223,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             Datacontainer containing weights to use in redundant averaging.
             only used if redundant_average is True.
             Default is None. If None is passed, then nsamples are used as the redundant weights.
+        tol_factor: float, optional
+            Float specifying the tolerance (as a fraction of channel width) within which cal frequencies must be matched in calibration solution to apply
+            solutions to a particular frequency channel in the data (rather then excluding the cal solution at that channel).
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
@@ -250,7 +254,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # determine frequencies to load in old_hc that are close to hc
         freqs_to_load = []
         for f in old_hc.freqs:
-            atol = np.mean(np.diff(hc.freqs)) / 10.
+            atol = np.mean(np.diff(hc.freqs)) / tol_factor
             # set atol to be 1/10th of a channel
             if np.any(np.isclose(hc.freqs, f, rtol=0., atol=atol)):
                 freqs_to_load.append(f)
@@ -262,7 +266,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     hd = io.HERAData(data_infilename, filetype=filetype_in)
     if filetype_in == 'uvh5':
         freqs_to_load = []
-        atol = np.mean(np.diff(hc.freqs)) / 10.
+        atol = np.mean(np.diff(hc.freqs)) / tol_factor
         for f in hd.freq_array[0]:
             if np.any(np.isclose(hc.freq_array[0], f, rtol=0., atol=atol)):
                 freqs_to_load.append(f)
@@ -300,7 +304,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
         for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average,
-                                                                   reds=all_reds, freqs_to_load=freqs_to_load):
+                                                                   reds=all_reds, frequencies=freqs_to_load):
             for bl in data_flags.keys():
                 # apply band edge flags
                 data_flags[bl][:, 0:flag_nchan_low] = True
