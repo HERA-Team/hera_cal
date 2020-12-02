@@ -12,5 +12,5 @@ arithmetic.sum_files(file_list=args.file_list,
                      outfilename=args.outfilename,
                      flag_mode=args.flag_mode,
                      nsample_mode=args.nsample_mode,
-                     coefficients=[1., -1.],
+                     coefficients=[1. / np.sqrt(2.), -1. / np.sqrt(2.)],
                      clobber=args.clobber)
