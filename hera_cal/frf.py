@@ -308,7 +308,7 @@ class FRFilter(VisClean):
     """
     FRFilter object. See hera_cal.vis_clean.VisClean.__init__ for instantiation options.
     """
-    def timeavg_data(self, data, times, lsts, t_avg, flags=None, nsamples=None, wgt_by_nsample=True,
+    def timeavg_data(self, data, times, lsts, t_avg=None, n_avg=None, flags=None, nsamples=None, wgt_by_nsample=True,
                      rephase=False, verbose=True, output_prefix='avg', keys=None, overwrite=False):
         """
         Time average data attached to object given a averaging time-scale t_avg [seconds].
@@ -351,7 +351,11 @@ class FRFilter(VisClean):
         # turn t_avg into Navg
         Ntimes = len(times)
         dtime = np.median(np.abs(np.diff(times))) * 24 * 3600
-        Navg = int(np.round((t_avg / dtime)))
+        if t_avg is not None:
+            Navg = int(np.round((t_avg / dtime)))
+        elif n_avg is not None:
+            Navg = n_avg
+            t_avg = dtime * n_avg
         assert Navg > 0, "A t_avg of {:0.5f} makes Navg=0, which is too small.".format(t_avg)
         if Navg > Ntimes:
             Navg = Ntimes
@@ -518,7 +522,7 @@ class FRFilter(VisClean):
         return hd_output
 
 
-def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_data=None, interleaved_output_data=None, wgt_by_nsample=True, rephase=False,
+def time_avg_data_and_write(input_data, output_data, t_avg=None, n_avg=None, interleaved_input_data=None, interleaved_output_data=None, wgt_by_nsample=True, rephase=False,
                             verbose=False, clobber=False, flag_output=None):
     """Driver method for averaging and writing out data.
 
@@ -571,12 +575,16 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_da
         fr3 = FRFilter(hd3)
         fr3.read(times=hd3.times[1::2])
         # now interleave the data
+        if n_avg is not None:
+            n_avg = n_avg // 2
         for frt in [fr, fr1, fr2, fr3]:
-            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg, flags=frt.flags, nsamples=frt.nsamples,
+            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=t_avg, n_avg=n_avg, flags=frt.flags, nsamples=frt.nsamples,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
         # time average ouputs to match inputs
+        if n_avg is not None:
+            n_avg = n_avg * 2
         for frt in [frout_even, frout_odd]:
-            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, flags=frt.flags, nsamples=frt.nsamples,
+            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, n_avg=n_avg, flags=frt.flags, nsamples=frt.nsamples,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
 
         # now populate frout_even and fr_out_odd with interleaved averages.
@@ -604,6 +612,7 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_da
 
 def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output_data, t_avg,
                                           interleaved_input_data_list=None, interleaved_output_data=None,
+                                          interleaved_diff_even=None, interleaved_diff_odd=None,
                                           wgt_by_nsample=True, rephase=False,
                                           verbose=False, clobber=False, flag_output=None):
     """Time-averaging with a baseline cornerturn
@@ -652,6 +661,8 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
         fr2 = FRFilter(hd2)
         fr3 = FRFilter(hd3)
         # now interleave the data
+        if n_avg is not None:
+            n_avg = n_avg // 2
         for frt, start in zip([fr, fr1, fr2, fr3], [0, 0, 1, 1]):
             data_in = copy.deepcopy(frt.data)
             nsamples_in = copy.deepcopy(frt.nsamples)
@@ -674,6 +685,8 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
             frt.timeavg_data(data_in, data_in.times, data_in.lsts, t_avg, flags=flags_in, nsamples=nsamples_in,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
         # time average ouputs to match inputs
+        if n_avg is not None:
+            n_avg = n_avg * 2
         for frt in [frout_even, frout_odd]:
             frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, flags=frt.flags, nsamples=frt.nsamples,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
@@ -712,7 +725,8 @@ def time_average_argparser(multifile=False):
         a.add_argument("--interleaved_input_data_list", nargs="+", default=None, type=str, help="Optional second list of data-files for performing interleaving before time averaging.")
     else:
         a.add_argument("--interleaved_input_data", default=None, type=str, help="Optional second data file for performing interleaving before time averaging.")
-    a.add_argument("t_avg", type=float, help="number of seconds to average over.")
+    a.add_argument("--t_avg", type=float, help="number of seconds to average over.", default=None)
+    a.add_argument("--n_avg", type=int, help="number of samples to average over.", default=None)
     a.add_argument("--rephase", default=False, action="store_true", help="rephase to averaging window center.")
     a.add_argument("--dont_wgt_by_nsample", default=False, action="store_true", help="don't weight averages by nsample.")
     a.add_argument("--clobber", default=False, action="store_true", help="Overwrite output files.")
