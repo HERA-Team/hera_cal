@@ -573,16 +573,12 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_da
         fr3 = FRFilter(hd3)
         fr3.read(times=hd3.times[1::2])
         # now interleave the data
-        if n_avg is not None:
-            n_avg = n_avg // 2
         for frt in [fr, fr1, fr2, fr3]:
-            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=t_avg, n_avg=n_avg, flags=frt.flags, nsamples=frt.nsamples,
+            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=t_avg, flags=frt.flags, nsamples=frt.nsamples,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
         # time average ouputs to match inputs
-        if n_avg is not None:
-            n_avg = n_avg * 2
         for frt in [frout_even, frout_odd]:
-            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, n_avg=n_avg, flags=frt.flags, nsamples=frt.nsamples,
+            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, flags=frt.flags, nsamples=frt.nsamples,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
 
         # now populate frout_even and fr_out_odd with interleaved averages.
@@ -674,8 +670,6 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
         fr2 = FRFilter(hd2)
         fr3 = FRFilter(hd3)
         # now interleave the data
-        if n_avg is not None:
-            n_avg = n_avg // 2
         for frt, start in zip([fr, fr1, fr2, fr3], [0, 0, 1, 1]):
             data_in = copy.deepcopy(frt.data)
             nsamples_in = copy.deepcopy(frt.nsamples)
@@ -698,8 +692,6 @@ def time_avg_data_and_write_baseline_list(input_data_list, baseline_list, output
             frt.timeavg_data(data_in, data_in.times, data_in.lsts, t_avg, flags=flags_in, nsamples=nsamples_in,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
         # time average ouputs to match inputs
-        if n_avg is not None:
-            n_avg = n_avg * 2
         for frt in [frout_even, frout_odd]:
             frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, flags=frt.flags, nsamples=frt.nsamples,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
