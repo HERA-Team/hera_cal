@@ -17,7 +17,6 @@ dependencies:
   - psutil
   - astropy-healpix
   - pyephem
-  - basemap
   - future
   - pytest-cov
   - coveralls
