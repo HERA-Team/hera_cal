@@ -37,7 +37,7 @@ def sum_files(file_list, outfilename, flag_mode="and", nsample_mode="average",
     """
     hd = io.HERAData(file_list[0])
     if coefficients is None:
-        coefficients = [1. for m f in file_list]
+        coefficients = [1. for f in file_list]
     d, f, n = hd.read()
     if nsample_mode == "average":
         n /= len(file_list)
