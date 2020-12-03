@@ -667,7 +667,7 @@ class HERAData(UVData):
             include_autos: bool, optional
                 include autocorrelations in iteration if True.
                 Default is True.
-            freqsuencies: array-like, optional
+            frequencies: array-like, optional
                 optional list of float frequencies to load.
                 Default (None) loads all frequencies in data.
 
