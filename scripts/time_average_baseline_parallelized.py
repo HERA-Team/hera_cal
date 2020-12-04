@@ -17,6 +17,8 @@ if len(baseline_list) > 0:
                                 input_data_list=args.input_data_list,
                                 interleaved_input_data_list=args.interleaved_input_data_list,
                                 interleaved_output_data=args.interleaved_output_data,
+                                interleaved_diff_odd=args.interleaved_diff_odd,
+                                interleaved_diff_even=args.interleaved_diff_even,
                                 baseline_list=baseline_list,
                                 output_data=args.output_data,
                                 t_avg=args.t_avg, rephase=args.rephase,

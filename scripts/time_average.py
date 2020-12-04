@@ -15,4 +15,6 @@ frf.time_avg_data_and_write(input_data=args.input_data,
                             clobber=args.clobber, verbose=args.verbose,
                             flag_output=args.flag_output,
                             interleaved_input_data=args.interleaved_input_data,
-                            interleaved_output_data=args.interleaved_output_data)
+                            interleaved_output_data=args.interleaved_output_data,
+                            interleaved_diff_odd=args.interleaved_diff_odd,
+                            interleaved_diff_even=args.interleaved_diff_even,)

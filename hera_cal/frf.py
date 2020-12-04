@@ -564,6 +564,8 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_da
         hd3 = copy.deepcopy(fr1.hd)
         frout_even = copy.deepcopy(fr)
         frout_odd = copy.deepcopy(fr1)
+        frdiff_even = copy.deepcopy(fr)
+        frdiff_odd = copy.deepcopy(fr1)
         fr = FRFilter(hd0)
         fr.read(times=hd0.times[::2])
         fr1 = FRFilter(hd1)
@@ -580,7 +582,9 @@ def time_avg_data_and_write(input_data, output_data, t_avg, interleaved_input_da
         for frt in [frout_even, frout_odd]:
             frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, flags=frt.flags, nsamples=frt.nsamples,
                             wgt_by_nsample=wgt_by_nsample, rephase=rephase)
-
+        for frt in [frdiff_even, frdiff_odd]:
+            frt.timeavg_data(frt.data, frt.times, frt.lsts, t_avg=fr.t_avg, flags=frt.flags, nsamples=frt.nsamples,
+                            wgt_by_nsample=wgt_by_nsample, rephase=rephase)
         # now populate frout_even and fr_out_odd with interleaved averages.
         # we assume that even and odd have the same flags and nsamples.
         for k in frout_even.avg_data:
