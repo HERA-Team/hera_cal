@@ -183,7 +183,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
-              tol_factor=10., **kwargs):
+              freq_atol=1., **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -254,9 +254,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # determine frequencies to load in old_hc that are close to hc
         freqs_to_load = []
         for f in old_hc.freqs:
-            atol = np.mean(np.diff(hc.freqs)) / tol_factor
             # set atol to be 1/10th of a channel
-            if np.any(np.isclose(hc.freqs, f, rtol=0., atol=atol)):
+            if np.any(np.isclose(hc.freqs, f, rtol=0., atol=freq_atol)):
                 freqs_to_load.append(f)
         old_hc.select(frequencies=np.asarray(freqs_to_load))  # match up frequencies with hc.freqs
         old_gains, old_flags, _, _ = old_hc.build_calcontainers()
@@ -266,9 +265,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     hd = io.HERAData(data_infilename, filetype=filetype_in)
     if filetype_in == 'uvh5':
         freqs_to_load = []
-        atol = np.mean(np.diff(hc.freqs)) / tol_factor
         for f in hd.freq_array[0]:
-            if np.any(np.isclose(hc.freq_array[0], f, rtol=0., atol=atol)):
+            if np.any(np.isclose(hc.freq_array[0], f, rtol=0., atol=freq_atol)):
                 freqs_to_load.append(f)
     else:
         freqs_to_load = None
