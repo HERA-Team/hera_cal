@@ -720,7 +720,6 @@ class CalibrationSmoother():
             out_flags = {ant: self.flag_grids[ant][self.time_indices[cal], :] for ant in self.ants}
             rel_diff, avg_rel_diff = utils.gain_relative_difference(gains, out_gains, out_flags)
             hc.update(gains=out_gains, flags=out_flags, quals=rel_diff, total_qual=avg_rel_diff)
-
             hc.history += version.history_string(add_to_history)
             for attribute, value in kwargs.items():
                 hc.__setattr__(attribute, value)
