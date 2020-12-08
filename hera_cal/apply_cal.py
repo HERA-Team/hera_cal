@@ -182,7 +182,8 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
-              add_to_history='', clobber=False, redundant_average=False, redundant_weights=None, **kwargs):
+              add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
+              redundant_groups=1, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -224,6 +225,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             Datacontainer containing weights to use in redundant averaging.
             only used if redundant_average is True.
             Default is None. If None is passed, then nsamples are used as the redundant weights.
+        redundant_groups : int, optional.
+            Integer specifying how many different subsets of each redundant group to write to an independent file.
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
@@ -273,7 +276,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         for attribute, value in kwargs.items():
             hd.__setattr__(attribute, value)
         if redundant_average or redundant_solution:
-            all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
+            all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True, min_bls=redundant_groups)
         else:
             all_reds = []
         if redundant_average:
@@ -292,7 +295,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             # couldn't get a system working where we just read in the outputs one at a time.
             # so unfortunately, we have to load one baseline per redundant group.
             hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
-
+        hd_reds = [hd_red] + [copy.deepcopy(hd_red) for m in range(redundant_groups-1)]
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
         for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average,
@@ -317,25 +320,37 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd.update(data=data, flags=data_flags, nsamples=data_nsamples)
 
             if redundant_average:
-                # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
-                # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
-                if no_red_weights:
-                    redundant_weights = copy.deepcopy(data_nsamples)
-                    for bl in data_flags:
-                        if np.all(data_flags[bl]):
-                            redundant_weights[bl][:] = 0.
-                # redundantly average
-                utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
-                                  reds=all_red_antpairs, wgts=redundant_weights, inplace=True,
-                                  propagate_flags=True)
-                # update redundant data. Don't partial write.
-                hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
+                for red_chunk, hd_red in enumerate(hd_reds):
+                    # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
+                    # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
+                    if no_red_weights:
+                        redundant_weights = copy.deepcopy(data_nsamples)
+                        for bl in data_flags:
+                            if np.all(data_flags[bl]):
+                                redundant_weights[bl][:] = 0.
+                    # redundantly average
+                    # select chunk antpairs
+                    red_antpairs = []
+                    for grp in all_red_antpairs:
+                        start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
+                        end = in(np.ceil(len(grp) / redundant_groups)) * (red_chunk + 1)
+
+                    utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
+                                      reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=True,
+                                      propagate_flags=True)
+                    # update redundant data. Don't partial write.
+                    hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
             else:
                 # partial write works for no redundant averaging.
                 hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
         if redundant_average:
             # if we did redundant averaging, just write the redundant dataset out in the end at once.
-            hd_red.write_uvh5(data_outfilename, clobber=clobber)
+            for red_chunk, hd_red in enumerate(hd_reds):
+                if redundant_groups > 1:
+                    outfile = data_outfilename.replace('.uvh5', f'.{red_chunk}.uvh5')
+                else:
+                    outfile = data_outfilename
+                hd_red.write_uvh5(outfile, clobber=clobber)
     # full data loading and writing
     else:
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
