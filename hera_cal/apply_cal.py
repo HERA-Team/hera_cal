@@ -188,11 +188,11 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
     Arguments:
-        data_infilename: filename of the data to be calibrated.
-        data_outfilename: filename of the resultant data file with the new calibration and flags.
+        data_infilenamse: filename (or list of filenames) of the data to be calibrated.
+        data_outfilename: filename (or list of filenames) of the resultant data file with the new calibration and flags.
         new_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be applied, along with its new flags (if any).
-        old_calibration: filename of the calfits file (or a list of filenames) for the calibration
+        old_calibration: filename (or list of filenames) of the calfits file (or a list of filenames) for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
@@ -333,13 +333,14 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     red_antpairs = []
                     for grp in all_red_antpairs:
                         start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
-                        end = in(np.ceil(len(grp) / redundant_groups)) * (red_chunk + 1)
+                        end = int(np.max([np.ceil(len(grp) / redundant_groups) * (red_chunk + 1), len(grp)]))
+                        red_antpairs.append(grp[start:end])
 
-                    utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
-                                      reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=True,
-                                      propagate_flags=True)
+                    data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
+                                                                          reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
+                                                                          propagate_flags=True)
                     # update redundant data. Don't partial write.
-                    hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
+                    hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
             else:
                 # partial write works for no redundant averaging.
                 hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
@@ -386,19 +387,26 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     if np.all(data_flags[bl]):
                         redundant_weights[bl][:] = 0.
             if redundant_average:
-                utils.red_average(hd, reds=all_red_antpairs, inplace=True, wgts=redundant_weights,
-                                  propagate_flags=True)
-            if filetype_out == 'uvh5':
-                # overwrite original outfile with
-                hd.write_uvh5(data_outfilename, clobber=clobber)# fir some reason add to history fials., add_to_history=add_to_history)
-            else:
-                raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
+                for red_chunk, hd_red in enumerate(hd_reds):
+                    data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
+                                                                          reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
+                                                                          propagate_flags=True)
+                    # update redundant data. Don't partial write.
+                    hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
+                    if redundant_groups > 1:
+                        outfile = data_outfilename.replace('.uvh5', f'.{red_chunk}.uvh5')
+                    else:
+                        outfile = data_outfilename
+                    if filetype_out == 'uvh5':
+                        hd_red.write_uvh5(outfile, clobber=clobber)
+                    else:
+                        raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
 
 
 def apply_cal_argparser():
     '''Arg parser for commandline operation of apply_cal.'''
     a = argparse.ArgumentParser(description="Apply (and optionally, also unapply) a calfits file to visibility file.")
-    a.add_argument("infilename", type=str, help="path to visibility data file to calibrate")
+    a.add_argument("infilenames", type=str, nargs="+", help="path to visibility data file(s) to calibrate")
     a.add_argument("outfilename", type=str, help="path to new visibility results file")
     a.add_argument("--new_cal", type=str, default=None, nargs="+", help="path to new calibration calfits file (or files for cross-pol)")
     a.add_argument("--old_cal", type=str, default=None, nargs="+", help="path to old calibration calfits file to unapply (or files for cross-pol)")
@@ -410,6 +418,7 @@ def apply_cal_argparser():
     a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype of output data files')
     a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only."
                                                                   "Default loads the whole file. If 0 is provided, also loads whole file.")
+    a.add_argument("--redundant_groups", type=int, default=1, help="Number of subgroups to split each redundant baseline into for cross power spectra. ")
     a.add_argument("--gain_convention", type=str, default='divide',
                    help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
     a.add_argument("--redundant_solution", default=False, action="store_true",
