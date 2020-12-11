@@ -179,7 +179,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
 
-def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
+def apply_cal(data_infilename, data_outfilename, new_calibrations, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
@@ -188,11 +188,11 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
     Arguments:
-        data_infilenamse: filename (or list of filenames) of the data to be calibrated.
-        data_outfilename: filename (or list of filenames) of the resultant data file with the new calibration and flags.
-        new_calibration: filename of the calfits file (or a list of filenames) for the calibration
+        data_infilename: filename of the data to be calibrated.
+        data_outfilename: filename of the resultant data file with the new calibration and flags.
+        new_calibration: filename of the calfits file for the calibration
             to be applied, along with its new flags (if any).
-        old_calibration: filename (or list of filenames) of the calfits file (or a list of filenames) for the calibration
+        old_calibration: filename of the calfits file for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
@@ -406,9 +406,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
 def apply_cal_argparser():
     '''Arg parser for commandline operation of apply_cal.'''
     a = argparse.ArgumentParser(description="Apply (and optionally, also unapply) a calfits file to visibility file.")
-    a.add_argument("infilenames", type=str, nargs="+", help="path to visibility data file(s) to calibrate")
+    a.add_argument("infilename", type=str, help="path to visibility data file to calibrate")
     a.add_argument("outfilename", type=str, help="path to new visibility results file")
-    a.add_argument("--new_cal", type=str, default=None, nargs="+", help="path to new calibration calfits file (or files for cross-pol)")
+    a.add_argument("--new_cal", type=str, default=None, help="path to new calibration calfits file (or files for cross-pol)")
     a.add_argument("--old_cal", type=str, default=None, nargs="+", help="path to old calibration calfits file to unapply (or files for cross-pol)")
     a.add_argument("--flag_file", type=str, default=None, help="path to file of flags to OR with data flags")
     a.add_argument("--flag_filetype", type=str, default='h5', help="filetype of flag_file (either 'h5' or legacy 'npz'")
