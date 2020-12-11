@@ -31,8 +31,10 @@ class XTalkFilter(VisClean):
     """
 
     def run_xtalk_filter(self, to_filter=None, weight_dict=None, max_frate_coeffs=[0.024, -0.229], mode='clean',
+                         frate_standoff=None,
                          skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
-                         write_cache=False, skip_flagged_edges=False, **filter_kwargs):
+                         write_cache=False, skip_flagged_edges=False, flag_filled=True,
+                         data=None, flags=None, **filter_kwargs):
         '''
         Run a cross-talk filter on data where the maximum fringe rate is set by the baseline length.
 
@@ -48,6 +50,9 @@ class XTalkFilter(VisClean):
             max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
                               max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
             mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.xtalk_filter for supported modes.
+            frate_standoff: float, optional
+                Additional fringe-rate standoff in mHz to add to \Omega_E b_{EW} \nu/c for fringe-rate inpainting.
+                default = None
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
@@ -80,15 +85,24 @@ class XTalkFilter(VisClean):
             filter_cache = None
         # compute maximum fringe rate dict based on EW baseline lengths.
         if self.round_up_bllens:
-            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.ceil(self.blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in self.data})
+            if frate_standoff is not None:
+                # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
+                max_frate = io.DataContainer({k: np.ceil(self.blvecs[k[:2]][0]) * 1./(24. * 36.) * self.freqs.max() / 3e8 + frate_standoff})
+            else:
+                max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.ceil(self.blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in self.data})
         else:
-            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
+            if frate_standoff is not None:
+                # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
+                max_frate = io.DataContainer({k: self.blvecs[k[:2]][0] * 1./(24. * 36.) * self.freqs.max() / 3e8 + frate_standoff})
+            else:
+                max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
+
         # loop over all baselines in increments of Nbls
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
                        cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
                        overwrite=True, verbose=verbose, skip_flagged_edge_times=skip_flagged_edges,
-                       flag_filled=True, **filter_kwargs)
+                       flag_filled=flag_filled, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
@@ -100,7 +114,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False,
                                 skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
-                                a_priori_flag_yaml=None, **filter_kwargs):
+                                a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform xtalk filtering.
 
@@ -137,6 +151,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
         overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
         a_priori_flag_yaml: path to manual flagging text file.
+        frate_standoff : standoff from baseline fringe-rate
+            to use for inpainting.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
@@ -161,6 +177,13 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         if trim_edges:
             echo(f"{str(datetime.now())}...trimming edges.", verbose=verbose)
             xf.trim_edges(ax='time')
+        if inpaint:
+            echo(f"{str(datetime.now())}...running inpainting.", verbose=verbose)
+            xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                skip_flagged_edges=skip_flagged_edges, flag_filled=True, flag_filled=False,
+                                frate_standoff=frate_standoff, **filter_kwargs, output_prefix='inpainted')
+            self.data = self.inpainted_data
+            self.flags = self.inpainted_flags
         echo(f"{str(datetime.now())}...running xtalk filter.", verbose=verbose)
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                             skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
@@ -180,9 +203,16 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                 xf.factorize_flags(time_thresh=time_thresh, inplace=True)
             if trim_edges:
                 raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
+            if inpaint:
+                echo(f"{str(datetime.now())}...running inpainting for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
+                xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                    skip_flagged_edges=skip_flagged_edges, flag_filled=True, flag_filled=False,
+                                    frate_standoff=frate_standoff, **filter_kwargs, output_prefix='inpainted')
+                self.data = self.inpainted_data
+                self.flags = self.inpainted_flags
             echo(f"{str(datetime.now())}...running xtalk filter for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+                                skip_flagged_edges=skip_flagged_edges, flag_filled=True, **filter_kwargs)
             echo(f"{str(datetime.now())}...writing filtered data for {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
@@ -197,7 +227,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
                                               skip_flagged_edges=False,flag_zero_times=True, overwrite_data_flags=False,
-                                              a_priori_flag_yaml=None, **filter_kwargs):
+                                              a_priori_flag_yaml=None, inpaint=False, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -233,6 +263,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
         overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
         a_priori_flag_yaml: path to manual flagging text file.
+        inpaint: if True, inpaint flagged times with all fringe-rates before filtering x-talk.
+                 this gets rid of time-domain flagging side-lobes.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
@@ -279,9 +311,16 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     if trim_edges:
         echo(f"{str(datetime.now())}...trimming edges", verbose=verbose)
         xf.trim_edges(ax='time')
+    if inpaint:
+        echo(f"{str(datetime.now())}...running inpainting.", verbose=verbose)
+        xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                            skip_flagged_edges=skip_flagged_edges, flag_filled=True, flag_filled=False,
+                            frate_standoff=frate_standoff, **filter_kwargs, output_prefix='inpainted')
+        self.data = self.inpainted_data
+        self.flags = self.inpainted_flags
     echo(f"{str(datetime.now())}...running xtalk filter", verbose=verbose)
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                        skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+                        skip_flagged_edges=skip_flagged_edges, flag_filled=flag_filled, **filter_kwargs)
     echo(f"{str(datetime.now())}...writing output", verbose=verbose)
     xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
@@ -318,5 +357,8 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
     elif mode == 'dpss_leastsq':
         a = vis_clean._dpss_argparser(multifile=multifile)
     filt_options = a.add_argument_group(title='Options for the cross-talk filter')
-    a.add_argument("--max_frate_coeffs", type=float, default=None, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
+    a.add_argument("--max_frate_coeffs", type=float, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
+    if 'dayenu' not in mode:
+        a.add_argument("--frate_standoff", type=float, default=0.0, help="Additional fringe-rate standoff in mHz to add to \Omega_E b_{EW} \nu/c for fringe-rate inpainting.")
+        a.add_argument("--inpaint", default=False, action="store_true", help="in-paint data with all sky fringe-rates before performing x-talk filter. This gets rid of flagging side-lobes.")
     return a
