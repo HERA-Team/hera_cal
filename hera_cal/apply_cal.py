@@ -285,7 +285,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # the data file.
         reds_data = redcal.filter_reds(all_reds, bls=hd.bls)
         reds_data_bls = []
-        for grp in reds_data:
+        for grp in all_red_antpairs:
             reds_data_bls.append(grp[0])
         # couldn't get a system working where we just read in the outputs one at a time.
         # so unfortunately, we have to load one baseline per redundant group.

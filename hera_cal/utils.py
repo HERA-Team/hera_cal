@@ -1139,7 +1139,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
 
 def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 wgts=None, flags=None, nsamples=None,
-                reds_bl_keys=None,
+                red_bl_keys=None,
                 propagate_flags=False):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
@@ -1167,7 +1167,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             If data is a DataContainer, these are its nsamples. Default (None) is 1.0 for all pixels.
             Furthermore, if data is a DataContainer, integration_time is 1.0 for all pixels.
             If data is a UVData, then data.nsample_array is used regardless of nsamples input.
-        reds_bl_keys : list, optional
+        red_bl_keys : list, optional
             Optional list of keys to use for each redundantly averaged group. If None,
             use the first key from each group.
             Default is None.
@@ -1242,10 +1242,10 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     reds = [blg for blg in reds if len(blg) > 0]
 
     # iterate over redundant groups and polarizations
-    if reds_bl_keys is None:
-        reds_bl_keys = [blg[0] for blg in reds]
+    if red_bl_keys is None:
+        red_bl_keys = [blg[0] for blg in reds]
     for pol in pols:
-        for blg, blk in zip(reds, reds_bl_keys):
+        for blg, blk in zip(reds, red_bl_keys):
             # get data and weighting for this pol-blgroup
             if fed_container:
                 d = np.asarray([data[bl + (pol,)] for bl in blg])
@@ -1289,7 +1289,7 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 data.integration_time[blinds] = iavg
 
     # select out averaged bls
-    bls = [blk + (pol,) for pol in pols for blk in reds_bl_keys]
+    bls = [blk + (pol,) for pol in pols for blk in red_bl_keys]
     if fed_container:
         for bl in list(data.keys()):
             if bl not in bls:
