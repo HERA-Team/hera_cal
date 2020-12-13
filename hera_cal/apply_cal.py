@@ -179,7 +179,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
 
-def apply_cal(data_infilename, data_outfilename, new_calibrations, old_calibration=None, flag_file=None,
+def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
@@ -270,32 +270,32 @@ def apply_cal(data_infilename, data_outfilename, new_calibrations, old_calibrati
     add_to_history = version.history_string(add_to_history)
     no_red_weights = redundant_weights is None
     # partial loading and writing using uvh5
+    if redundant_average or redundant_solution:
+        all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True, min_bls=redundant_groups)
+    else:
+        all_reds = []
+    if redundant_average:
+        # initialize a redunantly averaged HERAData on disk
+        # first copy the original HERAData
+        all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
+        hd_red = io.HERAData(data_infilename)
+        # go through all redundant groups and remove the groups that do not
+        # have baselines in the data. Each group is still labeled by the
+        # first baseline of each group regardless if that baseline is in
+        # the data file.
+        reds_data = redcal.filter_reds(all_reds, bls=hd.bls)
+        reds_data_bls = []
+        for grp in reds_data:
+            reds_data_bls.append(grp[0])
+        # couldn't get a system working where we just read in the outputs one at a time.
+        # so unfortunately, we have to load one baseline per redundant group.
+        hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
+        hd_reds = [hd_red] + [copy.deepcopy(hd_red) for m in range(redundant_groups-1)]
     if nbl_per_load is not None:
         if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
         for attribute, value in kwargs.items():
             hd.__setattr__(attribute, value)
-        if redundant_average or redundant_solution:
-            all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True, min_bls=redundant_groups)
-        else:
-            all_reds = []
-        if redundant_average:
-            # initialize a redunantly averaged HERAData on disk
-            # first copy the original HERAData
-            all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
-            hd_red = io.HERAData(data_infilename)
-            # go through all redundant groups and remove the groups that do not
-            # have baselines in the data. Each group is still labeled by the
-            # first baseline of each group regardless if that baseline is in
-            # the data file.
-            reds_data = redcal.filter_reds(all_reds, bls=hd.bls)
-            reds_data_bls = []
-            for grp in reds_data:
-                reds_data_bls.append(grp[0])
-            # couldn't get a system working where we just read in the outputs one at a time.
-            # so unfortunately, we have to load one baseline per redundant group.
-            hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
-        hd_reds = [hd_red] + [copy.deepcopy(hd_red) for m in range(redundant_groups-1)]
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
         for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average,
@@ -355,7 +355,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibrations, old_calibrati
     # full data loading and writing
     else:
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
-        all_reds = redcal.get_reds(data.antpos, pols=data.pols(), bl_error_tol=bl_error_tol, include_autos=True)
         if overwrite_data_flags:
             for bl in data_flags:
                 data_flags[bl][:] = False
@@ -388,6 +387,11 @@ def apply_cal(data_infilename, data_outfilename, new_calibrations, old_calibrati
                         redundant_weights[bl][:] = 0.
             if redundant_average:
                 for red_chunk, hd_red in enumerate(hd_reds):
+                    red_antpairs = []
+                    for grp in all_red_antpairs:
+                        start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
+                        end = int(np.max([np.ceil(len(grp) / redundant_groups) * (red_chunk + 1), len(grp)]))
+                        red_antpairs.append(grp[start:end])
                     data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
                                                                           reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
                                                                           propagate_flags=True)
