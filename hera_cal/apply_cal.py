@@ -271,7 +271,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     no_red_weights = redundant_weights is None
     # partial loading and writing using uvh5
     if redundant_average or redundant_solution:
-        all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True, min_bls=redundant_groups)
+        all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
     else:
         all_reds = []
     if redundant_average:
