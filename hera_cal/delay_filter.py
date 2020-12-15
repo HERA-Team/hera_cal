@@ -10,6 +10,7 @@ from . import io
 from . import version
 from .vis_clean import VisClean
 from . import vis_clean
+from .utils import echo
 import pickle
 import random
 import glob
@@ -17,6 +18,7 @@ import os
 import warnings
 from pyuvdata import UVCal
 from copy import deepcopy
+from datetime import datetime
 
 
 class DelayFilter(VisClean):
@@ -33,7 +35,8 @@ class DelayFilter(VisClean):
         self.run_delay_filter(**kwargs)
 
     def run_delay_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
-                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False, **filter_kwargs):
+                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False,
+                         skip_flagged_edges=False, **filter_kwargs):
         '''
         Run uvtools.dspec.vis_filter on data.
 
@@ -55,13 +58,12 @@ class DelayFilter(VisClean):
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
             tol : float, optional. To what level are foregrounds subtracted.
-            verbose: If True print feedback to stdout
             cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
                         see uvtools.dspec.dayenu_filter for key formats.
             read_cache: bool, If true, read existing cache files in cache_dir before running.
             write_cache: bool. If true, create new cache file with precomputed matrices
                                that were not in previously loaded cache files.
-            cache: dictionary containing pre-computed filter products.
+            skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -82,7 +84,8 @@ class DelayFilter(VisClean):
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='freq', x=self.freqs, cache=filter_cache, mode=mode,
                        horizon=horizon, standoff=standoff, min_dly=min_dly, tol=tol,
-                       skip_wgt=skip_wgt, overwrite=True, verbose=verbose, **filter_kwargs)
+                       skip_wgt=skip_wgt, overwrite=True,
+                       skip_flagged_edge_freqs=skip_flagged_edges, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
@@ -90,9 +93,12 @@ class DelayFilter(VisClean):
 
 def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, round_up_bllens=False,
-                                factorize_flags=False, time_thresh=0.05,
+                                factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                clobber=False, add_to_history='', **filter_kwargs):
+                                clobber=False, add_to_history='',
+                                skip_flagged_edges=False,  flag_zero_times=True,
+                                overwrite_data_flags=False, polarizations=None,
+                                a_priori_flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
@@ -114,12 +120,18 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             Fractional threshold of flagged pixels across time needed to flag all times
             per freq channel. It is not recommend to set this greater than 0.5.
             Fully flagged integrations do not count towards triggering time_thresh.
+        external_flags : str, optional, path to external flag files to apply
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
+        skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
+        flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
+        overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
+        polarizations: list, optional. List of polarizations to load, filter and write.
+        a_priori_flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
@@ -129,43 +141,50 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freqs[spw_range[0]:spw_range[1]]
+    if polarizations is None:
+        polarizations=hd.pols
     if Nbls_per_load is None:
         df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
-        df.read(frequencies=freqs)
+        df.read(frequencies=freqs, polarizations=polarizations)
+        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, flag_zero_times=flag_zero_times)
         if factorize_flags:
             df.factorize_flags(time_thresh=time_thresh, inplace=True)
-        df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+        df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                            verbose=verbose,
+                            skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
-                               clobber=clobber, add_to_history=add_to_history)
+                               clobber=clobber, add_to_history=add_to_history,
+                               extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': np.asarray([df.freqs])})
     else:
         for i in range(0, len(hd.bls), Nbls_per_load):
             df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
             if factorize_flags:
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
-            df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+            df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                                skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=True,
+                                   filled_outfilename=filled_outfilename, partial_write=True, verbose=verbose,
                                    clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
             df.hd.data_array = None  # this forces a reload in the next loop
 
 
 def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
                                               read_cache=False, write_cache=False, round_up_bllens=False,
-                                              factorize_flags=False, time_thresh=0.05,
+                                              factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
-                                              clobber=False, add_to_history='', **filter_kwargs):
+                                              clobber=False, add_to_history='', polarizations=None,
+                                              skip_flagged_edges=False, overwrite_data_flags=False,
+                                              flag_zero_times=True, a_priori_flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
 
     Arguments:
         datafile_list: list of data files to perform cross-talk filtering on
         baseline_list: list of antenna-pair-pol triplets to filter and write out from the datafile_list.
-        calfile_list: optional list of calibration files to apply to data before delay filtering
-        spw_range: 2-tuple or 2-list, channel index spw_range of data to filter
-                   uses python format where bottom index is included and upper index is excluded.
-                   default, None, uses full spw range (0,Nfreqs)
+        calfile_list: optional list of calibration files to apply to data before xtalk filtering
+        spw_range: 2-tuple or 2-list, spw_range of data to filter.
         cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
                     see uvtools.dspec.dayenu_filter for key formats.
         read_cache: bool, If true, read existing cache files in cache_dir before running.
@@ -178,15 +197,24 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             Fractional threshold of flagged pixels across time needed to flag all times
             per freq channel. It is not recommend to set this greater than 0.5.
             Fully flagged integrations do not count towards triggering time_thresh.
+        trim_edges : bool, optional
+            if true, trim fully flagged edge channels and times. helps to avoid edge popups.
+            default is false.
+        external_flags : str, optional, path to external flag files to apply
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
             with CLEAN models wherever possible
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
+        polarizations: list of polarizations to include and write.
+        verboase: lots of output.
+        skip_flagged_edges: if true, skip flagged edges in filtering.
+        flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
+        a_priori_flag_yaml: path to manual flagging text file.
         filter_kwargs: additional keyword arguments to be passed to DelayFilter.run_delay_filter()
     '''
-    hd = io.HERAData(datafile_list, filetype='uvh5')
+    hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
@@ -195,20 +223,38 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         baseline_antennas += list(blpolpair[:2])
     baseline_antennas = np.unique(baseline_antennas).astype(int)
     if calfile_list is not None:
-        cals = io.HERACal(calfile_list)
-        cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
+        # initialize calfile by iterating through calfile_list, selecting the antennas we need,
+        # and concatenating.
+        for filenum, calfile in enumerate(calfile_list):
+            cal = UVCal()
+            cal.read_calfits(calfile)
+            # only select calibration antennas that are in the intersection of antennas in
+            # baselines to be filtered and the calibration solution.
+            ants_overlap = np.intersect1d(cal.ant_array, baseline_antennas).astype(int)
+            cal.select(antenna_nums=ants_overlap, frequencies=freqs)
+            if filenum == 0:
+                cals = deepcopy(cal)
+            else:
+                cals = cals + cal
+        cals = io.to_HERACal(cals)
     else:
         cals = None
-    df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens)
-    df.read(bls=baseline_list, frequencies=freqs)
+    if polarizations is None:
+        if len(datafile_list) > 1:
+            polarizations=list(hd.pols.values())[0]
+        else:
+            polarizations=hd.pols
+    df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
+    df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
+    df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, flag_zero_times=flag_zero_times)
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
-    df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache, **filter_kwargs)
+    df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                        skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
     df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history,
                            extra_attrs={'Nfreqs': df.Nfreqs, 'freq_array': np.asarray([df.freqs])})
-
 
 # ----------------------------------------
 # Arg-parser for delay-filtering.
@@ -216,23 +262,27 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
 # ---------------------------------------
 
 
-def delay_filter_argparser(mode='clean'):
+def delay_filter_argparser(mode='clean', multifile=False):
     '''
     Arg parser for commandline operation of delay filters.
 
     Parameters:
         mode, str : optional. Determines sets of arguments to load.
             can be 'clean', 'dayenu', or 'dpss_leastsq'.
+        multifile: bool, optional.
+            If True, add calfilelist and filelist
+            arguments.
     Returns:
         argparser for delay-domain filtering for specified filtering mode
     '''
     if mode == 'clean':
-        a = vis_clean._clean_argparser()
-    elif mode in ['dayenu', 'dpss_leastsq']:
-        a = vis_clean._linear_argparser()
+        a = vis_clean._clean_argparser(multifile=multifile)
+    elif mode == 'dayenu':
+        a = vis_clean._linear_argparser(multifile=multifile)
+    elif mode == 'dpss_leastsq':
+        a = vis_clean._dpss_argparser(multifile=multifile)
     filt_options = a.add_argument_group(title='Options for the delay filter')
     filt_options.add_argument("--standoff", type=float, default=15.0, help='fixed additional delay beyond the horizon (default 15 ns)')
     filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
                               (full light travel time)')
     filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for filtering.")
-    return a
