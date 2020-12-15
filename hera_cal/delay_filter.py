@@ -18,7 +18,6 @@ import os
 import warnings
 from pyuvdata import UVCal
 from copy import deepcopy
-from datetime import datetime
 
 
 class DelayFilter(VisClean):
@@ -218,25 +217,13 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
-    baseline_antennas = []
+        baseline_antennas = []
     for blpolpair in baseline_list:
         baseline_antennas += list(blpolpair[:2])
     baseline_antennas = np.unique(baseline_antennas).astype(int)
     if calfile_list is not None:
-        # initialize calfile by iterating through calfile_list, selecting the antennas we need,
-        # and concatenating.
-        for filenum, calfile in enumerate(calfile_list):
-            cal = UVCal()
-            cal.read_calfits(calfile)
-            # only select calibration antennas that are in the intersection of antennas in
-            # baselines to be filtered and the calibration solution.
-            ants_overlap = np.intersect1d(cal.ant_array, baseline_antennas).astype(int)
-            cal.select(antenna_nums=ants_overlap, frequencies=freqs)
-            if filenum == 0:
-                cals = deepcopy(cal)
-            else:
-                cals = cals + cal
-        cals = io.to_HERACal(cals)
+        cals = io.HERACal(calfile_list)
+        cals.read(antenna_nums=baseline_antennas, frequencies=freqs)
     else:
         cals = None
     if polarizations is None:
