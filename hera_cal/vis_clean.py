@@ -213,6 +213,62 @@ class VisClean(object):
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
 
+
+def apply_flags(self, external_flags=None, overwrite_data_flags=False,
+                    flag_zero_times=True, a_priori_flag_yaml=None):
+        """
+        apply external flags.
+        Parameters
+        ----------
+        external_flags: str, optional.
+            Str or list of strings pointing to flag files to apply.
+
+        overwrite_data_flags: bool, optional
+            If true, overwrite all data flags for bls that are not entirely flagge.d
+
+        flag_zero_times: bool, optional
+            if true, don't overwrite flags where the entire time is flagged.
+
+        a_priori_flag_yaml: str, optional
+            path to a yaml file containing manual flags.
+        """
+        if external_flags is not None:
+            external_flags = UVFlag(external_flags)
+            # select frequencies and times that match data.
+            flag_times = np.unique(external_flags.time_array)
+            flag_freqs = np.unique(external_flags.freq_array)
+            times_overlapping = []
+            freqs_overlapping = []
+            for t in flag_times:
+                if np.any(np.isclose(self.times, t)):
+                    times_overlapping.append(t)
+            for f in flag_freqs:
+                if np.any(np.isclose(self.freqs, f)):
+                    freqs_overlapping.append(f)
+            # select frequencies and times that overlap with data.
+            external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
+        from hera_qm.xrfi import flag_apply
+        # set all flags to False on waterfalls that are not fully flagged
+        # if overwrite_data_flags is True.
+        if overwrite_data_flags:
+            for bl in self.flags:
+                if not np.all(self.flags[bl]):
+                    if not flag_zero_times:
+                        self.flags[bl][:] = False
+                    else:
+                        self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
+            self.hd.update(flags=self.flags)
+        # explicitly keep_existing since we already reset flags.
+        if external_flags is not None:
+            flag_apply(external_flags, self.hd, force_pol=True, keep_existing=True)
+        # apply apriori flag yaml too.
+        if a_priori_flag_yaml is not None:
+            import hera_qm.utils as qm_utils
+            self.hd = qm_utils.apply_yaml_flags(self.hd, a_priori_flag_yaml)
+
+        _, self.flags, _ = self.hd.build_datacontainers()
+
+
     def read(self, **read_kwargs):
         """
         Read from self.hd and attach data and/or metadata to self.
@@ -303,11 +359,16 @@ class VisClean(object):
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
-    def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
+        def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
                   min_dly=10.0, max_frate=None, output_prefix='clean',
                   skip_wgt=0.1, verbose=False, tol=1e-9,
-                  overwrite=False, **filter_kwargs):
+                  overwrite=False,
+                  skip_flagged_edge_freqs=False,
+                  skip_flagged_edge_times=False,
+                  skip_gaps_larger_then_filter_period=False,
+                  flag_filled=False,
+                   **filter_kwargs):
         """
         Filter the data
 
@@ -335,9 +396,26 @@ class VisClean(object):
             time. Skipped channels are then flagged in self.flags.
             Only works properly when all weights are all between 0 and 1.
         verbose : Lots of outputs
+        tol : float, optional. To what level are foregrounds subtracted.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
-        tol : float, optional. To what level are foregrounds subtracted.
+        skip_flagged_edge_freqs : bool, optional
+            if true, do not filter over flagged edge frequencies (filter over sub-region)
+            defualt is False
+        skip_flagged_edge_times : bool, optional
+            if true, do not filter over flagged edge times (filter over sub-region)
+            defualt is False
+        skip_gaps_larger_then_filter_period : bool, optional
+            if true, skip integrations or channels with gaps that are larger then the period of
+            of the finest scale mode used for interpolation.
+            default is False.
+        flag_filled : bool, optional
+            if true, set filter flags equal to the original flags (do not unflag interpolated channels)
+            This is useful for cross-talk filtering where the cross-talk modes will not completely interpolate
+            over the channel gaps since there are substantial contributions to the foreground power from fringe-rates
+            that are not being modeled as cross-talk. In this case, we may want a file with the modelled cross-talk included but
+            not used to in-paint flagged integrations.
+            default is False.
         filter_kwargs : optional dictionary, see fourier_filter **filter_kwargs.
                         Do not pass suppression_factors (non-clean)!
                         instead, use tol to set suppression levels in linear filtering.
@@ -398,16 +476,30 @@ class VisClean(object):
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, suppression_factors=suppression_factors,
                                     x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
+                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite,
+                                    skip_flagged_edge_freqs=skip_flagged_edge_freqs,
+                                    skip_flagged_edge_times=skip_flagged_edge_times,
+                                    skip_gaps_larger_then_filter_period=skip_gaps_larger_then_filter_period,
+                                    flag_filled=flag_filled,
+                                    **filter_kwargs)
             else:
                 self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
                                     mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite, **filter_kwargs)
+                                    ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite,
+                                    skip_flagged_edge_freqs=skip_flagged_edge_freqs,
+                                    skip_flagged_edge_times=skip_flagged_edge_times,
+                                    skip_gaps_larger_then_filter_period=skip_gaps_larger_then_filter_period,
+                                    flag_filled=flag_filled,
+                                    **filter_kwargs)
 
     def fourier_filter(self, filter_centers, filter_half_widths, mode,
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
-                       ax='freq', skip_wgt=0.1, verbose=False, overwrite=False, **filter_kwargs):
+                       ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
+                       skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
+                       skip_gaps_larger_then_filter_period=False,
+                       flag_filled=False,
+                       **filter_kwargs):
         """
         Generalized fourier filtering of attached data.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
@@ -486,6 +578,21 @@ class VisClean(object):
         verbose : Lots of outputs.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
+        skip_flagged_edge_freqs : bool, optional
+            if true, do not filter over flagged edge frequencies (filter over sub-region)
+            defualt is False
+        skip_flagged_edge_times : bool, optional
+            if true, do not filter over flagged edge times (filter over sub-region)
+            defualt is False
+        skip_gaps_larger_then_filter_period : bool, optional
+            if true, skip integrations or channels with gaps that are larger then the period of
+            of the finest scale mode used for interpolation.
+        flag_filled : bool, optional
+            if true, set filter flags equal to the original flags (do not unflag interpolated channels)
+            This is useful for cross-talk filtering where the cross-talk modes will not completely interpolate
+            over the channel gaps since there are substantial contributions to the foreground power from fringe-rates
+            that are not being modeled as cross-talk. In this case, we may want a file with the modelled cross-talk included but
+            not used to in-paint flagged integrations.
         filter_kwargs: dict. NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
@@ -596,12 +703,12 @@ class VisClean(object):
             raise ValueError("ax must be one of ['freq', 'time', 'both']")
 
         # initialize containers
-        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data']]
+        containers = ["{}_{}".format(output_prefix, dc) for dc in ['model', 'resid', 'flags', 'data', 'resid_flags']]
         for i, dc in enumerate(containers):
             if not hasattr(self, dc):
                 setattr(self, dc, DataContainer({}))
             containers[i] = getattr(self, dc)
-        filtered_model, filtered_resid, filtered_flags, filtered_data = containers
+        filtered_model, filtered_resid, filtered_flags, filtered_data, resid_flags = containers
         filtered_info = "{}_{}".format(output_prefix, 'info')
         if not hasattr(self, filtered_info):
             setattr(self, filtered_info, {})
@@ -664,10 +771,92 @@ class VisClean(object):
                         w, _ = zeropad_array(w, zeropad=zeropad[m], axis=m)
                         xp[m] = np.hstack([x[m].min() - (np.arange(zeropad[m])[::-1] + 1) * np.mean(np.diff(x[m])),
                                            x[m], x[m].max() + (1 + np.arange(zeropad[m])) * np.mean(np.diff(x[m]))])
-            mdl, res, info = dspec.fourier_filter(x=xp, data=d, wgts=w, filter_centers=filter_centers,
-                                                  filter_half_widths=filter_half_widths,
-                                                  mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                                  **filter_kwargs)
+            mdl, res = np.zeros_like(d), np.zeros_like(d)
+            if skip_flagged_edge_freqs:
+                unflagged_chans = np.where(~np.all(np.isclose(w, 0.0), axis=0))[0]
+                if len(unflagged_chans) > 0:
+                    ind_left = np.min(unflagged_chans)
+                    ind_right = np.max(unflagged_chans) + 1
+                else:
+                    ind_left = 0
+                    ind_right = d.shape[1]
+            else:
+                ind_left = 0
+                ind_right = d.shape[1]
+            if skip_flagged_edge_times:
+                unflagged_times = np.where(~np.all(np.isclose(w, 0.0), axis=1))[0]
+                if len(unflagged_times) > 0:
+                    ind_lower = np.min(unflagged_times)
+                    ind_upper = np.max(unflagged_times) + 1
+                else:
+                    ind_lower = 0
+                    ind_upper = d.shape[0]
+            else:
+                ind_lower = 0
+                ind_upper = d.shape[0]
+            din = d[ind_lower: ind_upper][:, ind_left: ind_right]
+            win = w[ind_lower: ind_upper][:, ind_left: ind_right]
+            if ax == 'both':
+                xp[0] = xp[0][ind_lower: ind_upper]
+                xp[1] = xp[1][ind_left: ind_right]
+            elif ax == 'time':
+                xp = xp[ind_lower: ind_upper]
+            elif ax == 'freq':
+                xp = xp[ind_left: ind_right]
+
+            # skip half period gaps
+            if skip_gaps_larger_then_filter_period:
+                if ax == 'freq':
+                    for rownum,wrow in enumerate(win):
+                        max_contiguous = 0
+                        current_flag_length = 0
+                        on_flag = False
+                        for w in wrow:
+                            on_flag = (w == 0)
+                            if on_flag:
+                                current_flag_length += 1
+                            else:
+                                if current_flag_length >= max_contiguous:
+                                    max_contiguous = current_flag_length
+                                current_flag_length = 0
+                        if ax=='both':
+                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[1], filter_half_widths[1])])
+                            dvoxel = np.mean(np.diff(x[1]))
+                        else:
+                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
+                            dvoxel = np.mean(np.diff(x))
+                # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
+                        if max_contiguous * dvoxel >= 1 / max_filter_delay:
+                            win[rownum] = 0.
+                if ax == 'time' or ax == 'both':
+                    for rownum,wrow in enumerate(win.T):
+                        max_contiguous = 0
+                        current_flag_length = 0
+                        on_flag = False
+                        for w in wrow:
+                            on_flag = (w == 0)
+                            if on_flag:
+                                current_flag_length += 1
+                            else:
+                                if current_flag_length >= max_contiguous:
+                                    max_contiguous = current_flag_length
+                                current_flag_length = 0
+                        if ax=='both':
+                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_widths[0])])
+                            dvoxel = np.mean(np.diff(x[0]))
+                        else:
+                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
+                            dvoxel = np.mean(np.diff(x))
+                    # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
+                        if max_contiguous * dvoxel >= 1 / max_filter_delay:
+                            win[:, rownum] = 0.
+
+
+            mdl[ind_lower: ind_upper][:, ind_left: ind_right], res[ind_lower: ind_upper][:, ind_left: ind_right], info \
+            = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                   filter_half_widths=filter_half_widths,
+                                   mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                   **filter_kwargs)
 
             # unzeropad array and put in skip flags.
             if ax == 'freq':
@@ -694,14 +883,22 @@ class VisClean(object):
                                 skipped[:, i] = True
                             elif dim == 1:
                                 skipped[i] = True
-
+            # also flag skipped edge channels and integrations.
+            skipped[:, :ind_left] = True
+            skipped[:, ind_right:] = True
+            skipped[:ind_lower, :] = True
+            skipped[ind_upper:, :] = True
             filtered_model[k] = mdl
             filtered_model[k][skipped] = 0.
             filtered_resid[k] = res * fw
             filtered_resid[k][skipped] = 0.
             filtered_data[k] = filtered_model[k] + filtered_resid[k]
-            filtered_flags[k] = skipped
+            if not flag_filled:
+                filtered_flags[k] = skipped
+            else:
+                filtered_flags[k] = copy.deepcopy(flags[k]) | skipped
             filtered_info[k] = info
+            resid_flags[k] = copy.deepcopy(flags[k]) | skipped
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times
@@ -894,7 +1091,7 @@ class VisClean(object):
                                          [res_outfilename, CLEAN_outfilename, filled_outfilename]):
                 if outfilename is not None:
                     if mode == 'residual':
-                        data_out, flags_out = getattr(self, prefix + '_resid'), self.flags
+                        data_out, flags_out = getattr(self, prefix + '_resid'), getattr(self, prefix + '_resid_flags')
                     elif mode == 'CLEAN':
                         data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
                     elif mode == 'filled':
@@ -1378,6 +1575,21 @@ def _linear_argparser(multifile=False):
     a.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
     return a
 
+def _dpss_argparser(multifile=False):
+    '''
+    Arg parser for commandline operation of hera_cal.delay_filter in dpss mode.
+    Arguments
+    ---------
+        multifile, bool: optional. If True, add calfilelist and filelist
+                         arguments.
+    Returns
+    -------
+        Arg-parser for dpss filtering.
+    '''
+    a = _linear_argparser(multifile=multifile)
+    a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
+    a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
+    return a
 
 def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, outfilename, clobber=False, time_bounds=False):
     """Combine multiple waterfall files (with disjoint baseline sets) into time-limited file with all baselines.
