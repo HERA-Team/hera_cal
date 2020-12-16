@@ -183,7 +183,7 @@ class Test_DelayFilter(object):
         if os.path.isdir(cdir):
             shutil.rmtree(cdir)
         os.mkdir(cdir)
-        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
                                                      calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
                                                      read_cache=True, write_cache=True,
                                                      res_outfilename=outfilename, clobber=True,
@@ -194,7 +194,7 @@ class Test_DelayFilter(object):
         assert d[(53, 54, 'ee')].shape[1] == 100
         assert d[(53, 54, 'ee')].shape[0] == 60
         # now do no spw range and no cal files just to cover those lines.
-        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
+        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
                                                      cache_dir=cdir,
                                                      read_cache=True, write_cache=True,
                                                      res_outfilename=outfilename, clobber=True,
@@ -229,7 +229,7 @@ class Test_DelayFilter(object):
         for blnum, bl in enumerate(flags.keys()):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
             df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
-                                                         tol=1e-4, baseline_list=[bl],
+                                                         tol=1e-4, baseline_list=[bl[:2]],
                                                          cache_dir=cdir,
                                                          factorize_flags=True, time_thresh=time_thresh, clobber=True)
         # now load all of the outputs in

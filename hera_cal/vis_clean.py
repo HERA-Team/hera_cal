@@ -214,59 +214,59 @@ class VisClean(object):
                                      gain_convention=gain_convention)
 
 
-def apply_flags(self, external_flags=None, overwrite_data_flags=False,
-                    flag_zero_times=True, a_priori_flag_yaml=None):
-        """
-        apply external flags.
-        Parameters
-        ----------
-        external_flags: str, optional.
-            Str or list of strings pointing to flag files to apply.
+    def apply_flags(self, external_flags=None, overwrite_data_flags=False,
+                        flag_zero_times=True, a_priori_flag_yaml=None):
+            """
+            apply external flags.
+            Parameters
+            ----------
+            external_flags: str, optional.
+                Str or list of strings pointing to flag files to apply.
 
-        overwrite_data_flags: bool, optional
-            If true, overwrite all data flags for bls that are not entirely flagge.d
+            overwrite_data_flags: bool, optional
+                If true, overwrite all data flags for bls that are not entirely flagge.d
 
-        flag_zero_times: bool, optional
-            if true, don't overwrite flags where the entire time is flagged.
+            flag_zero_times: bool, optional
+                if true, don't overwrite flags where the entire time is flagged.
 
-        a_priori_flag_yaml: str, optional
-            path to a yaml file containing manual flags.
-        """
-        if external_flags is not None:
-            external_flags = UVFlag(external_flags)
-            # select frequencies and times that match data.
-            flag_times = np.unique(external_flags.time_array)
-            flag_freqs = np.unique(external_flags.freq_array)
-            times_overlapping = []
-            freqs_overlapping = []
-            for t in flag_times:
-                if np.any(np.isclose(self.times, t)):
-                    times_overlapping.append(t)
-            for f in flag_freqs:
-                if np.any(np.isclose(self.freqs, f)):
-                    freqs_overlapping.append(f)
-            # select frequencies and times that overlap with data.
-            external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
-        from hera_qm.xrfi import flag_apply
-        # set all flags to False on waterfalls that are not fully flagged
-        # if overwrite_data_flags is True.
-        if overwrite_data_flags:
-            for bl in self.flags:
-                if not np.all(self.flags[bl]):
-                    if not flag_zero_times:
-                        self.flags[bl][:] = False
-                    else:
-                        self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
-            self.hd.update(flags=self.flags)
-        # explicitly keep_existing since we already reset flags.
-        if external_flags is not None:
-            flag_apply(external_flags, self.hd, force_pol=True, keep_existing=True)
-        # apply apriori flag yaml too.
-        if a_priori_flag_yaml is not None:
-            import hera_qm.utils as qm_utils
-            self.hd = qm_utils.apply_yaml_flags(self.hd, a_priori_flag_yaml)
+            a_priori_flag_yaml: str, optional
+                path to a yaml file containing manual flags.
+            """
+            if external_flags is not None:
+                external_flags = UVFlag(external_flags)
+                # select frequencies and times that match data.
+                flag_times = np.unique(external_flags.time_array)
+                flag_freqs = np.unique(external_flags.freq_array)
+                times_overlapping = []
+                freqs_overlapping = []
+                for t in flag_times:
+                    if np.any(np.isclose(self.times, t)):
+                        times_overlapping.append(t)
+                for f in flag_freqs:
+                    if np.any(np.isclose(self.freqs, f)):
+                        freqs_overlapping.append(f)
+                # select frequencies and times that overlap with data.
+                external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
+            from hera_qm.xrfi import flag_apply
+            # set all flags to False on waterfalls that are not fully flagged
+            # if overwrite_data_flags is True.
+            if overwrite_data_flags:
+                for bl in self.flags:
+                    if not np.all(self.flags[bl]):
+                        if not flag_zero_times:
+                            self.flags[bl][:] = False
+                        else:
+                            self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
+                self.hd.update(flags=self.flags)
+            # explicitly keep_existing since we already reset flags.
+            if external_flags is not None:
+                flag_apply(external_flags, self.hd, force_pol=True, keep_existing=True)
+            # apply apriori flag yaml too.
+            if a_priori_flag_yaml is not None:
+                import hera_qm.utils as qm_utils
+                self.hd = qm_utils.apply_yaml_flags(self.hd, a_priori_flag_yaml)
 
-        _, self.flags, _ = self.hd.build_datacontainers()
+            _, self.flags, _ = self.hd.build_datacontainers()
 
 
     def read(self, **read_kwargs):
@@ -359,16 +359,16 @@ def apply_flags(self, external_flags=None, overwrite_data_flags=False,
             raise ValueError("filetype {} not recognized".format(filetype))
         echo("...writing to {}".format(filename), verbose=verbose)
 
-        def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
-                  ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
-                  min_dly=10.0, max_frate=None, output_prefix='clean',
-                  skip_wgt=0.1, verbose=False, tol=1e-9,
-                  overwrite=False,
-                  skip_flagged_edge_freqs=False,
-                  skip_flagged_edge_times=False,
-                  skip_gaps_larger_then_filter_period=False,
-                  flag_filled=False,
-                   **filter_kwargs):
+    def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
+              ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
+              min_dly=10.0, max_frate=None, output_prefix='clean',
+              skip_wgt=0.1, verbose=False, tol=1e-9,
+              overwrite=False,
+              skip_flagged_edge_freqs=False,
+              skip_flagged_edge_times=False,
+              skip_gaps_larger_then_filter_period=False,
+              flag_filled=False,
+               **filter_kwargs):
         """
         Filter the data
 
