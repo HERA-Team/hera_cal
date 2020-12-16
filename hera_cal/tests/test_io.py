@@ -1085,7 +1085,4 @@ def test_baselines_from_filelist_position():
     sum_indices = np.argsort(ant_sum)
     baselines_sorted = [baselines[m] for m in sum_indices]
     # check that the sorted baselines are all of the original baselines.
-    assert baselines_sorted == [(53, 53, 'ee'), (53, 54, 'ee'), (54, 54, 'ee')]
-    # check that providing an invalid polarization will raise an exception.
-    with pytest.raises(ValueError):
-        io.baselines_from_filelist_position(file, filelist, 'lasdf')
+    assert baselines_sorted == [(53, 53), (53, 54), (54, 54)]

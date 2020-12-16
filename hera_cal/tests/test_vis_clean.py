@@ -532,7 +532,7 @@ class Test_VisClean(object):
         cdir.mkdir()
         # cross-talk filter chunked baselines
         for filenum, file in enumerate(datafiles):
-            baselines = io.baselines_from_filelist_position(file, datafiles, polarizations=['ee'])
+            baselines = io.baselines_from_filelist_position(file, datafiles)
             fname = 'temp.fragment.part.%d.h5' % filenum
             fragment_filename = tmp_path / fname
             xf.load_xtalk_filter_and_write_baseline_list(datafiles, baseline_list=baselines, calfile_list=cals,
