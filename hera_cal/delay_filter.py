@@ -10,7 +10,6 @@ from . import io
 from . import version
 from .vis_clean import VisClean
 from . import vis_clean
-from .utils import echo
 import pickle
 import random
 import glob
@@ -34,7 +33,7 @@ class DelayFilter(VisClean):
         self.run_delay_filter(**kwargs)
 
     def run_delay_filter(self, to_filter=None, weight_dict=None, horizon=1., standoff=0.15, min_dly=0.0, mode='clean',
-                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False, write_cache=False,
+                         skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False, write_cache=False,
                          skip_flagged_edges=False, **filter_kwargs):
         '''
         Run uvtools.dspec.vis_filter on data.
@@ -149,7 +148,6 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         if factorize_flags:
             df.factorize_flags(time_thresh=time_thresh, inplace=True)
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                            verbose=verbose,
                             skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
@@ -162,9 +160,9 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             if factorize_flags:
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
+                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
             df.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
-                                   filled_outfilename=filled_outfilename, partial_write=True, verbose=verbose,
+                                   filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history, Nfreqs=df.Nfreqs, freq_array=np.asarray([df.freqs]))
             df.hd.data_array = None  # this forces a reload in the next loop
 
@@ -217,7 +215,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
-        baseline_antennas = []
+    baseline_antennas = []
     for blpolpair in baseline_list:
         baseline_antennas += list(blpolpair[:2])
     baseline_antennas = np.unique(baseline_antennas).astype(int)
@@ -273,3 +271,4 @@ def delay_filter_argparser(mode='clean', multifile=False):
     filt_options.add_argument("--horizon", type=float, default=1.0, help='proportionality constant for bl_len where 1.0 (default) is the horizon\
                               (full light travel time)')
     filt_options.add_argument("--min_dly", type=float, default=0.0, help="A minimum delay threshold [ns] used for filtering.")
+    return a

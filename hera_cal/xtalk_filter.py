@@ -30,10 +30,10 @@ class XTalkFilter(VisClean):
     """
 
     def run_xtalk_filter(self, to_filter=None, weight_dict=None, max_frate_coeffs=[0.024, -0.229], mode='clean',
-                         skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
+                         skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
                          write_cache=False, skip_flagged_edges=False, flag_filled=True,
                          data=None, flags=None, **filter_kwargs):
-            '''
+        '''
         Run a cross-talk filter on data where the maximum fringe rate is set by the baseline length.
 
         Run a delay-filter on (a subset of) the data stored in the object.
@@ -53,7 +53,6 @@ class XTalkFilter(VisClean):
                 time. Skipped channels are then flagged in self.flags.
                 Only works properly when all weights are all between 0 and 1.
             tol : float, optional. To what level are foregrounds subtracted.
-            verbose: If True print feedback to stdout
             cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
                         see uvtools.dspec.dayenu_filter for key formats.
             read_cache: bool, If true, read existing cache files in cache_dir before running.
@@ -61,7 +60,6 @@ class XTalkFilter(VisClean):
                                that were not in previously loaded cache files.
             cache: dictionary containing pre-computed filter products.
             skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
-            verbose: bool, optional, lots of outputs!
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -87,7 +85,7 @@ class XTalkFilter(VisClean):
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
                        cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
-                       overwrite=True, verbose=verbose, skip_flagged_edge_times=skip_flagged_edges,
+                       overwrite=True, skip_flagged_edge_times=skip_flagged_edges,
                        flag_filled=flag_filled, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
@@ -95,7 +93,7 @@ class XTalkFilter(VisClean):
 
 
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
-                                read_cache=False, write_cache=False, verbose=False,
+                                read_cache=False, write_cache=False,
                                 factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False,
@@ -115,7 +113,6 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
                            that were not in previously loaded cache files.
-        verbose: bool, optiona. Lots of output. Default is False.
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
         time_thresh : float
@@ -153,10 +150,10 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         if factorize_flags:
             xf.factorize_flags(time_thresh=time_thresh, inplace=True)
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                            skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
+                            skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
-                               clobber=clobber, add_to_history=add_to_history, verbose=verbose,
+                               clobber=clobber, add_to_history=add_to_history,
                                extra_attrs={'Nfreqs': xf.Nfreqs, 'freq_array': np.asarray([xf.freqs])})
     else:
         for i in range(0, hd.Nbls, Nbls_per_load):
@@ -175,7 +172,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 
 def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
                                               read_cache=False, write_cache=False, external_flags=None,
-                                              factorize_flags=False, time_thresh=0.05, trim_edges=False, verbose=False,
+                                              factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
                                               skip_flagged_edges=False,flag_zero_times=True, overwrite_data_flags=False,
@@ -204,7 +201,6 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             if true, trim fully flagged edge channels and times. helps to avoid edge popups.
             default is false.
         res_outfilename: path for writing the filtered visibilities with flags
-        verbose: bool, optional. If True lots of outputs! default is False.
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
         filled_outfilename: path for writing the original data but with flags unflagged and replaced
             with CLEAN models wherever possible
@@ -221,12 +217,11 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
              to use for inpainting.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
-    echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freq_array.flatten()[spw_range[0]:spw_range[1]]
-        baseline_antennas = []
+    baseline_antennas = []
     for blpolpair in baseline_list:
         baseline_antennas += list(blpolpair[:2])
     baseline_antennas = np.unique(baseline_antennas).astype(int)
