@@ -22,6 +22,7 @@ from .utils import echo
 from .flag_utils import factorize_flags
 import warnings
 from pyuvdata import UVFlag
+from . import redcal
 
 
 class VisClean(object):
@@ -908,7 +909,7 @@ class VisClean(object):
 
     def fft_data(self, data=None, flags=None, keys=None, assign='dfft', ax='freq', window='none', alpha=0.1,
                  overwrite=False, edgecut_low=0, edgecut_hi=0, ifft=False, ifftshift=False, fftshift=True,
-                 zeropad=0, dtime=None, dnu=None, verbose=True):
+                 zeropad=0, dtime=None, dnu=None, verbose=True, redundant=False):
         """
         Take FFT of data and attach to self.
 
@@ -947,6 +948,8 @@ class VisClean(object):
             dnu : float, frequency spacing of input data [Hz]. Default is self.dnu.
             overwrite : bool
                 If dfft[key] already exists, overwrite its contents.
+            redundant : bool
+                If true, conjugate baselines in redundant groups before taking ffts.
         """
         # type checks
         if ax not in ['freq', 'time', 'both']:
@@ -986,6 +989,21 @@ class VisClean(object):
 
         # iterate over keys
         j = 0
+        if redundant:
+            key_pairs = [k[:2] for k in keys]
+            keys_red = []
+            reds_1pol = redcal.get_reds(self.antpos, include_autos=True)
+            for bl in reds_1pol:
+                # apply consistent conjugation to all redundant keys.
+                if bl[:2] in key_pairs:
+                    keys_red.append(bl + keys[key_pairs.index(bl[:2])][-1:])
+                if bl[:2:-1] in key_pairs:
+                    kp = bl + keys[key_pairs.index(bl[:2])][-1:]
+                    kp[-1] = kp[-1][::-1] #reverse polarization.
+                    keys_red.append()
+            keys = keys_red
+
+
         for k in keys:
             if k not in data:
                 echo("{} not in data, skipping...".format(k), verbose=verbose)
@@ -1584,11 +1602,10 @@ def _filter_argparser(multifile=False):
                           'antenna flagsfor parsable by hera_qm.metrics_io.read_a_priori_*_flags()'))
     a.add_argument("--external_flags", default=None, type=str, nargs="+", help="list of external flags to apply before filtering.")
     a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="overwrite data and calibration flags with external flags.")
+    a.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter and write out.")
     if multifile:
         a.add_argument("--calfilelist", default=None, type=str, nargs="+", help="list of calibration files.")
         a.add_argument("--datafilelist", default=None, type=str, nargs="+", help="list of data files. Used to determine parallelization chunk.")
-        a.add_argument("--polarizations", default=None, type=str, nargs="+", help="list of polarizations to filter and write out.")
-
     else:
         a.add_argument("--calfile", default=None, type=str, help="optional string path to calibration file to apply to data before delay filtering")
     return a

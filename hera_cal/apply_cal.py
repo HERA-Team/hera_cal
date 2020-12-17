@@ -276,21 +276,11 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         all_reds = []
     if redundant_average:
         # initialize a redunantly averaged HERAData on disk
-        # first copy the original HERAData
         all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == hd.pols[0]]
-        hd_red = io.HERAData(data_infilename)
-        # go through all redundant groups and remove the groups that do not
-        # have baselines in the data. Each group is still labeled by the
-        # first baseline of each group regardless if that baseline is in
-        # the data file.
-        reds_data = redcal.filter_reds(all_reds, bls=hd.bls)
-        reds_data_bls = []
-        for grp in all_red_antpairs:
-            reds_data_bls.append(grp[0])
-        # couldn't get a system working where we just read in the outputs one at a time.
-        # so unfortunately, we have to load one baseline per redundant group.
-        hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
-        hd_reds = [hd_red] + [copy.deepcopy(hd_red) for m in range(redundant_groups-1)]
+        data_antpairs = hd.get_antpairs()
+        reds_data = [[bl for bl in blg if bl in data_antpairs] for blg in all_red_antpairs]
+        reds_data = [blg for blg in reds_data if len(blg) > 0]
+
     if nbl_per_load is not None:
         if not ((filetype_in == 'uvh5') and (filetype_out == 'uvh5')):
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
@@ -320,7 +310,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             hd.update(data=data, flags=data_flags, nsamples=data_nsamples)
 
             if redundant_average:
-                for red_chunk, hd_red in enumerate(hd_reds):
+                for red_chunk in range(redundant_groups):
                     # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
                     # and also allows us to compute redundant averaged vis in flagged channels (in case flags are spurious).
                     if no_red_weights:
@@ -331,14 +321,22 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     # redundantly average
                     # select chunk antpairs
                     red_antpairs = []
-                    for grp in all_red_antpairs:
-                        start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
-                        end = int(np.max([np.ceil(len(grp) / redundant_groups) * (red_chunk + 1), len(grp)]))
-                        red_antpairs.append(grp[start:end])
+                    for grp in reds_data:
+                        # trim group to only include baselines with redundant weights not equal to zero.
+                        grp0 = grp[0]
+                        grp = [ap for ap in grp if not np.all(redundant_weights[ap+(hd.pols[0],)] == 0.)]
+                        # only include groups with more elements then redundant groups!
+                        if len(grp) >= redundant_groups:
+                            start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
+                            end = int(np.min([np.ceil(len(grp) / redundant_groups) * (red_chunk + 1), len(grp)]))
+                            red_antpairs.append(grp[start:end])
+                            reds_data_bls.append(grp0)
 
                     data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
                                                                           reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
                                                                           propagate_flags=True)
+                    hd_red = io.HERAData(data_infilename)
+                    hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
                     # update redundant data. Don't partial write.
                     hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
             else:
@@ -372,7 +370,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         else:
             calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                                old_gains=old_gains, gain_convention=gain_convention)
-        if filetype_out != 'uvh5' and not redundant_average:
+        if not redundant_average:
             io.update_vis(data_infilename, data_outfilename, filetype_in=filetype_in, filetype_out=filetype_out,
                           data=data, flags=data_flags, add_to_history=add_to_history, clobber=clobber, **kwargs)
         else:
@@ -385,26 +383,37 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 for bl in data_flags:
                     if np.all(data_flags[bl]):
                         redundant_weights[bl][:] = 0.
-            if redundant_average:
-                for red_chunk, hd_red in enumerate(hd_reds):
-                    red_antpairs = []
-                    for grp in all_red_antpairs:
+            for red_chunk in range(redundant_groups):
+                red_antpairs = []
+                reds_data_bls = []
+                for grp in reds_data:
+                    # trim group to only include baselines with redundant weights not equal to zero.
+                    grp0 = grp[0]
+                    grp = [ap for ap in grp if not np.all(redundant_weights[ap+(hd.pols[0],)] == 0.)]
+                    # only include groups with more elements then redundant groups!
+                    if len(grp) >= redundant_groups:
                         start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
-                        end = int(np.max([np.ceil(len(grp) / redundant_groups) * (red_chunk + 1), len(grp)]))
+                        end = int(np.min([np.ceil(len(grp) / redundant_groups) * (red_chunk + 1), len(grp)]))
                         red_antpairs.append(grp[start:end])
-                    data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
-                                                                          reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
-                                                                          propagate_flags=True)
-                    # update redundant data. Don't partial write.
-                    hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
-                    if redundant_groups > 1:
-                        outfile = data_outfilename.replace('.uvh5', f'.{red_chunk}.uvh5')
-                    else:
-                        outfile = data_outfilename
-                    if filetype_out == 'uvh5':
-                        hd_red.write_uvh5(outfile, clobber=clobber)
-                    else:
-                        raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
+                        reds_data_bls.append(grp0)
+                data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
+                                                                      reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
+                                                                      propagate_flags=True)
+                # update redundant data. Don't partial write.
+                hd_red = io.HERAData(data_infilename)
+                hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
+                # update redundant data. Don't partial write.
+                hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
+                hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
+                if redundant_groups > 1:
+                    outfile = data_outfilename.replace('.uvh5', f'.{red_chunk}.uvh5')
+                else:
+                    outfile = data_outfilename
+                if filetype_out == 'uvh5':
+                    hd_red.write_uvh5(outfile, clobber=clobber)
+                else:
+                    raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
+
 
 
 def apply_cal_argparser():

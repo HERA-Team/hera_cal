@@ -104,7 +104,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', verbose=False,
                                 skip_flagged_edges=False,  flag_zero_times=True,
-                                overwrite_data_flags=False,
+                                overwrite_data_flags=False, polarizations=None,
                                 a_priori_flag_yaml=None, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform delay filtering.
@@ -153,11 +153,13 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
     if spw_range is None:
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freqs[spw_range[0]:spw_range[1]]
+    if polarizations is None:
+        polarizations=hd.pols
     if Nbls_per_load is None:
         echo(f"{str(datetime.now())}...initializing delay filter.", verbose=verbose)
         df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         echo(f"{str(datetime.now())}...reading data.", verbose=verbose)
-        df.read(frequencies=freqs)
+        df.read(frequencies=freqs, polarizations=polarizations)
         echo(f"{str(datetime.now())}...applying external flags", verbose=verbose)
         df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, flag_zero_times=flag_zero_times)
         if factorize_flags:
