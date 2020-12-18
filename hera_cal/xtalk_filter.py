@@ -86,20 +86,12 @@ class XTalkFilter(FRFilter):
         else:
             max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
 
-        if frate_standoff is not None and frate_horizon is not None:
-            for k in self.data:
-                self.data[k] /= np.exp(-2j * np.pi * self.times * 3.6 * 24. * center_frate[k])
-
         # loop over all baselines in increments of Nbls
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                        ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
                        cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
                        overwrite=True, verbose=verbose, skip_flagged_edge_times=skip_flagged_edges,
                        flag_filled=flag_filled, **filter_kwargs)
-
-        if frate_standoff is not None and frate_horizon is not None:
-            for k in self.data:
-                self.data[k] /= np.exp(-2j * np.pi * self.times * 3.6 * 24. * center_frate[k])
 
         if not mode == 'clean':
             if write_cache:
@@ -458,3 +450,5 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
         a.add_argument("--frate_horizon", type=float, default=1.0, help="Fraction of horizon to use for fringe-rate inpaint.")
         a.add_argument("--inpaint", default=False, action="store_true", help="in-paint data with all sky fringe-rates before performing x-talk filter. This gets rid of flagging side-lobes.")
     return a
+
+    #TODO Add a time-inpainting argparser.
