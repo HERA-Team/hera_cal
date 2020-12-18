@@ -8,7 +8,7 @@ import numpy as np
 
 from . import io
 from . import version
-from .vis_clean import VisClean
+from .frf import FRFilter
 from . import vis_clean
 from .utils import echo
 
@@ -22,7 +22,7 @@ from pyuvdata import UVCal
 import argparse
 from datetime import datetime
 
-class XTalkFilter(VisClean):
+class XTalkFilter(FRFilter):
     """
     XTalkFilter object.
 
@@ -31,7 +31,7 @@ class XTalkFilter(VisClean):
     """
 
     def run_xtalk_filter(self, to_filter=None, weight_dict=None, max_frate_coeffs=[0.024, -0.229], mode='clean',
-                         frate_standoff=None,
+                         frate_standoff=None, frate_horizon=None,
                          skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
                          write_cache=False, skip_flagged_edges=False, flag_filled=True,
                          data=None, flags=None, **filter_kwargs):
@@ -50,9 +50,6 @@ class XTalkFilter(VisClean):
             max_frate_coeffs: All fringe-rates below this value are filtered (or interpolated) (in milliseconds).
                               max_frate [mHz] = x1 * EW_bl_len [ m ] + x2
             mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.xtalk_filter for supported modes.
-            frate_standoff: float, optional
-                Additional fringe-rate standoff in mHz to add to \Omega_E b_{EW} \nu/c for fringe-rate inpainting.
-                default = None. If None, will use max_frate_coeffs instead to compute max_frate.
             skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
                 Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
                 time. Skipped channels are then flagged in self.flags.
@@ -85,17 +82,13 @@ class XTalkFilter(VisClean):
             filter_cache = None
         # compute maximum fringe rate dict based on EW baseline lengths.
         if self.round_up_bllens:
-            if frate_standoff is not None:
-                # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
-                max_frate = io.DataContainer({k: np.abs(2 * np.pi * np.ceil(self.blvecs[k[:2]][0]) * 1./(24. * 3.6) * self.freqs.max() / 3e8) + frate_standoff for k in self.data})
-            else:
-                max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.ceil(self.blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in self.data})
+            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.ceil(self.blvecs[k[:2]][0]) + max_frate_coeffs[1], 0.0]) for k in self.data})
         else:
-            if frate_standoff is not None:
-                # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
-                max_frate = io.DataContainer({k: np.abs(2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8) + frate_standoff for k in self.data})
-            else:
-                max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
+            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * self.blvecs[k[:2]][0] + max_frate_coeffs[1], 0.0]) for k in self.data})
+
+        if frate_standoff is not None and frate_horizon is not None:
+            for k in self.data:
+                self.data[k] /= np.exp(-2j * np.pi * self.times * 3.6 * 24. * center_frate[k])
 
         # loop over all baselines in increments of Nbls
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
@@ -103,9 +96,101 @@ class XTalkFilter(VisClean):
                        cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
                        overwrite=True, verbose=verbose, skip_flagged_edge_times=skip_flagged_edges,
                        flag_filled=flag_filled, **filter_kwargs)
+
+        if frate_standoff is not None and frate_horizon is not None:
+            for k in self.data:
+                self.data[k] /= np.exp(-2j * np.pi * self.times * 3.6 * 24. * center_frate[k])
+
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
+
+def do_time_filter(self, to_filter=None, weight_dict=None, mode='clean',
+                   frate_standoff=0.0, frate_horizon=1.0,
+                   skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
+                   write_cache=False, skip_flagged_edges=False, flag_filled=False,
+                   data=None, flags=None, **filter_kwargs):
+                '''
+                Run a cross-talk filter on data where the maximum fringe rate is set by the baseline length.
+
+                Run a delay-filter on (a subset of) the data stored in the object.
+                Uses stored flags unless explicitly overridden with weight_dict.
+
+                Arguments:
+                  to_filter: list of visibilities to filter in the (i,j,pol) format.
+                      If None (the default), all visibilities are filtered.
+                  weight_dict: dictionary or DataContainer with all the same keys as self.data.
+                      Linear multiplicative weights to use for the delay filter. Default, use np.logical_not
+                      of self.flags. uvtools.dspec.xtalk_filter will renormalize to compensate.
+                  mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.xtalk_filter for supported modes.
+                  frate_standoff: float, optional
+                      Additional fringe-rate standoff in mHz to add to \Omega_E b_{EW} \nu/c for fringe-rate inpainting.
+                      default = None. If None, will use max_frate_coeffs instead to compute max_frate.
+                  frate_horizon: float, optional
+                     fraction of horizon to fringe-rate filter.
+                  skip_wgt: skips filtering rows with very low total weight (unflagged fraction ~< skip_wgt).
+                      Model is left as 0s, residual is left as data, and info is {'skipped': True} for that
+                      time. Skipped channels are then flagged in self.flags.
+                      Only works properly when all weights are all between 0 and 1.
+                  tol : float, optional. To what level are foregrounds subtracted.
+                  verbose: If True print feedback to stdout
+                  cache_dir: string, optional, path to cache file that contains pre-computed dayenu matrices.
+                              see uvtools.dspec.dayenu_filter for key formats.
+                  read_cache: bool, If true, read existing cache files in cache_dir before running.
+                  write_cache: bool. If true, create new cache file with precomputed matrices
+                                     that were not in previously loaded cache files.
+                  cache: dictionary containing pre-computed filter products.
+                  skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
+                  verbose: bool, optional, lots of outputs!
+                  filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
+
+                Results are stored in:
+                  self.clean_resid: DataContainer formatted like self.data with only high-delay components
+                  self.clean_model: DataContainer formatted like self.data with only low-delay components
+                  self.clean_info: Dictionary of info from uvtools.dspec.xtalk_filter with the same keys as self.data
+                '''
+                # read in cache
+                if not mode == 'clean':
+                   if read_cache:
+                       filter_cache = io.read_filter_cache_scratch(cache_dir)
+                   else:
+                       filter_cache = {}
+                   keys_before = list(filter_cache.keys())
+                else:
+                   filter_cache = None
+                # compute maximum fringe rate dict based on EW baseline lengths.
+                if self.round_up_bllens:
+                   # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
+                   max_frate = io.DataContainer({k: frate_horizon * 2 * np.pi * np.ceil(self.blvecs[k[:2]][0]) * 1./(24. * 3.6) * self.freqs.max() / 3e8 + frate_standoff for k in self.data})
+                   min_frate = io.DataContainer({k: - np.sin(np.abs(xf.hd.telescope_location_lat_lon_alt[0]))\
+                                                    * 2 * np.pi * np.ceil(self.blvecs[k[:2]][0]) * 1./(24. * 3.6) * self.freqs.max() / 3e8 + frate_standoff for k in self.data})
+                   center_frate = io.DataContainer({k: (max_frate[k] + min_frate[k]) / 2. for k in self.data})
+                   max_frate = io.DataContainer({k: np.abs(max_frate[k] - min_frate[k]) / 2. for k in self.data})
+                else:
+                   # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
+                   max_frate = io.DataContainer({k: np.abs(2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8) + frate_standoff for k in self.data})
+                   min_frate = io.DataContainer({k: - np.sin(np.abs(xf.hd.telescope_location_lat_lon_alt[0]))\
+                                                    * 2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8 + frate_standoff for k in self.data})
+                   center_frate = io.DataContainer({k: (max_frate[k] + min_frate[k]) / 2. for k in self.data})
+                   max_frate = io.DataContainer({k: np.abs(max_frate[k] - min_frate[k]) / 2. for k in self.data})
+
+                for k in self.data:
+                   self.data[k] /= np.exp(-2j * np.pi * self.times * 3.6 * 24. * center_frate[k])
+
+                # loop over all baselines in increments of Nbls
+                self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
+                              ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
+                              cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
+                              overwrite=True, verbose=verbose, skip_flagged_edge_times=skip_flagged_edges,
+                              flag_filled=flag_filled, **filter_kwargs)
+
+                for k in self.data:
+                   self.data[k] *= np.exp(-2j * np.pi * self.times * 3.6 * 24. * center_frate[k])
+
+                if not mode == 'clean':
+                   if write_cache:
+                       filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
+
 
 
 def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
@@ -114,7 +199,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False,
                                 skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
-                                a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0, **filter_kwargs):
+                                a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
+                                frate_horizon=1.0, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform xtalk filtering.
 
@@ -155,6 +241,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                  this gets rid of time-domain flagging side-lobes.
         frate_standoff : standoff from baseline fringe-rate
             to use for inpainting.
+        frate_horizon : fraction of horizon to use for fringe-rate inpainting.
+            default is 1.0
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     echo(f"{str(datetime.now())}...initializing metadata", verbose=verbose)
@@ -207,9 +295,10 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                 raise NotImplementedError("trim_edges not implemented for partial baseline loading.")
             if inpaint:
                 echo(f"{str(datetime.now())}...running inpainting for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
-                xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+                xf.do_time_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                                     skip_flagged_edges=skip_flagged_edges, flag_filled=False,
-                                    frate_standoff=frate_standoff, **filter_kwargs, output_prefix='inpainted')
+                                    frate_standoff=frate_standoff, frate_horizon=frate_horizon,
+                                    output_prefix='inpainted', **filter_kwargs)
                 xf.data = xf.inpainted_data
                 xf.flags = xf.inpainted_flags
             echo(f"{str(datetime.now())}...running xtalk filter for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
@@ -229,7 +318,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
                                               skip_flagged_edges=False,flag_zero_times=True, overwrite_data_flags=False,
-                                              a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0, **filter_kwargs):
+                                              a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
+                                              frate_horizon=1.0, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -317,9 +407,10 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         xf.trim_edges(ax='time')
     if inpaint:
         echo(f"{str(datetime.now())}...running inpainting.", verbose=verbose)
-        xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
+        xf.do_time_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
                             skip_flagged_edges=skip_flagged_edges, flag_filled=False,
-                            frate_standoff=frate_standoff, **filter_kwargs, output_prefix='inpainted')
+                            frate_standoff=frate_standoff, frate_horizon=frate_horizon,
+                            output_prefix='inpainted' , **filter_kwargs)
         xf.data = xf.inpainted_data
         xf.flags = xf.inpainted_flags
     echo(f"{str(datetime.now())}...running xtalk filter", verbose=verbose)
@@ -364,5 +455,6 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
     a.add_argument("--max_frate_coeffs", type=float, nargs=2, help="Maximum fringe-rate coefficients for the model max_frate [mHz] = x1 * EW_bl_len [ m ] + x2.")
     if 'dayenu' not in mode:
         a.add_argument("--frate_standoff", type=float, default=0.0, help="Additional fringe-rate standoff in mHz to add to \Omega_E b_{EW} \nu/c for fringe-rate inpainting.")
+        a.add_argument("--frate_horizon", type=float, default=1.0, help="Fraction of horizon to use for fringe-rate inpaint.")
         a.add_argument("--inpaint", default=False, action="store_true", help="in-paint data with all sky fringe-rates before performing x-talk filter. This gets rid of flagging side-lobes.")
     return a
