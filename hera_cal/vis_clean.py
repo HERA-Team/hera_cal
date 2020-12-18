@@ -852,11 +852,12 @@ class VisClean(object):
                             win[:, rownum] = 0.
 
 
-            mdl[ind_lower: ind_upper][:, ind_left: ind_right], res[ind_lower: ind_upper][:, ind_left: ind_right], info \
-            = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+            mdl, res, info  = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                    filter_half_widths=filter_half_widths,
                                    mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                    **filter_kwargs)
+            mdl = np.pad(mdl, [(ind_lower, self.Ntimes - ind_upper), (ind_left, self.Nfreqs - ind_right)])
+            res = np.pad(res, [(ind_lower, self.Ntimes - ind_upper), (ind_left, self.Nfreqs - ind_right)])
 
             # unzeropad array and put in skip flags.
             if ax == 'freq':
