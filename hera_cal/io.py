@@ -1832,7 +1832,7 @@ def baselines_from_filelist_position(filename, filelist):
     upper_index = np.min([(file_index + 1) * chunk_size, nbls])
     # only return baselines if lower and upper indices are within number of bls
     if lower_index < len(bls):
-            output = bls[lower_index:upper_index]
+        output = bls[lower_index:upper_index]
     else:
         output = []
     return output

@@ -175,7 +175,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               factorize_flags=False, time_thresh=0.05, trim_edges=False,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
-                                              skip_flagged_edges=False,flag_zero_times=True, overwrite_data_flags=False,
+                                              skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
                                               a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
@@ -232,9 +232,9 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         cals = None
     if polarizations is None:
         if len(datafile_list) > 1:
-            polarizations=list(hd.pols.values())[0]
+            polarizations = list(hd.pols.values())[0]
         else:
-            polarizations=hd.pols
+            polarizations = hd.pols
     xf = XTalkFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
     xf.read(bls=baseline_list, frequencies=freqs, axis='blt')
     xf.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, a_priori_flag_yaml=a_priori_flag_yaml, flag_zero_times=flag_zero_times)
@@ -272,7 +272,7 @@ def xtalk_filter_argparser(mode='clean', multifile=False):
     '''
     if mode == 'clean':
         a = vis_clean._clean_argparser(multifile=multifile)
-    elif mode =='dayenu':
+    elif mode == 'dayenu':
         a = vis_clean._linear_argparser(multifile=multifile)
     elif mode == 'dpss_leastsq':
         a = vis_clean._dpss_argparser(multifile=multifile)
