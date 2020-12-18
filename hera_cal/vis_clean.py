@@ -213,61 +213,59 @@ class VisClean(object):
         apply_cal.calibrate_in_place(self.data, cal_gains, self.flags, cal_flags,
                                      gain_convention=gain_convention)
 
-
     def apply_flags(self, external_flags=None, overwrite_data_flags=False,
-                        flag_zero_times=True, a_priori_flag_yaml=None):
-            """
-            apply external flags.
-            Parameters
-            ----------
-            external_flags: str, optional.
-                Str or list of strings pointing to flag files to apply.
+                    flag_zero_times=True, a_priori_flag_yaml=None):
+        """
+        apply external flags.
+        Parameters
+        ----------
+        external_flags: str, optional.
+            Str or list of strings pointing to flag files to apply.
+        overwrite_data_flags: bool, optional
+            If true, overwrite all data flags for bls that are not entirely flagge.d
+        flag_zero_times: bool, optional
+            if true, don't overwrite flags where the entire time is flagged.
+        a_priori_flag_yaml: str, optional
+            path to a yaml file containing manual flags.
+        Returns
+        -------
+            N/A
+        """
+        if external_flags is not None:
+            external_flags = UVFlag(external_flags)
+            # select frequencies and times that match data.
+            flag_times = np.unique(external_flags.time_array)
+            flag_freqs = np.unique(external_flags.freq_array)
+            times_overlapping = []
+            freqs_overlapping = []
+            for t in flag_times:
+                if np.any(np.isclose(self.times, t)):
+                    times_overlapping.append(t)
+            for f in flag_freqs:
+                if np.any(np.isclose(self.freqs, f)):
+                    freqs_overlapping.append(f)
+            # select frequencies and times that overlap with data.
+            external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
+        from hera_qm.xrfi import flag_apply
+        # set all flags to False on waterfalls that are not fully flagged
+        # if overwrite_data_flags is True.
+        if overwrite_data_flags:
+            for bl in self.flags:
+                if not np.all(self.flags[bl]):
+                    if not flag_zero_times:
+                        self.flags[bl][:] = False
+                    else:
+                        self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
+            self.hd.update(flags=self.flags)
+        # explicitly keep_existing since we already reset flags.
+        if external_flags is not None:
+            flag_apply(external_flags, self.hd, force_pol=True, keep_existing=True)
+        # apply apriori flag yaml too.
+        if a_priori_flag_yaml is not None:
+            import hera_qm.utils as qm_utils
+            self.hd = qm_utils.apply_yaml_flags(self.hd, a_priori_flag_yaml)
 
-            overwrite_data_flags: bool, optional
-                If true, overwrite all data flags for bls that are not entirely flagge.d
-
-            flag_zero_times: bool, optional
-                if true, don't overwrite flags where the entire time is flagged.
-
-            a_priori_flag_yaml: str, optional
-                path to a yaml file containing manual flags.
-            """
-            if external_flags is not None:
-                external_flags = UVFlag(external_flags)
-                # select frequencies and times that match data.
-                flag_times = np.unique(external_flags.time_array)
-                flag_freqs = np.unique(external_flags.freq_array)
-                times_overlapping = []
-                freqs_overlapping = []
-                for t in flag_times:
-                    if np.any(np.isclose(self.times, t)):
-                        times_overlapping.append(t)
-                for f in flag_freqs:
-                    if np.any(np.isclose(self.freqs, f)):
-                        freqs_overlapping.append(f)
-                # select frequencies and times that overlap with data.
-                external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
-            from hera_qm.xrfi import flag_apply
-            # set all flags to False on waterfalls that are not fully flagged
-            # if overwrite_data_flags is True.
-            if overwrite_data_flags:
-                for bl in self.flags:
-                    if not np.all(self.flags[bl]):
-                        if not flag_zero_times:
-                            self.flags[bl][:] = False
-                        else:
-                            self.flags[bl][~np.all(self.flags[bl], axis=1), :] = False
-                self.hd.update(flags=self.flags)
-            # explicitly keep_existing since we already reset flags.
-            if external_flags is not None:
-                flag_apply(external_flags, self.hd, force_pol=True, keep_existing=True)
-            # apply apriori flag yaml too.
-            if a_priori_flag_yaml is not None:
-                import hera_qm.utils as qm_utils
-                self.hd = qm_utils.apply_yaml_flags(self.hd, a_priori_flag_yaml)
-
-            _, self.flags, _ = self.hd.build_datacontainers()
-
+        _, self.flags, _ = self.hd.build_datacontainers()
 
     def read(self, **read_kwargs):
         """
@@ -360,15 +358,15 @@ class VisClean(object):
         echo("...writing to {}".format(filename), verbose=verbose)
 
     def vis_clean(self, keys=None, x=None, data=None, flags=None, wgts=None,
-              ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
-              min_dly=10.0, max_frate=None, output_prefix='clean',
-              skip_wgt=0.1, verbose=False, tol=1e-9,
-              overwrite=False,
-              skip_flagged_edge_freqs=False,
-              skip_flagged_edge_times=False,
-              skip_gaps_larger_then_filter_period=False,
-              flag_filled=False,
-               **filter_kwargs):
+                  ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
+                  min_dly=10.0, max_frate=None, output_prefix='clean',
+                  skip_wgt=0.1, verbose=False, tol=1e-9,
+                  overwrite=False,
+                  skip_flagged_edge_freqs=False,
+                  skip_flagged_edge_times=False,
+                  skip_gaps_larger_then_filter_period=False,
+                  flag_filled=False,
+                  **filter_kwargs):
         """
         Filter the data
 
@@ -805,7 +803,7 @@ class VisClean(object):
             # skip half period gaps
             if skip_gaps_larger_then_filter_period:
                 if ax == 'freq':
-                    for rownum,wrow in enumerate(win):
+                    for rownum, wrow in enumerate(win):
                         max_contiguous = 0
                         current_flag_length = 0
                         on_flag = False
@@ -817,7 +815,7 @@ class VisClean(object):
                                 if current_flag_length >= max_contiguous:
                                     max_contiguous = current_flag_length
                                 current_flag_length = 0
-                        if ax=='both':
+                        if ax == 'both':
                             max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[1], filter_half_widths[1])])
                             dvoxel = np.mean(np.diff(x[1]))
                         else:
@@ -827,7 +825,7 @@ class VisClean(object):
                         if max_contiguous * dvoxel >= 1 / max_filter_delay:
                             win[rownum] = 0.
                 if ax == 'time' or ax == 'both':
-                    for rownum,wrow in enumerate(win.T):
+                    for rownum, wrow in enumerate(win.T):
                         max_contiguous = 0
                         current_flag_length = 0
                         on_flag = False
@@ -839,7 +837,7 @@ class VisClean(object):
                                 if current_flag_length >= max_contiguous:
                                     max_contiguous = current_flag_length
                                 current_flag_length = 0
-                        if ax=='both':
+                        if ax == 'both':
                             max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_widths[0])])
                             dvoxel = np.mean(np.diff(x[0]))
                         else:
@@ -849,11 +847,10 @@ class VisClean(object):
                         if max_contiguous * dvoxel >= 1 / max_filter_delay:
                             win[:, rownum] = 0.
 
-
-            mdl, res, info  = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
-                                   filter_half_widths=filter_half_widths,
-                                   mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
-                                   **filter_kwargs)
+            mdl, res, info = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
+                                                  filter_half_widths=filter_half_widths,
+                                                  mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
+                                                  **filter_kwargs)
             mdl = np.pad(mdl, [(ind_lower, d.shape[0] - ind_upper), (ind_left, d.shape[1] - ind_right)])
             res = np.pad(res, [(ind_lower, d.shape[0] - ind_upper), (ind_left, d.shape[1] - ind_right)])
 
@@ -1574,6 +1571,7 @@ def _linear_argparser(multifile=False):
     a.add_argument("--max_contiguous_edge_flags", type=int, default=1, help="Skip integrations with at least this number of contiguous edge flags.")
     return a
 
+
 def _dpss_argparser(multifile=False):
     '''
     Arg parser for commandline operation of hera_cal.delay_filter in dpss mode.
@@ -1589,6 +1587,7 @@ def _dpss_argparser(multifile=False):
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
     return a
+
 
 def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, outfilename, clobber=False, time_bounds=False):
     """Combine multiple waterfall files (with disjoint baseline sets) into time-limited file with all baselines.

@@ -94,7 +94,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='',
-                                skip_flagged_edges=False,  flag_zero_times=True,
+                                skip_flagged_edges=False, flag_zero_times=True,
                                 overwrite_data_flags=False, polarizations=None,
                                 a_priori_flag_yaml=None, **filter_kwargs):
     '''
@@ -140,7 +140,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         spw_range = [0, hd.Nfreqs]
     freqs = hd.freqs[spw_range[0]:spw_range[1]]
     if polarizations is None:
-        polarizations=hd.pols
+        polarizations = hd.pols
     if Nbls_per_load is None:
         df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         df.read(frequencies=freqs, polarizations=polarizations)
@@ -226,9 +226,9 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         cals = None
     if polarizations is None:
         if len(datafile_list) > 1:
-            polarizations=list(hd.pols.values())[0]
+            polarizations = list(hd.pols.values())[0]
         else:
-            polarizations=hd.pols
+            polarizations = hd.pols
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
     df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags, flag_zero_times=flag_zero_times)
