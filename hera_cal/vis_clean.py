@@ -857,8 +857,8 @@ class VisClean(object):
                                    filter_half_widths=filter_half_widths,
                                    mode=mode, filter_dims=filterdim, skip_wgt=skip_wgt,
                                    **filter_kwargs)
-            mdl = np.pad(mdl, [(ind_lower, self.Ntimes - ind_upper), (ind_left, self.Nfreqs - ind_right)])
-            res = np.pad(res, [(ind_lower, self.Ntimes - ind_upper), (ind_left, self.Nfreqs - ind_right)])
+            mdl = np.pad(mdl, [(ind_lower, d.shape[0] - ind_upper), (ind_left, d.shape[1] - ind_right)])
+            res = np.pad(res, [(ind_lower, d.shape[0] - ind_upper), (ind_left, d.shape[1] - ind_right)])
 
             # unzeropad array and put in skip flags.
             if ax == 'freq':
