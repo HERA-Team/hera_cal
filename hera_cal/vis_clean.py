@@ -21,6 +21,7 @@ from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
 import warnings
+from pyuvdata import UVFlag
 
 
 class VisClean(object):
