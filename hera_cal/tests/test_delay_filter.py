@@ -244,7 +244,6 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][:, -1])
             assert np.all(f[bl][0, :])
 
-
         # test apriori flags and a_priori_flag_yaml
         flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
         uvf = UVFlag(hd, mode='flag', copy_flags=True)
@@ -364,8 +363,6 @@ class Test_DelayFilter(object):
             assert np.all(f[k][:, 60])
         os.remove(outfilename)
         shutil.rmtree(cdir)
-
-
 
     def test_delay_clean_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
