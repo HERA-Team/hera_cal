@@ -144,8 +144,9 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
     if Nbls_per_load is None:
         df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
         df.read(frequencies=freqs, polarizations=polarizations)
-        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
-                       flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
+        if external_flags is not None or a_priori_flag_yaml is not None:
+            df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
+                           flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
         if factorize_flags:
             df.factorize_flags(time_thresh=time_thresh, inplace=True)
         df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
@@ -157,8 +158,9 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         for i in range(0, len(hd.bls), Nbls_per_load):
             df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
-            df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
-                           flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
+            if external_flags is not None or a_priori_flag_yaml is not None:
+                df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
+                               flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
             if factorize_flags:
                 df.factorize_flags(time_thresh=time_thresh, inplace=True)
             df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
@@ -233,8 +235,9 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             polarizations = hd.pols
     df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
-    df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
-                   flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
+    if external_flags is not None or a_priori_flag_yaml is not None:
+        df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
+                       flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
     if factorize_flags:
         df.factorize_flags(time_thresh=time_thresh, inplace=True)
     df.run_delay_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
