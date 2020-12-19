@@ -295,3 +295,13 @@ class Test_XTalkFilter(object):
         assert a.max_frate_coeffs[1] == -0.229
         assert a.time_thresh == 0.05
         assert not a.factorize_flags
+        parser = xf.xtalk_filter_argparser(mode='dpss_leastsq')
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.write_cache is True
+        assert a.cache_dir == '/blah/'
+        assert a.max_frate_coeffs[0] == 0.024
+        assert a.max_frate_coeffs[1] == -0.229
+        assert a.time_thresh == 0.05
+        assert not a.factorize_flags

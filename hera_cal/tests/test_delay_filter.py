@@ -9,7 +9,7 @@ import os
 import sys
 import shutil
 from scipy import constants
-from pyuvdata import UVCal, UVData
+from pyuvdata import UVCal, UVData, UVFlag
 
 from .. import io
 from .. import delay_filter as df
@@ -244,6 +244,40 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][:, -1])
             assert np.all(f[bl][0, :])
 
+
+        # test apriori flags and a_priori_flag_yaml
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.flag_array[:] = False
+        flagfile = os.path.join(tmp_path, 'test_flag.h5')
+        uvf.write(flagfile, clobber=True)
+        df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
+                                                     tol=1e-4, baseline_list=[bl[:2]],
+                                                     clobber=True, mode='dayenu',
+                                                     external_flags=flagfile, overwrite_data_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        for k in f:
+            assert np.all(~f[k])
+        # now do the external yaml
+        df.load_delay_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
+                                                     tol=1e-4, baseline_list=[bl[:2]],
+                                                     clobber=True, mode='dayenu',
+                                                     external_flags=flagfile, overwrite_data_flags=True,
+                                                     a_priori_flag_yaml=flag_yaml)
+        # test that all flags are af yaml flags
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read()
+        for k in f:
+            assert np.all(f[k][:, 0])
+            assert np.all(f[k][:, 1])
+            assert np.all(f[k][:, 10:20])
+            assert np.all(f[k][:, 60])
+        os.remove(outfilename)
+        shutil.rmtree(cdir)
+
     def test_load_dayenu_filter_and_write(self, tmpdir):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
@@ -296,8 +330,42 @@ class Test_DelayFilter(object):
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         np.testing.assert_array_equal(f[(53, 54, 'ee')], True)
+
+        # test apriori flags and a_priori_flag_yaml
+        hd = io.HERAData(uvh5)
+        hd.read()
+        flag_yaml = os.path.join(DATA_PATH, 'test_input/a_priori_flags_sample.yaml')
+        uvf = UVFlag(hd, mode='flag', copy_flags=True)
+        uvf.to_waterfall(keep_pol=False, method='and')
+        uvf.flag_array[:] = False
+        flagfile = os.path.join(tmp_path, 'test_flag.h5')
+        uvf.write(flagfile, clobber=True)
+        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       Nbls_per_load=1, clobber=True, mode='dayenu',
+                                       external_flags=flagfile, flag_zero_times=False,
+                                       overwrite_data_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for k in f:
+            assert np.all(~f[k])
+        # now do the external yaml
+        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       Nbls_per_load=1, clobber=True, mode='dayenu',
+                                       external_flags=flagfile,
+                                       overwrite_data_flags=True, a_priori_flag_yaml=flag_yaml)
+        # test that all flags are af yaml flags
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for k in f:
+            assert np.all(f[k][:, 0])
+            assert np.all(f[k][:, 1])
+            assert np.all(f[k][:, 10:20])
+            assert np.all(f[k][:, 60])
         os.remove(outfilename)
         shutil.rmtree(cdir)
+
+
 
     def test_delay_clean_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--window', 'blackmanharris']
@@ -310,6 +378,13 @@ class Test_DelayFilter(object):
     def test_delay_linear_argparser(self):
         sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
         parser = df.delay_filter_argparser(mode='dayenu')
+        a = parser.parse_args()
+        assert a.infilename == 'a'
+        assert a.clobber is True
+        assert a.write_cache is True
+        assert a.cache_dir == '/blah/'
+        sys.argv = [sys.argv[0], 'a', '--clobber', '--write_cache', '--cache_dir', '/blah/']
+        parser = df.delay_filter_argparser(mode='dpss_leastsq')
         a = parser.parse_args()
         assert a.infilename == 'a'
         assert a.clobber is True
