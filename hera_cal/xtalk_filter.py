@@ -97,7 +97,7 @@ class XTalkFilter(FRFilter):
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
 
-def do_time_filter(self, to_filter=None, weight_dict=None, mode='clean',
+    def do_time_filter(self, to_filter=None, weight_dict=None, mode='clean',
                    frate_standoff=0.0, frate_horizon=1.0,
                    skip_wgt=0.1, tol=1e-9, verbose=False, cache_dir=None, read_cache=False,
                    write_cache=False, skip_flagged_edges=False, flag_filled=False,
@@ -153,21 +153,23 @@ def do_time_filter(self, to_filter=None, weight_dict=None, mode='clean',
                 # compute maximum fringe rate dict based on EW baseline lengths.
                 if self.round_up_bllens:
                    # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
-                   max_frate = io.DataContainer({k: frate_horizon * 2 * np.pi * np.ceil(self.blvecs[k[:2]][0]) * 1./(24. * 3.6) * self.freqs.max() / 3e8 + frate_standoff for k in self.data})
-                   min_frate = io.DataContainer({k: - np.sin(np.abs(xf.hd.telescope_location_lat_lon_alt[0]))\
-                                                    * 2 * np.pi * np.ceil(self.blvecs[k[:2]][0]) * 1./(24. * 3.6) * self.freqs.max() / 3e8 + frate_standoff for k in self.data})
+                   max_frate = io.DataContainer({k: frate_horizon * 2 * np.pi * np.sign(self.blvecs[k[:2]][0]) * np.ceil(np.abs(self.blvecs[k[:2]][0]))  * 1./(24. * 3.6) * self.freqs.max() / 3e8 for k in self.data})
+                   min_frate = io.DataContainer({k: -frate_horizon * 2 * np.pi * np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))\
+                                                    * np.sign(self.blvecs[k[:2]][0]) * np.ceil(np.abs(self.blvecs[k[:2]][0])) * 1./(24. * 3.6) * self.freqs.max() / 3e8 for k in self.data})
                    center_frate = io.DataContainer({k: (max_frate[k] + min_frate[k]) / 2. for k in self.data})
                    max_frate = io.DataContainer({k: np.abs(max_frate[k] - min_frate[k]) / 2. for k in self.data})
                 else:
                    # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
-                   max_frate = io.DataContainer({k: np.abs(2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8) + frate_standoff for k in self.data})
-                   min_frate = io.DataContainer({k: - np.sin(np.abs(xf.hd.telescope_location_lat_lon_alt[0]))\
-                                                    * 2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8 + frate_standoff for k in self.data})
+                   max_frate = io.DataContainer({k: 2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8 * frate_horizon\
+                                                      for k in self.data})
+                   min_frate = io.DataContainer({k: - np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))\
+                                                    * 2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8 * frate_horizon\
+                                                    for k in self.data})
                    center_frate = io.DataContainer({k: (max_frate[k] + min_frate[k]) / 2. for k in self.data})
-                   max_frate = io.DataContainer({k: np.abs(max_frate[k] - min_frate[k]) / 2. for k in self.data})
+                   max_frate = io.DataContainer({k: np.abs(max_frate[k] - min_frate[k]) / 2. + frate_standoff  for k in self.data})
 
                 for k in self.data:
-                   self.data[k] /= np.exp(-2j * np.pi * self.times * 3.6 * 24. * center_frate[k])
+                   self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
 
                 # loop over all baselines in increments of Nbls
                 self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
@@ -175,10 +177,19 @@ def do_time_filter(self, to_filter=None, weight_dict=None, mode='clean',
                               cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
                               overwrite=True, verbose=verbose, skip_flagged_edge_times=skip_flagged_edges,
                               flag_filled=flag_filled, **filter_kwargs)
-
+                if 'output_prefix' in filter_kwargs:
+                    filtered_data = getattr(self, filter_kwargs['output_prefix'] + '_data')
+                    filtered_model = getattr(self, filter_kwargs['output_prefix'] + '_model')
+                    filtered_resid = getattr(self, filter_kwargs['output_prefix'] + '_resid')
+                else:
+                    filtered_data = self.clean_data
+                    filtered_model = self.clean_model
+                    filtered_resid = self.clean_resid
                 for k in self.data:
-                   self.data[k] *= np.exp(-2j * np.pi * self.times * 3.6 * 24. * center_frate[k])
-
+                   filtered_data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+                   filtered_model[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+                   filtered_resid[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
+                   self.data[k] *= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
                 if not mode == 'clean':
                    if write_cache:
                        filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
@@ -192,7 +203,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 clobber=False, add_to_history='', round_up_bllens=False,
                                 skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
                                 a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
-                                frate_horizon=1.0, **filter_kwargs):
+                                frate_horizon=1.0,
+                                max_frate_coeffs=[0.024, -0.229],  **filter_kwargs):
     '''
     Uses partial data loading and writing to perform xtalk filtering.
 
@@ -311,7 +323,9 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
                                               skip_flagged_edges=False,flag_zero_times=True, overwrite_data_flags=False,
                                               a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
-                                              frate_horizon=1.0, **filter_kwargs):
+                                              frate_horizon=1.0,
+                                              max_frate_coeffs=[0.024, -0.229],
+                                              **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
