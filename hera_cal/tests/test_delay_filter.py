@@ -348,6 +348,17 @@ class Test_DelayFilter(object):
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
         for k in f:
             assert np.all(~f[k])
+        # now without parital io.
+        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
+                                       clobber=True, mode='dayenu',
+                                       external_flags=flagfile, flag_zero_times=False,
+                                       overwrite_data_flags=True)
+        # test that all flags are False
+        hd = io.HERAData(outfilename)
+        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for k in f:
+            assert np.all(~f[k])
+
         # now do the external yaml
         df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename,
                                        Nbls_per_load=1, clobber=True, mode='dayenu',

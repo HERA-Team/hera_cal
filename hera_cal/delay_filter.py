@@ -91,7 +91,7 @@ class DelayFilter(VisClean):
 
 def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, spw_range=None, cache_dir=None,
                                 read_cache=False, write_cache=False, round_up_bllens=False,
-                                factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
+                                factorize_flags=False, time_thresh=0.05, external_flags=None,
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='',
                                 skip_flagged_edges=False, flag_zero_times=True,
@@ -173,7 +173,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
 
 def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calfile_list=None, spw_range=None, cache_dir=None,
                                               read_cache=False, write_cache=False, round_up_bllens=False,
-                                              factorize_flags=False, time_thresh=0.05, trim_edges=False, external_flags=None,
+                                              factorize_flags=False, time_thresh=0.05, external_flags=None,
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', polarizations=None,
                                               skip_flagged_edges=False, overwrite_data_flags=False,
@@ -198,9 +198,6 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             Fractional threshold of flagged pixels across time needed to flag all times
             per freq channel. It is not recommend to set this greater than 0.5.
             Fully flagged integrations do not count towards triggering time_thresh.
-        trim_edges : bool, optional
-            if true, trim fully flagged edge channels and times. helps to avoid edge popups.
-            default is false.
         external_flags : str, optional, path to external flag files to apply
         res_outfilename: path for writing the filtered visibilities with flags
         CLEAN_outfilename: path for writing the CLEAN model visibilities (with the same flags)
