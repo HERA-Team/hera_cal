@@ -270,6 +270,85 @@ class Test_VisClean(object):
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
 
+    def test_vis_clean_flag_options(self, tmpdir):
+        # tests for time and frequency partial flagging.
+        tmp_path = tmpdir.strpath
+        template = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
+        # first run flagging channels and frequencies
+        fname_edgeflags = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.edgeflags.uvh5")
+        fname_flagged = os.path.join(tmp_path, "zen.2458043.40141.xx.HH.XRAA.allflags.uvh5")
+        hdt = io.HERAData(template)
+        d, f, n = hdt.read()
+        for k in d:
+            f[k][:] = False
+            f[k][:, 0] = True
+            f[k][0, :] = True
+        hdt.update(flags=f)
+        hdt.write_uvh5(fname_edgeflags)
+        for k in d:
+            f[k][:] = True
+        hdt.update(flags=f)
+        hdt.write_uvh5(fname_flagged)
+        V = VisClean(fname_flagged, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_flagged_edge_times=True, skip_flagged_edge_freqs=True)
+        # make sure if no unflagged channels exist, then the clean flags are all flagged.
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_gaps_larger_then_filter_period=True)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_gaps_larger_then_filter_period=True, max_frate=0.025)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_gaps_larger_then_filter_period=True, max_frate=0.025)
+        for k in V.clean_flags:
+            assert np.all(V.clean_flags[k])
+        # now do file with some edge flags. Make sure the edge flags remain in clean_flags.
+        V = VisClean(fname_edgeflags, filetype='uvh5')
+        V.read()
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_flagged_edge_times=True, skip_flagged_edge_freqs=True)
+        for k in V.clean_flags:
+            if not np.all(V.flags[k]):
+                assert not np.all(V.clean_flags[k])
+            assert np.all(V.clean_flags[k][0])
+            assert np.all(V.clean_flags[k][:, 0])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_flagged_edge_times=True, skip_flagged_edge_freqs=True, max_frate=0.025)
+        for k in V.clean_flags:
+            if not np.all(V.flags[k]):
+                assert not np.all(V.clean_flags[k])
+            assert np.all(V.clean_flags[k][0])
+            assert np.all(V.clean_flags[k][:, 0])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_flagged_edge_times=True, skip_flagged_edge_freqs=True, max_frate=0.025)
+        for k in V.clean_flags:
+            if not np.all(V.flags[k]):
+                assert not np.all(V.clean_flags[k])
+            assert np.all(V.clean_flags[k][0])
+            assert np.all(V.clean_flags[k][:, 0])
+        # now try using skip_contiguous flag gaps.
+        standoff = 1e9 / (np.mean(np.diff(V.freqs)))
+        max_frate = datacontainer.DataContainer({(24, 25, 'ee'): 2. / (np.mean(np.diff(V.times)) * 3.6 * 24.),
+                                                 (24, 24, 'ee'): 1. / (2 * np.mean(np.diff(V.times)) * 3.6 * 24.)})
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    skip_gaps_larger_then_filter_period=True, standoff=standoff)
+        # with this standoff, all data should be skipped.
+        assert np.all(V.clean_flags[(24, 25, 'ee')])
+        assert np.all(V.clean_flags[(24, 24, 'ee')])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    skip_gaps_larger_then_filter_period=True, max_frate=max_frate)
+        # this time, should only skip (24, 25, 'ee')
+        assert np.all(V.clean_flags[(24, 25, 'ee')])
+        assert not np.all(V.clean_flags[(24, 24, 'ee')])
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    skip_gaps_larger_then_filter_period=True, max_frate=max_frate, standoff=standoff)
+
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
