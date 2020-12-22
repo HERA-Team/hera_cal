@@ -177,7 +177,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
                                               skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
                                               a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
-                                              clean_flags_in_resid_flags=True, ***filter_kwargs):
+                                              clean_flags_in_resid_flags=True, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
