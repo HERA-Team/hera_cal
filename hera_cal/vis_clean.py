@@ -816,12 +816,8 @@ class VisClean(object):
                                 if current_flag_length >= max_contiguous:
                                     max_contiguous = current_flag_length
                                 current_flag_length = 0
-                        if ax == 'both':
-                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[1], filter_half_widths[1])])
-                            dvoxel = np.mean(np.diff(x[1]))
-                        else:
-                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
-                            dvoxel = np.mean(np.diff(x))
+                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
+                        dvoxel = np.mean(np.diff(x))
                 # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
                         if max_contiguous * dvoxel >= 1 / max_filter_delay:
                             win[rownum] = 0.
