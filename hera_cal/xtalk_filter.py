@@ -98,7 +98,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False,
                                 skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
-                                a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0, **filter_kwargs):
+                                a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
+                                clean_flags_in_resid_flags=True, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform xtalk filtering.
 
@@ -131,6 +132,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
         overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
         a_priori_flag_yaml: path to manual flagging text file.
+        clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
+                                    default is True.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     hd = io.HERAData(infilename, filetype='uvh5')
@@ -173,7 +176,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
                                               skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
-                                              a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0, **filter_kwargs):
+                                              a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
+                                              clean_flags_in_resid_flags=True, ***filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
     list of baselines. This is to support parallelization over baseline (rather then time).
@@ -209,6 +213,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                  this gets rid of time-domain flagging side-lobes.
         frate_standoff : standoff from baseline fringe-rate
              to use for inpainting.
+        clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
+                                    default is True.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
     '''
     hd = io.HERAData(datafile_list, filetype='uvh5', axis='blt')
