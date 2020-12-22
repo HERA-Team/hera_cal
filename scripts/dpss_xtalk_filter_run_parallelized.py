@@ -35,4 +35,5 @@ if len(baseline_list) > 0:
                                                            a_priori_flag_yaml=a.a_priori_flag_yaml,
                                                            external_flags=a.external_flags, inpaint=a.inpaint, frate_standoff=a.frate_standoff,
                                                            skip_gaps_larger_then_filter_period=True,
-                                                           overwrite_data_flags=a.overwrite_data_flags, **filter_kwargs)
+                                                           overwrite_data_flags=a.overwrite_data_flags,
+                                                           clean_flags_in_resid_flags=True, **filter_kwargs)
