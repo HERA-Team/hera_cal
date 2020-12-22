@@ -1068,7 +1068,8 @@ def test_get_file_times():
     pytest.raises(ValueError, io.get_file_times, fp, filetype='foo')
 
 
-def test_baselines_from_filelist_position():
+def test_baselines_from_filelist_position(tmpdir):
+    tmp_path = tmpdir.strpath
     filelist = [os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
                 os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
     # below, we test whether for each file we get a chunk of baselines whose length is either greater then 0
@@ -1086,3 +1087,16 @@ def test_baselines_from_filelist_position():
     baselines_sorted = [baselines[m] for m in sum_indices]
     # check that the sorted baselines are all of the original baselines.
     assert baselines_sorted == [(53, 53), (53, 54), (54, 54)]
+    # test case when there are less baselines then files
+    filelist_1bl = [os.path.join(tmp_path, "zen.2458101.46106.xx.HH.OCR_53x_54x_only.first.uvh5"),
+                    os.path.join(tmp_path, "zen.2458101.46106.xx.HH.OCR_53x_54x_only.second.uvh5")]
+    # to do this, we first generate single baseline files.
+    for fi, fo in zip(filelist, filelist_1bl):
+        hd = io.HERAData(fi)
+        hd.read(bls=[(53, 54)])
+        hd.write_uvh5(fo, clobber=True)
+    # then we get baseline chunks
+    baseline_chunk = io.baselines_from_filelist_position(filelist_1bl[0], filelist_1bl)
+    assert baseline_chunk == [(53, 54)]
+    baseline_chunk = io.baselines_from_filelist_position(filelist_1bl[1], filelist_1bl)
+    assert baseline_chunk == []
