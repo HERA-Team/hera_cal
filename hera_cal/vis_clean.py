@@ -366,7 +366,7 @@ class VisClean(object):
                   skip_flagged_edge_freqs=False,
                   skip_flagged_edge_times=False,
                   skip_gaps_larger_then_filter_period=False,
-                  flag_filled=False,
+                  flag_filled=False, clean_flags_in_resid_flags=False,
                   **filter_kwargs):
         """
         Filter the data
@@ -407,6 +407,9 @@ class VisClean(object):
         skip_gaps_larger_then_filter_period : bool, optional
             if true, skip integrations or channels with gaps that are larger then the period of
             of the finest scale mode used for interpolation.
+            default is False.
+        clean_flags_in_resid_flags : bool, optional
+            if true, include clean flags in residual flags that will be written out in res_outfilename.
             default is False.
         flag_filled : bool, optional
             if true, set filter flags equal to the original flags (do not unflag interpolated channels)
@@ -497,7 +500,7 @@ class VisClean(object):
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
                        skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
                        skip_gaps_larger_then_filter_period=False,
-                       flag_filled=False,
+                       flag_filled=False, clean_flags_in_resid_flags=False,
                        **filter_kwargs):
         """
         Generalized fourier filtering of attached data.
@@ -592,6 +595,9 @@ class VisClean(object):
             over the channel gaps since there are substantial contributions to the foreground power from fringe-rates
             that are not being modeled as cross-talk. In this case, we may want a file with the modelled cross-talk included but
             not used to in-paint flagged integrations.
+        clean_flags_in_resid_flags : bool, optional
+            if true, include clean flags in residual flags that will be written out in res_outfilename.
+            default is False.
         filter_kwargs: dict. NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
@@ -891,7 +897,10 @@ class VisClean(object):
             else:
                 filtered_flags[k] = copy.deepcopy(flags[k]) | skipped
             filtered_info[k] = info
-            resid_flags[k] = copy.deepcopy(flags[k]) | skipped
+            if clean_flags_in_resid_flags:
+                resid_flags[k] = copy.deepcopy(flags[k]) | skipped
+            else:
+                resid_flags[k] = copy.deepcopy(flags[k])
 
         if hasattr(data, 'times'):
             filtered_data.times = data.times

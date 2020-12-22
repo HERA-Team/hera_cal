@@ -30,4 +30,5 @@ if len(baseline_list) > 0:
                                                                  max_contiguous_edge_flags=a.max_contiguous_edge_flags,
                                                                  add_to_history=' '.join(sys.argv), polarizations=a.polarizations,
                                                                  skip_flagged_edges=a.skip_flagged_edges, verbose=a.verbose,
-                                                                 a_priori_flag_yaml=a.a_priori_flag_yaml, **filter_kwargs)
+                                                                 a_priori_flag_yaml=a.a_priori_flag_yaml,
+                                                                 clean_flags_in_resid_flags=True, **filter_kwargs)
