@@ -152,29 +152,34 @@ class XTalkFilter(FRFilter):
                    filter_cache = None
                 # compute maximum fringe rate dict based on EW baseline lengths.
                 if self.round_up_bllens:
-                   # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
-                   max_frate = io.DataContainer({k: frate_horizon * 2 * np.pi * np.sign(self.blvecs[k[:2]][0]) * np.ceil(np.abs(self.blvecs[k[:2]][0]))  * 1./(24. * 3.6) * self.freqs.max() / 3e8 for k in self.data})
-                   min_frate = io.DataContainer({k: -frate_horizon * 2 * np.pi * np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))\
-                                                    * np.sign(self.blvecs[k[:2]][0]) * np.ceil(np.abs(self.blvecs[k[:2]][0])) * 1./(24. * 3.6) * self.freqs.max() / 3e8 for k in self.data})
-                   center_frate = io.DataContainer({k: (max_frate[k] + min_frate[k]) / 2. for k in self.data})
-                   max_frate = io.DataContainer({k: np.abs(max_frate[k] - min_frate[k]) / 2. for k in self.data})
-                else:
-                   # if frate_standoff is provided, max fringe-rates are given by the baseline fringe-rate plus standoff (useful for interpolating signal)
-                   max_frate = io.DataContainer({k: 2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8 * frate_horizon\
-                                                      for k in self.data})
-                   min_frate = io.DataContainer({k: - np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))\
-                                                    * 2 * np.pi * self.blvecs[k[:2]][0] * 1./(24. * 3.6) * self.freqs.max() / 3e8 * frate_horizon\
-                                                    for k in self.data})
-                   center_frate = io.DataContainer({k: (max_frate[k] + min_frate[k]) / 2. for k in self.data})
-                   max_frate = io.DataContainer({k: np.abs(max_frate[k] - min_frate[k]) / 2. + frate_standoff  for k in self.data})
-
+                   blcosines = {k: self.blvecs[k[:2]][0] / np.linalg.norm(self.blvecs[k[:2]]) for k in self.data}
+                   frateamps = {k: 1./(24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi * np.linalg.norm(self.blvecs[k[:2]]) for k in self.data}
+               else:
+                   blcosines = {k: np.sign(self.blvecs[k[:2]][0]) * np.ceil(np.abs(self.blvecs[k[:2]][0])) / np.ceil(np.linalg.norm(self.blvecs[k[:2]])) for k in self.data}
+                   frateamps = {k: 1./(24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi *  np.ceil(np.linalg.norm(self.blvecs[k[:2]])) for k in self.data}
+               sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
+               max_frate = io.DataContainer({})
+               min_frate = io.DataContainer({})
+               center_frate = io.DataContainer({})
+               width_frate = io.DataContainer({})
+               # calculate min/max center fringerates.
+               for k in self.data:
+                   if blconsines[k] >= 0:
+                       max_frate[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                       min_frate[k] = -frateamps[k] * sinlat
+                   else:
+                       min_frate[k] = -frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
+                       max_frate[k] = frateamps[k] * sinlat
+                   center_frate[k] = (max_frate[k] + min_frate[k]) / 2.
+                   width_frate[k] = np.abs(max_frate[k] - min_frate[k]) / 2. * frate_horizon + frate_standoff
+                # divide by center fringe rate
                 for k in self.data:
                    self.data[k] /= np.exp(2j * np.pi * self.times[:, None] * 3.6 * 24. * center_frate[k])
 
                 # loop over all baselines in increments of Nbls
                 self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
                               ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
-                              cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
+                              cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=width_frate,
                               overwrite=True, verbose=verbose, skip_flagged_edge_times=skip_flagged_edges,
                               flag_filled=flag_filled, **filter_kwargs)
                 if 'output_prefix' in filter_kwargs:
@@ -280,7 +285,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             xf.flags = xf.inpainted_flags
         echo(f"{str(datetime.now())}...running xtalk filter.", verbose=verbose)
         xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                            skip_flagged_edges=skip_flagged_edges, verbose=verbose, **filter_kwargs)
+                            skip_flagged_edges=skip_flagged_edges,
+                            max_frate_coeffs=max_frate_coeffs, verbose=verbose, **filter_kwargs)
         echo(f"{str(datetime.now())}...writing output.", verbose=verbose)
         xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                filled_outfilename=filled_outfilename, partial_write=False,
@@ -307,7 +313,8 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                 xf.flags = xf.inpainted_flags
             echo(f"{str(datetime.now())}...running xtalk filter for baseline chunk with {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                                skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+                                skip_flagged_edges=skip_flagged_edges,
+                                max_frate_coeffs=max_frate_coeffs, **filter_kwargs)
             echo(f"{str(datetime.now())}...writing filtered data for {len(hd.bls[i:i+Nbls_per_load])} baselines.", verbose=verbose)
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
@@ -421,7 +428,8 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         xf.flags = xf.inpainted_flags
     echo(f"{str(datetime.now())}...running xtalk filter", verbose=verbose)
     xf.run_xtalk_filter(cache_dir=cache_dir, read_cache=read_cache, write_cache=write_cache,
-                        skip_flagged_edges=skip_flagged_edges, **filter_kwargs)
+                        skip_flagged_edges=skip_flagged_edges,
+                        max_frate_coeffs=max_frate_coeffs, **filter_kwargs)
     echo(f"{str(datetime.now())}...writing output", verbose=verbose)
     xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                            filled_outfilename=filled_outfilename, partial_write=False,
