@@ -154,17 +154,17 @@ class XTalkFilter(FRFilter):
                 if self.round_up_bllens:
                    blcosines = {k: self.blvecs[k[:2]][0] / np.linalg.norm(self.blvecs[k[:2]]) for k in self.data}
                    frateamps = {k: 1./(24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi * np.linalg.norm(self.blvecs[k[:2]]) for k in self.data}
-               else:
+                else:
                    blcosines = {k: np.sign(self.blvecs[k[:2]][0]) * np.ceil(np.abs(self.blvecs[k[:2]][0])) / np.ceil(np.linalg.norm(self.blvecs[k[:2]])) for k in self.data}
                    frateamps = {k: 1./(24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi *  np.ceil(np.linalg.norm(self.blvecs[k[:2]])) for k in self.data}
-               sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
-               max_frate = io.DataContainer({})
-               min_frate = io.DataContainer({})
-               center_frate = io.DataContainer({})
-               width_frate = io.DataContainer({})
-               # calculate min/max center fringerates.
-               for k in self.data:
-                   if blconsines[k] >= 0:
+                sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
+                max_frate = io.DataContainer({})
+                min_frate = io.DataContainer({})
+                center_frate = io.DataContainer({})
+                width_frate = io.DataContainer({})
+                # calculate min/max center fringerates.
+                for k in self.data:
+                   if blcosines[k] >= 0:
                        max_frate[k] = frateamps[k] * np.sqrt(sinlat ** 2. + blcosines[k] ** 2. * (1 - sinlat ** 2.))
                        min_frate[k] = -frateamps[k] * sinlat
                    else:
