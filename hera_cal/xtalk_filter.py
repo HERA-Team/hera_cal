@@ -82,9 +82,9 @@ class XTalkFilter(FRFilter):
             filter_cache = None
         # compute maximum fringe rate dict based on EW baseline lengths.
         if self.round_up_bllens:
-            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.ceil(np.linalg.norm(self.blvecs[k])) + max_frate_coeffs[1], 0.0]) for k in self.data})
+            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.ceil(np.linalg.norm(self.blvecs[k[:2]])) + max_frate_coeffs[1], 0.0]) for k in self.data})
         else:
-            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.linalg.norm(self.blvecs[k]) + max_frate_coeffs[1], 0.0]) for k in self.data})
+            max_frate = io.DataContainer({k: np.max([max_frate_coeffs[0] * np.linalg.norm(self.blvecs[k[:2]]) + max_frate_coeffs[1], 0.0]) for k in self.data})
 
         # loop over all baselines in increments of Nbls
         self.vis_clean(keys=to_filter, data=self.data, flags=self.flags, wgts=weight_dict,
