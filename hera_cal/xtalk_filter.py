@@ -157,6 +157,9 @@ class XTalkFilter(FRFilter):
                 else:
                    blcosines = {k: np.sign(self.blvecs[k[:2]][0]) * np.ceil(np.abs(self.blvecs[k[:2]][0])) / np.ceil(np.linalg.norm(self.blvecs[k[:2]])) for k in self.data}
                    frateamps = {k: 1./(24. * 3.6) * self.freqs.max() / 3e8 * 2 * np.pi *  np.ceil(np.linalg.norm(self.blvecs[k[:2]])) for k in self.data}
+                for k in blcosines:
+                    if np.isnan(blcosines[k]):
+                        blcosines[k] = 0.0
                 sinlat = np.sin(np.abs(self.hd.telescope_location_lat_lon_alt[0]))
                 max_frate = io.DataContainer({})
                 min_frate = io.DataContainer({})
