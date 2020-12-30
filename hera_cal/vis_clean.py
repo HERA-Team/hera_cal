@@ -244,7 +244,7 @@ class VisClean(object):
                 if np.any(np.isclose(self.times, t, atol=np.mean(np.diff(flag_times))/10., rtol=0.)):
                     times_overlapping.append(t)
             for f in flag_freqs:
-                if np.any(np.isclose(self.freqs, fm, atol=1., rtol=0.)):
+                if np.any(np.isclose(self.freqs, f, atol=1., rtol=0.)):
                     freqs_overlapping.append(f)
             # select frequencies and times that overlap with data.
             external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
