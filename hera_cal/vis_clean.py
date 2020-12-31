@@ -248,6 +248,10 @@ class VisClean(object):
                     freqs_overlapping.append(f)
             # select frequencies and times that overlap with data.
             external_flags.select(frequencies=freqs_overlapping, times=times_overlapping)
+            # set times and frequencies to be equal to visclean times and freqs
+            # since to_baseline in apply_flag checks for exact freq / time equality.
+            external_flags.time_array = np.unique(self.times)
+            external_flags.freq_array = np.unique(self.freqs)
         from hera_qm.xrfi import flag_apply
         # set all flags to False on waterfalls that are not fully flagged
         # if overwrite_data_flags is True.
