@@ -1008,7 +1008,7 @@ def get_file_times(filepaths, filetype='uvh5'):
         return dlsts, dtimes, file_lst_arrays, file_time_arrays
 
 
-def partial_time_io(hd, times, **kwargs):
+def partial_time_io(hd, times, return_hd=False, **kwargs):
     '''Perform partial io with a time-select on a HERAData object, even if it is intialized
     using multiple files, some of which do not contain any of the specified times.
 
@@ -1018,10 +1018,13 @@ def partial_time_io(hd, times, **kwargs):
         kwargs: other partial i/o kwargs (see io.HERAData.read)
 
     Returns:
+    if return_hd is False:
         data: DataContainer mapping baseline keys to complex visibility waterfalls
         flags: DataContainer mapping baseline keys to boolean flag waterfalls
         nsamples: DataContainer mapping baseline keys to interger Nsamples waterfalls
-        '''
+    else:
+        hd : heradata object containing times.
+    '''
     assert hd.filetype == 'uvh5', 'This function only works for uvh5-based HERAData objects.'
     combined_hd = None
     for f in hd.filepaths:
@@ -1034,7 +1037,10 @@ def partial_time_io(hd, times, **kwargs):
             else:
                 combined_hd += hd_here
     combined_hd = to_HERAData(combined_hd)  # re-runs the slicing and indexing
-    return combined_hd.build_datacontainers()
+    if return_hd:
+        return combined_hd
+    else:
+        return combined_hd.build_datacontainers()
 
 
 def save_redcal_meta(meta_filename, fc_meta, omni_meta, freqs, times, lsts, antpos, history):
