@@ -503,7 +503,7 @@ class VisClean(object):
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
                        skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
                        skip_gaps_larger_then_filter_period=False,
-                       flag_filled=False,
+                       flag_filled=False, flag_rms_outliers=False, rms_threshold=1.2,
                        **filter_kwargs):
         """
         Generalized fourier filtering of attached data.
@@ -598,6 +598,10 @@ class VisClean(object):
             over the channel gaps since there are substantial contributions to the foreground power from fringe-rates
             that are not being modeled as cross-talk. In this case, we may want a file with the modelled cross-talk included but
             not used to in-paint flagged integrations.
+        flag_rms_outliers: bool, optional
+            if true, flag samples where the rms on filter axis exceeds rms
+        rms_threshold : float, optional
+            if rms of model exceeds this value times rms of unflagged data, then flag time sample.
         filter_kwargs: dict. NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
@@ -816,8 +820,8 @@ class VisClean(object):
                         max_contiguous = 0
                         current_flag_length = 0
                         on_flag = False
-                        for w in wrow:
-                            on_flag = (w == 0)
+                        for wr in wrow:
+                            on_flag = (wr == 0)
                             if on_flag:
                                 current_flag_length += 1
                             else:
@@ -838,8 +842,8 @@ class VisClean(object):
                         max_contiguous = 0
                         current_flag_length = 0
                         on_flag = False
-                        for w in wrow:
-                            on_flag = (w == 0)
+                        for wr in wrow:
+                            on_flag = (wr == 0)
                             if on_flag:
                                 current_flag_length += 1
                             else:
@@ -889,6 +893,17 @@ class VisClean(object):
                                 skipped[:, i] = True
                             elif dim == 1:
                                 skipped[i] = True
+            # flag popups.
+            if ax == 'freq' or ax == 'both':
+                for i in range(mdl.shape[0]):
+                    if flag_rms_outliers:
+                        if np.mean(np.abs(mdl[i]) ** 2.) ** .5 >=  rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
+                            skipped[i] = True
+            if ax == 'time' or ax == 'both':
+                for i in range(mdl.shape[1]):
+                    if flag_rms_outliers:
+                        if np.mean(np.abs(mdl[:, i]) ** 2.) ** .5 >=  rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
+                            skipped[:, i] = True
             # also flag skipped edge channels and integrations.
             skipped[:, :ind_left] = True
             skipped[:, ind_right:] = True
@@ -1685,6 +1700,8 @@ def _dpss_argparser(multifile=False):
     a = _linear_argparser(multifile=multifile)
     a.add_argument("--CLEAN_outfilename", default=None, type=str, help="path for writing the filtered model visibilities (with the same flags)")
     a.add_argument("--filled_outfilename", default=None, type=str, help="path for writing the original data but with flags unflagged and replaced with filtered models wherever possible")
+    a.add_argument("--flag_rms_outliers", default=False, action="store_true", help="flag integrations where RMS of model exceeds RMS of unflagged data by factor of rms_threshold")
+    a.add_argument("--rms_threshold", default=1.2, type=float, help="flag integrations where RMS of model exceeds RMS of unflagged data by factor of rms_threshold")
     return a
 
 def time_chunk_from_baseline_chunks(time_chunk_template, baseline_chunk_files, outfilename, clobber=False, time_bounds=False):

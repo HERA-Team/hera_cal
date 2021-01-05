@@ -14,6 +14,7 @@ from . import utils
 from . import redcal
 import pyuvdata.utils as uvutils
 from pyuvdata import UVData, UVFlag
+import warnings
 
 
 def _check_polarization_consistency(data, gains):
@@ -401,18 +402,21 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                                                                       propagate_flags=True)
                 # update redundant data. Don't partial write.
                 hd_red = io.HERAData(data_infilename)
-                hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
-                # update redundant data. Don't partial write.
-                hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
-                hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
-                if redundant_groups > 1:
-                    outfile = data_outfilename.replace('.uvh5', f'.{red_chunk}.uvh5')
+                if len(reds_data_bls) > 0:
+                    hd_red.read(bls=reds_data_bls, frequencies=freqs_to_load)
+                    # update redundant data. Don't partial write.
+                    hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
+                    hd_red.update(nsamples=nsamples_red, flags=flags_red, data=data_red)
+                    if redundant_groups > 1:
+                        outfile = data_outfilename.replace('.uvh5', f'.{red_chunk}.uvh5')
+                    else:
+                        outfile = data_outfilename
+                    if filetype_out == 'uvh5':
+                        hd_red.write_uvh5(outfile, clobber=clobber)
+                    else:
+                        raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
                 else:
-                    outfile = data_outfilename
-                if filetype_out == 'uvh5':
-                    hd_red.write_uvh5(outfile, clobber=clobber)
-                else:
-                    raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
+                    warnings.warn("No unflagged data so no calibration or outputs produced..")
 
 
 
