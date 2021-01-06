@@ -1692,12 +1692,18 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     # enforce 'gain' cal_type
     uvc.cal_type = "gain"
 
+    # optional calfits parameters to get overwritten via kwargs
+    telescope_location = None 
+    antenna_positions = None
+    lst_array = None
+
     # create parameter list
     params = ["Nants_data", "Nants_telescope", "Nfreqs", "Ntimes", "Nspws", "Njones",
               "ant_array", "antenna_numbers", "antenna_names", "cal_style", "history",
               "channel_width", "flag_array", "gain_array", "quality_array", "jones_array",
               "time_array", "spw_array", "freq_array", "history", "integration_time",
-              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array"]
+              "time_range", "x_orientation", "telescope_name", "gain_convention", "total_quality_array",
+              "telescope_location", "antenna_positions", "lst_array"]
 
     # create local parameter dict
     local_params = locals()
