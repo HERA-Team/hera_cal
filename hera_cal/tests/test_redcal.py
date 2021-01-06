@@ -1517,6 +1517,10 @@ class TestRunMethods(object):
             # bad_ants is based on experiments with this particular file
             hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.first.calfits')
             gains, flags, quals, total_qual = hc.read()
+            np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
+            np.testing.assert_almost_equal(hc.telescope_location, hd.telescope_location)
+            for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
+                np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
                 np.testing.assert_almost_equal(gains[ant], cal_here['g_firstcal'][ant])
                 np.testing.assert_almost_equal(flags[ant], cal_here['gf_firstcal'][ant])
@@ -1532,6 +1536,10 @@ class TestRunMethods(object):
 
             hc = io.HERACal(os.path.splitext(input_data)[0] + prefix + '.omni.calfits')
             gains, flags, quals, total_qual = hc.read()
+            np.testing.assert_almost_equal(np.unique(hc.lst_array), np.unique(hd.lst_array))
+            np.testing.assert_almost_equal(hc.telescope_location, hd.telescope_location)
+            for antnum, antpos in zip(hc.antenna_numbers, hc.antenna_positions):
+                np.testing.assert_almost_equal(antpos, hd.antenna_positions[hd.antenna_numbers == antnum].flatten())
             for ant in gains.keys():
                 zero_check = np.isclose(cal_here['g_omnical'][ant], 0, rtol=1e-10, atol=1e-10)
                 np.testing.assert_array_almost_equal(gains[ant][~zero_check], cal_here['g_omnical'][ant][~zero_check])
