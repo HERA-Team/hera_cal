@@ -19,7 +19,7 @@ if args.vis_units is not None:
 
 if args.nbl_per_load == "none":
     args.nbl_per_load = None
-else:
+if args.nbl_per_load is not None:
     args.nbl_per_load = int(args.nbl_per_load)
 
 ac.apply_cal(args.infilename, args.outfilename, args.new_cal, old_calibration=args.old_cal, flag_file=args.flag_file,
