@@ -1693,7 +1693,7 @@ def write_cal(fname, gains, freqs, times, flags=None, quality=None, total_qual=N
     uvc.cal_type = "gain"
 
     # optional calfits parameters to get overwritten via kwargs
-    telescope_location = None 
+    telescope_location = None
     antenna_positions = None
     lst_array = None
 
@@ -1812,9 +1812,6 @@ def baselines_from_filelist_position(filename, filelist):
         name of the file being processed.
     filelist : list of strings
         name of all files over which computations are being parallelized.
-    chunk_pols : bool, optional
-        if True, don't split blpols with same baseline across multiple files.
-        Default is True.
     Returns
     -------
     list
@@ -1831,8 +1828,8 @@ def baselines_from_filelist_position(filename, filelist):
     lower_index = file_index * chunk_size
     upper_index = np.min([(file_index + 1) * chunk_size, nbls])
     # only return baselines if lower and upper indices are within number of bls
-    if lower_index < len(bls):
-        output = bls[lower_index:upper_index]
-    else:
-        output = []
+    #if lower_index < len(bls):
+    output = bls[lower_index:upper_index]
+    #else:
+    #    output = []
     return output

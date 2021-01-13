@@ -60,6 +60,7 @@ class XTalkFilter(VisClean):
                                that were not in previously loaded cache files.
             cache: dictionary containing pre-computed filter products.
             skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
+            flag_filled : bool, if true, retain data flags in filled data.
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -98,7 +99,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                 res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                 clobber=False, add_to_history='', round_up_bllens=False,
                                 skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
-                                a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
+                                a_priori_flag_yaml=None,
                                 clean_flags_in_resid_flags=True, **filter_kwargs):
     '''
     Uses partial data loading and writing to perform xtalk filtering.
@@ -166,7 +167,7 @@ def load_xtalk_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
             xf.write_filtered_data(res_outfilename=res_outfilename, CLEAN_outfilename=CLEAN_outfilename,
                                    filled_outfilename=filled_outfilename, partial_write=True,
                                    clobber=clobber, add_to_history=add_to_history,
-                                   freq_array=np.asarray([xf.freqs]), Nfreqs=xf.Nfreqs)
+                                   freq_array=xf.hd.freq_array, Nfreqs=xf.Nfreqs)
             xf.hd.data_array = None  # this forces a reload in the next loop
 
 
@@ -176,7 +177,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                                               res_outfilename=None, CLEAN_outfilename=None, filled_outfilename=None,
                                               clobber=False, add_to_history='', round_up_bllens=False, polarizations=None,
                                               skip_flagged_edges=False, flag_zero_times=True, overwrite_data_flags=False,
-                                              a_priori_flag_yaml=None, inpaint=False, frate_standoff=0.0,
+                                              a_priori_flag_yaml=None,
                                               clean_flags_in_resid_flags=True, **filter_kwargs):
     '''
     A xtalk filtering method that only simultaneously loads and writes user-provided
@@ -205,14 +206,11 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
         round_up_bllens: bool, if True, round up baseline lengths. Default is False.
+        polarizations : list of polarizations to process (and write out). Default None operates on all polarizations in data.
         skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
         flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
         overwrite_data_flags : bool, if true reset data flags to False except for flagged antennas.
         a_priori_flag_yaml: path to manual flagging text file.
-        inpaint: if True, inpaint flagged times with all fringe-rates before filtering x-talk.
-                 this gets rid of time-domain flagging side-lobes.
-        frate_standoff : standoff from baseline fringe-rate
-             to use for inpainting.
         clean_flags_in_resid_flags: bool, optional. If true, include clean flags in residual flags that get written.
                                     default is True.
         filter_kwargs: additional keyword arguments to be passed to XTalkFilter.run_xtalk_filter()
