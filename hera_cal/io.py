@@ -1001,7 +1001,7 @@ def partial_time_io(hd, times, return_hd=False, **kwargs):
     combined_hd = None
     for f in hd.filepaths:
         hd_here = HERAData(f)
-        times_here = [t for t in times if t in hd_here.times]
+        times_here = [t for t in hd_here.times if np.any(np.isclose(t, times, rtol=0.0, atol=np.mean(np.diff(hd_here.times))/10.))]
         if len(times_here) > 0:
             hd_here.read(times=times_here, return_data=False, **kwargs)
             if combined_hd is None:
