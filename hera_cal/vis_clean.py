@@ -222,10 +222,16 @@ class VisClean(object):
         ----------
         external_flags: str, optional.
             Str or list of strings pointing to flag files to apply.
+            flag files should be in a format readable by UVFlag and
+            can have times and frequencies that are not in the data.
         overwrite_data_flags: bool, optional
-            If true, overwrite all data flags for bls that are not entirely flagge.d
+            If true, overwrite all data flags for bls that are not entirely flagged.
         flag_zero_times: bool, optional
             if true, don't overwrite flags where the entire time is flagged.
+            this can be useful if we are applying external flags that do not have
+            thresholding.
+            An example of where we might want to do this is if we are doing a second round of RFI flagging
+            starting with a more conservative set of flags but we want to keep fully flagged times.
         a_priori_flag_yaml: str, optional
             path to a yaml file containing manual flags.
         Returns

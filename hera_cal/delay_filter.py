@@ -206,7 +206,6 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         clobber: if True, overwrites existing file at the outfilename
         add_to_history: string appended to the history of the output file
         polarizations: list of polarizations to include and write.
-        verboase: lots of output.
         skip_flagged_edges: if true, skip flagged edges in filtering.
         flag_zero_times: if true, don't overwrite data flags with data times entirely set to zero.
         a_priori_flag_yaml: path to manual flagging text file.
