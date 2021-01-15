@@ -184,7 +184,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
-              redundant_groups=1, **kwargs):
+              redundant_groups=1, spw_range=None, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -236,6 +236,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     if flag_file is not None:
         ext_flags, flag_meta = io.load_flags(flag_file, filetype=flag_filetype, return_meta=True)
         add_to_history += '\nFLAGS_HISTORY: ' + str(flag_meta['history']) + '\n'
+    if spw_range is None:
 
     # load new calibration solution
     hc = io.HERACal(new_calibration)
@@ -270,6 +271,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             freqs_to_load.append(f)
     add_to_history = version.history_string(add_to_history)
     no_red_weights = redundant_weights is None
+    if spw_range is not None:
+        freqs_to_load = freqs_to_load[spw_range[0]:spw_range[1]]
     # partial loading and writing using uvh5
     if redundant_average or redundant_solution:
         all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
@@ -443,4 +446,5 @@ def apply_cal_argparser():
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
     a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Completely overwrite data flags with calibration flags.")
+    a.add_argument("--spw_range", default=None, dtype=int, nargs="+", help="specify spw range to load.")
     return a
