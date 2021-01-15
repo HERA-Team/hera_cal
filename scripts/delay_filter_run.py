@@ -28,6 +28,7 @@ elif a.mode == 'dayenu':
     round_up_bllens=True
     max_contiguous_edge_flags=10000
     skip_flags_larger_then_filter_period=False
+    skip_flagged_edges=False
 elif a.mode == 'dpss_leastsq':
     filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
                      'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
