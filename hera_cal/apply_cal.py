@@ -236,11 +236,13 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     if flag_file is not None:
         ext_flags, flag_meta = io.load_flags(flag_file, filetype=flag_filetype, return_meta=True)
         add_to_history += '\nFLAGS_HISTORY: ' + str(flag_meta['history']) + '\n'
-    if spw_range is None:
 
     # load new calibration solution
     hc = io.HERACal(new_calibration)
     new_gains, new_flags, _, _ = hc.read()
+    #if spw_range is not None:
+    #    hc.select(frequencies=hc.freq_array[0][spw_range[0]:spw_range[1]])
+    #    new_gains, new_flags, _, _ = hc.build_calcontainers()
     if a_priori_flags_yaml is not None:
         from hera_qm.utils import apply_yaml_flags
         # flag hc
@@ -249,7 +251,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # and rebuild data containers.
         new_gains, new_flags, _, _ = hc.build_calcontainers()
     add_to_history += '\nNEW_CALFITS_HISTORY: ' + hc.history + '\n'
-
     # load old calibration solution
     if old_calibration is not None:
         old_hc = io.HERACal(old_calibration)
@@ -259,6 +260,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         for f in old_hc.freqs:
             if np.any(np.isclose(hc.freqs, f)):
                 freqs_to_load.append(f)
+        if spw_range is not None:
+            freqs_to_load = freqs_to_load[spw_range[0]:spw_range[1]]
         old_hc.select(frequencies=np.asarray(freqs_to_load)) # match up frequencies with hc.freqs
         old_gains, old_flags, _, _ = old_hc.build_calcontainers()
         add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
@@ -266,13 +269,27 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         old_gains, old_flags = None, None
     hd = io.HERAData(data_infilename, filetype=filetype_in)
     freqs_to_load = []
-    for f in hd.freqs:
+    if spw_range is None:
+        spw_range=(0, hd.Nfreqs)
+    for f in hd.freqs[spw_range[0]:spw_range[1]]:
         if np.any(np.isclose(hc.freqs, f)):
             freqs_to_load.append(f)
+    # reselect cals to match hd freqs_to_load
+    calfreqs = []
+    calfreqsold = []
+    for f in hc.freqs:
+        if np.any(np.isclose(freqs_to_load, f)):
+            calfreqs.append(f)
+        if old_calibration is not None and p.any(np.isclose(hc_old.freqs, f)):
+            calfreqsold.append(f)
+    hc.select(frequencies=calfreqs)
+    new_gains, new_flags, _, _ = hc.build_calcontainers()
+    if old_calibration is not None:
+        hc_old.select(frequencies=calfreqsold)
+        old_gains, old_flags, _, _ = hc_old.build_calcontainers()
+
     add_to_history = version.history_string(add_to_history)
     no_red_weights = redundant_weights is None
-    if spw_range is not None:
-        freqs_to_load = freqs_to_load[spw_range[0]:spw_range[1]]
     # partial loading and writing using uvh5
     if redundant_average or redundant_solution:
         all_reds = redcal.get_reds(hd.antpos, pols=hd.pols, bl_error_tol=bl_error_tol, include_autos=True)
@@ -446,5 +463,5 @@ def apply_cal_argparser():
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
     a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Completely overwrite data flags with calibration flags.")
-    a.add_argument("--spw_range", default=None, dtype=int, nargs="+", help="specify spw range to load.")
+    a.add_argument("--spw_range", default=None, type=int, nargs=2, help="specify spw range to load.")
     return a
