@@ -181,7 +181,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
-              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
+              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
               freq_atol=1., redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None,
               exclude_from_redundant_mode="data", **kwargs):
@@ -191,9 +191,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     Arguments:
         data_infilename: filename of the data to be calibrated.
         data_outfilename: filename of the resultant data file with the new calibration and flags.
-        new_calibration: filename of the calfits file (or a list of filenames) for the calibration
+        new_calibration: filename of the calfits file for the calibration
             to be applied, along with its new flags (if any).
-        old_calibration: filename of the calfits file (or a list of filenames) for the calibration
+        old_calibration: filename of the calfits file for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
@@ -219,6 +219,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
+        overwrite_data_flags bool, optional
+            If True, overwrite data flags with calibration flags.
         redundant_average : bool, optional
             If True, redundantly average calibrated data and save to <data_outfilename>.red_avg.<filetype_out>
         redundant_weights : datacontainer, optional.
@@ -255,6 +257,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     # load new calibration solution
     hc = io.HERACal(new_calibration)
     new_gains, new_flags, _, _ = hc.read()
+    #if spw_range is not None:
+    #    hc.select(frequencies=hc.freq_array[0][spw_range[0]:spw_range[1]])
+    #    new_gains, new_flags, _, _ = hc.build_calcontainers()
     if a_priori_flags_yaml is not None:
         from hera_qm.utils import apply_yaml_flags
         from hera_qm.metrics_io import read_a_priori_ant_flags
@@ -267,7 +272,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     else:
         ex_ants = None
     add_to_history += '\nNEW_CALFITS_HISTORY: ' + hc.history + '\n'
-
     # load old calibration solution
     if old_calibration is not None:
         old_hc = io.HERACal(old_calibration)
@@ -275,8 +279,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # determine frequencies to load in old_hc that are close to hc
         freqs_to_load = []
         for f in old_hc.freqs:
-            # set atol to be 1/10th of a channel
-            if np.any(np.isclose(hc.freqs, f, rtol=0., atol=freq_atol)):
+            if np.any(np.isclose(hc.freqs, f)):
                 freqs_to_load.append(f)
         if spw_range is not None:
             freqs_to_load = freqs_to_load[spw_range[0]:spw_range[1]]
@@ -348,7 +351,11 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # consider calucate reds here instead and pass in (to avoid computing it multiple times)
         # I'll look into generators and whether the reds calc is being repeated.
         for data, data_flags, data_nsamples in hd.iterate_over_bls(Nbls=nbl_per_load, chunk_by_redundant_group=redundant_average,
-                                                                   reds=all_reds, frequencies=freqs_to_load):
+                                                                   reds=all_reds, freqs_to_load=freqs_to_load):
+            if overwrite_data_flags:
+                for bl in data_flags:
+                    data_flags[bl][:] = False
+                    data_nsamples[bl][:] = 1.
             for bl in data_flags.keys():
                 # apply band edge flags
                 data_flags[bl][:, 0:flag_nchan_low] = True
@@ -362,7 +369,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             else:
                 calibrate_in_place(data, new_gains, data_flags=data_flags, cal_flags=new_flags,
                                    old_gains=old_gains, gain_convention=gain_convention)
-            hd.update(data=data, flags=data_flags)
+            hd.update(data=data, flags=data_flags, nsamples=data_nsamples)
 
             if redundant_average:
                 # by default, weight by nsamples (but not flags). This prevents spectral structure from being introduced
@@ -387,7 +394,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 hd.partial_write(data_outfilename, inplace=True, clobber=clobber, add_to_history=add_to_history, **kwargs)
         if redundant_average:
             # if we did redundant averaging, just write the redundant dataset out in the end at once.
-            hd_red.write_uvh5(data_outfilename, clobber=clobber)
+            for red_chunk, hd_red in enumerate(hd_reds):
+                if redundant_groups > 1:
+                    outfile = data_outfilename.replace('.uvh5', f'.{red_chunk}.uvh5')
+                else:
+                    outfile = data_outfilename
+                hd_red.write_uvh5(outfile, clobber=clobber)
     # full data loading and writing
     else:
         data, data_flags, data_nsamples = hd.read(frequencies=freqs_to_load)
@@ -472,7 +484,7 @@ def apply_cal_argparser():
     a = argparse.ArgumentParser(description="Apply (and optionally, also unapply) a calfits file to visibility file.")
     a.add_argument("infilename", type=str, help="path to visibility data file to calibrate")
     a.add_argument("outfilename", type=str, help="path to new visibility results file")
-    a.add_argument("--new_cal", type=str, default=None, nargs="+", help="path to new calibration calfits file (or files for cross-pol)")
+    a.add_argument("--new_cal", type=str, default=None, help="path to new calibration calfits file (or files for cross-pol)")
     a.add_argument("--old_cal", type=str, default=None, nargs="+", help="path to old calibration calfits file to unapply (or files for cross-pol)")
     a.add_argument("--flag_file", type=str, default=None, help="path to file of flags to OR with data flags")
     a.add_argument("--flag_filetype", type=str, default='h5', help="filetype of flag_file (either 'h5' or legacy 'npz'")
@@ -488,7 +500,6 @@ def apply_cal_argparser():
     a.add_argument("--redundant_solution", default=False, action="store_true",
                    help="If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
-    a.add_argument("--vis_units", default=None, type=str, help="String to insert into vis_units attribute of output visibility file.")
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
     a.add_argument("--dont_red_average_flagged_data", default=False, action="store_true", help="Do not include flagged data in redundant averages. Prevents redundant groups where one subgroup is flagged.")
     a.add_argument("--spw_range", default=None, type=int, nargs=2, help="specify spw range to load.")
