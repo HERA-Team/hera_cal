@@ -1317,8 +1317,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     # select out averaged bls
     bls = [blk + (pol,) for pol in pols for blk in red_bl_keys]
     if fed_container:
-        to_del = [bl for bl in data.keys() if bl not in bls]
-        del data[to_del], flags[to_del], nsamples[to_del]
+        for bl in list(data.keys()):
+            if bl not in bls:
+                del data[bl], flags[bl], nsamples[bl]
     else:
         data.select(bls=bls)
 
