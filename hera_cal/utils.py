@@ -1165,6 +1165,7 @@ def gain_relative_difference(old_gains, new_gains, flags, denom=None):
 
 def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 wgts=None, flags=None, nsamples=None,
+                red_bl_keys=None,
                 propagate_flags=False):
     """
     Redundantly average visibilities in a DataContainer, HERAData or UVData object.
@@ -1192,6 +1193,10 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             If data is a DataContainer, these are its nsamples. Default (None) is 1.0 for all pixels.
             Furthermore, if data is a DataContainer, integration_time is 1.0 for all pixels.
             If data is a UVData, then data.nsample_array is used regardless of nsamples input.
+        red_bl_keys : list, optional
+            Optional list of keys to use for each redundantly averaged group. If None,
+            use the first key from each group.
+            Default is None.
         propagate_flags : bool, optional
             If True, propagate input flags to the average flag, even if wgts are provided.
             Note, if wgts are provided, the input flags are NOT used for weighting, but
@@ -1263,8 +1268,10 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     reds = [blg for blg in reds if len(blg) > 0]
 
     # iterate over redundant groups and polarizations
+    if red_bl_keys is None:
+        red_bl_keys = [blg[0] for blg in reds]
     for pol in pols:
-        for blg in reds:
+        for blg, blk in zip(reds, red_bl_keys):
             # get data and weighting for this pol-blgroup
             if fed_container:
                 d = np.asarray([data[bl + (pol,)] for bl in blg])
@@ -1294,13 +1301,13 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
 
             # replace with new data
             if fed_container:
-                blkey = blg[0] + (pol,)
+                blkey = blk + (pol,)
                 data[blkey] = davg
                 flags[blkey] = favg
                 nsamples[blkey] = navg
 
             else:
-                blinds = data.antpair2ind(blg[0])
+                blinds = data.antpair2ind(blk)
                 polind = pols.index(pol)
                 data.data_array[blinds, 0, :, polind] = davg
                 data.flag_array[blinds, 0, :, polind] = favg
@@ -1308,10 +1315,11 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
                 data.integration_time[blinds] = iavg
 
     # select out averaged bls
-    bls = [blg[0] + (pol,) for pol in pols for blg in reds]
+    bls = [blk + (pol,) for pol in pols for blk in red_bl_keys]
     if fed_container:
-        to_del = [bl for bl in data.keys() if bl not in bls]
-        del data[to_del], flags[to_del], nsamples[to_del]
+        for bl in list(data.keys()):
+            if bl not in bls:
+                del data[bl], flags[bl], nsamples[bl]
     else:
         data.select(bls=bls)
 
