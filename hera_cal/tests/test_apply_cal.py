@@ -292,15 +292,7 @@ class Test_Update_Cal(object):
             if np.all(f[bl]):
                 wgts[bl][:] = 0.
         hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts, propagate_flags=True)
-        dcal, fcal, ncal = hda_calibrated.build_datacontainers()
-        # bls_2_keep = []
-        # for bl in hda_calibrated.antpairs:
-        #    anypols = False
-        #    for p, pol in enumerate(hda_calibrated.pols):
-        #        anypols = anypols or np.any(fcal[bl + (pol, )])
-        #    if anypols:
-        #        bls_2_keep.append(bl)
-        # hda_calibrated.select(bls=bls_2_keep)
+
         ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
                      gain_convention='divide', redundant_average=True)
 
@@ -332,6 +324,73 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
         assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
         assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
+        dcal, fcal, ncal = hd_calibrated.build_datacontainers()
+
+        # now try out the dont_red_average_flagged_data keyword
+        bls_2_keep = []
+        for bl in hd_calibrated.antpairs:
+            anypols = False
+            for p, pol in enumerate(hd_calibrated.pols):
+                anypols = anypols or np.any(~fcal[bl + (pol, )])
+            if anypols:
+                bls_2_keep.append(bl)
+        hd_calibrated_selection = hd_calibrated.select(bls=bls_2_keep, inplace=False)
+        hda_calibrated = utils.red_average(hd_calibrated_selection, reds, inplace=False, wgts=wgts, propagate_flags=True)
+        # check not impelemented error
+        with pytest.raises(NotImplementedError):
+            ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
+                         gain_convention='divide', redundant_average=True, nbl_per_load=2, clobber=True)
+        # check skipping flagged data.
+        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
+                     gain_convention='divide', redundant_average=True, nbl_per_load=None, clobber=True)
+        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
+        hda_calibrated_with_apply_cal.read()
+        # check that the data, flags, and nsamples arrays are close
+        assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
+        assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
+        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
+
+        # check not implemented error for partial i/o with redundant_groups > 1
+        with pytest.raises(NotImplementedError):
+            ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
+                         gain_convention='divide', redundant_average=True, nbl_per_load=2, clobber=True, redundant_groups=2)
+        # now  test with two baseline-groups.
+        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
+                     gain_convention='divide', redundant_average=True, nbl_per_load=None, clobber=True, redundant_groups=2)
+        hda_calibrated_with_apply_cal0 = io.HERAData(calibrated_redundant_averaged_file.replace('.uvh5', '.0.uvh5'))
+        hda_calibrated_with_apply_cal1 = io.HERAData(calibrated_redundant_averaged_file.replace('.uvh5', '.1.uvh5'))
+        hda_calibrated_with_apply_cal0.read()
+        hda_calibrated_with_apply_cal1.read()
+        hda_calibrated_groups = [hda_calibrated_with_apply_cal0, hda_calibrated_with_apply_cal1]
+        bls_2_keep = []
+        # get rid of flagged bls
+        for bl in hd_calibrated.antpairs:
+            anypols = False
+            for p, pol in enumerate(hd_calibrated.pols):
+                anypols = anypols or np.any(~fcal[bl + (pol, )])
+            if anypols:
+                bls_2_keep.append(bl)
+        # get redundant groups and remove groups with less then 2 unflagged antennas.
+        reds_downselect = [[bl for bl in grp if bl in bls_2_keep] for grp in reds]
+        reds_downselect = [grp for grp in reds_downselect if len(grp) > 0]
+        # now split up groups
+        for rc in range(1):
+            creds = []
+            blreds = []
+            bls = []
+            for grp in reds_downselect:
+                if len(grp) >= 2:
+                    start = int(np.ceil(len(grp) / 2)) * rc
+                    end = int(np.min([np.ceil(len(grp) / 2) * (rc + 1), len(grp)]))
+                    creds.append(grp[start:end])
+                    blreds.append(creds[-1][0])
+                    bls+=creds[-1]
+            hd_calibrated_selection = hd_calibrated.select(bls=bls, inplace=False)
+            hda_calibrated = utils.red_average(hd_calibrated_selection, reds, red_bl_keys=blreds, inplace=False, wgts=wgts, propagate_flags=True)
+            assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_groups[rc].nsample_array))
+            assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_groups[rc].flag_array))
+            assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_groups[rc].data_array))
+
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
