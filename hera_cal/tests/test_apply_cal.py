@@ -350,46 +350,68 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
         assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
 
+        # prepare calibrated file where all baselines have the same nsamples and the same flagging pattern if they are not all flagged.
+        hdt = io.HERAData(uncalibrated_file)
+        d, f, n = hdt.read()
+        for bl in f:
+            if not np.all(f[bl]):
+                bl_not_flagged = bl
+                break
+        for bl in f:
+            if not np.all(f[bl]):
+                f[bl] = f[bl_not_flagged]
+                n[bl] = n[bl_not_flagged]
+        hdt.update(data=d, flags=f, nsamples=n)
+        uncalibrated_file_homogenous_nsamples_flags = os.path.join(tmp_path, 'homogenous_nsamples_flags.uvh5')
+        hdt.write_uvh5(uncalibrated_file_homogenous_nsamples_flags)
+
         # check not implemented error for partial i/o with redundant_groups > 1
         with pytest.raises(NotImplementedError):
             ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
                          gain_convention='divide', redundant_average=True, nbl_per_load=2, clobber=True, redundant_groups=2)
-        # now  test with two baseline-groups.
-        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
-                     gain_convention='divide', redundant_average=True, nbl_per_load=None, clobber=True, redundant_groups=2)
-        hda_calibrated_with_apply_cal0 = io.HERAData(calibrated_redundant_averaged_file.replace('.uvh5', '.0.uvh5'))
-        hda_calibrated_with_apply_cal1 = io.HERAData(calibrated_redundant_averaged_file.replace('.uvh5', '.1.uvh5'))
-        hda_calibrated_with_apply_cal0.read()
-        hda_calibrated_with_apply_cal1.read()
-        hda_calibrated_groups = [hda_calibrated_with_apply_cal0, hda_calibrated_with_apply_cal1]
-        bls_2_keep = []
-        # get rid of flagged bls
-        for bl in hd_calibrated.antpairs:
-            anypols = False
-            for p, pol in enumerate(hd_calibrated.pols):
-                anypols = anypols or np.any(~fcal[bl + (pol, )])
-            if anypols:
-                bls_2_keep.append(bl)
-        # get redundant groups and remove groups with less then 2 unflagged antennas.
-        reds_downselect = [[bl for bl in grp if bl in bls_2_keep] for grp in reds]
-        reds_downselect = [grp for grp in reds_downselect if len(grp) > 0]
-        # now split up groups
-        for rc in range(1):
-            creds = []
-            blreds = []
-            bls = []
-            for grp in reds_downselect:
-                if len(grp) >= 2:
-                    start = int(np.ceil(len(grp) / 2)) * rc
-                    end = int(np.min([np.ceil(len(grp) / 2) * (rc + 1), len(grp)]))
-                    creds.append(grp[start:end])
-                    blreds.append(creds[-1][0])
-                    bls+=creds[-1]
-            hd_calibrated_selection = hd_calibrated.select(bls=bls, inplace=False)
-            hda_calibrated = utils.red_average(hd_calibrated_selection, reds, red_bl_keys=blreds, inplace=False, wgts=wgts, propagate_flags=True)
-            assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_groups[rc].nsample_array))
-            assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_groups[rc].flag_array))
-            assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_groups[rc].data_array))
+
+        # single redundant group for comparison.
+        ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
+                     gain_convention='divide', redundant_average=True, nbl_per_load=None, clobber=True)
+        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
+        hda_calibrated_with_apply_cal.read()
+        d1, f1, n1 = hda_calibrated_with_apply_cal.build_datacontainers()
+
+        for ngrps in range(3, 6):
+            hda_calibrated_groups = []
+            ac.apply_cal(uncalibrated_file_homogenous_nsamples_flags, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
+                         gain_convention='divide', redundant_average=True, nbl_per_load=None, clobber=True, redundant_groups=ngrps)
+            for rc in range(ngrps):
+                hda_calibrated_groups.append(io.HERAData(calibrated_redundant_averaged_file.replace('.uvh5', f'.{rc}.uvh5')))
+                hda_calibrated_groups[-1].read()
+                os.remove(calibrated_redundant_averaged_file.replace('.uvh5', f'.{rc}.uvh5'))
+            # check that the sum of nsample arrays is equal to the nsamples in the redgroup in the original data.
+            for m in range(len(hda_calibrated_groups)):
+                _, _, nt = hda_calibrated_groups[m].build_datacontainers()
+                if m == 0:
+                    nsum = nt
+                else:
+                    nsum += nt
+            for bl in nsum:
+                assert np.all(np.isclose(n1[bl], nsum[bl]))
+
+            equal_flags = []
+            equal_times = []
+            equal_baselines = []
+            equal_data = []
+            for m in range(ngrps-1):
+                equal_flags.append(np.all(np.isclose(hda_calibrated_groups[m].flag_array, hda_calibrated_groups[m+1].flag_array)))
+                equal_times.append(np.all(np.isclose(hda_calibrated_groups[m].time_array, hda_calibrated_groups[m+1].time_array)))
+                equal_data.append(np.all(np.isclose(hda_calibrated_groups[m].data_array, hda_calibrated_groups[m+1].data_array)))
+                equal_baselines.append(np.all(np.isclose(hda_calibrated_groups[m].baseline_array, hda_calibrated_groups[m+1].baseline_array)))
+            # check all flag arrays are equal
+            assert np.all(equal_flags)
+            # check that all baseline and time arrays are equal
+            assert np.all(equal_baselines)
+            assert np.all(equal_times)
+            # check that data is not equal.
+            assert not np.any(equal_data)
+
 
 
     def test_apply_cal_argparser(self):
