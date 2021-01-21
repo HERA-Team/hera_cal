@@ -304,6 +304,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             raise NotImplementedError('Partial writing is not implemented for non-uvh5 I/O.')
         if not redundant_groups == 1:
             raise NotImplementedError("Splitting redundant groups into subgroups is not yet implemented for partial I/O!")
+        if dont_red_average_flagged_data:
+            raise NotImplementedError("Completely skipping flagged data in redundantly averaged data not implemented for partial I/O!")
         for attribute, value in kwargs.items():
             hd.__setattr__(attribute, value)
         if redundant_average or redundant_solution:
@@ -418,7 +420,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     # trim group to only include baselines with redundant weights not equal to zero.
                     grp0 = grp[0]
                     if dont_red_average_flagged_data:
-                        grp = [ap for ap in grp if np.any(np.abs([data_flags[ap + (pol,)] * redundant_weights[ap + (pol,)] for pol in hd.pols]) >= 0.)]
+                        grp = [ap for ap in grp if np.any(np.asarray([~data_flags[ap + (pol,)] for pol in data_flags.pols()]))]
                     # only include groups with more elements then redundant groups!
                     if len(grp) >= redundant_groups:
                         start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
