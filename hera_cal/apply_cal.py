@@ -467,7 +467,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 else:
                     warnings.warn("No unflagged data so no calibration or outputs produced.")
 
-
 def apply_cal_argparser():
     '''Arg parser for commandline operation of apply_cal.'''
     a = argparse.ArgumentParser(description="Apply (and optionally, also unapply) a calfits file to visibility file.")

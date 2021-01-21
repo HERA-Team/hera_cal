@@ -293,14 +293,14 @@ class Test_Update_Cal(object):
                 wgts[bl][:] = 0.
         hda_calibrated = utils.red_average(hd_calibrated, reds, inplace=False, wgts=wgts, propagate_flags=True)
         dcal, fcal, ncal = hda_calibrated.build_datacontainers()
-        #bls_2_keep = []
-        #for bl in hda_calibrated.antpairs:
+        # bls_2_keep = []
+        # for bl in hda_calibrated.antpairs:
         #    anypols = False
         #    for p, pol in enumerate(hda_calibrated.pols):
         #        anypols = anypols or np.any(fcal[bl + (pol, )])
         #    if anypols:
         #        bls_2_keep.append(bl)
-        #hda_calibrated.select(bls=bls_2_keep)
+        # hda_calibrated.select(bls=bls_2_keep)
         ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile,
                      gain_convention='divide', redundant_average=True)
 
