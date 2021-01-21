@@ -264,14 +264,14 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 freqs_to_load.append(f)
         if spw_range is not None:
             freqs_to_load = freqs_to_load[spw_range[0]:spw_range[1]]
-        old_hc.select(frequencies=np.asarray(freqs_to_load)) # match up frequencies with hc.freqs
+        old_hc.select(frequencies=np.asarray(freqs_to_load))  # match up frequencies with hc.freqs
         old_gains, old_flags, _, _ = old_hc.build_calcontainers()
         add_to_history += '\nOLD_CALFITS_HISTORY: ' + old_hc.history + '\n'
     else:
         old_gains, old_flags = None, None
     hd = io.HERAData(data_infilename, filetype=filetype_in)
     if spw_range is None:
-        spw_range=(0, hd.Nfreqs)
+        spw_range = (0, hd.Nfreqs)
     else:
         if filetype_in != 'uvh5':
             raise NotImplementedError("spw only implemented for uvh5 files.")
@@ -418,7 +418,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     # trim group to only include baselines with redundant weights not equal to zero.
                     grp0 = grp[0]
                     if dont_red_average_flagged_data:
-                        grp = [ap for ap in grp if np.any(np.abs([data_flags[ap + (pol,)] * redundant_weights[ap + (pol,)] for pol in hd.pols])>=0.)]
+                        grp = [ap for ap in grp if np.any(np.abs([data_flags[ap + (pol,)] * redundant_weights[ap + (pol,)] for pol in hd.pols]) >= 0.)]
                     # only include groups with more elements then redundant groups!
                     if len(grp) >= redundant_groups:
                         start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
@@ -445,7 +445,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                         raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
                 else:
                     warnings.warn("No unflagged data so no calibration or outputs produced..")
-
 
 
 def apply_cal_argparser():
