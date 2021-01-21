@@ -423,8 +423,11 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                         grp = [ap for ap in grp if np.any(np.asarray([~data_flags[ap + (pol,)] for pol in data_flags.pols()]))]
                     # only include groups with more elements then redundant groups!
                     if len(grp) >= redundant_groups:
-                        start = int(np.ceil(len(grp) / redundant_groups)) * red_chunk
-                        end = int(np.min([np.ceil(len(grp) / redundant_groups) * (red_chunk + 1), len(grp)]))
+                        start = len(grp) // redundant_groups * red_chunk
+                        if red_chunk < redundant_groups - 1:
+                            end = len(grp) // redundant_groups * (red_chunk + 1)
+                        else:
+                            end = len(grp)
                         red_antpairs.append(grp[start:end])
                         reds_data_bls.append(grp0)
                 data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
