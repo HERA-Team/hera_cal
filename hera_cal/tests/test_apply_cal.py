@@ -399,11 +399,11 @@ class Test_Update_Cal(object):
             equal_times = []
             equal_baselines = []
             equal_data = []
-            for m in range(ngrps-1):
-                equal_flags.append(np.all(np.isclose(hda_calibrated_groups[m].flag_array, hda_calibrated_groups[m+1].flag_array)))
-                equal_times.append(np.all(np.isclose(hda_calibrated_groups[m].time_array, hda_calibrated_groups[m+1].time_array)))
-                equal_data.append(np.all(np.isclose(hda_calibrated_groups[m].data_array, hda_calibrated_groups[m+1].data_array)))
-                equal_baselines.append(np.all(np.isclose(hda_calibrated_groups[m].baseline_array, hda_calibrated_groups[m+1].baseline_array)))
+            for m in range(ngrps - 1):
+                equal_flags.append(np.all(np.isclose(hda_calibrated_groups[m].flag_array, hda_calibrated_groups[m + 1].flag_array)))
+                equal_times.append(np.all(np.isclose(hda_calibrated_groups[m].time_array, hda_calibrated_groups[m + 1].time_array)))
+                equal_data.append(np.all(np.isclose(hda_calibrated_groups[m].data_array, hda_calibrated_groups[m + 1].data_array)))
+                equal_baselines.append(np.all(np.isclose(hda_calibrated_groups[m].baseline_array, hda_calibrated_groups[m + 1].baseline_array)))
             # check all flag arrays are equal
             assert np.all(equal_flags)
             # check that all baseline and time arrays are equal
@@ -411,8 +411,6 @@ class Test_Update_Cal(object):
             assert np.all(equal_times)
             # check that data is not equal.
             assert not np.any(equal_data)
-
-
 
     def test_apply_cal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', '--new_cal', 'd']
