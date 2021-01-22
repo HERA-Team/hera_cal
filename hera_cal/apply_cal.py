@@ -378,9 +378,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                             if bl[0] in ex_ants or bl[1] in ex_ants:
                                 redundant_weights[bl][:] = 0.
                 # redundantly average
-                utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
-                                  reds=all_red_antpairs, wgts=redundant_weights, inplace=True,
-                                  propagate_flags=True)
+                data, data_flags, data_nsamples = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
+                                                                    reds=all_red_antpairs, wgts=redundant_weights, inplace=False,
+                                                                    propagate_flags=True)
                 # update redundant data. Don't partial write.
                 hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
             else:
