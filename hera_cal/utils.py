@@ -1177,9 +1177,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             are propagated to the output flags. Default = False.
     Returns:
         if fed a DataContainer:
-            DataContainer, averaged data
-            DataContainer, averaged flags
-            DataContainer, summed nsamples
+            Dict, averaged data
+            Dict, averaged flags
+            Dict, summed nsamples
         elif fed a HERAData or UVData:
             HERAData or UVData object, averaged data
 
@@ -1290,19 +1290,30 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
 
     # select out averaged bls
     bls = [blk + (pol,) for pol in pols for blk in red_bl_keys]
-    new_data = {}
-    new_flags = {}
-    new_nsamples = {}
     if fed_container:
-        for bl in list(data.keys()):
-            if bl in bls:
-                new_data[bl] = data[bl]
-                new_flags[bl] = flags[bl]
-                new_nsamples[bl] = nsamples[bl]
-                #del data[bl], flags[bl], nsamples[bl]
-        data=new_data
-        flags=new_flags
-        nsamples=new_nsamples
+        new_data = {}
+        new_flags = {}
+        new_nsamples = {}
+        # its much faster to assign a new dict then
+        # delete items from an existing dict for
+        # large data sets where number of red keys
+        # much smaller the original keys.
+        if not inplace:
+            for bl in list(data.keys()):
+                if bl in bls:
+                    new_data[bl] = data[bl]
+                    new_flags[bl] = flags[bl]
+                    new_nsamples[bl] = nsamples[bl]
+            data = new_data
+            flags = new_flags
+            nsamples = new_nsamples
+        else:
+            # can't think of how to avoid this inplace.
+            for bl in list(data.keys()):
+                if bl not in bls:
+                    del data[bl]
+                    del flags[bl]
+                    del nsamples[bl]
     else:
         data.select(bls=bls)
 
@@ -1311,7 +1322,6 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             return data, flags, nsamples
         else:
             return data
-
 
 def eq2top_m(ha, dec):
     """Return the 3x3 matrix converting equatorial coordinates to topocentric
