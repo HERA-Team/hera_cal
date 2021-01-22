@@ -1287,14 +1287,14 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
     # select out averaged bls
     bls = [blk + (pol,) for pol in pols for blk in red_bl_keys]
     if fed_container:
-        new_data = {}
-        new_flags = {}
-        new_nsamples = {}
         # its much faster to assign a new dict then
         # delete items from an existing dict for
         # large data sets where number of red keys
         # much smaller the original keys.
         if not inplace:
+            new_data = {}
+            new_flags = {}
+            new_nsamples = {}
             for bl in list(data.keys()):
                 if bl in bls:
                     new_data[bl] = data[bl]
