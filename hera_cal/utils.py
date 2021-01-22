@@ -1173,9 +1173,9 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
             are propagated to the output flags. Default = False.
     Returns:
         if fed a DataContainer:
-            DataContainer, averaged data
-            DataContainer, averaged flags
-            DataContainer, summed nsamples
+            Dict, averaged data
+            Dict, averaged flags
+            Dict, summed nsamples
         elif fed a HERAData or UVData:
             HERAData or UVData object, averaged data
 
@@ -1290,14 +1290,26 @@ def red_average(data, reds=None, bl_tol=1.0, inplace=False,
         new_data = {}
         new_flags = {}
         new_nsamples = {}
-        for bl in list(data.keys()):
-            if bl in bls:
-                new_data[bl] = data[bl]
-                new_flags[bl] = flags[bl]
-                new_nsamples[bl] = nsamples[bl]
-        data = new_data
-        flags = new_flags
-        nsamples = new_nsamples
+        # its much faster to assign a new dict then
+        # delete items from an existing dict for
+        # large data sets where number of red keys
+        # much smaller the original keys.
+        if not inplace:
+            for bl in list(data.keys()):
+                if bl in bls:
+                    new_data[bl] = data[bl]
+                    new_flags[bl] = flags[bl]
+                    new_nsamples[bl] = nsamples[bl]
+            data = new_data
+            flags = new_flags
+            nsamples = new_nsamples
+        else:
+            # can't think of how to avoid this inplace.
+            for bl in list(data.keys()):
+                if bl not in bls:
+                    del data[bl]
+                    del flags[bl]
+                    del nsamples[bl]
     else:
         data.select(bls=bls)
 
