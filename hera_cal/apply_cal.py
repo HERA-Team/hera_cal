@@ -181,7 +181,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
-              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
+              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
               freq_atol=1., redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None,
               exclude_from_redundant_mode="data", **kwargs):
@@ -191,9 +191,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     Arguments:
         data_infilename: filename of the data to be calibrated.
         data_outfilename: filename of the resultant data file with the new calibration and flags.
-        new_calibration: filename of the calfits file for the calibration
-            to be applied, along with its new flags (if any).
-        old_calibration: filename of the calfits file for the calibration
+        new_calibration: filename of the calfits file (or a list of filenames) for the calibration
+        old_calibration: filename of the calfits file (or a list of filenames) for the calibration	        old_calibration: filename of the calfits file for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
@@ -277,7 +276,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # determine frequencies to load in old_hc that are close to hc
         freqs_to_load = []
         for f in old_hc.freqs:
-            if np.any(np.isclose(hc.freqs, f)):
+            # set atol to be 1/10th of a channel
+            if np.any(np.isclose(hc.freqs, f, rtol=0., atol=freq_atol)):
                 freqs_to_load.append(f)
         if spw_range is not None:
             freqs_to_load = freqs_to_load[spw_range[0]:spw_range[1]]
@@ -378,9 +378,9 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                             if bl[0] in ex_ants or bl[1] in ex_ants:
                                 redundant_weights[bl][:] = 0.
                 # redundantly average
-                data, data_flags, data_nsamples = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
-                                                                    reds=all_red_antpairs, wgts=redundant_weights, inplace=False,
-                                                                    propagate_flags=True)
+                utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
+                                  reds=all_red_antpairs, wgts=redundant_weights, inplace=True,
+                                  propagate_flags=True)
                 # update redundant data. Don't partial write.
                 hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
             else:
