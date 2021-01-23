@@ -326,29 +326,9 @@ class Test_Update_Cal(object):
         assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
         dcal, fcal, ncal = hd_calibrated.build_datacontainers()
 
-        # now try out the dont_red_average_flagged_data keyword
-        bls_2_keep = []
-        for bl in hd_calibrated.antpairs:
-            anypols = False
-            for p, pol in enumerate(hd_calibrated.pols):
-                anypols = anypols or np.any(~fcal[bl + (pol, )])
-            if anypols:
-                bls_2_keep.append(bl)
-        hd_calibrated_selection = hd_calibrated.select(bls=bls_2_keep, inplace=False)
-        hda_calibrated = utils.red_average(hd_calibrated_selection, reds, inplace=False, wgts=wgts, propagate_flags=True)
-        # check not impelemented error
         with pytest.raises(NotImplementedError):
             ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
                          gain_convention='divide', redundant_average=True, nbl_per_load=2, clobber=True)
-        # check skipping flagged data.
-        ac.apply_cal(uncalibrated_file, calibrated_redundant_averaged_file, calfile, dont_red_average_flagged_data=True,
-                     gain_convention='divide', redundant_average=True, nbl_per_load=None, clobber=True)
-        hda_calibrated_with_apply_cal = io.HERAData(calibrated_redundant_averaged_file)
-        hda_calibrated_with_apply_cal.read()
-        # check that the data, flags, and nsamples arrays are close
-        assert np.all(np.isclose(hda_calibrated.nsample_array, hda_calibrated_with_apply_cal.nsample_array))
-        assert np.all(np.isclose(hda_calibrated.flag_array, hda_calibrated_with_apply_cal.flag_array))
-        assert np.all(np.isclose(hda_calibrated.data_array, hda_calibrated_with_apply_cal.data_array))
 
         # prepare calibrated file where all baselines have the same nsamples and the same flagging pattern if they are not all flagged.
         hdt = io.HERAData(uncalibrated_file)
