@@ -13,9 +13,13 @@ import sys
 a = ac.apply_cal_argparser()
 args = a.parse_args()
 
-kwargs = {}
-if args.nbl_per_load == 0:
+if args.vis_units is not None:	
+    kwargs['vis_units'] = args.vis_units
+
+if args.nbl_per_load == "none":
     args.nbl_per_load = None
+if args.nbl_per_load is not None:
+    args.nbl_per_load = int(args.nbl_per_load)
 
 ac.apply_cal(args.infilename, args.outfilename, args.new_cal, old_calibration=args.old_cal, flag_file=args.flag_file,
              flag_filetype=args.flag_filetype, flag_nchan_low=args.flag_nchan_low, flag_nchan_high=args.flag_nchan_high, spw_range=args.spw_range,
