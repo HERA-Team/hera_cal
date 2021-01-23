@@ -488,6 +488,7 @@ def apply_cal_argparser():
     a.add_argument("--redundant_solution", default=False, action="store_true",
                    help="If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    a.add_argument("--vis_units", default=None, type=str, help="String to insert into vis_units attribute of output visibility file.")
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
     a.add_argument("--dont_red_average_flagged_data", default=False, action="store_true", help="Do not include flagged data in redundant averages. Prevents redundant groups where one subgroup is flagged.")
     a.add_argument("--spw_range", default=None, type=int, nargs=2, help="specify spw range to load.")
