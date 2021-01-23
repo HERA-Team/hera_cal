@@ -151,15 +151,19 @@ class DataContainer:
             raise ValueError('only supports setting (ant1, ant2, pol) keys')
 
     def __delitem__(self, key):
-        '''Deletes the input key and corresponding data. Only supports the form (0,1,'nn').
-        Abstracts away both baseline ordering and polarization capitalization.'''
-        if len(key) == 3:
-            key = comply_bl(key)
-            del self._data[key]
-            self._antpairs = set([k[:2] for k in self._data.keys()])
-            self._pols = set([k[-1] for k in self._data.keys()])
-        else:
-            raise ValueError('only supports setting (ant1, ant2, pol) keys')
+        '''Deletes the input key(s) and corresponding data. Only supports tuples of form (0,1,'nn')
+        or lists or ndarrays of tuples of that form. Abstracts away both baseline ordering and
+        polarization capitalization.'''
+        if isinstance(key, tuple):
+            key = [key]
+        for k in key:
+            if isinstance(k, tuple) and (len(k) == 3):
+                k = comply_bl(k)
+                del self._data[k]
+            else:
+                raise ValueError(f'Tuple keys to delete must be in the format (ant1, ant2, pol), {k} is not.')
+        self._antpairs = set([k[:2] for k in self._data.keys()])
+        self._pols = set([k[-1] for k in self._data.keys()])
 
     def concatenate(self, D, axis=0):
         '''Concatenates D, a DataContainer or a list of DCs, with self along an axis'''
