@@ -503,6 +503,7 @@ class VisClean(object):
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
                        skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
                        skip_gaps_larger_then_filter_period=False,
+                       skip_flags_within_filter_period_of_edge=False,
                        flag_filled=False, flag_rms_outliers=False, rms_threshold=1.2,
                        **filter_kwargs):
         """
@@ -814,52 +815,61 @@ class VisClean(object):
                 xp = xp[ind_left: ind_right]
 
             # skip half period gaps
-            if skip_gaps_larger_then_filter_period:
-                if ax == 'freq':
-                    for rownum,wrow in enumerate(win):
-                        max_contiguous = 0
-                        current_flag_length = 0
-                        on_flag = False
-                        for wr in wrow:
-                            on_flag = (wr == 0)
-                            if on_flag:
-                                current_flag_length += 1
-                            else:
-                                if current_flag_length >= max_contiguous:
-                                    max_contiguous = current_flag_length
-                                current_flag_length = 0
-                        if ax=='both':
-                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[1], filter_half_widths[1])])
-                            dvoxel = np.mean(np.diff(x[1]))
+            if ax == 'freq' or ax == 'both':
+                for rownum,wrow in enumerate(win):
+                    max_contiguous = 0
+                    current_flag_length = 0
+                    on_flag = False
+                    for wr in wrow:
+                        on_flag = (wr == 0)
+                        if on_flag:
+                            current_flag_length += 1
                         else:
-                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
-                            dvoxel = np.mean(np.diff(x))
-                # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
-                        if max_contiguous * dvoxel >= 1 / max_filter_delay:
-                            win[rownum] = 0.
-                if ax == 'time' or ax == 'both':
-                    for rownum,wrow in enumerate(win.T):
-                        max_contiguous = 0
-                        current_flag_length = 0
-                        on_flag = False
-                        for wr in wrow:
-                            on_flag = (wr == 0)
-                            if on_flag:
-                                current_flag_length += 1
-                            else:
-                                if current_flag_length >= max_contiguous:
-                                    max_contiguous = current_flag_length
-                                current_flag_length = 0
-                        if ax=='both':
-                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_widths[0])])
-                            dvoxel = np.mean(np.diff(x[0]))
-                        else:
-                            max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
-                            dvoxel = np.mean(np.diff(x))
-                    # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
-                        if max_contiguous * dvoxel >= 1 / max_filter_delay:
-                            win[:, rownum] = 0.
+                            if current_flag_length >= max_contiguous:
+                                max_contiguous = current_flag_length
+                            current_flag_length = 0
+                    if ax=='both':
+                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[1], filter_half_widths[1])])
+                        dvoxel = np.mean(np.diff(x[1]))
+                    else:
+                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
+                        dvoxel = np.mean(np.diff(x))
+            # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
+                    if max_contiguous * dvoxel >= 1 / max_filter_delay:
+                        if skip_gaps_larger_then_filter_period:
+                            win[rownum, :] = 0.
+                    max_edge = int(np.ceil(1 / max_filter_delay / dvoxel))
+                    if skip_flags_within_filter_period_of_edge:
+                        if np.any(np.isclose(win[rownum, :max_edge], 0.0)) | np.any(np.isclose(win[rownum, -max_edge:], 0.0)):
+                            win[rownum, :] = 0.
 
+            if ax == 'time' or ax == 'both':
+                for rownum,wrow in enumerate(win.T):
+                    max_contiguous = 0
+                    current_flag_length = 0
+                    on_flag = False
+                    for wr in wrow:
+                        on_flag = (wr == 0)
+                        if on_flag:
+                            current_flag_length += 1
+                        else:
+                            if current_flag_length >= max_contiguous:
+                                max_contiguous = current_flag_length
+                            current_flag_length = 0
+                    if ax=='both':
+                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_widths[0])])
+                        dvoxel = np.mean(np.diff(x[0]))
+                    else:
+                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
+                        dvoxel = np.mean(np.diff(x))
+                # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
+                    max_edge = int(np.ceil(1 / max_filter_delay / dvoxel))
+                    if max_contiguous * dvoxel >= 1 / max_filter_delay:
+                        if skip_gaps_larger_then_filter_period:
+                            win[:, rownum] = 0.
+                    if skip_flags_within_filter_period_of_edge:
+                        if np.any(np.isclose(win[:max_edge, rownum], 0.0)) | np.any(np.isclose(win[-max_edge:, rownum], 0.0)):
+                            win[:, rownum] = 0.
 
             mdl, res, info  = dspec.fourier_filter(x=xp, data=din, wgts=win, filter_centers=filter_centers,
                                    filter_half_widths=filter_half_widths,
