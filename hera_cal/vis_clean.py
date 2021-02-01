@@ -7,30 +7,24 @@ from collections import OrderedDict as odict
 import datetime
 from uvtools import dspec
 import argparse
-
-
 from astropy import constants
 import copy
 import fnmatch
 from scipy import signal
+import warnings
+from pyuvdata import UVFlag
 
-from . import io
-from . import apply_cal
-from . import version
+from . import io, apply_cal, version, redcal
 from .datacontainer import DataContainer
 from .utils import echo
 from .flag_utils import factorize_flags
-import warnings
-from pyuvdata import UVFlag
 
 
 class VisClean(object):
     """
     VisClean object for visibility CLEANing and filtering.
     """
-
     def __init__(self, input_data, filetype='uvh5', input_cal=None, link_data=True,
-                 round_up_bllens=False,
                  **read_kwargs):
         """
         Initialize the object.
@@ -45,11 +39,6 @@ class VisClean(object):
                 as they are built.
             link_data : bool, if True, attempt to link DataContainers
                 from HERAData object, otherwise only link metadata if possible.
-            round_up_bllens : bool, optional
-                If True, round up baseline lengths to nearest meter for delay-filtering.
-                this allows linear filters for baselines with slightly different lengths
-                to be hashed to the same matrix. Saves lots of time by only computing
-                one unique filtering matrix per flagging pattern and baseline length group.
             read_kwargs : kwargs to pass to UVData.read (e.g. run_check, check_extra and
                 run_check_acceptability). Only used for uvh5 filetype
         """
@@ -62,7 +51,29 @@ class VisClean(object):
 
         # attach data and/or metadata to object if exists
         self.attach_data(link_data=link_data)
-        self.round_up_bllens = round_up_bllens
+
+    def round_baseline_vectors(self, bl_error_tol=1.0):
+        """
+        Round individual baseline vectors to the
+        average baseline vector of each redundant group
+
+        Args:
+            bl_error_tol : float, baseline error tolerance [meters]
+
+        Notes:
+            Affects self.blvecs and self.bllens in place
+        """
+        # get redundancies
+        antpos, ants = self.hd.get_ENU_antpos(pick_data_ants=True)
+        antpos_dict = dict(list(zip(ants, antpos)))
+        reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
+
+        # iterate over redundancies
+        for red in reds:
+            avg_vec = np.mean([self.blvecs[r] for r in red], axis=0)
+            for r in red:
+                self.blvecs[r] = avg_vec.copy()
+                self.bllens[r] = np.linalg.norm(avg_vec) / constants.c.value
 
     def soft_copy(self, references=[]):
         """
@@ -372,29 +383,27 @@ class VisClean(object):
                   ax='freq', horizon=1.0, standoff=0.0, cache=None, mode='clean',
                   min_dly=10.0, max_frate=None, output_prefix='clean',
                   skip_wgt=0.1, verbose=False, tol=1e-9,
-                  overwrite=False,
-                  skip_flagged_edge_freqs=False,
-                  skip_flagged_edge_times=False,
-                  skip_gaps_larger_then_filter_period=False,
-                  flag_filled=False, clean_flags_in_resid_flags=False,
-                  **filter_kwargs):
+                  overwrite=False, **filter_kwargs):
         """
-        Filter the data
+        Perform visibility cleaning and filtering given flags.
 
         Parameters
         -----------
-        keys : list of bl-pol keys in data to filter
-        x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
+        keys : list of antpair-pol tuples
+            keys in data to filter, default is all keys
+        x : array-like
+            x-values of the axes to be filtered. Numpy array if 1d filter.
             2-list/tuple of numpy arrays if 2d filter.
         data : DataContainer, data to clean. Default is self.data
         flags : Datacontainer, flags to use. Default is self.flags
         wgts : DataContainer, weights to use. Default is None.
-        ax: str, axis to filter, options=['freq', 'time', 'both']
+            Inverse of flags are multiplied into this dictionary
+        ax : str, axis to filter, options=['freq', 'time', 'both']
             Where 'freq' and 'time' are 1d filters and 'both' is a 2d filter.
         horizon: coefficient to bl_len where 1 is the horizon [freq filtering]
         standoff: fixed additional delay beyond the horizon (in nanosec) to filter [freq filtering]
         cache: dictionary containing pre-computed filter products.
-        mode: string specifying filtering mode. See fourier_filter or uvtools.dspec.fourier_filter for supported modes.
+        mode: string specifying filtering mode. See fourier_filter for supported modes.
         min_dly: max delay (in nanosec) used for freq filter is never below this.
         max_frate : max fringe rate (in milli-Hz) used for time filtering. See uvtools.dspec.fourier_filter for options.
         output_prefix : str, attach output model, resid, etc, to self as output_prefix + '_model' etc.
@@ -408,26 +417,6 @@ class VisClean(object):
         tol : float, optional. To what level are foregrounds subtracted.
         overwrite : bool, if True, overwrite output modules with the same name
                     if they already exist.
-        skip_flagged_edge_freqs : bool, optional
-            if true, do not filter over flagged edge frequencies (filter over sub-region)
-            defualt is False
-        skip_flagged_edge_times : bool, optional
-            if true, do not filter over flagged edge times (filter over sub-region)
-            defualt is False
-        skip_gaps_larger_then_filter_period : bool, optional
-            if true, skip integrations or channels with gaps that are larger then the period of
-            of the finest scale mode used for interpolation.
-            default is False.
-        clean_flags_in_resid_flags : bool, optional
-            if true, include clean flags in residual flags that will be written out in res_outfilename.
-            default is False.
-        flag_filled : bool, optional
-            if true, set filter flags equal to the original flags (do not unflag interpolated channels)
-            This is useful for cross-talk filtering where the cross-talk modes will not completely interpolate
-            over the channel gaps since there are substantial contributions to the foreground power from fringe-rates
-            that are not being modeled as cross-talk. In this case, we may want a file with the modelled cross-talk included but
-            not used to in-paint flagged integrations.
-            default is False.
         filter_kwargs : optional dictionary, see fourier_filter **filter_kwargs.
                         Do not pass suppression_factors (non-clean)!
                         instead, use tol to set suppression levels in linear filtering.
@@ -444,7 +433,7 @@ class VisClean(object):
             wgts = DataContainer(dict([(k, np.ones_like(flags[k], dtype=np.float)) for k in keys]))
         # make sure flagged channels have zero weight, regardless of what user supplied.
         wgts = DataContainer(dict([(k, (~flags[k]).astype(float) * wgts[k]) for k in keys]))
-        suppression_factors = [tol]
+        # convert max_frate to DataContainer
         if max_frate is not None:
             if isinstance(max_frate, (int, np.integer, float, np.float)):
                 max_frate = DataContainer(dict([(k, max_frate) for k in data]))
@@ -454,57 +443,25 @@ class VisClean(object):
             max_frate = DataContainer(dict([(k, np.asarray(max_frate[k])) for k in max_frate]))
 
         for k in keys:
-            if ax == 'freq' or ax == 'both':
-                filter_centers_freq = [0.]
-                if self.round_up_bllens:
-                    bl_dly = np.ceil(self.bllens[k[:2]] * constants.c.value) / constants.c.value * horizon + standoff / 1e9
-                else:
-                    bl_dly = self.bllens[k[:2]] * horizon + standoff / 1e9
-                filter_half_widths_freq = [np.max([bl_dly, min_dly / 1e9])]
-            if ax == 'time' or ax == 'both':
-                filter_centers_time = [0.]
-                if max_frate is not None:
-                    max_fr = max_frate[k] * 1e-3
-                    filter_centers_time = [0.]
-                    filter_half_widths_time = [max_fr]
-                else:
-                    raise ValueError("Must provide a maximum ringe-rate (or max frate dict) for time filtering.")
-            if ax == 'both':
-                filter_centers = [filter_centers_time, filter_centers_freq]
-                filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
-                filter_centers = [filter_centers_time, filter_centers_freq]
-                if not mode == 'clean':
-                    suppression_factors = [[tol], [tol]]
-            else:
-                if not mode == 'clean':
-                    suppression_factors = [tol]
-                if ax == 'freq':
-                    filter_centers = filter_centers_freq
-                    filter_half_widths = filter_half_widths_freq
-                elif ax == 'time':
-                    filter_centers = filter_centers_time
-                    filter_half_widths = filter_half_widths_time
+            # get filter properties
+            mfrate = max_frate[k] if max_frate is not None else None
+            filter_centers, filter_half_widths = gen_filter_properties(ax=ax, horizon=horizon,
+                                                                       standoff=standoff, min_dly=min_dly,
+                                                                       bl_len=self.bllens[k[:2]], max_frate=mfrate)
             if mode != 'clean':
-                self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                    mode=mode, suppression_factors=suppression_factors,
+                suppression_factors = [[tol], [tol]] if ax == 'both' else [tol]
+                self.fourier_filter(filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                                    keys=[k], mode=mode, suppression_factors=suppression_factors,
                                     x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite,
-                                    skip_flagged_edge_freqs=skip_flagged_edge_freqs,
-                                    skip_flagged_edge_times=skip_flagged_edge_times,
-                                    skip_gaps_larger_then_filter_period=skip_gaps_larger_then_filter_period,
-                                    flag_filled=flag_filled,
-                                    **filter_kwargs)
+                                    ax=ax, cache=cache, skip_wgt=skip_wgt, verbose=verbose,
+                                    overwrite=overwrite, **filter_kwargs)
             else:
-                self.fourier_filter(keys=[k], filter_centers=filter_centers, filter_half_widths=filter_half_widths,
-                                    mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts, output_prefix=output_prefix,
-                                    ax=ax, skip_wgt=skip_wgt, verbose=verbose, overwrite=overwrite,
-                                    skip_flagged_edge_freqs=skip_flagged_edge_freqs,
-                                    skip_flagged_edge_times=skip_flagged_edge_times,
-                                    skip_gaps_larger_then_filter_period=skip_gaps_larger_then_filter_period,
-                                    flag_filled=flag_filled,
-                                    **filter_kwargs)
+                self.fourier_filter(filter_centers=filter_centers, filter_half_widths=filter_half_widths,
+                                    keys=[k], mode=mode, tol=tol, x=x, data=data, flags=flags, wgts=wgts,
+                                    output_prefix=output_prefix, ax=ax, skip_wgt=skip_wgt, verbose=verbose,
+                                    overwrite=overwrite, **filter_kwargs)
 
-    def fourier_filter(self, filter_centers, filter_half_widths, mode,
+    def fourier_filter(self, filter_centers, filter_half_widths, mode='clean',
                        x=None, keys=None, data=None, flags=None, wgts=None,
                        output_prefix='clean', zeropad=None, cache=None,
                        ax='freq', skip_wgt=0.1, verbose=False, overwrite=False,
@@ -513,7 +470,7 @@ class VisClean(object):
                        flag_filled=False, clean_flags_in_resid_flags=False,
                        **filter_kwargs):
         """
-        Generalized fourier filtering of attached data.
+        Generalized fourier filtering wrapper for uvtools.dspec.fourier_filter.
         It can filter 1d or 2d data with x-axis(es) x and wgts in fourier domain
         rectangular windows centered at filter_centers or filter_half_widths
         perform filtering along any of 2 dimensions in 2d or 1d!
@@ -533,7 +490,7 @@ class VisClean(object):
             if 2dfilter: should be a 2-list or 2-tuple. Each element should
             be a list or tuple or np.ndarray of floats that include centers
             of rectangular bins.
-        mode: string
+        mode: string, optional
             specify filtering mode. Currently supported are
             'clean', iterative clean
             'dpss_lsq', dpss fitting using scipy.optimize.lsq_linear
@@ -571,7 +528,8 @@ class VisClean(object):
                      'dpss_matrix' method (see above)
             'dayenu_clean', apply dayenu filter to data. Deconvolve
                      subtracted foregrounds with 'clean'.
-        x : array-like, optional, numpy ndarray
+        x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
+            2-list/tuple of numpy arrays if 2d filter. Default is freqs [Hz] and/or time [sec].
         keys : list, optional, list of tuple ant-pol pair keys of visibilities to filter.
         data : DataContainer, data to clean. Default is self.data
         flags : Datacontainer, flags to use. Default is self.flags
@@ -686,11 +644,8 @@ class VisClean(object):
                     'gain': The fraction of a residual used in each iteration. If this is too low, clean takes
                         unnecessarily long. If it is too high, clean does a poor job of deconvolving.
                     'alpha': float, if window is 'tukey', this is its alpha parameter.
-        x : array-like, x-values of axes to be filtered. Numpy array if 1d filter.
-            2-list/tuple of numpy arrays if 2d filter.
-     """
+        """
         # type checks
-
         if ax == 'both':
             if zeropad is None:
                 zeropad = [0, 0]
@@ -834,7 +789,8 @@ class VisClean(object):
                                 current_flag_length = 0
                         max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
                         dvoxel = np.mean(np.diff(x))
-                # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
+                        # if width of largest contiguous flag region is greater then the largest filtering delay
+                        # then flag the whole integration.
                         if max_contiguous * dvoxel >= 1 / max_filter_delay:
                             win[rownum] = 0.
                 if ax == 'time' or ax == 'both':
@@ -856,7 +812,8 @@ class VisClean(object):
                         else:
                             max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
                             dvoxel = np.mean(np.diff(x))
-                    # if width of largest contiguous flag region is greater then the largest filtering delay, then flag the whole integration.
+                        # if width of largest contiguous flag region is greater then the largest filtering delay,
+                        # then flag the whole integration.
                         if max_contiguous * dvoxel >= 1 / max_filter_delay:
                             win[:, rownum] = 0.
 
@@ -1382,34 +1339,6 @@ def trim_model(clean_model, clean_resid, dnu, keys=None, noise_thresh=2.0, delay
     return model, noise
 
 
-def _trim_status(info_dict, axis, zeropad):
-    '''
-    Trims the info status dictionary for a zero-padded
-    filter so that the status of integrations that were
-    in the zero-pad region are deleted
-
-    Parameters
-    ----------
-    info : dict, info dictionary
-    axis : integer, index of axis to trim
-    zeropad : integer
-
-    Returns
-    -------
-    Nothing, modifies the provided dictionary in place.
-    '''
-    # delete statuses in zero-pad region
-    statuses = info_dict['status']['axis_%d' % axis]
-    nints = len(statuses)
-    for i in range(zeropad):
-        del statuses[i]
-        del statuses[nints - i - 1]
-    # now update keys of the dict elements we wish to keep
-    nints = len(statuses)
-    for i in range(nints):
-        statuses[i] = statuses.pop(i + zeropad)
-
-
 def zeropad_array(data, binvals=None, zeropad=0, axis=-1, undo=False):
     """
     Zeropad data ndarray along axis.
@@ -1494,6 +1423,80 @@ def noise_eq_bandwidth(window, axis=-1):
             Noise equivalent bandwidth of the window
     """
     return np.sqrt(window.shape[axis] * np.max(window, axis=axis)**2 / np.sum(window**2, dtype=np.float, axis=axis))
+
+
+def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=None,
+                          max_frate=0):
+    """
+    Convert standard delay and fringe-rate filtering parameters
+    into uvtools.dspec.fourier_filter parameters.
+    If ax == 'both', filter properties are returned as (time, freq)
+
+    Args:
+        ax : str, options = ['freq', 'time', 'both']
+        horizon : float, foreground wedge horizon coefficient
+        standoff : float, wedge buffer [nanosec]
+        min_dly: float, the CLEAN delay window
+            is never below this minimum value (in nanosec)
+        bl_len : float, baseline length in seconds (i.e. meters / c)
+        max_frate : float, maximum |fringe-rate| to filter [mHz]
+
+    Returns:
+        filter_centers
+            list of filter centers in units of Hz or sec
+        filter_half_widths
+            list of filter half widths in units Hz or sec
+    """
+    if ax == 'freq' or ax == 'both':
+        filter_centers_freq = [0.]
+        assert bl_len is not None
+        # bl_dly in nanosec
+        bl_dly = dspec._get_bl_dly(bl_len * 1e9, horizon=horizon, standoff=standoff, min_dly=min_dly)
+        filter_half_widths_freq = [bl_dly * 1e9]
+    if ax == 'time' or ax == 'both':
+        assert max_frate is not None
+        filter_centers_time = [0.]
+        filter_half_widths_time = [max_frate * 1e-3]
+    if ax == 'both':
+        filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
+        filter_centers = [filter_centers_time, filter_centers_freq]
+    elif ax == 'freq':
+        filter_centers = filter_centers_freq
+        filter_half_widths = filter_half_widths_freq
+    elif ax == 'time':
+        filter_centers = filter_centers_time
+        filter_half_widths = filter_half_widths_time
+
+    return filter_centers, filter_half_widths
+
+
+def _trim_status(info_dict, axis, zeropad):
+    '''
+    Trims the info status dictionary for a zero-padded
+    filter so that the status of integrations that were
+    in the zero-pad region are deleted
+
+    Parameters
+    ----------
+    info : dict, info dictionary
+    axis : integer, index of axis to trim
+    zeropad : integer
+
+    Returns
+    -------
+    Nothing, modifies the provided dictionary in place.
+    '''
+    # delete statuses in zero-pad region
+    statuses = info_dict['status']['axis_%d' % axis]
+    nints = len(statuses)
+    for i in range(zeropad):
+        del statuses[i]
+        del statuses[nints - i - 1]
+    # now update keys of the dict elements we wish to keep
+    nints = len(statuses)
+    for i in range(nints):
+        statuses[i] = statuses.pop(i + zeropad)
+
 
 # ------------------------------------------
 # Here is an argparser with core arguments

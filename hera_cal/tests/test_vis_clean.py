@@ -184,7 +184,7 @@ class Test_VisClean(object):
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-15))
         assert np.all([V.clean_info[(24, 25, 'ee')]['status']['axis_1'][i] == 'success' for i in V.clean_info[(24, 25, 'ee')]['status']['axis_1']])
 
-        assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', mode='dayenu')
+        assert pytest.raises(AssertionError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate=None, mode='dayenu')
         assert pytest.raises(ValueError, V.vis_clean, keys=[(24, 25, 'ee')], ax='time', max_frate='arglebargle', mode='dayenu')
 
         # cover no overwrite = False skip lines.

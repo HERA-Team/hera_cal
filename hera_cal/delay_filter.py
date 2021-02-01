@@ -111,7 +111,7 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
                            that were not in previously loaded cache files.
-        round_up_bllens: bool, if True, round up baseline lengths. Default is False.
+        round_up_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
         time_thresh : float
@@ -142,8 +142,10 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
     if polarizations is None:
         polarizations = hd.pols
     if Nbls_per_load is None:
-        df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
+        df = DelayFilter(hd, input_cal=calfile)
         df.read(frequencies=freqs, polarizations=polarizations)
+        if round_up_bllens:
+            df.round_baseline_vectors()
         if external_flags is not None or a_priori_flag_yaml is not None:
             df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
                            flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
@@ -156,8 +158,10 @@ def load_delay_filter_and_write(infilename, calfile=None, Nbls_per_load=None, sp
                                clobber=clobber, add_to_history=add_to_history)
     else:
         for i in range(0, len(hd.bls), Nbls_per_load):
-            df = DelayFilter(hd, input_cal=calfile, round_up_bllens=round_up_bllens)
+            df = DelayFilter(hd, input_cal=calfile)
             df.read(bls=hd.bls[i:i + Nbls_per_load], frequencies=freqs)
+            if round_up_bllens:
+                df.round_baseline_vectors()
             if external_flags is not None or a_priori_flag_yaml is not None:
                 df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
                                flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
@@ -191,7 +195,7 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
         read_cache: bool, If true, read existing cache files in cache_dir before running.
         write_cache: bool. If true, create new cache file with precomputed matrices
                            that were not in previously loaded cache files.
-        round_up_bllens: bool, if True, round up baseline lengths. Default is False.
+        round_up_bllens: bool, if True, round baseline lengths to redundant average. Default is False.
         factorize_flags: bool, optional
             If True, factorize flags before running delay filter. See vis_clean.factorize_flags.
         time_thresh : float
@@ -229,8 +233,10 @@ def load_delay_filter_and_write_baseline_list(datafile_list, baseline_list, calf
             polarizations = list(hd.pols.values())[0]
         else:
             polarizations = hd.pols
-    df = DelayFilter(hd, input_cal=cals, round_up_bllens=round_up_bllens, axis='blt')
+    df = DelayFilter(hd, input_cal=cals, axis='blt')
     df.read(bls=baseline_list, frequencies=freqs, axis='blt', polarizations=polarizations)
+    if round_up_bllens:
+        df.round_baseline_vectors()
     if external_flags is not None or a_priori_flag_yaml is not None:
         df.apply_flags(external_flags, overwrite_data_flags=overwrite_data_flags,
                        flag_zero_times=flag_zero_times, a_priori_flag_yaml=a_priori_flag_yaml)
