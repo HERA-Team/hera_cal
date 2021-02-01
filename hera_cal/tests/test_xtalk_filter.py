@@ -39,8 +39,10 @@ class Test_XTalkFilter(object):
         k = (24, 25, 'ee')
         # check successful run when round_up_bllens is True and when False.
         for round_up_bllens in [True, False]:
-            xfil = xf.XTalkFilter(fname, filetype='miriad', round_up_bllens=round_up_bllens)
+            xfil = xf.XTalkFilter(fname, filetype='miriad')
             xfil.read(bls=[k])
+            if round_up_bllens:
+                xfil.round_baseline_vectors()
             wgts = {k: np.ones_like(xfil.flags[k], dtype=np.float)}
             wgts[k][:, 0] = 0.0
             xfil.run_xtalk_filter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)

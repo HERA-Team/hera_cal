@@ -42,6 +42,8 @@ class Test_DelayFilter(object):
         for round_up_bllens in [True, False]:
             dfil = df.DelayFilter(fname, filetype='miriad')
             dfil.read(bls=[k])
+            if round_up_bllens:
+                dfil.round_baseline_vectors()
             wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
             wgts[k][0, :] = 0.0
             dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
