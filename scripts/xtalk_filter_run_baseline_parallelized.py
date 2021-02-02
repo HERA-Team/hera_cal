@@ -21,21 +21,27 @@ if a.mode == 'clean':
     if a.window == 'tukey':
         filter_kwargs['alpha'] = a.alpha
     round_up_bllens=False
-    skip_flags_larger_then_filter_period=False
+    skip_gaps_larger_then_filter_period=False
     skip_flagged_edges=False
     max_contiguous_edge_flags=10000
+    skip_flags_within_filter_period_of_edge=False
+    flag_model_rms_outliers=False
 elif a.mode == 'dayenu':
     filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
     round_up_bllens=True
     max_contiguous_edge_flags=10000
-    skip_flags_larger_then_filter_period=False
+    skip_gaps_larger_then_filter_period=False
     skip_flagged_edges=False
+    skip_flags_within_filter_period_of_edge=False
+    flag_model_rms_outliers=False
 elif a.mode == 'dpss_leastsq':
     filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
     round_up_bllens=True
-    skip_flags_larger_then_filter_period=True
+    skip_gaps_larger_then_filter_period=True
     skip_flagged_edges=True
     max_contiguous_edge_flags=1
+    skip_flags_within_filter_period_of_edge=True
+    flag_model_rms_outliers=True
 
 
 
@@ -60,4 +66,6 @@ if len(baseline_list) > 0:
                                                            external_flags=a.external_flags, inpaint=a.inpaint, frate_standoff=a.frate_standoff,
                                                            skip_gaps_larger_then_filter_period=True,
                                                            overwrite_data_flags=a.overwrite_data_flags,
+                                                           skip_flags_within_filter_period_of_edge=skip_flags_within_filter_period_of_edge,
+                                                           flag_model_rms_outliers=flag_model_rms_outliers,
                                                            clean_flags_in_resid_flags=True, **filter_kwargs)

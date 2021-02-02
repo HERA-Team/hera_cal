@@ -61,7 +61,8 @@ class DelayFilter(VisClean):
             read_cache: bool, If true, read existing cache files in cache_dir before running.
             write_cache: bool. If true, create new cache file with precomputed matrices
                                that were not in previously loaded cache files.
-            skip_flagged_edges : bool, if true do not include edge freqs in filtering region (filter over sub-region).
+            skip_flagged_edges : bool, if true do not include frequencies at the edge of the band that are fully flagged. Instead
+                                 filter over frequencies bounded by the edge flags.
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:

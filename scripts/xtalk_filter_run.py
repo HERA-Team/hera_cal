@@ -23,21 +23,27 @@ if a.mode == 'clean':
     if a.window == 'tukey':
         filter_kwargs['alpha'] = a.alpha
     round_up_bllens=False
-    skip_flags_larger_then_filter_period=False
+    skip_gaps_larger_then_filter_peri=False
     skip_flagged_edges=False
     max_contiguous_edge_flags=10000
+    skip_flags_within_filter_period_of_edge=False
+    flag_model_rms_outliers=False
 elif a.mode == 'dayenu':
     filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
     round_up_bllens=True
     max_contiguous_edge_flags=10000
-    skip_flags_larger_then_filter_period=False
+    skip_gaps_larger_then_filter_peri=False
     skip_flagged_edges=False
+    skip_flags_within_filter_period_of_edge=False
+    flag_model_rms_outliers=False
 elif a.mode == 'dpss_leastsq':
     filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
     round_up_bllens=True
-    skip_flags_larger_then_filter_period=True
+    skip_gaps_larger_then_filter_peri=True
     skip_flagged_edges=True
     max_contiguous_edge_flags=1
+    skip_flags_within_filter_period_of_edge=True
+    flag_model_rms_outliers=True
 
 
 # Run XTalk Filter
@@ -50,8 +56,10 @@ xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, round_
                                          max_contiguous_edge_flags=max_contiguous_edge_flags,
                                          add_to_history=' '.join(sys.argv), verbose=a.verbose,
                                          skip_flagged_edges=skip_flagged_edges,
-                                         skip_flags_larger_then_filter_period=skip_flags_larger_then_filter_period,
+                                         skip_gaps_larger_then_filter_peri=skip_gaps_larger_then_filter_peri,
                                          a_priori_flag_yaml=a.a_priori_flag_yaml,
                                          external_flags=a.external_flags,
                                          overwrite_data_flags=a.overwrite_data_flags,
+                                         skip_flags_within_filter_period_of_edge=skip_flags_within_filter_period_of_edge,
+                                         flag_model_rms_outliers=flag_model_rms_outliers,
                                          clean_flags_in_resid_flags=True, **filter_kwargs)
