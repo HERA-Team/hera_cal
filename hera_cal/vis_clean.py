@@ -467,7 +467,8 @@ class VisClean(object):
                        skip_flagged_edge_freqs=False, skip_flagged_edge_times=False,
                        skip_gaps_larger_then_filter_period=False,
                        keep_flags=False, clean_flags_in_resid_flags=False,
-                       skip_flags_within_filter_period_of_edge=False,
+                       skip_if_flag_within_edge_distance=False,
+                       flag_within_edge_distance=None,
                        flag_model_rms_outliers=False, model_rms_threshold=1.1,
                        **filter_kwargs):
         """
@@ -563,9 +564,13 @@ class VisClean(object):
         clean_flags_in_resid_flags : bool, optional
             if true, include clean flags in residual flags that will be written out in res_outfilename.
             default is False.
-        skip_flags_within_filter_period_of_edge : bool, optional
-            if true, skip channel or integration if there is a flag within a shortest filtering wavelength
+        skip_if_flag_within_edge_distance : bool, optional
+            if true, skip channel or integration if there is a flag within a skip_if_flag_within_edge_distance
             of the edge. Some instabilities seem to arise near edges, even if not contiguous with edge.
+        skip_if_flag_within_edge_distance : float (or 2-tuple/list), optional
+            if skip_if_flag_within_edge_distance is true and there is any flag within skip_if_flag_within_edge_distance
+            of the edge of the band, then flag that integration (or channel).
+            If performing 2dfilter, this arg should be a 2-tuple or list.
         flag_model_rms_outliers : bool, optional
             if true, flag integrations or channels where the rms of the filter model exceeds the rms of the
             unflagged data by model_rms_threshold.
@@ -753,7 +758,7 @@ class VisClean(object):
             # Identify edge channels that are flagged.
             unflagged_chans = np.where(~np.all(np.isclose(w, 0.0), axis=0))[0]
             # truncate data to be filtered where appropriate.
-            if skip_flagged_edge_freqs and len(unflagged_chans) > 0::
+            if skip_flagged_edge_freqs and len(unflagged_chans) > 0:
                 ind_left = np.min(unflagged_chans)
                 ind_right = np.max(unflagged_chans) + 1
 
@@ -786,6 +791,13 @@ class VisClean(object):
             # being used to interpolate the data. Linear filters have instability
             # in regions where the shortest interpolation wavelength is smaller
             # then the flagging gap.
+            if flag_within_edge_distance is None:
+                if ax == 'both':
+                    flag_within_edge_distance = (0., 1e6)
+                elif ax == 'freq':
+                    flag_within_edge_distance = 1e6
+                else:
+                    flag_within_edge_distance = 0.
             if ax == 'freq' or ax == 'both':
                 # iterate through each integration.
                 for rownum,wrow in enumerate(win):
@@ -817,10 +829,14 @@ class VisClean(object):
                     if max_contiguous * dvoxel >= 1 / max_filter_delay:
                         if skip_gaps_larger_then_filter_period:
                             win[rownum, :] = 0.
-                    # check whether there are flags within a  filter period of the edge.
+                    # check whether there are any flags within some distance of the edge
                     # if user wants to flag these integrations, flag them as well.
-                    max_edge = int(np.ceil(1 / max_filter_delay / dvoxel))
-                    if skip_flags_within_filter_period_of_edge:
+                    if ax == 'both':
+                        max_edge = int(flag_within_edge_distance[1] / dvoxel)
+                    else:
+                        max_edge = int(flag_within_edge_distance / dvoxel)
+
+                    if skip_if_flag_within_edge_distance:
                         if np.any(np.isclose(win[rownum, :max_edge], 0.0)) | np.any(np.isclose(win[rownum, -max_edge:], 0.0)):
                             win[rownum, :] = 0.
             # the following code identifies contiguous time-flags with chunks larger
@@ -844,20 +860,25 @@ class VisClean(object):
                             current_flag_length = 0
                     # determine maximum contiguous length
                     if ax=='both':
-                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_widths[0])])
+                        max_filter_fr = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_widths[0])])
                         dvoxel = np.mean(np.diff(x[0]))
                     else:
-                        max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
+                        max_filter_fr = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers, filter_half_widths)])
                         dvoxel = np.mean(np.diff(x))
-                    # if width of largest contiguous flag region is greater
-                    # then the largest filtering delay, then flag the whole integration.
-                    max_edge = int(np.ceil(1 / max_filter_delay / dvoxel))
-                    if max_contiguous * dvoxel >= 1 / max_filter_delay:
+                    # if largest contiguous flag region is larger then smallest period
+                    # flag the whole integration.
+                    if max_contiguous * dvoxel >= 1 / max_filter_fr:
                         if skip_gaps_larger_then_filter_period:
                             win[:, rownum] = 0.
+                    # check whether there are any flags within some distance of the edge
+                    # if user wants to flag these integrations, flag them as well.
+                    if ax == 'both':
+                        max_edge = int(flag_within_edge_distance[1] / dvoxel)
+                    else:
+                        max_edge = int(flag_within_edge_distance / dvoxel)
                     # also have option to flag channel if there is a flag within
                     # filter width of edge.
-                    if skip_flags_within_filter_period_of_edge:
+                    if skip_if_flag_within_edge_distance:
                         if np.any(np.isclose(win[:max_edge, rownum], 0.0)) | np.any(np.isclose(win[-max_edge:, rownum], 0.0)):
                             win[:, rownum] = 0.
             # perform the filtering on weights and data that have been truncated to exclude flaggged edges
@@ -901,12 +922,12 @@ class VisClean(object):
             # flag popups.
             if ax == 'freq' or ax == 'both':
                 for i in range(mdl.shape[0]):
-                    if flag_rms_outliers:
+                    if flag_model_rms_outliers:
                         if np.mean(np.abs(mdl[i]) ** 2.) ** .5 >=  model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
                             skipped[i] = True
             if ax == 'time' or ax == 'both':
                 for i in range(mdl.shape[1]):
-                    if flag_rms_outliers:
+                    if flag_model_rms_outliers:
                         if np.mean(np.abs(mdl[:, i]) ** 2.) ** .5 >=  model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
                             skipped[:, i] = True
             # also flag skipped edge channels and integrations.
@@ -1512,11 +1533,13 @@ def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=No
         assert bl_len is not None
         # bl_dly in nanosec
         bl_dly = dspec._get_bl_dly(bl_len * 1e9, horizon=horizon, standoff=standoff, min_dly=min_dly)
-        filter_half_widths_freq = [bl_dly * 1e9]
+        filter_half_widths_freq = [bl_dly * 1e-9]
     if ax == 'time' or ax == 'both':
-        assert max_frate is not None
-        filter_centers_time = [0.]
-        filter_half_widths_time = [max_frate * 1e-3]
+        if max_frate is not None:
+            filter_centers_time = [0.]
+            filter_half_widths_time = [max_frate * 1e-3]
+        else:
+            raise ValueError("must supply max_frate if ax=='time' or ax=='both'!")
     if ax == 'both':
         filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
         filter_centers = [filter_centers_time, filter_centers_freq]

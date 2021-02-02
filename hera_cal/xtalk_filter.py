@@ -31,7 +31,7 @@ class XTalkFilter(VisClean):
 
     def run_xtalk_filter(self, to_filter=None, weight_dict=None, max_frate_coeffs=[0.024, -0.229], mode='clean',
                          skip_wgt=0.1, tol=1e-9, cache_dir=None, read_cache=False,
-                         write_cache=False, skip_flagged_edges=False, flag_filled=True,
+                         write_cache=False, skip_flagged_edges=False, keep_flags=True,
                          data=None, flags=None, **filter_kwargs):
         '''
         Run a cross-talk filter on data where the maximum fringe rate is set by the baseline length.
@@ -60,7 +60,7 @@ class XTalkFilter(VisClean):
                                that were not in previously loaded cache files.
             cache: dictionary containing pre-computed filter products.
             skip_flagged_edges : bool, if true do not include edge times in filtering region (filter over sub-region).
-            flag_filled : bool, if true, retain data flags in filled data.
+            keep_flags : bool, if true, retain data flags in filled data.
             filter_kwargs: see fourier_filter for a full list of filter_specific arguments.
 
         Results are stored in:
@@ -84,7 +84,7 @@ class XTalkFilter(VisClean):
                        ax='time', x=(self.times - np.mean(self.times)) * 24. * 3600.,
                        cache=filter_cache, mode=mode, tol=tol, skip_wgt=skip_wgt, max_frate=max_frate,
                        overwrite=True, skip_flagged_edge_times=skip_flagged_edges,
-                       flag_filled=flag_filled, **filter_kwargs)
+                       keep_flags=keep_flags, **filter_kwargs)
         if not mode == 'clean':
             if write_cache:
                 filter_cache = io.write_filter_cache_scratch(filter_cache, cache_dir, skip_keys=keys_before)
