@@ -1537,7 +1537,7 @@ def gen_filter_properties(ax='freq', horizon=1, standoff=0, min_dly=0, bl_len=No
             filter_centers_time = [0.]
             filter_half_widths_time = [max_frate * 1e-3]
         else:
-            raise ValueError("must supply max_frate if ax=='time' or ax=='both'!")
+            raise AssertionError("must supply max_frate if ax=='time' or ax=='both'!")
     if ax == 'both':
         filter_half_widths = [filter_half_widths_time, filter_half_widths_freq]
         filter_centers = [filter_centers_time, filter_centers_freq]
