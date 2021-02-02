@@ -1207,7 +1207,7 @@ class VisClean(object):
                     elif mode == 'CLEAN':
                         data_out, flags_out = getattr(self, prefix + '_model'), getattr(self, prefix + '_flags')
                     elif mode == 'filled':
-                        data_out, flags_out = self.get_filled_data()
+                        data_out, flags_out = self.get_filled_data(prefix=prefix)
                     if partial_write:
                         if not ((filetype == 'uvh5') and (getattr(self.hd, 'filetype', None) == 'uvh5')):
                             raise NotImplementedError('Partial writing requires input and output types to be "uvh5".')
