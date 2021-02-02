@@ -766,8 +766,8 @@ class VisClean(object):
             unflagged_times = np.where(~np.all(np.isclose(w, 0.0), axis=1))[0]
             # truncate data to be filtered where appropriate.
             if skip_flagged_edge_times and len(unflagged_times) > 0:
-                    ind_lower = np.min(unflagged_times)
-                    ind_upper = np.max(unflagged_times) + 1
+                ind_lower = np.min(unflagged_times)
+                ind_upper = np.max(unflagged_times) + 1
 
             # din and win are the arrays that will be passed into fourier filter
             # If we specified skip_flagged_edge_freqs or
@@ -798,13 +798,13 @@ class VisClean(object):
                     flag_within_edge_distance = 0.
             if ax == 'freq' or ax == 'both':
                 # iterate through each integration.
-                for rownum,wrow in enumerate(win):
-                    max_contiguous = 0 # keeps track of the largest contig flags in integration.
-                    current_flag_length = 0 # keeps track of current contig flag size.
-                    on_flag = False # keep track if currently on a flag.
+                for rownum, wrow in enumerate(win):
+                    max_contiguous = 0  # keeps track of the largest contig flags in integration.
+                    current_flag_length = 0  # keeps track of current contig flag size.
+                    on_flag = False  # keep track if currently on a flag.
                     # iterate over each channel in integration.
                     for wr in wrow:
-                        on_flag = (wr == 0) # if weights are zero, on a flag.
+                        on_flag = (wr == 0)  # if weights are zero, on a flag.
                         # if on a flag, +1 current flag size.
                         if on_flag:
                             current_flag_length += 1
@@ -816,7 +816,7 @@ class VisClean(object):
                             current_flag_length = 0
                     # compute the maximum filter delay and the size of the frequency channel (voxel).
                     # need different cases for ax=='both' or ax=='freq'.
-                    if ax=='both':
+                    if ax == 'both':
                         max_filter_delay = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[1], filter_half_widths[1])])
                         dvoxel = np.mean(np.diff(x[1]))
                     else:
@@ -842,14 +842,14 @@ class VisClean(object):
             # channels with chuncks above this length can be flag, if user wishes.
             if ax == 'time' or ax == 'both':
                 # visit each channel now.
-                for rownum,wrow in enumerate(win.T):
-                    max_contiguous = 0 # maximum contiguous time flag in channel.
-                    current_flag_length = 0 # length of current time flag.
-                    on_flag = False # keep track if on a flagged region.
-                    for wr in wrow: # iterate through times in channel.
-                        on_flag = (wr == 0) # on a flag if weights are zero.
+                for rownum, wrow in enumerate(win.T):
+                    max_contiguous = 0  # maximum contiguous time flag in channel.
+                    current_flag_length = 0  # length of current time flag.
+                    on_flag = False  # keep track if on a flagged region.
+                    for wr in wrow:  # iterate through times in channel.
+                        on_flag = (wr == 0)  # on a flag if weights are zero.
                         if on_flag:
-                            current_flag_length += 1 # if on a flag, +1 flag len.
+                            current_flag_length += 1  # if on a flag, +1 flag len.
                         else:
                             # set max contig if we just got off of contig region
                             # and cur len > max contig.
@@ -857,7 +857,7 @@ class VisClean(object):
                                 max_contiguous = current_flag_length
                             current_flag_length = 0
                     # determine maximum contiguous length
-                    if ax=='both':
+                    if ax == 'both':
                         max_filter_fr = np.max([np.abs(fc) + np.abs(fw) for fc, fw in zip(filter_centers[0], filter_half_widths[0])])
                         dvoxel = np.mean(np.diff(x[0]))
                     else:
@@ -921,12 +921,12 @@ class VisClean(object):
             if ax == 'freq' or ax == 'both':
                 for i in range(mdl.shape[0]):
                     if flag_model_rms_outliers:
-                        if np.mean(np.abs(mdl[i]) ** 2.) ** .5 >=  model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
+                        if np.mean(np.abs(mdl[i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[i, ~np.isclose(np.abs(w[i]), 0.0)]) ** 2.) ** .5:
                             skipped[i] = True
             if ax == 'time' or ax == 'both':
                 for i in range(mdl.shape[1]):
                     if flag_model_rms_outliers:
-                        if np.mean(np.abs(mdl[:, i]) ** 2.) ** .5 >=  model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
+                        if np.mean(np.abs(mdl[:, i]) ** 2.) ** .5 >= model_rms_threshold * np.mean(np.abs(d[~np.isclose(np.abs(w[:, i]), 0.0), i]) ** 2.) ** .5:
                             skipped[:, i] = True
             # also flag skipped edge channels and integrations.
             skipped[:, :ind_left] = True
