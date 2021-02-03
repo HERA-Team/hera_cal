@@ -400,10 +400,7 @@ class Test_VisClean(object):
                     max_frate=max_frate, standoff=0.0, min_dly=50., skip_wgt=0.5)
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             assert np.all(V.clean_resid_flags[k][-1])
-
-
-
-
+            
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
