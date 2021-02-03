@@ -271,10 +271,19 @@ class Test_VisClean(object):
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
         # run with flag_model_rms_outliers
         for ax in ['freq', 'time', 'both']:
+            for k in V.flags:
+                V.flags[k][:] = False
+                V.data[k][:] = np.random.randn(*V.data[k].shape) + 1j * np.random.randn(*V.data[k].shape)
+            # run with rms threshold < 1 which should lead to everything being flagged.
             V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax=ax, overwrite=True,
-                        max_frate=1.0, mode='dpss_leastsq', flag_model_rms_outliers=True)
-
-
+                        max_frate=1.0, mode='dpss_leastsq', flag_model_rms_outliers=True, model_rms_threshold=0.1)
+            for k in [(24, 25, 'ee'), (24, 25, 'ee')]:
+                assert np.all(V.clean_flags[k])
+            # now use a threshold which should not lead to any flags.
+            V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax=ax, overwrite=True,
+                        max_frate=1.0, mode='dpss_leastsq', flag_model_rms_outliers=True, model_rms_threshold=1e6)
+            for k in [(24, 25, 'ee'), (24, 25, 'ee')]:
+                assert not np.any(V.clean_flags[k])
 
     def test_vis_clean_flag_options(self, tmpdir):
         # tests for time and frequency partial flagging.
