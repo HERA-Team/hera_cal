@@ -94,24 +94,26 @@ class Test_DelayFilter(object):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1,
-                                       avg_red_bllens=True)
-        hd = io.HERAData(outfilename)
-        d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        for avg_bl in [True, False]:
+            df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1,
+                                           avg_red_bllens=avg_bl)
+            hd = io.HERAData(outfilename)
+            d, f, n = hd.read(bls=[(53, 54, 'ee')])
 
-        dfil = df.DelayFilter(uvh5, filetype='uvh5')
-        dfil.read(bls=[(53, 54, 'ee')])
-        dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
-        np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
-        np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
+            dfil = df.DelayFilter(uvh5, filetype='uvh5')
+            dfil.read(bls=[(53, 54, 'ee')])
+            dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
+            np.testing.assert_almost_equal(d[(53, 54, 'ee')], dfil.clean_resid[(53, 54, 'ee')], decimal=5)
+            np.testing.assert_array_equal(f[(53, 54, 'ee')], dfil.flags[(53, 54, 'ee')])
 
-        # test loading and writing all baselines at once.
-        uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
-        outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=None)
-        hd = io.HERAData(outfilename)
-        d, f, n = hd.read(bls=[(53, 54, 'ee')])
-
+            # test loading and writing all baselines at once.
+            uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
+            outfilename = os.path.join(tmp_path, 'temp.h5')
+            df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True,
+                                           Nbls_per_load=None, avg_red_bllens=avg_bl)
+            hd = io.HERAData(outfilename)
+            d, f, n = hd.read(bls=[(53, 54, 'ee')])
+        avg_bl = False
         dfil = df.DelayFilter(uvh5, filetype='uvh5')
         dfil.read(bls=[(53, 54, 'ee')])
         dfil.run_delay_filter(to_filter=[(53, 54, 'ee')], tol=1e-4, verbose=True)
@@ -120,7 +122,8 @@ class Test_DelayFilter(object):
 
         cal = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.uv.abs.calfits_54x_only")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True)
+        df.load_delay_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename, Nbls_per_load=2, clobber=True,
+                                       avg_red_bllens=avg_bl)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -147,7 +150,7 @@ class Test_DelayFilter(object):
         # and entire final channel being flagged
         # when flags are broadcasted.
         time_thresh = 2. / hd.Ntimes
-        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, avg_red_bllens=avg_bl,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -156,7 +159,7 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][0, :])
 
         # test delay filtering and writing with factorized flags and partial i/o
-        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4,
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, avg_red_bllens=avg_bl,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
@@ -165,7 +168,7 @@ class Test_DelayFilter(object):
             assert np.all(f[bl][0, :])
             assert np.all(f[bl][:, -1])
 
-        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1,
+        df.load_delay_filter_and_write(input_file, res_outfilename=outfilename, tol=1e-4, Nbls_per_load=1, avg_red_bllens=avg_bl,
                                        factorize_flags=True, time_thresh=time_thresh, clobber=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
