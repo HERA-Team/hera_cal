@@ -833,9 +833,8 @@ class VisClean(object):
                         max_edge = int(flag_within_edge_distance[1] / dvoxel)
                     else:
                         max_edge = int(flag_within_edge_distance / dvoxel)
-
                     if skip_if_flag_within_edge_distance:
-                        if np.any(np.isclose(win[rownum, :max_edge], 0.0)) | np.any(np.isclose(win[rownum, -max_edge:], 0.0)):
+                        if np.any(np.isclose(win[rownum, :max_edge], 0.0)) | np.any(np.isclose(win[rownum, -max_edge - 1:], 0.0)):
                             win[rownum, :] = 0.
             # the following code identifies contiguous time-flags with chunks larger
             # then the wavelength of the shortest filtering scale.
@@ -871,13 +870,13 @@ class VisClean(object):
                     # check whether there are any flags within some distance of the edge
                     # if user wants to flag these integrations, flag them as well.
                     if ax == 'both':
-                        max_edge = int(flag_within_edge_distance[1] / dvoxel)
+                        max_edge = int(flag_within_edge_distance[0] / dvoxel)
                     else:
                         max_edge = int(flag_within_edge_distance / dvoxel)
                     # also have option to flag channel if there is a flag within
                     # filter width of edge.
                     if skip_if_flag_within_edge_distance:
-                        if np.any(np.isclose(win[:max_edge, rownum], 0.0)) | np.any(np.isclose(win[-max_edge:, rownum], 0.0)):
+                        if np.any(np.isclose(win[:max_edge, rownum], 0.0)) | np.any(np.isclose(win[-max_edge - 1:, rownum], 0.0)):
                             win[:, rownum] = 0.
             # perform the filtering on weights and data that have been truncated to exclude flaggged edges
             # per users preference.
