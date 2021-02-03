@@ -18,7 +18,7 @@ if a.mode == 'clean':
                      'edgecut_low': a.edgecut_low, 'min_dly': a.min_dly, 'gain': a.gain}
     if a.window == 'tukey':
         filter_kwargs['alpha'] = a.alpha
-    round_up_bllens=False
+    avg_red_bllens=False
     skip_gaps_larger_then_filter_period=False
     skip_flagged_edges=False
     max_contiguous_edge_flags=10000
@@ -27,7 +27,7 @@ if a.mode == 'clean':
 elif a.mode == 'dayenu':
     filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
                      'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
-    round_up_bllens=True
+    avg_red_bllens=True
     max_contiguous_edge_flags=10000
     skip_gaps_larger_then_filter_period=False
     skip_flagged_edges=False
@@ -36,7 +36,7 @@ elif a.mode == 'dayenu':
 elif a.mode == 'dpss_leastsq':
     filter_kwargs = {'standoff': a.standoff, 'horizon': a.horizon, 'tol': a.tol,
                      'skip_wgt': a.skip_wgt, 'min_dly': a.min_dly}
-    round_up_bllens=True
+    avg_red_bllens=True
     skip_gaps_larger_then_filter_period=True
     skip_flagged_edges=True
     max_contiguous_edge_flags=1
@@ -49,7 +49,7 @@ if a.calfile is not None:
         a.calfile = None
 
 # Run Delay Filter
-delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, round_up_bllens=round_up_bllens,
+delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, avg_red_bllens=avg_red_bllens,
                                          Nbls_per_load=a.partial_load_Nbls, spw_range=a.spw_range,
                                          cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
                                          clobber=a.clobber, write_cache=a.write_cache,

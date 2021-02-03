@@ -37,12 +37,12 @@ class Test_XTalkFilter(object):
         # test skip_wgt imposition of flags
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
-        # check successful run when round_up_bllens is True and when False.
-        for round_up_bllens in [True, False]:
+        # check successful run when avg_red_bllens is True and when False.
+        for avg_red_bllens in [True, False]:
             xfil = xf.XTalkFilter(fname, filetype='miriad')
             xfil.read(bls=[k])
-            if round_up_bllens:
-                xfil.round_baseline_vectors()
+            if avg_red_bllens:
+                xfil.avg_red_baseline_vectors()
             wgts = {k: np.ones_like(xfil.flags[k], dtype=np.float)}
             wgts[k][:, 0] = 0.0
             xfil.run_xtalk_filter(to_filter=[k], weight_dict=wgts, tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
@@ -65,7 +65,7 @@ class Test_XTalkFilter(object):
         os.mkdir(cdir)
         xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
                                                      calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                                     read_cache=True, write_cache=True,
+                                                     read_cache=True, write_cache=True, avg_red_bllens=True,
                                                      res_outfilename=outfilename, clobber=True,
                                                      mode='dayenu')
         hd = io.HERAData(outfilename)
@@ -75,7 +75,7 @@ class Test_XTalkFilter(object):
         assert d[(53, 54, 'ee')].shape[0] == 60
         # now do no spw range and no cal files just to cover those lines.
         xf.load_xtalk_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54, 'ee')],
-                                                     cache_dir=cdir,
+                                                     cache_dir=cdir, avg_red_bllens=True,
                                                      read_cache=True, write_cache=True,
                                                      res_outfilename=outfilename, clobber=True,
                                                      mode='dayenu')
@@ -110,7 +110,7 @@ class Test_XTalkFilter(object):
             outfilename = os.path.join(tmp_path, 'bl_chunk_%d.h5' % blnum)
             xf.load_xtalk_filter_and_write_baseline_list(datafile_list=[input_file], res_outfilename=outfilename,
                                                          tol=1e-4, baseline_list=[bl],
-                                                         cache_dir=cdir,
+                                                         cache_dir=cdir, avg_red_bllens=True,
                                                          factorize_flags=True, time_thresh=time_thresh, clobber=True)
         # now load all of the outputs in
         output_files = glob.glob(tmp_path + '/bl_chunk_*.h5')
@@ -159,7 +159,7 @@ class Test_XTalkFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         os.remove(outfilename)
         xf.load_xtalk_filter_and_write(uvh5, calfile=cal, tol=1e-4, res_outfilename=outfilename,
-                                       Nbls_per_load=2, clobber=True)
+                                       Nbls_per_load=2, clobber=True, avg_red_bllens=True)
         hd = io.HERAData(outfilename)
         assert 'Thisfilewasproducedbythefunction' in hd.history.replace('\n', '').replace(' ', '')
         d, f, n = hd.read()
