@@ -349,6 +349,61 @@ class Test_VisClean(object):
         V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
                     skip_gaps_larger_then_filter_period=True, max_frate=max_frate, standoff=standoff)
 
+        # now test flagging integrations within edge distance.
+        # these flags should cause channel 12 to be
+        # completely flagged if flagging mode is "both".
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            V.flags[k][:] = False
+            V.flags[k][12, 0] = True
+            V.flags[k][-1, 32] = True
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='both', overwrite=True,
+                    max_frate=0.025, standoff=0.0, min_dly=50.,
+                    skip_if_flag_within_edge_distance=True, mode='dpss_leastsq',
+                    flag_within_edge_distance=(1.1 * np.mean(np.diff(V.times * 3600 * 24.)), 1.1 * np.mean(np.diff(V.freqs))))
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            for i in range(V.Ntimes):
+                if i == 12:
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert not np.any(V.clean_flags[k][i])
+
+        # if flagging mode is 'freq', then integration 12 should be flagged
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    max_frate=0.025, standoff=0.0, min_dly=50.,
+                    skip_if_flag_within_edge_distance=True, mode='dpss_leastsq',
+                    flag_within_edge_distance=1.1 * np.mean(np.diff(V.freqs)))
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            for i in range(V.Ntimes):
+                if i == 12:
+                    assert np.all(V.clean_flags[k][i])
+                else:
+                    assert not np.any(V.clean_flags[k][i])
+
+        # if flagging mode is 'time', then channel 32 should be flagged.
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='time', overwrite=True,
+                    max_frate=0.025, standoff=0.0, min_dly=50.,
+                    skip_if_flag_within_edge_distance=True, mode='dpss_leastsq',
+                    flag_within_edge_distance=1.1 * np.mean(np.diff(V.times * 3600 * 24.)))
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            for i in range(V.Nfreqs):
+                if i == 32:
+                    assert np.all(V.clean_flags[k][:, i])
+                else:
+                    assert not np.any(V.clean_flags[k][:, i])
+
+        # test clean_flags in resid_flags
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            V.flags[k][:] = False
+            V.flags[k][-1, :-2] = True
+        V.vis_clean(keys=[(24, 25, 'ee'), (24, 24, 'ee')], ax='freq', overwrite=True,
+                    clean_flags_in_resid_flags=True, mode='dpss_leastsq',
+                    max_frate=max_frate, standoff=0.0, min_dly=50., skip_wgt=0.5)
+        for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
+            assert np.all(V.clean_resid_flags[k][-1])
+
+
+
+
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
