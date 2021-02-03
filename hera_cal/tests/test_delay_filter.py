@@ -186,19 +186,20 @@ class Test_DelayFilter(object):
         outfilename = os.path.join(tmp_path, 'temp.h5')
         cdir = os.path.join(tmp_path, 'cache_temp')
         # make a cache directory
-        if os.path.isdir(cdir):
-            shutil.rmtree(cdir)
-        os.mkdir(cdir)
-        df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
-                                                     calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
-                                                     read_cache=True, write_cache=True,
-                                                     res_outfilename=outfilename, clobber=True,
-                                                     mode='dayenu')
-        hd = io.HERAData(outfilename)
-        d, f, n = hd.read()
-        assert len(list(d.keys())) == 1
-        assert d[(53, 54, 'ee')].shape[1] == 100
-        assert d[(53, 54, 'ee')].shape[0] == 60
+        for avg_bl in [True, False]:
+            if os.path.isdir(cdir):
+                shutil.rmtree(cdir)
+            os.mkdir(cdir)
+            df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
+                                                         calfile_list=cals, spw_range=[100, 200], cache_dir=cdir,
+                                                         read_cache=True, write_cache=True, avg_red_bllens=avg_bl,
+                                                         res_outfilename=outfilename, clobber=True,
+                                                         mode='dayenu')
+            hd = io.HERAData(outfilename)
+            d, f, n = hd.read()
+            assert len(list(d.keys())) == 1
+            assert d[(53, 54, 'ee')].shape[1] == 100
+            assert d[(53, 54, 'ee')].shape[0] == 60
         # now do no spw range and no cal files just to cover those lines.
         df.load_delay_filter_and_write_baseline_list(datafile_list=uvh5, baseline_list=[(53, 54)],
                                                      cache_dir=cdir,

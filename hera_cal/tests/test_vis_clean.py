@@ -269,6 +269,12 @@ class Test_VisClean(object):
         # check that filtered_data is the same in channels that were not flagged
         assert np.all(np.isclose(V.clean_data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]],
                                  V.data[(24, 25, 'ee')][~V.flags[(24, 25, 'ee')] & ~V.clean_flags[(24, 25, 'ee')]], atol=1e-6))
+        # run with flag_model_rms_outliers
+        for ax in ['freq', 'time', 'both']:
+            V.vis_clean(keys=[(24, 25, 'ee'), (24, 25, 'ee')], ax=ax, overwrite=True,
+                        max_frate=1.0, mode='dpss_leastsq', flag_model_rms_outliers=True)
+
+
 
     def test_vis_clean_flag_options(self, tmpdir):
         # tests for time and frequency partial flagging.
@@ -400,7 +406,7 @@ class Test_VisClean(object):
                     max_frate=max_frate, standoff=0.0, min_dly=50., skip_wgt=0.5)
         for k in [(24, 25, 'ee'), (24, 24, 'ee')]:
             assert np.all(V.clean_resid_flags[k][-1])
-            
+
     @pytest.mark.filterwarnings("ignore:.*dspec.vis_filter will soon be deprecated")
     def test_vis_clean(self):
         fname = os.path.join(DATA_PATH, "zen.2458043.40141.xx.HH.XRAA.uvh5")
