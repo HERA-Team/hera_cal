@@ -39,11 +39,11 @@ class Test_DelayFilter(object):
         fname = os.path.join(DATA_PATH, "zen.2458043.12552.xx.HH.uvORA")
         k = (24, 25, 'ee')
         # test that everything runs when baselines lengths are rounded.
-        for round_up_bllens in [True, False]:
+        for avg_red_bllens in [True, False]:
             dfil = df.DelayFilter(fname, filetype='miriad')
             dfil.read(bls=[k])
-            if round_up_bllens:
-                dfil.round_baseline_vectors()
+            if avg_red_bllens:
+                dfil.avg_red_baseline_vectors()
             wgts = {k: np.ones_like(dfil.flags[k], dtype=np.float)}
             wgts[k][0, :] = 0.0
             dfil.run_filter(to_filter=[k], weight_dict=wgts, standoff=0., horizon=1., tol=1e-5, window='blackman-harris', skip_wgt=0.1, maxiter=100)
@@ -94,7 +94,8 @@ class Test_DelayFilter(object):
         tmp_path = tmpdir.strpath
         uvh5 = os.path.join(DATA_PATH, "test_input/zen.2458101.46106.xx.HH.OCR_53x_54x_only.uvh5")
         outfilename = os.path.join(tmp_path, 'temp.h5')
-        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1)
+        df.load_delay_filter_and_write(uvh5, res_outfilename=outfilename, tol=1e-4, clobber=True, Nbls_per_load=1,
+                                       avg_red_bllens=True)
         hd = io.HERAData(outfilename)
         d, f, n = hd.read(bls=[(53, 54, 'ee')])
 

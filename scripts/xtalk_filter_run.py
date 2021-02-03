@@ -22,7 +22,7 @@ if a.mode == 'clean':
                     'edgecut_low': a.edgecut_low, 'gain': a.gain}
     if a.window == 'tukey':
         filter_kwargs['alpha'] = a.alpha
-    round_up_bllens=False
+    avg_red_bllens=False
     skip_gaps_larger_then_filter_peri=False
     skip_flagged_edges=False
     max_contiguous_edge_flags=10000
@@ -30,7 +30,7 @@ if a.mode == 'clean':
     flag_model_rms_outliers=False
 elif a.mode == 'dayenu':
     filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
-    round_up_bllens=True
+    avg_red_bllens=True
     max_contiguous_edge_flags=10000
     skip_gaps_larger_then_filter_peri=False
     skip_flagged_edges=False
@@ -38,7 +38,7 @@ elif a.mode == 'dayenu':
     flag_model_rms_outliers=False
 elif a.mode == 'dpss_leastsq':
     filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
-    round_up_bllens=True
+    avg_red_bllens=True
     skip_gaps_larger_then_filter_peri=True
     skip_flagged_edges=True
     max_contiguous_edge_flags=1
@@ -47,7 +47,7 @@ elif a.mode == 'dpss_leastsq':
 
 
 # Run XTalk Filter
-xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, round_up_bllens=round_up_bllens,
+xtalk_filter.load_xtalk_filter_and_write(a.infilename, calfile=a.calfile, avg_red_bllens=avg_red_bllens,
                                          Nbls_per_load=a.partial_load_Nbls, spw_range=a.spw_range,
                                          cache_dir=a.cache_dir, res_outfilename=a.res_outfilename,
                                          clobber=a.clobber, write_cache=a.write_cache,

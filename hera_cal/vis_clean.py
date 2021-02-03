@@ -52,7 +52,7 @@ class VisClean(object):
         # attach data and/or metadata to object if exists
         self.attach_data(link_data=link_data)
 
-    def round_baseline_vectors(self, bl_error_tol=1.0):
+    def avg_red_baseline_vectors(self, bl_error_tol=1.0):
         """
         Round individual baseline vectors to the
         average baseline vector of each redundant group
