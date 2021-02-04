@@ -10,6 +10,7 @@ import argparse
 from hera_cal import apply_cal as ac
 import sys
 
+kwargs = {}
 a = ac.apply_cal_argparser()
 args = a.parse_args()
 
