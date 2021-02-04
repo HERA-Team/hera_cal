@@ -182,7 +182,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
-              freq_atol=1., redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None, **kwargs):
+              freq_atol=1., redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None,
+              exclude_from_redundant_mode="data", **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
@@ -237,11 +238,16 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             the subgroups being entirely flagged. This option is only used when redundant_groups > 1.
             Not supported for partial I/O.
         spw_range : 2-tuple specifying range of channels to select and redundantly average.
+        exclude_from_redundant_mode: str, optional
+            specify whether to use entirely flagged data, 'data', or ex_ants from an external yaml file 'yaml' to determine
+            baselines to exclude from redundant average.
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
     # UPDATE CAL FLAGS WITH EX_ANTS INSTEAD OF FILTERING BASELINES.
     # optionally load external flags
+    if exclude_from_redundant_mode not in ['yaml', 'data']:
+        raise ValueError("exclude_from_redundant_mode must be 'yaml' or 'data'.")
     if flag_file is not None:
         ext_flags, flag_meta = io.load_flags(flag_file, filetype=flag_filetype, return_meta=True)
         add_to_history += '\nFLAGS_HISTORY: ' + str(flag_meta['history']) + '\n'
@@ -251,11 +257,15 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     new_gains, new_flags, _, _ = hc.read()
     if a_priori_flags_yaml is not None:
         from hera_qm.utils import apply_yaml_flags
+        from hera_qm.metrics_io import read_a_priori_ant_flags
         # flag hc
         hc = apply_yaml_flags(hc, a_priori_flags_yaml,
                               ant_indices_only=True)
         # and rebuild data containers.
         new_gains, new_flags, _, _ = hc.build_calcontainers()
+        ex_ants = read_a_priori_ant_flags(a_priori_flags_yaml, ant_indices_only=True)
+    else:
+        ex_ants = None
     add_to_history += '\nNEW_CALFITS_HISTORY: ' + hc.history + '\n'
 
     # load old calibration solution
@@ -430,7 +440,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     # trim group to only include baselines with redundant weights not equal to zero.
                     grp0 = grp[0]
                     if dont_red_average_flagged_data and redundant_groups > 1:
-                        grp = [ap for ap in grp if np.any(np.asarray([~data_flags[ap + (pol,)] for pol in data_flags.pols()]))]
+                        grp = [ap for ap in grp if np.any(np.asarray([~np.isclose(redundant_weights[ap + (pol,)], 0.0) for pol in data_flags.pols()]))]
                     # only include groups with more elements then redundant groups!
                     if len(grp) >= redundant_groups:
                         red_antpairs.append(grp[red_chunk:: redundant_groups])
@@ -482,6 +492,7 @@ def apply_cal_argparser():
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
     a.add_argument("--dont_red_average_flagged_data", default=False, action="store_true", help="Do not include flagged data in redundant averages. Prevents redundant groups where one subgroup is flagged.")
     a.add_argument("--spw_range", default=None, type=int, nargs=2, help="specify spw range to load.")
-     a.add_argument("--exclude_from_redundant_mode", default='data', type=str, help="exclude visibilities from redundant average based on whether entire waterfall is flagged ,'data'"
-                                                                                    ", or whether its antennas are present in a yaml file.")
+    a.add_argument("--exclude_from_redundant_mode", default='data', type=str, help="exclude visibilities from redundant average based on whether entire waterfall is flagged ,'data'"
+                                                                                   ", or whether its antennas are present in a yaml file.")
+    a.add_argument("--a_priori_flags_yaml", type=str, default=None, help="path to yaml file to use in apriori flags.")
     return a
