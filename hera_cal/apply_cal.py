@@ -182,18 +182,17 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
 
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
-              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0, overwrite_data_flags=False,
+              nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
               add_to_history='', clobber=False, redundant_average=False, redundant_weights=None,
-              redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None, **kwargs):
+              freq_atol=1., redundant_groups=1, dont_red_average_flagged_data=False, spw_range=None, **kwargs):
     '''Update the calibration solution and flags on the data, writing to a new file. Takes out old calibration
     and puts in new calibration solution, including its flags. Also enables appending to history.
 
     Arguments:
         data_infilename: filename of the data to be calibrated.
         data_outfilename: filename of the resultant data file with the new calibration and flags.
-        new_calibration: filename of the calfits file for the calibration
-            to be applied, along with its new flags (if any).
-        old_calibration: filename of the calfits file for the calibration
+        new_calibration: filename of the calfits file (or a list of filenames) for the calibration
+        old_calibration: filename of the calfits file (or a list of filenames) for the calibration	        old_calibration: filename of the calfits file for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
@@ -210,6 +209,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         filetype_out: type of data outfile. Supports 'miriad', 'uvfits', and 'uvh5'.
         nbl_per_load: maximum number of baselines to load at once. Default (None) is to load the whole file at once.
             Enables partial reading and writing, but only for uvh5 to uvh5.
+            nbl_per_load is only supported if filetype_in is .uvh5.
         gain_convention: str, either 'divide' or 'multiply'. 'divide' means V_obs = gi gj* V_true,
             'multiply' means V_true = gi gj* V_obs. Assumed to be the same for new_gains and old_gains.
         redundant_solution: If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.
@@ -226,13 +226,19 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
             Datacontainer containing weights to use in redundant averaging.
             only used if redundant_average is True.
             Default is None. If None is passed, then nsamples are used as the redundant weights.
+        tol_factor: float, optional
+            Float specifying the tolerance (as a fraction of channel width) within which cal frequencies must be matched in calibration solution to apply.
         redundant_groups : int, optional.
             Integer specifying how many different subsets of each redundant group to write to an independent file.
+            If more then one redundant subgroup is specified, then output files will have label .uvh5 -> .n.uvh5
+            redundant_groups>1 not supported with partial I/O yet.
         dont_red_average_flagged_data : bool, optional.
             If True, baselines within a redundant group with all pols flagged do not count towards the number of baselines
             in that group above the number of groups to output. This lets us throw away groups that in principal have greater
             then the minimum number of baselines to allow for a split into different output groups but could result in one of
-            the subgroups being entirely flagged.
+            the subgroups being entirely flagged. This option is only used when redundant_groups > 1.
+            Not supported for partial I/O.
+        spw_range : 2-tuple specifying range of channels to select and redundantly average.
         kwargs: dictionary mapping updated UVData attributes to their new values.
             See pyuvdata.UVData documentation for more info.
     '''
@@ -261,7 +267,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         # determine frequencies to load in old_hc that are close to hc
         freqs_to_load = []
         for f in old_hc.freqs:
-            if np.any(np.isclose(hc.freqs, f)):
+            # set atol to be 1/10th of a channel
+            if np.any(np.isclose(hc.freqs, f, rtol=0., atol=freq_atol)):
                 freqs_to_load.append(f)
         if spw_range is not None:
             freqs_to_load = freqs_to_load[spw_range[0]:spw_range[1]]
@@ -279,7 +286,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
     if filetype_in == 'uvh5':
         freqs_to_load = []
         for f in hd.freqs[spw_range[0]:spw_range[1]]:
-            if np.any(np.isclose(hc.freqs, f)):
+            if np.any(np.isclose(hc.freqs, f, rtol=0., atol=freq_atol)):
                 freqs_to_load.append(f)
     else:
         freqs_to_load = None
@@ -355,12 +362,16 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 if no_red_weights:
                     redundant_weights = copy.deepcopy(data_nsamples)
                     for bl in data_flags:
-                        if np.all(data_flags[bl]):
-                            redundant_weights[bl][:] = 0.
+                        if exclude_from_redundant_mode == 'data':
+                            if np.all(data_flags[bl]):
+                                redundant_weights[bl][:] = 0.
+                        elif exclude_from_redundant_mode == 'yaml' and ex_ants is not None:
+                            if bl[0] in ex_ants or bl[1] in ex_ants:
+                                redundant_weights[bl][:] = 0.
                 # redundantly average
-                data, data_flags, data_nsamples = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
-                                                                    reds=all_red_antpairs, wgts=redundant_weights, inplace=False,
-                                                                    propagate_flags=True)
+                utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
+                                  reds=all_red_antpairs, wgts=redundant_weights, inplace=True,
+                                  propagate_flags=True)
                 # update redundant data. Don't partial write.
                 hd_red.update(nsamples=data_nsamples, flags=data_flags, data=data)
             else:
@@ -379,15 +390,10 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         else:
             all_reds = []
         if redundant_average:
-            # initialize a redunantly averaged HERAData on disk
             all_red_antpairs = [[bl[:2] for bl in grp] for grp in all_reds if grp[-1][-1] == pols[0]]
             data_antpairs = hd.get_antpairs()
             reds_data = [[bl for bl in blg if bl in data_antpairs] for blg in all_red_antpairs]
             reds_data = [blg for blg in reds_data if len(blg) > 0]
-        if overwrite_data_flags:
-            for bl in data_flags:
-                data_flags[bl][:] = False
-                data_nsamples[bl][:] = 1.
         for bl in data_flags.keys():
             # apply band edge flags
             data_flags[bl][:, 0:flag_nchan_low] = True
@@ -413,23 +419,23 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 redundant_weights = copy.deepcopy(data_nsamples)
                 for bl in data_flags:
                     if np.all(data_flags[bl]):
-                        redundant_weights[bl][:] = 0.
+                        if exclude_from_redundant_mode == 'data':
+                            if np.all(data_flags[bl]):
+                                redundant_weights[bl][:] = 0.
+                        elif exclude_from_redundant_mode == 'yaml' and ex_ants is not None:
+                            if bl[0] in ex_ants or bl[1] in ex_ants:
+                                redundant_weights[bl][:] = 0.
             for red_chunk in range(redundant_groups):
                 red_antpairs = []
                 reds_data_bls = []
                 for grp in reds_data:
                     # trim group to only include baselines with redundant weights not equal to zero.
                     grp0 = grp[0]
-                    if dont_red_average_flagged_data:
+                    if dont_red_average_flagged_data and redundant_groups > 1:
                         grp = [ap for ap in grp if np.any(np.asarray([~data_flags[ap + (pol,)] for pol in data_flags.pols()]))]
                     # only include groups with more elements then redundant groups!
                     if len(grp) >= redundant_groups:
-                        start = len(grp) // redundant_groups * red_chunk
-                        if red_chunk < redundant_groups - 1:
-                            end = len(grp) // redundant_groups * (red_chunk + 1)
-                        else:
-                            end = len(grp)
-                        red_antpairs.append(grp[start:end])
+                        red_antpairs.append(grp[red_chunk:: redundant_groups])
                         reds_data_bls.append(grp0)
                 data_red, flags_red, nsamples_red = utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
                                                                       reds=red_antpairs, red_bl_keys=reds_data_bls, wgts=redundant_weights, inplace=False,
@@ -450,7 +456,7 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                     else:
                         raise NotImplementedError("redundant averaging only supported for uvh5 outputs.")
                 else:
-                    warnings.warn("No unflagged data so no calibration or outputs produced..")
+                    warnings.warn("No unflagged data so no calibration or outputs produced.")
 
 
 def apply_cal_argparser():
@@ -467,15 +473,17 @@ def apply_cal_argparser():
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files')
     a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype of output data files')
     a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only."
-                                                                  "Default loads the whole file. If 0 is provided, also loads whole file.")
+                                                                  "Default loads the whole file. If 'none' is provided, also loads whole file.")
     a.add_argument("--redundant_groups", type=int, default=1, help="Number of subgroups to split each redundant baseline into for cross power spectra. ")
     a.add_argument("--gain_convention", type=str, default='divide',
                    help="'divide' means V_obs = gi gj* V_true, 'multiply' means V_true = gi gj* V_obs.")
     a.add_argument("--redundant_solution", default=False, action="store_true",
                    help="If True, average gain ratios in redundant groups to recalibrate e.g. redcal solutions.")
     a.add_argument("--clobber", default=False, action="store_true", help='overwrites existing file at outfile')
+    a.add_argument("--vis_units", default=None, type=str, help="String to insert into vis_units attribute of output visibility file.")
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
-    a.add_argument("--overwrite_data_flags", default=False, action="store_true", help="Completely overwrite data flags with calibration flags.")
-    a.add_argument("--dont_red_average_flagged_data", default=False, action="store_true", help="Completely overwrite data flags with calibration flags.")
+    a.add_argument("--dont_red_average_flagged_data", default=False, action="store_true", help="Do not include flagged data in redundant averages. Prevents redundant groups where one subgroup is flagged.")
     a.add_argument("--spw_range", default=None, type=int, nargs=2, help="specify spw range to load.")
+     a.add_argument("--exclude_from_redundant_mode", default='data', type=str, help="exclude visibilities from redundant average based on whether entire waterfall is flagged ,'data'"
+                                                                                    ", or whether its antennas are present in a yaml file.")
     return a
