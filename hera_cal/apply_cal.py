@@ -178,7 +178,6 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                 else:
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
-
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
@@ -361,8 +360,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 if no_red_weights:
                     redundant_weights = copy.deepcopy(data_nsamples)
                     for bl in data_flags:
-                        if np.all(data_flags[bl]):
-                            redundant_weights[bl][:] = 0.
+                        if exclude_from_redundant_mode == 'data':
+                            if np.all(data_flags[bl]):
+                                redundant_weights[bl][:] = 0.
+                        elif exclude_from_redundant_mode == 'yaml' and ex_ants is not None:
+                            if bl[0] in ex_ants or bl[1] in ex_ants:
+                                redundant_weights[bl][:] = 0.
                 # redundantly average
                 utils.red_average(data=data, flags=data_flags, nsamples=data_nsamples,
                                   reds=all_red_antpairs, wgts=redundant_weights, inplace=True,
@@ -414,7 +417,12 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
                 redundant_weights = copy.deepcopy(data_nsamples)
                 for bl in data_flags:
                     if np.all(data_flags[bl]):
-                        redundant_weights[bl][:] = 0.
+                        if exclude_from_redundant_mode == 'data':
+                            if np.all(data_flags[bl]):
+                                redundant_weights[bl][:] = 0.
+                        elif exclude_from_redundant_mode == 'yaml' and ex_ants is not None:
+                            if bl[0] in ex_ants or bl[1] in ex_ants:
+                                redundant_weights[bl][:] = 0.
             for red_chunk in range(redundant_groups):
                 red_antpairs = []
                 reds_data_bls = []
@@ -474,4 +482,6 @@ def apply_cal_argparser():
     a.add_argument("--redundant_average", default=False, action="store_true", help="Redundantly average calibrated data.")
     a.add_argument("--dont_red_average_flagged_data", default=False, action="store_true", help="Do not include flagged data in redundant averages. Prevents redundant groups where one subgroup is flagged.")
     a.add_argument("--spw_range", default=None, type=int, nargs=2, help="specify spw range to load.")
+     a.add_argument("--exclude_from_redundant_mode", default='data', type=str, help="exclude visibilities from redundant average based on whether entire waterfall is flagged ,'data'"
+                                                                                    ", or whether its antennas are present in a yaml file.")
     return a

@@ -13,7 +13,7 @@ import sys
 a = ac.apply_cal_argparser()
 args = a.parse_args()
 
-if args.vis_units is not None:	
+if args.vis_units is not None:
     kwargs['vis_units'] = args.vis_units
 
 if args.nbl_per_load == "none":
@@ -26,4 +26,4 @@ ac.apply_cal(args.infilename, args.outfilename, args.new_cal, old_calibration=ar
              filetype_in=args.filetype_in, filetype_out=args.filetype_out, nbl_per_load=args.nbl_per_load, redundant_groups=args.redundant_groups,
              gain_convention=args.gain_convention, redundant_solution=args.redundant_solution, redundant_average=args.redundant_average,
              add_to_history=' '.join(sys.argv), clobber=args.clobber, overwrite_data_flags=args.overwrite_data_flags,
-             dont_red_average_flagged_data=args.dont_red_average_flagged_data, **kwargs)
+             dont_red_average_flagged_data=args.dont_red_average_flagged_data, exclude_from_redundant_mode=args.exclude_from_redundant_mode, **kwargs)
