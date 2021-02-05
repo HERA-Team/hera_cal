@@ -600,8 +600,8 @@ class HERAData(UVData):
                                   this.nsample_array, **self.last_read_kwargs)
 
     def iterate_over_bls(self, Nbls=1, bls=None, chunk_by_redundant_group=False, reds=None,
-                         bl_error_tol=1.0, include_autos=True, freqs_to_load=None,
-                         times_to_load=None, pols_to_load=None):
+                         bl_error_tol=1.0, include_autos=True, frequencies=None,
+                         times_to_load=None, polarizations=None):
         '''Produces a generator that iteratively yields successive calls to
         HERAData.read() by baseline or group of baselines.
 
@@ -627,7 +627,7 @@ class HERAData(UVData):
             include_autos: bool, optional
                 include autocorrelations in iteration if True.
                 Default is True.
-            freqs_to_load: array-like, optional
+            frequencies: array-like, optional
                 optional list of float frequencies to load.
                 Default (None) loads all frequencies in data.
             times_to_load: array-like, optional
@@ -679,10 +679,10 @@ class HERAData(UVData):
             baseline_chunks = chunk_baselines_by_redundant_groups(reds=reds, max_chunk_size=Nbls)
         for chunk in baseline_chunks:
                 read_args = {'bls':chunk}
-                if freqs_to_load is not None:
-                    read_args['frequencies'] = freqs_to_load
-                if pols_to_load is not None:
-                    read_args['polarizations'] = pols_to_load
+                if frequencies is not None:
+                    read_args['frequencies'] = frequencies
+                if polarizations is not None:
+                    read_args['polarizations'] = polarizations
                 if times_to_load is not None:
                     read_args['times'] = times_to_load
                 yield self.read(**read_args)
