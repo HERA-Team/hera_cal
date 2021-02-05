@@ -178,6 +178,7 @@ def calibrate_in_place(data, new_gains, data_flags=None, cal_flags=None, old_gai
                 else:
                     data_flags[(i, j, pol)] = np.ones_like(data[(i, j, pol)], dtype=np.bool)
 
+
 def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibration=None, flag_file=None,
               flag_filetype='h5', a_priori_flags_yaml=None, flag_nchan_low=0, flag_nchan_high=0, filetype_in='uvh5', filetype_out='uvh5',
               nbl_per_load=None, gain_convention='divide', redundant_solution=False, bl_error_tol=1.0,
@@ -480,7 +481,7 @@ def apply_cal_argparser():
     a.add_argument("--flag_nchan_high", type=int, default=0, help="integer number of channels at the high frequency end of the band to always flag (default 0)")
     a.add_argument("--filetype_in", type=str, default='uvh5', help='filetype of input data files')
     a.add_argument("--filetype_out", type=str, default='uvh5', help='filetype of output data files')
-    a.add_argument("--nbl_per_load", type=int, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only."
+    a.add_argument("--nbl_per_load", type=str, default=None, help="Maximum number of baselines to load at once. uvh5 to uvh5 only."
                                                                   "Default loads the whole file. If 'none' is provided, also loads whole file.")
     a.add_argument("--redundant_groups", type=int, default=1, help="Number of subgroups to split each redundant baseline into for cross power spectra. ")
     a.add_argument("--gain_convention", type=str, default='divide',
