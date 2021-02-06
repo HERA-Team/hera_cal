@@ -438,7 +438,7 @@ def load_xtalk_filter_and_write_baseline_list(datafile_list, baseline_list, calf
                            filled_outfilename=filled_outfilename, partial_write=False,
                            clobber=clobber, add_to_history=add_to_history,
                            extra_attrs={'Nfreqs': xf.Nfreqs, 'freq_array': np.asarray([xf.freqs])})
-
+    return xf
 # ------------------------------------------
 # Here are arg-parsers for xtalk-filtering.
 # ------------------------------------------

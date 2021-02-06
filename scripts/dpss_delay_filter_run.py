@@ -30,6 +30,6 @@ delay_filter.load_delay_filter_and_write(a.infilename, calfile=a.calfile, round_
                                          add_to_history=' '.join(sys.argv), verbose=a.verbose,
                                          skip_flagged_edges=a.skip_flagged_edges,
                                          a_priori_flag_yaml=a.a_priori_flag_yaml,
-                                         external_flags=a.external_flags, skip_flags_within_filter_period_of_edge=True,
+                                         external_flags=a.external_flags, skip_flags_within_filter_period_of_edge=False,
                                          skip_gaps_larger_then_filter_period=True, rms_threshold=a.rms_threshold, flag_rms_outliers=a.flag_rms_outliers,
                                          overwrite_data_flags=a.overwrite_data_flags, **filter_kwargs)
