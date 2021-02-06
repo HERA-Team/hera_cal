@@ -510,7 +510,6 @@ class VisClean(object):
                         if 2dfilter: should be a 2-list or 2-tuple. Each element should
                         be a list or tuple or np.ndarray of floats that include centers
                         of rectangular bins.
-                    ax: str, axis to filter, options=['freq', 'time', 'both']
                 * 'dpss':
                     'eigenval_cutoff': array-like
                         list of sinc_matrix eigenvalue cutoffs to use for included dpss modes.
@@ -533,7 +532,6 @@ class VisClean(object):
                         if 2dfilter: should be a 2-list or 2-tuple. Each element should
                         be a list or tuple or np.ndarray of floats that include centers
                         of rectangular bins.
-                    ax: str, axis to filter, options=['freq', 'time', 'both']
                 *'clean':
                      'tol': float,
                         clean tolerance. 1e-9 is standard.
