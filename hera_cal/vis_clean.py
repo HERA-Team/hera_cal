@@ -793,11 +793,11 @@ class VisClean(object):
             # then the flagging gap.
             if flag_within_edge_distance is None:
                 if ax == 'both':
-                    flag_within_edge_distance = (0., 1e6)
+                    flag_within_edge_distance = (np.mean(np.diff(self.times) * 3600 * 24.), np.mean(np.diff(self.freqs)))
                 elif ax == 'freq':
-                    flag_within_edge_distance = 1e6
+                    flag_within_edge_distance = np.mean(np.diff(self.freqs))
                 else:
-                    flag_within_edge_distance = 0.
+                    flag_within_edge_distance = np.mean(np.diff(self.times) * 3600 * 24.)
             if ax == 'freq' or ax == 'both':
                 # iterate through each integration.
                 for rownum, wrow in enumerate(win):

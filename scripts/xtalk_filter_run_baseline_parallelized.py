@@ -24,7 +24,6 @@ if a.mode == 'clean':
     skip_gaps_larger_then_filter_period=False
     skip_flagged_edges=False
     max_contiguous_edge_flags=10000
-    skip_if_flag_within_edge_distance=False
     flag_model_rms_outliers=False
 elif a.mode == 'dayenu':
     filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
@@ -32,7 +31,6 @@ elif a.mode == 'dayenu':
     max_contiguous_edge_flags=10000
     skip_gaps_larger_then_filter_period=False
     skip_flagged_edges=False
-    skip_if_flag_within_edge_distance=False
     flag_model_rms_outliers=False
 elif a.mode == 'dpss_leastsq':
     filter_kwargs = {'tol': a.tol, 'max_frate_coeffs': a.max_frate_coeffs}
@@ -40,7 +38,6 @@ elif a.mode == 'dpss_leastsq':
     skip_gaps_larger_then_filter_period=True
     skip_flagged_edges=True
     max_contiguous_edge_flags=1
-    skip_if_flag_within_edge_distance=True
     flag_model_rms_outliers=True
 
 
@@ -66,6 +63,5 @@ if len(baseline_list) > 0:
                                                            external_flags=a.external_flags, inpaint=a.inpaint, frate_standoff=a.frate_standoff,
                                                            skip_gaps_larger_then_filter_period=True,
                                                            overwrite_data_flags=a.overwrite_data_flags,
-                                                           skip_if_flag_within_edge_distance=skip_if_flag_within_edge_distance,
                                                            flag_model_rms_outliers=flag_model_rms_outliers,
                                                            clean_flags_in_resid_flags=True, **filter_kwargs)
