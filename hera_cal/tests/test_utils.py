@@ -506,6 +506,15 @@ def test_chisq():
     assert len(chisq_per_ant) == 0
 
 
+def test_per_antenna_modified_z_scores():
+    metric = {(0, 'Jnn'): 1, (50, 'Jnn'): 0, (2, 'Jnn'): 2,
+              (2, 'Jee'): 2000, (0, 'Jee'): -300}
+    zscores = ant_metrics.per_antenna_modified_z_scores(metric)
+    np.testing.assert_almost_equal(zscores[0, 'Jnn'], 0, 10)
+    np.testing.assert_almost_equal(zscores[50, 'Jnn'], -0.6745, 10)
+    np.testing.assert_almost_equal(zscores[2, 'Jnn'], 0.6745, 10)
+
+
 def test_gp_interp1d():
     # load data
     dfiles = glob.glob(os.path.join(DATA_PATH, "zen.2458043.4*.xx.HH.XRAA.uvh5"))
