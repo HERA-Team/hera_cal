@@ -1670,6 +1670,7 @@ def _clean_argparser(multifile=False):
     clean_options.add_argument("--edgecut_hi", default=0, type=int, help="Number of channels to flag on upper band edge and exclude from window function.")
     clean_options.add_argument("--gain", type=float, default=0.1, help="Fraction of residual to use in each iteration.")
     clean_options.add_argument("--alpha", type=float, default=.5, help="If window='tukey', use this alpha parameter (default .5).")
+    clean_options.add_argument("--zeropad", type=int, default=0, help="amount to zeropad.")
     return a
 
 # ------------------------------------------
