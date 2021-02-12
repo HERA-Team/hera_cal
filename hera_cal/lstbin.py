@@ -16,6 +16,7 @@ from . import utils
 from . import version
 from . import abscal
 from . import io
+from . import redcal
 from . import apply_cal
 from .datacontainer import DataContainer
 
@@ -510,7 +511,9 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
                   lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
-                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, **kwargs):
+                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
+                  bl_error_tol=1.0,
+                  **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
@@ -552,6 +555,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     Nbls_to_load : int, default=None, Number of baselines to load and bin simultaneously. If Nbls exceeds this
         than iterate over an outer loop until all baselines are binned. Default is to load all baselines at once.
     ignore_flags : bool, if True, ignore the flags in the input files, such that all input data in included in binning.
+    average_redundant_baselines : bool, if True, baselines that are redundant between nights will be averaged together.
+                                  When this is set to true, Nbls_to_load is interpreted as the number of redundant groups
+                                  to load simultaneously. The number of data waterfalls can be substantially larger in some
+                                  cases.
+    bl_error_tol : float, tolerance within which baselines are considered redundant
+                   between nights for purposes of average_redundant_baselines.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
@@ -604,9 +613,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = Nbls
     Nblgroups = Nbls // Nbls_to_load + 1
-    blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
-    blgroups = [blg for blg in blgroups if len(blg) > 0]
-
+    if not average_redundant_baselines:
+        blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
+        blgroups = [blg for blg in blgroups if len(blg) > 0]
+    else:
+        bldicts = gen_bldicts([io.HERAData(dfiles[-1]) for dfiles in data_files], bl_error_tol=bl_error_tol)
+        blgrps = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(len(bldicts))]
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
@@ -652,12 +664,24 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
 
                     # load data: only times needed for this output LST-bin file
                     hd = io.HERAData(data_files[j][k], filetype='uvh5')
-                    antpairs = set(hd.antpairs)
-                    bls_in_data = [bl for bl in blgroup if bl in antpairs or bl[::-1] in antpairs]
-                    if len(bls_in_data) == 0:
-                        utils.echo(f"No baselines from blgroup {bi + 1} found in {data_files[j][k]}, skipping file for these bls", verbose=verbose)
-                    data, flags, nsamps = hd.read(bls=bls_in_data, times=tarr[tinds])
-                    data.phase_type = 'drift'
+                    try:
+                        if average_redundant_baselines:
+                            bls_to_load = []
+                            key_baselines = {} # map first baseline in each group to
+                                               # first baseline in group on earliest night.
+                            for bldict in blgroup:
+                                key_bl = bldict[np.min(list(bldict.keys()))][0]
+                                key_baselines[
+                                for bl in bldict[j]:
+                                    bls_to_load.append(bl)
+                        else:
+                            bls_to_load = blgroup
+                        data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
+                        data.phase_type = 'drift'
+                    except ValueError:
+                        # if no baselines in the file, skip this file
+                        utils.echo("No baselines from blgroup {} found in {}, skipping file for these bls".format(bi + 1, data_files[j][k]), verbose=verbose)
+                        continue
 
                     # load calibration
                     if input_cals is not None:
@@ -672,6 +696,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                 gains, cal_flags, quals, totquals = uvc.build_calcontainers()
                             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
                                                          gain_convention=uvc.gain_convention)
+
+                    if average_redundant_baselines:
+                        data, flags, nsamps = utils.red_average(data=data, flags=flags, nsamples=nsamps,
+                                                                bl_tol=bl_error_tol, inplace=False)
+                    # replace baseline keys with baseline keys from
+                    # first night.
 
                     file_list.append(data_files[j][k])
                     nightly_data_list.append(data)  # this is data
@@ -872,7 +902,7 @@ def gen_bldicts(hds, bltol=1.0):
 
     Outputs:
     ---------
-    list of dictionaries of the form {0: (a0, b0), 1: (a1, b1), ... Nnight: (ANnight, BNnight)}.
+    list of dictionaries of the form {0: [(a0, b0), (a0, c0)...], 1: [(a1, b1),.., ], ... Nnight: [(ANnight, BNnight), ...,]}.
     Each dictionary represents a unique baseline length and orientation.
     where the key of each dictionary is an index for each night to be LST binned and each value
     is the antenna pair representing the unique baseline on that night.
@@ -888,33 +918,32 @@ def gen_bldicts(hds, bltol=1.0):
         d, _, _ = hd.read()
         reds = [[bl for bl in grp if bl in d] for grp in reds]
         reds = [grp for grp in reds if len(grp) > 0]
-        assert np.all(np.asarray([len(grp) for grp in reds]) == 1.), 'HERAData object provided that is not minimally redundant.'
-        bls = [grp[0][:2] for grp in reds]
-        for bl in bls:
-            # store baseline vectors for all data.
-            blvecs[bl] == hd.antpos[bl[1]] - hd.antpos[bl[1]]
+        reds = [[bl[:2] for bl in grp] for grp in reds]
+        for grp in reds:
+            for bl in grp:
+                # store baseline vectors for all data.
+                blvecs[bl] == hd.antpos[bl[1]] - hd.antpos[bl[1]]
         # if night is 0, then initialize baseline dicts
         if night == 0:
-            for bl in bls:
-                bldicts.append({night:bl})
-                bldictsi.append({bl:night})
-        # otherwise, loop through baselines, for each bldict, see if the first non-None
+            for grp in reds:
+                bldicts.append({night:grp})
+        # otherwise, loop through baselines, for each bldict, see if the first
         # entry matches (or conjugate matches). If yes, append to that bldict
         else:
-            for bl in bls:
+            for grp in reds:
                 present=False
                 for bldict in bldicts:
                     for i in bldict:
-                        if bl == bldict[i] or np.linalg.norm(blvecs[bl] - blvecs[bldict[i]]) <= bltol:
-                            bldict[night] == bl
+                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bltol:
+                            bldict[night] == grp
                             present=True
                             break
-                        elif bl[::-1] == bldict[i] or np.linalg.norm(blvecs[bl] + blvecs[bldict[i]]) <= bltol:
-                            bldict[night] = bl[::-1]
+                        elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bltol:
+                            bldict[night] = [bl[::-1] for bl in grp]
                             present=True
                             break
                 if not present:
-                    bldicts.append({night:bl})
+                    bldicts.append({night:grp})
     return bldicts
 
 
