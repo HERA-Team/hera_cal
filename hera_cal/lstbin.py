@@ -512,7 +512,7 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
 
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
-                  file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None, 
+                  file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
                   lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
                   output_file_select=None, Nbls_to_load=None, ignore_flags=False, **kwargs):
     """
@@ -627,7 +627,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             file_list = []
             flgs_list = []
             lst_list = []
-     
+
             # iterate over individual nights to bin
             for j in range(len(data_files)):
                 nightly_data_list = []
@@ -722,7 +722,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         kwargs['history'] = file_history + version.history_string()
 
         # form integration time array
-        _Nbls = len(set([bl[:2] for bl in list(bin_data.keys())])) 
+        _Nbls = len(set([bl[:2] for bl in list(bin_data.keys())]))
         kwargs['integration_time'] = np.ones(len(bin_lst) * _Nbls, dtype=np.float64) * integration_time
 
         # file in data ext
@@ -855,3 +855,72 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     clip_flags[clip] = True
 
     return clip_flags
+
+
+def gen_bldicts(hds, bltol=1.0):
+    """
+    Helper function to generate baseline dicts to keep track of reds between nights.
+
+    Parameters:
+    -----------
+
+    hds : list of HERAData objects. Can have no data loaded (preferable) and should refer to single files.
+          each object should be representative of a night that is going to be combined in LST binner.
+          each HERAData object must be minimally redundant (already have redundant baselines averaged together).
+
+
+    Outputs:
+    ---------
+    list of dictionaries of the form {0: (a0, b0), 1: (a1, b1), ... Nnight: (ANnight, BNnight)}.
+    Each dictionary represents a unique baseline length and orientation.
+    where the key of each dictionary is an index for each night to be LST binned and each value
+    is the antenna pair representing the unique baseline on that night.
+    some baseline dicts will only have a subset of nights.
+    """
+    # check that all hds are minimally redundant
+    blvecs = {}
+    bldicts = []
+    for night, hd in enumerate(hds):
+        assert len(hd.filepaths) == 1, 'HERAData objects must be for single data files.'
+        reds = redcal.get_reds(hd.antpos, bl_error_tol=bltol, pols=hd.polarizations[0])
+        # read to get baselines in data
+        d, _, _ = hd.read()
+        reds = [[bl for bl in grp if bl in d] for grp in reds]
+        reds = [grp for grp in reds if len(grp) > 0]
+        assert np.all(np.asarray([len(grp) for grp in reds]) == 1.), 'HERAData object provided that is not minimally redundant.'
+        bls = [grp[0][:2] for grp in reds]
+        for bl in bls:
+            # store baseline vectors for all data.
+            blvecs[bl] == hd.antpos[bl[1]] - hd.antpos[bl[1]]
+        # if night is 0, then initialize baseline dicts
+        if night == 0:
+            for bl in bls:
+                bldicts.append({night:bl})
+                bldictsi.append({bl:night})
+        # otherwise, loop through baselines, for each bldict, see if the first non-None
+        # entry matches (or conjugate matches). If yes, append to that bldict
+        else:
+            for bl in bls:
+                present=False
+                for bldict in bldicts:
+                    for i in bldict:
+                        if bl == bldict[i] or np.linalg.norm(blvecs[bl] - blvecs[bldict[i]]) <= bltol:
+                            bldict[night] == bl
+                            present=True
+                            break
+                        elif bl[::-1] == bldict[i] or np.linalg.norm(blvecs[bl] + blvecs[bldict[i]]) <= bltol:
+                            bldict[night] = bl[::-1]
+                            present=True
+                            break
+                if not present:
+                    bldicts.append({night:bl})
+    return bldicts
+
+
+
+
+
+
+
+
+        # now go through each baseline, see if is in any of the baseline dicts.
