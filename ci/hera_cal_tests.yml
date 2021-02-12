@@ -16,7 +16,6 @@ dependencies:
   - pycodestyle
   - psutil
   - astropy-healpix
-  - pyephem
   - future
   - pytest-cov
   - coveralls

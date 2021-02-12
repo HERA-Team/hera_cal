@@ -34,7 +34,6 @@ First Install all dependencies.
 -  numpy >= 1.10
 -  scipy
 -  astropy >=1.2
--  pyephem
 -  aipy
 -  pyuvdata >= 1.1
 -  omnical >= 5.0.2
