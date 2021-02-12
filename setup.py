@@ -53,7 +53,6 @@ setup_args = {
         'scipy',
         'astropy',
         'pyuvdata',
-        'pyephem',
         'linsolve @ git+git://github.com/HERA-Team/linsolve',
         'hera_qm @ git+git://github.com/HERA-Team/hera_qm',
         'scikit-learn'

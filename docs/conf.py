@@ -29,7 +29,7 @@ class Mock(MagicMock):
         return MagicMock()
 
 
-MOCK_MODULES = ['omnical', 'numpy', 'ephem', 'aipy', 'scipy', 'pyuvdata',
+MOCK_MODULES = ['omnical', 'numpy', 'aipy', 'scipy', 'pyuvdata',
                 'astropy', 'numpy.linalg', 'pylab', 'scipy.sparse', 'aipy.miriad', 'scipy.signal']
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
