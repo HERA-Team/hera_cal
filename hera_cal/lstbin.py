@@ -635,13 +635,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             file_list = []
             flgs_list = []
             lst_list = []
-
+            nsamp_list = []
             # iterate over individual nights to bin
             for j in range(len(data_files)):
                 nightly_data_list = []
                 nightly_flgs_list = []
                 nightly_lst_list = []
-
+                nightly_nsamp_list = []
                 # iterate over files in each night, and open files that fall into this output file LST range
                 for k in range(len(data_files[j])):
                     # unwrap la relative to itself
@@ -667,11 +667,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     try:
                         if average_redundant_baselines:
                             bls_to_load = []
-                            key_baselines = {} # map first baseline in each group to
+                            key_baselines = [] # map first baseline in each group to
                                                # first baseline in group on earliest night.
+                            reds = []
                             for bldict in blgroup:
                                 key_bl = bldict[np.min(list(bldict.keys()))][0]
-                                key_baselines[
+                                key_baselines.append(key_bl)
+                                reds.append(bldict[j])
                                 for bl in bldict[j]:
                                     bls_to_load.append(bl)
                         else:
@@ -697,16 +699,18 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
                                                          gain_convention=uvc.gain_convention)
 
+                    # redundantly average baselines, keying to baseline group key
+                    # on earliest night.
                     if average_redundant_baselines:
                         data, flags, nsamps = utils.red_average(data=data, flags=flags, nsamples=nsamps,
-                                                                bl_tol=bl_error_tol, inplace=False)
-                    # replace baseline keys with baseline keys from
-                    # first night.
+                                                                bl_tol=bl_error_tol, inplace=False,
+                                                                reds=reds, red_bl_keys=key_baselines)
 
                     file_list.append(data_files[j][k])
                     nightly_data_list.append(data)  # this is data
                     nightly_flgs_list.append(flags)  # this is flgs
-                    nightly_lst_list.append(data.lsts)  # this is lsts
+                    nightly_lst_list.append(larr[tinds])  # this is lsts
+                    nightly_nsamp_list.append(nsamps)
 
                 # skip if nothing accumulated in nightly files
                 if len(nightly_data_list) == 0:
@@ -716,8 +720,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 data_list.extend(nightly_data_list)
                 flgs_list.extend(nightly_flgs_list)
                 lst_list.extend(nightly_lst_list)
-
-                del nightly_data_list, nightly_flgs_list, nightly_lst_list
+                nsamp_list.extend(nightly_nsamp_list)
+                del nightly_data_list, nightly_flgs_list, nightly_lst_list, nightly_nsamp_list
 
             # skip if data_list is empty
             if len(data_list) == 0:
@@ -727,8 +731,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             if ignore_flags:
                 flgs_list = None
             (bin_lst, bin_data, flag_data, std_data,
-             num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
-                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip,
+             num_data, nsamp_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
+                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamp_list=nsamp_list,
                                  sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
 
             # append to lists
@@ -736,7 +740,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             flag_conts.append(flag_data)
             std_conts.append(std_data)
             num_conts.append(num_data)
-
+            nsamp_conts.append(nsamp_data)
         # if all blgroups were empty skip
         if len(data_conts) == 0:
             utils.echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
