@@ -246,6 +246,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             # make data and flag arrays from lists
             d = np.array(data[key][ind])  # shape = (Ndays x Nfreqs)
             f = np.array(flags[key][ind])
+            n = np.array(nsamples[key][ind])
             f[np.isnan(f)] = True
 
             # replace flagged data with nan
@@ -279,16 +280,30 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             # take bin average: real and imag separately
             if median:
                 # for median to account for varying nsamples, copy each day by nsamps
-                dnsamps = np.vstack([[dd for m in range(int(nn))] for dd, nn in zip(d, n)])
-                real_avg.append(np.nanmedian(dnsamps.real, axis=0))
-                imag_avg.append(np.nanmedian(dnsamps.imag, axis=0))
+                # this code is loopy landscapes. So avoid execution unless we have to.
+                if not np.all(np.isclose(n, np.median(n))):
+                    dnsamps = np.zeros(d.shape[1], dtype=complex)
+                    for f in range(d.shape[1]):
+                        samples_r = []
+                        samples_i = []
+                        for dd, nn in zip(d[:,f], n[:,f]):
+                            for m in range(nn):
+                                if np.isfinite(dd):
+                                    samples_r.append(dd.real)
+                                    samples_i.append(dd.imag)
+                        dnsamps[f] = np.median(samples_r) + 1j * np.median(samples_i)
+                    real_avg.append(dnsamps.real)
+                    imag_avg.append(dnsamps.imag)
+                else:
+                    real_avg.append(np.nanmedian(d.real, axis=0))
+                    imag_avg.append(np.nanmedian(d.imag, axis=0))
             else:
                 # for mean ot account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
-                resum = np.asarray([(d.real[:, f] * n[:, f])[np.isfinite(d.real[:, f])].flatten() for f in range(d.shape[1])]).T
-                re_nsum = np.asarray([(n[np.isfinite(d.real[:, f]), f]).flatten() for f in range(d.shape[1])]).T
-                imsum = np.asarray([(d.imag[:, f] * n[:, f])[np.isfinite(d.imag[:, f])].flatten() for f in range(d.shape[1])]).T
-                im_nsum = np.asarray([(n[np.isfinite(d.imag[:, f]), f]).flatten() for f in range(d.shape[1])]).T
+                resum = np.asarray([np.sum((d.real[:, f] * n[:, f])[np.isfinite(d.real[:, f])]) for f in range(d.shape[1])])
+                re_nsum = np.asarray([np.sum((n[np.isfinite(d.real[:, f]), f])) for f in range(d.shape[1])])
+                imsum = np.asarray([np.sum((d.imag[:, f] * n[:, f])[np.isfinite(d.imag[:, f])]) for f in range(d.shape[1])])
+                im_nsum = np.asarray([np.sum((n[np.isfinite(d.imag[:, f]), f])) for f in range(d.shape[1])])
 
                 real_avg.append(resum / re_nsum)
                 imag_avg.append(imsum / im_nsum)
@@ -760,7 +775,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             flag_conts.append(flag_data)
             std_conts.append(std_data)
             num_conts.append(num_data)
-            nsamp_conts.append(nsamp_data)
         # if all blgroups were empty skip
         if len(data_conts) == 0:
             utils.echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
