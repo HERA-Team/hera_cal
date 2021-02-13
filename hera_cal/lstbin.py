@@ -24,7 +24,7 @@ from .datacontainer import DataContainer
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
-            freq_array=None, lat=-30.72152, verbose=True):
+            freq_array=None, lat=-30.72152, verbose=True, nsamp_list=None):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -63,6 +63,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     freq_array : type=ndarray, 1D array of unique data frequencies channels in Hz. Needed for rephase.
     lat : type=float, latitude of array in degrees North. Needed for rephase.
     verbose : type=bool, if True report feedback to stdout
+    nsamp_list : list of nsamples arrays
 
     Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
@@ -112,6 +113,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     # themselves hold lists of ndarrays
     data = odict()
     flags = odict()
+    nsamples = odict()
     all_lst_indices = set()
 
     # iterate over data_list
@@ -160,11 +162,13 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                 d[key] = np.conj(d[utils.reverse_bl(key)])
                 if flags_list is not None:
                     flags_list[i][key] = flags_list[i][utils.reverse_bl(key)]
+                if nsamp_list is not None:
+                    nsamp_list[i][key] = nsamp_list[i][utils.reverse_bl(key)]
             else:
                 # if key or conj(key) not in data, insert key into data as an odict
                 data[key] = odict()
                 flags[key] = odict()
-
+                nsamples[key] = odict()
             # data[key] is an odict, with keys as grid index integers and
             # values as lists holding the LST bin data: ndarrays of shape (Nfreqs)
 
@@ -176,6 +180,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                     if ind not in data[key]:
                         data[key][ind] = []
                         flags[key][ind] = []
+                        nsamples[key][ind] = []
                     # append data ndarray to LST bin
                     data[key][ind].append(d[key][k])
                     # also insert flags if fed
@@ -183,6 +188,11 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                         flags[key][ind].append(np.zeros_like(d[key][k], np.bool))
                     else:
                         flags[key][ind].append(flags_list[i][key][k])
+                    if nsamp_list is None:
+                        nsamples[key][ind].append(np.ones_like(d[key][k], np.int))
+                    else:
+                        nsamples[key][ind].append(nsamp_list[i][key][k])
+
 
     # get final lst_bin array
     if truncate_empty:
@@ -198,7 +208,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                 # fill data with blank data
                 data[key][index] = [np.ones(Nfreqs, np.complex)]
                 flags[key][index] = [np.ones(Nfreqs, np.bool)]
-
+                nsamples[key][index] = [np.ones(Nfreqs, np.int)]
         # use all LST bins
         lst_bins = lst_grid
 
@@ -268,11 +278,20 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
 
             # take bin average: real and imag separately
             if median:
-                real_avg.append(np.nanmedian(d.real, axis=0))
-                imag_avg.append(np.nanmedian(d.imag, axis=0))
+                # for median to account for varying nsamples, copy each day by nsamps
+                dnsamps = np.vstack([[dd for m in range(int(nn))] for dd, nn in zip(d, n)])
+                real_avg.append(np.nanmedian(dnsamps.real, axis=0))
+                imag_avg.append(np.nanmedian(dnsamps.imag, axis=0))
             else:
-                real_avg.append(np.nanmean(d.real, axis=0))
-                imag_avg.append(np.nanmean(d.imag, axis=0))
+                # for mean ot account for varying nsamples, take nsamples weighted sum.
+                # (inverse variance weighted sum).
+                resum = np.asarray([(d.real[:, f] * n[:, f])[np.isfinite(d.real[:, f])].flatten() for f in range(d.shape[1])]).T
+                re_nsum = np.asarray([(n[np.isfinite(d.real[:, f]), f]).flatten() for f in range(d.shape[1])]).T
+                imsum = np.asarray([(d.imag[:, f] * n[:, f])[np.isfinite(d.imag[:, f])].flatten() for f in range(d.shape[1])]).T
+                im_nsum = np.asarray([(n[np.isfinite(d.imag[:, f]), f]).flatten() for f in range(d.shape[1])]).T
+
+                real_avg.append(resum / re_nsum)
+                imag_avg.append(imsum / im_nsum)
 
             # get minimum bin flag
             f_min.append(np.nanmin(f, axis=0))
@@ -731,9 +750,10 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             if ignore_flags:
                 flgs_list = None
             (bin_lst, bin_data, flag_data, std_data,
-             num_data, nsamp_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
+             num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamp_list=nsamp_list,
                                  sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
+            # I AM HERE!
 
             # append to lists
             data_conts.append(bin_data)
