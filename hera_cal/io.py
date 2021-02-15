@@ -939,11 +939,12 @@ def get_file_times(filepaths, filetype='uvh5'):
         filetype : str, options=['miriad', 'uvh5']
 
     Returns:
-        If input is a string, output are floats, otherwise outputs are ndarrays.
-        dlst : ndarray of lst bin width [radian]
-        dtime : ndarray of time bin width [Julian Date]
-        file_lst_arrays : ndarrays of unwrapped lst_array [radians]
-        file_time_arrays : ndarrays of time_array [Julian Date]
+        dlst : ndarray (or float if filepaths is a string) of lst bin width [radian]
+        dtime : ndarray (or float if filepaths is a string) of time bin width [Julian Date]
+        file_lst_arrays : list of ndarrays (or list of floats if filepaths is a string)
+            of unwrapped lst_array [radians]
+        file_time_arrays : list of ndarrays (or list of floats if filepaths is a string)
+            of time_array [Julian Date]
     """
     _array = True
     # check filepaths type
@@ -1002,8 +1003,6 @@ def get_file_times(filepaths, filetype='uvh5'):
 
     dlsts = np.asarray(dlsts)
     dtimes = np.asarray(dtimes)
-    file_lst_arrays = np.asarray(file_lst_arrays)
-    file_time_arrays = np.asarray(file_time_arrays)
 
     if _array is False:
         return dlsts[0], dtimes[0], file_lst_arrays[0], file_time_arrays[0]
