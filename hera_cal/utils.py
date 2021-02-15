@@ -955,6 +955,36 @@ def chisq(data, model, data_wgts=None, gains=None, gain_flags=None, split_by_ant
     return chisq, nObs, chisq_per_ant, nObs_per_ant
 
 
+def per_antenna_modified_z_scores(metric):
+    """Compute modified Z-Score over antennas for each antenna polarization.
+    This function computes the per-pol modified z-score of the given metric
+    dictionary for each antenna.
+    The modified Z-score is defined as:
+        0.6745 * (metric - median(all_metrics))/ median_absoulte_deviation
+    
+    Parameters:
+        metric : dict
+            Dictionary of metric data to compute z-score. Keys are expected to
+            have the form: (ant, antpol)
+    Returns:
+        zscores : dict
+            Dictionary of z-scores for the given data.
+    """
+    zscores = {}
+    antpols = set([key[1] for key in metric])
+    for antpol in antpols:
+        values = np.array([val for (key, val) in metric.items()
+                           if key[1] == antpol])
+        median = np.nanmedian(values)
+        medAbsDev = np.nanmedian(np.abs(values - median))
+        for (key, val) in metric.items():
+            if key[1] == antpol:
+                # this factor makes it comparable to a
+                # standard z-score for gaussian data
+                zscores[key] = 0.6745 * (val - median) / medAbsDev
+    return zscores
+
+
 def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
                 kernel=None, Nmirror=0, optimizer=None, xthin=None):
     """

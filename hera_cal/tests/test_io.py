@@ -1034,8 +1034,8 @@ def test_get_file_times():
     filepaths = sorted(glob.glob(DATA_PATH + "/zen.2458042.*.xx.HH.uvXA"))
     # test execution
     dlsts, dtimes, larrs, tarrs = io.get_file_times(filepaths, filetype='miriad')
-    assert np.isclose(larrs[0, 0], 4.7293432458811866)
-    assert np.isclose(larrs[0, -1], 4.7755393587036084)
+    assert np.isclose(larrs[0][0], 4.7293432458811866)
+    assert np.isclose(larrs[0][-1], 4.7755393587036084)
     assert np.isclose(dlsts[0], 0.00078298496309189868)
     assert len(dlsts) == 2
     assert len(dtimes) == 2
