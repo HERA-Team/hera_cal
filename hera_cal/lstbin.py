@@ -201,14 +201,16 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     else:
         # keep all lst_grid bins and fill empty ones with unity data and mark as flagged
         for index in range(len(lst_grid)):
-            if index in all_lst_indices:
-                # skip if index already in data
-                continue
+            # I got rid of this statement because it causes failures if a
+            # subset of baselines dont have data in every LST bin which can happen
+            # if a baseline is flagged on some days an not others.
             for key in list(data.keys()):
                 # fill data with blank data
-                data[key][index] = [np.ones(Nfreqs, np.complex)]
-                flags[key][index] = [np.ones(Nfreqs, np.bool)]
-                nsamples[key][index] = [np.ones(Nfreqs, np.int)]
+                # if the index is not present.
+                if index not in data[key]:
+                    data[key][index] = [np.ones(Nfreqs, np.complex)]
+                    flags[key][index] = [np.ones(Nfreqs, np.bool)]
+                    nsamples[key][index] = [np.ones(Nfreqs, np.int)]
         # use all LST bins
         lst_bins = lst_grid
 
@@ -239,6 +241,13 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
         real_std = []
         imag_std = []
         bin_count = []
+        # create empty LST grided data.
+        #real_avg = np.zeros((len(lst_grid), Nfreqs), dtype=complex)
+        #imag_avg = np.zeros_like(real_avg)
+        #f_min = np.zeros_like(real_avg)
+        #real_std = np.zeros_like(real_avg)
+        #imag_std = np.zeros_like(real_avg)
+        #bin_count = np.zeros_like(real_avg)
 
         # iterate over sorted LST grid indices in data[key]
         for j, ind in enumerate(sorted(data[key].keys())):
@@ -283,15 +292,15 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                 # this code is loopy landscapes. So avoid execution unless we have to.
                 if not np.all(np.isclose(n, np.median(n))):
                     dnsamps = np.zeros(d.shape[1], dtype=complex)
-                    for f in range(d.shape[1]):
+                    for chan in range(d.shape[1]):
                         samples_r = []
                         samples_i = []
-                        for dd, nn in zip(d[:,f], n[:,f]):
-                            for m in range(nn):
+                        for dd, nn in zip(d[:,chan], n[:,chan]):
+                            for m in range(int(nn)):
                                 if np.isfinite(dd):
                                     samples_r.append(dd.real)
                                     samples_i.append(dd.imag)
-                        dnsamps[f] = np.median(samples_r) + 1j * np.median(samples_i)
+                        dnsamps[chan] = np.median(samples_r) + 1j * np.median(samples_i)
                     real_avg.append(dnsamps.real)
                     imag_avg.append(dnsamps.imag)
                 else:
@@ -300,13 +309,16 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             else:
                 # for mean ot account for varying nsamples, take nsamples weighted sum.
                 # (inverse variance weighted sum).
-                resum = np.asarray([np.sum((d.real[:, f] * n[:, f])[np.isfinite(d.real[:, f])]) for f in range(d.shape[1])])
-                re_nsum = np.asarray([np.sum((n[np.isfinite(d.real[:, f]), f])) for f in range(d.shape[1])])
-                imsum = np.asarray([np.sum((d.imag[:, f] * n[:, f])[np.isfinite(d.imag[:, f])]) for f in range(d.shape[1])])
-                im_nsum = np.asarray([np.sum((n[np.isfinite(d.imag[:, f]), f])) for f in range(d.shape[1])])
+                resum = np.asarray([np.sum((d.real[:, chan] * n[:, chan])[np.isfinite(d.real[:, chan])]) for chan in range(d.shape[1])])
+                re_nsum = np.asarray([np.sum((n[np.isfinite(d.real[:, chan]), chan])) for chan in range(d.shape[1])])
+                imsum = np.asarray([np.sum((d.imag[:, chan] * n[:, chan])[np.isfinite(d.imag[:, chan])]) for chan in range(d.shape[1])])
+                im_nsum = np.asarray([np.sum((n[np.isfinite(d.imag[:, chan]), chan])) for chan in range(d.shape[1])])
 
-                real_avg.append(resum / re_nsum)
-                imag_avg.append(imsum / im_nsum)
+                resum[re_nsum > 0.] /= re_nsum[re_nsum > 0.]
+                imsum[im_nsum > 0.] /= im_nsum[im_nsum > 0.]
+
+                real_avg.append(resum)
+                imag_avg.append(imsum)
 
             # get minimum bin flag
             f_min.append(np.nanmin(f, axis=0))
@@ -314,7 +326,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             # get other stats
             real_std.append(np.nanstd(d.real, axis=0))
             imag_std.append(np.nanstd(d.imag, axis=0))
-            bin_count.append(np.nansum(~np.isnan(d), axis=0))
+            bin_count.append(np.nansum(~np.isnan(d) * n, axis=0))
 
         # get final statistics
         d_avg = np.array(real_avg) + 1j * np.array(imag_avg)
@@ -550,7 +562,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                   file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
                   lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
                   output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
-                  bl_error_tol=1.0,
+                  bl_error_tol=1.0, include_autos=True,
                   **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
@@ -597,6 +609,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                   When this is set to true, Nbls_to_load is interpreted as the number of redundant groups
                                   to load simultaneously. The number of data waterfalls can be substantially larger in some
                                   cases.
+    include_autos : bool, if True, include autocorrelations in redundant baseline averages.
+                    default is True.
     bl_error_tol : float, tolerance within which baselines are considered redundant
                    between nights for purposes of average_redundant_baselines.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
@@ -655,19 +669,17 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
         blgroups = [blg for blg in blgroups if len(blg) > 0]
     else:
-        bldicts = gen_bldicts([io.HERAData(dfiles[-1]) for dfiles in data_files], bl_error_tol=bl_error_tol)
-        blgrps = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(len(bldicts))]
+        bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos)
+        blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(len(bldicts))]
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
         fmin = f_lst[0] - (dlst / 2 + atol)
         fmax = f_lst[-1] + (dlst / 2 + atol)
-
         # iterate over baseline groups (for memory efficiency)
         data_conts, flag_conts, std_conts, num_conts = [], [], [], []
         for bi, blgroup in enumerate(blgroups):
             utils.echo("starting baseline-group {} / {}: {}".format(bi + 1, len(blgroups), datetime.datetime.now()), type=0, verbose=verbose)
-
             # create empty data lists
             data_list = []
             file_list = []
@@ -703,11 +715,14 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                                # first baseline in group on earliest night.
                             reds = []
                             for bldict in blgroup:
-                                key_bl = bldict[np.min(list(bldict.keys()))][0]
-                                key_baselines.append(key_bl)
-                                reds.append(bldict[j])
-                                for bl in bldict[j]:
-                                    bls_to_load.append(bl)
+                                # only load group if present in the current night.
+                                if j in bldict:
+                                    # key to earliest night with this redundant group.
+                                    key_bl = bldict[np.min(list(bldict.keys()))][0]
+                                    key_baselines.append(key_bl)
+                                    reds.append(bldict[j])
+                                    for bl in bldict[j]:
+                                        bls_to_load.append(bl)
                         else:
                             bls_to_load = blgroup
                         data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
@@ -734,10 +749,11 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     # redundantly average baselines, keying to baseline group key
                     # on earliest night.
                     if average_redundant_baselines:
-                        data, flags, nsamps = utils.red_average(data=data, flags=flags, nsamples=nsamps,
-                                                                bl_tol=bl_error_tol, inplace=False,
-                                                                reds=reds, red_bl_keys=key_baselines)
-
+                        if ignore_flags:
+                            raise NotImplementedError("average_redundant_baselines with ignore_flags True is not implemented.")
+                        utils.red_average(data=data, flags=flags, nsamples=nsamps,
+                                          bl_tol=bl_error_tol, inplace=True,
+                                          reds=reds, red_bl_keys=key_baselines)
                     file_list.append(data_files[j][k])
                     nightly_data_list.append(data)  # this is data
                     nightly_flgs_list.append(flags)  # this is flgs
@@ -766,8 +782,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamp_list=nsamp_list,
                                  sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
-            # I AM HERE!
-
             # append to lists
             data_conts.append(bin_data)
             flag_conts.append(flag_data)
@@ -806,7 +820,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         if os.path.exists(bin_file) and overwrite is False:
             utils.echo("{} exists, not overwriting".format(bin_file), verbose=verbose)
             continue
-
         # write to file
         io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose,
                      nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **kwargs)
@@ -924,7 +937,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     return clip_flags
 
 
-def gen_bldicts(hds, bltol=1.0):
+def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True):
     """
     Helper function to generate baseline dicts to keep track of reds between nights.
 
@@ -934,8 +947,10 @@ def gen_bldicts(hds, bltol=1.0):
     hds : list of HERAData objects. Can have no data loaded (preferable) and should refer to single files.
           each object should be representative of a night that is going to be combined in LST binner.
           each HERAData object must be minimally redundant (already have redundant baselines averaged together).
-
-
+    bl_error_tol : float (meters), optional. baselines whose vector difference are within this tolerance are considered
+                   redundant. Default is 1.0 meter.
+    include_autos : bool, if True, include autos in bldicts.
+                    default is True.
     Outputs:
     ---------
     list of dictionaries of the form {0: [(a0, b0), (a0, c0)...], 1: [(a1, b1),.., ], ... Nnight: [(ANnight, BNnight), ...,]}.
@@ -949,37 +964,33 @@ def gen_bldicts(hds, bltol=1.0):
     bldicts = []
     for night, hd in enumerate(hds):
         assert len(hd.filepaths) == 1, 'HERAData objects must be for single data files.'
-        reds = redcal.get_reds(hd.antpos, bl_error_tol=bltol, pols=hd.polarizations[0])
+        reds = redcal.get_reds(hd.antpos, bl_error_tol=bl_error_tol, pols=hd.pols[0], include_autos=include_autos)
         # read to get baselines in data
         d, _, _ = hd.read()
-        reds = [[bl for bl in grp if bl in d] for grp in reds]
+        data_bls = d.antpairs()
+        reds = [[bl for bl in grp if bl[:2] in data_bls or bl[:2][::-1] in data_bls] for grp in reds]
         reds = [grp for grp in reds if len(grp) > 0]
         reds = [[bl[:2] for bl in grp] for grp in reds]
         for grp in reds:
             for bl in grp:
                 # store baseline vectors for all data.
-                blvecs[bl] == hd.antpos[bl[1]] - hd.antpos[bl[1]]
-        # if night is 0, then initialize baseline dicts
-        if night == 0:
-            for grp in reds:
-                bldicts.append({night:grp})
+                blvecs[bl] = hd.antpos[bl[1]] - hd.antpos[bl[0]]
         # otherwise, loop through baselines, for each bldict, see if the first
         # entry matches (or conjugate matches). If yes, append to that bldict
-        else:
-            for grp in reds:
-                present=False
-                for bldict in bldicts:
-                    for i in bldict:
-                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bltol:
-                            bldict[night] == grp
-                            present=True
-                            break
-                        elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bltol:
-                            bldict[night] = [bl[::-1] for bl in grp]
-                            present=True
-                            break
-                if not present:
-                    bldicts.append({night:grp})
+        for grp in reds:
+            present=False
+            for bldict in bldicts:
+                for i in bldict:
+                    if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol:
+                        bldict[night] = grp
+                        present=True
+                        break
+                    elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
+                        bldict[night] = [bl[::-1] for bl in grp]
+                        present=True
+                        break
+            if not present:
+                bldicts.append({night:grp})
     return bldicts
 
 

@@ -10,8 +10,7 @@ import copy
 import glob
 import scipy.stats as stats
 from pyuvdata import UVCal, UVData
-
-from .. import io, lstbin, utils
+from .. import io, lstbin, utils, redcal
 from ..datacontainer import DataContainer
 from ..data import DATA_PATH
 
@@ -29,15 +28,16 @@ class Test_lstbin(object):
                            sorted(glob.glob(DATA_PATH + '/zen.2458044.4*XRAA.uvh5')),
                            sorted(glob.glob(DATA_PATH + '/zen.2458045.4*XRAA.uvh5'))]
 
-        (self.data1, self.flgs1, self.ap1, a, self.freqs1, t, self.lsts1,
-         p) = io.load_vis(self.data_files[0], return_meta=True, filetype="uvh5")
-        (self.data2, self.flgs2, ap, a, self.freqs2, t, self.lsts2,
-         p) = io.load_vis(self.data_files[1], return_meta=True, filetype="uvh5")
-        (self.data3, self.flgs3, ap, a, self.freqs3, t, self.lsts3,
-         p) = io.load_vis(self.data_files[2], return_meta=True, filetype="uvh5")
+        (self.data1, self.flgs1, self.nsmps1, self.ap1, a, self.freqs1, t, self.lsts1,
+         p) = io.load_vis(self.data_files[0], return_meta=True, filetype="uvh5", return_nsamples=True)
+        (self.data2, self.flgs2, self.nsmps2, ap, a, self.freqs2, t, self.lsts2,
+         p) = io.load_vis(self.data_files[1], return_meta=True, filetype="uvh5", return_nsamples=True)
+        (self.data3, self.flgs3, self.nsmps3, ap, a, self.freqs3, t, self.lsts3,
+         p) = io.load_vis(self.data_files[2], return_meta=True, filetype="uvh5", return_nsamples=True)
         self.data_list = [self.data1, self.data2, self.data3]
         self.flgs_list = [self.flgs1, self.flgs2, self.flgs3]
         self.lst_list = [self.lsts1, self.lsts2, self.lsts3]
+        self.nsmp_list = [self.nsmps1, self.nsmps2, self.nsmps3]
 
     def test_make_lst_grid(self):
         lst_grid = lstbin.make_lst_grid(0.01, begin_lst=None, verbose=False)
@@ -59,6 +59,7 @@ class Test_lstbin(object):
                                 median=True, lst_low=0, lst_hi=np.pi, verbose=False)
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=0.01,
                                 verbose=False)
+
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=dlst,
                                 verbose=False)
         # check shape and dtype
@@ -105,6 +106,30 @@ class Test_lstbin(object):
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=dlst, lst_low=0.25, lst_hi=0.3,
                                 verbose=False)
         assert np.allclose(output[4][(24, 25, 'ee')], 3.0)
+
+    def test_lstbin_vary_nsamps(self):
+        # test execution
+        lst_output, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
+                    median=True, lst_low=0, lst_hi=np.pi, verbose=False)
+        output = lstbin.lst_bin(self.data_list + [data_output], self.lst_list + [lst_output], flags_list=self.flgs_list + [flags_output], dlst=None,
+                                nsamp_list=self.nsmp_list + [nsamples_output], median=True, verbose=False)
+        # test that nsamples_output are all 3.
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 2)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[30, 30], 4)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[100, 30], 6)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[190, 30], 4)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[220, 30], 2)
+        _, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
+                    median=False, lst_low=0, lst_hi=np.pi, verbose=False)
+        output = lstbin.lst_bin(self.data_list + [data_output], self.lst_list + [lst_output], flags_list=self.flgs_list + [flags_output], dlst=None,
+                                nsamp_list=self.nsmp_list + [nsamples_output], median=False, verbose=False)
+        # test that nsamples_output are all 3.
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[0, 30], 2)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[30, 30], 4)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[100, 30], 6)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[190, 30], 4)
+        assert np.allclose(output[-1][(24, 25, 'ee')].real[220, 30], 2)
+
 
     def test_lst_align(self):
         # test basic execution
@@ -267,6 +292,101 @@ class Test_lstbin(object):
 
         os.remove(output_lst_file)
         os.remove(output_std_file)
+
+    def test_lst_bin_files_redundant_average(self, tmpdir):
+        # basic execution
+        tmp_path = tmpdir.strpath
+
+        file_ext = "{pol}.{type}.{time:7.5f}.uvh5"
+        # generate list of redundantly averaged data files.
+        redundantly_averaged_filepaths = []
+        redundantly_averaged_data = []
+        redundantly_averaged_flags = []
+        redundantly_averaged_nsamples = []
+        # get reds
+        hdt = io.HERAData(self.data_files[0][0])
+        hdt.read()
+        ants_data = np.unique(np.hstack([hdt.ant_1_array, hdt.ant_2_array]))
+        antpos = {a: hdt.antpos[a] for a in ants_data}
+        reds_data = redcal.get_reds(antpos, include_autos=True)
+        reds_data = [[bl[:2] for bl in grp] for grp in reds_data]
+        # build redundantly averaged individual files and write them to disk.
+        for flist in self.data_files:
+            redundantly_averaged_filepaths.append([])
+            for fstr in flist:
+                hd = io.HERAData(fstr)
+                hd.read()
+                utils.red_average(hd, inplace=True,reds=reds_data)
+                out_path = os.path.join(tmp_path, fstr.split('/')[-1].replace('.uvh5', '.red_average.uvh5'))
+                hd.write_uvh5(out_path)
+                redundantly_averaged_filepaths[-1].append(out_path)
+        # test NotImplementedError when we set ignore_flags to True and average_redundant_baselines to True
+        pytest.raises(NotImplementedError, lstbin.lst_bin_files, data_files=self.data_files,
+                                            outdir=tmp_path, overwrite=True, median=False,
+                                            verbose=False, file_ext=file_ext,
+                                            ignore_flags=True, average_redundant_baselines=True)
+        # get redundantly averaged nsamples.
+        lstbin.lst_bin_files(redundantly_averaged_filepaths, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=False)
+        output_lst_file = os.path.join(tmp_path, "zen.ee.LST.0.20124.uvh5")
+        output_std_file = os.path.join(tmp_path, "zen.ee.STD.0.20124.uvh5")
+        assert os.path.exists(output_lst_file)
+        assert os.path.exists(output_std_file)
+        uv1 = io.HERAData(output_lst_file)
+        d1, f1, n1 = uv1.read()
+        lstbin.lst_bin_files(self.data_files, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=False)
+        uv2 = io.HERAData(output_lst_file)
+        uv2.read()
+        utils.red_average(uv2, inplace=True, reds=reds_data)
+        d2, f2, n2 = uv2.build_datacontainers()
+        # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
+        for k in d2:
+            assert np.all(np.isclose(d1[k], d2[k]))
+            assert np.all(np.isclose(n1[k], n2[k]))
+            assert np.all(np.isclose(f1[k], f2[k]))
+        lstbin.lst_bin_files(self.data_files, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=True)
+        uv3 = io.HERAData(output_lst_file)
+        d3, f3, n3 = uv3.read()
+        # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
+        for k in d2:
+            assert np.all(np.isclose(d3[k], d2[k]))
+            assert np.all(np.isclose(n3[k], n2[k]))
+            assert np.all(np.isclose(f3[k], f2[k]))
+
+        # next, remove one baseline from a group, including the first
+        # baseline which typically acts as the key for the redundant group
+        # this tests lstbinners ability to correctly match up red baselines
+        # between nights with non-matching keys.
+        reds_data_missing = copy.deepcopy(reds_data)
+        reds_data_missing[1] = reds_data_missing[1][2:]
+        bls_missing_first_group = []
+        for grp in reds_data_missing:
+            for bl in grp:
+                bls_missing_first_group.append(bl)
+        # replaced redundantly averaged files in second
+        # and third nights with data where
+        # first redundant group is missing two baselines.
+        for flist in self.data_files[1:]:
+            for fstr in flist:
+                hd = io.HERAData(fstr)
+                hd.read(bls=bls_missing_first_group)
+                utils.red_average(hd, inplace=True,reds=reds_data)
+                out_path = os.path.join(tmp_path, fstr.split('/')[-1].replace('.uvh5', '.red_average.uvh5'))
+                hd.write_uvh5(out_path, clobber=True)
+
+        lstbin.lst_bin_files(redundantly_averaged_filepaths, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=True)
+
+        uv4 = io.HERAData(output_lst_file)
+        d4, f4, n4 = uv4.read()
+        # assert that all nsamples and data of lstbinned and red averaged equal to red average then lst bin.
+        for k in d2:
+            if not(k[:2] in reds_data[1] or k[:2][::-1] in reds_data[1]):
+                assert np.all(np.isclose(n4[k], n2[k]))
+                assert np.all(np.isclose(d4[k], d2[k]))
+                assert np.all(np.isclose(f4[k], f2[k]))
 
     def test_lst_bin_arg_parser(self):
         a = lstbin.lst_bin_arg_parser()
