@@ -1174,7 +1174,8 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
         raise TypeError('Input must be a UVData/HERAData object, a string, or a list of either.')
 
 
-def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False, **read_kwargs):
+def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, pick_data_ants=True, nested_dict=False,
+             return_nsamples=False, **read_kwargs):
     '''Load miriad or uvfits files or UVData/HERAData objects into DataContainers, optionally returning
     the most useful metadata. More than one spectral window is not supported. Assumes every baseline
     has the same times present and that the times are in order.
@@ -1188,6 +1189,8 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
         pick_data_ants: boolean, if True and return_meta=True, return only antennas in data
         nested_dict: boolean, if True replace DataContainers with the legacy nested dictionary filetype
             where visibilities and flags are accessed as data[(0,1)]['nn']
+        return_nsamples: boolean, if True, return nsamples data container.
+            default is False.
         read_kwargs : keyword arguments to pass to HERAData.read()
 
     Returns:
@@ -1220,21 +1223,29 @@ def load_vis(input_data, return_meta=False, filetype='miriad', pop_autos=False, 
 
     # convert into nested dict if necessary
     if nested_dict:
-        data, flags = odict(), odict()
+        data, flags, nsamples = odict(), odict(), odict()
         antpairs = [key[0:2] for key in d.keys()]
         for ap in antpairs:
             data[ap] = d[ap]
             flags[ap] = f[ap]
+            nsamples[ap] = n[ap]
     else:
-        data, flags = d, f
+        data, flags, nsamples = d, f, n
 
     # get meta
     if return_meta:
         antpos, ants = hd.get_ENU_antpos(center=True, pick_data_ants=pick_data_ants)
         antpos = odict(zip(ants, antpos))
-        return data, flags, antpos, ants, d.freqs, d.times, d.lsts, d.pols()
+        if return_nsamples:
+            return data, flags, nsamples, antpos, ants, d.freqs, d.times, d.lsts, d.pols()
+        else:
+            return data, flags, antpos, ants, d.freqs, d.times, d.lsts, d.pols()
+
     else:
-        return data, flags
+        if return_nsamples:
+            return data, flags, nsamples
+        else:
+            return data, flags
 
 
 def write_vis(fname, data, lst_array, freq_array, antpos, time_array=None, flags=None, nsamples=None,
