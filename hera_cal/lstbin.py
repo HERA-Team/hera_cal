@@ -16,6 +16,7 @@ from . import utils
 from . import version
 from . import abscal
 from . import io
+from . import redcal
 from . import apply_cal
 from .datacontainer import DataContainer
 
@@ -23,7 +24,7 @@ from .datacontainer import DataContainer
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
-            freq_array=None, lat=-30.72152, verbose=True):
+            freq_array=None, lat=-30.72152, verbose=True, nsamp_list=None):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -62,6 +63,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     freq_array : type=ndarray, 1D array of unique data frequencies channels in Hz. Needed for rephase.
     lat : type=float, latitude of array in degrees North. Needed for rephase.
     verbose : type=bool, if True report feedback to stdout
+    nsamp_list : list of nsamples arrays
 
     Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
@@ -111,6 +113,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     # themselves hold lists of ndarrays
     data = odict()
     flags = odict()
+    nsamples = odict()
     all_lst_indices = set()
 
     # iterate over data_list
@@ -159,11 +162,13 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                 d[key] = np.conj(d[utils.reverse_bl(key)])
                 if flags_list is not None:
                     flags_list[i][key] = flags_list[i][utils.reverse_bl(key)]
+                if nsamp_list is not None:
+                    nsamp_list[i][key] = nsamp_list[i][utils.reverse_bl(key)]
             else:
                 # if key or conj(key) not in data, insert key into data as an odict
                 data[key] = odict()
                 flags[key] = odict()
-
+                nsamples[key] = odict()
             # data[key] is an odict, with keys as grid index integers and
             # values as lists holding the LST bin data: ndarrays of shape (Nfreqs)
 
@@ -175,6 +180,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                     if ind not in data[key]:
                         data[key][ind] = []
                         flags[key][ind] = []
+                        nsamples[key][ind] = []
                     # append data ndarray to LST bin
                     data[key][ind].append(d[key][k])
                     # also insert flags if fed
@@ -182,6 +188,10 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                         flags[key][ind].append(np.zeros_like(d[key][k], np.bool))
                     else:
                         flags[key][ind].append(flags_list[i][key][k])
+                    if nsamp_list is None:
+                        nsamples[key][ind].append(np.ones_like(d[key][k], np.int))
+                    else:
+                        nsamples[key][ind].append(nsamp_list[i][key][k])
 
     # get final lst_bin array
     if truncate_empty:
@@ -190,14 +200,16 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     else:
         # keep all lst_grid bins and fill empty ones with unity data and mark as flagged
         for index in range(len(lst_grid)):
-            if index in all_lst_indices:
-                # skip if index already in data
-                continue
+            # I got rid of this statement because it causes failures if a
+            # subset of baselines dont have data in every LST bin which can happen
+            # if a baseline is flagged on some days an not others.
             for key in list(data.keys()):
                 # fill data with blank data
-                data[key][index] = [np.ones(Nfreqs, np.complex)]
-                flags[key][index] = [np.ones(Nfreqs, np.bool)]
-
+                # if the index is not present.
+                if index not in data[key]:
+                    data[key][index] = [np.ones(Nfreqs, np.complex)]
+                    flags[key][index] = [np.ones(Nfreqs, np.bool)]
+                    nsamples[key][index] = [np.ones(Nfreqs, np.int)]
         # use all LST bins
         lst_bins = lst_grid
 
@@ -228,13 +240,13 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
         real_std = []
         imag_std = []
         bin_count = []
-
         # iterate over sorted LST grid indices in data[key]
         for j, ind in enumerate(sorted(data[key].keys())):
 
             # make data and flag arrays from lists
             d = np.array(data[key][ind])  # shape = (Ndays x Nfreqs)
             f = np.array(flags[key][ind])
+            n = np.array(nsamples[key][ind])
             f[np.isnan(f)] = True
 
             # replace flagged data with nan
@@ -267,11 +279,37 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
 
             # take bin average: real and imag separately
             if median:
-                real_avg.append(np.nanmedian(d.real, axis=0))
-                imag_avg.append(np.nanmedian(d.imag, axis=0))
+                # for median to account for varying nsamples, copy each day by nsamps
+                # this code is loopy landscapes. So avoid execution unless we have to.
+                if not np.all(np.isclose(n, np.median(n))):
+                    dnsamps = np.zeros(d.shape[1], dtype=complex)
+                    for chan in range(d.shape[1]):
+                        samples_r = []
+                        samples_i = []
+                        for dd, nn in zip(d[:, chan], n[:, chan]):
+                            for m in range(int(nn)):
+                                if np.isfinite(dd):
+                                    samples_r.append(dd.real)
+                                    samples_i.append(dd.imag)
+                        dnsamps[chan] = np.median(samples_r) + 1j * np.median(samples_i)
+                    real_avg.append(dnsamps.real)
+                    imag_avg.append(dnsamps.imag)
+                else:
+                    real_avg.append(np.nanmedian(d.real, axis=0))
+                    imag_avg.append(np.nanmedian(d.imag, axis=0))
             else:
-                real_avg.append(np.nanmean(d.real, axis=0))
-                imag_avg.append(np.nanmean(d.imag, axis=0))
+                # for mean ot account for varying nsamples, take nsamples weighted sum.
+                # (inverse variance weighted sum).
+                resum = np.asarray([np.sum((d.real[:, chan] * n[:, chan])[np.isfinite(d.real[:, chan])]) for chan in range(d.shape[1])])
+                re_nsum = np.asarray([np.sum((n[np.isfinite(d.real[:, chan]), chan])) for chan in range(d.shape[1])])
+                imsum = np.asarray([np.sum((d.imag[:, chan] * n[:, chan])[np.isfinite(d.imag[:, chan])]) for chan in range(d.shape[1])])
+                im_nsum = np.asarray([np.sum((n[np.isfinite(d.imag[:, chan]), chan])) for chan in range(d.shape[1])])
+
+                resum[re_nsum > 0.] /= re_nsum[re_nsum > 0.]
+                imsum[im_nsum > 0.] /= im_nsum[im_nsum > 0.]
+
+                real_avg.append(resum)
+                imag_avg.append(imsum)
 
             # get minimum bin flag
             f_min.append(np.nanmin(f, axis=0))
@@ -279,7 +317,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             # get other stats
             real_std.append(np.nanstd(d.real, axis=0))
             imag_std.append(np.nanstd(d.imag, axis=0))
-            bin_count.append(np.nansum(~np.isnan(d), axis=0))
+            bin_count.append(np.nansum(~np.isnan(d) * n, axis=0))
 
         # get final statistics
         d_avg = np.array(real_avg) + 1j * np.array(imag_avg)
@@ -406,6 +444,7 @@ def lst_bin_arg_parser():
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
     a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
+    a.add_argument("--average_redundant_baselines", action="store_true", default=False, help="Redundantly average baselines within and between nights.")
     return a
 
 
@@ -512,9 +551,11 @@ def config_lst_bin_files(data_files, dlst=None, atol=1e-10, lst_start=None, lst_
 
 
 def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_per_file=60,
-                  file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None, 
+                  file_ext="{type}.{time:7.5f}.uvh5", outdir=None, overwrite=False, history='', lst_start=None,
                   lst_stop=None, fixed_lst_start=False, atol=1e-6, sig_clip=True, sigma=5.0, min_N=5, rephase=False,
-                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, **kwargs):
+                  output_file_select=None, Nbls_to_load=None, ignore_flags=False, average_redundant_baselines=False,
+                  bl_error_tol=1.0, include_autos=True,
+                  **kwargs):
     """
     LST bin a series of UVH5 files with identical frequency bins, but varying
     time bins. Output file meta data (frequency bins, antennas positions, time_array)
@@ -556,6 +597,14 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     Nbls_to_load : int, default=None, Number of baselines to load and bin simultaneously. If Nbls exceeds this
         than iterate over an outer loop until all baselines are binned. Default is to load all baselines at once.
     ignore_flags : bool, if True, ignore the flags in the input files, such that all input data in included in binning.
+    average_redundant_baselines : bool, if True, baselines that are redundant between nights will be averaged together.
+                                  When this is set to true, Nbls_to_load is interpreted as the number of redundant groups
+                                  to load simultaneously. The number of data waterfalls can be substantially larger in some
+                                  cases.
+    include_autos : bool, if True, include autocorrelations in redundant baseline averages.
+                    default is True.
+    bl_error_tol : float, tolerance within which baselines are considered redundant
+                   between nights for purposes of average_redundant_baselines.
     kwargs : type=dictionary, keyword arguments to pass to io.write_vis()
 
     Result:
@@ -608,32 +657,33 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = Nbls
     Nblgroups = Nbls // Nbls_to_load + 1
-    blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
-    blgroups = [blg for blg in blgroups if len(blg) > 0]
-
+    if not average_redundant_baselines:
+        blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
+        blgroups = [blg for blg in blgroups if len(blg) > 0]
+    else:
+        bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos)
+        blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(len(bldicts))]
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
         fmin = f_lst[0] - (dlst / 2 + atol)
         fmax = f_lst[-1] + (dlst / 2 + atol)
-
         # iterate over baseline groups (for memory efficiency)
         data_conts, flag_conts, std_conts, num_conts = [], [], [], []
         for bi, blgroup in enumerate(blgroups):
             utils.echo("starting baseline-group {} / {}: {}".format(bi + 1, len(blgroups), datetime.datetime.now()), type=0, verbose=verbose)
-
             # create empty data lists
             data_list = []
             file_list = []
             flgs_list = []
             lst_list = []
-     
+            nsamp_list = []
             # iterate over individual nights to bin
             for j in range(len(data_files)):
                 nightly_data_list = []
                 nightly_flgs_list = []
                 nightly_lst_list = []
-
+                nightly_nsamp_list = []
                 # iterate over files in each night, and open files that fall into this output file LST range
                 for k in range(len(data_files[j])):
                     # unwrap la relative to itself
@@ -651,7 +701,23 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     # load data: only times needed for this output LST-bin file
                     hd = io.HERAData(data_files[j][k], filetype='uvh5')
                     try:
-                        data, flags, nsamps = hd.read(bls=blgroup, times=tarr[tinds])
+                        if average_redundant_baselines:
+                            bls_to_load = []
+                            key_baselines = []  # map first baseline in each group to
+                            # first baseline in group on earliest night.
+                            reds = []
+                            for bldict in blgroup:
+                                # only load group if present in the current night.
+                                if j in bldict:
+                                    # key to earliest night with this redundant group.
+                                    key_bl = bldict[np.min(list(bldict.keys()))][0]
+                                    key_baselines.append(key_bl)
+                                    reds.append(bldict[j])
+                                    for bl in bldict[j]:
+                                        bls_to_load.append(bl)
+                        else:
+                            bls_to_load = blgroup
+                        data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
                         data.phase_type = 'drift'
                     except ValueError:
                         # if no baselines in the file, skip this file
@@ -672,10 +738,19 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                             apply_cal.calibrate_in_place(data, gains, data_flags=flags, cal_flags=cal_flags,
                                                          gain_convention=uvc.gain_convention)
 
+                    # redundantly average baselines, keying to baseline group key
+                    # on earliest night.
+                    if average_redundant_baselines:
+                        if ignore_flags:
+                            raise NotImplementedError("average_redundant_baselines with ignore_flags True is not implemented.")
+                        utils.red_average(data=data, flags=flags, nsamples=nsamps,
+                                          bl_tol=bl_error_tol, inplace=True,
+                                          reds=reds, red_bl_keys=key_baselines)
                     file_list.append(data_files[j][k])
                     nightly_data_list.append(data)  # this is data
                     nightly_flgs_list.append(flags)  # this is flgs
                     nightly_lst_list.append(larr[tinds])  # this is lsts
+                    nightly_nsamp_list.append(nsamps)
 
                 # skip if nothing accumulated in nightly files
                 if len(nightly_data_list) == 0:
@@ -685,8 +760,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 data_list.extend(nightly_data_list)
                 flgs_list.extend(nightly_flgs_list)
                 lst_list.extend(nightly_lst_list)
-
-                del nightly_data_list, nightly_flgs_list, nightly_lst_list
+                nsamp_list.extend(nightly_nsamp_list)
+                del nightly_data_list, nightly_flgs_list, nightly_lst_list, nightly_nsamp_list
 
             # skip if data_list is empty
             if len(data_list) == 0:
@@ -697,15 +772,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 flgs_list = None
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
-                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip,
+                                 lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamp_list=nsamp_list,
                                  sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
-
             # append to lists
             data_conts.append(bin_data)
             flag_conts.append(flag_data)
             std_conts.append(std_data)
             num_conts.append(num_data)
-
         # if all blgroups were empty skip
         if len(data_conts) == 0:
             utils.echo("data_list is empty for beginning LST {}".format(f_lst[0]), verbose=verbose)
@@ -722,7 +795,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         kwargs['history'] = file_history + version.history_string()
 
         # form integration time array
-        _Nbls = len(set([bl[:2] for bl in list(bin_data.keys())])) 
+        _Nbls = len(set([bl[:2] for bl in list(bin_data.keys())]))
         kwargs['integration_time'] = np.ones(len(bin_lst) * _Nbls, dtype=np.float64) * integration_time
 
         # file in data ext
@@ -739,7 +812,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         if os.path.exists(bin_file) and overwrite is False:
             utils.echo("{} exists, not overwriting".format(bin_file), verbose=verbose)
             continue
-
         # write to file
         io.write_vis(bin_file, bin_data, bin_lst, freq_array, antpos, flags=flag_data, verbose=verbose,
                      nsamples=num_data, filetype='uvh5', x_orientation=x_orientation, **kwargs)
@@ -855,3 +927,60 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     clip_flags[clip] = True
 
     return clip_flags
+
+
+def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True):
+    """
+    Helper function to generate baseline dicts to keep track of reds between nights.
+
+    Parameters:
+    -----------
+
+    hds : list of HERAData objects. Can have no data loaded (preferable) and should refer to single files.
+          each object should be representative of a night that is going to be combined in LST binner.
+          each HERAData object must be minimally redundant (already have redundant baselines averaged together).
+    bl_error_tol : float (meters), optional. baselines whose vector difference are within this tolerance are considered
+                   redundant. Default is 1.0 meter.
+    include_autos : bool, if True, include autos in bldicts.
+                    default is True.
+    Outputs:
+    ---------
+    list of dictionaries of the form {0: [(a0, b0), (a0, c0)...], 1: [(a1, b1),.., ], ... Nnight: [(ANnight, BNnight), ...,]}.
+    Each dictionary represents a unique baseline length and orientation.
+    where the key of each dictionary is an index for each night to be LST binned and each value
+    is the antenna pair representing the unique baseline on that night.
+    some baseline dicts will only have a subset of nights.
+    """
+    # check that all hds are minimally redundant
+    blvecs = {}
+    bldicts = []
+    for night, hd in enumerate(hds):
+        assert len(hd.filepaths) == 1, 'HERAData objects must be for single data files.'
+        reds = redcal.get_reds(hd.antpos, bl_error_tol=bl_error_tol, pols=hd.pols[0], include_autos=include_autos)
+        # read to get baselines in data
+        d, _, _ = hd.read()
+        data_bls = d.antpairs()
+        reds = [[bl for bl in grp if bl[:2] in data_bls or bl[:2][::-1] in data_bls] for grp in reds]
+        reds = [grp for grp in reds if len(grp) > 0]
+        reds = [[bl[:2] for bl in grp] for grp in reds]
+        for grp in reds:
+            for bl in grp:
+                # store baseline vectors for all data.
+                blvecs[bl] = hd.antpos[bl[1]] - hd.antpos[bl[0]]
+        # otherwise, loop through baselines, for each bldict, see if the first
+        # entry matches (or conjugate matches). If yes, append to that bldict
+        for grp in reds:
+            present = False
+            for bldict in bldicts:
+                for i in bldict:
+                    if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol:
+                        bldict[night] = grp
+                        present = True
+                        break
+                    elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
+                        bldict[night] = [bl[::-1] for bl in grp]
+                        present = True
+                        break
+            if not present:
+                bldicts.append({night: grp})
+    return bldicts
