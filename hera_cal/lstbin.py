@@ -193,7 +193,6 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                     else:
                         nsamples[key][ind].append(nsamp_list[i][key][k])
 
-
     # get final lst_bin array
     if truncate_empty:
         # use only lst_grid bins that have data in them
@@ -241,14 +240,6 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
         real_std = []
         imag_std = []
         bin_count = []
-        # create empty LST grided data.
-        #real_avg = np.zeros((len(lst_grid), Nfreqs), dtype=complex)
-        #imag_avg = np.zeros_like(real_avg)
-        #f_min = np.zeros_like(real_avg)
-        #real_std = np.zeros_like(real_avg)
-        #imag_std = np.zeros_like(real_avg)
-        #bin_count = np.zeros_like(real_avg)
-
         # iterate over sorted LST grid indices in data[key]
         for j, ind in enumerate(sorted(data[key].keys())):
 
@@ -295,7 +286,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                     for chan in range(d.shape[1]):
                         samples_r = []
                         samples_i = []
-                        for dd, nn in zip(d[:,chan], n[:,chan]):
+                        for dd, nn in zip(d[:, chan], n[:, chan]):
                             for m in range(int(nn)):
                                 if np.isfinite(dd):
                                     samples_r.append(dd.real)
@@ -711,8 +702,8 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     try:
                         if average_redundant_baselines:
                             bls_to_load = []
-                            key_baselines = [] # map first baseline in each group to
-                                               # first baseline in group on earliest night.
+                            key_baselines = []  # map first baseline in each group to
+                            # first baseline in group on earliest night.
                             reds = []
                             for bldict in blgroup:
                                 # only load group if present in the current night.
@@ -978,26 +969,17 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True):
         # otherwise, loop through baselines, for each bldict, see if the first
         # entry matches (or conjugate matches). If yes, append to that bldict
         for grp in reds:
-            present=False
+            present = False
             for bldict in bldicts:
                 for i in bldict:
                     if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol:
                         bldict[night] = grp
-                        present=True
+                        present = True
                         break
                     elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
                         bldict[night] = [bl[::-1] for bl in grp]
-                        present=True
+                        present = True
                         break
             if not present:
-                bldicts.append({night:grp})
+                bldicts.append({night: grp})
     return bldicts
-
-
-
-
-
-
-
-
-        # now go through each baseline, see if is in any of the baseline dicts.

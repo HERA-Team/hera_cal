@@ -110,7 +110,7 @@ class Test_lstbin(object):
     def test_lstbin_vary_nsamps(self):
         # test execution
         lst_output, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
-                    median=True, lst_low=0, lst_hi=np.pi, verbose=False)
+                                                                                   median=True, lst_low=0, lst_hi=np.pi, verbose=False)
         output = lstbin.lst_bin(self.data_list + [data_output], self.lst_list + [lst_output], flags_list=self.flgs_list + [flags_output], dlst=None,
                                 nsamp_list=self.nsmp_list + [nsamples_output], median=True, verbose=False)
         # test that nsamples_output are all 3.
@@ -120,7 +120,7 @@ class Test_lstbin(object):
         assert np.allclose(output[-1][(24, 25, 'ee')].real[190, 30], 4)
         assert np.allclose(output[-1][(24, 25, 'ee')].real[220, 30], 2)
         _, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
-                    median=False, lst_low=0, lst_hi=np.pi, verbose=False)
+                                                                          median=False, lst_low=0, lst_hi=np.pi, verbose=False)
         output = lstbin.lst_bin(self.data_list + [data_output], self.lst_list + [lst_output], flags_list=self.flgs_list + [flags_output], dlst=None,
                                 nsamp_list=self.nsmp_list + [nsamples_output], median=False, verbose=False)
         # test that nsamples_output are all 3.
@@ -129,7 +129,6 @@ class Test_lstbin(object):
         assert np.allclose(output[-1][(24, 25, 'ee')].real[100, 30], 6)
         assert np.allclose(output[-1][(24, 25, 'ee')].real[190, 30], 4)
         assert np.allclose(output[-1][(24, 25, 'ee')].real[220, 30], 2)
-
 
     def test_lst_align(self):
         # test basic execution
@@ -311,23 +310,29 @@ class Test_lstbin(object):
         reds_data = redcal.get_reds(antpos, include_autos=True)
         reds_data = [[bl[:2] for bl in grp] for grp in reds_data]
         # build redundantly averaged individual files and write them to disk.
-        for flist in self.data_files:
+        for fnight, flist in enumerate(self.data_files):
             redundantly_averaged_filepaths.append([])
             for fstr in flist:
                 hd = io.HERAData(fstr)
                 hd.read()
-                utils.red_average(hd, inplace=True,reds=reds_data)
+                if fnight == 1:
+                    # conjugate a group to test correctly keying cojugates.
+                    reds_average = copy.deepcopy(reds_data)
+                    reds_average[1] = [bl[::-1] for bl in reds_average[1]]
+                else:
+                    reds_to_average = reds_data
+                utils.red_average(hd, inplace=True, reds=reds_data)
                 out_path = os.path.join(tmp_path, fstr.split('/')[-1].replace('.uvh5', '.red_average.uvh5'))
                 hd.write_uvh5(out_path)
                 redundantly_averaged_filepaths[-1].append(out_path)
         # test NotImplementedError when we set ignore_flags to True and average_redundant_baselines to True
         pytest.raises(NotImplementedError, lstbin.lst_bin_files, data_files=self.data_files,
-                                            outdir=tmp_path, overwrite=True, median=False,
-                                            verbose=False, file_ext=file_ext,
-                                            ignore_flags=True, average_redundant_baselines=True)
+                      outdir=tmp_path, overwrite=True, median=False,
+                      verbose=False, file_ext=file_ext,
+                      ignore_flags=True, average_redundant_baselines=True)
         # get redundantly averaged nsamples.
         lstbin.lst_bin_files(redundantly_averaged_filepaths, outdir=tmp_path, overwrite=True, median=False,
-                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=False)
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=True)
         output_lst_file = os.path.join(tmp_path, "zen.ee.LST.0.20124.uvh5")
         output_std_file = os.path.join(tmp_path, "zen.ee.STD.0.20124.uvh5")
         assert os.path.exists(output_lst_file)
@@ -372,7 +377,7 @@ class Test_lstbin(object):
             for fstr in flist:
                 hd = io.HERAData(fstr)
                 hd.read(bls=bls_missing_first_group)
-                utils.red_average(hd, inplace=True,reds=reds_data)
+                utils.red_average(hd, inplace=True, reds=reds_data)
                 out_path = os.path.join(tmp_path, fstr.split('/')[-1].replace('.uvh5', '.red_average.uvh5'))
                 hd.write_uvh5(out_path, clobber=True)
 
