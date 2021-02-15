@@ -444,6 +444,7 @@ def lst_bin_arg_parser():
     a.add_argument("--vis_units", default='Jy', type=str, help="visibility units of output files.")
     a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
+    a.add_argument("--average_redundant_baselines", action="store_true", default=False, help="Redundantly average baselines within and between nights.")
     return a
 
 
