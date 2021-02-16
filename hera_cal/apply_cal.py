@@ -192,7 +192,8 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         data_infilename: filename of the data to be calibrated.
         data_outfilename: filename of the resultant data file with the new calibration and flags.
         new_calibration: filename of the calfits file (or a list of filenames) for the calibration
-        old_calibration: filename of the calfits file (or a list of filenames) for the calibration	        old_calibration: filename of the calfits file for the calibration
+            to be applied, along with its new flags (if any).
+        old_calibration: filename of the calfits file (or a list of filenames) for the calibration
             to be unapplied. Default None means that the input data is raw (i.e. uncalibrated).
         flag_file: optional path to file containing flags to be ORed with flags in input data. Must have
             the same shape as the data.
