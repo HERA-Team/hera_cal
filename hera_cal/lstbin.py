@@ -651,27 +651,48 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     integration_time = np.median(hd.integration_time)
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
     # get total antpos and unique baselines from entire list.
-    all_bls = []
-    for dlist in data_files:
-        hd = io.HERAData(dlist[-1])
-        # get baselines from data and form baseline groups
-        bls = sorted(hd.get_antpairs())
-        for bl in bls:
-            if bl not in all_bls and bl[::-1] not in all_bls:
-                all_bls.append(bl)
-        for a in hd.antpos:
-            if a not in antpos:
-                antpos[a] = hd.antpos[a]
-    Nbls = len(all_bls)
-    if Nbls_to_load in [None, 'None', 'none']:
-        Nbls_to_load = Nbls
-    Nblgroups = Nbls // Nbls_to_load + 1
+    # need baselines per night.
+
+    # handle different baselines on each night.
     if not average_redundant_baselines:
-        blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
-        blgroups = [blg for blg in blgroups if len(blg) > 0]
+        bls = {}
+        Nbls = {}
+        Nblgroups = {}
+        blgroups = {}
+        for j, dlist in enumerate(data_files):
+            hd = io.HERAData(dlist[-1])
+            # get baselines from data and form baseline groups
+            bls[j] = sorted(hd.get_antpairs())
+            Nbls[j] = len(bls[j])
+            for a in hd.antpos:
+                if a not in antpos:
+                    antpos[a] = hd.antpos[a]
+        if Nbls_to_load in [None, 'None', 'none']:
+            Nbls_to_load = {k: Nbls[k] for k in Nbls}
+        for j in range(len(data_files)):
+            Nblgroups[j] = Nbls[j] // Nbls_to_load[j] + 1
+            blgroups[j] = [bls[i * Nbls_to_load[j]:(i + 1) * Nbls_to_load[j]] for i in range(Nblgroups[j])]
+            blgroups[j] = [blg for blg in blgroups[j] if len(blg) > 0]
+            # We dont support situation where blgroups are different from night to night and Nbls_to_load is greater then 1.
+            # because this can lead to the same baseline ending up in different groups on the different nights.
+        baseline_values = [list(bls.values())]
+        if len(baseline_values) > 1:
+            baselines_consistent = np.all([blv == baseline_values[0] for blv in baseline_values[1:]])
+        else:
+            baselines_consistent = False
+        if np.any(np.array(list(Nblgroups.values()))>1.) and baselines_equal_first:
+            raise NotImplementedError("We do not currently support Nblgroups > 1 and different sets of baselines on different nights.")
+
+
     else:
         bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos)
-        blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(len(bldicts))]
+        if Nbls_to_load in [None, 'None', 'none']:
+            Nblgroups = 1
+            Nbls_to_load = len(bldicts)
+        else:
+            Nblgroups = len(bldicts) // Nbls_to_load + 1
+        #print(bldicts)
+        blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
@@ -679,7 +700,12 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         fmax = f_lst[-1] + (dlst / 2 + atol)
         # iterate over baseline groups (for memory efficiency)
         data_conts, flag_conts, std_conts, num_conts = [], [], [], []
-        for bi, blgroup in enumerate(blgroups):
+        if not average_redundant_baselines:
+            blgrps = blgroups[i]
+        else:
+            blgrps = blgroups
+        for bi, blgroup in enumerate(blgrps):
+            print(blgroup)
             utils.echo("starting baseline-group {} / {}: {}".format(bi + 1, len(blgroups), datetime.datetime.now()), type=0, verbose=verbose)
             # create empty data lists
             data_list = []
@@ -711,6 +737,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     hd = io.HERAData(data_files[j][k], filetype='uvh5')
                     try:
                         if average_redundant_baselines:
+                            print('averaging redundant baselines.')
                             bls_to_load = []
                             key_baselines = []  # map first baseline in each group to
                             # first baseline in group on earliest night.
@@ -725,10 +752,14 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                                     for bl in bldict[j]:
                                         bls_to_load.append(bl)
                         else:
+                            print('not averaging redundant baselines.')
                             bls_to_load = blgroup
+                            print(bls_to_load)
                         data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
                         data.phase_type = 'drift'
-                    except ValueError:
+                    except ValueError as e:
+                        print(e)
+                        print(bls_to_load)
                         # if no baselines in the file, skip this file
                         utils.echo("No baselines from blgroup {} found in {}, skipping file for these bls".format(bi + 1, data_files[j][k]), verbose=verbose)
                         continue
