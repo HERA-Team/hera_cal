@@ -660,6 +660,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         Nbls_to_load = len(bldicts)
     Nblgroups = len(bldicts) // Nbls_to_load + 1
     blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
+    blgroups = [blg for blg in blgroups if len(blg) > 0]
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
