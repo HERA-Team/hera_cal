@@ -577,11 +577,13 @@ class VisClean(object):
         model_rms_threshold : float, optional
             factor that rms of model in a channel or integration needs to exceed the rms of unflagged data
             to be flagged. only used if flag_model_rms_outliers is true.
-        filter_kwargs: dict. NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
+        filter_kwargs: dict. Filtering arguments depending on type of filtering.
+            NOTE: Unlike the dspec.fourier_filter function, cache is not passed in filter_kwargs.
             dictionary with options for fitting techniques.
             if filter2d is true, this should be a 2-tuple or 2-list
             of dictionaries. The dictionary for each dimension must
             specify the following for each fitting method.
+            Also see uvtools.dspec.fourier_filter where these kwargs are listed.
                 * 'dft':
                     'fundamental_period': float or 2-tuple
                         the fundamental_period of dft modes to fit. The number of
