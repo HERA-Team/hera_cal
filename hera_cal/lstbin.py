@@ -646,10 +646,19 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['start_jd'] = start_jd
     integration_time = np.median(hd.integration_time)
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
-
-    # get baselines from data and form baseline groups
-    bls = sorted(hd.get_antpairs())
-    Nbls = len(bls)
+    # get total antpos and unique baselines from entire list.
+    all_bls = []
+    for dlist in data_files:
+        hd = io.HERAData(dlist[-1])
+        # get baselines from data and form baseline groups
+        bls = sorted(hd.get_antpairs())
+        for bl in bls:
+            if bl not in all_bls and bl[::-1] not in all_bls:
+                all_bls.append(bl)
+        for a in hd.antpos:
+            if a not in antpos:
+                antpos[a] = hd.antpos[a]
+    Nbls = len(all_bls)
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = Nbls
     Nblgroups = Nbls // Nbls_to_load + 1
