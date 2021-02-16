@@ -661,13 +661,14 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     Nbls = len(all_bls)
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = Nbls
-    Nblgroups = Nbls // Nbls_to_load + 1
     if not average_redundant_baselines:
+        Nblgroups = Nbls // Nbls_to_load + 1
         blgroups = [bls[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
         blgroups = [blg for blg in blgroups if len(blg) > 0]
     else:
         bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos)
-        blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(len(bldicts))]
+        Nblgroups = len(bldicts) // Nbls_to_load + 1
+        blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
