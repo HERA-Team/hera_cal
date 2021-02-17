@@ -12,7 +12,7 @@ from . import utils
 from . import version
 from .noise import predict_noise_variance_from_autos
 from .datacontainer import DataContainer
-from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol
+from .utils import split_pol, conj_pol, split_bl, reverse_bl, join_bl, join_pol, comply_pol, per_antenna_modified_z_scores
 from .io import HERAData, HERACal, write_cal, save_redcal_meta
 from .apply_cal import calibrate_in_place
 
@@ -1863,7 +1863,6 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         outdir = os.path.dirname(input_data)
 
     # loop over calibration, removing bad antennas and re-running if necessary
-    from hera_qm.ant_metrics import per_antenna_modified_z_scores
     run_number = 0
     while True:
         # Run redundant calibration

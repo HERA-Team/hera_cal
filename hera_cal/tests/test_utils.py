@@ -506,6 +506,15 @@ def test_chisq():
     assert len(chisq_per_ant) == 0
 
 
+def test_per_antenna_modified_z_scores():
+    metric = {(0, 'Jnn'): 1, (50, 'Jnn'): 0, (2, 'Jnn'): 2,
+              (2, 'Jee'): 2000, (0, 'Jee'): -300}
+    zscores = utils.per_antenna_modified_z_scores(metric)
+    np.testing.assert_almost_equal(zscores[0, 'Jnn'], 0, 10)
+    np.testing.assert_almost_equal(zscores[50, 'Jnn'], -0.6745, 10)
+    np.testing.assert_almost_equal(zscores[2, 'Jnn'], 0.6745, 10)
+
+
 def test_gp_interp1d():
     # load data
     dfiles = glob.glob(os.path.join(DATA_PATH, "zen.2458043.4*.xx.HH.XRAA.uvh5"))
@@ -589,7 +598,7 @@ def test_red_average():
 
     # try with DataContainer
     data_avg, flag_avg, _ = utils.red_average(data, reds, flags=flags, inplace=False)
-    assert isinstance(data_avg, datacontainer.DataContainer)
+    assert isinstance(data_avg, (datacontainer.DataContainer, dict))
     assert len(data_avg) == len(reds)
     assert np.isclose(data_avg[blkey], davg).all()
     assert np.isclose(flag_avg[blkey], hda.get_flags(blkey)).all()
