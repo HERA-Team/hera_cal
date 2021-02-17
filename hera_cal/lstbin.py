@@ -650,49 +650,21 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     kwargs['start_jd'] = start_jd
     integration_time = np.median(hd.integration_time)
     assert np.all(np.abs(np.diff(times) - np.median(np.diff(times))) < 1e-6), 'All integrations must be of equal length (BDA not supported).'
-    # get total antpos and unique baselines from entire list.
-    # need baselines per night.
-
-    # handle different baselines on each night.
-    if not average_redundant_baselines:
-        bls = {}
-        Nbls = {}
-        Nblgroups = {}
-        blgroups = {}
-        for j, dlist in enumerate(data_files):
-            hd = io.HERAData(dlist[-1])
-            # get baselines from data and form baseline groups
-            bls[j] = sorted(hd.get_antpairs())
-            Nbls[j] = len(bls[j])
-            for a in hd.antpos:
-                if a not in antpos:
-                    antpos[a] = hd.antpos[a]
-        if Nbls_to_load in [None, 'None', 'none']:
-            Nbls_to_load = {k: Nbls[k] for k in Nbls}
-        for j in range(len(data_files)):
-            Nblgroups[j] = Nbls[j] // Nbls_to_load[j] + 1
-            blgroups[j] = [bls[i * Nbls_to_load[j]:(i + 1) * Nbls_to_load[j]] for i in range(Nblgroups[j])]
-            blgroups[j] = [blg for blg in blgroups[j] if len(blg) > 0]
-            # We dont support situation where blgroups are different from night to night and Nbls_to_load is greater then 1.
-            # because this can lead to the same baseline ending up in different groups on the different nights.
-        baseline_values = [list(bls.values())]
-        if len(baseline_values) > 1:
-            baselines_consistent = np.all([blv == baseline_values[0] for blv in baseline_values[1:]])
-        else:
-            baselines_consistent = False
-        if np.any(np.array(list(Nblgroups.values()))>1.) and baselines_equal_first:
-            raise NotImplementedError("We do not currently support Nblgroups > 1 and different sets of baselines on different nights.")
-
-
-    else:
-        bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos)
-        if Nbls_to_load in [None, 'None', 'none']:
-            Nblgroups = 1
-            Nbls_to_load = len(bldicts)
-        else:
-            Nblgroups = len(bldicts) // Nbls_to_load + 1
-        #print(bldicts)
-        blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
+    # get antpos over all nights
+    for dlist in data_files:
+        hd = io.HERAData(dlist[-1])
+        for a in hd.antpos:
+            if a not in antpos:
+                antpos[a] = hd.antpos[a]
+    # generate a list of dictionaries which contain the nights occupied by each unique baseline
+    # (or unique baseline group if average_redundant_baselines is true)
+    bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos,
+                          redundant=average_redundant_baselines)
+    if Nbls_to_load in [None, 'None', 'none']:
+        Nbls_to_load = len(bldicts)
+    Nblgroups = len(bldicts) // Nbls_to_load + 1
+    blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
+    blgroups = [blg for blg in blgroups if len(blg) > 0]
     # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
@@ -700,12 +672,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
         fmax = f_lst[-1] + (dlst / 2 + atol)
         # iterate over baseline groups (for memory efficiency)
         data_conts, flag_conts, std_conts, num_conts = [], [], [], []
-        if not average_redundant_baselines:
-            blgrps = blgroups[i]
-        else:
-            blgrps = blgroups
-        for bi, blgroup in enumerate(blgrps):
-            print(blgroup)
+        for bi, blgroup in enumerate(blgroups):
             utils.echo("starting baseline-group {} / {}: {}".format(bi + 1, len(blgroups), datetime.datetime.now()), type=0, verbose=verbose)
             # create empty data lists
             data_list = []
@@ -736,30 +703,22 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                     # load data: only times needed for this output LST-bin file
                     hd = io.HERAData(data_files[j][k], filetype='uvh5')
                     try:
-                        if average_redundant_baselines:
-                            print('averaging redundant baselines.')
-                            bls_to_load = []
-                            key_baselines = []  # map first baseline in each group to
-                            # first baseline in group on earliest night.
-                            reds = []
-                            for bldict in blgroup:
-                                # only load group if present in the current night.
-                                if j in bldict:
-                                    # key to earliest night with this redundant group.
-                                    key_bl = bldict[np.min(list(bldict.keys()))][0]
-                                    key_baselines.append(key_bl)
-                                    reds.append(bldict[j])
-                                    for bl in bldict[j]:
-                                        bls_to_load.append(bl)
-                        else:
-                            print('not averaging redundant baselines.')
-                            bls_to_load = blgroup
-                            print(bls_to_load)
+                        bls_to_load = []
+                        key_baselines = []  # map first baseline in each group to
+                        # first baseline in group on earliest night.
+                        reds = []
+                        for bldict in blgroup:
+                            # only load group if present in the current night.
+                            if j in bldict:
+                                # key to earliest night with this redundant group.
+                                key_bl = bldict[np.min(list(bldict.keys()))][0]
+                                key_baselines.append(key_bl)
+                                reds.append(bldict[j])
+                                for bl in bldict[j]:
+                                    bls_to_load.append(bl)
                         data, flags, nsamps = hd.read(bls=bls_to_load, times=tarr[tinds])
                         data.phase_type = 'drift'
-                    except ValueError as e:
-                        print(e)
-                        print(bls_to_load)
+                    except ValueError:
                         # if no baselines in the file, skip this file
                         utils.echo("No baselines from blgroup {} found in {}, skipping file for these bls".format(bi + 1, data_files[j][k]), verbose=verbose)
                         continue
@@ -969,7 +928,7 @@ def sigma_clip(array, flags=None, sigma=4.0, axis=0, min_N=4):
     return clip_flags
 
 
-def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True):
+def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
     """
     Helper function to generate baseline dicts to keep track of reds between nights.
 
@@ -977,19 +936,25 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True):
     -----------
 
     hds : list of HERAData objects. Can have no data loaded (preferable) and should refer to single files.
-          each object should be representative of a night that is going to be combined in LST binner.
-          each HERAData object must be minimally redundant (already have redundant baselines averaged together).
     bl_error_tol : float (meters), optional. baselines whose vector difference are within this tolerance are considered
                    redundant. Default is 1.0 meter.
     include_autos : bool, if True, include autos in bldicts.
                     default is True.
+    redundant : optional, if True, each bldict stores redundant group. If False, each bldict will contain a length-1 group for each baseline
+                over all the nights.
+                default is False.
     Outputs:
     ---------
-    list of dictionaries of the form {0: [(a0, b0), (a0, c0)...], 1: [(a1, b1),.., ], ... Nnight: [(ANnight, BNnight), ...,]}.
-    Each dictionary represents a unique baseline length and orientation.
-    where the key of each dictionary is an index for each night to be LST binned and each value
-    is the antenna pair representing the unique baseline on that night.
-    some baseline dicts will only have a subset of nights.
+    If redundant:
+        list of dictionaries of the form {0: [(a0, b0), (a0, c0)...], 1: [(a1, b1),.., ], ... Nnight: [(ANnight, BNnight), ...,]}.
+        Each dictionary represents a unique baseline length and orientation.
+        where the key of each dictionary is an index for each night to be LST binned and each value
+        is the antenna pair representing the unique baseline on that night.
+        some baseline dicts will only have a subset of nights.
+    If not redundant:
+        list of dictionaries of form {0: [(a,b)], 1:[(a, b)], 4:[(a,b)]}
+        In other words, each baseline dict corresponds to a unique baseline rather then a group
+        and each value is that baseline in a length 1 list and each key is each night in which the baseline is present.
     """
     # check that all hds are minimally redundant
     blvecs = {}
@@ -1010,17 +975,41 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True):
         # otherwise, loop through baselines, for each bldict, see if the first
         # entry matches (or conjugate matches). If yes, append to that bldict
         for grp in reds:
-            present = False
-            for bldict in bldicts:
-                for i in bldict:
-                    if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol:
-                        bldict[night] = grp
-                        present = True
-                        break
-                    elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
-                        bldict[night] = [bl[::-1] for bl in grp]
-                        present = True
-                        break
-            if not present:
-                bldicts.append({night: grp})
+            if redundant:
+                present = False
+                for bldict in bldicts:
+                    # check if baseline group occured in previous nights
+                    # if it did, add it to the appropriate bldict.
+                    for i in bldict:
+                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol:
+                            bldict[night] = grp
+                            present = True
+                            break
+                        elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
+                            bldict[night] = [bl[::-1] for bl in grp]
+                            present = True
+                            break
+                if not present:
+                    # this baseline group has not occured in previous nights
+                    # add it.
+                    bldicts.append({night: grp})
+            else:
+                for bl in grp:
+                    present = False
+                    # check if baseline occured in previous nights
+                    # if it did, add it to its corresponding baseline dictionary.
+                    for bldict in bldicts:
+                        for i in bldict:
+                            if bl in bldict[i]:
+                                bldict[night] = [bl]
+                                present = True
+                                break
+                            if bl[::-1] in bldict[i]:
+                                bldict[night] = [bl[::-1]]
+                                present = True
+                                break
+                    if not present:
+                        # if this baseline does not appear in previous nights
+                        # add it with this night.
+                        bldicts.append({night:[bl]})
     return bldicts
