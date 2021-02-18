@@ -1071,7 +1071,7 @@ def gp_interp1d(x, y, x_eval=None, flags=None, length_scale=1.0, nl=1e-10,
     flag_indices = {}
     for i in range(flags.shape[1]):
         # hash the flag pattern
-        h = hash(flags[:, i].tostring())
+        h = hash(flags[:, i].tobytes())
         # append to list
         if h not in flag_hashes:
             flag_hashes.append(h)
