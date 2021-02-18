@@ -1506,7 +1506,7 @@ class TestRunMethods(object):
             sys.stdout = open(os.devnull, 'w')
             cal = om.redcal_run(input_data, verbose=True, ant_z_thresh=1.8, add_to_history='testing',
                                 a_priori_ex_ants_yaml=os.path.join(DATA_PATH, 'test_input', 'a_priori_flags_sample.yaml'),
-                                iter0_prefix='.iter0', ant_metrics_file=ant_metrics_file, clobber=True)
+                                iter0_prefix='.iter0', metrics_files=ant_metrics_file, clobber=True)
 
             hd = io.HERAData(input_data)
             cal0 = om.redcal_iteration(hd, ex_ants=[11, 50])
@@ -1608,7 +1608,7 @@ class TestRunMethods(object):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sys.stdout = open(os.devnull, 'w')
-            cal = om.redcal_run(hd, ant_metrics_file=ant_metrics_file, clobber=True)
+            cal = om.redcal_run(hd, metrics_files=ant_metrics_file, clobber=True)
             sys.stdout = sys.__stdout__
         assert len(cal) != 0
         shutil.rmtree(os.path.join(DATA_PATH, 'test_output/temp.uv'))
@@ -1620,10 +1620,10 @@ class TestRunMethods(object):
             cal = om.redcal_run({})
 
     def test_redcal_argparser(self):
-        sys.argv = [sys.argv[0], 'a', '--ant_metrics_file', 'b', '--ex_ants', '5', '6', '--verbose']
+        sys.argv = [sys.argv[0], 'a', '--metrics_files', 'b', '--ex_ants', '5', '6', '--verbose']
         a = om.redcal_argparser()
         assert a.input_data == 'a'
-        assert a.ant_metrics_file == 'b'
+        assert a.metrics_files == ['b']
         assert a.ex_ants == [5, 6]
         assert a.gain == 0.4
         assert a.verbose is True
