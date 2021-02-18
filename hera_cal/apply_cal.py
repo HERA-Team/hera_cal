@@ -219,8 +219,6 @@ def apply_cal(data_infilename, data_outfilename, new_calibration, old_calibratio
         add_to_history: appends a string to the history of the output file. This will preceed combined histories
             of flag_file (if applicable), new_calibration and, old_calibration (if applicable).
         clobber: if True, overwrites existing file at outfilename
-        overwrite_data_flags bool, optional
-            If True, overwrite data flags with calibration flags.
         redundant_average : bool, optional
             If True, redundantly average calibrated data and save to <data_outfilename>.red_avg.<filetype_out>
         redundant_weights : datacontainer, optional.
