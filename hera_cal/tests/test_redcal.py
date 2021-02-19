@@ -167,7 +167,7 @@ class TestMethods(object):
         new_reds = om.filter_reds(reds, max_dims=2)
         ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
         assert ant_inds == set(range(0, 9))
-                
+
         # Max 3 dimensions means all 3 good rows, but keeps out the off-grid antenna
         new_reds = om.filter_reds(reds, max_dims=3)
         ant_inds = set([ant[0] for red in new_reds for bl in red for ant in split_bl(bl)])
@@ -385,14 +385,14 @@ class TestRedundantCalibrator(object):
         reds = om.get_reds(antpos, pols=['xx'], pol_mode='1pol')
         rc = om.RedundantCalibrator(reds)
         freqs = np.linspace(1e8, 2e8, 1024)
-        
+
         # test firstcal where the degeneracies of the phases and delays have already been removed so no abscal is necessary
         gains, true_vis, d = sim_red_data(reds, gain_scatter=0, shape=(2, len(freqs)))
         fc_delays = {ant: [[100e-9 * np.random.randn()]] for ant in gains.keys()}  # in s
         fc_delays = rc.remove_degen_gains(fc_delays)
         fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
         fc_offsets = rc.remove_degen_gains(fc_offsets)
-        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs))) 
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs)))
                     for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
@@ -406,7 +406,7 @@ class TestRedundantCalibrator(object):
         fc_delays = {ant: [[0 * np.random.randn()]] for ant in gains.keys()}  # in s
         fc_offsets = {ant: [[.49 * np.pi * (np.random.rand() > .90)]] for ant in gains.keys()}  # the .49 removes the possibly of phase wraps that need abscal
         fc_offsets = rc.remove_degen_gains(fc_offsets)
-        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs))) 
+        fc_gains = {ant: np.reshape(np.exp(-2.0j * np.pi * freqs * delay - 1.0j * fc_offsets[ant]), (1, len(freqs)))
                     for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
@@ -441,9 +441,9 @@ class TestRedundantCalibrator(object):
             meta, sol = info.logcal(d)
         om.make_sol_finite(sol)
         for red in reds:
-            np.testing.assert_array_equal(sol[red[0]], 0.0)
+            np.testing.assert_array_equal(sol[red[0]], np.zeros_like(sol[red[0]]))
         for ant in gains.keys():
-            np.testing.assert_array_equal(sol[ant], 1.0)
+            np.testing.assert_array_equal(sol[ant], np.ones_like(sol[ant]))
 
     def test_omnical(self):
         NANTS = 18
@@ -1132,16 +1132,16 @@ class TestRedundantCalibrator(object):
         # factor of 2 comes from the fact that all baselines go into two antennas' chisq_per_ant
         non_degen_dof_per_ant = {ant: -2 for ant in ants}
         for red in reds:
-            for bl in red:        
+            for bl in red:
                 for ant in split_bl(bl):
                     non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
             # show that the number of degrees of freedom (i.e. expected chi^2) per antenna is always a bit larger
-            # than the number expected from just antenna and ubl DoF, but that each antenna gets some of the 
+            # than the number expected from just antenna and ubl DoF, but that each antenna gets some of the
             # degenerate DoF
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] < 2
             assert chisq_per_ant[ant] - non_degen_dof_per_ant[ant] > 0
-            
+
         # Test hex array (see comments on analogous test above)
         antpos = hex_array(3, split_core=False, outriggers=0)
         ants = [(ant, 'Jxx') for ant in antpos]
@@ -1155,7 +1155,7 @@ class TestRedundantCalibrator(object):
         np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
         non_degen_dof_per_ant = {ant: -2 for ant in ants}
         for red in reds:
-            for bl in red:        
+            for bl in red:
                 for ant in split_bl(bl):
                     non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
@@ -1175,7 +1175,7 @@ class TestRedundantCalibrator(object):
         np.testing.assert_approx_equal(np.sum(list(chisq_per_ant.values())), 2 * dof)
         non_degen_dof_per_ant = {ant: -2 for ant in ants}
         for red in reds:
-            for bl in red:        
+            for bl in red:
                 for ant in split_bl(bl):
                     non_degen_dof_per_ant[ant] += 1.0 - 1.0 / (len(red))
         for ant in ants:
@@ -1199,7 +1199,7 @@ class TestRedundantCalibrator(object):
         n = DataContainer({bl: np.sqrt(noise_var / 2) * (np.random.randn(*vis.shape) + 1j * np.random.randn(*vis.shape)) for bl, vis in d.items()})
         noisy_data = n + DataContainer(d)
 
-        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
+        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance
         for antnum in antpos.keys():
             noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
@@ -1251,7 +1251,7 @@ class TestRedundantCalibrator(object):
         noisy_data = n + DataContainer(d)
         nsamples = DataContainer({bl: np.ones_like(d[bl], dtype=float) for bl in d})
 
-        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance 
+        # Set up autocorrelations so that the predicted noise variance is the actual simulated noise variance
         for antnum in antpos.keys():
             noisy_data[(antnum, antnum, 'xx')] = np.sqrt(noise_var * dt * df)
         noisy_data.freqs = deepcopy(freqs)
@@ -1293,13 +1293,13 @@ class TestRedundantCalibrator(object):
             np.testing.assert_almost_equal(np.mean(chisq_per_ant[ant]), predicted_chisq_per_ant[ant], -np.log10(.03))
 
         # make sure excluded antenna has the highest chi^2, but not inexplicably large
-        assert np.mean(cal['chisq_per_ant'][6, 'Jxx']) <= len(antpos)  
+        assert np.mean(cal['chisq_per_ant'][6, 'Jxx']) <= len(antpos)
         for ant in cal['chisq_per_ant']:
             assert np.mean(cal['chisq_per_ant'][ant]) <= np.mean(cal['chisq_per_ant'][6, 'Jxx'])
 
 
 class TestRedcalAndAbscal(object):
-    
+
     def test_post_redcal_abscal(self):
         '''This test shows that performing a combination of redcal and abscal recovers the exact input gains
         up to an overall phase (which is handled by using a reference antenna).'''
@@ -1313,7 +1313,7 @@ class TestRedcalAndAbscal(object):
         d = DataContainer(d)
         fc_delays = {ant: 100e-9 * np.random.randn() for ant in gains.keys()}  # in s
         fc_offsets = {ant: 2 * np.pi * np.random.rand() for ant in gains.keys()}  # random phase offsets
-        fc_gains = {ant: np.reshape(np.exp(2.0j * np.pi * freqs * delay + 1.0j * fc_offsets[ant]), 
+        fc_gains = {ant: np.reshape(np.exp(2.0j * np.pi * freqs * delay + 1.0j * fc_offsets[ant]),
                                     (1, len(freqs))) for ant, delay in fc_delays.items()}
         for ant1, ant2, pol in d.keys():
             d[(ant1, ant2, pol)] *= fc_gains[(ant1, split_pol(pol)[0])] * np.conj(fc_gains[(ant2, split_pol(pol)[1])])
@@ -1339,16 +1339,16 @@ class TestRedcalAndAbscal(object):
         model.freqs = freqs
         model.times_by_bl = {bl[0:2]: np.array([2458110.18523274, 2458110.18535701]) for bl in model.keys()}
         model.antpos = antpos
-        
+
         # run abscal
         abscal_delta_gains = abscal.post_redcal_abscal(model, d_omnicaled, wgts, cal['gf_omnical'], verbose=True)
 
         # evaluate solutions, rephasing to antenna 0 as a reference
         abscal_gains = {ant: cal['g_omnical'][ant] * abscal_delta_gains[ant] for ant in cal['g_omnical']}
         refant = {'Jxx': (0, 'Jxx'), 'Jyy': (0, 'Jyy')}
-        agr = {ant: abscal_gains[ant] * np.abs(abscal_gains[refant[ant[1]]]) / abscal_gains[refant[ant[1]]] 
+        agr = {ant: abscal_gains[ant] * np.abs(abscal_gains[refant[ant[1]]]) / abscal_gains[refant[ant[1]]]
                for ant in abscal_gains.keys()}
-        tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]] 
+        tgr = {ant: true_gains[ant] * np.abs(true_gains[refant[ant[1]]]) / true_gains[refant[ant[1]]]
                for ant in true_gains.keys()}
         gain_errors = [agr[ant] - tgr[ant] for ant in tgr if ant[1] == 'Jxx']
         np.testing.assert_almost_equal(np.abs(gain_errors), 0, decimal=10)
@@ -1392,11 +1392,11 @@ class TestRunMethods(object):
                             assert val.dtype == bool
 
                 for flag in rv['gf_firstcal'].values():
-                    np.testing.assert_array_equal(flag, 0)
+                    np.testing.assert_array_equal(flag, np.zeros_like(flag))
                 for k, flag in rv['gf_omnical'].items():
-                    np.testing.assert_array_equal(rv['g_omnical'][k][flag], 1.)
+                    np.testing.assert_array_equal(rv['g_omnical'][k][flag], np.ones_like(rv['g_omnical'][k][flag]))
                 for k, flag in rv['vf_omnical'].items():
-                    np.testing.assert_array_equal(rv['v_omnical'][k][flag], 0)
+                    np.testing.assert_array_equal(rv['v_omnical'][k][flag], np.zeros_like(rv['v_omnical'][k][flag]))
 
         if pol_mode == '4pol':
             assert rv['chisq'].shape == (nTimes, nFreqs)
@@ -1450,7 +1450,7 @@ class TestRunMethods(object):
                 assert not np.all(flag[t, :])
                 assert np.all(flag[t, 0:30])
                 assert np.all(flag[t, -40:])
-        
+
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))  # test w/o partial loading
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -1470,13 +1470,13 @@ class TestRunMethods(object):
         hd.telescope_location_lat_lon_alt_degrees = (-30.7, 121.4, 1051.7)  # move array longitude
         rv = om.redcal_iteration(hd, solar_horizon=0.0)
         for flag in rv['gf_firstcal'].values():
-            np.testing.assert_array_equal(flag, True)
+            np.testing.assert_array_equal(flag, np.ones_like(flag))
         for flag in rv['gf_omnical'].values():
-            np.testing.assert_array_equal(flag, True)
+            np.testing.assert_array_equal(flag, np.ones_like(flag))
         for flag in rv['vf_omnical'].values():
-            np.testing.assert_array_equal(flag, True)
+            np.testing.assert_array_equal(flag, np.ones_like(flag))
         for nsamples in rv['vns_omnical'].values():
-            np.testing.assert_array_equal(nsamples, 0)
+            np.testing.assert_array_equal(nsamples, np.zeros_like(nsamples))
 
         # this tests redcal.expand_omni_sol
         hd = io.HERAData(os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5'))
@@ -1490,13 +1490,14 @@ class TestRunMethods(object):
                 # test that completely excluded baselines from redcal are still represented
                 assert (23, 27, pol) in rv[key].keys()
             # test redundant baseline counting
-            np.testing.assert_array_equal(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]], 4.0)
-            np.testing.assert_array_equal(rv['vns_omnical'][(23, 27, pol)], 0.0)
-            np.testing.assert_array_equal(rv['vns_omnical'][(1, 27, pol)], 0.0)
+            np.testing.assert_array_equal(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]],
+                                          4.0 * np.ones_like(rv['vns_omnical'][(1, 12, pol)][~rv['vf_omnical'][(1, 12, pol)]]))
+            np.testing.assert_array_equal(rv['vns_omnical'][(23, 27, pol)], np.zeros_like(rv['vns_omnical'][(23, 27, pol)]))
+            np.testing.assert_array_equal(rv['vns_omnical'][(1, 27, pol)], np.zeros_like(rv['vns_omnical'][(1, 27, pol)]))
         for ant in [(1, 'Jee'), (1, 'Jnn'), (27, 'Jee'), (27, 'Jnn')]:
             assert not np.all(rv['g_omnical'][ant] == 1.0)
             assert not np.all(rv['chisq_per_ant'][ant] == 0.0)
-            np.testing.assert_array_equal(rv['gf_omnical'][ant], True)
+            np.testing.assert_array_equal(rv['gf_omnical'][ant], np.ones_like(rv['gf_omnical'][ant]))
 
     def test_redcal_run(self):
         input_data = os.path.join(DATA_PATH, 'zen.2458098.43124.downsample.uvh5')
@@ -1510,7 +1511,7 @@ class TestRunMethods(object):
 
             hd = io.HERAData(input_data)
             cal0 = om.redcal_iteration(hd, ex_ants=[11, 50])
-            
+
             sys.stdout = sys.__stdout__
 
         for prefix, cal_here, bad_ants in [('', cal, [11, 50, 12]), ('.iter0', cal0, [11, 50])]:
@@ -1525,8 +1526,8 @@ class TestRunMethods(object):
                 np.testing.assert_almost_equal(gains[ant], cal_here['g_firstcal'][ant])
                 np.testing.assert_almost_equal(flags[ant], cal_here['gf_firstcal'][ant])
                 if ant[0] in bad_ants:
-                    np.testing.assert_array_equal(gains[ant], 1.0)
-                    np.testing.assert_array_equal(flags[ant], True)
+                    np.testing.assert_array_equal(gains[ant], np.ones_like(gains[ant]))
+                    np.testing.assert_array_equal(flags[ant], np.ones_like(flags[ant]))
             assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
             if prefix == '':
                 assert 'Throwingoutantenna12' in hc.history.replace('\n', '').replace(' ', '')
@@ -1545,10 +1546,10 @@ class TestRunMethods(object):
                 np.testing.assert_array_almost_equal(gains[ant][~zero_check], cal_here['g_omnical'][ant][~zero_check])
                 np.testing.assert_array_almost_equal(flags[ant][~zero_check], cal_here['gf_omnical'][ant][~zero_check])
                 if np.sum(zero_check) > 0:
-                    np.testing.assert_array_equal(flags[ant][zero_check], True)
+                    np.testing.assert_array_equal(flags[ant][zero_check], np.ones_like(flags[ant][zero_check]))
                 np.testing.assert_array_almost_equal(quals[ant][~zero_check], cal_here['chisq_per_ant'][ant][~zero_check])
                 if ant[0] in bad_ants:
-                    np.testing.assert_array_equal(flags[ant], True)
+                    np.testing.assert_array_equal(flags[ant], np.ones_like(flags[ant]))
             for antpol in total_qual.keys():
                 np.testing.assert_array_almost_equal(total_qual[antpol], cal_here['chisq'][antpol])
             assert 'testing' in hc.history.replace('\n', '').replace(' ', '')
