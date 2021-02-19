@@ -1961,3 +1961,4 @@ def spoof_autos(data):
         for a in ants:
             for pol in pols:
                 data[(a, a, pol)] = np.ones_like(d0)
+                data.times_by_bl[(a, a)] = data.times_by_bl[(a, ants[0])]
