@@ -266,11 +266,11 @@ class Test_Abscal_Solvers(object):
         model[0, 1, 'ee'][0, 0] = np.nan
         model[0, 1, 'ee'][0, 1] = np.inf
         fit = abscal.abs_amp_lincal(model, data)
-        np.testing.assert_array_equal(fit['A_Jee'], 2.0)
+        np.testing.assert_array_equal(fit['A_Jee'], 2.0 * np.ones_like(fit['A_Jee']))
         ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
         gains = abscal.abs_amp_lincal(model, data, return_gains=True, gain_ants=ants)
         for ant in ants:
-            np.testing.assert_array_equal(gains[ant], 2.0) 
+            np.testing.assert_array_equal(gains[ant], 2.0 * np.ones_like(gains[ant]))
 
     def test_abs_amp_lincal_4pol(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
@@ -283,15 +283,15 @@ class Test_Abscal_Solvers(object):
         model[0, 1, 'ee'][0, 0] = np.nan
         model[0, 1, 'ee'][0, 1] = np.inf
         fit = abscal.abs_amp_lincal(model, data)
-        np.testing.assert_array_equal(fit['A_Jee'], 2.0)
-        np.testing.assert_array_equal(fit['A_Jnn'], 3.0)
+        np.testing.assert_array_equal(fit['A_Jee'], 2.0 * np.ones_like(fit['A_Jee']))
+        np.testing.assert_array_equal(fit['A_Jnn'], 3.0 * np.ones_like(fit['A_Jnn']))
         ants = list(set([ant for bl in data for ant in utils.split_bl(bl)]))
         gains = abscal.abs_amp_lincal(model, data, return_gains=True, gain_ants=ants)
         for ant in ants:
             if ant[1] == 'Jee':
-                np.testing.assert_array_equal(gains[ant], 2.0)
+                np.testing.assert_array_equal(gains[ant], 2.0 * np.ones_like(gains[ant]))
             elif ant[1] == 'Jnn':
-                np.testing.assert_array_equal(gains[ant], 3.0)
+                np.testing.assert_array_equal(gains[ant], 3.0 * np.ones_like(gains[ant]))
 
     def test_TT_phs_logcal_1pol_assume_2D(self):
         antpos = hex_array(2, split_core=False, outriggers=0)
@@ -542,10 +542,10 @@ class Test_Abscal_Solvers(object):
             data = copy.deepcopy(uncal_data)
             for i in range(8):
                 if i == 0:
-                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver=solver, assume_2D=True, 
+                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver=solver, assume_2D=True,
                                                              time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
                 else:
-                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False, 
+                    gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False,
                                                              time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
                 calibrate_in_place(data, gains)
             np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0)
@@ -567,10 +567,10 @@ class Test_Abscal_Solvers(object):
         ants = sorted(list(set([ant for bl in data for ant in utils.split_bl(bl)])))
         for i in range(10):
             if i == 0:
-                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='ndim_fft', assume_2D=False, 
+                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='ndim_fft', assume_2D=False,
                                                          time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
             else:
-                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False, 
+                gains = abscal.global_phase_slope_logcal(model, data, antpos, solver='linfit', assume_2D=False,
                                                          time_avg=True, return_gains=True, gain_ants=ants, verbose=False)
             calibrate_in_place(data, gains)
         np.testing.assert_array_almost_equal(np.linalg.norm([data[bl] - model[bl] for bl in data]), 0, 5)
@@ -1068,7 +1068,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         model_antpos = {100: np.array([0, 0, 0]), 101: np.array([10, 0, 0]), 102: np.array([20, 0, 0]), 103: np.array([100, 100, 0])}
         data_bls = [(0, 2, 'ee'), (1, 2, 'ee'), (0, 3, 'ee')]
         model_bls = [(100, 101, 'ee'), (100, 102, 'ee'), (101, 103, 'ee')]
-        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos, 
+        data_bl_to_load, model_bl_to_load, data_to_model_bl_map = abscal.match_baselines(data_bls, model_bls, antpos, model_antpos=model_antpos,
                                                                                          data_is_redsol=True, model_is_redundant=True)
         assert len(data_bl_to_load) == 2
         assert len(model_bl_to_load) == 2
@@ -1171,7 +1171,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         data_ants = set([ant for bl in data.keys() for ant in utils.split_bl(bl)])
         rc_gains_subset = {k: rc_gains[k][tinds, :] for k in data_ants}
         rc_flags_subset = {k: rc_flags[k][tinds, :] for k in data_ants}
-        calibrate_in_place(data, rc_gains_subset, data_flags=flags, 
+        calibrate_in_place(data, rc_gains_subset, data_flags=flags,
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
         wgts = DataContainer({k: (~flags[k]).astype(np.float) for k in flags.keys()})
 
@@ -1181,7 +1181,7 @@ class Test_Post_Redcal_Abscal_Run(object):
             delta_gains = abscal.post_redcal_abscal(model, copy.deepcopy(data), wgts, rc_flags_subset, verbose=False)
 
         # use returned gains to calibrate data
-        calibrate_in_place(data, delta_gains, data_flags=flags, 
+        calibrate_in_place(data, delta_gains, data_flags=flags,
                            cal_flags=rc_flags_subset, gain_convention=hc.gain_convention)
 
         # basic shape & type checks
@@ -1202,20 +1202,20 @@ class Test_Post_Redcal_Abscal_Run(object):
         hd.write_uvh5(temp_outfile, clobber=True)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4, 
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, [temp_outfile], phs_conv_crit=1e-4,
                                                 nInt_to_load=30, verbose=False, add_to_history='testing')
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
-        np.testing.assert_array_equal(hca.total_quality_array, 0.0)
+        np.testing.assert_array_equal(hca.total_quality_array, np.zeros_like(hca.total_quality_array))
         np.testing.assert_array_equal(hca.gain_array, hcr.gain_array)
-        np.testing.assert_array_equal(hca.flag_array, True)
-        np.testing.assert_array_equal(hca.quality_array, 0.0)
+        np.testing.assert_array_equal(hca.flag_array, np.ones_like(hca.flag_array))
+        np.testing.assert_array_equal(hca.quality_array, np.zeros_like(hca.total_quality_array))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(temp_outfile)
 
         # test normal operation of abscal (with one missing integration, to test assinging multiple data times to one model time and then rephasing)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files_missing_one_int, extrap_limit=1.0, 
+            hca = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.model_files_missing_one_int, extrap_limit=1.0,
                                                 phs_conv_crit=1e-4, nInt_to_load=30, verbose=False, add_to_history='testing')
         pytest.raises(IOError, abscal.post_redcal_abscal_run, self.data_file, self.redcal_file, self.model_files, clobber=False)
 
@@ -1252,7 +1252,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test redundant model and full data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca_red = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4, 
+            hca_red = abscal.post_redcal_abscal_run(self.data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4,
                                                     nInt_to_load=10, verbose=False, add_to_history='testing2', model_is_redundant=True)
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
@@ -1289,8 +1289,8 @@ class Test_Post_Redcal_Abscal_Run(object):
         # test redundant model and redundant data
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            hca_red_red = abscal.post_redcal_abscal_run(self.red_data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4, 
-                                                        nInt_to_load=10, verbose=False, add_to_history='testing3', model_is_redundant=True, 
+            hca_red_red = abscal.post_redcal_abscal_run(self.red_data_file, self.redcal_file, self.red_model_files, phs_conv_crit=1e-4,
+                                                        nInt_to_load=10, verbose=False, add_to_history='testing3', model_is_redundant=True,
                                                         data_is_redsol=True, raw_auto_file=self.data_file)
         assert os.path.exists(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
@@ -1339,9 +1339,9 @@ class Test_Post_Redcal_Abscal_Run(object):
                 assert np.abs(np.median(np.abs(g1[ant][~f1[ant]] / g3[ant][~f3[ant]])) - 1) < .1
 
         for ant in q1:
-            np.testing.assert_array_equal(q1[ant], 0.0)
-            np.testing.assert_array_equal(q2[ant], 0.0)
-            np.testing.assert_array_equal(q3[ant], 0.0)
+            np.testing.assert_array_equal(q1[ant], np.zeros_like(q1[ant]))
+            np.testing.assert_array_equal(q2[ant], np.zeros_like(q2[ant]))
+            np.testing.assert_array_equal(q3[ant], np.zeros_like(q3[ant]))
 
     def test_post_redcal_abscal_argparser(self):
         sys.argv = [sys.argv[0], 'a', 'b', 'c', 'd', '--nInt_to_load', '6', '--verbose']
