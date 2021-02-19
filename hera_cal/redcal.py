@@ -1955,7 +1955,7 @@ def spoof_autos(data);
     pols = []
     for k in data:
         if k[-1] not in pols:
-            data.append(k[-1])
+            pols.append(k[-1])
     d0 = data[list(data.keys())[0]]
     if not np.any([(a, a, pols[0]) in data for a in ants]):
         for a in ants:
