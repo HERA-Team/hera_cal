@@ -1208,7 +1208,7 @@ class Test_Post_Redcal_Abscal_Run(object):
         np.testing.assert_array_equal(hca.total_quality_array, np.zeros_like(hca.total_quality_array))
         np.testing.assert_array_equal(hca.gain_array, hcr.gain_array)
         np.testing.assert_array_equal(hca.flag_array, np.ones_like(hca.flag_array))
-        np.testing.assert_array_equal(hca.quality_array, np.zeros_like(hca.total_quality_array))
+        np.testing.assert_array_equal(hca.quality_array, np.zeros_like(hca.quality_array))
         os.remove(self.redcal_file.replace('.omni.', '.abs.'))
         os.remove(temp_outfile)
 
