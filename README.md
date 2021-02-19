@@ -96,7 +96,6 @@ installing `hera_cal`:
 (note that `h5py` is a dependency of `hera_qm`, not `hera_cal`).
 
 Other dependencies that will be installed from PyPI on-the-fly are:
-* pyephem
 * [linsolve](https://github.com/HERA-Team/linsolve)
 * [hera_qm](https://github.com/HERA-Team/hera_qm)
 
