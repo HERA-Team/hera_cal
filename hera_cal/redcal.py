@@ -1950,7 +1950,7 @@ def redcal_argparser():
     args = a.parse_args()
     return args
 
-def spoof_autos(data);
+def spoof_autos(data):
     ants = np.unique(np.hstack([list(bl[:2]) for bl in data.keys()]).astype(int))
     pols = []
     for k in data:
