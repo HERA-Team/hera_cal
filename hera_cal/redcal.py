@@ -1537,7 +1537,6 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         'fc_meta' : dictionary that includes delays and identifies flipped antennas
         'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
-    spoof_autos(data)
     rv = {}  # dictionary of return values
     filtered_reds = filter_reds(reds, max_dims=max_dims)
     rc = RedundantCalibrator(filtered_reds)
@@ -1700,6 +1699,7 @@ def redcal_iteration(hd, nInt_to_load=None, pol_mode='2pol', bl_error_tol=1.0, e
                         nsamples[bl] = nsamples[bl][tinds, fSlice]
                 else:  # perform partial i/o
                     data, _, nsamples = hd.read(times=hd.times[tinds], frequencies=hd.freqs[fSlice], polarizations=pols)
+                spoof_autos(data)
                 cal = redundantly_calibrate(data, reds, freqs=hd.freqs[fSlice], times_by_bl=hd.times_by_bl,
                                             fc_conv_crit=fc_conv_crit, fc_maxiter=fc_maxiter,
                                             oc_conv_crit=oc_conv_crit, oc_maxiter=oc_maxiter,
