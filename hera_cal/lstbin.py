@@ -24,7 +24,7 @@ from .datacontainer import DataContainer
 def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst_low=None,
             lst_hi=None, flag_thresh=0.7, atol=1e-10, median=False, truncate_empty=True,
             sig_clip=False, sigma=4.0, min_N=4, return_no_avg=False, antpos=None, rephase=False,
-            freq_array=None, lat=-30.72152, verbose=True, nsamp_list=None):
+            freq_array=None, lat=-30.72152, verbose=True, nsamp_list=None, bl_list=None):
     """
     Bin data in Local Sidereal Time (LST) onto an LST grid. An LST grid
     is defined as an array of points increasing in Local Sidereal Time, with each point marking
@@ -64,6 +64,11 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     lat : type=float, latitude of array in degrees North. Needed for rephase.
     verbose : type=bool, if True report feedback to stdout
     nsamp_list : list of nsamples arrays
+    bl_list : optional list of antenna pairs that includes baselines that may not be in the data for the chunk of lsts
+              being processed but may be present in other lst chunks.
+              baselines not in data will be spoofed in the average to keep baselines in lst-averaged files.
+              flags set to True, nsamples set to zero, data set to one.
+              consistent across all lst bins.
 
     Output: (lst_bins, data_avg, flags_min, data_std, data_count)
     -------
@@ -115,7 +120,10 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
     flags = odict()
     nsamples = odict()
     all_lst_indices = set()
-
+    pols = []
+    for key in data_list[0].keys():
+        if key[-1] not in pols:
+            pols.append(key[-1])
     # iterate over data_list
     for i, d in enumerate(data_list):
         # get lst array
@@ -192,6 +200,18 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                         nsamples[key][ind].append(np.ones_like(d[key][k], np.int))
                     else:
                         nsamples[key][ind].append(nsamp_list[i][key][k])
+        # add in spoofed baselines to keep baselines in different LST files consistent.
+        for antpair in bl_list:
+            for pol in pols:
+                key = antpair + (pol,)
+                if key not in data and utils.reverse_bl(key) not in data:
+                    nsamples[key] = odict({ind:[] for ind in grid_indices})
+                    data[key] = odict({ind:[] for ind in grid_indices})
+                    flags[key] = odict({ind:[] for ind in grid_indices})
+                    for k, ind in enumerate(grid_indices):
+                        nsamples[key][ind].append(np.zeros(Nfreqs))
+                        flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
+                        data[key][ind].append(np.ones(Nfreqs, dtype=complex))
 
     # get final lst_bin array
     if truncate_empty:
@@ -210,6 +230,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                     data[key][index] = [np.ones(Nfreqs, np.complex)]
                     flags[key][index] = [np.ones(Nfreqs, np.bool)]
                     nsamples[key][index] = [np.ones(Nfreqs, np.int)]
+
         # use all LST bins
         lst_bins = lst_grid
 
@@ -660,12 +681,16 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # (or unique baseline group if average_redundant_baselines is true)
     bldicts = gen_bldicts([io.HERAData(dlists[-1]) for dlists in data_files], bl_error_tol=bl_error_tol, include_autos=include_autos,
                           redundant=average_redundant_baselines)
+    # store all baselines in this list. They need to be spoofed
+    # if there are some times that dont overlap for nights with different baselines.
+    #all_key_baselines = [list(bldict.values())[0] for bldict in blgroups]
+    # iterate over output LST files
+    all_key_baselines = [list(bldict.values())[0][0] for bldict in bldicts]
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bldicts)
     Nblgroups = len(bldicts) // Nbls_to_load + 1
     blgroups = [bldicts[i * Nbls_to_load:(i + 1) * Nbls_to_load] for i in range(Nblgroups)]
     blgroups = [blg for blg in blgroups if len(blg) > 0]
-    # iterate over output LST files
     for i, f_lst in enumerate(file_lsts):
         utils.echo("LST file {} / {}: {}".format(i + 1, len(file_lsts), datetime.datetime.now()), type=1, verbose=verbose)
         fmin = f_lst[0] - (dlst / 2 + atol)
@@ -772,7 +797,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamp_list=nsamp_list,
-                                 sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos)
+                                 sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos, bl_list=all_key_baselines)
             # append to lists
             data_conts.append(bin_data)
             flag_conts.append(flag_data)
