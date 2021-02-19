@@ -3360,10 +3360,25 @@ def post_redcal_abscal(model, data, data_wgts, rc_flags, edge_cut=0, tol=1.0, ke
             the updates to the gains between redcal and abscal. Uses keys from rc_flags
     '''
 
-    # setup: initialize ants, get idealized antenna positions
+    # setup: initialize ants and figure out which ones are not completely flagged (no weight)
     ants = list(rc_flags.keys())
-    reds = redcal.get_reds(data.antpos, bl_error_tol=tol)
+    ants_with_wgts = set([])
+    for bl in data_wgts:
+        if not np.all(data_wgts[bl] == 0.0):
+            for ant in split_bl(bl):
+                assert ant in ants, f'Antenna {ant} appears in the data but not in the redcal flags.'
+                ants_with_wgts.add(ant)
+
+    # Get idealized antenna poistions, not letting flagged antennas affect the number of dimensions
+    reds = redcal.get_reds(data.antpos, bl_error_tol=tol, pols=data.pols())
+    reds = redcal.filter_reds(reds, ants=ants_with_wgts)
     idealized_antpos = redcal.reds_to_antpos(reds, tol=redcal.IDEALIZED_BL_TOL)
+    
+    # set flagged antennas to have position 0.0
+    nDims = _count_nDims(idealized_antpos, assume_2D=False)
+    for ant in ants:
+        if ant not in ants_with_wgts:
+            idealized_antpos[ant[0]] = np.zeros(nDims)
 
     # Abscal Step 1: Per-Channel Logarithmic Absolute Amplitude Calibration
     gains_here = abs_amp_logcal(model, data, wgts=data_wgts, verbose=verbose, return_gains=True, gain_ants=ants)

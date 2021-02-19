@@ -8,7 +8,7 @@ from copy import deepcopy
 import warnings
 import argparse
 import pyuvdata
-from collections import Iterable
+from collections.abc import Iterable
 
 try:
     import uvtools
