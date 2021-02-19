@@ -598,7 +598,7 @@ def test_red_average():
 
     # try with DataContainer
     data_avg, flag_avg, _ = utils.red_average(data, reds, flags=flags, inplace=False)
-    assert isinstance(data_avg, datacontainer.DataContainer)
+    assert isinstance(data_avg, (datacontainer.DataContainer, dict))
     assert len(data_avg) == len(reds)
     assert np.isclose(data_avg[blkey], davg).all()
     assert np.isclose(flag_avg[blkey], hda.get_flags(blkey)).all()
