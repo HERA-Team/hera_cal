@@ -1441,11 +1441,11 @@ def expand_omni_sol(cal, all_reds, data, nsamples):
 
         # solve for new gains and update cal
         new_gains = {}
-        new_gain_ants = set([ant for bl in bls_to_use for ant in split_bl(bl) 
+        new_gain_ants = set([ant for bl in bls_to_use for ant in split_bl(bl)
                              if ant not in cal['g_omnical']])
         for ant in new_gain_ants:
-            new_gains.update(linear_cal_update([bl for bl in bls_to_use if ant in split_bl(bl)], 
-                                               cal, data, all_reds, 
+            new_gains.update(linear_cal_update([bl for bl in bls_to_use if ant in split_bl(bl)],
+                                               cal, data, all_reds,
                                                weight_by_nsamples=True, weight_by_flags=(i == 0)))
         make_sol_finite(new_gains)
         for ant, g in new_gains.items():
@@ -1537,6 +1537,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
         'fc_meta' : dictionary that includes delays and identifies flipped antennas
         'omni_meta': dictionary of information about the omnical convergence and chi^2 of the solution
     '''
+    spoof_autos(data)
     rv = {}  # dictionary of return values
     filtered_reds = filter_reds(reds, max_dims=max_dims)
     rc = RedundantCalibrator(filtered_reds)
@@ -1552,6 +1553,7 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     # perform logcal and omnical
     _, log_sol = rc.logcal(data, sol0=rv['g_firstcal'])
     make_sol_finite(log_sol)
+    # spoof autos if none are present in the data
     data_wgts = {bl: predict_noise_variance_from_autos(bl, data, dt=(np.median(np.ediff1d(times_by_bl[bl[:2]]))
                                                                      * SEC_PER_DAY))**-1 for bl in data.keys()}
     rv['omni_meta'], omni_sol = rc.omnical(data, log_sol, wgts=data_wgts, conv_crit=oc_conv_crit, maxiter=oc_maxiter,
@@ -1736,7 +1738,7 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
     '''Helper function for writing the results of redcal_run.'''
     # get antnums2antnames dictionary
     antnums2antnames = dict(zip(hd.antenna_numbers, hd.antenna_names))
-    
+
     # Build UVCal metadata that might be different from UVData metadata
     cal_antnums = sorted(set([ant[0] for ant in cal['g_omnical']]))
     antenna_positions = np.array([hd.antenna_positions[hd.antenna_numbers == antnum].flatten() for antnum in cal_antnums])
@@ -1947,3 +1949,15 @@ def redcal_argparser():
 
     args = a.parse_args()
     return args
+
+def spoof_autos(data);
+    ants = np.unique(np.hstack([list(bl[:2]) for bl in data.keys()]).astype(int))
+    pols = []
+    for k in data:
+        if k[-1] not in pols:
+            data.append(k[-1])
+    d0 = data[list(data.keys())[0]]
+    if not np.any([(a, a, pols[0]) in data for a in ants]):
+        for a in ants:
+            for pol in pols:
+                data[(a, a, pol)] = np.ones_like(d0)
