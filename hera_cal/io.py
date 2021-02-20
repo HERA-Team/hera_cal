@@ -9,7 +9,7 @@ import os
 import copy
 import warnings
 from functools import reduce
-import collections
+from collections.abc import Iterable
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 from astropy import units
@@ -53,7 +53,7 @@ class HERACal(UVCal):
         if isinstance(input_cal, str):
             assert os.path.exists(input_cal), '{} does not exist.'.format(input_cal)
             self.filepaths = [input_cal]
-        elif isinstance(input_cal, collections.Iterable):  # List loading
+        elif isinstance(input_cal, Iterable):  # List loading
             if np.all([isinstance(i, str) for i in input_cal]):  # List of visibility data paths
                 for ic in input_cal:
                     assert os.path.exists(ic), '{} does not exist.'.format(ic)
@@ -269,7 +269,7 @@ class HERAData(UVData):
         # parse input_data as filepath(s)
         if isinstance(input_data, str):
             self.filepaths = [input_data]
-        elif isinstance(input_data, collections.Iterable):  # List loading
+        elif isinstance(input_data, Iterable):  # List loading
             if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
                 self.filepaths = list(input_data)
             else:
@@ -1104,11 +1104,11 @@ def read_redcal_meta(meta_filename):
         lsts = infile['header']['lsts'][:]
         antpos = {ant: pos for ant, pos in zip(infile['header']['antpos'].attrs['antnums'],
                                                infile['header']['antpos'][:, :])}
-        history = infile['header']['history'][()].tostring().decode('utf8')
+        history = infile['header']['history'][()].tobytes().decode('utf8')
 
         # reconstruct firstcal metadata
         fc_meta = {}
-        ants = [(int(num.tostring().decode('utf8')), pol.tostring().decode('utf8'))
+        ants = [(int(num.tobytes().decode('utf8')), pol.tobytes().decode('utf8'))
                 for num, pol in infile['fc_meta']['dlys'].attrs['ants']]
         fc_meta['dlys'] = {ant: dly for ant, dly in zip(ants, infile['fc_meta']['dlys'][:, :])}
         fc_meta['polarity_flips'] = {ant: flips for ant, flips in zip(ants, infile['fc_meta']['polarity_flips'][:, :])}
@@ -1155,7 +1155,7 @@ def to_HERAData(input_data, filetype='miriad', **read_kwargs):
         hd._determine_pol_indexing()
         hd.filepaths = None
         return hd
-    elif isinstance(input_data, collections.Iterable):  # List loading
+    elif isinstance(input_data, Iterable):  # List loading
         if np.all([isinstance(i, str) for i in input_data]):  # List of visibility data paths
             return HERAData(input_data, filetype=filetype, **read_kwargs)
         elif np.all([isinstance(i, (UVData, HERAData)) for i in input_data]):  # List of uvdata objects
@@ -1532,7 +1532,7 @@ def to_HERACal(input_cal):
         input_cal.__class__ = HERACal
         input_cal.filepaths = None
         return input_cal
-    elif isinstance(input_cal, collections.Iterable):  # List loading
+    elif isinstance(input_cal, Iterable):  # List loading
         if np.all([isinstance(ic, str) for ic in input_cal]):  # List of calfits paths
             return HERACal(input_cal)
         elif np.all([isinstance(ic, (UVCal, HERACal)) for ic in input_cal]):  # List of UVCal/HERACal objects
