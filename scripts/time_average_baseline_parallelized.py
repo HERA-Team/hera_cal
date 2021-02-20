@@ -11,7 +11,6 @@ args = a.parse_args()
 
 baseline_list = io.baselines_from_filelist_position(filename=args.input_data,
                                                     filelist=args.input_data_list)
-print(baseline_list[0])
 for f in args.input_data_list:
     hd = io.HERAData(f)
 if len(baseline_list) > 0:

@@ -466,6 +466,7 @@ def lst_bin_arg_parser():
     a.add_argument("--ignore_flags", default=False, action='store_true', help="Ignore flags in data files, such that all input data is included in binning.")
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
     a.add_argument("--average_redundant_baselines", action="store_true", default=False, help="Redundantly average baselines within and between nights.")
+    a.add_argument("--flag_thresh", default=0.7, type=float, help="fraction of flags over all nights in an LST bin on a baseline to flag that baseline.")
     return a
 
 
@@ -792,12 +793,13 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 continue
 
             # pass through lst-bin function
+            all_key_baselines_blgroup = [bl for bl in all_key_baselines if bl in blgroup]
             if ignore_flags:
                 flgs_list = None
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamp_list=nsamp_list,
-                                 sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos, bl_list=all_key_baselines)
+                                 sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos, bl_list=all_key_baselines_blgroup)
             # append to lists
             data_conts.append(bin_data)
             flag_conts.append(flag_data)
