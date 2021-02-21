@@ -85,6 +85,7 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             un-averaged complex visibilities in each LST bin as values.
         flags_min : dictionary with data flags
     """
+    print(f'len bl_list: {len(bl_list)}')
     # get visibility shape
     Ntimes, Nfreqs = data_list[0][list(data_list[0].keys())[0]].shape
 
@@ -686,7 +687,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # if there are some times that dont overlap for nights with different baselines.
     #all_key_baselines = [list(bldict.values())[0] for bldict in blgroups]
     # iterate over output LST files
-    all_key_baselines = [list(bldict.values())[0][0] for bldict in bldicts]
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bldicts)
     Nblgroups = len(bldicts) // Nbls_to_load + 1
@@ -788,18 +788,26 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                 nsamp_list.extend(nightly_nsamp_list)
                 del nightly_data_list, nightly_flgs_list, nightly_lst_list, nightly_nsamp_list
 
-            # skip if data_list is empty
+            all_blgroup_baselines = [list(bldict.values())[0][0] for bldict in blgroup]
+            all_blgroup_antpairpols = []
             if len(data_list) == 0:
-                continue
-
+                # spoof data  if data_list is empty.
+                # this is to avoid creating lstbinned files with varying numbers of baselines
+                # if we happen to be at an lst bin where one of the blgroups doesn't appear.
+                for pol in hd.pols:
+                    for bl in all_blgroup_baselines:
+                        all_blgroup_antpairpols.append(bl + (pol,))
+                data_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=complex) for bl in all_blgroup_antpairpols})]
+                flgs_list = [DataContainer({bl: np.ones((1, hd.Nfreqs), dtype=bool) for bl in all_blgroup_antpairpols})]
+                lst_list = [make_lst_grid(dlst, begin_lst=begin_lst, verbose=verbose)[:1]]
+                nsamp_list = [DataContainer({bl: np.zeros((1, hd.Nfreqs)) for bl in all_blgroup_antpairpols})]
             # pass through lst-bin function
-            all_key_baselines_blgroup = [bl for bl in all_key_baselines if bl in blgroup]
             if ignore_flags:
                 flgs_list = None
             (bin_lst, bin_data, flag_data, std_data,
              num_data) = lst_bin(data_list, lst_list, flags_list=flgs_list, dlst=dlst, begin_lst=begin_lst,
                                  lst_low=fmin, lst_hi=fmax, truncate_empty=False, sig_clip=sig_clip, nsamp_list=nsamp_list,
-                                 sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos, bl_list=all_key_baselines_blgroup)
+                                 sigma=sigma, min_N=min_N, rephase=rephase, freq_array=freq_array, antpos=antpos, bl_list=all_blgroup_baselines)
             # append to lists
             data_conts.append(bin_data)
             flag_conts.append(flag_data)
