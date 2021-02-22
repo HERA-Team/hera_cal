@@ -3568,7 +3568,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
                                 autocorrs, auto_flags, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
                             except:
                                 autocorrs = DataContainer({bl: np.ones((hd_autos.Ntimes, hd_autos.Nfreqs)) for bl in auto_bls})
-                                auto_flags = DataContainer({bl: hd_autos.get_flags(list(hd_autos.bls)[0])})
+                                auto_flags = DataContainer({bl: hd_autos.get_flags(list(hd_autos.bls)[0]) for bl in auto_bls})
                             calibrate_in_place(autocorrs, rc_gains_subset, data_flags=auto_flags, cal_flags=rc_flags_subset)
 
                             # use data_to_model_bl_map to rekey model. Does not copy to save memory.
