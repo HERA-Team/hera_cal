@@ -3564,7 +3564,7 @@ def post_redcal_abscal_run(data_file, redcal_file, model_files, raw_auto_file=No
 
                             # get the relative wgts for each piece of data
                             auto_bls = [join_bl(ant, ant) for ant in rc_gains if join_bl(ant, ant)[2] == pol]
-                            if np.all([bl in hd.bls for bl in auto_bls])
+                            if np.all([bl in hd.bls for bl in auto_bls]):
                                 autocorrs, auto_flags, _ = hd_autos.read(times=hd.times[tinds], bls=auto_bls)
                             else:
                                 autocorrs = DataContainer({bl: np.ones((hd_autos.Ntimes, hd_autos.Nfreqs)) for bl in auto_bls})
