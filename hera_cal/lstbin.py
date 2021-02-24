@@ -206,9 +206,9 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                 for pol in pols:
                     key = antpair + (pol,)
                     if key not in data and utils.reverse_bl(key) not in data:
-                        nsamples[key] = odict({ind:[] for ind in grid_indices})
-                        data[key] = odict({ind:[] for ind in grid_indices})
-                        flags[key] = odict({ind:[] for ind in grid_indices})
+                        nsamples[key] = odict({ind: [] for ind in grid_indices})
+                        data[key] = odict({ind: [] for ind in grid_indices})
+                        flags[key] = odict({ind: [] for ind in grid_indices})
                         for k, ind in enumerate(grid_indices):
                             nsamples[key][ind].append(np.zeros(Nfreqs))
                             flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
@@ -680,7 +680,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                           redundant=average_redundant_baselines)
     # store all baselines in this list. They need to be spoofed
     # if there are some times that dont overlap for nights with different baselines.
-    #all_key_baselines = [list(bldict.values())[0] for bldict in blgroups]
+    # all_key_baselines = [list(bldict.values())[0] for bldict in blgroups]
     # iterate over output LST files
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bldicts)
@@ -1047,5 +1047,5 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
                     if not present:
                         # if this baseline does not appear in previous nights
                         # add it with this night.
-                        bldicts.append({night:[bl]})
+                        bldicts.append({night: [bl]})
     return bldicts
