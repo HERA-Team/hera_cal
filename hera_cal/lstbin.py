@@ -85,7 +85,6 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             un-averaged complex visibilities in each LST bin as values.
         flags_min : dictionary with data flags
     """
-    print(f'len bl_list: {len(bl_list)}')
     # get visibility shape
     Ntimes, Nfreqs = data_list[0][list(data_list[0].keys())[0]].shape
 
@@ -202,17 +201,18 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                     else:
                         nsamples[key][ind].append(nsamp_list[i][key][k])
         # add in spoofed baselines to keep baselines in different LST files consistent.
-        for antpair in bl_list:
-            for pol in pols:
-                key = antpair + (pol,)
-                if key not in data and utils.reverse_bl(key) not in data:
-                    nsamples[key] = odict({ind:[] for ind in grid_indices})
-                    data[key] = odict({ind:[] for ind in grid_indices})
-                    flags[key] = odict({ind:[] for ind in grid_indices})
-                    for k, ind in enumerate(grid_indices):
-                        nsamples[key][ind].append(np.zeros(Nfreqs))
-                        flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
-                        data[key][ind].append(np.ones(Nfreqs, dtype=complex))
+        if bl_list is not None:
+            for antpair in bl_list:
+                for pol in pols:
+                    key = antpair + (pol,)
+                    if key not in data and utils.reverse_bl(key) not in data:
+                        nsamples[key] = odict({ind:[] for ind in grid_indices})
+                        data[key] = odict({ind:[] for ind in grid_indices})
+                        flags[key] = odict({ind:[] for ind in grid_indices})
+                        for k, ind in enumerate(grid_indices):
+                            nsamples[key][ind].append(np.zeros(Nfreqs))
+                            flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
+                            data[key][ind].append(np.ones(Nfreqs, dtype=complex))
 
     # get final lst_bin array
     if truncate_empty:
@@ -656,7 +656,6 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
     # update kwrgs
     kwargs['outdir'] = outdir
     kwargs['overwrite'] = overwrite
-
     # get metadata from the zeroth data file in the last day
     hd = io.HERAData(data_files[-1][0])
     x_orientation = hd.x_orientation
