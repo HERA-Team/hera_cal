@@ -107,12 +107,31 @@ class Test_lstbin(object):
                                 verbose=False)
         assert np.allclose(output[4][(24, 25, 'ee')], 3.0)
         # test including additional baselines in bl_list:
-        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=dlst, lst_low=0.25, lst_hi=0.3,
+        output = lstbin.lst_bin(self.data_list, self.lst_list, nsamp_list=self.nsmp_list,
+                                flags_list=self.flgs_list, dlst=dlst, lst_low=0.25, lst_hi=0.3,
                                 verbose=False, bl_list=[(512, 512)])
         assert (512, 512, 'ee') in output[4]
         assert np.allclose(output[4][(512, 512, 'ee')], 0.0)
         assert np.all(output[2][(512, 512, 'ee')])
         assert np.allclose(output[1][(512, 512, 'ee')], 0.0)
+        # test conjugated flags and nsamples
+        flags_list_conj = copy.deepcopy(self.flgs_list)
+        nsamp_list_conj = copy.deepcopy(self.nsmp_list)
+        data_list_conj = copy.deepcopy(self.data_list)
+        # conjugate last night.
+        flags_list_conj[-1] = DataContainer({utils.reverse_bl(k): flags_list_conj[-1][k] for k in flags_list_conj[-1]})
+        nsamp_list_conj[-1] = DataContainer({utils.reverse_bl(k): nsamp_list_conj[-1][k] for k in nsamp_list_conj[-1]})
+        data_list_conj[-1] = DataContainer({utils.reverse_bl(k): np.conj(data_list_conj[-1][k]) for k in data_list_conj[-1]})
+        output2 = lstbin.lst_bin(data_list=data_list_conj, lst_list=self.lst_list,
+                                 flags_list=flags_list_conj, nsamp_list=nsamp_list_conj,
+                                 dlst=dlst, lst_low=0.25, lst_hi=0.3,
+                                 verbose=False, bl_list=[(512, 512)])
+        # assert outputs are identical, even with conjugations present in the last night.
+        for k in output2[4]:
+            assert np.all(np.isclose(output[4][k], output2[4][k]))
+            assert np.all(np.isclose(output[2][k], output2[2][k]))
+            assert np.all(np.isclose(output[1][k], output2[1][k]))
+
 
     def test_lstbin_vary_nsamps(self):
         # test execution
@@ -399,6 +418,32 @@ class Test_lstbin(object):
                 assert np.all(np.isclose(n4[k], n2[k]))
                 assert np.all(np.isclose(d4[k], d2[k]))
                 assert np.all(np.isclose(f4[k], f2[k]))
+        # remove all but a single antenna from data on the first night.
+        for fnum, flist in enumerate(self.data_files):
+            for fstr in flist:
+                hd = UVData()
+                hd.read(fstr)
+                nants = len(hd.antenna_numbers)
+                # on first night, remove all but two antennas.
+                if fnum < 2:
+                    hd.select(antenna_nums=np.unique(hd.ant_1_array)[:2], keep_all_metadata=False)
+                hd.write_uvh5(os.path.join(tmp_path,'temp.uvh5'), clobber=True)
+                hd = io.HERAData(os.path.join(tmp_path,'temp.uvh5'))
+                hd.read()
+                if fnum < 2:
+                    assert len(hd.antpos) < nants
+                utils.red_average(hd, inplace=True, reds=reds_data)
+                out_path = os.path.join(tmp_path, fstr.split('/')[-1].replace('.uvh5', '.red_average.uvh5'))
+                hd.write_uvh5(out_path, clobber=True)
+
+        lstbin.lst_bin_files(redundantly_averaged_filepaths, outdir=tmp_path, overwrite=True, median=False,
+                             verbose=False, file_ext=file_ext, ignore_flags=False, average_redundant_baselines=True)
+        # assert that the keys when only two antennas are present on the first night data
+        # are identical to the data set when all antennas are present on the first night data
+        uv5 = io.HERAData(output_lst_file)
+        d5, f5, n5 = uv5.read()
+        assert sorted(list(d5.keys())) == sorted(list(d4.keys()))
+
 
     def test_lst_bin_arg_parser(self):
         a = lstbin.lst_bin_arg_parser()
