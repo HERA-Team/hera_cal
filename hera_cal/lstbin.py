@@ -1035,12 +1035,9 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
                     # if it did, add it to its corresponding baseline dictionary.
                     for bldict in bldicts:
                         for i in bldict:
-                            if bl in bldict[i]:
-                                bldict[night] = [bl]
-                                present = True
-                                break
-                            if bl[::-1] in bldict[i]:
-                                bldict[night] = [bl[::-1]]
+                            if bl in bldict[i] or bl[::-1] in bldict[i]:
+                                sign = bl[::-1] in bldict[i]
+                                bldict[night] = [bl[::sign]]
                                 present = True
                                 break
                     if not present:
