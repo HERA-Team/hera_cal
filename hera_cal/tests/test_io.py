@@ -630,6 +630,10 @@ class Test_Visibility_IO_Legacy(object):
         data, flags = io.load_vis([fname])
         assert data[(24, 25, 'ee')].shape == (60, 64)
 
+        # test with return_nsamples=True
+        data, flags, nsamples = io.load_vis([fname], return_nsamples=True)
+        assert nsamples[(24, 25, 'ee')].shape == (60, 64)
+
         # test pop autos
         data, flags = io.load_vis(fname, pop_autos=True)
         assert (24, 24, parse_polstr('EE', x_orientation=self.uvd.x_orientation)) not in data
