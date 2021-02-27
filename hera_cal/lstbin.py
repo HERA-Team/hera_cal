@@ -158,7 +158,8 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
             d = utils.lst_rephase(d, bls, freq_array, lst_shift, lat=lat, inplace=False)
 
         # iterate over keys in d
-        for j, key in enumerate(d.keys()):
+        klist = list(d.keys())
+        for j, key in enumerate(klist):
             # data[key] will be an odict. if data[key] doesn't exist
             # create data[key] as an empty odict. if data[key] already
             # exists, then pass
@@ -201,17 +202,18 @@ def lst_bin(data_list, lst_list, flags_list=None, dlst=None, begin_lst=None, lst
                     else:
                         nsamples[key][ind].append(nsamp_list[i][key][k])
         # add in spoofed baselines to keep baselines in different LST files consistent.
-        for antpair in bl_list:
-            for pol in pols:
-                key = antpair + (pol,)
-                if key not in data and utils.reverse_bl(key) not in data:
-                    nsamples[key] = odict({ind:[] for ind in grid_indices})
-                    data[key] = odict({ind:[] for ind in grid_indices})
-                    flags[key] = odict({ind:[] for ind in grid_indices})
-                    for k, ind in enumerate(grid_indices):
-                        nsamples[key][ind].append(np.zeros(Nfreqs))
-                        flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
-                        data[key][ind].append(np.ones(Nfreqs, dtype=complex))
+        if bl_list is not None:
+            for antpair in bl_list:
+                for pol in pols:
+                    key = antpair + (pol,)
+                    if key not in data and utils.reverse_bl(key) not in data:
+                        nsamples[key] = odict({ind: [] for ind in grid_indices})
+                        data[key] = odict({ind: [] for ind in grid_indices})
+                        flags[key] = odict({ind: [] for ind in grid_indices})
+                        for k, ind in enumerate(grid_indices):
+                            nsamples[key][ind].append(np.zeros(Nfreqs))
+                            flags[key][ind].append(np.ones(Nfreqs, dtype=bool))
+                            data[key][ind].append(np.ones(Nfreqs, dtype=complex))
 
     # get final lst_bin array
     if truncate_empty:
@@ -683,7 +685,7 @@ def lst_bin_files(data_files, input_cals=None, dlst=None, verbose=True, ntimes_p
                           redundant=average_redundant_baselines)
     # store all baselines in this list. They need to be spoofed
     # if there are some times that dont overlap for nights with different baselines.
-    #all_key_baselines = [list(bldict.values())[0] for bldict in blgroups]
+    # all_key_baselines = [list(bldict.values())[0] for bldict in blgroups]
     # iterate over output LST files
     if Nbls_to_load in [None, 'None', 'none']:
         Nbls_to_load = len(bldicts)
@@ -1014,12 +1016,12 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
                     # check if baseline group occured in previous nights
                     # if it did, add it to the appropriate bldict.
                     for i in bldict:
-                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol:
-                            bldict[night] = grp
-                            present = True
-                            break
-                        elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
-                            bldict[night] = [bl[::-1] for bl in grp]
+                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol or np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
+                            # I was having a lot of trouble getting a unittest for two separate cases here because
+                            # I'm not sure how to conveniently create a UVData object with baselines conjugated.
+                            # two cases is more readable then one so I'd prefer to have two.
+                            sign = int((-1) ** int(np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol))
+                            bldict[night] = [bl[::sign] for bl in grp]
                             present = True
                             break
                 if not present:
@@ -1033,16 +1035,16 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
                     # if it did, add it to its corresponding baseline dictionary.
                     for bldict in bldicts:
                         for i in bldict:
-                            if bl in bldict[i]:
-                                bldict[night] = [bl]
-                                present = True
-                                break
-                            if bl[::-1] in bldict[i]:
-                                bldict[night] = [bl[::-1]]
+                            if bl in bldict[i] or bl[::-1] in bldict[i]:
+                                # I was having a lot of trouble getting a unittest for two separate cases here because
+                                # I'm not sure how to conveniently create a UVData object with baselines conjugated.
+                                # two cases is more readable then one so I'd prefer to have two.
+                                sign = int((-1) ** int(bl[::-1] in bldict[i]))
+                                bldict[night] = [bl[::sign]]
                                 present = True
                                 break
                     if not present:
                         # if this baseline does not appear in previous nights
                         # add it with this night.
-                        bldicts.append({night:[bl]})
+                        bldicts.append({night: [bl]})
     return bldicts
