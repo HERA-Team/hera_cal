@@ -1015,12 +1015,11 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
                     # check if baseline group occured in previous nights
                     # if it did, add it to the appropriate bldict.
                     for i in bldict:
-                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol:
-                            bldict[night] = grp
-                            present = True
-                            break
-                        elif np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
-                            bldict[night] = [bl[::-1] for bl in grp]
+                        if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol or np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
+                            # The things I do for coverage.
+                            # unittests for more readable code was just too painful.
+                            sign = int((-1) ** float(np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol))
+                            bldict[night] = [bl[::sign] for bl in grp]
                             present = True
                             break
                 if not present:
