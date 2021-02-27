@@ -1036,7 +1036,7 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
                     for bldict in bldicts:
                         for i in bldict:
                             if bl in bldict[i] or bl[::-1] in bldict[i]:
-                                sign = bl[::-1] in bldict[i]
+                                sign = int((-1) ** int(bl[::-1] in bldict[i]))
                                 bldict[night] = [bl[::sign]]
                                 present = True
                                 break
