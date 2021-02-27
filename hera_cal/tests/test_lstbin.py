@@ -132,7 +132,6 @@ class Test_lstbin(object):
             assert np.all(np.isclose(output[2][k], output2[2][k]))
             assert np.all(np.isclose(output[1][k], output2[1][k]))
 
-
     def test_lstbin_vary_nsamps(self):
         # test execution
         lst_output, data_output, flags_output, _, nsamples_output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=self.flgs_list, dlst=None,
@@ -427,8 +426,8 @@ class Test_lstbin(object):
                 # on first night, remove all but two antennas.
                 if fnum < 2:
                     hd.select(antenna_nums=np.unique(hd.ant_1_array)[:2], keep_all_metadata=False)
-                hd.write_uvh5(os.path.join(tmp_path,'temp.uvh5'), clobber=True)
-                hd = io.HERAData(os.path.join(tmp_path,'temp.uvh5'))
+                hd.write_uvh5(os.path.join(tmp_path, 'temp.uvh5'), clobber=True)
+                hd = io.HERAData(os.path.join(tmp_path, 'temp.uvh5'))
                 hd.read()
                 if fnum < 2:
                     assert len(hd.antpos) < nants
@@ -443,7 +442,6 @@ class Test_lstbin(object):
         uv5 = io.HERAData(output_lst_file)
         d5, f5, n5 = uv5.read()
         assert sorted(list(d5.keys())) == sorted(list(d4.keys()))
-
 
     def test_lst_bin_arg_parser(self):
         a = lstbin.lst_bin_arg_parser()
