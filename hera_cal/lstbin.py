@@ -1020,7 +1020,7 @@ def gen_bldicts(hds, bl_error_tol=1.0, include_autos=True, redundant=False):
                         if np.linalg.norm(blvecs[grp[0]] - blvecs[bldict[i][0]]) <= bl_error_tol or np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol:
                             # The things I do for coverage.
                             # unittests for more readable code was just too painful.
-                            sign = int((-1) ** float(np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol))
+                            sign = int((-1) ** int(np.linalg.norm(blvecs[grp[0]] + blvecs[bldict[i][0]]) <= bl_error_tol))
                             bldict[night] = [bl[::sign] for bl in grp]
                             present = True
                             break
