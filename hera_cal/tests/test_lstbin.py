@@ -106,6 +106,13 @@ class Test_lstbin(object):
         output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=dlst, lst_low=0.25, lst_hi=0.3,
                                 verbose=False)
         assert np.allclose(output[4][(24, 25, 'ee')], 3.0)
+        # test including additional baselines in bl_list:
+        output = lstbin.lst_bin(self.data_list, self.lst_list, flags_list=None, dlst=dlst, lst_low=0.25, lst_hi=0.3,
+                                verbose=False, bl_list=[(512, 512)])
+        assert (512, 512, 'ee') in output[4]
+        assert np.allclose(output[4][(512, 512, 'ee')], 0.0)
+        assert np.all(output[2][(512, 512, 'ee')])
+        assert np.allclose(output[1][(512, 512, 'ee')], 0.0)
 
     def test_lstbin_vary_nsamps(self):
         # test execution
