@@ -1774,7 +1774,7 @@ def _redcal_run_write_results(cal, hd, fistcal_filename, omnical_filename, omniv
 
 def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnical_ext='.omni.calfits',
                omnivis_ext='.omni_vis.uvh5', meta_ext='.redcal_meta.hdf5', iter0_prefix='', outdir=None,
-               ant_metrics_file=None, a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, pol_mode='2pol',
+               metrics_files=[], a_priori_ex_ants_yaml=None, clobber=False, nInt_to_load=None, pol_mode='2pol',
                bl_error_tol=1.0, ex_ants=[], ant_z_thresh=4.0, max_rerun=5, solar_horizon=0.0,
                flag_nchan_low=0, flag_nchan_high=0, fc_conv_crit=1e-6, fc_maxiter=50,
                oc_conv_crit=1e-10, oc_maxiter=500, check_every=10, check_after=50, gain=.4, add_to_history='',
@@ -1793,8 +1793,9 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
         iter0_prefix: if not '', save the omnical results with this prefix appended to each file after the 0th
             iteration, but only if redcal has found any antennas to exclude and re-run without
         outdir: folder to save data products. If None, will be the same as the folder containing input_data
-        ant_metrics_file: path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file.
-            Used for finding ex_ants and is combined with antennas excluded via ex_ants.
+        metrics_files: path or list of paths to file(s) containing ant_metrics or auto_metrics readable by 
+            hera_qm.metrics_io.load_metric_file. Used for finding ex_ants and is combined with antennas
+            excluded via ex_ants.
         a_priori_ex_ants_yaml : path to YAML with antenna flagging information parsable by
             hera_qm.metrics_io.read_a_priori_ant_flags(). Frequency and time flags in the YAML
             are ignored. Flags are combined with ant_metrics's xants and ex_ants. If any
@@ -1847,11 +1848,23 @@ def redcal_run(input_data, filetype='uvh5', firstcal_ext='.first.calfits', omnic
     else:
         raise TypeError('input_data must be a single string path to a visibility data file or a HERAData object')
 
+    # parse ex_ants from function, metrics_files, and apriori yamls
     ex_ants = set(ex_ants)
-    from hera_qm.metrics_io import load_metric_file
-    if ant_metrics_file is not None:
-        for ant in load_metric_file(ant_metrics_file)['xants']:
-            ex_ants.add(ant[0])  # Just take the antenna number, flagging both polarizations
+    if metrics_files is not None:
+        if isinstance(metrics_files, str):
+            metrics_files = [metrics_files]
+        if len(metrics_files) > 0:
+            from hera_qm.metrics_io import load_metric_file
+            for mf in metrics_files:
+                metrics = load_metric_file(mf)
+                # load from an ant_metrics file
+                if 'xants' in metrics:
+                    for ant in metrics['xants']:
+                        ex_ants.add(ant[0])  # Just take the antenna number, flagging both polarizations
+                # load from an auto_metrics file
+                elif 'ex_ants' in metrics and 'r2_ex_ants' in metrics['ex_ants']:
+                    for ant in metrics['ex_ants']['r2_ex_ants']:
+                        ex_ants.add(ant)  # Auto metrics reports just antenna numbers
     if a_priori_ex_ants_yaml is not None:
         from hera_qm.metrics_io import read_a_priori_ant_flags
         ex_ants = ex_ants.union(set(read_a_priori_ant_flags(a_priori_ex_ants_yaml, ant_indices_only=True)))
@@ -1918,7 +1931,7 @@ def redcal_argparser():
     a.add_argument("--verbose", default=False, action="store_true", help="print calibration progress updates")
 
     redcal_opts = a.add_argument_group(title='Runtime Options for Redcal')
-    redcal_opts.add_argument("--ant_metrics_file", type=str, default=None, help="path to file containing ant_metrics readable by hera_qm.metrics_io.load_metric_file. \
+    redcal_opts.add_argument("--metrics_files", type=str, nargs='*', default=[], help="path to file containing ant_metrics or auto_metrics readable by hera_qm.metrics_io.load_metric_file. \
                              Used for finding ex_ants and is combined with antennas excluded via ex_ants.")
     redcal_opts.add_argument("--ex_ants", type=int, nargs='*', default=[], help='space-delimited list of antennas to exclude from calibration and flag. All pols for an antenna will be excluded.')
     redcal_opts.add_argument("--a_priori_ex_ants_yaml", type=str, default=None, help='path to YAML file containing a priori ex_ants parsable by hera_qm.metrics_io.read_a_priori_ant_flags()')
