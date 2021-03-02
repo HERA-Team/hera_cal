@@ -485,7 +485,7 @@ def lst_bin_arg_parser():
     a.add_argument("--Nbls_to_load", default=None, type=int, help="Number of baselines to load and bin simultaneously. Default is all.")
     a.add_argument("--average_redundant_baselines", action="store_true", default=False, help="Redundantly average baselines within and between nights.")
     a.add_argument("--flag_thresh", default=0.7, type=float, help="fraction of flags over all nights in an LST bin on a baseline to flag that baseline.")
-    a.add_argument("--ex_ant_yaml_dir", default=None, type=str, help="directory containing flagging yamls with lists of antennas from each night to exclude lstbinned data files.")
+    a.add_argument("--ex_ant_yaml_files", default=None, type=str, nargs='+', help="list of paths to yamls with lists of antennas from each night to exclude lstbinned data files.")
     return a
 
 
