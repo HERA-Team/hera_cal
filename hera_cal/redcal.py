@@ -1539,7 +1539,6 @@ def redundantly_calibrate(data, reds, freqs=None, times_by_bl=None, fc_conv_crit
     '''
     rv = {}  # dictionary of return values
     filtered_reds = filter_reds(reds, max_dims=max_dims)
-    filtered_reds = [red for red in filtered_reds if len(red) > 1]  # remove length-1 reds which can't be firstcaled
     rc = RedundantCalibrator(filtered_reds)
     if freqs is None:
         freqs = data.freqs
