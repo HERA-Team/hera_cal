@@ -28,6 +28,9 @@ class Test_lstbin(object):
         self.data_files = [sorted(glob.glob(DATA_PATH + '/zen.2458043.4*XRAA.uvh5')),
                            sorted(glob.glob(DATA_PATH + '/zen.2458044.4*XRAA.uvh5')),
                            sorted(glob.glob(DATA_PATH + '/zen.2458045.4*XRAA.uvh5'))]
+        self.ant_yamls = [DATA_PATH + '/2458043.yaml',
+                          DATA_PATH + '/2458044.yaml',
+                          DATA_PATH + '/2458045.yaml']
 
         hd1 = io.HERAData(self.data_files[0])
         hd2 = io.HERAData(self.data_files[1])
@@ -314,6 +317,17 @@ class Test_lstbin(object):
         lstb.read(output_lst_file)
         assert np.allclose(np.abs(lstb.get_data(25, 37)[~lstb.get_flags(25, 37)]), 0.0)
         assert np.all(lstb.get_flags(24, 25))
+        # make sure a is in the data when we dont use the flag yaml.
+        for a in [24, 25, 37, 38]:
+            assert a in np.unique(np.hstack([lstb.ant_1_array, lstb.ant_2_array]))
+        # test removing antennas in a flag yaml
+        lstbin.lst_bin_files(self.data_files, ntimes_per_file=250, outdir="./", overwrite=True,
+                             verbose=False, input_cals=input_cals, file_ext=file_ext,
+                             ex_ant_yaml_files=self.ant_yamls)
+        lstb = UVData()
+        lstb.read(output_lst_file)
+        for a in [24, 25, 37, 38]:
+            assert a not in np.unique(np.hstack([lstb.ant_1_array, lstb.ant_2_array]))
 
         os.remove(output_lst_file)
         os.remove(output_std_file)
