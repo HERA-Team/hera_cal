@@ -846,6 +846,10 @@ class RedundantCalibrator:
         sol = ls.solve(mode=mode)
         dly_sol = {self.unpack_sol_key(k): v[0] for k, v in sol.items()}
         off_sol = {self.unpack_sol_key(k): v[1] for k, v in sol.items()}
+        # add back in antennas in reds but not in the system of equations
+        ants = set([ant for red in self.reds for bl in red for ant in utils.split_bl(bl)])
+        dly_sol = {ant: dly_sol.get(ant, (np.zeros_like(list(dly_sol.values())[0]))) for ant in ants}
+        off_sol = {ant: off_sol.get(ant, (np.zeros_like(list(off_sol.values())[0]))) for ant in ants}
         return dly_sol, off_sol
 
     def firstcal(self, data, freqs, wgts={}, maxiter=25, conv_crit=1e-6,
